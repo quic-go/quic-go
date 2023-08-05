@@ -6,26 +6,23 @@ import (
 	"io"
 	"net"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/handshake"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/handshake"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var (
-	sentHeaders     []*logging.ExtendedHeader
+	sentHeaders     []*logging.ShortHeader
 	receivedHeaders []*logging.ShortHeader
 )
 
 func countKeyPhases() (sent, received int) {
 	lastKeyPhase := protocol.KeyPhaseOne
 	for _, hdr := range sentHeaders {
-		if hdr.IsLongHeader {
-			continue
-		}
 		if hdr.KeyPhase != lastKeyPhase {
 			sent++
 			lastKeyPhase = hdr.KeyPhase
@@ -45,7 +42,7 @@ type keyUpdateConnTracer struct {
 	logging.NullConnectionTracer
 }
 
-func (t *keyUpdateConnTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+func (t *keyUpdateConnTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
 	sentHeaders = append(sentHeaders, hdr)
 }
 
@@ -54,12 +51,14 @@ func (t *keyUpdateConnTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader
 }
 
 var _ = Describe("Key Update tests", func() {
-	var server quic.Listener
+	It("downloads a large file", func() {
+		origKeyUpdateInterval := handshake.KeyUpdateInterval
+		defer func() { handshake.KeyUpdateInterval = origKeyUpdateInterval }()
+		handshake.KeyUpdateInterval = 1 // update keys as frequently as possible
 
-	runServer := func() {
-		var err error
-		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
 
 		go func() {
 			defer GinkgoRecover()
@@ -71,18 +70,14 @@ var _ = Describe("Key Update tests", func() {
 			_, err = str.Write(PRDataLong)
 			Expect(err).ToNot(HaveOccurred())
 		}()
-	}
 
-	It("downloads a large file", func() {
-		origKeyUpdateInterval := handshake.KeyUpdateInterval
-		defer func() { handshake.KeyUpdateInterval = origKeyUpdateInterval }()
-		handshake.KeyUpdateInterval = 1 // update keys as frequently as possible
-
-		runServer()
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return &keyUpdateConnTracer{} })}),
+			getQuicConfig(&quic.Config{Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+				return &keyUpdateConnTracer{}
+			}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := conn.AcceptUniStream(context.Background())

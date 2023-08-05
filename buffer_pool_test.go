@@ -1,7 +1,7 @@
 package quic
 
 import (
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -9,13 +9,17 @@ import (
 
 var _ = Describe("Buffer Pool", func() {
 	It("returns buffers of cap", func() {
-		buf := getPacketBuffer()
-		Expect(buf.Data).To(HaveCap(int(protocol.MaxPacketBufferSize)))
+		buf1 := getPacketBuffer()
+		Expect(buf1.Data).To(HaveCap(protocol.MaxPacketBufferSize))
+		buf2 := getLargePacketBuffer()
+		Expect(buf2.Data).To(HaveCap(protocol.MaxLargePacketBufferSize))
 	})
 
 	It("releases buffers", func() {
-		buf := getPacketBuffer()
-		buf.Release()
+		buf1 := getPacketBuffer()
+		buf1.Release()
+		buf2 := getLargePacketBuffer()
+		buf2.Release()
 	})
 
 	It("gets the length", func() {

@@ -3,7 +3,7 @@ package utils
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // ByteInterval is an interval from one ByteCount to the other

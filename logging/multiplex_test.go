@@ -1,14 +1,12 @@
 package logging
 
 import (
-	"context"
 	"errors"
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,46 +34,6 @@ var _ = Describe("Tracing", func() {
 				tr1 = NewMockTracer(mockCtrl)
 				tr2 = NewMockTracer(mockCtrl)
 				tracer = NewMultiplexedTracer(tr1, tr2)
-			})
-
-			It("multiplexes the TracerForConnection call", func() {
-				ctx := context.Background()
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				tracer.TracerForConnection(ctx, PerspectiveClient, connID)
-			})
-
-			It("uses multiple connection tracers", func() {
-				ctx := context.Background()
-				ctr1 := NewMockConnectionTracer(mockCtrl)
-				ctr2 := NewMockConnectionTracer(mockCtrl)
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr1)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr2)
-				tr := tracer.TracerForConnection(ctx, PerspectiveServer, connID)
-				ctr1.EXPECT().LossTimerCanceled()
-				ctr2.EXPECT().LossTimerCanceled()
-				tr.LossTimerCanceled()
-			})
-
-			It("handles tracers that return a nil ConnectionTracer", func() {
-				ctx := context.Background()
-				ctr1 := NewMockConnectionTracer(mockCtrl)
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr1)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID)
-				tr := tracer.TracerForConnection(ctx, PerspectiveServer, connID)
-				ctr1.EXPECT().LossTimerCanceled()
-				tr.LossTimerCanceled()
-			})
-
-			It("returns nil when all tracers return a nil ConnectionTracer", func() {
-				ctx := context.Background()
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				Expect(tracer.TracerForConnection(ctx, PerspectiveClient, connID)).To(BeNil())
 			})
 
 			It("traces the PacketSent event", func() {
@@ -157,13 +115,22 @@ var _ = Describe("Tracing", func() {
 			tracer.RestoredTransportParameters(tp)
 		})
 
-		It("traces the SentPacket event", func() {
+		It("traces the SentLongHeaderPacket event", func() {
 			hdr := &ExtendedHeader{Header: Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}}
 			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
 			ping := &PingFrame{}
-			tr1.EXPECT().SentPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tr2.EXPECT().SentPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tracer.SentPacket(hdr, 1337, ack, []Frame{ping})
+			tr1.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
+			tr2.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
+			tracer.SentLongHeaderPacket(hdr, 1337, ack, []Frame{ping})
+		})
+
+		It("traces the SentShortHeaderPacket event", func() {
+			hdr := &ShortHeader{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}
+			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
+			ping := &PingFrame{}
+			tr1.EXPECT().SentShortHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
+			tr2.EXPECT().SentShortHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
+			tracer.SentShortHeaderPacket(hdr, 1337, ack, []Frame{ping})
 		})
 
 		It("traces the ReceivedVersionNegotiationPacket event", func() {

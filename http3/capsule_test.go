@@ -4,19 +4,19 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Capsule", func() {
 	It("parses Capsules", func() {
-		var buf bytes.Buffer
-		quicvarint.Write(&buf, 1337)
-		quicvarint.Write(&buf, 6)
-		buf.WriteString("foobar")
+		b := quicvarint.Append(nil, 1337)
+		b = quicvarint.Append(b, 6)
+		b = append(b, []byte("foobar")...)
 
-		ct, r, err := ParseCapsule(&buf)
+		ct, r, err := ParseCapsule(bytes.NewReader(b))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(ct).To(BeEquivalentTo(1337))
 		val, err := io.ReadAll(r)
@@ -37,14 +37,12 @@ var _ = Describe("Capsule", func() {
 	})
 
 	It("errors on EOF", func() {
-		var buf bytes.Buffer
-		quicvarint.Write(&buf, 1337)
-		quicvarint.Write(&buf, 6)
-		buf.WriteString("foobar")
-		data := buf.Bytes()
+		b := quicvarint.Append(nil, 1337)
+		b = quicvarint.Append(b, 6)
+		b = append(b, []byte("foobar")...)
 
-		for i := range data {
-			ct, r, err := ParseCapsule(bytes.NewReader(data[:i]))
+		for i := range b {
+			ct, r, err := ParseCapsule(bytes.NewReader(b[:i]))
 			if err != nil {
 				Expect(err).To(MatchError(io.ErrUnexpectedEOF))
 				continue

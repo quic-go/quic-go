@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"net"
 	"time"
 )
@@ -21,16 +20,6 @@ func NewMultiplexedTracer(tracers ...Tracer) Tracer {
 		return tracers[0]
 	}
 	return &tracerMultiplexer{tracers}
-}
-
-func (m *tracerMultiplexer) TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer {
-	var connTracers []ConnectionTracer
-	for _, t := range m.tracers {
-		if ct := t.TracerForConnection(ctx, p, odcid); ct != nil {
-			connTracers = append(connTracers, ct)
-		}
-	}
-	return NewMultiplexedConnectionTracer(connTracers...)
 }
 
 func (m *tracerMultiplexer) SentPacket(remote net.Addr, hdr *Header, size ByteCount, frames []Frame) {
@@ -104,9 +93,15 @@ func (m *connTracerMultiplexer) RestoredTransportParameters(tp *TransportParamet
 	}
 }
 
-func (m *connTracerMultiplexer) SentPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame) {
+func (m *connTracerMultiplexer) SentLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame) {
 	for _, t := range m.tracers {
-		t.SentPacket(hdr, size, ack, frames)
+		t.SentLongHeaderPacket(hdr, size, ack, frames)
+	}
+}
+
+func (m *connTracerMultiplexer) SentShortHeaderPacket(hdr *ShortHeader, size ByteCount, ack *AckFrame, frames []Frame) {
+	for _, t := range m.tracers {
+		t.SentShortHeaderPacket(hdr, size, ack, frames)
 	}
 }
 

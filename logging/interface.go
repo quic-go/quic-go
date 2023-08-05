@@ -3,15 +3,13 @@
 package logging
 
 import (
-	"context"
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type (
@@ -102,12 +100,6 @@ type ShortHeader struct {
 
 // A Tracer traces events.
 type Tracer interface {
-	// TracerForConnection requests a new tracer for a connection.
-	// The ODCID is the original destination connection ID:
-	// The destination connection ID that the client used on the first Initial packet it sent on this connection.
-	// If nil is returned, tracing will be disabled for this connection.
-	TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer
-
 	SentPacket(net.Addr, *Header, ByteCount, []Frame)
 	SentVersionNegotiationPacket(_ net.Addr, dest, src ArbitraryLenConnectionID, _ []VersionNumber)
 	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
@@ -121,7 +113,8 @@ type ConnectionTracer interface {
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
-	SentPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
+	SentLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
+	SentShortHeaderPacket(hdr *ShortHeader, size ByteCount, ack *AckFrame, frames []Frame)
 	ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber)
 	ReceivedRetry(*Header)
 	ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)

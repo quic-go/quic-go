@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/quicvarint"
 )
 
 // A NewTokenFrame is a NEW_TOKEN frame
@@ -15,9 +15,6 @@ type NewTokenFrame struct {
 }
 
 func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
 	tokenLen, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
@@ -36,7 +33,7 @@ func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFra
 }
 
 func (f *NewTokenFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x7)
+	b = append(b, newTokenFrameType)
 	b = quicvarint.Append(b, uint64(len(f.Token)))
 	b = append(b, f.Token...)
 	return b, nil

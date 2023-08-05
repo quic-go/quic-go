@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"net"
 	"time"
 )
@@ -12,9 +11,6 @@ type NullTracer struct{}
 
 var _ Tracer = &NullTracer{}
 
-func (n NullTracer) TracerForConnection(context.Context, Perspective, ConnectionID) ConnectionTracer {
-	return NullConnectionTracer{}
-}
 func (n NullTracer) SentPacket(net.Addr, *Header, ByteCount, []Frame) {}
 func (n NullTracer) SentVersionNegotiationPacket(_ net.Addr, dest, src ArbitraryLenConnectionID, _ []VersionNumber) {
 }
@@ -31,11 +27,12 @@ func (n NullConnectionTracer) StartedConnection(local, remote net.Addr, srcConnI
 
 func (n NullConnectionTracer) NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber) {
 }
-func (n NullConnectionTracer) ClosedConnection(err error)                                {}
-func (n NullConnectionTracer) SentTransportParameters(*TransportParameters)              {}
-func (n NullConnectionTracer) ReceivedTransportParameters(*TransportParameters)          {}
-func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters)          {}
-func (n NullConnectionTracer) SentPacket(*ExtendedHeader, ByteCount, *AckFrame, []Frame) {}
+func (n NullConnectionTracer) ClosedConnection(err error)                                          {}
+func (n NullConnectionTracer) SentTransportParameters(*TransportParameters)                        {}
+func (n NullConnectionTracer) ReceivedTransportParameters(*TransportParameters)                    {}
+func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters)                    {}
+func (n NullConnectionTracer) SentLongHeaderPacket(*ExtendedHeader, ByteCount, *AckFrame, []Frame) {}
+func (n NullConnectionTracer) SentShortHeaderPacket(*ShortHeader, ByteCount, *AckFrame, []Frame)   {}
 func (n NullConnectionTracer) ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber) {
 }
 func (n NullConnectionTracer) ReceivedRetry(*Header)                                        {}

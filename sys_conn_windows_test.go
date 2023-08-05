@@ -15,9 +15,10 @@ var _ = Describe("Windows Conn Test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		udpConn, err := net.ListenUDP("udp4", addr)
 		Expect(err).ToNot(HaveOccurred())
-		conn, err := newConn(udpConn)
+		conn, err := newConn(udpConn, true)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.Close()).To(Succeed())
+		Expect(conn.capabilities().DF).To(BeTrue())
 	})
 
 	It("works on IPv6", func() {
@@ -25,8 +26,9 @@ var _ = Describe("Windows Conn Test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		udpConn, err := net.ListenUDP("udp6", addr)
 		Expect(err).ToNot(HaveOccurred())
-		conn, err := newConn(udpConn)
+		conn, err := newConn(udpConn, false)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.Close()).To(Succeed())
+		Expect(conn.capabilities().DF).To(BeFalse())
 	})
 })

@@ -1,14 +1,11 @@
 package logging
 
 import (
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // PacketTypeFromHeader determines the packet type from a *wire.Header.
 func PacketTypeFromHeader(hdr *Header) PacketType {
-	if !hdr.IsLongHeader {
-		return PacketType1RTT
-	}
 	if hdr.Version == 0 {
 		return PacketTypeVersionNegotiation
 	}

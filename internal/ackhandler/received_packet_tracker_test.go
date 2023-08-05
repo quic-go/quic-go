@@ -3,9 +3,9 @@ package ackhandler
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -19,7 +19,7 @@ var _ = Describe("Received Packet Tracker", func() {
 
 	BeforeEach(func() {
 		rttStats = &utils.RTTStats{}
-		tracker = newReceivedPacketTracker(rttStats, utils.DefaultLogger, protocol.VersionWhatever)
+		tracker = newReceivedPacketTracker(rttStats, utils.DefaultLogger)
 	})
 
 	Context("accepting packets", func() {

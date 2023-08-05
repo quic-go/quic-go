@@ -1,11 +1,11 @@
 package testutils
 
 import (
-	"bytes"
+	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/handshake"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/handshake"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 // Utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
@@ -13,9 +13,11 @@ import (
 
 // writePacket returns a new raw packet with the specified header and payload
 func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
-	buf := &bytes.Buffer{}
-	hdr.Write(buf, hdr.Version)
-	return append(buf.Bytes(), data...)
+	b, err := hdr.Append(nil, hdr.Version)
+	if err != nil {
+		panic(fmt.Sprintf("failed to write header: %s", err))
+	}
+	return append(b, data...)
 }
 
 // packRawPayload returns a new raw payload containing given frames
@@ -50,7 +52,6 @@ func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.C
 	length := payloadSize + int(pnLength) + sealer.Overhead()
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{
-			IsLongHeader:     true,
 			Type:             protocol.PacketTypeInitial,
 			SrcConnectionID:  srcConnID,
 			DestConnectionID: destConnID,
@@ -88,7 +89,6 @@ func ComposeRetryPacket(
 ) []byte {
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{
-			IsLongHeader:     true,
 			Type:             protocol.PacketTypeRetry,
 			SrcConnectionID:  srcConnID,
 			DestConnectionID: destConnID,

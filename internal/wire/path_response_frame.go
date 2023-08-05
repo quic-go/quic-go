@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // A PathResponseFrame is a PATH_RESPONSE frame
@@ -13,9 +13,6 @@ type PathResponseFrame struct {
 }
 
 func parsePathResponseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PathResponseFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
 	frame := &PathResponseFrame{}
 	if _, err := io.ReadFull(r, frame.Data[:]); err != nil {
 		if err == io.ErrUnexpectedEOF {
@@ -27,7 +24,7 @@ func parsePathResponseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PathRes
 }
 
 func (f *PathResponseFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x1b)
+	b = append(b, pathResponseFrameType)
 	b = append(b, f.Data[:]...)
 	return b, nil
 }

@@ -3,11 +3,11 @@ package frames
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 // PrefixLen is the number of bytes used for configuration
 const PrefixLen = 1
@@ -33,31 +33,20 @@ func Fuzz(data []byte) int {
 	encLevel := toEncLevel(data[0])
 	data = data[PrefixLen:]
 
-	parser := wire.NewFrameParser(true, version)
+	parser := wire.NewFrameParser(true)
 	parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
 
-	initialLen := len(data)
-
-	var frames []wire.Frame
-
+	var numFrames int
+	var b []byte
 	for len(data) > 0 {
-		l, f, err := parser.ParseNext(data, encLevel)
+		initialLen := len(data)
+		l, f, err := parser.ParseNext(data, encLevel, version)
 		if err != nil {
 			break
 		}
 		data = data[l:]
-		frames = append(frames, f)
-	}
-	parsedLen := initialLen - len(data)
-
-	if len(frames) == 0 {
-		return 0
-	}
-
-	var b []byte
-	for _, f := range frames {
+		numFrames++
 		if f == nil { // PADDING frame
-			b = append(b, 0)
 			continue
 		}
 		// We accept empty STREAM frames, but we don't write them.
@@ -67,21 +56,27 @@ func Fuzz(data []byte) int {
 				continue
 			}
 		}
-		lenBefore := len(b)
-		b, err := f.Append(b, version)
+
+		startLen := len(b)
+		parsedLen := initialLen - len(data)
+		b, err = f.Append(b, version)
 		if err != nil {
 			panic(fmt.Sprintf("Error writing frame %#v: %s", f, err))
 		}
-		frameLen := len(b) - lenBefore
-		if f.Length(version) != protocol.ByteCount(frameLen) {
+		frameLen := protocol.ByteCount(len(b) - startLen)
+		if f.Length(version) != frameLen {
 			panic(fmt.Sprintf("Inconsistent frame length for %#v: expected %d, got %d", f, frameLen, f.Length(version)))
 		}
 		if sf, ok := f.(*wire.StreamFrame); ok {
 			sf.PutBack()
 		}
+		if frameLen > protocol.ByteCount(parsedLen) {
+			panic(fmt.Sprintf("Serialized length (%d) is longer than parsed length (%d)", len(b), parsedLen))
+		}
 	}
-	if len(b) > parsedLen {
-		panic(fmt.Sprintf("Serialized length (%d) is longer than parsed length (%d)", len(b), parsedLen))
+
+	if numFrames == 0 {
+		return 0
 	}
 	return 1
 }

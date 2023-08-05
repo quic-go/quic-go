@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/quicvarint"
 )
 
 // A CryptoFrame is a CRYPTO frame
@@ -15,10 +15,6 @@ type CryptoFrame struct {
 }
 
 func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
 	frame := &CryptoFrame{}
 	offset, err := quicvarint.Read(r)
 	if err != nil {
@@ -43,7 +39,7 @@ func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, 
 }
 
 func (f *CryptoFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x6)
+	b = append(b, cryptoFrameType)
 	b = quicvarint.Append(b, uint64(f.Offset))
 	b = quicvarint.Append(b, uint64(len(f.Data)))
 	b = append(b, f.Data...)

@@ -4,10 +4,11 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
         with:
-          go-version: "1.19.x"
+          skip-pkg-cache: true
+          go-version: "1.20.x"
       - name: Check that no non-test files import Ginkgo or Gomega
         run: .github/workflows/no_ginkgo.sh
       - name: Check that go.mod is tidied
@@ -24,11 +25,49 @@ jobs:
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
         with:
-          go-version: "1.19.x"
-      - name: golangci-lint
+          go-version: "1.20.x"
+      - name: golangci-lint (Linux)
         uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.48.0
+          skip-pkg-cache: true
+          args: --timeout=3m
+          version: v1.52.2
+      - name: golangci-lint (Windows)
+        if: success() || failure() # run this step even if the previous one failed
+        uses: golangci/golangci-lint-action@v3
+        env:
+          GOOS: "windows"
+        with:
+          skip-pkg-cache: true
+          args: --timeout=3m
+          version: v1.52.2
+      - name: golangci-lint (OSX)
+        if: success() || failure() # run this step even if the previous one failed
+        uses: golangci/golangci-lint-action@v3
+        env:
+          GOOS: "darwin"
+        with:
+          skip-pkg-cache: true
+          args: --timeout=3m
+          version: v1.52.2
+      - name: golangci-lint (FreeBSD)
+        if: success() || failure() # run this step even if the previous one failed
+        uses: golangci/golangci-lint-action@v3
+        env:
+          GOOS: "freebsd"
+        with:
+          skip-pkg-cache: true
+          args: --timeout=3m
+          version: v1.52.2
+      - name: golangci-lint (others)
+        if: success() || failure() # run this step even if the previous one failed
+        uses: golangci/golangci-lint-action@v3
+        env:
+          GOOS: "solaris" # some OS that we don't have any build tags for
+        with:
+          skip-pkg-cache: true
+          args: --timeout=3m
+          version: v1.52.2

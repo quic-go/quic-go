@@ -18,36 +18,27 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	VersionTLS      VersionNumber = 0x1
-	VersionWhatever VersionNumber = math.MaxUint32 - 1 // for when the version doesn't matter
-	VersionUnknown  VersionNumber = math.MaxUint32
-	VersionDraft29  VersionNumber = 0xff00001d
-	Version1        VersionNumber = 0x1
-	Version2        VersionNumber = 0x709a50c4
+	VersionUnknown VersionNumber = math.MaxUint32
+	versionDraft29 VersionNumber = 0xff00001d // draft-29 used to be a widely deployed version
+	Version1       VersionNumber = 0x1
+	Version2       VersionNumber = 0x6b3343cf
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
-var SupportedVersions = []VersionNumber{Version1, Version2, VersionDraft29}
+var SupportedVersions = []VersionNumber{Version1, Version2}
 
 // IsValidVersion says if the version is known to quic-go
 func IsValidVersion(v VersionNumber) bool {
-	return v == VersionTLS || IsSupportedVersion(SupportedVersions, v)
+	return v == Version1 || IsSupportedVersion(SupportedVersions, v)
 }
 
 func (vn VersionNumber) String() string {
-	// For releases, VersionTLS will be set to a draft version.
-	// A switch statement can't contain duplicate cases.
-	if vn == VersionTLS && VersionTLS != VersionDraft29 && VersionTLS != Version1 {
-		return "TLS dev version (WIP)"
-	}
 	//nolint:exhaustive
 	switch vn {
-	case VersionWhatever:
-		return "whatever"
 	case VersionUnknown:
 		return "unknown"
-	case VersionDraft29:
+	case versionDraft29:
 		return "draft-29"
 	case Version1:
 		return "v1"

@@ -7,10 +7,10 @@ import (
 	"net"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/flowcontrol"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type streamError struct {
@@ -46,7 +46,6 @@ var errTooManyOpenStreams = errors.New("too many open streams")
 
 type streamsMap struct {
 	perspective protocol.Perspective
-	version     protocol.VersionNumber
 
 	maxIncomingBidiStreams uint64
 	maxIncomingUniStreams  uint64
@@ -70,7 +69,6 @@ func newStreamsMap(
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
-	version protocol.VersionNumber,
 ) streamManager {
 	m := &streamsMap{
 		perspective:            perspective,
@@ -78,7 +76,6 @@ func newStreamsMap(
 		maxIncomingBidiStreams: maxIncomingBidiStreams,
 		maxIncomingUniStreams:  maxIncomingUniStreams,
 		sender:                 sender,
-		version:                version,
 	}
 	m.initMaps()
 	return m
@@ -89,7 +86,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeBidi,
 		func(num protocol.StreamNum) streamI {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective)
-			return newStream(id, m.sender, m.newFlowController(id), m.version)
+			return newStream(id, m.sender, m.newFlowController(id))
 		},
 		m.sender.queueControlFrame,
 	)
@@ -97,7 +94,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeBidi,
 		func(num protocol.StreamNum) streamI {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective.Opposite())
-			return newStream(id, m.sender, m.newFlowController(id), m.version)
+			return newStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingBidiStreams,
 		m.sender.queueControlFrame,
@@ -106,7 +103,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeUni,
 		func(num protocol.StreamNum) sendStreamI {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective)
-			return newSendStream(id, m.sender, m.newFlowController(id), m.version)
+			return newSendStream(id, m.sender, m.newFlowController(id))
 		},
 		m.sender.queueControlFrame,
 	)
@@ -114,7 +111,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeUni,
 		func(num protocol.StreamNum) receiveStreamI {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective.Opposite())
-			return newReceiveStream(id, m.sender, m.newFlowController(id), m.version)
+			return newReceiveStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingUniStreams,
 		m.sender.queueControlFrame,

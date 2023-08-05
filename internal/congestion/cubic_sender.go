@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/logging"
 )
 
 const (
@@ -120,8 +120,8 @@ func (c *cubicSender) TimeUntilSend(_ protocol.ByteCount) time.Time {
 	return c.pacer.TimeUntilSend()
 }
 
-func (c *cubicSender) HasPacingBudget() bool {
-	return c.pacer.Budget(c.clock.Now()) >= c.maxDatagramSize
+func (c *cubicSender) HasPacingBudget(now time.Time) bool {
+	return c.pacer.Budget(now) >= c.maxDatagramSize
 }
 
 func (c *cubicSender) maxCongestionWindow() protocol.ByteCount {

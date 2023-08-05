@@ -1,12 +1,11 @@
 package wire
 
 import (
-	"bytes"
 	"encoding/binary"
 	"testing"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -18,9 +17,7 @@ func TestWire(t *testing.T) {
 }
 
 func encodeVarInt(i uint64) []byte {
-	b := &bytes.Buffer{}
-	quicvarint.Write(b, i)
-	return b.Bytes()
+	return quicvarint.Append(nil, i)
 }
 
 func appendVersion(data []byte, v protocol.VersionNumber) []byte {

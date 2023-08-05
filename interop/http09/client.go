@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/net/idna"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.
@@ -90,13 +90,13 @@ type client struct {
 
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.once.Do(func() {
-		c.conn, c.dialErr = quic.DialAddrEarly(c.hostname, c.tlsConf, c.quicConf)
+		c.conn, c.dialErr = quic.DialAddrEarly(context.Background(), c.hostname, c.tlsConf, c.quicConf)
 	})
 	if c.dialErr != nil {
 		return nil, c.dialErr
 	}
 	if req.Method != MethodGet0RTT {
-		<-c.conn.HandshakeComplete().Done()
+		<-c.conn.HandshakeComplete()
 	}
 	return c.doRequest(req)
 }

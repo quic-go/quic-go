@@ -3,13 +3,13 @@ package congestion
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // A SendAlgorithm performs congestion control
 type SendAlgorithm interface {
 	TimeUntilSend(bytesInFlight protocol.ByteCount) time.Time
-	HasPacingBudget() bool
+	HasPacingBudget(now time.Time) bool
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool)
 	CanSend(bytesInFlight protocol.ByteCount) bool
 	MaybeExitSlowStart()

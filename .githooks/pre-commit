@@ -2,7 +2,7 @@
 
 # Check that test files don't contain focussed test cases.
 errored=false
-for f in $(git diff --cached --name-only); do
+for f in $(git diff --diff-filter=d --cached --name-only); do
 	if [[ $f != *_test.go ]]; then continue; fi
 	output=$(git show :"$f" | grep -n -e "FIt(" -e "FContext(" -e "FDescribe(")
 	if [ $? -eq 0 ]; then
@@ -13,8 +13,16 @@ for f in $(git diff --cached --name-only); do
 	fi
 done
 
+pushd ./integrationtests/gomodvendor > /dev/null
+go mod tidy
+if [[ -n $(git diff --diff-filter=d --name-only -- "go.mod" "go.sum") ]]; then
+  echo "go.mod / go.sum in integrationtests/gomodvendor not tidied"
+  errored=true
+fi
+popd > /dev/null
+
 # Check that all Go files are properly gofumpt-ed.
-output=$(gofumpt -d $(git diff --cached --name-only -- '*.go'))
+output=$(gofumpt -d $(git diff --diff-filter=d --cached --name-only -- '*.go'))
 if [ -n "$output" ]; then
 	echo "Found files that are not properly gofumpt-ed."
 	echo "$output"

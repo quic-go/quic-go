@@ -3,7 +3,7 @@ package utils
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -153,5 +153,15 @@ var _ = Describe("RTT stats", func() {
 		Expect(rttStats.LatestRTT()).To(Equal(200 * time.Millisecond))
 		Expect(rttStats.SmoothedRTT()).To(Equal(200 * time.Millisecond))
 		Expect(rttStats.MeanDeviation()).To(Equal(100 * time.Millisecond))
+	})
+
+	It("doesn't restore the RTT if we already have a measurement", func() {
+		const rtt = 10 * time.Millisecond
+		rttStats.UpdateRTT(rtt, 0, time.Now())
+		Expect(rttStats.LatestRTT()).To(Equal(rtt))
+		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
+		rttStats.SetInitialRTT(time.Minute)
+		Expect(rttStats.LatestRTT()).To(Equal(rtt))
+		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
 	})
 })

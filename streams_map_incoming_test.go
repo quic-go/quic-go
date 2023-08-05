@@ -3,13 +3,14 @@ package quic
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"time"
 
-	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"golang.org/x/exp/rand"
 
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
+
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -42,9 +43,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 
 	// check that the frame can be serialized and deserialized
 	checkFrameSerialization := func(f wire.Frame) {
-		b, err := f.Append(nil, protocol.VersionTLS)
+		b, err := f.Append(nil, protocol.Version1)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		_, frame, err := wire.NewFrameParser(false, protocol.VersionTLS).ParseNext(b, protocol.Encryption1RTT)
+		_, frame, err := wire.NewFrameParser(false).ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		Expect(f).To(Equal(frame))
 	}
@@ -274,7 +275,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 		BeforeEach(func() { maxNumStreams = num })
 
 		It("opens and accepts streams", func() {
-			rand.Seed(GinkgoRandomSeed())
+			rand.Seed(uint64(GinkgoRandomSeed()))
 			ids := make([]protocol.StreamNum, num)
 			for i := 0; i < num; i++ {
 				ids[i] = protocol.StreamNum(i + 1)

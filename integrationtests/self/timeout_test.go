@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/quic-go/quic-go"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -54,6 +54,7 @@ var _ = Describe("Timeout tests", func() {
 		errChan := make(chan error)
 		go func() {
 			_, err := quic.DialAddr(
+				context.Background(),
 				"localhost:12345",
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 10 * time.Millisecond}),
@@ -70,7 +71,7 @@ var _ = Describe("Timeout tests", func() {
 		defer cancel()
 		errChan := make(chan error)
 		go func() {
-			_, err := quic.DialAddrContext(
+			_, err := quic.DialAddr(
 				ctx,
 				"localhost:12345",
 				getTLSClientConfig(),
@@ -89,7 +90,7 @@ var _ = Describe("Timeout tests", func() {
 		defer cancel()
 		errChan := make(chan error)
 		go func() {
-			_, err := quic.DialAddrEarlyContext(
+			_, err := quic.DialAddrEarly(
 				ctx,
 				"localhost:12345",
 				getTLSClientConfig(),
@@ -104,7 +105,7 @@ var _ = Describe("Timeout tests", func() {
 	})
 
 	It("returns net.Error timeout errors when an idle timeout occurs", func() {
-		const idleTimeout = 100 * time.Millisecond
+		const idleTimeout = 500 * time.Millisecond
 
 		server, err := quic.ListenAddr(
 			"localhost:0",
@@ -124,18 +125,18 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}()
 
-		drop := utils.AtomicBool{}
-
+		var drop atomic.Bool
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			DropPacket: func(quicproxy.Direction, []byte) bool {
-				return drop.Get()
+				return drop.Load()
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, MaxIdleTimeout: idleTimeout}),
@@ -148,7 +149,7 @@ var _ = Describe("Timeout tests", func() {
 		_, err = strIn.Read(make([]byte, 6))
 		Expect(err).ToNot(HaveOccurred())
 
-		drop.Set(true)
+		drop.Store(true)
 		time.Sleep(2 * idleTimeout)
 		_, err = strIn.Write([]byte("test"))
 		checkTimeoutError(err)
@@ -172,7 +173,7 @@ var _ = Describe("Timeout tests", func() {
 		var idleTimeout time.Duration
 
 		BeforeEach(func() {
-			idleTimeout = scaleDuration(100 * time.Millisecond)
+			idleTimeout = scaleDuration(500 * time.Millisecond)
 		})
 
 		It("times out after inactivity", func() {
@@ -195,11 +196,12 @@ var _ = Describe("Timeout tests", func() {
 
 			tr := newPacketTracer()
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:          idleTimeout,
-					Tracer:                  newTracer(func() logging.ConnectionTracer { return tr }),
+					Tracer:                  newTracer(tr),
 					DisablePathMTUDiscovery: true,
 				}),
 			)
@@ -213,7 +215,7 @@ var _ = Describe("Timeout tests", func() {
 			}()
 			Eventually(done, 2*idleTimeout).Should(BeClosed())
 			var lastAckElicitingPacketSentAt time.Time
-			for _, p := range tr.getSentPackets() {
+			for _, p := range tr.getSentShortHeaderPackets() {
 				var hasAckElicitingFrame bool
 				for _, f := range p.frames {
 					if _, ok := f.(*logging.AckFrame); ok {
@@ -251,12 +253,12 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
-			drop := utils.AtomicBool{}
+			var drop atomic.Bool
 			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 				RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				DropPacket: func(dir quicproxy.Direction, _ []byte) bool {
 					if dir == quicproxy.DirectionOutgoing {
-						return drop.Get()
+						return drop.Load()
 					}
 					return false
 				},
@@ -274,6 +276,7 @@ var _ = Describe("Timeout tests", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout, DisablePathMTUDiscovery: true}),
@@ -282,7 +285,7 @@ var _ = Describe("Timeout tests", func() {
 
 			// wait half the idle timeout, then send a packet
 			time.Sleep(idleTimeout / 2)
-			drop.Set(true)
+			drop.Store(true)
 			str, err := conn.OpenUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			_, err = str.Write([]byte("foobar"))
@@ -312,7 +315,7 @@ var _ = Describe("Timeout tests", func() {
 	})
 
 	It("does not time out if keepalive is set", func() {
-		const idleTimeout = 100 * time.Millisecond
+		const idleTimeout = 500 * time.Millisecond
 
 		server, err := quic.ListenAddr(
 			"localhost:0",
@@ -331,17 +334,18 @@ var _ = Describe("Timeout tests", func() {
 			close(serverConnClosed)
 		}()
 
-		drop := utils.AtomicBool{}
+		var drop atomic.Bool
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			DropPacket: func(quicproxy.Direction, []byte) bool {
-				return drop.Get()
+				return drop.Load()
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
@@ -361,7 +365,7 @@ var _ = Describe("Timeout tests", func() {
 		Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 		// idle timeout will still kick in if pings are dropped
-		drop.Set(true)
+		drop.Store(true)
 		time.Sleep(2 * idleTimeout)
 		_, err = str.Write([]byte("foobar"))
 		checkTimeoutError(err)
@@ -373,7 +377,7 @@ var _ = Describe("Timeout tests", func() {
 	Context("faulty packet conns", func() {
 		const handshakeTimeout = time.Second / 2
 
-		runServer := func(ln quic.Listener) error {
+		runServer := func(ln *quic.Listener) error {
 			conn, err := ln.Accept(context.Background())
 			if err != nil {
 				return err
@@ -424,6 +428,7 @@ var _ = Describe("Timeout tests", func() {
 			go func() {
 				defer GinkgoRecover()
 				conn, err := quic.DialAddr(
+					context.Background(),
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{
@@ -450,6 +455,7 @@ var _ = Describe("Timeout tests", func() {
 			case serverErr := <-serverErrChan:
 				Expect(serverErr).To(HaveOccurred())
 				Expect(serverErr.Error()).To(ContainSubstring(io.ErrClosedPipe.Error()))
+				defer ln.Close()
 			default:
 				Expect(ln.Close()).To(Succeed())
 				Eventually(serverErrChan).Should(Receive())
@@ -468,6 +474,7 @@ var _ = Describe("Timeout tests", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
 
 			serverErrChan := make(chan error, 1)
 			go func() {
@@ -485,9 +492,9 @@ var _ = Describe("Timeout tests", func() {
 			go func() {
 				defer GinkgoRecover()
 				conn, err := quic.Dial(
+					context.Background(),
 					&faultyConn{PacketConn: conn, MaxPackets: maxPackets},
 					ln.Addr(),
-					"localhost",
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 				)

@@ -3,7 +3,7 @@ package quic
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/qerr"
 )
 
 type (
@@ -46,6 +46,7 @@ const (
 type StreamError struct {
 	StreamID  StreamID
 	ErrorCode StreamErrorCode
+	Remote    bool
 }
 
 func (e *StreamError) Is(target error) bool {
@@ -54,5 +55,9 @@ func (e *StreamError) Is(target error) bool {
 }
 
 func (e *StreamError) Error() string {
-	return fmt.Sprintf("stream %d canceled with error code %d", e.StreamID, e.ErrorCode)
+	pers := "local"
+	if e.Remote {
+		pers = "remote"
+	}
+	return fmt.Sprintf("stream %d canceled by %s with error code %d", e.StreamID, pers, e.ErrorCode)
 }

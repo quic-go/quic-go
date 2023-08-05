@@ -5,32 +5,45 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.18.x", "1.19.x" ]
-    runs-on: ubuntu-latest
+        go: [ "1.20.x", "1.21.0-rc.3" ]
+    runs-on: ${{ fromJSON(vars['INTEGRATION_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     env:
       DEBUG: false # set this to true to export qlogs and save them as artifacts
       TIMESCALE_FACTOR: 3
     name: Integration Tests (Go ${{ matrix.go }})
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
         with:
           stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - run: go version
       - name: set qlogger
         if: env.DEBUG == 'true'
-        run: echo "QLOGFLAG=-- -qlog" >> $GITHUB_ENV
-      - name: Run tests
+        run: echo "QLOGFLAG= -qlog" >> $GITHUB_ENV
+      - name: Run other tests
         run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self integrationtests
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self ${{ env.QLOGFLAG }}
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation -- ${{ env.QLOGFLAG }}
+      - name: Run self tests, using QUIC v1
+        if: success() || failure() # run this step even if the previous one failed
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
+      - name: Run self tests, using QUIC v2
+        if: success() || failure() # run this step even if the previous one failed
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=2 ${{ env.QLOGFLAG }}
+      - name: Run set tests, with GSO enabled
+        if: success() || failure() # run this step even if the previous one failed
+        env:
+          QUIC_GO_ENABLE_GSO: true
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
       - name: Run tests (32 bit)
+        if: success() || failure() # run this step even if the previous one failed
         env:
           GOARCH: 386
         run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self integrationtests
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self ${{ env.QLOGFLAG }}
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation -- ${{ env.QLOGFLAG }}
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- ${{ env.QLOGFLAG }}
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
         uses: actions/upload-artifact@v2

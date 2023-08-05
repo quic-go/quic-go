@@ -3,9 +3,9 @@ package quic
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -46,7 +46,6 @@ var _ = Describe("Connection ID Generator", func() {
 			},
 			func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
 			&protocol.DefaultConnectionIDGenerator{ConnLen: initialConnID.Len()},
-			protocol.VersionDraft29,
 		)
 	})
 

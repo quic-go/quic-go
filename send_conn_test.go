@@ -17,12 +17,14 @@ var _ = Describe("Connection (for sending packets)", func() {
 	BeforeEach(func() {
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = NewMockPacketConn(mockCtrl)
-		c = newSendPconn(packetConn, addr)
+		rawConn, err := wrapConn(packetConn)
+		Expect(err).ToNot(HaveOccurred())
+		c = newSendConnWithPacketInfo(rawConn, addr, packetInfo{})
 	})
 
 	It("writes", func() {
 		packetConn.EXPECT().WriteTo([]byte("foobar"), addr)
-		Expect(c.Write([]byte("foobar"))).To(Succeed())
+		Expect(c.Write([]byte("foobar"), 6)).To(Succeed())
 	})
 
 	It("gets the remote address", func() {

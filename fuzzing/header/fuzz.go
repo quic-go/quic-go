@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 // PrefixLen is the number of bytes used for configuration
 const PrefixLen = 1
@@ -30,8 +30,14 @@ func Fuzz(data []byte) int {
 	if err != nil {
 		return 0
 	}
+
+	if !wire.IsLongHeaderPacket(data[0]) {
+		wire.ParseShortHeader(data, connIDLen)
+		return 1
+	}
+
 	is0RTTPacket := wire.Is0RTTPacket(data)
-	hdr, _, _, err := wire.ParsePacket(data, connIDLen)
+	hdr, _, _, err := wire.ParsePacket(data)
 	if err != nil {
 		return 0
 	}
@@ -55,11 +61,11 @@ func Fuzz(data []byte) int {
 	}
 	// We always use a 2-byte encoding for the Length field in Long Header packets.
 	// Serializing the header will fail when using a higher value.
-	if hdr.IsLongHeader && hdr.Length > 16383 {
+	if hdr.Length > 16383 {
 		return 1
 	}
-	b := &bytes.Buffer{}
-	if err := extHdr.Write(b, version); err != nil {
+	b, err := extHdr.Append(nil, version)
+	if err != nil {
 		// We are able to parse packets with connection IDs longer than 20 bytes,
 		// but in QUIC version 1, we don't write headers with longer connection IDs.
 		if hdr.DestConnectionID.Len() <= protocol.MaxConnIDLen &&
@@ -70,8 +76,8 @@ func Fuzz(data []byte) int {
 	}
 	// GetLength is not implemented for Retry packets
 	if hdr.Type != protocol.PacketTypeRetry {
-		if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(b.Len()) {
-			panic(fmt.Sprintf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, b.Len()))
+		if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(len(b)) {
+			panic(fmt.Sprintf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, len(b)))
 		}
 	}
 	return 1

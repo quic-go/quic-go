@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils"
 )
 
 // Connection is a UDP connection
@@ -169,6 +169,12 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
+		return nil, err
+	}
+	if err := conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
+		return nil, err
+	}
 	raddr, err := net.ResolveUDPAddr("udp", opts.RemoteAddr)
 	if err != nil {
 		return nil, err
@@ -225,13 +231,19 @@ func (p *QuicProxy) LocalPort() int {
 }
 
 func (p *QuicProxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
-	srvudp, err := net.DialUDP("udp", nil, p.serverAddr)
+	conn, err := net.DialUDP("udp", nil, p.serverAddr)
 	if err != nil {
+		return nil, err
+	}
+	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
+		return nil, err
+	}
+	if err := conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
 		return nil, err
 	}
 	return &connection{
 		ClientAddr:      cliAddr,
-		ServerConn:      srvudp,
+		ServerConn:      conn,
 		incomingPackets: make(chan packetEntry, 10),
 		Incoming:        newQueue(),
 		Outgoing:        newQueue(),

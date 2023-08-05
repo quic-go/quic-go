@@ -2,9 +2,10 @@ package wire
 
 import (
 	"bytes"
+	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,8 +14,7 @@ import (
 var _ = Describe("MAX_DATA frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			data := []byte{0x10}
-			data = append(data, encodeVarInt(0xdecafbad123456)...) // byte offset
+			data := encodeVarInt(0xdecafbad123456) // byte offset
 			b := bytes.NewReader(data)
 			frame, err := parseMaxDataFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
@@ -23,13 +23,12 @@ var _ = Describe("MAX_DATA frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x10}
-			data = append(data, encodeVarInt(0xdecafbad1234567)...) // byte offset
+			data := encodeVarInt(0xdecafbad1234567) // byte offset
 			_, err := parseMaxDataFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseMaxDataFrame(bytes.NewReader(data[0:i]), protocol.Version1)
-				Expect(err).To(HaveOccurred())
+				_, err := parseMaxDataFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				Expect(err).To(MatchError(io.EOF))
 			}
 		})
 	})
@@ -48,7 +47,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			}
 			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10}
+			expected := []byte{maxDataFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b).To(Equal(expected))
 		})

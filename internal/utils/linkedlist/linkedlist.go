@@ -11,6 +11,12 @@
 //	}
 package list
 
+import "sync"
+
+func NewPool[T any]() *sync.Pool {
+	return &sync.Pool{New: func() any { return &Element[T]{} }}
+}
+
 // Element is an element of a linked list.
 type Element[T any] struct {
 	// Next and previous pointers in the doubly-linked list of elements.
@@ -43,11 +49,17 @@ func (e *Element[T]) Prev() *Element[T] {
 	return nil
 }
 
+func (e *Element[T]) List() *List[T] {
+	return e.list
+}
+
 // List represents a doubly linked list.
 // The zero value for List is an empty list ready to use.
 type List[T any] struct {
 	root Element[T] // sentinel list element, only &root, root.prev, and root.next are used
 	len  int        // current list length excluding (this) sentinel element
+
+	pool *sync.Pool
 }
 
 // Init initializes or clears list l.
@@ -60,6 +72,12 @@ func (l *List[T]) Init() *List[T] {
 
 // New returns an initialized list.
 func New[T any]() *List[T] { return new(List[T]).Init() }
+
+// NewWithPool returns an initialized list, using a sync.Pool for list elements.
+func NewWithPool[T any](pool *sync.Pool) *List[T] {
+	l := &List[T]{pool: pool}
+	return l.Init()
+}
 
 // Len returns the number of elements of list l.
 // The complexity is O(1).
@@ -101,7 +119,14 @@ func (l *List[T]) insert(e, at *Element[T]) *Element[T] {
 
 // insertValue is a convenience wrapper for insert(&Element{Value: v}, at).
 func (l *List[T]) insertValue(v T, at *Element[T]) *Element[T] {
-	return l.insert(&Element[T]{Value: v}, at)
+	var e *Element[T]
+	if l.pool != nil {
+		e = l.pool.Get().(*Element[T])
+	} else {
+		e = &Element[T]{}
+	}
+	e.Value = v
+	return l.insert(e, at)
 }
 
 // remove removes e from its list, decrements l.len
@@ -111,6 +136,9 @@ func (l *List[T]) remove(e *Element[T]) {
 	e.next = nil // avoid memory leaks
 	e.prev = nil // avoid memory leaks
 	e.list = nil
+	if l.pool != nil {
+		l.pool.Put(e)
+	}
 	l.len--
 }
 
@@ -132,12 +160,13 @@ func (l *List[T]) move(e, at *Element[T]) {
 // It returns the element value e.Value.
 // The element must not be nil.
 func (l *List[T]) Remove(e *Element[T]) T {
+	v := e.Value
 	if e.list == l {
 		// if e.list == l, l must have been initialized when e was inserted
 		// in l or l == nil (e is a zero Element) and l.remove will crash
 		l.remove(e)
 	}
-	return e.Value
+	return v
 }
 
 // PushFront inserts a new element e with value v at the front of list l and returns e.

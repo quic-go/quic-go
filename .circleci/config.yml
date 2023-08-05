@@ -1,21 +1,15 @@
 version: 2.1
 executors:
-  test-go118:
+  test-go120:
     docker:
-      - image: "cimg/go:1.18"
-    environment:
-      runrace: true
-      TIMESCALE_FACTOR: 3
-  test-go119:
-    docker:
-      - image: "cimg/go:1.19"
+      - image: "cimg/go:1.20"
     environment:
       runrace: true
       TIMESCALE_FACTOR: 3
  
 jobs:
   "test": &test
-    executor: test-go118
+    executor: test-go120
     steps:
       - checkout
       - run:
@@ -28,19 +22,21 @@ jobs:
           name: "Run self integration tests"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self
       - run:
+          name: "Run version negotiation tests"
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/versionnegotiation
+      - run:
           name: "Run self integration tests with race detector"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -race -v -randomize-all -trace integrationtests/self
       - run:
           name: "Run self integration tests with qlog"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self -- -qlog
-  go118:
+      - run:
+          name: "Run version negotiation tests with qlog"
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/versionnegotiation -- -qlog
+  go120:
     <<: *test
-  go119:
-    <<: *test
-    executor: test-go119
 
 workflows:
   workflow:
     jobs:
-      - go118
-      - go119
+      - go120

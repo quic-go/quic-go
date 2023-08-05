@@ -10,17 +10,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Stream Cancelations", func() {
+var _ = Describe("Stream Cancellations", func() {
 	const numStreams = 80
 
 	Context("canceling the read side", func() {
-		var server quic.Listener
+		var server *quic.Listener
 
 		// The server accepts a single connection, and then opens numStreams unidirectional streams.
 		// On each of these streams, it (tries to) write PRData.
@@ -45,9 +45,10 @@ var _ = Describe("Stream Cancelations", func() {
 						str, err := conn.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						if _, err := str.Write(data); err != nil {
-							Expect(err).To(MatchError(&quic.StreamError{
+							Expect(err).To(Equal(&quic.StreamError{
 								StreamID:  str.StreamID(),
 								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+								Remote:    true,
 							}))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
@@ -72,6 +73,7 @@ var _ = Describe("Stream Cancelations", func() {
 		It("downloads when the client immediately cancels most streams", func() {
 			serverCanceledCounterChan := runServer(PRData)
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -90,7 +92,14 @@ var _ = Describe("Stream Cancelations", func() {
 					// cancel around 2/3 of the streams
 					if rand.Int31()%3 != 0 {
 						atomic.AddInt32(&canceledCounter, 1)
-						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
+						resetErr := quic.StreamErrorCode(str.StreamID())
+						str.CancelRead(resetErr)
+						_, err := str.Read([]byte{0})
+						Expect(err).To(Equal(&quic.StreamError{
+							StreamID:  str.StreamID(),
+							ErrorCode: resetErr,
+							Remote:    false,
+						}))
 						return
 					}
 					data, err := io.ReadAll(str)
@@ -116,6 +125,7 @@ var _ = Describe("Stream Cancelations", func() {
 			serverCanceledCounterChan := runServer(PRData)
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -162,10 +172,11 @@ var _ = Describe("Stream Cancelations", func() {
 
 		It("allows concurrent Read and CancelRead calls", func() {
 			// This test is especially valuable when run with race detector,
-			// see https://github.com/lucas-clemente/quic-go/issues/3239.
+			// see https://github.com/quic-go/quic-go/issues/3239.
 			serverCanceledCounterChan := runServer(make([]byte, 100)) // make sure the FIN is sent with the STREAM frame
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -189,7 +200,11 @@ var _ = Describe("Stream Cancelations", func() {
 						b := make([]byte, 32)
 						if _, err := str.Read(b); err != nil {
 							atomic.AddInt32(&counter, 1)
-							Expect(err.Error()).To(ContainSubstring("canceled with error code 1234"))
+							Expect(err).To(Equal(&quic.StreamError{
+								StreamID:  str.StreamID(),
+								ErrorCode: 1234,
+								Remote:    false,
+							}))
 							return
 						}
 					}()
@@ -207,8 +222,9 @@ var _ = Describe("Stream Cancelations", func() {
 	})
 
 	Context("canceling the write side", func() {
-		runClient := func(server quic.Listener) int32 /* number of canceled streams */ {
+		runClient := func(server *quic.Listener) int32 /* number of canceled streams */ {
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -354,6 +370,7 @@ var _ = Describe("Stream Cancelations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -439,6 +456,7 @@ var _ = Describe("Stream Cancelations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -517,6 +535,7 @@ var _ = Describe("Stream Cancelations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 3}),
@@ -602,6 +621,7 @@ var _ = Describe("Stream Cancelations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: maxIncomingStreams}),
@@ -640,6 +660,7 @@ var _ = Describe("Stream Cancelations", func() {
 			getQuicConfig(&quic.Config{MaxIncomingStreams: maxIncomingStreams, MaxIdleTimeout: 10 * time.Second}),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
 
 		var wg sync.WaitGroup
 		wg.Add(2 * 4 * maxIncomingStreams)
@@ -695,6 +716,7 @@ var _ = Describe("Stream Cancelations", func() {
 		}()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{}),

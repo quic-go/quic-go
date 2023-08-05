@@ -5,7 +5,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 // The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented by:
@@ -67,7 +67,7 @@ func (r *body) Read(b []byte) (int, error) {
 }
 
 func (r *body) Close() error {
-	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
+	r.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (r *body) StreamID() quic.StreamID {
 func (r *hijackableBody) Close() error {
 	r.requestDone()
 	// If the EOF was read, CancelRead() is a no-op.
-	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
+	r.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 	return nil
 }
 

@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,8 +36,8 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 			defer close(done)
 			_ = server.ListenAndServe()
 		}()
-		var ln quic.EarlyListener
-		Eventually(func() quic.EarlyListener {
+		var ln *quic.EarlyListener
+		Eventually(func() *quic.EarlyListener {
 			server.mutex.Lock()
 			defer server.mutex.Unlock()
 			ln = server.listener

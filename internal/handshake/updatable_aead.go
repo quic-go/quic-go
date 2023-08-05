@@ -8,26 +8,28 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/qtls"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/logging"
 )
 
 // KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
 // It's a package-level variable to allow modifying it for testing purposes.
 var KeyUpdateInterval uint64 = protocol.KeyUpdateInterval
 
+// FirstKeyUpdateInterval is the maximum number of packets we send or receive before initiating the first key update.
+// It's a package-level variable to allow modifying it for testing purposes.
+var FirstKeyUpdateInterval uint64 = 100
+
 type updatableAEAD struct {
-	suite *qtls.CipherSuiteTLS13
+	suite *cipherSuite
 
 	keyPhase           protocol.KeyPhase
 	largestAcked       protocol.PacketNumber
 	firstPacketNumber  protocol.PacketNumber
 	handshakeConfirmed bool
 
-	keyUpdateInterval  uint64
 	invalidPacketLimit uint64
 	invalidPacketCount uint64
 
@@ -74,7 +76,6 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, tracer logging.ConnectionTracer,
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
-		keyUpdateInterval:       KeyUpdateInterval,
 		rttStats:                rttStats,
 		tracer:                  tracer,
 		logger:                  logger,
@@ -116,9 +117,10 @@ func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte
 	return hkdfExpandLabel(hash, ts, []byte{}, "quic ku", hash.Size())
 }
 
+// SetReadKey sets the read key.
 // For the client, this function is called before SetWriteKey.
 // For the server, this function is called after SetWriteKey.
-func (a *updatableAEAD) SetReadKey(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
+func (a *updatableAEAD) SetReadKey(suite *cipherSuite, trafficSecret []byte) {
 	a.rcvAEAD = createAEAD(suite, trafficSecret, a.version)
 	a.headerDecrypter = newHeaderProtector(suite, trafficSecret, false, a.version)
 	if a.suite == nil {
@@ -129,9 +131,10 @@ func (a *updatableAEAD) SetReadKey(suite *qtls.CipherSuiteTLS13, trafficSecret [
 	a.nextRcvAEAD = createAEAD(suite, a.nextRcvTrafficSecret, a.version)
 }
 
+// SetWriteKey sets the write key.
 // For the client, this function is called after SetReadKey.
 // For the server, this function is called before SetWriteKey.
-func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
+func (a *updatableAEAD) SetWriteKey(suite *cipherSuite, trafficSecret []byte) {
 	a.sendAEAD = createAEAD(suite, trafficSecret, a.version)
 	a.headerEncrypter = newHeaderProtector(suite, trafficSecret, false, a.version)
 	if a.suite == nil {
@@ -142,7 +145,7 @@ func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret 
 	a.nextSendAEAD = createAEAD(suite, a.nextSendTrafficSecret, a.version)
 }
 
-func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite *qtls.CipherSuiteTLS13) {
+func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite *cipherSuite) {
 	a.nonceBuf = make([]byte, aead.NonceSize())
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
@@ -284,11 +287,17 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 	if !a.updateAllowed() {
 		return false
 	}
-	if a.numRcvdWithCurrentKey >= a.keyUpdateInterval {
+	// Initiate the first key update shortly after the handshake, in order to exercise the key update mechanism.
+	if a.keyPhase == 0 {
+		if a.numRcvdWithCurrentKey >= FirstKeyUpdateInterval || a.numSentWithCurrentKey >= FirstKeyUpdateInterval {
+			return true
+		}
+	}
+	if a.numRcvdWithCurrentKey >= KeyUpdateInterval {
 		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)
 		return true
 	}
-	if a.numSentWithCurrentKey >= a.keyUpdateInterval {
+	if a.numSentWithCurrentKey >= KeyUpdateInterval {
 		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %d", a.numSentWithCurrentKey, a.keyPhase+1)
 		return true
 	}

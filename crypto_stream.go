@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type cryptoStream interface {
@@ -71,17 +71,9 @@ func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 
 // GetCryptoData retrieves data that was received in CRYPTO frames
 func (s *cryptoStreamImpl) GetCryptoData() []byte {
-	if len(s.msgBuf) < 4 {
-		return nil
-	}
-	msgLen := 4 + int(s.msgBuf[1])<<16 + int(s.msgBuf[2])<<8 + int(s.msgBuf[3])
-	if len(s.msgBuf) < msgLen {
-		return nil
-	}
-	msg := make([]byte, msgLen)
-	copy(msg, s.msgBuf[:msgLen])
-	s.msgBuf = s.msgBuf[msgLen:]
-	return msg
+	b := s.msgBuf
+	s.msgBuf = nil
+	return b
 }
 
 func (s *cryptoStreamImpl) Finish() error {

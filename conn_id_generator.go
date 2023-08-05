@@ -3,10 +3,10 @@ package quic
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type connIDGenerator struct {
@@ -22,8 +22,6 @@ type connIDGenerator struct {
 	retireConnectionID     func(protocol.ConnectionID)
 	replaceWithClosed      func([]protocol.ConnectionID, protocol.Perspective, []byte)
 	queueControlFrame      func(wire.Frame)
-
-	version protocol.VersionNumber
 }
 
 func newConnIDGenerator(
@@ -36,7 +34,6 @@ func newConnIDGenerator(
 	replaceWithClosed func([]protocol.ConnectionID, protocol.Perspective, []byte),
 	queueControlFrame func(wire.Frame),
 	generator ConnectionIDGenerator,
-	version protocol.VersionNumber,
 ) *connIDGenerator {
 	m := &connIDGenerator{
 		generator:              generator,
@@ -47,7 +44,6 @@ func newConnIDGenerator(
 		retireConnectionID:     retireConnectionID,
 		replaceWithClosed:      replaceWithClosed,
 		queueControlFrame:      queueControlFrame,
-		version:                version,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
 	m.initialClientDestConnID = initialClientDestConnID

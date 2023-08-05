@@ -5,11 +5,11 @@ import (
 	"io"
 	"net/http"
 
-	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/golang/mock/gomock"
-	"github.com/marten-seemann/qpack"
+	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -57,6 +57,13 @@ var _ = Describe("Request Writer", func() {
 		Expect(headerFields).To(HaveKeyWithValue(":path", "/index.html?foo=bar"))
 		Expect(headerFields).To(HaveKeyWithValue(":scheme", "https"))
 		Expect(headerFields).ToNot(HaveKey("accept-encoding"))
+	})
+
+	It("rejects invalid host headers", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/index.html?foo=bar", nil)
+		Expect(err).ToNot(HaveOccurred())
+		req.Host = "foo@bar" // @ is invalid
+		Expect(rw.WriteRequestHeader(str, req, false)).To(MatchError("http3: invalid Host header"))
 	})
 
 	It("sends cookies", func() {

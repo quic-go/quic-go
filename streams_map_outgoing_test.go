@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"sort"
 	"sync"
 	"time"
 
+	"golang.org/x/exp/rand"
+
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
+
 	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -409,7 +411,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 
 	Context("randomized tests", func() {
 		It("opens streams", func() {
-			rand.Seed(GinkgoRandomSeed())
+			rand.Seed(uint64(GinkgoRandomSeed()))
 			const n = 100
 			fmt.Fprintf(GinkgoWriter, "Opening %d streams concurrently.\n", n)
 
@@ -460,7 +462,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		})
 
 		It("opens streams, when some of them are getting canceled", func() {
-			rand.Seed(GinkgoRandomSeed())
+			rand.Seed(uint64(GinkgoRandomSeed()))
 			const n = 100
 			fmt.Fprintf(GinkgoWriter, "Opening %d streams concurrently.\n", n)
 

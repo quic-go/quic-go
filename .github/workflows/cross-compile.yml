@@ -4,14 +4,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.18.x", "1.19.x" ]
-    runs-on: ubuntu-latest
+        go: [ "1.20.x", "1.21.0-rc.3" ]
+    runs-on: ${{ fromJSON(vars['CROSS_COMPILE_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     name: "Cross Compilation (Go ${{matrix.go}})"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
         with:
-          stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - name: Install build utils
         run: |
@@ -20,4 +19,5 @@ jobs:
       - name: Install dependencies
         run: go build example/main.go
       - name: Run cross compilation
-        run: .github/workflows/cross-compile.sh
+        # run in parallel on as many cores as are available on the machine
+        run: go tool dist list | xargs -I % -P "$(nproc)" .github/workflows/cross-compile.sh %

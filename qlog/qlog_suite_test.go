@@ -29,8 +29,8 @@ func scaleDuration(t time.Duration) time.Duration {
 func checkEncoding(data []byte, expected map[string]interface{}) {
 	// unmarshal the data
 	m := make(map[string]interface{})
-	ExpectWithOffset(1, json.Unmarshal(data, &m)).To(Succeed())
-	ExpectWithOffset(1, m).To(HaveLen(len(expected)))
+	ExpectWithOffset(2, json.Unmarshal(data, &m)).To(Succeed())
+	ExpectWithOffset(2, m).To(HaveLen(len(expected)))
 	for key, value := range expected {
 		switch v := value.(type) {
 		case bool, string, map[string]interface{}:

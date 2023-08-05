@@ -11,7 +11,7 @@ import (
 	ipv4 "golang.org/x/net/ipv4"
 )
 
-// MockBatchConn is a mock of BatchConn interface.
+// MockBatchConn is a mock of batchConn interface.
 type MockBatchConn struct {
 	ctrl     *gomock.Controller
 	recorder *MockBatchConnMockRecorder

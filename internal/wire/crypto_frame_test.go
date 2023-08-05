@@ -2,9 +2,10 @@ package wire
 
 import (
 	"bytes"
+	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,9 +14,8 @@ import (
 var _ = Describe("CRYPTO frame", func() {
 	Context("when parsing", func() {
 		It("parses", func() {
-			data := []byte{0x6}
-			data = append(data, encodeVarInt(0xdecafbad)...) // offset
-			data = append(data, encodeVarInt(6)...)          // length
+			data := encodeVarInt(0xdecafbad)        // offset
+			data = append(data, encodeVarInt(6)...) // length
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
 			frame, err := parseCryptoFrame(r, protocol.Version1)
@@ -26,15 +26,15 @@ var _ = Describe("CRYPTO frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x6}
-			data = append(data, encodeVarInt(0xdecafbad)...) // offset
-			data = append(data, encodeVarInt(6)...)          // data length
+			data := encodeVarInt(0xdecafbad)        // offset
+			data = append(data, encodeVarInt(6)...) // data length
 			data = append(data, []byte("foobar")...)
-			_, err := parseCryptoFrame(bytes.NewReader(data), protocol.Version1)
+			r := bytes.NewReader(data)
+			_, err := parseCryptoFrame(r, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseCryptoFrame(bytes.NewReader(data[0:i]), protocol.Version1)
-				Expect(err).To(HaveOccurred())
+				_, err := parseCryptoFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				Expect(err).To(MatchError(io.EOF))
 			}
 		})
 	})
@@ -47,7 +47,7 @@ var _ = Describe("CRYPTO frame", func() {
 			}
 			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x6}
+			expected := []byte{cryptoFrameType}
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			expected = append(expected, encodeVarInt(6)...)        // length
 			expected = append(expected, []byte("foobar")...)

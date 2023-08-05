@@ -1,7 +1,7 @@
 package wire
 
 import (
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // A Frame in QUIC
@@ -12,6 +12,6 @@ type Frame interface {
 
 // A FrameParser parses QUIC frames, one by one.
 type FrameParser interface {
-	ParseNext([]byte, protocol.EncryptionLevel) (int, Frame, error)
+	ParseNext([]byte, protocol.EncryptionLevel, protocol.VersionNumber) (int, Frame, error)
 	SetAckDelayExponent(uint8)
 }

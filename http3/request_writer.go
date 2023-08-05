@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,12 +11,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/marten-seemann/qpack"
 	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/net/idna"
+
+	"github.com/quic-go/qpack"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/utils"
 )
 
 const bodyCopyBufferSize = 8 * 1024
@@ -79,6 +81,9 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	host, err := httpguts.PunycodeHostPort(host)
 	if err != nil {
 		return err
+	}
+	if !httpguts.ValidHostHeader(host) {
+		return errors.New("http3: invalid Host header")
 	}
 
 	// http.NewRequest sets this field to HTTP/1.1

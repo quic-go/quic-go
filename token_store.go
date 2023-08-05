@@ -1,10 +1,10 @@
 package quic
 
 import (
-	"container/list"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/utils"
+	list "github.com/quic-go/quic-go/internal/utils/linkedlist"
 )
 
 type singleOriginTokenStore struct {
@@ -48,8 +48,8 @@ type lruTokenStoreEntry struct {
 type lruTokenStore struct {
 	mutex sync.Mutex
 
-	m                map[string]*list.Element
-	q                *list.List
+	m                map[string]*list.Element[*lruTokenStoreEntry]
+	q                *list.List[*lruTokenStoreEntry]
 	capacity         int
 	singleOriginSize int
 }
@@ -61,8 +61,8 @@ var _ TokenStore = &lruTokenStore{}
 // tokensPerOrigin specifies the maximum number of tokens per origin.
 func NewLRUTokenStore(maxOrigins, tokensPerOrigin int) TokenStore {
 	return &lruTokenStore{
-		m:                make(map[string]*list.Element),
-		q:                list.New(),
+		m:                make(map[string]*list.Element[*lruTokenStoreEntry]),
+		q:                list.New[*lruTokenStoreEntry](),
 		capacity:         maxOrigins,
 		singleOriginSize: tokensPerOrigin,
 	}
@@ -73,7 +73,7 @@ func (s *lruTokenStore) Put(key string, token *ClientToken) {
 	defer s.mutex.Unlock()
 
 	if el, ok := s.m[key]; ok {
-		entry := el.Value.(*lruTokenStoreEntry)
+		entry := el.Value
 		entry.cache.Add(token)
 		s.q.MoveToFront(el)
 		return
@@ -90,7 +90,7 @@ func (s *lruTokenStore) Put(key string, token *ClientToken) {
 	}
 
 	elem := s.q.Back()
-	entry := elem.Value.(*lruTokenStoreEntry)
+	entry := elem.Value
 	delete(s.m, entry.key)
 	entry.key = key
 	entry.cache = newSingleOriginTokenStore(s.singleOriginSize)
@@ -106,7 +106,7 @@ func (s *lruTokenStore) Pop(key string) *ClientToken {
 	var token *ClientToken
 	if el, ok := s.m[key]; ok {
 		s.q.MoveToFront(el)
-		cache := el.Value.(*lruTokenStoreEntry).cache
+		cache := el.Value.cache
 		token = cache.Pop()
 		if cache.Len() == 0 {
 			s.q.Remove(el)

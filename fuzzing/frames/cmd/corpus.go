@@ -2,16 +2,17 @@ package main
 
 import (
 	"log"
-	"math/rand"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"golang.org/x/exp/rand"
+
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/fuzzing/internal/helper"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 func getRandomData(l int) []byte {
 	b := make([]byte, l)
