@@ -4,7 +4,10 @@ import (
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils/tree"
 )
+
+var _ tree.Val[ByteInterval] = ByteInterval{}
 
 // ByteInterval is an interval from one ByteCount to the other
 type ByteInterval struct {
