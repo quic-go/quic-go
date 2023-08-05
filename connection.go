@@ -1475,7 +1475,7 @@ func (s *connection) handleHandshakeDoneFrame() error {
 		}
 	}
 	if !s.handshakeConfirmed {
-		s.handleHandshakeConfirmed()
+		return s.handleHandshakeConfirmed()
 	}
 	return nil
 }
