@@ -3,7 +3,6 @@ package handshake
 import (
 	"time"
 
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -18,7 +17,7 @@ var _ = Describe("Session Ticket", func() {
 				InitialMaxStreamDataBidiLocal:  1,
 				InitialMaxStreamDataBidiRemote: 2,
 				ActiveConnectionIDLimit:        10,
-				MaxDatagramFrameSize:           protocol.MaxDatagramFrameSize,
+				MaxDatagramFrameSize:           20,
 			},
 			RTT: 1337 * time.Microsecond,
 		}
@@ -27,7 +26,7 @@ var _ = Describe("Session Ticket", func() {
 		Expect(t.Parameters.InitialMaxStreamDataBidiLocal).To(BeEquivalentTo(1))
 		Expect(t.Parameters.InitialMaxStreamDataBidiRemote).To(BeEquivalentTo(2))
 		Expect(t.Parameters.ActiveConnectionIDLimit).To(BeEquivalentTo(10))
-		Expect(t.Parameters.MaxDatagramFrameSize).To(BeEquivalentTo(protocol.MaxDatagramFrameSize))
+		Expect(t.Parameters.MaxDatagramFrameSize).To(BeEquivalentTo(20))
 		Expect(t.RTT).To(Equal(1337 * time.Microsecond))
 	})
 
