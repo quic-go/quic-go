@@ -174,13 +174,13 @@ func (h *connIDManager) ChangeInitialConnID(newConnID protocol.ConnectionID) {
 	h.activeConnectionID = newConnID
 }
 
-// is called when the server provides a stateless reset token in the transport parameters
+// SetStatelessResetToken is called when the server provides a stateless reset token in the transport parameters
 func (h *connIDManager) SetStatelessResetToken(token protocol.StatelessResetToken) {
-	if h.activeSequenceNumber != 0 {
-		panic("expected first connection ID to have sequence number 0")
+	// Only set the stateless reset token if we're still using the connection ID with sequence number 0.
+	if h.activeSequenceNumber == 0 {
+		h.activeStatelessResetToken = &token
+		h.addStatelessResetToken(token)
 	}
-	h.activeStatelessResetToken = &token
-	h.addStatelessResetToken(token)
 }
 
 func (h *connIDManager) SentPacket() {
