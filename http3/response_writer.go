@@ -15,7 +15,12 @@ import (
 	"github.com/quic-go/qpack"
 )
 
-// headerWriter wrap the stream, so first Write will flush header to the stream
+// The maximum length of an encoded quic frame header is 10.
+// 1 (header type) + variable (frame length, the length of the largest encoded quic varint is 9).
+// 16 is more than enough.
+const frameHeaderLen = 16
+
+// headerWriter wraps the stream, so that the first Write call flushes the header to the stream
 type headerWriter struct {
 	str     quic.Stream
 	header  http.Header
@@ -37,15 +42,12 @@ func (hw *headerWriter) writeHeader() error {
 		}
 	}
 
-	buf := make([]byte, 0, 16+headers.Len())
+	buf := make([]byte, 0, frameHeaderLen+headers.Len())
 	buf = (&headersFrame{Length: uint64(headers.Len())}).Append(buf)
 	hw.logger.Infof("Responding with %d", hw.status)
 	buf = append(buf, headers.Bytes()...)
 
 	_, err := hw.str.Write(buf)
-	if err != nil {
-		hw.logger.Errorf("could not write headers frame: %s", err.Error())
-	}
 	return err
 }
 
@@ -85,7 +87,7 @@ func newResponseWriter(str quic.Stream, conn quic.Connection, logger utils.Logge
 	}
 	return &responseWriter{
 		headerWriter: hw,
-		buf:          make([]byte, 16),
+		buf:          make([]byte, frameHeaderLen),
 		conn:         conn,
 		bufferedStr:  bufio.NewWriter(hw),
 	}
