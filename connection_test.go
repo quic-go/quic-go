@@ -1891,7 +1891,6 @@ var _ = Describe("Connection", func() {
 
 	It("cancels the HandshakeComplete context when the handshake completes", func() {
 		packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), conn.version).AnyTimes()
-		finishHandshake := make(chan struct{})
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		conn.sentPacketHandler = sph
 		tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake)
@@ -1901,53 +1900,26 @@ var _ = Describe("Connection", func() {
 		sph.EXPECT().DropPackets(protocol.EncryptionHandshake)
 		sph.EXPECT().SetHandshakeConfirmed()
 		connRunner.EXPECT().Retire(clientDestConnID)
-		go func() {
-			defer GinkgoRecover()
-			<-finishHandshake
-			cryptoSetup.EXPECT().StartHandshake()
-			cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventHandshakeComplete})
-			cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
-			cryptoSetup.EXPECT().SetHandshakeConfirmed()
-			cryptoSetup.EXPECT().GetSessionTicket()
-			conn.run()
-		}()
+		cryptoSetup.EXPECT().SetHandshakeConfirmed()
+		cryptoSetup.EXPECT().GetSessionTicket()
 		handshakeCtx := conn.HandshakeComplete()
 		Consistently(handshakeCtx).ShouldNot(BeClosed())
-		close(finishHandshake)
+		Expect(conn.handleHandshakeComplete()).To(Succeed())
 		Eventually(handshakeCtx).Should(BeClosed())
-		// make sure the go routine returns
-		streamManager.EXPECT().CloseWithError(gomock.Any())
-		expectReplaceWithClosed()
-		packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
-		cryptoSetup.EXPECT().Close()
-		mconn.EXPECT().Write(gomock.Any(), gomock.Any())
-		tracer.EXPECT().ClosedConnection(gomock.Any())
-		tracer.EXPECT().Close()
-		conn.shutdown()
-		Eventually(conn.Context().Done()).Should(BeClosed())
 	})
 
 	It("sends a session ticket when the handshake completes", func() {
 		const size = protocol.MaxPostHandshakeCryptoFrameSize * 3 / 2
 		packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), conn.version).AnyTimes()
-		finishHandshake := make(chan struct{})
 		connRunner.EXPECT().Retire(clientDestConnID)
 		conn.sentPacketHandler.DropPackets(protocol.EncryptionInitial)
 		tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake)
-		go func() {
-			defer GinkgoRecover()
-			<-finishHandshake
-			cryptoSetup.EXPECT().StartHandshake()
-			cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventHandshakeComplete})
-			cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
-			cryptoSetup.EXPECT().SetHandshakeConfirmed()
-			cryptoSetup.EXPECT().GetSessionTicket().Return(make([]byte, size), nil)
-			conn.run()
-		}()
+		cryptoSetup.EXPECT().SetHandshakeConfirmed()
+		cryptoSetup.EXPECT().GetSessionTicket().Return(make([]byte, size), nil)
 
 		handshakeCtx := conn.HandshakeComplete()
 		Consistently(handshakeCtx).ShouldNot(BeClosed())
-		close(finishHandshake)
+		Expect(conn.handleHandshakeComplete()).To(Succeed())
 		var frames []ackhandler.Frame
 		Eventually(func() []ackhandler.Frame {
 			frames, _ = conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
@@ -1963,16 +1935,6 @@ var _ = Describe("Connection", func() {
 			}
 		}
 		Expect(size).To(BeEquivalentTo(s))
-		// make sure the go routine returns
-		streamManager.EXPECT().CloseWithError(gomock.Any())
-		expectReplaceWithClosed()
-		packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
-		cryptoSetup.EXPECT().Close()
-		mconn.EXPECT().Write(gomock.Any(), gomock.Any())
-		tracer.EXPECT().ClosedConnection(gomock.Any())
-		tracer.EXPECT().Close()
-		conn.shutdown()
-		Eventually(conn.Context().Done()).Should(BeClosed())
 	})
 
 	It("doesn't cancel the HandshakeComplete context when the handshake fails", func() {
@@ -2027,6 +1989,7 @@ var _ = Describe("Connection", func() {
 			cryptoSetup.EXPECT().SetHandshakeConfirmed()
 			cryptoSetup.EXPECT().GetSessionTicket()
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any())
+			Expect(conn.handleHandshakeComplete()).To(Succeed())
 			conn.run()
 		}()
 		Eventually(done).Should(BeClosed())
@@ -2350,6 +2313,7 @@ var _ = Describe("Connection", func() {
 				cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
 				cryptoSetup.EXPECT().GetSessionTicket().MaxTimes(1)
 				cryptoSetup.EXPECT().SetHandshakeConfirmed().MaxTimes(1)
+				Expect(conn.handleHandshakeComplete()).To(Succeed())
 				err := conn.run()
 				nerr, ok := err.(net.Error)
 				Expect(ok).To(BeTrue())
@@ -2867,7 +2831,10 @@ var _ = Describe("Client Connection", func() {
 					TransportParameters: params,
 				})
 				cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventHandshakeComplete}).MaxTimes(1)
-				cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent}).MaxTimes(1)
+				cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent}).MaxTimes(1).Do(func() {
+					defer GinkgoRecover()
+					Expect(conn.handleHandshakeComplete()).To(Succeed())
+				})
 				errChan <- conn.run()
 				close(errChan)
 			}()

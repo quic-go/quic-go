@@ -140,15 +140,22 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("has the right local and remote address on the ClientHelloInfo.Conn", func() {
+		It("has the right local and remote address on the tls.Config.GetConfigForClient ClientHelloInfo.Conn", func() {
 			var local, remote net.Addr
+			var local2, remote2 net.Addr
 			done := make(chan struct{})
 			tlsConf := &tls.Config{
 				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-					defer close(done)
 					local = info.Conn.LocalAddr()
 					remote = info.Conn.RemoteAddr()
-					return getTLSConfig(), nil
+					conf := getTLSConfig()
+					conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+						defer close(done)
+						local2 = info.Conn.LocalAddr()
+						remote2 = info.Conn.RemoteAddr()
+						return &(conf.Certificates[0]), nil
+					}
+					return conf, nil
 				},
 			}
 			runServer(tlsConf)
@@ -162,6 +169,8 @@ var _ = Describe("Handshake tests", func() {
 			Eventually(done).Should(BeClosed())
 			Expect(server.Addr()).To(Equal(local))
 			Expect(conn.LocalAddr().(*net.UDPAddr).Port).To(Equal(remote.(*net.UDPAddr).Port))
+			Expect(local).To(Equal(local2))
+			Expect(remote).To(Equal(remote2))
 		})
 
 		It("works with a long certificate chain", func() {

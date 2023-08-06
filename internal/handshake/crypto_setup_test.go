@@ -29,6 +29,25 @@ const (
 )
 
 var _ = Describe("Crypto Setup TLS", func() {
+	generateCert := func() tls.Certificate {
+		priv, err := rsa.GenerateKey(rand.Reader, 2048)
+		Expect(err).ToNot(HaveOccurred())
+		tmpl := &x509.Certificate{
+			SerialNumber:          big.NewInt(1),
+			Subject:               pkix.Name{},
+			SignatureAlgorithm:    x509.SHA256WithRSA,
+			NotBefore:             time.Now(),
+			NotAfter:              time.Now().Add(time.Hour), // valid for an hour
+			BasicConstraintsValid: true,
+		}
+		certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, priv.Public(), priv)
+		Expect(err).ToNot(HaveOccurred())
+		return tls.Certificate{
+			PrivateKey:  priv,
+			Certificate: [][]byte{certDER},
+		}
+	}
+
 	var clientConf, serverConf *tls.Config
 
 	BeforeEach(func() {
@@ -86,26 +105,69 @@ var _ = Describe("Crypto Setup TLS", func() {
 		Expect(err.Error()).To(ContainSubstring("tls: handshake data received at wrong level"))
 	})
 
-	Context("doing the handshake", func() {
-		generateCert := func() tls.Certificate {
-			priv, err := rsa.GenerateKey(rand.Reader, 2048)
-			Expect(err).ToNot(HaveOccurred())
-			tmpl := &x509.Certificate{
-				SerialNumber:          big.NewInt(1),
-				Subject:               pkix.Name{},
-				SignatureAlgorithm:    x509.SHA256WithRSA,
-				NotBefore:             time.Now(),
-				NotAfter:              time.Now().Add(time.Hour), // valid for an hour
-				BasicConstraintsValid: true,
-			}
-			certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, priv.Public(), priv)
-			Expect(err).ToNot(HaveOccurred())
-			return tls.Certificate{
-				PrivateKey:  priv,
-				Certificate: [][]byte{certDER},
-			}
-		}
+	Context("filling in a net.Conn in tls.ClientHelloInfo", func() {
+		var (
+			local  = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
+			remote = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+		)
 
+		It("wraps GetCertificate", func() {
+			var localAddr, remoteAddr net.Addr
+			tlsConf := &tls.Config{
+				GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+					localAddr = info.Conn.LocalAddr()
+					remoteAddr = info.Conn.RemoteAddr()
+					cert := generateCert()
+					return &cert, nil
+				},
+			}
+			addConnToClientHelloInfo(tlsConf, local, remote)
+			_, err := tlsConf.GetCertificate(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(localAddr).To(Equal(local))
+			Expect(remoteAddr).To(Equal(remote))
+		})
+
+		It("wraps GetConfigForClient", func() {
+			var localAddr, remoteAddr net.Addr
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+					localAddr = info.Conn.LocalAddr()
+					remoteAddr = info.Conn.RemoteAddr()
+					return &tls.Config{}, nil
+				},
+			}
+			addConnToClientHelloInfo(tlsConf, local, remote)
+			_, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(localAddr).To(Equal(local))
+			Expect(remoteAddr).To(Equal(remote))
+		})
+
+		It("wraps GetConfigForClient, recursively", func() {
+			var localAddr, remoteAddr net.Addr
+			tlsConf := &tls.Config{}
+			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+				conf := tlsConf.Clone()
+				conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+					localAddr = info.Conn.LocalAddr()
+					remoteAddr = info.Conn.RemoteAddr()
+					cert := generateCert()
+					return &cert, nil
+				}
+				return conf, nil
+			}
+			addConnToClientHelloInfo(tlsConf, local, remote)
+			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			_, err = conf.GetCertificate(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(localAddr).To(Equal(local))
+			Expect(remoteAddr).To(Equal(remote))
+		})
+	})
+
+	Context("doing the handshake", func() {
 		newRTTStatsWithRTT := func(rtt time.Duration) *utils.RTTStats {
 			rttStats := &utils.RTTStats{}
 			rttStats.UpdateRTT(rtt, 0, time.Now())
