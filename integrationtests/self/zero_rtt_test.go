@@ -994,7 +994,7 @@ var _ = Describe("0-RTT", func() {
 		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 		Expect(num0RTT).ToNot(BeZero())
 		zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
-		Expect(len(zeroRTTPackets)).To(BeNumerically("==", 1))
+		Expect(zeroRTTPackets).To(HaveLen(1))
 		Expect(conn.CloseWithError(0, "")).To(Succeed())
 	})
 
