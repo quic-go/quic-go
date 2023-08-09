@@ -32,7 +32,7 @@ go func() {
     // ... error handling
     // handle the connection, usually in a new Go routine
   }
-}
+}()
 ```
 
 The listener `ln` can now be used to accept incoming QUIC connections by (repeatedly) calling the `Accept` method (see below for more information on the `quic.Connection`).
