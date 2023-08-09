@@ -5,7 +5,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.20.x", "1.21.0-rc.3" ]
+        go: [ "1.20.x", "1.21.x" ]
     runs-on: ${{ fromJSON(vars['INTEGRATION_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     env:
       DEBUG: false # set this to true to export qlogs and save them as artifacts
