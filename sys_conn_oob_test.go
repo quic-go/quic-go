@@ -53,7 +53,7 @@ var _ = Describe("OOB Conn Test", func() {
 		return udpConn, packetChan
 	}
 
-	Context("ECN conn", func() {
+	Context("reading ECN-marked packets", func() {
 		sendPacketWithECN := func(network string, addr *net.UDPAddr, setECN func(uintptr)) net.Addr {
 			conn, err := net.DialUDP(network, nil, addr)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
@@ -289,6 +289,27 @@ var _ = Describe("OOB Conn Test", func() {
 		})
 	})
 
+	Context("sending ECN-marked packets", func() {
+		It("sets the ECN control message", func() {
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			c := &oobRecordingConn{UDPConn: udpConn}
+			oobConn, err := newConn(c, true)
+			Expect(err).ToNot(HaveOccurred())
+
+			oob := make([]byte, 0, 123)
+			oobConn.WritePacket([]byte("foobar"), addr, oob, 0, protocol.ECNCE)
+			Expect(c.oobs).To(HaveLen(1))
+			oobMsg := c.oobs[0]
+			Expect(oobMsg).ToNot(BeEmpty())
+			Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
+			expected := appendIPv4ECNMsg([]byte{}, protocol.ECNCE)
+			Expect(oobMsg).To(Equal(expected))
+		})
+	})
+
 	if platformSupportsGSO {
 		Context("GSO", func() {
 			It("appends the GSO control message", func() {
@@ -301,14 +322,15 @@ var _ = Describe("OOB Conn Test", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(oobConn.capabilities().GSO).To(BeTrue())
 
-				oob := make([]byte, 0, 42)
-				oobConn.WritePacket([]byte("foobar"), addr, oob, 3)
+				oob := make([]byte, 0, 123)
+				oobConn.WritePacket([]byte("foobar"), addr, oob, 3, protocol.ECNCE)
 				Expect(c.oobs).To(HaveLen(1))
 				oobMsg := c.oobs[0]
 				Expect(oobMsg).ToNot(BeEmpty())
 				Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
 				expected := appendUDPSegmentSizeMsg([]byte{}, 3)
-				Expect(oobMsg).To(Equal(expected))
+				// Check that the first control message is the OOB control message.
+				Expect(oobMsg[:len(expected)]).To(Equal(expected))
 			})
 		})
 	}

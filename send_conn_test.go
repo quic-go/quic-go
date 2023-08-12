@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"runtime"
 
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -45,8 +46,8 @@ var _ = Describe("Connection (for sending packets)", func() {
 			pi := packetInfo{addr: netip.IPv6Loopback()}
 			Expect(pi.OOB()).ToNot(BeEmpty())
 			c := newSendConn(rawConn, remoteAddr, pi, utils.DefaultLogger)
-			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, pi.OOB(), uint16(0))
-			Expect(c.Write([]byte("foobar"), 0)).To(Succeed())
+			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, pi.OOB(), uint16(0), protocol.ECT1)
+			Expect(c.Write([]byte("foobar"), 0, protocol.ECT1)).To(Succeed())
 		})
 	}
 
@@ -55,8 +56,8 @@ var _ = Describe("Connection (for sending packets)", func() {
 		rawConn.EXPECT().LocalAddr()
 		rawConn.EXPECT().capabilities().AnyTimes()
 		c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
-		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(3))
-		Expect(c.Write([]byte("foobar"), 3)).To(Succeed())
+		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(3), protocol.ECNCE)
+		Expect(c.Write([]byte("foobar"), 3, protocol.ECNCE)).To(Succeed())
 	})
 
 	if platformSupportsGSO {
@@ -67,11 +68,11 @@ var _ = Describe("Connection (for sending packets)", func() {
 			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
 			Expect(c.capabilities().GSO).To(BeTrue())
 			gomock.InOrder(
-				rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(4)).Return(0, errGSO),
-				rawConn.EXPECT().WritePacket([]byte("foob"), remoteAddr, gomock.Any(), uint16(0)).Return(4, nil),
-				rawConn.EXPECT().WritePacket([]byte("ar"), remoteAddr, gomock.Any(), uint16(0)).Return(2, nil),
+				rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(4), protocol.ECNCE).Return(0, errGSO),
+				rawConn.EXPECT().WritePacket([]byte("foob"), remoteAddr, gomock.Any(), uint16(0), protocol.ECNCE).Return(4, nil),
+				rawConn.EXPECT().WritePacket([]byte("ar"), remoteAddr, gomock.Any(), uint16(0), protocol.ECNCE).Return(2, nil),
 			)
-			Expect(c.Write([]byte("foobar"), 4)).To(Succeed())
+			Expect(c.Write([]byte("foobar"), 4, protocol.ECNCE)).To(Succeed())
 			Expect(c.capabilities().GSO).To(BeFalse())
 		})
 	}

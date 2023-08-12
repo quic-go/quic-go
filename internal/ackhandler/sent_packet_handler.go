@@ -228,6 +228,7 @@ func (h *sentPacketHandler) SentPacket(
 	streamFrames []StreamFrame,
 	frames []Frame,
 	encLevel protocol.EncryptionLevel,
+	_ protocol.ECN,
 	size protocol.ByteCount,
 	isPathMTUProbePacket bool,
 ) {
@@ -710,6 +711,11 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 
 func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
 	return h.alarm
+}
+
+func (h *sentPacketHandler) ECNMode() protocol.ECN {
+	// TODO: implement ECN logic
+	return protocol.ECNNon
 }
 
 func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {

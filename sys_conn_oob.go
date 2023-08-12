@@ -229,13 +229,20 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 }
 
 // WritePacket writes a new packet.
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16) (int, error) {
+func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error) {
 	oob := packetInfoOOB
 	if gsoSize > 0 {
 		if !c.capabilities().GSO {
 			panic("GSO disabled")
 		}
 		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
+	}
+	if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
+		if remoteUDPAddr.IP.To4() != nil {
+			oob = appendIPv4ECNMsg(oob, ecn)
+		} else {
+			oob = appendIPv6ECNMsg(oob, ecn)
+		}
 	}
 	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
