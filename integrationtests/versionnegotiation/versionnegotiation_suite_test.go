@@ -2,12 +2,12 @@ package versionnegotiation
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"testing"
 
 	"github.com/quic-go/quic-go/integrationtests/tools"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/quic-go/quic-go"

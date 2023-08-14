@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	mrand "math/rand"
@@ -11,11 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go/quicvarint"
-
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

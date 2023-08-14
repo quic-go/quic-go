@@ -3,7 +3,6 @@ package quic
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"net"
 	"syscall"
@@ -11,6 +10,7 @@ import (
 
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 

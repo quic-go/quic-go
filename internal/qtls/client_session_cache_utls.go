@@ -1,9 +1,9 @@
-//go:build go1.21 && !utls
+//go:build go1.21 && utls
 
 package qtls
 
 import (
-	"crypto/tls"
+	"gitlab.com/go-extension/tls"
 )
 
 type clientSessionCache struct {

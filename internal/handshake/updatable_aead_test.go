@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"crypto/rand"
-	"crypto/tls"
 	"fmt"
 	"testing"
 	"time"
@@ -10,6 +9,7 @@ import (
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/golang/mock/gomock"

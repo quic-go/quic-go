@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"log"
 	"net"
 
@@ -9,6 +8,7 @@ import (
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/testdata"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"

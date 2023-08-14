@@ -3,7 +3,6 @@ package self_test
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"fmt"
@@ -19,6 +18,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools"
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"

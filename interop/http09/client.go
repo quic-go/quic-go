@@ -2,7 +2,6 @@ package http09
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -14,6 +13,7 @@ import (
 	"golang.org/x/net/idna"
 
 	"github.com/quic-go/quic-go"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.

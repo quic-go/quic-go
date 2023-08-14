@@ -1,7 +1,6 @@
 package testdata
 
 import (
-	"crypto/tls"
 	"crypto/x509"
 	"os"
 	"path"
@@ -22,18 +21,6 @@ func init() {
 // GetCertificatePaths returns the paths to certificate and key
 func GetCertificatePaths() (string, string) {
 	return path.Join(certPath, "cert.pem"), path.Join(certPath, "priv.key")
-}
-
-// GetTLSConfig returns a tls config for quic.clemente.io
-func GetTLSConfig() *tls.Config {
-	cert, err := tls.LoadX509KeyPair(GetCertificatePaths())
-	if err != nil {
-		panic(err)
-	}
-	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{cert},
-	}
 }
 
 // AddRootCA adds the root CA certificate to a cert pool

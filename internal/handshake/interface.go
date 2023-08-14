@@ -1,12 +1,12 @@
 package handshake
 
 import (
-	"crypto/tls"
 	"errors"
 	"io"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 

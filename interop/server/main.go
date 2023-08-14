@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -10,8 +9,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	"github.com/quic-go/quic-go/internal/qtls"
-	"github.com/quic-go/quic-go/interop/http09"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/interop/utils"
 )
 
@@ -56,7 +54,7 @@ func main() {
 	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect", "zerortt":
 		err = runHTTP09Server(quicConf)
 	case "chacha20":
-		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
+		reset := tls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
 		defer reset()
 		err = runHTTP09Server(quicConf)
 	case "http3":
@@ -70,18 +68,6 @@ func main() {
 		fmt.Printf("Error running server: %s\n", err.Error())
 		os.Exit(1)
 	}
-}
-
-func runHTTP09Server(quicConf *quic.Config) error {
-	server := http09.Server{
-		Server: &http.Server{
-			Addr:      ":443",
-			TLSConfig: tlsConf,
-		},
-		QuicConfig: quicConf,
-	}
-	http.DefaultServeMux.Handle("/", http.FileServer(http.Dir("/www")))
-	return server.ListenAndServe()
 }
 
 func runHTTP3Server(quicConf *quic.Config) error {

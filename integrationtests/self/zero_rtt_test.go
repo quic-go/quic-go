@@ -4,7 +4,6 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	mrand "math/rand"
@@ -16,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 

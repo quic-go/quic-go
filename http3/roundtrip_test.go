@@ -3,7 +3,6 @@ package http3
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/qerr"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"

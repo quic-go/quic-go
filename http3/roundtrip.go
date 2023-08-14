@@ -2,7 +2,6 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/net/http/httpguts"
 
 	"github.com/quic-go/quic-go"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 )
 
 type roundTripCloser interface {

@@ -3,7 +3,6 @@
 package qtls
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net"
 
@@ -15,7 +14,7 @@ import (
 
 var _ = Describe("Client Session Cache", func() {
 	It("adds data to and restores data from a session ticket", func() {
-		ln, err := tls.Listen("tcp4", "localhost:0", testdata.GetTLSConfig())
+		ln, err := Listen("tcp4", "localhost:0", testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 
 		done := make(chan struct{})
@@ -36,15 +35,15 @@ var _ = Describe("Client Session Cache", func() {
 		}()
 
 		restored := make(chan []byte, 1)
-		clientConf := &tls.Config{
+		clientConf := &Config{
 			RootCAs: testdata.GetRootCA(),
 			ClientSessionCache: &clientSessionCache{
-				wrapped: tls.NewLRUClientSessionCache(10),
+				wrapped: NewLRUClientSessionCache(10),
 				getData: func() []byte { return []byte("session") },
 				setData: func(data []byte) { restored <- data },
 			},
 		}
-		conn, err := tls.Dial(
+		conn, err := Dial(
 			"tcp4",
 			fmt.Sprintf("localhost:%d", ln.Addr().(*net.TCPAddr).Port),
 			clientConf,
@@ -60,9 +59,9 @@ var _ = Describe("Client Session Cache", func() {
 
 		// make sure the cache can deal with nonsensical inputs
 		clientConf.ClientSessionCache.Put("foo", nil)
-		clientConf.ClientSessionCache.Put("bar", &tls.ClientSessionState{})
+		clientConf.ClientSessionCache.Put("bar", &ClientSessionState{})
 
-		conn, err = tls.Dial(
+		conn, err = Dial(
 			"tcp4",
 			fmt.Sprintf("localhost:%d", ln.Addr().(*net.TCPAddr).Port),
 			clientConf,

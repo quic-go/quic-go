@@ -2,12 +2,12 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/quic-go/quic-go"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

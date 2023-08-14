@@ -1,4 +1,4 @@
-//go:build !utls
+//go:build utls
 
 package http09
 
@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"net/http/httptest"
 
 	"github.com/quic-go/quic-go"
 	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/testdata"
+	"gitlab.com/go-extension/http"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

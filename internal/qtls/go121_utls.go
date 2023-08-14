@@ -1,11 +1,16 @@
-//go:build go1.21 && !utls
+//go:build go1.21 && utls
 
 package qtls
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
+
+	gotls "crypto/tls"
+
+	"gitlab.com/go-extension/tls"
+
+	_ "unsafe"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 )
@@ -81,6 +86,9 @@ const (
 	QUICHandshakeDone               = tls.QUICHandshakeDone
 )
 
+//go:linkname quicMaxEarlyData gitlab.com/go-extension/tls.quicMaxEarlyData
+var quicMaxEarlyData uint32
+
 func QUICServer(config *QUICConfig) *QUICConn { return tls.QUICServer(config) }
 func QUICClient(config *QUICConfig) *QUICConn { return tls.QUICClient(config) }
 
@@ -100,7 +108,7 @@ func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, acce
 	conf.WrapSession = func(cs tls.ConnectionState, state *tls.SessionState) ([]byte, error) {
 		// Add QUIC transport parameters if this is a 0-RTT packet.
 		// TODO(#3853): also save the RTT for non-0-RTT tickets
-		if state.EarlyData {
+		if state.MaxEarlyData > 0 {
 			state.Extra = append(state.Extra, addExtraPrefix(getData()))
 		}
 		if origWrapSession != nil {
@@ -126,12 +134,16 @@ func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, acce
 		if err != nil || state == nil {
 			return nil, err
 		}
-		if state.EarlyData {
+		if state.MaxEarlyData > 0 {
 			extra := findExtraData(state.Extra)
 			if unwrapCount == 1 && extra != nil { // first session ticket
-				state.EarlyData = accept0RTT(extra)
+				if accept0RTT(extra) {
+					state.MaxEarlyData = quicMaxEarlyData
+				} else {
+					state.MaxEarlyData = 0
+				}
 			} else { // subsequent session ticket, can't be used for 0-RTT
-				state.EarlyData = false
+				state.MaxEarlyData = 0
 			}
 		}
 		return state, nil
@@ -203,6 +215,6 @@ func SendSessionTicket(c *QUICConn, allow0RTT bool) error {
 	})
 }
 
-func ToConnectionState(cs ConnectionState) ConnectionState {
-	return cs
+func ToConnectionState(cs ConnectionState) gotls.ConnectionState {
+	return cs.Compatible()
 }

@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +11,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/qtls"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -91,7 +90,7 @@ var _ = Describe("Handshake tests", func() {
 			suiteID := id
 
 			It(fmt.Sprintf("using %s", name), func() {
-				reset := qtls.SetCipherSuite(suiteID)
+				reset := tls.SetCipherSuite(suiteID)
 				defer reset()
 
 				tlsConf := getTLSConfig()
