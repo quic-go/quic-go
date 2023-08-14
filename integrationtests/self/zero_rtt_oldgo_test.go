@@ -802,7 +802,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
 	})
 
-	It("send 0-RTT datagrams", func() {
+	It("sends 0-RTT datagrams", func() {
 		tlsConf, clientTLSConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
 			EnableDatagrams: true,
 		}))
@@ -860,7 +860,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(conn.CloseWithError(0, "")).To(Succeed())
 	})
 
-	It("reject 0-RTT datagrams when the server doesn't support datagrams anymore", func() {
+	It("rejects 0-RTT datagrams when the server doesn't support datagrams anymore", func() {
 		tlsConf, clientTLSConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
 			EnableDatagrams: true,
 		}))
