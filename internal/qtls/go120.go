@@ -13,12 +13,53 @@ import (
 )
 
 type (
+	Conn               = qtls.Conn
+	Config             = qtls.Config
+	ConnectionState    = qtls.ConnectionState
+	ClientSessionCache = qtls.ClientSessionCache
+	ClientSessionState = qtls.ClientSessionState
+	Certificate        = qtls.Certificate
+	CurveID            = qtls.CurveID
+	ClientHelloInfo    = qtls.ClientHelloInfo
+	ClientAuthType     = qtls.ClientAuthType
+)
+
+type (
 	QUICConn            = qtls.QUICConn
 	QUICConfig          = qtls.QUICConfig
 	QUICEvent           = qtls.QUICEvent
 	QUICEventKind       = qtls.QUICEventKind
 	QUICEncryptionLevel = qtls.QUICEncryptionLevel
 	AlertError          = qtls.AlertError
+)
+
+var (
+	CipherSuiteName          = qtls.CipherSuiteName
+	LoadX509KeyPair          = qtls.LoadX509KeyPair
+	X509KeyPair              = qtls.X509KeyPair
+	NewLRUClientSessionCache = qtls.NewLRUClientSessionCache
+	Listen                   = qtls.Listen
+	Dial                     = qtls.Dial
+)
+
+const (
+	VersionTLS12 = qtls.VersionTLS12
+	VersionTLS13 = qtls.VersionTLS13
+
+	TLS_AES_128_GCM_SHA256       = qtls.TLS_AES_128_GCM_SHA256       // nolint: stylecheck
+	TLS_AES_256_GCM_SHA384       = qtls.TLS_AES_256_GCM_SHA384       // nolint: stylecheck
+	TLS_CHACHA20_POLY1305_SHA256 = qtls.TLS_CHACHA20_POLY1305_SHA256 // nolint: stylecheck
+
+	CurveP256 = qtls.CurveP256
+	CurveP384 = qtls.CurveP384
+	CurveP521 = qtls.CurveP521
+	X25519    = qtls.X25519
+
+	NoClientCert               = qtls.NoClientCert
+	RequestClientCert          = qtls.RequestClientCert
+	RequireAnyClientCert       = qtls.RequireAnyClientCert
+	VerifyClientCertIfGiven    = qtls.VerifyClientCertIfGiven
+	RequireAndVerifyClientCert = qtls.RequireAndVerifyClientCert
 )
 
 const (
@@ -142,4 +183,8 @@ func SetCipherSuite(id uint16) (reset func()) {
 
 func SendSessionTicket(c *QUICConn, allow0RTT bool) error {
 	return c.SendSessionTicket(allow0RTT)
+}
+
+func ToConnectionState(cs ConnectionState) ConnectionState {
+	return cs
 }

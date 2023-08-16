@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"math/big"
 
 	"github.com/quic-go/quic-go"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 )
 
 const addr = "localhost:4242"

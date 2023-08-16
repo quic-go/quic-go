@@ -2,11 +2,11 @@ package handshake
 
 import (
 	"crypto"
-	"crypto/tls"
 
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 )
 
 var (

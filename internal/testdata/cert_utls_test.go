@@ -1,10 +1,11 @@
-//go:build !utls
+//go:build utls
 
 package testdata
 
 import (
-	"crypto/tls"
 	"io"
+
+	"gitlab.com/go-extension/tls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

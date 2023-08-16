@@ -2,7 +2,6 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -572,7 +572,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		return newStreamError(ErrCodeMessageError, err)
 	}
 
-	connState := conn.ConnectionState().TLS
+	connState := tls.ToConnectionState(conn.ConnectionState().TLS)
 	req.TLS = &connState
 	req.RemoteAddr = conn.RemoteAddr().String()
 

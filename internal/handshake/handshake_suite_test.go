@@ -1,12 +1,12 @@
 package handshake
 
 import (
-	"crypto/tls"
 	"encoding/hex"
 	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	tls "github.com/quic-go/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

@@ -16,4 +16,4 @@ package mocks
 
 // The following command produces a warning message on OSX, however, it still generates the correct mock file.
 // See https://github.com/golang/mock/issues/339 for details.
-//go:generate sh -c "go run github.com/golang/mock/mockgen -package mocktls -destination tls/client_session_cache.go crypto/tls ClientSessionCache"
+//go:generate sh -c "go run github.com/golang/mock/mockgen -package mocktls -destination tls/client_session_cache_tmp.go github.com/quic-go/quic-go/internal/qtls ClientSessionCache && sed -E 's~crypto/tls~github.com/quic-go/quic-go/internal/qtls~g' tls/client_session_cache_tmp.go > tls/client_session_cache.go && rm tls/client_session_cache_tmp.go && go run golang.org/x/tools/cmd/goimports -w tls/client_session_cache.go"
