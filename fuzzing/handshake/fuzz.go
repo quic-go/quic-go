@@ -156,7 +156,7 @@ func getTransportParameters(seed uint8) *wire.TransportParameters {
 
 // PrefixLen is the number of bytes used for configuration
 const (
-	PrefixLen = 12
+	PrefixLen = 14
 	confLen   = 5
 )
 
@@ -177,6 +177,10 @@ func Fuzz(data []byte) int {
 	data = data[confLen:]
 	messageConfig2 := data[0]
 	data = data[1:]
+	messageLen1 := data[0]
+	data = data[1:]
+	messageLen2 := data[0]
+	data = data[1:]
 	if dataLen != len(data)+PrefixLen {
 		panic("incorrect configuration")
 	}
@@ -192,13 +196,13 @@ func Fuzz(data []byte) int {
 		clientConf.ClientSessionCache = tls.NewLRUClientSessionCache(5)
 	}
 
-	if val := runHandshake(runConfig1, messageConfig1, clientConf, data); val != 1 {
+	if val := runHandshake(runConfig1, messageConfig1, messageLen1, clientConf, data); val != 1 {
 		return val
 	}
-	return runHandshake(runConfig2, messageConfig2, clientConf, data)
+	return runHandshake(runConfig2, messageConfig2, messageLen2, clientConf, data)
 }
 
-func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.Config, data []byte) int {
+func runHandshake(runConfig [confLen]byte, messageConfig, messageSize uint8, clientConf *tls.Config, data []byte) int {
 	serverConf := &tls.Config{
 		MinVersion:       tls.VersionTLS13,
 		Certificates:     []tls.Certificate{*cert},
@@ -338,8 +342,12 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 					fmt.Printf("replacing %s message to the server with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
 					msg = data
 				}
-				if err := server.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
-					return 1
+				for len(msg) > 0 {
+					size := utils.Min(int(messageSize), len(msg))
+					if err := server.HandleMessage(msg[:size], messageToReplaceEncLevel); err != nil {
+						return 1
+					}
+					msg = msg[size:]
 				}
 			case handshake.EventHandshakeComplete:
 				clientHandshakeComplete = true
@@ -364,8 +372,12 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 					fmt.Printf("replacing %s message to the client with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
 					msg = data
 				}
-				if err := client.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
-					return 1
+				for len(msg) > 0 {
+					size := utils.Min(int(messageSize), len(msg))
+					if err := client.HandleMessage(msg[:size], messageToReplaceEncLevel); err != nil {
+						return 1
+					}
+					msg = msg[size:]
 				}
 			case handshake.EventHandshakeComplete:
 				serverHandshakeComplete = true
