@@ -1,11 +1,17 @@
 name: Build interop Docker image
 on: 
   push:
-    branches: [ interop ]
+    branches:
+      - master
+      - build-interop-docker-image-for-tags # TODO: remove
+    tags:
+      - 'v*'
   
 jobs:
   interop:
     runs-on: ubuntu-latest
+    env:
+      TAG: "latest"
     steps:
       - uses: actions/checkout@v3
       - name: Set up QEMU
@@ -19,9 +25,12 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: set tag name
+        if: github.event_name == 'tag'
+        run: echo "TAG=${{ github.event.release.tag_name }}"
       - uses: docker/build-push-action@v4
         with:
           context: "{{defaultContext}}:interop"
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: martenseemann/quic-go-interop:latest
+          tags: martenseemann/quic-go-interop:${{ env.TAG }}
