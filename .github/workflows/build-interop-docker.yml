@@ -9,7 +9,7 @@ on:
   
 jobs:
   interop:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars['DOCKER_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     env:
       TAG: "latest"
     steps:
@@ -27,6 +27,8 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: set tag name
         if: github.event_name == 'tag'
+        # Tagged releases won't be picked up by the interop runner automatically,
+        # but they can be useful when debugging regressions.
         run: echo "TAG=${{ github.event.release.tag_name }}"
       - uses: docker/build-push-action@v4
         with:
