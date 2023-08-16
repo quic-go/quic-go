@@ -147,6 +147,7 @@ func getTransportParameters(seed uint8) *wire.TransportParameters {
 	const maxVarInt = math.MaxUint64 / 4
 	r := mrand.New(mrand.NewSource(int64(seed)))
 	return &wire.TransportParameters{
+		ActiveConnectionIDLimit:        2,
 		InitialMaxData:                 protocol.ByteCount(r.Int63n(maxVarInt)),
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.Int63n(maxVarInt)),
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.Int63n(maxVarInt)),
@@ -302,6 +303,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	if err := client.StartHandshake(); err != nil {
 		log.Fatal(err)
 	}
+	defer client.Close()
 
 	server := handshake.NewCryptoSetupServer(
 		protocol.ConnectionID{},
@@ -318,12 +320,13 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	if err := server.StartHandshake(); err != nil {
 		log.Fatal(err)
 	}
+	defer server.Close()
 
 	var clientHandshakeComplete, serverHandshakeComplete bool
 	for {
+		var processedEvent bool
 	clientLoop:
 		for {
-			var processedEvent bool
 			ev := client.NextEvent()
 			//nolint:exhaustive // only need to process a few events
 			switch ev.Kind {
@@ -334,11 +337,16 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 				break clientLoop
 			case handshake.EventWriteInitialData, handshake.EventWriteHandshakeData:
 				msg := ev.Data
+				encLevel := protocol.EncryptionInitial
+				if ev.Kind == handshake.EventWriteHandshakeData {
+					encLevel = protocol.EncryptionHandshake
+				}
 				if msg[0] == messageToReplace {
 					fmt.Printf("replacing %s message to the server with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
 					msg = data
+					encLevel = messageToReplaceEncLevel
 				}
-				if err := server.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
+				if err := server.HandleMessage(msg, encLevel); err != nil {
 					return 1
 				}
 			case handshake.EventHandshakeComplete:
@@ -347,9 +355,9 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 			processedEvent = true
 		}
 
+		processedEvent = false
 	serverLoop:
 		for {
-			var processedEvent bool
 			ev := server.NextEvent()
 			//nolint:exhaustive // only need to process a few events
 			switch ev.Kind {
@@ -359,12 +367,17 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 				}
 				break serverLoop
 			case handshake.EventWriteInitialData, handshake.EventWriteHandshakeData:
+				encLevel := protocol.EncryptionInitial
+				if ev.Kind == handshake.EventWriteHandshakeData {
+					encLevel = protocol.EncryptionHandshake
+				}
 				msg := ev.Data
 				if msg[0] == messageToReplace {
 					fmt.Printf("replacing %s message to the client with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
 					msg = data
+					encLevel = messageToReplaceEncLevel
 				}
-				if err := client.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
+				if err := client.HandleMessage(msg, encLevel); err != nil {
 					return 1
 				}
 			case handshake.EventHandshakeComplete:
@@ -410,9 +423,11 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		client.HandleMessage(ticket, protocol.Encryption1RTT)
 	}
 	if sendPostHandshakeMessageToClient {
+		fmt.Println("sending post handshake message to the client at", messageToReplaceEncLevel)
 		client.HandleMessage(data, messageToReplaceEncLevel)
 	}
 	if sendPostHandshakeMessageToServer {
+		fmt.Println("sending post handshake message to the server at", messageToReplaceEncLevel)
 		server.HandleMessage(data, messageToReplaceEncLevel)
 	}
 
