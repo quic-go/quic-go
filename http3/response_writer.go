@@ -15,9 +15,8 @@ import (
 	"github.com/quic-go/qpack"
 )
 
-// The maximum length of an encoded quic frame header is 10.
-// 1 (header type) + variable (frame length, the length of the largest encoded quic varint is 9).
-// 16 is more than enough.
+// The maximum length of an encoded HTTP/3 frame header is 16:
+// The frame has a type and length field, both QUIC varints (maximum 8 bytes in length)
 const frameHeaderLen = 16
 
 // headerWriter wraps the stream, so that the first Write call flushes the header to the stream
