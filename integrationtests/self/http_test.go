@@ -134,7 +134,7 @@ var _ = Describe("HTTP tests", func() {
 			w.Write([]byte("foobar"))
 		})
 
-		resp, err := client.Get("https://localhost:" + port + "/small")
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/small", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 		Expect(resp.Header.Get("Content-Length")).To(Equal(strconv.Itoa(len("foobar"))))
