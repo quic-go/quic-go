@@ -17,6 +17,7 @@ import (
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -82,33 +83,6 @@ func (m messageType) String() string {
 	default:
 		return fmt.Sprintf("unknown message type: %d", m)
 	}
-}
-
-func appendSuites(suites []uint16, rand uint8) []uint16 {
-	const (
-		s1 = tls.TLS_AES_128_GCM_SHA256
-		s2 = tls.TLS_AES_256_GCM_SHA384
-		s3 = tls.TLS_CHACHA20_POLY1305_SHA256
-	)
-	switch rand % 4 {
-	default:
-		return suites
-	case 1:
-		return append(suites, s1)
-	case 2:
-		return append(suites, s2)
-	case 3:
-		return append(suites, s3)
-	}
-}
-
-// consumes 2 bits
-func getSuites(rand uint8) []uint16 {
-	suites := make([]uint16, 0, 3)
-	for i := 1; i <= 3; i++ {
-		suites = appendSuites(suites, rand>>i%4)
-	}
-	return suites
 }
 
 // consumes 3 bits
@@ -207,14 +181,26 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		SessionTicketKey: sessionTicketKey,
 	}
 
+	// This sets the cipher suite for both client and server.
+	// The way crypto/tls is designed doesn't allow us to set different cipher suites for client and server.
+	resetCipherSuite := func() {}
+	switch (runConfig[0] >> 6) % 4 {
+	case 0:
+		resetCipherSuite = qtls.SetCipherSuite(tls.TLS_AES_128_GCM_SHA256)
+	case 1:
+		resetCipherSuite = qtls.SetCipherSuite(tls.TLS_AES_256_GCM_SHA384)
+	case 3:
+		resetCipherSuite = qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
+	default:
+	}
+	defer resetCipherSuite()
+
 	enable0RTTClient := helper.NthBit(runConfig[0], 0)
 	enable0RTTServer := helper.NthBit(runConfig[0], 1)
 	sendPostHandshakeMessageToClient := helper.NthBit(runConfig[0], 3)
 	sendPostHandshakeMessageToServer := helper.NthBit(runConfig[0], 4)
 	sendSessionTicket := helper.NthBit(runConfig[0], 5)
-	clientConf.CipherSuites = getSuites(runConfig[0] >> 6)
 	serverConf.ClientAuth = getClientAuth(runConfig[1] & 0b00000111)
-	serverConf.CipherSuites = getSuites(runConfig[1] >> 6)
 	serverConf.SessionTicketsDisabled = helper.NthBit(runConfig[1], 3)
 	if helper.NthBit(runConfig[2], 0) {
 		clientConf.RootCAs = x509.NewCertPool()
