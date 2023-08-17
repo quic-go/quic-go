@@ -17,6 +17,7 @@ import (
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -84,33 +85,6 @@ func (m messageType) String() string {
 	}
 }
 
-func appendSuites(suites []uint16, rand uint8) []uint16 {
-	const (
-		s1 = tls.TLS_AES_128_GCM_SHA256
-		s2 = tls.TLS_AES_256_GCM_SHA384
-		s3 = tls.TLS_CHACHA20_POLY1305_SHA256
-	)
-	switch rand % 4 {
-	default:
-		return suites
-	case 1:
-		return append(suites, s1)
-	case 2:
-		return append(suites, s2)
-	case 3:
-		return append(suites, s3)
-	}
-}
-
-// consumes 2 bits
-func getSuites(rand uint8) []uint16 {
-	suites := make([]uint16, 0, 3)
-	for i := 1; i <= 3; i++ {
-		suites = appendSuites(suites, rand>>i%4)
-	}
-	return suites
-}
-
 // consumes 3 bits
 func getClientAuth(rand uint8) tls.ClientAuthType {
 	switch rand {
@@ -147,6 +121,7 @@ func getTransportParameters(seed uint8) *wire.TransportParameters {
 	const maxVarInt = math.MaxUint64 / 4
 	r := mrand.New(mrand.NewSource(int64(seed)))
 	return &wire.TransportParameters{
+		ActiveConnectionIDLimit:        2,
 		InitialMaxData:                 protocol.ByteCount(r.Int63n(maxVarInt)),
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.Int63n(maxVarInt)),
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.Int63n(maxVarInt)),
@@ -206,14 +181,26 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		SessionTicketKey: sessionTicketKey,
 	}
 
+	// This sets the cipher suite for both client and server.
+	// The way crypto/tls is designed doesn't allow us to set different cipher suites for client and server.
+	resetCipherSuite := func() {}
+	switch (runConfig[0] >> 6) % 4 {
+	case 0:
+		resetCipherSuite = qtls.SetCipherSuite(tls.TLS_AES_128_GCM_SHA256)
+	case 1:
+		resetCipherSuite = qtls.SetCipherSuite(tls.TLS_AES_256_GCM_SHA384)
+	case 3:
+		resetCipherSuite = qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
+	default:
+	}
+	defer resetCipherSuite()
+
 	enable0RTTClient := helper.NthBit(runConfig[0], 0)
 	enable0RTTServer := helper.NthBit(runConfig[0], 1)
 	sendPostHandshakeMessageToClient := helper.NthBit(runConfig[0], 3)
 	sendPostHandshakeMessageToServer := helper.NthBit(runConfig[0], 4)
 	sendSessionTicket := helper.NthBit(runConfig[0], 5)
-	clientConf.CipherSuites = getSuites(runConfig[0] >> 6)
 	serverConf.ClientAuth = getClientAuth(runConfig[1] & 0b00000111)
-	serverConf.CipherSuites = getSuites(runConfig[1] >> 6)
 	serverConf.SessionTicketsDisabled = helper.NthBit(runConfig[1], 3)
 	if helper.NthBit(runConfig[2], 0) {
 		clientConf.RootCAs = x509.NewCertPool()
@@ -302,6 +289,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	if err := client.StartHandshake(); err != nil {
 		log.Fatal(err)
 	}
+	defer client.Close()
 
 	server := handshake.NewCryptoSetupServer(
 		protocol.ConnectionID{},
@@ -318,12 +306,13 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	if err := server.StartHandshake(); err != nil {
 		log.Fatal(err)
 	}
+	defer server.Close()
 
 	var clientHandshakeComplete, serverHandshakeComplete bool
 	for {
+		var processedEvent bool
 	clientLoop:
 		for {
-			var processedEvent bool
 			ev := client.NextEvent()
 			//nolint:exhaustive // only need to process a few events
 			switch ev.Kind {
@@ -334,11 +323,16 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 				break clientLoop
 			case handshake.EventWriteInitialData, handshake.EventWriteHandshakeData:
 				msg := ev.Data
+				encLevel := protocol.EncryptionInitial
+				if ev.Kind == handshake.EventWriteHandshakeData {
+					encLevel = protocol.EncryptionHandshake
+				}
 				if msg[0] == messageToReplace {
 					fmt.Printf("replacing %s message to the server with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
 					msg = data
+					encLevel = messageToReplaceEncLevel
 				}
-				if err := server.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
+				if err := server.HandleMessage(msg, encLevel); err != nil {
 					return 1
 				}
 			case handshake.EventHandshakeComplete:
@@ -347,9 +341,9 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 			processedEvent = true
 		}
 
+		processedEvent = false
 	serverLoop:
 		for {
-			var processedEvent bool
 			ev := server.NextEvent()
 			//nolint:exhaustive // only need to process a few events
 			switch ev.Kind {
@@ -359,12 +353,17 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 				}
 				break serverLoop
 			case handshake.EventWriteInitialData, handshake.EventWriteHandshakeData:
+				encLevel := protocol.EncryptionInitial
+				if ev.Kind == handshake.EventWriteHandshakeData {
+					encLevel = protocol.EncryptionHandshake
+				}
 				msg := ev.Data
 				if msg[0] == messageToReplace {
 					fmt.Printf("replacing %s message to the client with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
 					msg = data
+					encLevel = messageToReplaceEncLevel
 				}
-				if err := client.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
+				if err := client.HandleMessage(msg, encLevel); err != nil {
 					return 1
 				}
 			case handshake.EventHandshakeComplete:
@@ -410,9 +409,11 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		client.HandleMessage(ticket, protocol.Encryption1RTT)
 	}
 	if sendPostHandshakeMessageToClient {
+		fmt.Println("sending post handshake message to the client at", messageToReplaceEncLevel)
 		client.HandleMessage(data, messageToReplaceEncLevel)
 	}
 	if sendPostHandshakeMessageToServer {
+		fmt.Println("sending post handshake message to the server at", messageToReplaceEncLevel)
 		server.HandleMessage(data, messageToReplaceEncLevel)
 	}
 
