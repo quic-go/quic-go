@@ -202,6 +202,8 @@ var _ = Describe("Handshake tests", func() {
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
 			Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
+			var certErr *tls.CertificateVerificationError
+			Expect(errors.As(transportErr, &certErr)).To(BeTrue())
 		})
 
 		It("fails the handshake if the client fails to provide the requested client cert", func() {
