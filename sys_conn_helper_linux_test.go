@@ -1,22 +1,24 @@
-// We need root permissions to use RCVBUFFORCE.
-// This test is therefore only compiled when the root build flag is set.
-// It can only succeed if the tests are then also run with root permissions.
-//go:build linux && root
+//go:build linux
 
 package quic
 
 import (
+	"errors"
 	"net"
 	"os"
+
+	"golang.org/x/sys/unix"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
+var errGSO = &os.SyscallError{Err: unix.EIO}
+
 var _ = Describe("forcing a change of send and receive buffer sizes", func() {
 	It("forces a change of the receive buffer size", func() {
 		if os.Getuid() != 0 {
-			Fail("Must be root to force change the receive buffer size")
+			Skip("Must be root to force change the receive buffer size")
 		}
 
 		c, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -43,7 +45,7 @@ var _ = Describe("forcing a change of send and receive buffer sizes", func() {
 
 	It("forces a change of the send buffer size", func() {
 		if os.Getuid() != 0 {
-			Fail("Must be root to force change the send buffer size")
+			Skip("Must be root to force change the send buffer size")
 		}
 
 		c, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -66,5 +68,11 @@ var _ = Describe("forcing a change of send and receive buffer sizes", func() {
 		Expect(err).ToNot(HaveOccurred())
 		//  The kernel doubles this value (to allow space for bookkeeping overhead)
 		Expect(size).To(Equal(2 * large))
+	})
+
+	It("detects GSO errors", func() {
+		Expect(isGSOError(errGSO)).To(BeTrue())
+		Expect(isGSOError(nil)).To(BeFalse())
+		Expect(isGSOError(errors.New("test"))).To(BeFalse())
 	})
 })

@@ -179,7 +179,7 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, hostname string, tl
 		}
 		tlsConf.ServerName = hostname
 	}
-	return dial(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
+	return dial(ctx, newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
 }
 
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
@@ -195,7 +195,6 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 				return
 			}
 		}
-		t.conn = conn
 
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
@@ -229,7 +228,7 @@ func (t *Transport) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if err := t.init(false); err != nil {
 		return 0, err
 	}
-	return t.conn.WritePacket(b, uint16(len(b)), addr, nil)
+	return t.conn.WritePacket(b, addr, nil)
 }
 
 func (t *Transport) enqueueClosePacket(p closePacket) {
@@ -247,7 +246,7 @@ func (t *Transport) runSendQueue() {
 		case <-t.listening:
 			return
 		case p := <-t.closeQueue:
-			t.conn.WritePacket(p.payload, uint16(len(p.payload)), p.addr, p.info.OOB())
+			t.conn.WritePacket(p.payload, p.addr, p.info.OOB())
 		case p := <-t.statelessResetQueue:
 			t.sendStatelessReset(p)
 		}
@@ -408,7 +407,7 @@ func (t *Transport) sendStatelessReset(p receivedPacket) {
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)
-	if _, err := t.conn.WritePacket(data, uint16(len(data)), p.remoteAddr, p.info.OOB()); err != nil {
+	if _, err := t.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
 		t.logger.Debugf("Error sending Stateless Reset to %s: %s", p.remoteAddr, err)
 	}
 }
