@@ -408,6 +408,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		}
 		client.HandleMessage(ticket, protocol.Encryption1RTT)
 	}
+
 	if sendPostHandshakeMessageToClient {
 		fmt.Println("sending post handshake message to the client at", messageToReplaceEncLevel)
 		client.HandleMessage(data, messageToReplaceEncLevel)
