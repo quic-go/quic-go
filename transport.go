@@ -7,12 +7,12 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/quic-go/quic-go/internal/wire"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 )
 
@@ -84,6 +84,9 @@ type Transport struct {
 	closed      bool
 	createdConn bool
 	isSingleUse bool // was created for a single server or client, i.e. by calling quic.Listen or quic.Dial
+
+	readingNonQUICPackets atomic.Bool
+	nonQUICPackets        chan receivedPacket
 
 	logger utils.Logger
 }
@@ -341,6 +344,13 @@ func (t *Transport) listen(conn rawConn) {
 }
 
 func (t *Transport) handlePacket(p receivedPacket) {
+	if len(p.data) == 0 {
+		return
+	}
+	if !wire.IsPotentialQUICPacket(p.data[0]) && !wire.IsLongHeaderPacket(p.data[0]) {
+		t.handleNonQUICPacket(p)
+		return
+	}
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
@@ -428,4 +438,43 @@ func (t *Transport) maybeHandleStatelessReset(data []byte) bool {
 		return true
 	}
 	return false
+}
+
+func (t *Transport) handleNonQUICPacket(p receivedPacket) {
+	// Strictly speaking, this is racy,
+	// but we only care about receiving packets at some point after ReadNonQUICPacket has been called.
+	if !t.readingNonQUICPackets.Load() {
+		return
+	}
+	select {
+	case t.nonQUICPackets <- p:
+	default:
+		if t.Tracer != nil {
+			t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention)
+		}
+	}
+}
+
+const maxQueuedNonQUICPackets = 32
+
+// ReadNonQUICPacket reads non-QUIC packets received on the underlying connection.
+// The detection logic is very simple: Any packet that has the first and second bit of the packet set to 0.
+// Note that this is stricter than the detection logic defined in RFC 9443.
+func (t *Transport) ReadNonQUICPacket(ctx context.Context, b []byte) (int, net.Addr, error) {
+	if err := t.init(false); err != nil {
+		return 0, nil, err
+	}
+	if !t.readingNonQUICPackets.Load() {
+		t.nonQUICPackets = make(chan receivedPacket, maxQueuedNonQUICPackets)
+		t.readingNonQUICPackets.Store(true)
+	}
+	select {
+	case <-ctx.Done():
+		return 0, nil, ctx.Err()
+	case p := <-t.nonQUICPackets:
+		n := copy(b, p.data)
+		return n, p.remoteAddr, nil
+	case <-t.listening:
+		return 0, nil, errors.New("closed")
+	}
 }
