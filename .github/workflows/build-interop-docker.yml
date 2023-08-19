@@ -10,8 +10,6 @@ on:
 jobs:
   interop:
     runs-on: ${{ fromJSON(vars['DOCKER_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
-    env:
-      TAG: "latest"
     steps:
       - uses: actions/checkout@v3
       - name: Set up QEMU
@@ -26,13 +24,18 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: set tag name
-        if: github.event_name == 'tag'
+        id: tag
         # Tagged releases won't be picked up by the interop runner automatically,
         # but they can be useful when debugging regressions.
-        run: echo "TAG=${{ github.event.release.tag_name }}"
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
+          else
+            echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
+          fi
       - uses: docker/build-push-action@v4
         with:
           context: "{{defaultContext}}:interop"
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: martenseemann/quic-go-interop:${{ env.TAG }}
+          tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
