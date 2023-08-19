@@ -409,6 +409,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		}
 		client.HandleMessage(ticket, protocol.Encryption1RTT)
 	}
+
 	if sendPostHandshakeMessageToClient {
 		client.HandleMessage(data, messageToReplaceEncLevel)
 	}

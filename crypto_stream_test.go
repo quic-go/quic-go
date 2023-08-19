@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"crypto/rand"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -15,7 +16,7 @@ var _ = Describe("Crypto Stream", func() {
 	var str cryptoStream
 
 	BeforeEach(func() {
-		str = newCryptoStream()
+		str = newCryptoStream(false)
 	})
 
 	Context("handling incoming data", func() {
@@ -136,5 +137,24 @@ var _ = Describe("Crypto Stream", func() {
 			Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
 			Expect(f.Data).To(Equal([]byte("bar")))
 		})
+	})
+
+	It("reassembles data", func() {
+		str = newCryptoStream(true)
+		data := make([]byte, 1337)
+		l := len(data) - 4
+		data[1] = uint8(l >> 16)
+		data[2] = uint8(l >> 8)
+		data[3] = uint8(l)
+		rand.Read(data[4:])
+
+		for i, b := range data {
+			Expect(str.GetCryptoData()).To(BeEmpty())
+			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
+				Offset: protocol.ByteCount(i),
+				Data:   []byte{b},
+			})).To(Succeed())
+		}
+		Expect(str.GetCryptoData()).To(Equal(data))
 	})
 })
