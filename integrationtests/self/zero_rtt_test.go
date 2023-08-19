@@ -938,4 +938,119 @@ var _ = Describe("0-RTT", func() {
 		)
 		Expect(restored).To(BeTrue())
 	})
+
+	It("sends 0-RTT datagrams", func() {
+		tlsConf := getTLSConfig()
+		clientTLSConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, getQuicConfig(&quic.Config{
+			EnableDatagrams: true,
+		}), clientTLSConf)
+
+		tracer := newPacketTracer()
+		ln, err := quic.ListenAddrEarly(
+			"localhost:0",
+			tlsConf,
+			getQuicConfig(&quic.Config{
+				Allow0RTT:       true,
+				EnableDatagrams: true,
+				Tracer:          newTracer(tracer),
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+		proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+		defer proxy.Close()
+
+		// second connection
+		sentMessage := GeneratePRData(100)
+		var receivedMessage []byte
+		received := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(received)
+			conn, err := ln.Accept(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			receivedMessage, err = conn.ReceiveMessage(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
+		}()
+		conn, err := quic.DialAddrEarly(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+			clientTLSConf,
+			getQuicConfig(&quic.Config{
+				EnableDatagrams: true,
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
+		Expect(conn.SendMessage(sentMessage)).To(Succeed())
+		<-conn.HandshakeComplete()
+		<-received
+
+		Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
+		Expect(receivedMessage).To(Equal(sentMessage))
+		num0RTT := atomic.LoadUint32(num0RTTPackets)
+		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+		Expect(num0RTT).ToNot(BeZero())
+		zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
+		Expect(zeroRTTPackets).To(HaveLen(1))
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
+	})
+
+	It("rejects 0-RTT datagrams when the server doesn't support datagrams anymore", func() {
+		tlsConf := getTLSConfig()
+		clientTLSConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, getQuicConfig(&quic.Config{
+			EnableDatagrams: true,
+		}), clientTLSConf)
+
+		tracer := newPacketTracer()
+		ln, err := quic.ListenAddrEarly(
+			"localhost:0",
+			tlsConf,
+			getQuicConfig(&quic.Config{
+				Allow0RTT:       true,
+				EnableDatagrams: false,
+				Tracer:          newTracer(tracer),
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+
+		proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+		defer proxy.Close()
+
+		// second connection
+		go func() {
+			defer GinkgoRecover()
+			conn, err := ln.Accept(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			_, err = conn.ReceiveMessage(context.Background())
+			Expect(err.Error()).To(Equal("datagram support disabled"))
+			<-conn.HandshakeComplete()
+			Expect(conn.ConnectionState().Used0RTT).To(BeFalse())
+		}()
+		conn, err := quic.DialAddrEarly(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+			clientTLSConf,
+			getQuicConfig(&quic.Config{
+				EnableDatagrams: true,
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		// the client can temporarily send datagrams but the server doesn't process them.
+		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
+		Expect(conn.SendMessage(make([]byte, 100))).To(Succeed())
+		<-conn.HandshakeComplete()
+
+		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
+		Expect(conn.ConnectionState().Used0RTT).To(BeFalse())
+		num0RTT := atomic.LoadUint32(num0RTTPackets)
+		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+		Expect(num0RTT).ToNot(BeZero())
+		Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(BeEmpty())
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
+	})
 })
