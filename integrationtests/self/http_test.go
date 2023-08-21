@@ -128,6 +128,18 @@ var _ = Describe("HTTP tests", func() {
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 	})
 
+	It("sets content-length for small response", func() {
+		mux.HandleFunc("/small", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Write([]byte("foobar"))
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/small", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		Expect(resp.Header.Get("Content-Length")).To(Equal(strconv.Itoa(len("foobar"))))
+	})
+
 	It("requests to different servers with the same udpconn", func() {
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/remoteAddr", port))
 		Expect(err).ToNot(HaveOccurred())

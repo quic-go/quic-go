@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -627,7 +628,12 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 
 	// only write response when there is no panic
 	if !panicked {
-		r.WriteHeader(http.StatusOK)
+		// response not written to the client yet, set Content-Length
+		if !r.written {
+			if _, haveCL := r.header["Content-Length"]; !haveCL {
+				r.header.Set("Content-Length", strconv.FormatInt(r.numWritten, 10))
+			}
+		}
 		r.Flush()
 	}
 	// If the EOF was read by the handler, CancelRead() is a no-op.
