@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - build-interop-docker-image-for-tags
     tags:
       - 'v*'
   
@@ -29,12 +30,16 @@ jobs:
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "tag=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
+            echo "gitref=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
           else
             echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
+            echo 'gitref=${{ github.sha }}' | tee -a $GITHUB_OUTPUT;
           fi
       - uses: docker/build-push-action@v4
         with:
           context: "{{defaultContext}}:interop"
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            GITREF=${{ steps.tag.outputs.gitref }}
           tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
