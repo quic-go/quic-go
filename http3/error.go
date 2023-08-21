@@ -18,7 +18,7 @@ type Error struct {
 
 var _ error = &Error{}
 
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	s := e.ErrorCode.string()
 	if s == "" {
 		s = fmt.Sprintf("H3 error (%#x)", uint64(e.ErrorCode))
@@ -54,5 +54,5 @@ func maybeReplaceError(err error) error {
 		e.ErrorCode = ErrCode(appErr.ErrorCode)
 		e.ErrorMessage = appErr.ErrorMessage
 	}
-	return e
+	return &e
 }

@@ -307,7 +307,7 @@ var _ = Describe("HTTP tests", func() {
 			for {
 				if _, err := w.Write([]byte("foobar")); err != nil {
 					Expect(r.Context().Done()).To(BeClosed())
-					var http3Err http3.Error
+					var http3Err *http3.Error
 					Expect(errors.As(err, &http3Err)).To(BeTrue())
 					Expect(http3Err.ErrorCode).To(Equal(http3.ErrCode(0x10c)))
 					Expect(http3Err.Error()).To(Equal("H3_REQUEST_CANCELLED"))
@@ -326,7 +326,7 @@ var _ = Describe("HTTP tests", func() {
 		cancel()
 		Eventually(handlerCalled).Should(BeClosed())
 		_, err = resp.Body.Read([]byte{0})
-		var http3Err http3.Error
+		var http3Err *http3.Error
 		Expect(errors.As(err, &http3Err)).To(BeTrue())
 		Expect(http3Err.ErrorCode).To(Equal(http3.ErrCode(0x10c)))
 		Expect(http3Err.Error()).To(Equal("H3_REQUEST_CANCELLED (local)"))
