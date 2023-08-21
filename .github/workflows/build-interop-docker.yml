@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - master
-      - build-interop-docker-image-for-tags
     tags:
       - 'v*'
   
