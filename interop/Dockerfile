@@ -5,7 +5,7 @@ RUN echo "TARGETPLATFORM: ${TARGETPLATFORM}"
 
 RUN apt-get update && apt-get install -y wget tar git
 
-ENV GOVERSION=1.20.2
+ENV GOVERSION=1.20.7
 
 RUN platform=$(echo ${TARGETPLATFORM} | tr '/' '-') && \
   filename="go${GOVERSION}.${platform}.tar.gz" && \
@@ -18,14 +18,15 @@ ENV PATH="/go/bin:${PATH}"
 # build with --build-arg CACHEBUST=$(date +%s)
 ARG CACHEBUST=1
 
-RUN git clone https://github.com/quic-go/quic-go && \
-  cd quic-go && \
-  git fetch origin interop && git checkout -t origin/interop && \
-  go get ./...
+# build other branches / commits / tags using --build-arg GITREF="<git reference>"
+ARG GITREF="master"
 
+RUN git clone https://github.com/quic-go/quic-go
 WORKDIR /quic-go
+RUN git checkout ${GITREF}
+RUN go get ./...
 
-RUN git rev-parse HEAD > commit.txt
+RUN git rev-parse HEAD | tee commit.txt
 RUN go build -o server -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/server/main.go
 RUN go build -o client -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/client/main.go
 
