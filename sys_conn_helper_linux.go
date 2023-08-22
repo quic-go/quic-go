@@ -56,7 +56,6 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 // isGSOSupported tests if the kernel supports GSO.
 // Sending with GSO might still fail later on, if the interface doesn't support it (see isGSOError).
 func isGSOSupported(conn syscall.RawConn) bool {
-
 	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
 	if err == nil && disabled {
 		return false
