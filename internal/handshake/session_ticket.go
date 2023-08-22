@@ -21,7 +21,11 @@ func (t *sessionTicket) Marshal() []byte {
 	b := make([]byte, 0, 256)
 	b = quicvarint.Append(b, sessionTicketRevision)
 	b = quicvarint.Append(b, uint64(t.RTT.Microseconds()))
-	return t.Parameters.MarshalForSessionTicket(b)
+	if t.Parameters == nil {
+		return b
+	} else {
+		return t.Parameters.MarshalForSessionTicket(b)
+	}
 }
 
 func (t *sessionTicket) Unmarshal(b []byte) error {
@@ -37,11 +41,13 @@ func (t *sessionTicket) Unmarshal(b []byte) error {
 	if err != nil {
 		return errors.New("failed to read RTT")
 	}
-	var tp wire.TransportParameters
-	if err := tp.UnmarshalFromSessionTicket(r); err != nil {
-		return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
+	if r.Len() > 0 {
+		var tp wire.TransportParameters
+		if err := tp.UnmarshalFromSessionTicket(r); err != nil {
+			return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
+		}
+		t.Parameters = &tp
 	}
-	t.Parameters = &tp
 	t.RTT = time.Duration(rtt) * time.Microsecond
 	return nil
 }

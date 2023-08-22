@@ -11,7 +11,7 @@ import (
 )
 
 var _ = Describe("Session Ticket", func() {
-	It("marshals and unmarshals a session ticket", func() {
+	It("marshals and unmarshals a session ticket with transport parameters", func() {
 		ticket := &sessionTicket{
 			Parameters: &wire.TransportParameters{
 				InitialMaxStreamDataBidiLocal:  1,
@@ -27,6 +27,16 @@ var _ = Describe("Session Ticket", func() {
 		Expect(t.Parameters.InitialMaxStreamDataBidiRemote).To(BeEquivalentTo(2))
 		Expect(t.Parameters.ActiveConnectionIDLimit).To(BeEquivalentTo(10))
 		Expect(t.Parameters.MaxDatagramFrameSize).To(BeEquivalentTo(20))
+		Expect(t.RTT).To(Equal(1337 * time.Microsecond))
+	})
+
+	It("marshals and unmarshals a session ticket without transport parameters", func() {
+		ticket := &sessionTicket{
+			RTT: 1337 * time.Microsecond,
+		}
+		var t sessionTicket
+		Expect(t.Unmarshal(ticket.Marshal())).To(Succeed())
+		Expect(t.Parameters).To(BeNil())
 		Expect(t.RTT).To(Equal(1337 * time.Microsecond))
 	})
 
