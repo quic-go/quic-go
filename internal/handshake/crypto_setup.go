@@ -347,10 +347,13 @@ func (h *cryptoSetup) handleDataFromSessionStateImpl(data []byte) (*wire.Transpo
 }
 
 func (h *cryptoSetup) getDataForSessionTicket() []byte {
-	return (&sessionTicket{
-		Parameters: h.ourParams,
-		RTT:        h.rttStats.SmoothedRTT(),
-	}).Marshal()
+	ticket := &sessionTicket{
+		RTT: h.rttStats.SmoothedRTT(),
+	}
+	if h.allow0RTT {
+		ticket.Parameters = h.ourParams
+	}
+	return ticket.Marshal()
 }
 
 // GetSessionTicket generates a new session ticket.

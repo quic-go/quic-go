@@ -55,7 +55,7 @@ func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, hand
 	// add callbacks to save transport parameters into the session ticket
 	origWrapSession := conf.WrapSession
 	conf.WrapSession = func(cs tls.ConnectionState, state *tls.SessionState) ([]byte, error) {
-		// Add QUIC transport parameters
+		// Add QUIC session ticket
 		state.Extra = append(state.Extra, addExtraPrefix(getData()))
 
 		if origWrapSession != nil {
