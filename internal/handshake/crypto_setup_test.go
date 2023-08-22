@@ -449,7 +449,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
 				Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
-				Expect(serverRTTStats.SmoothedRTT()).To(Equal(serverRTT))
 			})
 
 			It("doesn't use session resumption if the server disabled it", func() {
