@@ -127,7 +127,7 @@ func NewCryptoSetupServer(
 	cs.allow0RTT = allow0RTT
 
 	quicConf := &qtls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.accept0RTT)
+	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
 	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
 
 	cs.tlsConf = quicConf.TLSConfig
@@ -379,12 +379,16 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	return ticket, nil
 }
 
-// accept0RTT is called for the server when receiving the client's session ticket.
-// It decides whether to accept 0-RTT.
-func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
+// handleSessionTicket is called for the server when receiving the client's session ticket.
+// It reads parameters from the session ticket and decides whether to accept 0-RTT when the session ticket is used for 0-RTT.
+func (h *cryptoSetup) handleSessionTicket(using0RTT bool, sessionTicketData []byte) bool {
 	var t sessionTicket
 	if err := t.Unmarshal(sessionTicketData); err != nil {
 		h.logger.Debugf("Unmarshalling transport parameters from session ticket failed: %s", err.Error())
+		return false
+	}
+	h.rttStats.SetInitialRTT(t.RTT)
+	if !using0RTT {
 		return false
 	}
 	valid := h.ourParams.ValidFor0RTT(t.Parameters)
@@ -397,7 +401,6 @@ func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 		return false
 	}
 	h.logger.Debugf("Accepting 0-RTT. Restoring RTT from session ticket: %s", t.RTT)
-	h.rttStats.SetInitialRTT(t.RTT)
 	return true
 }
 
