@@ -14,15 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var gsoDisabled bool
-
-func init() {
-	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
-	if err == nil {
-		gsoDisabled = disabled
-	}
-}
-
 const (
 	msgTypeIPTOS = unix.IP_TOS
 	ipv4PKTINFO  = unix.IP_PKTINFO
@@ -65,7 +56,8 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 // isGSOSupported tests if the kernel supports GSO.
 // Sending with GSO might still fail later on, if the interface doesn't support it (see isGSOError).
 func isGSOSupported(conn syscall.RawConn) bool {
-	if gsoDisabled {
+	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
+	if err == nil && disabled {
 		return false
 	}
 	var serr error
