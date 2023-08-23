@@ -5,8 +5,6 @@ import (
 	"log"
 	"net"
 
-	fuzzhandshake "github.com/quic-go/quic-go/fuzzing/handshake"
-	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/testdata"
@@ -109,18 +107,6 @@ func main() {
 		}
 	}
 
-	ticket, err := server.GetSessionTicket()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if ticket == nil {
-		log.Fatal("expected a session ticket")
-	}
-	messages = append(messages, ticket)
-
-	for _, m := range messages {
-		if err := helper.WriteCorpusFileWithPrefix("corpus", m, fuzzhandshake.PrefixLen); err != nil {
-			log.Fatal(err)
-		}
-	}
+	ticket := []byte{0, 1, 0, 0}
+	server.HandleMessage(ticket, protocol.Encryption1RTT)
 }

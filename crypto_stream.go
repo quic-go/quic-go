@@ -39,7 +39,7 @@ type cryptoStreamImpl struct {
 func newCryptoStream(onlyCompleteMsg bool) cryptoStream {
 	return &cryptoStreamImpl{
 		queue:           newFrameSorter(),
-		onlyCompleteMsg: onlyCompleteMsg,
+		onlyCompleteMsg: false,
 	}
 }
 
