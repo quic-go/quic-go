@@ -386,7 +386,7 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 // It reads parameters from the session ticket and decides whether to accept 0-RTT when the session ticket is used for 0-RTT.
 func (h *cryptoSetup) handleSessionTicket(using0RTT bool, sessionTicketData []byte) bool {
 	var t sessionTicket
-	if err := t.Unmarshal(sessionTicketData); err != nil {
+	if err := t.Unmarshal(using0RTT, sessionTicketData); err != nil {
 		h.logger.Debugf("Unmarshalling transport parameters from session ticket failed: %s", err.Error())
 		return false
 	}

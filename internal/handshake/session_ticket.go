@@ -27,7 +27,7 @@ func (t *sessionTicket) Marshal() []byte {
 	return t.Parameters.MarshalForSessionTicket(b)
 }
 
-func (t *sessionTicket) Unmarshal(b []byte) error {
+func (t *sessionTicket) Unmarshal(using0RTT bool, b []byte) error {
 	r := bytes.NewReader(b)
 	rev, err := quicvarint.Read(r)
 	if err != nil {
@@ -40,7 +40,7 @@ func (t *sessionTicket) Unmarshal(b []byte) error {
 	if err != nil {
 		return errors.New("failed to read RTT")
 	}
-	if r.Len() > 0 {
+	if using0RTT {
 		var tp wire.TransportParameters
 		if err := tp.UnmarshalFromSessionTicket(r); err != nil {
 			return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
