@@ -23,9 +23,8 @@ func (t *sessionTicket) Marshal() []byte {
 	b = quicvarint.Append(b, uint64(t.RTT.Microseconds()))
 	if t.Parameters == nil {
 		return b
-	} else {
-		return t.Parameters.MarshalForSessionTicket(b)
 	}
+	return t.Parameters.MarshalForSessionTicket(b)
 }
 
 func (t *sessionTicket) Unmarshal(b []byte) error {
