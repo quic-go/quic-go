@@ -159,7 +159,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	return t.dial(ctx, addr, "", tlsConf, conf, true)
 }
 
-func (t *Transport) dial(ctx context.Context, addr net.Addr, hostname string, tlsConf *tls.Config, conf *Config, use0RTT bool) (EarlyConnection, error) {
+func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsConf *tls.Config, conf *Config, use0RTT bool) (EarlyConnection, error) {
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
@@ -173,15 +173,7 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, hostname string, tl
 	}
 	tlsConf = tlsConf.Clone()
 	tlsConf.MinVersion = tls.VersionTLS13
-	// If no ServerName is set, infer the ServerName from the hostname we're connecting to.
-	if tlsConf.ServerName == "" {
-		if hostname == "" {
-			if udpAddr, ok := addr.(*net.UDPAddr); ok {
-				hostname = udpAddr.IP.String()
-			}
-		}
-		tlsConf.ServerName = hostname
-	}
+	setTLSConfigServerName(tlsConf, addr, host)
 	return dial(ctx, newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
 }
 
@@ -477,4 +469,23 @@ func (t *Transport) ReadNonQUICPacket(ctx context.Context, b []byte) (int, net.A
 	case <-t.listening:
 		return 0, nil, errors.New("closed")
 	}
+}
+
+func setTLSConfigServerName(tlsConf *tls.Config, addr net.Addr, host string) {
+	// If no ServerName is set, infer the ServerName from the host we're connecting to.
+	if tlsConf.ServerName != "" {
+		return
+	}
+	if host == "" {
+		if udpAddr, ok := addr.(*net.UDPAddr); ok {
+			tlsConf.ServerName = udpAddr.IP.String()
+			return
+		}
+	}
+	h, _, err := net.SplitHostPort(host)
+	if err != nil { // This happens if the host doesn't contain a port number.
+		tlsConf.ServerName = host
+		return
+	}
+	tlsConf.ServerName = h
 }

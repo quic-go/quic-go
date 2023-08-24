@@ -396,6 +396,18 @@ var _ = Describe("Transport", func() {
 		close(packetChan)
 		tr.Close()
 	})
+
+	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 3, 5, 7), Port: 1234}
+	DescribeTable("setting the tls.Config.ServerName",
+		func(expected string, conf *tls.Config, addr net.Addr, host string) {
+			setTLSConfigServerName(conf, addr, host)
+			Expect(conf.ServerName).To(Equal(expected))
+		},
+		Entry("uses the value from the config", "foo.bar", &tls.Config{ServerName: "foo.bar"}, remoteAddr, "baz.foo"),
+		Entry("uses the hostname", "golang.org", &tls.Config{}, remoteAddr, "golang.org"),
+		Entry("removes the port from the hostname", "golang.org", &tls.Config{}, remoteAddr, "golang.org:1234"),
+		Entry("uses the IP", "1.3.5.7", &tls.Config{}, remoteAddr, ""),
+	)
 })
 
 type mockSyscallConn struct {
