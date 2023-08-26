@@ -59,7 +59,8 @@ type zeroRTTQueue struct {
 type baseServer struct {
 	mutex sync.Mutex
 
-	acceptEarlyConns bool
+	disableVersionNegotiation bool
+	acceptEarlyConns          bool
 
 	tlsConf *tls.Config
 	config  *Config
@@ -226,6 +227,7 @@ func newServer(
 	config *Config,
 	tracer logging.Tracer,
 	onClose func(),
+	disableVersionNegotiation bool,
 	acceptEarly bool,
 ) (*baseServer, error) {
 	tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
@@ -233,23 +235,24 @@ func newServer(
 		return nil, err
 	}
 	s := &baseServer{
-		conn:                    conn,
-		tlsConf:                 tlsConf,
-		config:                  config,
-		tokenGenerator:          tokenGenerator,
-		connIDGenerator:         connIDGenerator,
-		connHandler:             connHandler,
-		connQueue:               make(chan quicConn),
-		errorChan:               make(chan struct{}),
-		running:                 make(chan struct{}),
-		receivedPackets:         make(chan receivedPacket, protocol.MaxServerUnprocessedPackets),
-		versionNegotiationQueue: make(chan receivedPacket, 4),
-		invalidTokenQueue:       make(chan receivedPacket, 4),
-		newConn:                 newConnection,
-		tracer:                  tracer,
-		logger:                  utils.DefaultLogger.WithPrefix("server"),
-		acceptEarlyConns:        acceptEarly,
-		onClose:                 onClose,
+		conn:                      conn,
+		tlsConf:                   tlsConf,
+		config:                    config,
+		tokenGenerator:            tokenGenerator,
+		connIDGenerator:           connIDGenerator,
+		connHandler:               connHandler,
+		connQueue:                 make(chan quicConn),
+		errorChan:                 make(chan struct{}),
+		running:                   make(chan struct{}),
+		receivedPackets:           make(chan receivedPacket, protocol.MaxServerUnprocessedPackets),
+		versionNegotiationQueue:   make(chan receivedPacket, 4),
+		invalidTokenQueue:         make(chan receivedPacket, 4),
+		newConn:                   newConnection,
+		tracer:                    tracer,
+		logger:                    utils.DefaultLogger.WithPrefix("server"),
+		acceptEarlyConns:          acceptEarly,
+		disableVersionNegotiation: disableVersionNegotiation,
+		onClose:                   onClose,
 	}
 	if acceptEarly {
 		s.zeroRTTQueues = map[protocol.ConnectionID]*zeroRTTQueue{}
@@ -383,7 +386,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, v) {
-		if s.config.DisableVersionNegotiationPackets {
+		if s.disableVersionNegotiation {
 			return false
 		}
 

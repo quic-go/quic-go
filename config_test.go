@@ -192,7 +192,6 @@ var _ = Describe("Config", func() {
 			Expect(c.MaxConnectionReceiveWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
-			Expect(c.DisableVersionNegotiationPackets).To(BeFalse())
 			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
 			Expect(c.GetConfigForClient).To(BeNil())
 		})

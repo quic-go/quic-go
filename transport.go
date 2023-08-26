@@ -57,6 +57,11 @@ type Transport struct {
 	// See section 10.3 of RFC 9000 for details.
 	StatelessResetKey *StatelessResetKey
 
+	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
+	// This can be useful if version information is exchanged out-of-band.
+	// It has no effect for clients.
+	DisableVersionNegotiationPackets bool
+
 	// A Tracer traces events that don't belong to a single QUIC connection.
 	Tracer logging.Tracer
 
@@ -95,28 +100,10 @@ type Transport struct {
 // There can only be a single listener on any net.PacketConn.
 // Listen may only be called again after the current Listener was closed.
 func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error) {
-	if tlsConf == nil {
-		return nil, errors.New("quic: tls.Config not set")
-	}
-	if err := validateConfig(conf); err != nil {
-		return nil, err
-	}
-
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-
-	if t.server != nil {
-		return nil, errListenerAlreadySet
-	}
-	conf = populateServerConfig(conf)
-	if err := t.init(false); err != nil {
-		return nil, err
-	}
-	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, false)
+	s, err := t.createServer(tlsConf, conf, false)
 	if err != nil {
 		return nil, err
 	}
-	t.server = s
 	return &Listener{baseServer: s}, nil
 }
 
@@ -124,6 +111,14 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 // There can only be a single listener on any net.PacketConn.
 // Listen may only be called again after the current Listener was closed.
 func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListener, error) {
+	s, err := t.createServer(tlsConf, conf, true)
+	if err != nil {
+		return nil, err
+	}
+	return &EarlyListener{baseServer: s}, nil
+}
+
+func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bool) (*baseServer, error) {
 	if tlsConf == nil {
 		return nil, errors.New("quic: tls.Config not set")
 	}
@@ -141,12 +136,22 @@ func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListen
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
-	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, true)
+	s, err := newServer(
+		t.conn,
+		t.handlerMap,
+		t.connIDGenerator,
+		tlsConf,
+		conf,
+		t.Tracer,
+		t.closeServer,
+		t.DisableVersionNegotiationPackets,
+		allow0RTT,
+	)
 	if err != nil {
 		return nil, err
 	}
 	t.server = s
-	return &EarlyListener{baseServer: s}, nil
+	return s, nil
 }
 
 // Dial dials a new connection to a remote host (not using 0-RTT).
