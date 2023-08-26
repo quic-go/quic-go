@@ -21,7 +21,6 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - run: go version
       - name: set qlogger
@@ -38,7 +37,7 @@ jobs:
         if: success() || failure() # run this step even if the previous one failed
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=2 ${{ env.QLOGFLAG }}
       - name: Run self tests, with GSO disabled
-        if: ${{ matrix.os == 'ubuntu' && (success() || failure()) # run this step even if the previous one failed
+        if: ${{ matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_GSO: true
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
