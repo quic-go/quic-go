@@ -77,6 +77,10 @@ var _ = Describe("Handshake tests", func() {
 		protocol.SupportedVersions = supportedVersions
 	})
 
+	It("fails", func() {
+		Fail("test")
+	})
+
 	if !israce.Enabled {
 		It("when the server supports more versions than the client", func() {
 			expectedVersion := protocol.SupportedVersions[0]
