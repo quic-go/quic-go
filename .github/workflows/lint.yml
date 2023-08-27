@@ -9,10 +9,7 @@ jobs:
         with:
           skip-pkg-cache: true
           go-version: "1.20.x"
-      - name: Run code generators
-        run: .github/workflows/go-generate.sh
       - name: Check that no non-test files import Ginkgo or Gomega
-        if: success() || failure() # run this step even if the previous one failed
         run: .github/workflows/no_ginkgo.sh
       - name: Check for //go:build ignore in .go files
         run: |
@@ -29,6 +26,9 @@ jobs:
           go mod tidy
           diff go.mod go.mod.orig
           diff go.sum go.sum.orig
+      - name: Run code generators
+        if: success() || failure() # run this step even if the previous one failed
+        run: .github/workflows/go-generate.sh
       - name: Check that go mod vendor works
         if: success() || failure() # run this step even if the previous one failed
         run: |
