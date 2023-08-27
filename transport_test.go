@@ -280,9 +280,10 @@ var _ = Describe("Transport", func() {
 			phm.EXPECT().GetByResetToken(gomock.Any()),
 			phm.EXPECT().Get(connID),
 			phm.EXPECT().GetStatelessResetToken(connID).Return(token),
-			conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).Do(func(b []byte, _ net.Addr) {
+			conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).Do(func(b []byte, _ net.Addr) (int, error) {
 				defer close(written)
 				Expect(bytes.Contains(b, token[:])).To(BeTrue())
+				return len(b), nil
 			}),
 		)
 		packetChan <- packetToRead{data: b}

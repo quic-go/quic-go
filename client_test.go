@@ -129,7 +129,7 @@ var _ = Describe("Client", func() {
 			) quicConn {
 				Expect(enable0RTT).To(BeFalse())
 				conn := NewMockQUICConn(mockCtrl)
-				conn.EXPECT().run().Do(func() { close(run) })
+				conn.EXPECT().run().Do(func() error { close(run); return nil })
 				c := make(chan struct{})
 				close(c)
 				conn.EXPECT().HandshakeComplete().Return(c)
@@ -166,7 +166,7 @@ var _ = Describe("Client", func() {
 			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
 				conn := NewMockQUICConn(mockCtrl)
-				conn.EXPECT().run().Do(func() { close(done) })
+				conn.EXPECT().run().Do(func() error { close(done); return nil })
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 				conn.EXPECT().earlyConnReady().Return(readyChan)
 				return conn

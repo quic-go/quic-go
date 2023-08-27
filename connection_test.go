@@ -83,7 +83,7 @@ var _ = Describe("Connection", func() {
 		})
 	}
 
-	expectAppendPacket := func(packer *MockPacker, p shortHeaderPacket, b []byte) *gomock.Call {
+	expectAppendPacket := func(packer *MockPacker, p shortHeaderPacket, b []byte) *PackerAppendPacketCall {
 		return packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), Version1).DoAndReturn(func(buf *packetBuffer, _ protocol.ByteCount, _ protocol.VersionNumber) (shortHeaderPacket, error) {
 			buf.Data = append(buf.Data, b...)
 			return p, nil
@@ -1280,7 +1280,10 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck)
 			sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECT1).AnyTimes()
 			done := make(chan struct{})
-			packer.EXPECT().PackCoalescedPacket(true, gomock.Any(), conn.version).Do(func(bool, protocol.ByteCount, protocol.VersionNumber) { close(done) })
+			packer.EXPECT().PackCoalescedPacket(true, gomock.Any(), conn.version).Do(func(bool, protocol.ByteCount, protocol.VersionNumber) (*coalescedPacket, error) {
+				close(done)
+				return nil, nil
+			})
 			runConn()
 			conn.scheduleSending()
 			Eventually(done).Should(BeClosed())
@@ -1914,7 +1917,7 @@ var _ = Describe("Connection", func() {
 		)
 
 		sent := make(chan struct{})
-		mconn.EXPECT().Write([]byte("foobar"), uint16(0), protocol.ECT1).Do(func([]byte, uint16, protocol.ECN) { close(sent) })
+		mconn.EXPECT().Write([]byte("foobar"), uint16(0), protocol.ECT1).Do(func([]byte, uint16, protocol.ECN) error { close(sent); return nil })
 
 		go func() {
 			defer GinkgoRecover()
@@ -2581,7 +2584,10 @@ var _ = Describe("Client Connection", func() {
 		})
 		conn.unpacker = unpacker
 		done := make(chan struct{})
-		packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(onlyAck bool, maxPacketSize protocol.ByteCount, v protocol.VersionNumber) { close(done) })
+		packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(onlyAck bool, maxPacketSize protocol.ByteCount, v protocol.VersionNumber) (*coalescedPacket, error) {
+			close(done)
+			return nil, nil
+		})
 		newConnID := protocol.ParseConnectionID([]byte{1, 3, 3, 7, 1, 3, 3, 7})
 		p := getPacket(&wire.ExtendedHeader{
 			Header: wire.Header{
@@ -2671,9 +2677,10 @@ var _ = Describe("Client Connection", func() {
 		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		running := make(chan struct{})
-		cryptoSetup.EXPECT().StartHandshake().Do(func() {
+		cryptoSetup.EXPECT().StartHandshake().Do(func() error {
 			close(running)
 			conn.closeLocal(errors.New("early error"))
+			return nil
 		})
 		cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
 		cryptoSetup.EXPECT().Close()

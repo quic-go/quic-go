@@ -31,7 +31,7 @@ var _ = Describe("Send Queue", func() {
 		q.Send(p, 10, protocol.ECT1) // make sure the packet size is passed through to the conn
 
 		written := make(chan struct{})
-		c.EXPECT().Write([]byte("foobar"), uint16(10), protocol.ECT1).Do(func([]byte, uint16, protocol.ECN) { close(written) })
+		c.EXPECT().Write([]byte("foobar"), uint16(10), protocol.ECT1).Do(func([]byte, uint16, protocol.ECN) error { close(written); return nil })
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
@@ -149,7 +149,7 @@ var _ = Describe("Send Queue", func() {
 
 	It("blocks Close() until the packet has been sent out", func() {
 		written := make(chan []byte)
-		c.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(p []byte, _ uint16, _ protocol.ECN) { written <- p })
+		c.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(p []byte, _ uint16, _ protocol.ECN) error { written <- p; return nil })
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()

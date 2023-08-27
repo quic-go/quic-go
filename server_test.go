@@ -91,9 +91,10 @@ var _ = Describe("Server", func() {
 			<-wait
 			return 0, nil, errors.New("done")
 		}).MaxTimes(1)
-		conn.EXPECT().SetReadDeadline(gomock.Any()).Do(func(time.Time) {
+		conn.EXPECT().SetReadDeadline(gomock.Any()).Do(func(time.Time) error {
 			close(wait)
 			conn.EXPECT().SetReadDeadline(time.Time{})
+			return nil
 		}).MaxTimes(1)
 		tlsConf = testdata.GetTLSConfig()
 		tlsConf.NextProtos = []string{"proto1"}
@@ -307,7 +308,7 @@ var _ = Describe("Server", func() {
 					Expect(srcConnID).To(Equal(newConnID))
 					Expect(tokenP).To(Equal(token))
 					conn.EXPECT().handlePacket(p)
-					conn.EXPECT().run().Do(func() { close(run) })
+					conn.EXPECT().run().Do(func() error { close(run); return nil })
 					conn.EXPECT().Context().Return(context.Background())
 					conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 					return conn
@@ -370,7 +371,6 @@ var _ = Describe("Server", func() {
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				packet.remoteAddr = raddr
 				done := make(chan struct{})
-				conn.EXPECT().WriteTo(gomock.Any(), raddr).Do(func() { close(done) }).Times(0)
 				serv.handlePacket(packet)
 				Consistently(done, 50*time.Millisecond).ShouldNot(BeClosed())
 			})
@@ -509,7 +509,7 @@ var _ = Describe("Server", func() {
 					Expect(srcConnID).To(Equal(newConnID))
 					Expect(tokenP).To(Equal(token))
 					conn.EXPECT().handlePacket(p)
-					conn.EXPECT().run().Do(func() { close(run) })
+					conn.EXPECT().run().Do(func() error { close(run); return nil })
 					conn.EXPECT().Context().Return(context.Background())
 					conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 					return conn
@@ -621,7 +621,7 @@ var _ = Describe("Server", func() {
 				phm.EXPECT().AddWithConnID(connID, gomock.Any(), gomock.Any()).Return(false)
 				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				done := make(chan struct{})
-				conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).Do(func([]byte, net.Addr) { close(done) })
+				conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).Do(func([]byte, net.Addr) (int, error) { close(done); return 0, nil })
 				Expect(serv.handlePacketImpl(p)).To(BeTrue())
 				Expect(createdConn).To(BeFalse())
 				Eventually(done).Should(BeClosed())
@@ -791,7 +791,10 @@ var _ = Describe("Server", func() {
 
 				done := make(chan struct{})
 				phm.EXPECT().Get(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_, _ protocol.ConnectionID, _ func() (packetHandler, bool)) { close(done) })
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_, _ protocol.ConnectionID, _ func() (packetHandler, bool)) bool {
+					close(done)
+					return false
+				})
 				serv.handlePacket(packet)
 				Eventually(done).Should(BeClosed())
 			})
@@ -1031,7 +1034,7 @@ var _ = Describe("Server", func() {
 					Expect(conf.MaxIncomingStreams).To(BeEquivalentTo(1234))
 					conn.EXPECT().handlePacket(gomock.Any())
 					conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-					conn.EXPECT().run().Do(func() {})
+					conn.EXPECT().run()
 					conn.EXPECT().Context().Return(context.Background())
 					return conn
 				}
@@ -1107,7 +1110,7 @@ var _ = Describe("Server", func() {
 				) quicConn {
 					conn.EXPECT().handlePacket(gomock.Any())
 					conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-					conn.EXPECT().run().Do(func() {})
+					conn.EXPECT().run()
 					conn.EXPECT().Context().Return(context.Background())
 					return conn
 				}
@@ -1179,7 +1182,7 @@ var _ = Describe("Server", func() {
 				_ protocol.VersionNumber,
 			) quicConn {
 				conn.EXPECT().handlePacket(gomock.Any())
-				conn.EXPECT().run().Do(func() {})
+				conn.EXPECT().run()
 				conn.EXPECT().earlyConnReady().Return(ready)
 				conn.EXPECT().Context().Return(context.Background())
 				return conn
