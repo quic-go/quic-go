@@ -83,7 +83,7 @@ var _ = Describe("Connection", func() {
 		})
 	}
 
-	expectAppendPacket := func(packer *MockPacker, p shortHeaderPacket, b []byte) *gomock.Call {
+	expectAppendPacket := func(packer *MockPacker, p shortHeaderPacket, b []byte) *PackerAppendPacketCall {
 		return packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), Version1).DoAndReturn(func(buf *packetBuffer, _ protocol.ByteCount, _ protocol.VersionNumber) (shortHeaderPacket, error) {
 			buf.Data = append(buf.Data, b...)
 			return p, nil
@@ -2701,7 +2701,7 @@ var _ = Describe("Client Connection", func() {
 			Expect(recreateErr.nextPacketNumber).To(Equal(protocol.PacketNumber(128)))
 		})
 
-		It("it closes when no matching version is found", func() {
+		It("closes when no matching version is found", func() {
 			errChan := make(chan error, 1)
 			go func() {
 				defer GinkgoRecover()

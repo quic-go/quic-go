@@ -43,9 +43,33 @@ func (m *MockSentPacketTracker) GetLowestPacketNotConfirmedAcked() protocol.Pack
 }
 
 // GetLowestPacketNotConfirmedAcked indicates an expected call of GetLowestPacketNotConfirmedAcked.
-func (mr *MockSentPacketTrackerMockRecorder) GetLowestPacketNotConfirmedAcked() *gomock.Call {
+func (mr *MockSentPacketTrackerMockRecorder) GetLowestPacketNotConfirmedAcked() *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLowestPacketNotConfirmedAcked", reflect.TypeOf((*MockSentPacketTracker)(nil).GetLowestPacketNotConfirmedAcked))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLowestPacketNotConfirmedAcked", reflect.TypeOf((*MockSentPacketTracker)(nil).GetLowestPacketNotConfirmedAcked))
+	return &SentPacketTrackerGetLowestPacketNotConfirmedAckedCall{Call: call}
+}
+
+// SentPacketTrackerGetLowestPacketNotConfirmedAckedCall wrap *gomock.Call
+type SentPacketTrackerGetLowestPacketNotConfirmedAckedCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall) Return(arg0 protocol.PacketNumber) *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall) Do(f func() protocol.PacketNumber) *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall) DoAndReturn(f func() protocol.PacketNumber) *SentPacketTrackerGetLowestPacketNotConfirmedAckedCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }
 
 // ReceivedPacket mocks base method.
@@ -55,7 +79,31 @@ func (m *MockSentPacketTracker) ReceivedPacket(arg0 protocol.EncryptionLevel) {
 }
 
 // ReceivedPacket indicates an expected call of ReceivedPacket.
-func (mr *MockSentPacketTrackerMockRecorder) ReceivedPacket(arg0 interface{}) *gomock.Call {
+func (mr *MockSentPacketTrackerMockRecorder) ReceivedPacket(arg0 interface{}) *SentPacketTrackerReceivedPacketCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockSentPacketTracker)(nil).ReceivedPacket), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockSentPacketTracker)(nil).ReceivedPacket), arg0)
+	return &SentPacketTrackerReceivedPacketCall{Call: call}
+}
+
+// SentPacketTrackerReceivedPacketCall wrap *gomock.Call
+type SentPacketTrackerReceivedPacketCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *SentPacketTrackerReceivedPacketCall) Return() *SentPacketTrackerReceivedPacketCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *SentPacketTrackerReceivedPacketCall) Do(f func(protocol.EncryptionLevel)) *SentPacketTrackerReceivedPacketCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *SentPacketTrackerReceivedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel)) *SentPacketTrackerReceivedPacketCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }

@@ -43,9 +43,33 @@ func (m *MockRoundTripCloser) Close() error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockRoundTripCloserMockRecorder) Close() *gomock.Call {
+func (mr *MockRoundTripCloserMockRecorder) Close() *RoundTripCloserCloseCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockRoundTripCloser)(nil).Close))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockRoundTripCloser)(nil).Close))
+	return &RoundTripCloserCloseCall{Call: call}
+}
+
+// RoundTripCloserCloseCall wrap *gomock.Call
+type RoundTripCloserCloseCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *RoundTripCloserCloseCall) Return(arg0 error) *RoundTripCloserCloseCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *RoundTripCloserCloseCall) Do(f func() error) *RoundTripCloserCloseCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *RoundTripCloserCloseCall) DoAndReturn(f func() error) *RoundTripCloserCloseCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }
 
 // HandshakeComplete mocks base method.
@@ -57,9 +81,33 @@ func (m *MockRoundTripCloser) HandshakeComplete() bool {
 }
 
 // HandshakeComplete indicates an expected call of HandshakeComplete.
-func (mr *MockRoundTripCloserMockRecorder) HandshakeComplete() *gomock.Call {
+func (mr *MockRoundTripCloserMockRecorder) HandshakeComplete() *RoundTripCloserHandshakeCompleteCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockRoundTripCloser)(nil).HandshakeComplete))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockRoundTripCloser)(nil).HandshakeComplete))
+	return &RoundTripCloserHandshakeCompleteCall{Call: call}
+}
+
+// RoundTripCloserHandshakeCompleteCall wrap *gomock.Call
+type RoundTripCloserHandshakeCompleteCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *RoundTripCloserHandshakeCompleteCall) Return(arg0 bool) *RoundTripCloserHandshakeCompleteCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *RoundTripCloserHandshakeCompleteCall) Do(f func() bool) *RoundTripCloserHandshakeCompleteCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *RoundTripCloserHandshakeCompleteCall) DoAndReturn(f func() bool) *RoundTripCloserHandshakeCompleteCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }
 
 // RoundTripOpt mocks base method.
@@ -72,7 +120,31 @@ func (m *MockRoundTripCloser) RoundTripOpt(arg0 *http.Request, arg1 RoundTripOpt
 }
 
 // RoundTripOpt indicates an expected call of RoundTripOpt.
-func (mr *MockRoundTripCloserMockRecorder) RoundTripOpt(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockRoundTripCloserMockRecorder) RoundTripOpt(arg0, arg1 interface{}) *RoundTripCloserRoundTripOptCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTripOpt", reflect.TypeOf((*MockRoundTripCloser)(nil).RoundTripOpt), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTripOpt", reflect.TypeOf((*MockRoundTripCloser)(nil).RoundTripOpt), arg0, arg1)
+	return &RoundTripCloserRoundTripOptCall{Call: call}
+}
+
+// RoundTripCloserRoundTripOptCall wrap *gomock.Call
+type RoundTripCloserRoundTripOptCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *RoundTripCloserRoundTripOptCall) Return(arg0 *http.Response, arg1 error) *RoundTripCloserRoundTripOptCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *RoundTripCloserRoundTripOptCall) Do(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *RoundTripCloserRoundTripOptCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *RoundTripCloserRoundTripOptCall) DoAndReturn(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *RoundTripCloserRoundTripOptCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }

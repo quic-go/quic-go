@@ -44,7 +44,31 @@ func (m *MockAckFrameSource) GetAckFrame(arg0 protocol.EncryptionLevel, arg1 boo
 }
 
 // GetAckFrame indicates an expected call of GetAckFrame.
-func (mr *MockAckFrameSourceMockRecorder) GetAckFrame(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAckFrameSourceMockRecorder) GetAckFrame(arg0, arg1 interface{}) *AckFrameSourceGetAckFrameCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame), arg0, arg1)
+	return &AckFrameSourceGetAckFrameCall{Call: call}
+}
+
+// AckFrameSourceGetAckFrameCall wrap *gomock.Call
+type AckFrameSourceGetAckFrameCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *AckFrameSourceGetAckFrameCall) Return(arg0 *wire.AckFrame) *AckFrameSourceGetAckFrameCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *AckFrameSourceGetAckFrameCall) Do(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *AckFrameSourceGetAckFrameCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *AckFrameSourceGetAckFrameCall) DoAndReturn(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *AckFrameSourceGetAckFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }

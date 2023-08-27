@@ -40,9 +40,33 @@ func (m *MockUnknownPacketHandler) handlePacket(arg0 receivedPacket) {
 }
 
 // handlePacket indicates an expected call of handlePacket.
-func (mr *MockUnknownPacketHandlerMockRecorder) handlePacket(arg0 interface{}) *gomock.Call {
+func (mr *MockUnknownPacketHandlerMockRecorder) handlePacket(arg0 interface{}) *UnknownPacketHandlerhandlePacketCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockUnknownPacketHandler)(nil).handlePacket), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockUnknownPacketHandler)(nil).handlePacket), arg0)
+	return &UnknownPacketHandlerhandlePacketCall{Call: call}
+}
+
+// UnknownPacketHandlerhandlePacketCall wrap *gomock.Call
+type UnknownPacketHandlerhandlePacketCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *UnknownPacketHandlerhandlePacketCall) Return() *UnknownPacketHandlerhandlePacketCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *UnknownPacketHandlerhandlePacketCall) Do(f func(receivedPacket)) *UnknownPacketHandlerhandlePacketCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *UnknownPacketHandlerhandlePacketCall) DoAndReturn(f func(receivedPacket)) *UnknownPacketHandlerhandlePacketCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }
 
 // setCloseError mocks base method.
@@ -52,7 +76,31 @@ func (m *MockUnknownPacketHandler) setCloseError(arg0 error) {
 }
 
 // setCloseError indicates an expected call of setCloseError.
-func (mr *MockUnknownPacketHandlerMockRecorder) setCloseError(arg0 interface{}) *gomock.Call {
+func (mr *MockUnknownPacketHandlerMockRecorder) setCloseError(arg0 interface{}) *UnknownPacketHandlersetCloseErrorCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setCloseError", reflect.TypeOf((*MockUnknownPacketHandler)(nil).setCloseError), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setCloseError", reflect.TypeOf((*MockUnknownPacketHandler)(nil).setCloseError), arg0)
+	return &UnknownPacketHandlersetCloseErrorCall{Call: call}
+}
+
+// UnknownPacketHandlersetCloseErrorCall wrap *gomock.Call
+type UnknownPacketHandlersetCloseErrorCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *UnknownPacketHandlersetCloseErrorCall) Return() *UnknownPacketHandlersetCloseErrorCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *UnknownPacketHandlersetCloseErrorCall) Do(f func(error)) *UnknownPacketHandlersetCloseErrorCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *UnknownPacketHandlersetCloseErrorCall) DoAndReturn(f func(error)) *UnknownPacketHandlersetCloseErrorCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }

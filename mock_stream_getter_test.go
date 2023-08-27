@@ -44,9 +44,33 @@ func (m *MockStreamGetter) GetOrOpenReceiveStream(arg0 protocol.StreamID) (recei
 }
 
 // GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream.
-func (mr *MockStreamGetterMockRecorder) GetOrOpenReceiveStream(arg0 interface{}) *gomock.Call {
+func (mr *MockStreamGetterMockRecorder) GetOrOpenReceiveStream(arg0 interface{}) *StreamGetterGetOrOpenReceiveStreamCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenReceiveStream), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenReceiveStream), arg0)
+	return &StreamGetterGetOrOpenReceiveStreamCall{Call: call}
+}
+
+// StreamGetterGetOrOpenReceiveStreamCall wrap *gomock.Call
+type StreamGetterGetOrOpenReceiveStreamCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *StreamGetterGetOrOpenReceiveStreamCall) Return(arg0 receiveStreamI, arg1 error) *StreamGetterGetOrOpenReceiveStreamCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *StreamGetterGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (receiveStreamI, error)) *StreamGetterGetOrOpenReceiveStreamCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *StreamGetterGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (receiveStreamI, error)) *StreamGetterGetOrOpenReceiveStreamCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }
 
 // GetOrOpenSendStream mocks base method.
@@ -59,7 +83,31 @@ func (m *MockStreamGetter) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStre
 }
 
 // GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream.
-func (mr *MockStreamGetterMockRecorder) GetOrOpenSendStream(arg0 interface{}) *gomock.Call {
+func (mr *MockStreamGetterMockRecorder) GetOrOpenSendStream(arg0 interface{}) *StreamGetterGetOrOpenSendStreamCall {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenSendStream), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenSendStream), arg0)
+	return &StreamGetterGetOrOpenSendStreamCall{Call: call}
+}
+
+// StreamGetterGetOrOpenSendStreamCall wrap *gomock.Call
+type StreamGetterGetOrOpenSendStreamCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *StreamGetterGetOrOpenSendStreamCall) Return(arg0 sendStreamI, arg1 error) *StreamGetterGetOrOpenSendStreamCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *StreamGetterGetOrOpenSendStreamCall) Do(f func(protocol.StreamID) (sendStreamI, error)) *StreamGetterGetOrOpenSendStreamCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *StreamGetterGetOrOpenSendStreamCall) DoAndReturn(f func(protocol.StreamID) (sendStreamI, error)) *StreamGetterGetOrOpenSendStreamCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
 }
