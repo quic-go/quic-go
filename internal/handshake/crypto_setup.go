@@ -387,7 +387,7 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 func (h *cryptoSetup) handleSessionTicket(using0RTT bool, sessionTicketData []byte) bool {
 	var t sessionTicket
 	if err := t.Unmarshal(using0RTT, sessionTicketData); err != nil {
-		h.logger.Debugf("Unmarshalling transport parameters from session ticket failed: %s", err.Error())
+		h.logger.Debugf("Unmarshalling session ticket failed: %s", err.Error())
 		return false
 	}
 	h.rttStats.SetInitialRTT(t.RTT)

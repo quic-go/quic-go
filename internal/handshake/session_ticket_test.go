@@ -64,4 +64,19 @@ var _ = Describe("Session Ticket", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshaling transport parameters from session ticket failed"))
 	})
+
+	It("refuses to unmarshal if the non-0-RTT session ticket has more bytes than expected", func() {
+		ticket := &sessionTicket{
+			Parameters: &wire.TransportParameters{
+				InitialMaxStreamDataBidiLocal:  1,
+				InitialMaxStreamDataBidiRemote: 2,
+				ActiveConnectionIDLimit:        10,
+				MaxDatagramFrameSize:           20,
+			},
+			RTT: 1234 * time.Microsecond,
+		}
+		err := (&sessionTicket{}).Unmarshal(false, ticket.Marshal())
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("the session ticket has more bytes than expected"))
+	})
 })

@@ -46,6 +46,8 @@ func (t *sessionTicket) Unmarshal(using0RTT bool, b []byte) error {
 			return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
 		}
 		t.Parameters = &tp
+	} else if r.Len() > 0 {
+		return fmt.Errorf("the session ticket has more bytes than expected")
 	}
 	t.RTT = time.Duration(rtt) * time.Microsecond
 	return nil
