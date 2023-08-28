@@ -8,10 +8,10 @@ import (
 	reflect "reflect"
 	time "time"
 
-	gomock "github.com/golang/mock/gomock"
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	wire "github.com/quic-go/quic-go/internal/wire"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockSentPacketHandler is a mock of SentPacketHandler interface.

@@ -9,10 +9,10 @@ import (
 	reflect "reflect"
 	time "time"
 
-	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	utils "github.com/quic-go/quic-go/internal/utils"
 	wire "github.com/quic-go/quic-go/internal/wire"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockConnectionTracer is a mock of ConnectionTracer interface.

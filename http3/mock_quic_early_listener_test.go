@@ -9,8 +9,8 @@ import (
 	net "net"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	quic "github.com/quic-go/quic-go"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockQUICEarlyListener is a mock of QUICEarlyListener interface.

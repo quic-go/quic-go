@@ -8,8 +8,8 @@ import (
 	reflect "reflect"
 	time "time"
 
-	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockShortHeaderOpener is a mock of ShortHeaderOpener interface.

@@ -7,9 +7,9 @@ package quic
 import (
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/quic-go/quic-go/internal/handshake"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockCryptoDataHandler is a mock of CryptoDataHandler interface.

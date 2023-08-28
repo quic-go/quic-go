@@ -8,9 +8,9 @@ import (
 	reflect "reflect"
 	time "time"
 
-	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	wire "github.com/quic-go/quic-go/internal/wire"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockReceivedPacketHandler is a mock of ReceivedPacketHandler interface.

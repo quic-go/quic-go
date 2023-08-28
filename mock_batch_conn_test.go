@@ -7,7 +7,7 @@ package quic
 import (
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	ipv4 "golang.org/x/net/ipv4"
 )
 

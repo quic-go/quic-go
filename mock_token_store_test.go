@@ -7,7 +7,7 @@ package quic
 import (
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockTokenStore is a mock of TokenStore interface.

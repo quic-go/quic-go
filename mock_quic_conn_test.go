@@ -9,9 +9,9 @@ import (
 	net "net"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockQUICConn is a mock of QUICConn interface.

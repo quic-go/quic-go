@@ -7,8 +7,8 @@ package quic
 import (
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockStreamGetter is a mock of StreamGetter interface.

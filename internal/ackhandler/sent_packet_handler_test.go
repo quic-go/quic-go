@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
 	"github.com/quic-go/quic-go/internal/mocks"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -14,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 type customFrameHandler struct {

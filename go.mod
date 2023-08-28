@@ -4,11 +4,11 @@ go 1.20
 
 require (
 	github.com/francoispqt/gojay v1.2.13
-	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.6
 	github.com/quic-go/qpack v0.4.0
 	github.com/quic-go/qtls-go1-20 v0.3.3
+	go.uber.org/mock v0.2.0
 	golang.org/x/crypto v0.4.0
 	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db
 	golang.org/x/net v0.10.0
