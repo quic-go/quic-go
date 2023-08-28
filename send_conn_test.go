@@ -15,6 +15,16 @@ import (
 // GSO is actually supported on this platform.
 var platformSupportsGSO = len(appendUDPSegmentSizeMsg([]byte{}, 1337)) > 0
 
+type oobRecordingConn struct {
+	*net.UDPConn
+	oobs [][]byte
+}
+
+func (c *oobRecordingConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
+	c.oobs = append(c.oobs, oob)
+	return c.UDPConn.WriteMsgUDP(b, oob, addr)
+}
+
 var _ = Describe("Connection (for sending packets)", func() {
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 
@@ -35,48 +45,48 @@ var _ = Describe("Connection (for sending packets)", func() {
 		Expect(c.LocalAddr().String()).To(Equal("127.0.0.42:1234"))
 	})
 
-	if platformSupportsGSO {
-		It("writes with GSO", func() {
-			rawConn := NewMockRawConn(mockCtrl)
-			rawConn.EXPECT().LocalAddr()
-			rawConn.EXPECT().capabilities().Return(connCapabilities{GSO: true}).AnyTimes()
-			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
-			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any()).Do(func(_ []byte, _ net.Addr, oob []byte) {
-				msg := appendUDPSegmentSizeMsg([]byte{}, 3)
-				Expect(oob).To(Equal(msg))
-			})
-			Expect(c.Write([]byte("foobar"), 3)).To(Succeed())
-		})
+	It("sets the OOB", func() {
+		rawConn := NewMockRawConn(mockCtrl)
+		rawConn.EXPECT().LocalAddr()
+		rawConn.EXPECT().capabilities().AnyTimes()
+		pi := packetInfo{addr: netip.IPv6Loopback()}
+		Expect(pi.OOB()).ToNot(BeEmpty())
+		c := newSendConn(rawConn, remoteAddr, pi, utils.DefaultLogger)
+		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, pi.OOB(), uint16(0))
+		Expect(c.Write([]byte("foobar"), 0)).To(Succeed())
+	})
 
-		It("disables GSO if writing fails", func() {
-			rawConn := NewMockRawConn(mockCtrl)
-			rawConn.EXPECT().LocalAddr()
-			rawConn.EXPECT().capabilities().Return(connCapabilities{GSO: true}).AnyTimes()
-			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
-			Expect(c.capabilities().GSO).To(BeTrue())
-			gomock.InOrder(
-				rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any()).DoAndReturn(func(_ []byte, _ net.Addr, oob []byte) (int, error) {
-					msg := appendUDPSegmentSizeMsg([]byte{}, 3)
-					Expect(oob).To(Equal(msg))
-					return 0, errGSO
-				}),
-				rawConn.EXPECT().WritePacket([]byte("foo"), remoteAddr, gomock.Len(0)).Return(3, nil),
-				rawConn.EXPECT().WritePacket([]byte("bar"), remoteAddr, gomock.Len(0)).Return(3, nil),
-			)
-			Expect(c.Write([]byte("foobar"), 3)).To(Succeed())
-			Expect(c.capabilities().GSO).To(BeFalse()) // GSO support is now disabled
-			// make sure we actually enforce that
-			Expect(func() { c.Write([]byte("foobar"), 3) }).To(PanicWith("inconsistent packet size (6 vs 3)"))
-		})
-	} else {
-		It("writes without GSO", func() {
-			remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
-			rawConn := NewMockRawConn(mockCtrl)
-			rawConn.EXPECT().LocalAddr()
-			rawConn.EXPECT().capabilities()
-			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
-			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Len(0))
-			Expect(c.Write([]byte("foobar"), 6)).To(Succeed())
+	It("writes", func() {
+		rawConn := NewMockRawConn(mockCtrl)
+		rawConn.EXPECT().LocalAddr()
+		rawConn.EXPECT().capabilities().AnyTimes()
+		c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
+		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(3))
+		Expect(c.Write([]byte("foobar"), 3)).To(Succeed())
+	})
+
+	if platformSupportsGSO {
+		Context("GSO", func() {
+			It("appends the GSO control message", func() {
+				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+				Expect(err).ToNot(HaveOccurred())
+				udpConn, err := net.ListenUDP("udp", addr)
+				Expect(err).ToNot(HaveOccurred())
+
+				c := &oobRecordingConn{UDPConn: udpConn}
+				oobConn, err := newConn(c, true)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(oobConn.capabilities().GSO).To(BeTrue())
+
+				oob := make([]byte, 0, 42)
+				oobConn.WritePacket([]byte("foobar"), addr, oob, 3)
+				Expect(c.oobs).To(HaveLen(1))
+				oobMsg := c.oobs[0]
+				Expect(oobMsg).ToNot(BeEmpty())
+				Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
+				expected := appendUDPSegmentSizeMsg([]byte{}, 3)
+				Expect(oobMsg).To(Equal(expected))
+			})
 		})
 	}
 })

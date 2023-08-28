@@ -1,17 +1,14 @@
 package quic
 
 import (
-	"fmt"
-	"math"
 	"net"
 
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.
 type sendConn interface {
-	Write(b []byte, size protocol.ByteCount) error
+	Write(b []byte, gsoSize uint16) error
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
@@ -27,8 +24,7 @@ type sconn struct {
 
 	logger utils.Logger
 
-	info packetInfo
-	oob  []byte
+	packetInfoOOB []byte
 	// If GSO enabled, and we receive a GSO error for this remote address, GSO is disabled.
 	gotGSOError bool
 }
@@ -51,28 +47,16 @@ func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger utils.Logge
 	oob = append(oob, make([]byte, 32)...)
 	oob = oob[:l]
 	return &sconn{
-		rawConn:    c,
-		localAddr:  localAddr,
-		remoteAddr: remote,
-		info:       info,
-		oob:        oob,
-		logger:     logger,
+		rawConn:       c,
+		localAddr:     localAddr,
+		remoteAddr:    remote,
+		packetInfoOOB: oob,
+		logger:        logger,
 	}
 }
 
-func (c *sconn) Write(p []byte, size protocol.ByteCount) error {
-	if !c.capabilities().GSO {
-		if protocol.ByteCount(len(p)) != size {
-			panic(fmt.Sprintf("inconsistent packet size (%d vs %d)", len(p), size))
-		}
-		_, err := c.WritePacket(p, c.remoteAddr, c.oob)
-		return err
-	}
-	// GSO is supported. Append the control message and send.
-	if size > math.MaxUint16 {
-		panic("size overflow")
-	}
-	_, err := c.WritePacket(p, c.remoteAddr, appendUDPSegmentSizeMsg(c.oob, uint16(size)))
+func (c *sconn) Write(p []byte, gsoSize uint16) error {
+	_, err := c.WritePacket(p, c.remoteAddr, c.packetInfoOOB, gsoSize)
 	if err != nil && isGSOError(err) {
 		// disable GSO for future calls
 		c.gotGSOError = true
@@ -82,10 +66,10 @@ func (c *sconn) Write(p []byte, size protocol.ByteCount) error {
 		// send out the packets one by one
 		for len(p) > 0 {
 			l := len(p)
-			if l > int(size) {
-				l = int(size)
+			if l > int(gsoSize) {
+				l = int(gsoSize)
 			}
-			if _, err := c.WritePacket(p[:l], c.remoteAddr, c.oob); err != nil {
+			if _, err := c.WritePacket(p[:l], c.remoteAddr, c.packetInfoOOB, 0); err != nil {
 				return err
 			}
 			p = p[l:]

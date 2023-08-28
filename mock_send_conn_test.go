@@ -8,7 +8,6 @@ import (
 	net "net"
 	reflect "reflect"
 
-	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -78,7 +77,7 @@ func (mr *MockSendConnMockRecorder) RemoteAddr() *gomock.Call {
 }
 
 // Write mocks base method.
-func (m *MockSendConn) Write(arg0 []byte, arg1 protocol.ByteCount) error {
+func (m *MockSendConn) Write(arg0 []byte, arg1 uint16) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Write", arg0, arg1)
 	ret0, _ := ret[0].(error)

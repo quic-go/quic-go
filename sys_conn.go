@@ -104,7 +104,10 @@ func (c *basicConn) ReadPacket() (receivedPacket, error) {
 	}, nil
 }
 
-func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte) (n int, err error) {
+func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte, gsoSize uint16) (n int, err error) {
+	if gsoSize != 0 {
+		panic("cannot use GSO with a basicConn")
+	}
 	return c.PacketConn.WriteTo(b, addr)
 }
 

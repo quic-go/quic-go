@@ -242,4 +242,18 @@ var _ = Describe("OOB Conn Test", func() {
 			}
 		})
 	})
+
+	if platformSupportsGSO {
+		Context("GSO", func() {
+			It("appends the GSO control message", func() {
+				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+				Expect(err).ToNot(HaveOccurred())
+				udpConn, err := net.ListenUDP("udp", addr)
+				Expect(err).ToNot(HaveOccurred())
+				oobConn, err := newConn(udpConn, true)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(oobConn.capabilities().GSO).To(BeTrue())
+			})
+		})
+	}
 })

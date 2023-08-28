@@ -1832,7 +1832,7 @@ func (s *connection) sendPackets(now time.Time) error {
 		}
 		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
 		s.registerPackedShortHeaderPacket(p, now)
-		s.sendQueue.Send(buf, buf.Len())
+		s.sendQueue.Send(buf, 0)
 		// This is kind of a hack. We need to trigger sending again somehow.
 		s.pacingDeadline = deadlineSendImmediately
 		return nil
@@ -1881,7 +1881,7 @@ func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 			return err
 		}
 
-		s.sendQueue.Send(buf, buf.Len())
+		s.sendQueue.Send(buf, 0)
 
 		if s.sendQueue.WouldBlock() {
 			return nil
@@ -1938,7 +1938,7 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 			continue
 		}
 
-		s.sendQueue.Send(buf, maxSize)
+		s.sendQueue.Send(buf, uint16(maxSize))
 
 		if dontSendMore {
 			return nil
@@ -1986,7 +1986,7 @@ func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 	}
 	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
 	s.registerPackedShortHeaderPacket(p, now)
-	s.sendQueue.Send(buf, buf.Len())
+	s.sendQueue.Send(buf, 0)
 	return nil
 }
 
@@ -2078,7 +2078,7 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, now time
 		s.sentPacketHandler.SentPacket(now, p.PacketNumber, largestAcked, p.StreamFrames, p.Frames, protocol.Encryption1RTT, p.Length, p.IsPathMTUProbePacket)
 	}
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(packet.buffer, packet.buffer.Len())
+	s.sendQueue.Send(packet.buffer, 0)
 	return nil
 }
 
@@ -2101,7 +2101,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 		return nil, err
 	}
 	s.logCoalescedPacket(packet)
-	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, packet.buffer.Len())
+	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, 0)
 }
 
 func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {

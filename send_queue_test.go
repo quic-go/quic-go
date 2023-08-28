@@ -3,8 +3,6 @@ package quic
 import (
 	"errors"
 
-	"github.com/quic-go/quic-go/internal/protocol"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -31,7 +29,7 @@ var _ = Describe("Send Queue", func() {
 		q.Send(p, 10) // make sure the packet size is passed through to the conn
 
 		written := make(chan struct{})
-		c.EXPECT().Write([]byte("foobar"), protocol.ByteCount(10)).Do(func([]byte, protocol.ByteCount) { close(written) })
+		c.EXPECT().Write([]byte("foobar"), uint16(10)).Do(func([]byte, uint16) { close(written) })
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
@@ -79,7 +77,7 @@ var _ = Describe("Send Queue", func() {
 		write := make(chan struct{}, 1)
 		written := make(chan struct{}, 100)
 		// now start sending out packets. This should free up queue space.
-		c.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func([]byte, protocol.ByteCount) error {
+		c.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func([]byte, uint16) error {
 			written <- struct{}{}
 			<-write
 			return nil
@@ -149,7 +147,7 @@ var _ = Describe("Send Queue", func() {
 
 	It("blocks Close() until the packet has been sent out", func() {
 		written := make(chan []byte)
-		c.EXPECT().Write(gomock.Any(), gomock.Any()).Do(func(p []byte, _ protocol.ByteCount) { written <- p })
+		c.EXPECT().Write(gomock.Any(), gomock.Any()).Do(func(p []byte, _ uint16) { written <- p })
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
