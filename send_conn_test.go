@@ -3,6 +3,7 @@ package quic
 import (
 	"net"
 	"net/netip"
+	"runtime"
 
 	"github.com/quic-go/quic-go/internal/utils"
 
@@ -45,16 +46,19 @@ var _ = Describe("Connection (for sending packets)", func() {
 		Expect(c.LocalAddr().String()).To(Equal("127.0.0.42:1234"))
 	})
 
-	It("sets the OOB", func() {
-		rawConn := NewMockRawConn(mockCtrl)
-		rawConn.EXPECT().LocalAddr()
-		rawConn.EXPECT().capabilities().AnyTimes()
-		pi := packetInfo{addr: netip.IPv6Loopback()}
-		Expect(pi.OOB()).ToNot(BeEmpty())
-		c := newSendConn(rawConn, remoteAddr, pi, utils.DefaultLogger)
-		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, pi.OOB(), uint16(0))
-		Expect(c.Write([]byte("foobar"), 0)).To(Succeed())
-	})
+	// We're not using an OOB conn on windows, and packetInfo.OOB() always returns an empty slice.
+	if runtime.GOOS != "windows" {
+		It("sets the OOB", func() {
+			rawConn := NewMockRawConn(mockCtrl)
+			rawConn.EXPECT().LocalAddr()
+			rawConn.EXPECT().capabilities().AnyTimes()
+			pi := packetInfo{addr: netip.IPv6Loopback()}
+			Expect(pi.OOB()).ToNot(BeEmpty())
+			c := newSendConn(rawConn, remoteAddr, pi, utils.DefaultLogger)
+			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, pi.OOB(), uint16(0))
+			Expect(c.Write([]byte("foobar"), 0)).To(Succeed())
+		})
+	}
 
 	It("writes", func() {
 		rawConn := NewMockRawConn(mockCtrl)
