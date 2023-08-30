@@ -58,6 +58,14 @@ func (e ECN) String() string {
 	}
 }
 
+type CC int
+
+const (
+	CcDefault CC = iota
+	CcCubic
+	CcBbr
+)
+
 // A ByteCount in QUIC
 type ByteCount int64
 

@@ -145,6 +145,7 @@ func main() {
 	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
+	bbr := flag.Bool("b", false, "use bbr as congestion control algorithm")
 	flag.Parse()
 
 	logger := utils.DefaultLogger
@@ -172,6 +173,9 @@ func main() {
 			log.Printf("Creating qlog file %s.\n", filename)
 			return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), p, connID)
 		}
+	}
+	if *bbr {
+		quicConf.CC = quic.CcBbr
 	}
 
 	var wg sync.WaitGroup

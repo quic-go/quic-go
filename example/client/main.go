@@ -28,6 +28,7 @@ func main() {
 	keyLogFile := flag.String("keylog", "", "key log file")
 	insecure := flag.Bool("insecure", false, "skip certificate verification")
 	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
+	bbr := flag.Bool("b", false, "use bbr as congestion control algorithm")
 	flag.Parse()
 	urls := flag.Args()
 
@@ -67,6 +68,9 @@ func main() {
 			log.Printf("Creating qlog file %s.\n", filename)
 			return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), p, connID)
 		}
+	}
+	if *bbr {
+		qconf.CC = quic.CcBbr
 	}
 	roundTripper := &http3.RoundTripper{
 		TLSClientConfig: &tls.Config{

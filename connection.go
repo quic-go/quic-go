@@ -279,6 +279,7 @@ var newConnection = func(
 		s.rttStats,
 		clientAddressValidated,
 		s.perspective,
+		s.config.CC,
 		s.tracer,
 		s.logger,
 	)
@@ -387,6 +388,7 @@ var newClientConnection = func(
 		s.rttStats,
 		false, /* has no effect */
 		s.perspective,
+		s.config.CC,
 		s.tracer,
 		s.logger,
 	)

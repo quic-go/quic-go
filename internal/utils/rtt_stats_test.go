@@ -19,6 +19,7 @@ var _ = Describe("RTT stats", func() {
 	It("DefaultsBeforeUpdate", func() {
 		Expect(rttStats.MinRTT()).To(Equal(time.Duration(0)))
 		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(0)))
+		Expect(rttStats.MinOrInitialRtt()).To(BeNumerically(">", time.Duration(0)))
 	})
 
 	It("SmoothedRTT", func() {

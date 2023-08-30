@@ -10,24 +10,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const (
-	initialCongestionWindowPackets = 10
-	defaultWindowTCP               = protocol.ByteCount(initialCongestionWindowPackets) * maxDatagramSize
-)
-
-type mockClock time.Time
-
-func (c *mockClock) Now() time.Time {
-	return time.Time(*c)
-}
-
-func (c *mockClock) Advance(d time.Duration) {
-	*c = mockClock(time.Time(*c).Add(d))
-}
-
-const MaxCongestionWindow protocol.ByteCount = 200 * maxDatagramSize
-
 var _ = Describe("Cubic Sender", func() {
+	const (
+		initialCongestionWindowPackets                    = 10
+		defaultWindowTCP                                  = protocol.ByteCount(initialCongestionWindowPackets) * maxDatagramSize
+		maxCongestionWindow            protocol.ByteCount = 200 * maxDatagramSize
+	)
+
 	var (
 		sender            *cubicSender
 		clock             mockClock
@@ -49,7 +38,7 @@ var _ = Describe("Cubic Sender", func() {
 			true, /*reno*/
 			protocol.InitialPacketSizeIPv4,
 			initialCongestionWindowPackets*maxDatagramSize,
-			MaxCongestionWindow,
+			maxCongestionWindow,
 			nil,
 		)
 	})
@@ -66,14 +55,14 @@ var _ = Describe("Cubic Sender", func() {
 	}
 
 	// Normal is that TCP acks every other segment.
-	AckNPackets := func(n int) {
+	AckNPacketsLen := func(n int, packetLength protocol.ByteCount) {
 		rttStats.UpdateRTT(60*time.Millisecond, 0, clock.Now())
 		sender.MaybeExitSlowStart()
 		for i := 0; i < n; i++ {
 			ackedPacketNumber++
-			sender.OnPacketAcked(ackedPacketNumber, maxDatagramSize, bytesInFlight, clock.Now())
+			sender.OnPacketAcked(ackedPacketNumber, packetLength, bytesInFlight, clock.Now())
 		}
-		bytesInFlight -= protocol.ByteCount(n) * maxDatagramSize
+		bytesInFlight -= protocol.ByteCount(n) * packetLength
 		clock.Advance(time.Millisecond)
 	}
 
@@ -92,6 +81,7 @@ var _ = Describe("Cubic Sender", func() {
 	}
 
 	SendAvailableSendWindow := func() int { return SendAvailableSendWindowLen(maxDatagramSize) }
+	AckNPackets := func(n int) { AckNPacketsLen(n, maxDatagramSize) }
 	LoseNPackets := func(n int) { LoseNPacketsLen(n, maxDatagramSize) }
 
 	It("has the right values at startup", func() {
@@ -454,7 +444,7 @@ var _ = Describe("Cubic Sender", func() {
 		// Resets cwnd and slow start threshold on connection migrations.
 		sender.OnConnectionMigration()
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(maxCongestionWindow))
 		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
@@ -490,7 +480,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("limit cwnd increase in congestion avoidance", func() {
 		// Enable Cubic.
-		sender = newCubicSender(&clock, rttStats, false, protocol.InitialPacketSizeIPv4, initialCongestionWindowPackets*maxDatagramSize, MaxCongestionWindow, nil)
+		sender = newCubicSender(&clock, rttStats, false, protocol.InitialPacketSizeIPv4, initialCongestionWindowPackets*maxDatagramSize, maxCongestionWindow, nil)
 		numSent := SendAvailableSendWindow()
 
 		// Make sure we fall out of slow start.

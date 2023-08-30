@@ -35,4 +35,25 @@ var _ = Describe("RingBuffer", func() {
 		Expect(r.full).To(BeFalse())
 		Expect(r.Len()).To(Equal(0))
 	})
+	It("front, back, offset", func() {
+		r := RingBuffer[int]{}
+		r.Init(3)
+		r.PushBack(1)
+		r.PushBack(2)
+		r.PushBack(3)
+		r.PopFront()
+		r.PushBack(4)
+		Expect(r.full).To(BeTrue())
+		Expect(*r.Front()).To(Equal(2))
+		Expect(*r.Back()).To(Equal(4))
+		Expect(func() { r.Offset(4) }).To(Panic())
+		Expect(*r.Offset(0)).To(Equal(2))
+		Expect(*r.Offset(1)).To(Equal(3))
+		Expect(*r.Offset(2)).To(Equal(4))
+		*r.Front() = 4
+		*r.Back() = 2
+		Expect(*r.Offset(0)).To(Equal(4))
+		Expect(*r.Offset(1)).To(Equal(3))
+		Expect(*r.Offset(2)).To(Equal(2))
+	})
 })
