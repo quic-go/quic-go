@@ -62,8 +62,8 @@ func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn pro
 	if ackEliciting {
 		h.maybeQueueACK(pn, rcvTime, isMissing)
 	}
+	//nolint:exhaustive // Only need to count ECT(0), ECT(1) and ECNCE.
 	switch ecn {
-	case protocol.ECNNon:
 	case protocol.ECT0:
 		h.ect0++
 	case protocol.ECT1:

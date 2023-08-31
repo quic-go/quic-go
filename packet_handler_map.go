@@ -21,6 +21,8 @@ type connCapabilities struct {
 	DF bool
 	// GSO (Generic Segmentation Offload) supported
 	GSO bool
+	// ECN (Explicit Congestion Notifications) supported
+	ECN bool
 }
 
 // rawConn is a connection that allow reading of a receivedPackeh.

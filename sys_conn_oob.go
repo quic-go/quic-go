@@ -141,6 +141,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		cap: connCapabilities{
 			DF:  supportsDF,
 			GSO: isGSOSupported(rawConn),
+			ECN: true,
 		},
 	}
 	for i := 0; i < batchSize; i++ {
@@ -189,7 +190,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
 			case msgTypeIPTOS:
-				p.ecn = protocol.ECN(body[0] & ecnMask)
+				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case ipv4PKTINFO:
 				ip, ifIndex, ok := parseIPv4PktInfo(body)
 				if ok {
@@ -206,7 +207,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		if hdr.Level == unix.IPPROTO_IPV6 {
 			switch hdr.Type {
 			case unix.IPV6_TCLASS:
-				p.ecn = protocol.ECN(body[0] & ecnMask)
+				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case unix.IPV6_PKTINFO:
 				// struct in6_pktinfo {
 				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
@@ -237,11 +238,13 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 		}
 		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
 	}
-	if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
-		if remoteUDPAddr.IP.To4() != nil {
-			oob = appendIPv4ECNMsg(oob, ecn)
-		} else {
-			oob = appendIPv6ECNMsg(oob, ecn)
+	if ecn != protocol.ECNUnsupported {
+		if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
+			if remoteUDPAddr.IP.To4() != nil {
+				oob = appendIPv4ECNMsg(oob, ecn)
+			} else {
+				oob = appendIPv6ECNMsg(oob, ecn)
+			}
 		}
 	}
 	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
@@ -298,7 +301,7 @@ func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
 
 	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
 	offset := startLen + unix.CmsgSpace(0)
-	b[offset] = uint8(val)
+	b[offset] = val.ToHeaderBits()
 	return b
 }
 
@@ -313,6 +316,6 @@ func appendIPv6ECNMsg(b []byte, val protocol.ECN) []byte {
 
 	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
 	offset := startLen + unix.CmsgSpace(0)
-	b[offset] = uint8(val)
+	b[offset] = val.ToHeaderBits()
 	return b
 }

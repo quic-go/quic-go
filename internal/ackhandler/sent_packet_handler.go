@@ -92,6 +92,8 @@ type sentPacketHandler struct {
 	// The alarm timeout
 	alarm time.Time
 
+	enableECN bool
+
 	perspective protocol.Perspective
 
 	tracer logging.ConnectionTracer
@@ -110,6 +112,7 @@ func newSentPacketHandler(
 	initialMaxDatagramSize protocol.ByteCount,
 	rttStats *utils.RTTStats,
 	clientAddressValidated bool,
+	enableECN bool,
 	pers protocol.Perspective,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
@@ -130,6 +133,7 @@ func newSentPacketHandler(
 		appDataPackets:                 newPacketNumberSpace(0, true),
 		rttStats:                       rttStats,
 		congestion:                     congestion,
+		enableECN:                      enableECN,
 		perspective:                    pers,
 		tracer:                         tracer,
 		logger:                         logger,
@@ -714,6 +718,9 @@ func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
 }
 
 func (h *sentPacketHandler) ECNMode() protocol.ECN {
+	if !h.enableECN {
+		return protocol.ECNUnsupported
+	}
 	// TODO: implement ECN logic
 	return protocol.ECNNon
 }
