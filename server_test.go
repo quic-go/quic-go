@@ -357,7 +357,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't send a Version Negotiation packets if sending them is disabled", func() {
-				serv.config.DisableVersionNegotiationPackets = true
+				serv.disableVersionNegotiation = true
 				srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
 				destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
 				packet := getPacket(&wire.Header{

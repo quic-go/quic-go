@@ -3,8 +3,10 @@ package versionnegotiation
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools/israce"
@@ -113,7 +115,7 @@ var _ = Describe("Handshake tests", func() {
 
 		It("when the client supports more versions than the server supports", func() {
 			expectedVersion := protocol.SupportedVersions[0]
-			// the server doesn't support the highest supported version, which is the first one the client will try
+			// The server doesn't support the highest supported version, which is the first one the client will try,
 			// but it supports a bunch of versions that the client doesn't speak
 			serverTracer := &versionNegotiationTracer{}
 			serverConfig := &quic.Config{}
@@ -146,6 +148,46 @@ var _ = Describe("Handshake tests", func() {
 			Expect(serverTracer.chosen).To(Equal(expectedVersion))
 			Expect(serverTracer.serverVersions).To(Equal(serverConfig.Versions))
 			Expect(serverTracer.clientVersions).To(BeEmpty())
+		})
+
+		It("fails if the server disables version negotiation", func() {
+			// The server doesn't support the highest supported version, which is the first one the client will try,
+			// but it supports a bunch of versions that the client doesn't speak
+			serverTracer := &versionNegotiationTracer{}
+			serverConfig := &quic.Config{}
+			serverConfig.Versions = supportedVersions
+			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+				return serverTracer
+			}
+			conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+			Expect(err).ToNot(HaveOccurred())
+			tr := &quic.Transport{
+				Conn:                             conn,
+				DisableVersionNegotiationPackets: true,
+			}
+			ln, err := tr.Listen(getTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+
+			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
+			clientTracer := &versionNegotiationTracer{}
+			_, err = quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", conn.LocalAddr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				maybeAddQLOGTracer(&quic.Config{
+					Versions: clientVersions,
+					Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+						return clientTracer
+					},
+					HandshakeIdleTimeout: 100 * time.Millisecond,
+				}),
+			)
+			Expect(err).To(HaveOccurred())
+			var nerr net.Error
+			Expect(errors.As(err, &nerr)).To(BeTrue())
+			Expect(nerr.Timeout()).To(BeTrue())
+			Expect(clientTracer.receivedVersionNegotiation).To(BeFalse())
 		})
 	}
 })
