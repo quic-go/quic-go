@@ -18,6 +18,16 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+type oobRecordingConn struct {
+	*net.UDPConn
+	oobs [][]byte
+}
+
+func (c *oobRecordingConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
+	c.oobs = append(c.oobs, oob)
+	return c.UDPConn.WriteMsgUDP(b, oob, addr)
+}
+
 var _ = Describe("OOB Conn Test", func() {
 	runServer := func(network, address string) (*net.UDPConn, <-chan receivedPacket) {
 		addr, err := net.ResolveUDPAddr(network, address)
@@ -242,4 +252,28 @@ var _ = Describe("OOB Conn Test", func() {
 			}
 		})
 	})
+
+	if platformSupportsGSO {
+		Context("GSO", func() {
+			It("appends the GSO control message", func() {
+				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+				Expect(err).ToNot(HaveOccurred())
+				udpConn, err := net.ListenUDP("udp", addr)
+				Expect(err).ToNot(HaveOccurred())
+				c := &oobRecordingConn{UDPConn: udpConn}
+				oobConn, err := newConn(c, true)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(oobConn.capabilities().GSO).To(BeTrue())
+
+				oob := make([]byte, 0, 42)
+				oobConn.WritePacket([]byte("foobar"), addr, oob, 3)
+				Expect(c.oobs).To(HaveLen(1))
+				oobMsg := c.oobs[0]
+				Expect(oobMsg).ToNot(BeEmpty())
+				Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
+				expected := appendUDPSegmentSizeMsg([]byte{}, 3)
+				Expect(oobMsg).To(Equal(expected))
+			})
+		})
+	}
 })

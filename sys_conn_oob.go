@@ -228,8 +228,14 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 }
 
 // WritePacket writes a new packet.
-// If the connection supports GSO, it's the caller's responsibility to append the right control mesage.
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (int, error) {
+func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16) (int, error) {
+	oob := packetInfoOOB
+	if gsoSize > 0 {
+		if !c.capabilities().GSO {
+			panic("GSO disabled")
+		}
+		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
+	}
 	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
 }
