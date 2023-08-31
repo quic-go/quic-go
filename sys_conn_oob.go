@@ -228,7 +228,6 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 }
 
 // WritePacket writes a new packet.
-// If the connection supports GSO, it's the caller's responsibility to append the right control mesage.
 func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16) (int, error) {
 	oob := packetInfoOOB
 	if gsoSize > 0 {
