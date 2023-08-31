@@ -16,16 +16,6 @@ import (
 // GSO is actually supported on this platform.
 var platformSupportsGSO = len(appendUDPSegmentSizeMsg([]byte{}, 1337)) > 0
 
-type oobRecordingConn struct {
-	*net.UDPConn
-	oobs [][]byte
-}
-
-func (c *oobRecordingConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
-	c.oobs = append(c.oobs, oob)
-	return c.UDPConn.WriteMsgUDP(b, oob, addr)
-}
-
 var _ = Describe("Connection (for sending packets)", func() {
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 
@@ -70,27 +60,19 @@ var _ = Describe("Connection (for sending packets)", func() {
 	})
 
 	if platformSupportsGSO {
-		Context("GSO", func() {
-			It("appends the GSO control message", func() {
-				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
-				Expect(err).ToNot(HaveOccurred())
-				udpConn, err := net.ListenUDP("udp", addr)
-				Expect(err).ToNot(HaveOccurred())
-
-				c := &oobRecordingConn{UDPConn: udpConn}
-				oobConn, err := newConn(c, true)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(oobConn.capabilities().GSO).To(BeTrue())
-
-				oob := make([]byte, 0, 42)
-				oobConn.WritePacket([]byte("foobar"), addr, oob, 3)
-				Expect(c.oobs).To(HaveLen(1))
-				oobMsg := c.oobs[0]
-				Expect(oobMsg).ToNot(BeEmpty())
-				Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
-				expected := appendUDPSegmentSizeMsg([]byte{}, 3)
-				Expect(oobMsg).To(Equal(expected))
-			})
+		It("disables GSO if sending fails", func() {
+			rawConn := NewMockRawConn(mockCtrl)
+			rawConn.EXPECT().LocalAddr()
+			rawConn.EXPECT().capabilities().Return(connCapabilities{GSO: true}).AnyTimes()
+			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
+			Expect(c.capabilities().GSO).To(BeTrue())
+			gomock.InOrder(
+				rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(4)).Return(0, errGSO),
+				rawConn.EXPECT().WritePacket([]byte("foob"), remoteAddr, gomock.Any(), uint16(0)).Return(4, nil),
+				rawConn.EXPECT().WritePacket([]byte("ar"), remoteAddr, gomock.Any(), uint16(0)).Return(2, nil),
+			)
+			Expect(c.Write([]byte("foobar"), 4)).To(Succeed())
+			Expect(c.capabilities().GSO).To(BeFalse())
 		})
 	}
 })
