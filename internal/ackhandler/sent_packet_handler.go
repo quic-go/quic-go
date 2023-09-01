@@ -659,7 +659,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 				h.removeFromBytesInFlight(p)
 				h.queueFramesForRetransmission(p)
 				if !p.IsPathMTUProbePacket {
-					h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+					h.congestion.OnCongestionEvent(p.PacketNumber, p.Length, priorInFlight)
 				}
 				if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil {
 					h.ecnTracker.LostPacket(p.PacketNumber)

@@ -563,7 +563,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// lose packet 1
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
-				cong.EXPECT().OnPacketLost(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
 			)
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -575,7 +575,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("doesn't call OnPacketLost when a Path MTU probe packet is lost", func() {
+		It("doesn't call OnCongestionEvent when a Path MTU probe packet is lost", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
 			var mtuPacketDeclaredLost bool
 			sentPacket(ackElicitingPacket(&packet{
@@ -590,7 +590,7 @@ var _ = Describe("SentPacketHandler", func() {
 				},
 			}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2}))
-			// lose packet 1, but don't EXPECT any calls to OnPacketLost()
+			// lose packet 1, but don't EXPECT any calls to OnCongestionEvent()
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
@@ -602,7 +602,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(BeZero())
 		})
 
-		It("calls OnPacketAcked and OnPacketLost with the right bytes_in_flight value", func() {
+		It("calls OnPacketAcked and OnCongestionEvent with the right bytes_in_flight value", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(4)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2, SendTime: time.Now().Add(-30 * time.Minute)}))
@@ -611,7 +611,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// receive the first ACK
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
-				cong.EXPECT().OnPacketLost(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(4)),
+				cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(4)),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(4), gomock.Any()),
 			)
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -620,7 +620,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// receive the second ACK
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
-				cong.EXPECT().OnPacketLost(protocol.PacketNumber(3), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(3), protocol.ByteCount(1), protocol.ByteCount(2)),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(4), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
 			)
 			ack = &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 4, Largest: 4}}}
