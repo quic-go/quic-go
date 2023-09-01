@@ -1911,9 +1911,9 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 	buf := getLargePacketBuffer()
 	maxSize := s.mtuDiscoverer.CurrentSize()
 
+	ecn := s.sentPacketHandler.ECNMode(true)
 	for {
 		var dontSendMore bool
-		ecn := s.sentPacketHandler.ECNMode(true)
 		size, err := s.appendOneShortHeaderPacket(buf, maxSize, ecn, now)
 		if err != nil {
 			if err != errNothingToPack {
@@ -1936,11 +1936,15 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 			}
 		}
 
+		// Don't send more packets in this batch if they require a different ECN marking than the previous ones.
+		nextECN := s.sentPacketHandler.ECNMode(true)
+
 		// Append another packet if
 		// 1. The congestion controller and pacer allow sending more
 		// 2. The last packet appended was a full-size packet
-		// 3. We still have enough space for another full-size packet in the buffer
-		if !dontSendMore && size == maxSize && buf.Len()+maxSize <= buf.Cap() {
+		// 3. The next packet will have the same ECN marking
+		// 4. We still have enough space for another full-size packet in the buffer
+		if !dontSendMore && size == maxSize && nextECN == ecn && buf.Len()+maxSize <= buf.Cap() {
 			continue
 		}
 

@@ -1451,7 +1451,7 @@ var _ = Describe("Connection", func() {
 		It("sends multiple packets one by one immediately, with GSO", func() {
 			enableGSO()
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
-			sph.EXPECT().ECNMode(true).Times(3)
+			sph.EXPECT().ECNMode(true).Return(protocol.ECT1).Times(4)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(3)
 			payload1 := make([]byte, conn.mtuDiscoverer.CurrentSize())
 			rand.Read(payload1)
@@ -1476,19 +1476,58 @@ var _ = Describe("Connection", func() {
 
 		It("stops appending packets when a smaller packet is packed, with GSO", func() {
 			enableGSO()
-			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
-			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(2)
-			sph.EXPECT().ECNMode(true).Times(2)
+			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(3)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
+			sph.EXPECT().ECNMode(true).Times(4)
 			payload1 := make([]byte, conn.mtuDiscoverer.CurrentSize())
 			rand.Read(payload1)
 			payload2 := make([]byte, conn.mtuDiscoverer.CurrentSize()-1)
 			rand.Read(payload2)
+			payload3 := make([]byte, conn.mtuDiscoverer.CurrentSize())
+			rand.Read(payload3)
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 10}, payload1)
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 11}, payload2)
+			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 12}, payload3)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any(), uint16(conn.mtuDiscoverer.CurrentSize()), gomock.Any()).Do(func(b *packetBuffer, _ uint16, _ protocol.ECN) {
 				Expect(b.Data).To(Equal(append(payload1, payload2...)))
+			})
+			sender.EXPECT().Send(gomock.Any(), uint16(conn.mtuDiscoverer.CurrentSize()), gomock.Any()).Do(func(b *packetBuffer, _ uint16, _ protocol.ECN) {
+				Expect(b.Data).To(Equal(payload3))
+			})
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().StartHandshake().MaxTimes(1)
+				cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
+				conn.run()
+			}()
+			conn.scheduleSending()
+			time.Sleep(50 * time.Millisecond) // make sure that only 2 packets are sent
+		})
+
+		It("stops appending packets when the ECN marking changes, with GSO", func() {
+			enableGSO()
+			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(3)
+			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
+			sph.EXPECT().ECNMode(true).Return(protocol.ECT1).Times(2)
+			sph.EXPECT().ECNMode(true).Return(protocol.ECT0).Times(2)
+			payload1 := make([]byte, conn.mtuDiscoverer.CurrentSize())
+			rand.Read(payload1)
+			payload2 := make([]byte, conn.mtuDiscoverer.CurrentSize())
+			rand.Read(payload2)
+			payload3 := make([]byte, conn.mtuDiscoverer.CurrentSize())
+			rand.Read(payload3)
+			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 10}, payload1)
+			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 11}, payload2)
+			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 11}, payload3)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any(), uint16(conn.mtuDiscoverer.CurrentSize()), gomock.Any()).Do(func(b *packetBuffer, _ uint16, _ protocol.ECN) {
+				Expect(b.Data).To(Equal(append(payload1, payload2...)))
+			})
+			sender.EXPECT().Send(gomock.Any(), uint16(conn.mtuDiscoverer.CurrentSize()), gomock.Any()).Do(func(b *packetBuffer, _ uint16, _ protocol.ECN) {
+				Expect(b.Data).To(Equal(payload3))
 			})
 			go func() {
 				defer GinkgoRecover()
