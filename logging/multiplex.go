@@ -213,6 +213,12 @@ func (m *connTracerMultiplexer) LossTimerCanceled() {
 	}
 }
 
+func (m *connTracerMultiplexer) ECNStateUpdated(state ECNState, trigger ECNStateTrigger) {
+	for _, t := range m.tracers {
+		t.ECNStateUpdated(state, trigger)
+	}
+}
+
 func (m *connTracerMultiplexer) Debug(name, msg string) {
 	for _, t := range m.tracers {
 		t.Debug(name, msg)

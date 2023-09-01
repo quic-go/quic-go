@@ -865,6 +865,27 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
 			})
 
+			It("records an ECN state transition, without a trigger", func() {
+				tracer.ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("recovery:ecn_state_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("new", "unknown"))
+			})
+
+			It("records an ECN state transition, with a trigger", func() {
+				tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedNoECNCounts)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("recovery:ecn_state_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(2))
+				Expect(ev).To(HaveKeyWithValue("new", "failed"))
+				Expect(ev).To(HaveKeyWithValue("trigger", "ACK doesn't contain ECN marks"))
+			})
+
 			It("records a generic event", func() {
 				tracer.Debug("foo", "bar")
 				entry := exportAndParseSingle()

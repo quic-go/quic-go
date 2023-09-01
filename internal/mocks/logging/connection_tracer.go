@@ -135,6 +135,18 @@ func (mr *MockConnectionTracerMockRecorder) DroppedPacket(arg0, arg1, arg2 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedPacket), arg0, arg1, arg2)
 }
 
+// ECNStateUpdated mocks base method.
+func (m *MockConnectionTracer) ECNStateUpdated(arg0 logging.ECNState, arg1 logging.ECNStateTrigger) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ECNStateUpdated", arg0, arg1)
+}
+
+// ECNStateUpdated indicates an expected call of ECNStateUpdated.
+func (mr *MockConnectionTracerMockRecorder) ECNStateUpdated(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNStateUpdated", reflect.TypeOf((*MockConnectionTracer)(nil).ECNStateUpdated), arg0, arg1)
+}
+
 // LossTimerCanceled mocks base method.
 func (m *MockConnectionTracer) LossTimerCanceled() {
 	m.ctrl.T.Helper()

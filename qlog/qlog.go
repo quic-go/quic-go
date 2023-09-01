@@ -503,6 +503,12 @@ func (t *connectionTracer) LossTimerCanceled() {
 	t.mutex.Unlock()
 }
 
+func (t *connectionTracer) ECNStateUpdated(state logging.ECNState, trigger logging.ECNStateTrigger) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventECNStateUpdated{state: state, trigger: trigger})
+	t.mutex.Unlock()
+}
+
 func (t *connectionTracer) Debug(name, msg string) {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventGeneric{

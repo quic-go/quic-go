@@ -524,6 +524,20 @@ func (e eventCongestionStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("new", e.state.String())
 }
 
+type eventECNStateUpdated struct {
+	state   logging.ECNState
+	trigger logging.ECNStateTrigger
+}
+
+func (e eventECNStateUpdated) Category() category { return categoryRecovery }
+func (e eventECNStateUpdated) Name() string       { return "ecn_state_updated" }
+func (e eventECNStateUpdated) IsNil() bool        { return false }
+
+func (e eventECNStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("new", ecnState(e.state).String())
+	enc.StringKeyOmitEmpty("trigger", ecnStateTrigger(e.trigger).String())
+}
+
 type eventGeneric struct {
 	name string
 	msg  string
