@@ -29,8 +29,7 @@ type SentPacketHandler interface {
 	// only to be called once the handshake is complete
 	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */
 
-	ECNMode() protocol.ECN
-
+	ECNMode(isShortHeaderPacket bool) protocol.ECN // isShortHeaderPacket should only be true for non-coalesced 1-RTT packets
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
 

@@ -717,9 +717,12 @@ func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
 	return h.alarm
 }
 
-func (h *sentPacketHandler) ECNMode() protocol.ECN {
+func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
 	if !h.enableECN {
 		return protocol.ECNUnsupported
+	}
+	if !isShortHeaderPacket {
+		return protocol.ECNNon
 	}
 	// TODO: implement ECN logic
 	return protocol.ECNNon

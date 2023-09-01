@@ -1832,7 +1832,7 @@ func (s *connection) sendPackets(now time.Time) error {
 		if err != nil {
 			return err
 		}
-		ecn := s.sentPacketHandler.ECNMode()
+		ecn := s.sentPacketHandler.ECNMode(true)
 		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, ecn, buf.Len(), false)
 		s.registerPackedShortHeaderPacket(p, ecn, now)
 		s.sendQueue.Send(buf, 0, ecn)
@@ -1855,7 +1855,7 @@ func (s *connection) sendPackets(now time.Time) error {
 			return err
 		}
 		s.sentFirstPacket = true
-		if err := s.sendPackedCoalescedPacket(packet, s.sentPacketHandler.ECNMode(), now); err != nil {
+		if err := s.sendPackedCoalescedPacket(packet, s.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket()), now); err != nil {
 			return err
 		}
 		sendMode := s.sentPacketHandler.SendMode(now)
@@ -1876,8 +1876,8 @@ func (s *connection) sendPackets(now time.Time) error {
 func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 	for {
 		buf := getPacketBuffer()
-		ecn := s.sentPacketHandler.ECNMode()
-		if _, err := s.appendOnePacket(buf, s.mtuDiscoverer.CurrentSize(), ecn, now); err != nil {
+		ecn := s.sentPacketHandler.ECNMode(true)
+		if _, err := s.appendOneShortHeaderPacket(buf, s.mtuDiscoverer.CurrentSize(), ecn, now); err != nil {
 			if err == errNothingToPack {
 				buf.Release()
 				return nil
@@ -1912,8 +1912,8 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 
 	for {
 		var dontSendMore bool
-		ecn := s.sentPacketHandler.ECNMode()
-		size, err := s.appendOnePacket(buf, maxSize, ecn, now)
+		ecn := s.sentPacketHandler.ECNMode(true)
+		size, err := s.appendOneShortHeaderPacket(buf, maxSize, ecn, now)
 		if err != nil {
 			if err != errNothingToPack {
 				return err
@@ -1971,8 +1971,8 @@ func (s *connection) resetPacingDeadline() {
 }
 
 func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
-	ecn := s.sentPacketHandler.ECNMode()
 	if !s.handshakeConfirmed {
+		ecn := s.sentPacketHandler.ECNMode(false)
 		packet, err := s.packer.PackCoalescedPacket(true, s.mtuDiscoverer.CurrentSize(), s.version)
 		if err != nil {
 			return err
@@ -1983,6 +1983,7 @@ func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 		return s.sendPackedCoalescedPacket(packet, ecn, time.Now())
 	}
 
+	ecn := s.sentPacketHandler.ECNMode(true)
 	p, buf, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
@@ -2024,12 +2025,12 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel, now time
 	if packet == nil || (len(packet.longHdrPackets) == 0 && packet.shortHdrPacket == nil) {
 		return fmt.Errorf("connection BUG: couldn't pack %s probe packet", encLevel)
 	}
-	return s.sendPackedCoalescedPacket(packet, s.sentPacketHandler.ECNMode(), now)
+	return s.sendPackedCoalescedPacket(packet, s.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket()), now)
 }
 
-// appendOnePacket appends a new packet to the given packetBuffer.
+// appendOneShortHeaderPacket appends a new packet to the given packetBuffer.
 // If there was nothing to pack, the returned size is 0.
-func (s *connection) appendOnePacket(buf *packetBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now time.Time) (protocol.ByteCount, error) {
+func (s *connection) appendOneShortHeaderPacket(buf *packetBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now time.Time) (protocol.ByteCount, error) {
 	startLen := buf.Len()
 	p, err := s.packer.AppendPacket(buf, maxSize, s.version)
 	if err != nil {
@@ -2106,7 +2107,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	ecn := s.sentPacketHandler.ECNMode()
+	ecn := s.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket())
 	s.logCoalescedPacket(packet, ecn)
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, 0, ecn)
 }

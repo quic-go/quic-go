@@ -50,17 +50,17 @@ func (mr *MockSentPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *gomo
 }
 
 // ECNMode mocks base method.
-func (m *MockSentPacketHandler) ECNMode() protocol.ECN {
+func (m *MockSentPacketHandler) ECNMode(arg0 bool) protocol.ECN {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ECNMode")
+	ret := m.ctrl.Call(m, "ECNMode", arg0)
 	ret0, _ := ret[0].(protocol.ECN)
 	return ret0
 }
 
 // ECNMode indicates an expected call of ECNMode.
-func (mr *MockSentPacketHandlerMockRecorder) ECNMode() *gomock.Call {
+func (mr *MockSentPacketHandlerMockRecorder) ECNMode(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNMode", reflect.TypeOf((*MockSentPacketHandler)(nil).ECNMode))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNMode", reflect.TypeOf((*MockSentPacketHandler)(nil).ECNMode), arg0)
 }
 
 // GetLossDetectionTimeout mocks base method.

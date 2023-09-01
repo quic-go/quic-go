@@ -613,7 +613,7 @@ var _ = Describe("Connection", func() {
 			conn.sendQueue = newSendQueue(sconn)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().Return(time.Now().Add(time.Hour)).AnyTimes()
-			sph.EXPECT().ECNMode().Return(protocol.ECT1).AnyTimes()
+			sph.EXPECT().ECNMode(true).Return(protocol.ECT1).AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
 			// only expect a single SentPacket() call
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
@@ -1206,7 +1206,7 @@ var _ = Describe("Connection", func() {
 
 		AfterEach(func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sph.EXPECT().ECNMode().Return(protocol.ECNCE).MaxTimes(1)
+			sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECNCE).MaxTimes(1)
 			packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -1234,7 +1234,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().TimeUntilSend().AnyTimes()
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().Return(protocol.ECNNon).AnyTimes()
+			sph.EXPECT().ECNMode(true).Return(protocol.ECNNon).AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			runConn()
 			p := shortHeaderPacket{
@@ -1262,7 +1262,7 @@ var _ = Describe("Connection", func() {
 			conn.handshakeConfirmed = true
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(true).AnyTimes()
 			runConn()
 			packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack).AnyTimes()
 			conn.receivedPacketHandler.ReceivedPacket(0x035e, protocol.ECNNon, protocol.Encryption1RTT, time.Now(), true)
@@ -1274,7 +1274,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().TimeUntilSend().AnyTimes()
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck)
-			sph.EXPECT().ECNMode().Return(protocol.ECT1).AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECT1).AnyTimes()
 			done := make(chan struct{})
 			packer.EXPECT().PackCoalescedPacket(true, gomock.Any(), conn.version).Do(func(bool, protocol.ByteCount, protocol.VersionNumber) { close(done) })
 			runConn()
@@ -1287,7 +1287,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().TimeUntilSend().AnyTimes()
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
@@ -1341,7 +1341,7 @@ var _ = Describe("Connection", func() {
 					sph.EXPECT().SendMode(gomock.Any()).Return(sendMode)
 					sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
 					sph.EXPECT().QueueProbePacket(encLevel)
-					sph.EXPECT().ECNMode()
+					sph.EXPECT().ECNMode(gomock.Any())
 					p := getCoalescedPacket(123, enc != protocol.Encryption1RTT)
 					packer.EXPECT().MaybePackProbePacket(encLevel, gomock.Any(), conn.version).Return(p, nil)
 					sph.EXPECT().SentPacket(gomock.Any(), protocol.PacketNumber(123), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
@@ -1363,7 +1363,7 @@ var _ = Describe("Connection", func() {
 					sph.EXPECT().TimeUntilSend().AnyTimes()
 					sph.EXPECT().SendMode(gomock.Any()).Return(sendMode)
 					sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
-					sph.EXPECT().ECNMode()
+					sph.EXPECT().ECNMode(gomock.Any())
 					sph.EXPECT().QueueProbePacket(encLevel).Return(false)
 					p := getCoalescedPacket(123, enc != protocol.Encryption1RTT)
 					packer.EXPECT().MaybePackProbePacket(encLevel, gomock.Any(), conn.version).Return(p, nil)
@@ -1407,7 +1407,7 @@ var _ = Describe("Connection", func() {
 
 		AfterEach(func() {
 			// make the go routine return
-			sph.EXPECT().ECNMode().MaxTimes(1)
+			sph.EXPECT().ECNMode(gomock.Any()).MaxTimes(1)
 			packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -1422,7 +1422,7 @@ var _ = Describe("Connection", func() {
 		It("sends multiple packets one by one immediately", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(2)
-			sph.EXPECT().ECNMode().Times(2)
+			sph.EXPECT().ECNMode(gomock.Any()).Times(2)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited)
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 10}, []byte("packet10"))
@@ -1447,7 +1447,7 @@ var _ = Describe("Connection", func() {
 		It("sends multiple packets one by one immediately, with GSO", func() {
 			enableGSO()
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
-			sph.EXPECT().ECNMode().Times(3)
+			sph.EXPECT().ECNMode(true).Times(3)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(3)
 			payload1 := make([]byte, conn.mtuDiscoverer.CurrentSize())
 			rand.Read(payload1)
@@ -1474,7 +1474,7 @@ var _ = Describe("Connection", func() {
 			enableGSO()
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(2)
-			sph.EXPECT().ECNMode().Times(2)
+			sph.EXPECT().ECNMode(true).Times(2)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
 			payload1 := make([]byte, conn.mtuDiscoverer.CurrentSize())
 			rand.Read(payload1)
@@ -1499,7 +1499,7 @@ var _ = Describe("Connection", func() {
 		It("sends multiple packets, when the pacer allows immediate sending", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(2)
-			sph.EXPECT().ECNMode().Times(2)
+			sph.EXPECT().ECNMode(gomock.Any()).Times(2)
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 10}, []byte("packet10"))
 			packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack)
 			sender.EXPECT().WouldBlock().AnyTimes()
@@ -1518,7 +1518,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited)
-			sph.EXPECT().ECNMode()
+			sph.EXPECT().ECNMode(gomock.Any())
 			packer.EXPECT().PackAckOnlyPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{PacketNumber: 123}, getPacketBuffer(), nil)
 
 			sender.EXPECT().WouldBlock().AnyTimes()
@@ -1539,7 +1539,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck)
-			sph.EXPECT().ECNMode().Times(2)
+			sph.EXPECT().ECNMode(gomock.Any()).Times(2)
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 100}, []byte("packet100"))
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any())
@@ -1557,13 +1557,13 @@ var _ = Describe("Connection", func() {
 			pacingDelay := scaleDuration(100 * time.Millisecond)
 			gomock.InOrder(
 				sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny),
-				sph.EXPECT().ECNMode(),
+				sph.EXPECT().ECNMode(gomock.Any()),
 				expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 100}, []byte("packet100")),
 				sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 				sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited),
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(pacingDelay)),
 				sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny),
-				sph.EXPECT().ECNMode(),
+				sph.EXPECT().ECNMode(gomock.Any()),
 				expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 101}, []byte("packet101")),
 				sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 				sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited),
@@ -1587,7 +1587,7 @@ var _ = Describe("Connection", func() {
 		It("sends multiple packets at once", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(3)
-			sph.EXPECT().ECNMode().Times(3)
+			sph.EXPECT().ECNMode(gomock.Any()).Times(3)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited)
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			for pn := protocol.PacketNumber(1000); pn < 1003; pn++ {
@@ -1628,7 +1628,7 @@ var _ = Describe("Connection", func() {
 				sender.EXPECT().WouldBlock().AnyTimes()
 				sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-				sph.EXPECT().ECNMode().AnyTimes()
+				sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 				expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 1000}, []byte("packet1000"))
 				packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack)
 				sender.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*packetBuffer, uint16, protocol.ECN) { close(written) })
@@ -1653,7 +1653,7 @@ var _ = Describe("Connection", func() {
 				conn.handlePacket(receivedPacket{buffer: getPacketBuffer()})
 			})
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 10}, []byte("packet10"))
 			packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack)
 			sender.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*packetBuffer, uint16, protocol.ECN) { close(written) })
@@ -1667,7 +1667,7 @@ var _ = Describe("Connection", func() {
 		It("stops sending when the send queue is full", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny)
-			sph.EXPECT().ECNMode()
+			sph.EXPECT().ECNMode(gomock.Any())
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 1000}, []byte("packet1000"))
 			written := make(chan struct{}, 1)
 			sender.EXPECT().WouldBlock()
@@ -1688,7 +1688,7 @@ var _ = Describe("Connection", func() {
 			// now make room in the send queue
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 			sender.EXPECT().WouldBlock().AnyTimes()
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 1001}, []byte("packet1001"))
 			packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack)
@@ -1703,7 +1703,7 @@ var _ = Describe("Connection", func() {
 
 		It("doesn't set a pacing timer when there is no data to send", func() {
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 			sender.EXPECT().WouldBlock().AnyTimes()
 			packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack)
 			// don't EXPECT any calls to mconn.Write()
@@ -1723,7 +1723,7 @@ var _ = Describe("Connection", func() {
 			conn.config.DisablePathMTUDiscovery = false
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny)
-			sph.EXPECT().ECNMode()
+			sph.EXPECT().ECNMode(true)
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
 			written := make(chan struct{}, 1)
 			sender.EXPECT().WouldBlock().AnyTimes()
@@ -1774,7 +1774,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().TimeUntilSend().AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			conn.sentPacketHandler = sph
@@ -1803,7 +1803,7 @@ var _ = Describe("Connection", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-			sph.EXPECT().ECNMode().AnyTimes()
+			sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any(), protocol.PacketNumber(1234), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			conn.sentPacketHandler = sph
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
@@ -1855,7 +1855,7 @@ var _ = Describe("Connection", func() {
 
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-		sph.EXPECT().ECNMode().Return(protocol.ECT1).AnyTimes()
+		sph.EXPECT().ECNMode(false).Return(protocol.ECT1).AnyTimes()
 		sph.EXPECT().TimeUntilSend().Return(time.Now()).AnyTimes()
 		gomock.InOrder(
 			sph.EXPECT().SentPacket(gomock.Any(), protocol.PacketNumber(13), gomock.Any(), gomock.Any(), gomock.Any(), protocol.EncryptionInitial, protocol.ECT1, protocol.ByteCount(123), gomock.Any()),
@@ -1968,7 +1968,7 @@ var _ = Describe("Connection", func() {
 	It("sends a HANDSHAKE_DONE frame when the handshake completes", func() {
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-		sph.EXPECT().ECNMode().AnyTimes()
+		sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().TimeUntilSend().AnyTimes()
 		sph.EXPECT().SetHandshakeConfirmed()

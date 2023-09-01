@@ -71,6 +71,11 @@ type coalescedPacket struct {
 	shortHdrPacket *shortHeaderPacket
 }
 
+// IsOnlyShortHeaderPacket says if this packet only contains a short header packet (and no long header packets).
+func (p *coalescedPacket) IsOnlyShortHeaderPacket() bool {
+	return len(p.longHdrPackets) == 0 && p.shortHdrPacket != nil
+}
+
 func (p *longHeaderPacket) EncryptionLevel() protocol.EncryptionLevel {
 	//nolint:exhaustive // Will never be called for Retry packets (and they don't have encrypted data).
 	switch p.header.Type {
