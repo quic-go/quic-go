@@ -8,6 +8,8 @@ import (
 	"log"
 	"net"
 	"net/netip"
+	"os"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -55,6 +57,11 @@ func inspectWriteBuffer(c syscall.RawConn) (int, error) {
 		return 0, err
 	}
 	return size, serr
+}
+
+func isECNDisabled() bool {
+	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_ECN"))
+	return err == nil && disabled
 }
 
 type oobConn struct {
@@ -141,7 +148,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		cap: connCapabilities{
 			DF:  supportsDF,
 			GSO: isGSOSupported(rawConn),
-			ECN: true,
+			ECN: !isECNDisabled(),
 		},
 	}
 	for i := 0; i < batchSize; i++ {
@@ -239,6 +246,9 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
 	}
 	if ecn != protocol.ECNUnsupported {
+		if !c.capabilities().ECN {
+			panic("tried to send a ECN-marked packet although ECN is disabled")
+		}
 		if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
 			if remoteUDPAddr.IP.To4() != nil {
 				oob = appendIPv4ECNMsg(oob, ecn)
