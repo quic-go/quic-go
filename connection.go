@@ -907,6 +907,7 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket, destConnID protoc
 					KeyPhase:         keyPhase,
 				},
 				p.Size(),
+				p.ecn,
 				frames,
 			)
 		}
@@ -1192,7 +1193,7 @@ func (s *connection) handleUnpackedLongHeaderPacket(
 	var log func([]logging.Frame)
 	if s.tracer != nil {
 		log = func(frames []logging.Frame) {
-			s.tracer.ReceivedLongHeaderPacket(packet.hdr, packetSize, frames)
+			s.tracer.ReceivedLongHeaderPacket(packet.hdr, packetSize, ecn, frames)
 		}
 	}
 	isAckEliciting, err := s.handleFrames(packet.data, packet.hdr.DestConnectionID, packet.encryptionLevel, log)
@@ -2112,7 +2113,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, 0, ecn)
 }
 
-func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {
+func (s *connection) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN) {
 	// quic-go logging
 	if s.logger.Debug() {
 		p.header.Log(s.logger)
@@ -2140,7 +2141,7 @@ func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {
 		if p.ack != nil {
 			ack = logutils.ConvertAckFrame(p.ack)
 		}
-		s.tracer.SentLongHeaderPacket(p.header, p.length, ack, frames)
+		s.tracer.SentLongHeaderPacket(p.header, p.length, ecn, ack, frames)
 	}
 }
 
@@ -2194,6 +2195,7 @@ func (s *connection) logShortHeaderPacket(
 				KeyPhase:         kp,
 			},
 			size,
+			ecn,
 			ack,
 			fs,
 		)
@@ -2226,7 +2228,7 @@ func (s *connection) logCoalescedPacket(packet *coalescedPacket, ecn protocol.EC
 		}
 	}
 	for _, p := range packet.longHdrPackets {
-		s.logLongHeaderPacket(p)
+		s.logLongHeaderPacket(p, ecn)
 	}
 	if p := packet.shortHdrPacket; p != nil {
 		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, ecn, p.Length, true)

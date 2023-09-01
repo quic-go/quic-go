@@ -127,4 +127,12 @@ var _ = Describe("Types", func() {
 		Expect(congestionState(logging.CongestionStateApplicationLimited).String()).To(Equal("application_limited"))
 		Expect(congestionState(logging.CongestionStateRecovery).String()).To(Equal("recovery"))
 	})
+
+	It("has a string representation for the ECN bits", func() {
+		Expect(ecn(logging.ECT0).String()).To(Equal("ECT(0)"))
+		Expect(ecn(logging.ECT1).String()).To(Equal("ECT(1)"))
+		Expect(ecn(logging.ECNCE).String()).To(Equal("CE"))
+		Expect(ecn(logging.ECTNot).String()).To(Equal("Not-ECT"))
+		Expect(ecn(42).String()).To(Equal("unknown ECN"))
+	})
 })

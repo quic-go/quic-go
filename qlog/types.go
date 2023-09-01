@@ -312,3 +312,21 @@ func (s congestionState) String() string {
 		return "unknown congestion state"
 	}
 }
+
+type ecn logging.ECN
+
+func (e ecn) String() string {
+	//nolint:exhaustive // The unsupported value is never logged.
+	switch logging.ECN(e) {
+	case logging.ECTNot:
+		return "Not-ECT"
+	case logging.ECT0:
+		return "ECT(0)"
+	case logging.ECT1:
+		return "ECT(1)"
+	case logging.ECNCE:
+		return "CE"
+	default:
+		return "unknown ECN"
+	}
+}

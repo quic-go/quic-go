@@ -119,18 +119,18 @@ var _ = Describe("Tracing", func() {
 			hdr := &ExtendedHeader{Header: Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}}
 			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
 			ping := &PingFrame{}
-			tr1.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tr2.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tracer.SentLongHeaderPacket(hdr, 1337, ack, []Frame{ping})
+			tr1.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ECTNot, ack, []Frame{ping})
+			tr2.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ECTNot, ack, []Frame{ping})
+			tracer.SentLongHeaderPacket(hdr, 1337, ECTNot, ack, []Frame{ping})
 		})
 
 		It("traces the SentShortHeaderPacket event", func() {
 			hdr := &ShortHeader{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}
 			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
 			ping := &PingFrame{}
-			tr1.EXPECT().SentShortHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tr2.EXPECT().SentShortHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tracer.SentShortHeaderPacket(hdr, 1337, ack, []Frame{ping})
+			tr1.EXPECT().SentShortHeaderPacket(hdr, ByteCount(1337), ECNCE, ack, []Frame{ping})
+			tr2.EXPECT().SentShortHeaderPacket(hdr, ByteCount(1337), ECNCE, ack, []Frame{ping})
+			tracer.SentShortHeaderPacket(hdr, 1337, ECNCE, ack, []Frame{ping})
 		})
 
 		It("traces the ReceivedVersionNegotiationPacket event", func() {
@@ -151,17 +151,17 @@ var _ = Describe("Tracing", func() {
 		It("traces the ReceivedLongHeaderPacket event", func() {
 			hdr := &ExtendedHeader{Header: Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}}
 			ping := &PingFrame{}
-			tr1.EXPECT().ReceivedLongHeaderPacket(hdr, ByteCount(1337), []Frame{ping})
-			tr2.EXPECT().ReceivedLongHeaderPacket(hdr, ByteCount(1337), []Frame{ping})
-			tracer.ReceivedLongHeaderPacket(hdr, 1337, []Frame{ping})
+			tr1.EXPECT().ReceivedLongHeaderPacket(hdr, ByteCount(1337), ECT1, []Frame{ping})
+			tr2.EXPECT().ReceivedLongHeaderPacket(hdr, ByteCount(1337), ECT1, []Frame{ping})
+			tracer.ReceivedLongHeaderPacket(hdr, 1337, ECT1, []Frame{ping})
 		})
 
 		It("traces the ReceivedShortHeaderPacket event", func() {
 			hdr := &ShortHeader{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}
 			ping := &PingFrame{}
-			tr1.EXPECT().ReceivedShortHeaderPacket(hdr, ByteCount(1337), []Frame{ping})
-			tr2.EXPECT().ReceivedShortHeaderPacket(hdr, ByteCount(1337), []Frame{ping})
-			tracer.ReceivedShortHeaderPacket(hdr, 1337, []Frame{ping})
+			tr1.EXPECT().ReceivedShortHeaderPacket(hdr, ByteCount(1337), ECT0, []Frame{ping})
+			tr2.EXPECT().ReceivedShortHeaderPacket(hdr, ByteCount(1337), ECT0, []Frame{ping})
+			tracer.ReceivedShortHeaderPacket(hdr, 1337, ECT0, []Frame{ping})
 		})
 
 		It("traces the BufferedPacket event", func() {

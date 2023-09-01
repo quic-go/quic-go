@@ -27,19 +27,23 @@ func (n NullConnectionTracer) StartedConnection(local, remote net.Addr, srcConnI
 
 func (n NullConnectionTracer) NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber) {
 }
-func (n NullConnectionTracer) ClosedConnection(err error)                                          {}
-func (n NullConnectionTracer) SentTransportParameters(*TransportParameters)                        {}
-func (n NullConnectionTracer) ReceivedTransportParameters(*TransportParameters)                    {}
-func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters)                    {}
-func (n NullConnectionTracer) SentLongHeaderPacket(*ExtendedHeader, ByteCount, *AckFrame, []Frame) {}
-func (n NullConnectionTracer) SentShortHeaderPacket(*ShortHeader, ByteCount, *AckFrame, []Frame)   {}
+func (n NullConnectionTracer) ClosedConnection(err error)                       {}
+func (n NullConnectionTracer) SentTransportParameters(*TransportParameters)     {}
+func (n NullConnectionTracer) ReceivedTransportParameters(*TransportParameters) {}
+func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters) {}
+func (n NullConnectionTracer) SentLongHeaderPacket(*ExtendedHeader, ByteCount, ECN, *AckFrame, []Frame) {
+}
+
+func (n NullConnectionTracer) SentShortHeaderPacket(*ShortHeader, ByteCount, ECN, *AckFrame, []Frame) {
+}
+
 func (n NullConnectionTracer) ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber) {
 }
-func (n NullConnectionTracer) ReceivedRetry(*Header)                                        {}
-func (n NullConnectionTracer) ReceivedLongHeaderPacket(*ExtendedHeader, ByteCount, []Frame) {}
-func (n NullConnectionTracer) ReceivedShortHeaderPacket(*ShortHeader, ByteCount, []Frame)   {}
-func (n NullConnectionTracer) BufferedPacket(PacketType, ByteCount)                         {}
-func (n NullConnectionTracer) DroppedPacket(PacketType, ByteCount, PacketDropReason)        {}
+func (n NullConnectionTracer) ReceivedRetry(*Header)                                             {}
+func (n NullConnectionTracer) ReceivedLongHeaderPacket(*ExtendedHeader, ByteCount, ECN, []Frame) {}
+func (n NullConnectionTracer) ReceivedShortHeaderPacket(*ShortHeader, ByteCount, ECN, []Frame)   {}
+func (n NullConnectionTracer) BufferedPacket(PacketType, ByteCount)                              {}
+func (n NullConnectionTracer) DroppedPacket(PacketType, ByteCount, PacketDropReason)             {}
 
 func (n NullConnectionTracer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int) {
 }
