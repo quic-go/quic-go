@@ -93,7 +93,7 @@ type sentPacketHandler struct {
 	alarm time.Time
 
 	enableECN  bool
-	ecnTracker *ecnTracker
+	ecnTracker ecnHandler
 
 	perspective protocol.Perspective
 
@@ -346,16 +346,15 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 
-	var ecnCongestionDetected bool
 	// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
 	if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil && largestAcked > pnSpace.largestAcked {
-		ecnCongestionDetected = h.ecnTracker.HandleNewlyAcked(ackedPackets, int64(ack.ECT0), int64(ack.ECT1), int64(ack.ECNCE))
+		congested := h.ecnTracker.HandleNewlyAcked(ackedPackets, int64(ack.ECT0), int64(ack.ECT1), int64(ack.ECNCE))
+		if congested {
+			h.congestion.OnCongestionEvent(largestAcked, 0, priorInFlight)
+		}
 	}
 
 	pnSpace.largestAcked = utils.Max(pnSpace.largestAcked, largestAcked)
-
-	// TODO: inform the congestion controller
-	_ = ecnCongestionDetected
 
 	if err := h.detectLostPackets(rcvTime, encLevel); err != nil {
 		return false, err

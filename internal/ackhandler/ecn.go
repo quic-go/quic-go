@@ -21,6 +21,13 @@ const (
 // must fit into an uint8, otherwise numSentTesting and numLostTesting must have a larger type
 const numECNTestingPackets = 10
 
+type ecnHandler interface {
+	SentPacket(protocol.PacketNumber, protocol.ECN)
+	Mode() protocol.ECN
+	HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64) (congested bool)
+	LostPacket(protocol.PacketNumber)
+}
+
 // The ecnTracker performs ECN validation of a path.
 // Once failed, it doesn't do any re-validation of the path.
 // It is designed only work for 1-RTT packets, it doesn't handle multiple packet number spaces.
@@ -41,6 +48,8 @@ type ecnTracker struct {
 	tracer logging.ConnectionTracer
 	logger utils.Logger
 }
+
+var _ ecnHandler = &ecnTracker{}
 
 func newECNTracker(logger utils.Logger, tracer logging.ConnectionTracer) *ecnTracker {
 	return &ecnTracker{
