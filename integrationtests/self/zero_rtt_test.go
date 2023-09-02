@@ -989,13 +989,13 @@ var _ = Describe("0-RTT", func() {
 		<-received
 
 		Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
 		Expect(receivedMessage).To(Equal(sentMessage))
 		num0RTT := atomic.LoadUint32(num0RTTPackets)
 		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 		Expect(num0RTT).ToNot(BeZero())
 		zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
 		Expect(zeroRTTPackets).To(HaveLen(1))
-		Expect(conn.CloseWithError(0, "")).To(Succeed())
 	})
 
 	It("rejects 0-RTT datagrams when the server doesn't support datagrams anymore", func() {
@@ -1047,10 +1047,10 @@ var _ = Describe("0-RTT", func() {
 
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 		Expect(conn.ConnectionState().Used0RTT).To(BeFalse())
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
 		num0RTT := atomic.LoadUint32(num0RTTPackets)
 		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 		Expect(num0RTT).ToNot(BeZero())
 		Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(BeEmpty())
-		Expect(conn.CloseWithError(0, "")).To(Succeed())
 	})
 })
