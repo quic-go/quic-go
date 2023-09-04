@@ -2201,7 +2201,7 @@ var _ = Describe("Connection", func() {
 
 		It("times out due to non-completed handshake", func() {
 			conn.handshakeComplete = false
-			conn.creationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
+			conn.creationTime = time.Now().Add(-2 * protocol.DefaultHandshakeIdleTimeout).Add(-time.Second)
 			connRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
@@ -2261,7 +2261,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("closes the connection due to the idle timeout before handshake", func() {
-			conn.config.HandshakeIdleTimeout = 0
+			conn.config.HandshakeIdleTimeout = scaleDuration(25 * time.Millisecond)
 			packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), conn.version).AnyTimes()
 			connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()

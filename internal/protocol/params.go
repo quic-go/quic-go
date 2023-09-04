@@ -108,9 +108,6 @@ const DefaultIdleTimeout = 30 * time.Second
 // DefaultHandshakeIdleTimeout is the default idle timeout used before handshake completion.
 const DefaultHandshakeIdleTimeout = 5 * time.Second
 
-// DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
-const DefaultHandshakeTimeout = 10 * time.Second
-
 // MaxKeepAliveInterval is the maximum time until we send a packet to keep a connection alive.
 // It should be shorter than the time that NATs clear their mapping.
 const MaxKeepAliveInterval = 20 * time.Second

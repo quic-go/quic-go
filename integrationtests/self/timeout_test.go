@@ -57,7 +57,7 @@ var _ = Describe("Timeout tests", func() {
 				context.Background(),
 				"localhost:12345",
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 10 * time.Millisecond}),
+				getQuicConfig(&quic.Config{HandshakeIdleTimeout: scaleDuration(50 * time.Millisecond)}),
 			)
 			errChan <- err
 		}()
