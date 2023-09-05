@@ -833,7 +833,8 @@ var _ = Describe("Server", func() {
 
 			It("sends an INVALID_TOKEN error, if an expired retry token is received", func() {
 				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
-				serv.config.MaxRetryTokenAge = time.Millisecond
+				serv.config.HandshakeIdleTimeout = time.Millisecond / 2 // the maximum retry token age is equivalent to the handshake timeout
+				Expect(serv.config.maxRetryTokenAge()).To(Equal(time.Millisecond))
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				token, err := serv.tokenGenerator.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())

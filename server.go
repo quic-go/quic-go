@@ -531,7 +531,7 @@ func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 	if !token.IsRetryToken && time.Since(token.SentTime) > s.config.MaxTokenAge {
 		return false
 	}
-	if token.IsRetryToken && time.Since(token.SentTime) > s.config.MaxRetryTokenAge {
+	if token.IsRetryToken && time.Since(token.SentTime) > s.config.maxRetryTokenAge() {
 		return false
 	}
 	return true

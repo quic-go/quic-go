@@ -19,6 +19,10 @@ func (c *Config) handshakeTimeout() time.Duration {
 	return 2 * c.HandshakeIdleTimeout
 }
 
+func (c *Config) maxRetryTokenAge() time.Duration {
+	return c.handshakeTimeout()
+}
+
 func validateConfig(config *Config) error {
 	if config == nil {
 		return nil
@@ -51,9 +55,6 @@ func populateServerConfig(config *Config) *Config {
 	config = populateConfig(config)
 	if config.MaxTokenAge == 0 {
 		config.MaxTokenAge = protocol.TokenValidity
-	}
-	if config.MaxRetryTokenAge == 0 {
-		config.MaxRetryTokenAge = protocol.RetryTokenValidity
 	}
 	if config.RequireAddressValidation == nil {
 		config.RequireAddressValidation = func(net.Addr) bool { return false }
@@ -114,7 +115,6 @@ func populateConfig(config *Config) *Config {
 		HandshakeIdleTimeout:           handshakeIdleTimeout,
 		MaxIdleTimeout:                 idleTimeout,
 		MaxTokenAge:                    config.MaxTokenAge,
-		MaxRetryTokenAge:               config.MaxRetryTokenAge,
 		RequireAddressValidation:       config.RequireAddressValidation,
 		KeepAlivePeriod:                config.KeepAlivePeriod,
 		InitialStreamReceiveWindow:     initialStreamReceiveWindow,
