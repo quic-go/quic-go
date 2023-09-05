@@ -2,21 +2,22 @@ package tokens
 
 import (
 	"encoding/binary"
-	"math/rand"
 	"net"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 func Fuzz(data []byte) int {
-	if len(data) < 8 {
+	if len(data) < 32 {
 		return -1
 	}
-	seed := binary.BigEndian.Uint64(data[:8])
-	data = data[8:]
-	tg, err := handshake.NewTokenGenerator(rand.New(rand.NewSource(int64(seed))))
+	var key quic.TokenGeneratorKey
+	copy(key[:], data[:32])
+	data = data[32:]
+	tg, err := handshake.NewTokenGenerator(key)
 	if err != nil {
 		panic(err)
 	}

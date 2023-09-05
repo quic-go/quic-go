@@ -2,7 +2,6 @@ package quic
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -227,10 +226,11 @@ func newServer(
 	config *Config,
 	tracer logging.Tracer,
 	onClose func(),
+	tokenGeneratorKey TokenGeneratorKey,
 	disableVersionNegotiation bool,
 	acceptEarly bool,
 ) (*baseServer, error) {
-	tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
+	tokenGenerator, err := handshake.NewTokenGenerator(tokenGeneratorKey)
 	if err != nil {
 		return nil, err
 	}
