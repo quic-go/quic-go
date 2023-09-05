@@ -14,7 +14,7 @@ var _ = Describe("Token Protector", func() {
 		var key TokenProtectorKey
 		rand.Read(key[:])
 		var err error
-		tp, err = newTokenProtector(key)
+		tp = newTokenProtector(key)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -31,10 +31,8 @@ var _ = Describe("Token Protector", func() {
 		var key1, key2 TokenProtectorKey
 		rand.Read(key1[:])
 		rand.Read(key2[:])
-		tp1, err := newTokenProtector(key1)
-		Expect(err).ToNot(HaveOccurred())
-		tp2, err := newTokenProtector(key2)
-		Expect(err).ToNot(HaveOccurred())
+		tp1 := newTokenProtector(key1)
+		tp2 := newTokenProtector(key2)
 		t1, err := tp1.NewToken([]byte("foo"))
 		Expect(err).ToNot(HaveOccurred())
 		t2, err := tp2.NewToken([]byte("foo"))
@@ -46,8 +44,7 @@ var _ = Describe("Token Protector", func() {
 		Expect(err).To(HaveOccurred())
 
 		// now create another token protector, reusing key1
-		tp3, err := newTokenProtector(key1)
-		Expect(err).ToNot(HaveOccurred())
+		tp3 := newTokenProtector(key1)
 		_, err = tp3.DecodeToken(t1)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = tp3.DecodeToken(t2)

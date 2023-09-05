@@ -30,10 +30,8 @@ type tokenProtectorImpl struct {
 }
 
 // newTokenProtector creates a source for source address tokens
-func newTokenProtector(key TokenProtectorKey) (tokenProtector, error) {
-	return &tokenProtectorImpl{
-		key: key,
-	}, nil
+func newTokenProtector(key TokenProtectorKey) tokenProtector {
+	return &tokenProtectorImpl{key: key}
 }
 
 // NewToken encodes data into a new token.

@@ -229,16 +229,12 @@ func newServer(
 	tokenGeneratorKey TokenGeneratorKey,
 	disableVersionNegotiation bool,
 	acceptEarly bool,
-) (*baseServer, error) {
-	tokenGenerator, err := handshake.NewTokenGenerator(tokenGeneratorKey)
-	if err != nil {
-		return nil, err
-	}
+) *baseServer {
 	s := &baseServer{
 		conn:                      conn,
 		tlsConf:                   tlsConf,
 		config:                    config,
-		tokenGenerator:            tokenGenerator,
+		tokenGenerator:            handshake.NewTokenGenerator(tokenGeneratorKey),
 		connIDGenerator:           connIDGenerator,
 		connHandler:               connHandler,
 		connQueue:                 make(chan quicConn),
@@ -260,7 +256,7 @@ func newServer(
 	go s.run()
 	go s.runSendQueue()
 	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
-	return s, nil
+	return s
 }
 
 func (s *baseServer) run() {

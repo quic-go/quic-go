@@ -17,10 +17,7 @@ func Fuzz(data []byte) int {
 	var key quic.TokenGeneratorKey
 	copy(key[:], data[:32])
 	data = data[32:]
-	tg, err := handshake.NewTokenGenerator(key)
-	if err != nil {
-		panic(err)
-	}
+	tg := handshake.NewTokenGenerator(key)
 	if len(data) < 1 {
 		return -1
 	}

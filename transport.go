@@ -142,7 +142,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
-	s, err := newServer(
+	s := newServer(
 		t.conn,
 		t.handlerMap,
 		t.connIDGenerator,
@@ -154,9 +154,6 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
 	)
-	if err != nil {
-		return nil, err
-	}
 	t.server = s
 	return s, nil
 }
