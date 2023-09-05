@@ -18,8 +18,8 @@ jobs:
       TIMESCALE_FACTOR: 3
     name: Integration Tests (${{ matrix.os }}, Go ${{ matrix.go }})
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go }}
       - run: go version
