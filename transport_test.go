@@ -114,7 +114,6 @@ var _ = Describe("Transport", func() {
 		phm := NewMockPacketHandlerManager(mockCtrl)
 		tr.handlerMap = phm
 
-		phm.EXPECT().CloseServer()
 		Expect(ln.Close()).To(Succeed())
 
 		// shutdown

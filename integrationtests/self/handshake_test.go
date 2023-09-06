@@ -152,13 +152,14 @@ var _ = Describe("Handshake tests", func() {
 	Context("Certificate validation", func() {
 		It("accepts the certificate", func() {
 			runServer(getTLSConfig())
-			_, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			conn.CloseWithError(0, "")
 		})
 
 		It("has the right local and remote address on the tls.Config.GetConfigForClient ClientHelloInfo.Conn", func() {
@@ -187,6 +188,7 @@ var _ = Describe("Handshake tests", func() {
 				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			defer conn.CloseWithError(0, "")
 			Eventually(done).Should(BeClosed())
 			Expect(server.Addr()).To(Equal(local))
 			Expect(conn.LocalAddr().(*net.UDPAddr).Port).To(Equal(remote.(*net.UDPAddr).Port))
@@ -196,13 +198,14 @@ var _ = Describe("Handshake tests", func() {
 
 		It("works with a long certificate chain", func() {
 			runServer(getTLSConfigWithLongCertChain())
-			_, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			conn.CloseWithError(0, "")
 		})
 
 		It("errors if the server name doesn't match", func() {

@@ -52,22 +52,23 @@ var _ = Describe("TLS session resumption", func() {
 		cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
 		tlsConf := getTLSClientConfig()
 		tlsConf.ClientSessionCache = cache
-		conn, err := quic.DialAddr(
+		conn1, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn1.CloseWithError(0, "")
 		var sessionKey string
 		Eventually(puts).Should(Receive(&sessionKey))
-		Expect(conn.ConnectionState().TLS.DidResume).To(BeFalse())
+		Expect(conn1.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		serverConn, err := server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
 
-		conn, err = quic.DialAddr(
+		conn2, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
@@ -75,11 +76,12 @@ var _ = Describe("TLS session resumption", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(gets).To(Receive(Equal(sessionKey)))
-		Expect(conn.ConnectionState().TLS.DidResume).To(BeTrue())
+		Expect(conn2.ConnectionState().TLS.DidResume).To(BeTrue())
 
 		serverConn, err = server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeTrue())
+		conn2.CloseWithError(0, "")
 	})
 
 	It("doesn't use session resumption, if the config disables it", func() {
@@ -94,15 +96,16 @@ var _ = Describe("TLS session resumption", func() {
 		cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
 		tlsConf := getTLSClientConfig()
 		tlsConf.ClientSessionCache = cache
-		conn, err := quic.DialAddr(
+		conn1, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn1.CloseWithError(0, "")
 		Consistently(puts).ShouldNot(Receive())
-		Expect(conn.ConnectionState().TLS.DidResume).To(BeFalse())
+		Expect(conn1.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -110,14 +113,15 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
 
-		conn, err = quic.DialAddr(
+		conn2, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.ConnectionState().TLS.DidResume).To(BeFalse())
+		Expect(conn2.ConnectionState().TLS.DidResume).To(BeFalse())
+		defer conn2.CloseWithError(0, "")
 
 		serverConn, err = server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
@@ -142,7 +146,7 @@ var _ = Describe("TLS session resumption", func() {
 		cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
 		tlsConf := getTLSClientConfig()
 		tlsConf.ClientSessionCache = cache
-		conn, err := quic.DialAddr(
+		conn1, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
@@ -150,7 +154,8 @@ var _ = Describe("TLS session resumption", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Consistently(puts).ShouldNot(Receive())
-		Expect(conn.ConnectionState().TLS.DidResume).To(BeFalse())
+		Expect(conn1.ConnectionState().TLS.DidResume).To(BeFalse())
+		defer conn1.CloseWithError(0, "")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -158,14 +163,15 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
 
-		conn, err = quic.DialAddr(
+		conn2, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.ConnectionState().TLS.DidResume).To(BeFalse())
+		Expect(conn2.ConnectionState().TLS.DidResume).To(BeFalse())
+		defer conn2.CloseWithError(0, "")
 
 		serverConn, err = server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
