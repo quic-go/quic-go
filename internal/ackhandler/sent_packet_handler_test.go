@@ -1334,7 +1334,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).ToNot(BeZero())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 			// now receive a Retry
-			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.ResetForRetry(time.Now())).To(Succeed())
 			Expect(lostPackets).To(Equal([]protocol.PacketNumber{42}))
 			Expect(handler.bytesInFlight).To(BeZero())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
@@ -1369,7 +1369,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 			Expect(handler.bytesInFlight).ToNot(BeZero())
 			// now receive a Retry
-			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.ResetForRetry(time.Now())).To(Succeed())
 			Expect(handler.bytesInFlight).To(BeZero())
 			Expect(lostInitial).To(BeTrue())
 			Expect(lost0RTT).To(BeTrue())
@@ -1379,49 +1379,53 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("uses a Retry for an RTT estimate, if it was not retransmitted", func() {
+			now := time.Now()
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    42,
 				EncryptionLevel: protocol.EncryptionInitial,
-				SendTime:        time.Now().Add(-500 * time.Millisecond),
+				SendTime:        now,
 			}))
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    43,
 				EncryptionLevel: protocol.EncryptionInitial,
-				SendTime:        time.Now().Add(-10 * time.Millisecond),
+				SendTime:        now.Add(500 * time.Millisecond),
 			}))
-			Expect(handler.ResetForRetry()).To(Succeed())
-			Expect(handler.rttStats.SmoothedRTT()).To(BeNumerically("~", 500*time.Millisecond, 100*time.Millisecond))
+			Expect(handler.ResetForRetry(now.Add(time.Second))).To(Succeed())
+			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second))
 		})
 
 		It("uses a Retry for an RTT estimate, but doesn't set the RTT to a value lower than 5ms", func() {
+			now := time.Now()
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    42,
 				EncryptionLevel: protocol.EncryptionInitial,
-				SendTime:        time.Now().Add(-500 * time.Microsecond),
+				SendTime:        now,
 			}))
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    43,
 				EncryptionLevel: protocol.EncryptionInitial,
-				SendTime:        time.Now().Add(-10 * time.Microsecond),
+				SendTime:        now.Add(2 * time.Millisecond),
 			}))
-			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.ResetForRetry(now.Add(4 * time.Millisecond))).To(Succeed())
+			Expect(minRTTAfterRetry).To(BeNumerically(">", 4*time.Millisecond))
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(minRTTAfterRetry))
 		})
 
 		It("doesn't use a Retry for an RTT estimate, if it was not retransmitted", func() {
+			now := time.Now()
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    42,
 				EncryptionLevel: protocol.EncryptionInitial,
-				SendTime:        time.Now().Add(-800 * time.Millisecond),
+				SendTime:        now,
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOInitial))
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    43,
 				EncryptionLevel: protocol.EncryptionInitial,
-				SendTime:        time.Now().Add(-100 * time.Millisecond),
+				SendTime:        now.Add(500 * time.Millisecond),
 			}))
-			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.ResetForRetry(now.Add(time.Second))).To(Succeed())
 			Expect(handler.rttStats.SmoothedRTT()).To(BeZero())
 		})
 	})

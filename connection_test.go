@@ -2767,9 +2767,10 @@ var _ = Describe("Client Connection", func() {
 		}
 
 		It("handles Retry packets", func() {
+			now := time.Now()
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			conn.sentPacketHandler = sph
-			sph.EXPECT().ResetForRetry()
+			sph.EXPECT().ResetForRetry(now)
 			sph.EXPECT().ReceivedBytes(gomock.Any())
 			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}))
 			packer.EXPECT().SetToken([]byte("foobar"))
@@ -2778,7 +2779,9 @@ var _ = Describe("Client Connection", func() {
 				Expect(hdr.SrcConnectionID).To(Equal(retryHdr.SrcConnectionID))
 				Expect(hdr.Token).To(Equal(retryHdr.Token))
 			})
-			Expect(conn.handlePacketImpl(getPacket(retryHdr, getRetryTag(retryHdr)))).To(BeTrue())
+			p := getPacket(retryHdr, getRetryTag(retryHdr))
+			p.rcvTime = now
+			Expect(conn.handlePacketImpl(p)).To(BeTrue())
 		})
 
 		It("ignores Retry packets after receiving a regular packet", func() {
@@ -3143,7 +3146,7 @@ var _ = Describe("Client Connection", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			conn.sentPacketHandler = sph
 			sph.EXPECT().ReceivedBytes(gomock.Any()).Times(2)
-			sph.EXPECT().ResetForRetry()
+			sph.EXPECT().ResetForRetry(gomock.Any())
 			newSrcConnID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
 			packer.EXPECT().SetToken([]byte("foobar"))
