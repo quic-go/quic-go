@@ -115,12 +115,7 @@ var _ = Describe("Config", func() {
 		return c
 	}
 
-	It("uses 10s handshake timeout for short handshake idle timeouts", func() {
-		c := &Config{HandshakeIdleTimeout: time.Second}
-		Expect(c.handshakeTimeout()).To(Equal(protocol.DefaultHandshakeTimeout))
-	})
-
-	It("uses twice the handshake idle timeouts for the handshake timeout, for long handshake idle timeouts", func() {
+	It("uses twice the handshake idle timeouts for the handshake timeout", func() {
 		c := &Config{HandshakeIdleTimeout: time.Second * 11 / 2}
 		Expect(c.handshakeTimeout()).To(Equal(11 * time.Second))
 	})

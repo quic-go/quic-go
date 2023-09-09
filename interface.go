@@ -250,7 +250,8 @@ type Config struct {
 	// If not set, it uses all versions available.
 	Versions []VersionNumber
 	// HandshakeIdleTimeout is the idle timeout before completion of the handshake.
-	// Specifically, if we don't receive any packet from the peer within this time, the connection attempt is aborted.
+	// If we don't receive any packet from the peer within this time, the connection attempt is aborted.
+	// Additionally, if the handshake doesn't complete in twice this time, the connection attempt is also aborted.
 	// If this value is zero, the timeout is set to 5 seconds.
 	HandshakeIdleTimeout time.Duration
 	// MaxIdleTimeout is the maximum duration that may pass without any incoming network activity.

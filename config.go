@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -17,7 +16,7 @@ func (c *Config) Clone() *Config {
 }
 
 func (c *Config) handshakeTimeout() time.Duration {
-	return utils.Max(protocol.DefaultHandshakeTimeout, 2*c.HandshakeIdleTimeout)
+	return 2 * c.HandshakeIdleTimeout
 }
 
 func validateConfig(config *Config) error {
