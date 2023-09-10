@@ -65,9 +65,6 @@ const MaxAcceptQueueSize = 32
 // TokenValidity is the duration that a (non-retry) token is considered valid
 const TokenValidity = 24 * time.Hour
 
-// RetryTokenValidity is the duration that a retry token is considered valid
-const RetryTokenValidity = 10 * time.Second
-
 // MaxOutstandingSentPackets is maximum number of packets saved for retransmission.
 // When reached, it imposes a soft limit on sending new packets:
 // Sending ACKs and retransmission is still allowed, but now new regular packets can be sent.
