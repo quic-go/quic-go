@@ -8,6 +8,8 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
+	"runtime"
+	"strings"
 	"time"
 
 	mocktls "github.com/quic-go/quic-go/internal/mocks/tls"
@@ -417,11 +419,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 					close(receivedSessionTicket)
 				})
 				clientConf.ClientSessionCache = csc
+				const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
+				serverOrigRTTStats := newRTTStatsWithRTT(serverRTT)
 				clientOrigRTTStats := newRTTStatsWithRTT(clientRTT)
 				client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
-					clientOrigRTTStats, &utils.RTTStats{},
+					clientOrigRTTStats, serverOrigRTTStats,
 					&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					false,
 				)
@@ -434,9 +438,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 				clientRTTStats := &utils.RTTStats{}
+				serverRTTStats := &utils.RTTStats{}
 				client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
-					clientRTTStats, &utils.RTTStats{},
+					clientRTTStats, serverRTTStats,
 					&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					false,
 				)
@@ -446,6 +451,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
 				Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
+				if !strings.Contains(runtime.Version(), "go1.20") {
+					Expect(serverRTTStats.SmoothedRTT()).To(Equal(serverRTT))
+				}
 			})
 
 			It("doesn't use session resumption if the server disabled it", func() {
