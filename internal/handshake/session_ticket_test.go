@@ -28,6 +28,8 @@ var _ = Describe("Session Ticket", func() {
 		Expect(t.Parameters.ActiveConnectionIDLimit).To(BeEquivalentTo(10))
 		Expect(t.Parameters.MaxDatagramFrameSize).To(BeEquivalentTo(20))
 		Expect(t.RTT).To(Equal(1337 * time.Microsecond))
+		// fails to unmarshal the ticket as a non-0-RTT ticket
+		Expect(t.Unmarshal(ticket.Marshal(), false)).To(MatchError("the session ticket has more bytes than expected"))
 	})
 
 	It("marshals and unmarshals a non-0-RTT session ticket", func() {
@@ -38,6 +40,8 @@ var _ = Describe("Session Ticket", func() {
 		Expect(t.Unmarshal(ticket.Marshal(), false)).To(Succeed())
 		Expect(t.Parameters).To(BeNil())
 		Expect(t.RTT).To(Equal(1337 * time.Microsecond))
+		// fails to unmarshal the ticket as a 0-RTT ticket
+		Expect(t.Unmarshal(ticket.Marshal(), true)).To(MatchError(ContainSubstring("unmarshaling transport parameters from session ticket failed")))
 	})
 
 	It("refuses to unmarshal if the ticket is too short for the revision", func() {
