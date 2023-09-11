@@ -41,7 +41,7 @@ const (
 func QUICServer(config *QUICConfig) *QUICConn { return tls.QUICServer(config) }
 func QUICClient(config *QUICConfig) *QUICConn { return tls.QUICClient(config) }
 
-func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, handleSessionTicket func(bool, []byte) bool) {
+func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, handleSessionTicket func([]byte, bool) bool) {
 	conf := qconf.TLSConfig
 
 	// Workaround for https://github.com/golang/go/issues/60506.
@@ -84,7 +84,7 @@ func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, hand
 
 		extra := findExtraData(state.Extra)
 		if extra != nil {
-			state.EarlyData = handleSessionTicket(state.EarlyData && unwrapCount == 1, extra)
+			state.EarlyData = handleSessionTicket(extra, state.EarlyData && unwrapCount == 1)
 		} else {
 			state.EarlyData = false
 		}

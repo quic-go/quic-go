@@ -27,7 +27,7 @@ func (t *sessionTicket) Marshal() []byte {
 	return t.Parameters.MarshalForSessionTicket(b)
 }
 
-func (t *sessionTicket) Unmarshal(using0RTT bool, b []byte) error {
+func (t *sessionTicket) Unmarshal(b []byte, using0RTT bool) error {
 	r := bytes.NewReader(b)
 	rev, err := quicvarint.Read(r)
 	if err != nil {

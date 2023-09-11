@@ -384,9 +384,9 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 
 // handleSessionTicket is called for the server when receiving the client's session ticket.
 // It reads parameters from the session ticket and decides whether to accept 0-RTT when the session ticket is used for 0-RTT.
-func (h *cryptoSetup) handleSessionTicket(using0RTT bool, sessionTicketData []byte) bool {
+func (h *cryptoSetup) handleSessionTicket(sessionTicketData []byte, using0RTT bool) bool {
 	var t sessionTicket
-	if err := t.Unmarshal(using0RTT, sessionTicketData); err != nil {
+	if err := t.Unmarshal(sessionTicketData, using0RTT); err != nil {
 		h.logger.Debugf("Unmarshalling session ticket failed: %s", err.Error())
 		return false
 	}
