@@ -655,6 +655,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(packet).ToNot(BeNil())
 				Expect(packet.longHdrPackets).To(HaveLen(1))
+				Expect(packet.IsOnlyShortHeaderPacket()).To(BeFalse())
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
 				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data)
@@ -874,6 +875,7 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.PackCoalescedPacket(false, maxPacketSize, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p).ToNot(BeNil())
+				Expect(p.IsOnlyShortHeaderPacket()).To(BeFalse())
 				parsePacket(p.buffer.Data)
 			})
 
@@ -1047,6 +1049,7 @@ var _ = Describe("Packet packer", func() {
 				packer.retransmissionQueue.addAppData(&wire.PingFrame{})
 				p, err := packer.PackCoalescedPacket(false, maxPacketSize, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(p.IsOnlyShortHeaderPacket()).To(BeFalse())
 				Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 				Expect(p.longHdrPackets).To(HaveLen(1))
 				Expect(p.longHdrPackets[0].EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
@@ -1422,6 +1425,7 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.MaybePackProbePacket(protocol.Encryption1RTT, maxPacketSize, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p).ToNot(BeNil())
+				Expect(p.IsOnlyShortHeaderPacket()).To(BeTrue())
 				Expect(p.longHdrPackets).To(BeEmpty())
 				Expect(p.shortHdrPacket).ToNot(BeNil())
 				packet := p.shortHdrPacket
@@ -1448,6 +1452,7 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.MaybePackProbePacket(protocol.Encryption1RTT, maxPacketSize, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p).ToNot(BeNil())
+				Expect(p.IsOnlyShortHeaderPacket()).To(BeTrue())
 				Expect(p.longHdrPackets).To(BeEmpty())
 				Expect(p.shortHdrPacket).ToNot(BeNil())
 				packet := p.shortHdrPacket

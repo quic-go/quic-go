@@ -253,15 +253,33 @@ func (t *connectionTracer) toTransportParameters(tp *wire.TransportParameters) *
 	}
 }
 
-func (t *connectionTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, packetSize logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
-	t.sentPacket(*transformLongHeader(hdr), packetSize, hdr.Length, ack, frames)
+func (t *connectionTracer) SentLongHeaderPacket(
+	hdr *logging.ExtendedHeader,
+	size logging.ByteCount,
+	ecn logging.ECN,
+	ack *logging.AckFrame,
+	frames []logging.Frame,
+) {
+	t.sentPacket(*transformLongHeader(hdr), size, hdr.Length, ecn, ack, frames)
 }
 
-func (t *connectionTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, packetSize logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
-	t.sentPacket(*transformShortHeader(hdr), packetSize, 0, ack, frames)
+func (t *connectionTracer) SentShortHeaderPacket(
+	hdr *logging.ShortHeader,
+	size logging.ByteCount,
+	ecn logging.ECN,
+	ack *logging.AckFrame,
+	frames []logging.Frame,
+) {
+	t.sentPacket(*transformShortHeader(hdr), size, 0, ecn, ack, frames)
 }
 
-func (t *connectionTracer) sentPacket(hdr gojay.MarshalerJSONObject, packetSize, payloadLen logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+func (t *connectionTracer) sentPacket(
+	hdr gojay.MarshalerJSONObject,
+	size, payloadLen logging.ByteCount,
+	ecn logging.ECN,
+	ack *logging.AckFrame,
+	frames []logging.Frame,
+) {
 	numFrames := len(frames)
 	if ack != nil {
 		numFrames++
@@ -276,14 +294,15 @@ func (t *connectionTracer) sentPacket(hdr gojay.MarshalerJSONObject, packetSize,
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketSent{
 		Header:        hdr,
-		Length:        packetSize,
+		Length:        size,
 		PayloadLength: payloadLen,
+		ECN:           ecn,
 		Frames:        fs,
 	})
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, packetSize logging.ByteCount, frames []logging.Frame) {
+func (t *connectionTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = frame{Frame: f}
@@ -292,14 +311,15 @@ func (t *connectionTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader,
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header:        header,
-		Length:        packetSize,
+		Length:        size,
 		PayloadLength: hdr.Length,
+		ECN:           ecn,
 		Frames:        fs,
 	})
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, packetSize logging.ByteCount, frames []logging.Frame) {
+func (t *connectionTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = frame{Frame: f}
@@ -308,8 +328,9 @@ func (t *connectionTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, p
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header:        header,
-		Length:        packetSize,
-		PayloadLength: packetSize - wire.ShortHeaderLen(hdr.DestConnectionID, hdr.PacketNumberLen),
+		Length:        size,
+		PayloadLength: size - wire.ShortHeaderLen(hdr.DestConnectionID, hdr.PacketNumberLen),
+		ECN:           ecn,
 		Frames:        fs,
 	})
 	t.mutex.Unlock()
@@ -479,6 +500,12 @@ func (t *connectionTracer) LossTimerExpired(tt logging.TimerType, encLevel proto
 func (t *connectionTracer) LossTimerCanceled() {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventLossTimerCanceled{})
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) ECNStateUpdated(state logging.ECNState, trigger logging.ECNStateTrigger) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventECNStateUpdated{state: state, trigger: trigger})
 	t.mutex.Unlock()
 }
 

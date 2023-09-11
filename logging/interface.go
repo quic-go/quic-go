@@ -15,6 +15,8 @@ import (
 type (
 	// A ByteCount is used to count bytes.
 	ByteCount = protocol.ByteCount
+	// ECN is the ECN value
+	ECN = protocol.ECN
 	// A ConnectionID is a QUIC Connection ID.
 	ConnectionID = protocol.ConnectionID
 	// An ArbitraryLenConnectionID is a QUIC Connection ID that can be up to 255 bytes long.
@@ -56,6 +58,19 @@ type (
 
 	// The RTTStats contain statistics used by the congestion controller.
 	RTTStats = utils.RTTStats
+)
+
+const (
+	// ECNUnsupported means that no ECN value was set / received
+	ECNUnsupported = protocol.ECNUnsupported
+	// ECTNot is Not-ECT
+	ECTNot = protocol.ECNNon
+	// ECT0 is ECT(0)
+	ECT0 = protocol.ECT0
+	// ECT1 is ECT(1)
+	ECT1 = protocol.ECT1
+	// ECNCE is CE
+	ECNCE = protocol.ECNCE
 )
 
 const (
@@ -113,12 +128,12 @@ type ConnectionTracer interface {
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
-	SentLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
-	SentShortHeaderPacket(hdr *ShortHeader, size ByteCount, ack *AckFrame, frames []Frame)
+	SentLongHeaderPacket(*ExtendedHeader, ByteCount, ECN, *AckFrame, []Frame)
+	SentShortHeaderPacket(*ShortHeader, ByteCount, ECN, *AckFrame, []Frame)
 	ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber)
 	ReceivedRetry(*Header)
-	ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)
-	ReceivedShortHeaderPacket(hdr *ShortHeader, size ByteCount, frames []Frame)
+	ReceivedLongHeaderPacket(*ExtendedHeader, ByteCount, ECN, []Frame)
+	ReceivedShortHeaderPacket(*ShortHeader, ByteCount, ECN, []Frame)
 	BufferedPacket(PacketType, ByteCount)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
@@ -133,6 +148,7 @@ type ConnectionTracer interface {
 	SetLossTimer(TimerType, EncryptionLevel, time.Time)
 	LossTimerExpired(TimerType, EncryptionLevel)
 	LossTimerCanceled()
+	ECNStateUpdated(state ECNState, trigger ECNStateTrigger)
 	// Close is called when the connection is closed.
 	Close()
 	Debug(name, msg string)

@@ -42,11 +42,13 @@ type keyUpdateConnTracer struct {
 	logging.NullConnectionTracer
 }
 
-func (t *keyUpdateConnTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
+var _ logging.ConnectionTracer = &keyUpdateConnTracer{}
+
+func (t *keyUpdateConnTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
 	sentHeaders = append(sentHeaders, hdr)
 }
 
-func (t *keyUpdateConnTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, frames []logging.Frame) {
+func (t *keyUpdateConnTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ []logging.Frame) {
 	receivedHeaders = append(receivedHeaders, hdr)
 }
 

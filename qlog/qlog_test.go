@@ -419,6 +419,7 @@ var _ = Describe("Tracing", func() {
 						PacketNumber: 1337,
 					},
 					987,
+					logging.ECNCE,
 					nil,
 					[]logging.Frame{
 						&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
@@ -439,6 +440,7 @@ var _ = Describe("Tracing", func() {
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 				Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
 				Expect(ev).To(HaveKey("frames"))
+				Expect(ev).To(HaveKeyWithValue("ecn", "CE"))
 				frames := ev["frames"].([]interface{})
 				Expect(frames).To(HaveLen(2))
 				Expect(frames[0].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_stream_data"))
@@ -452,6 +454,7 @@ var _ = Describe("Tracing", func() {
 						PacketNumber:     1337,
 					},
 					123,
+					logging.ECNUnsupported,
 					&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 1, Largest: 10}}},
 					[]logging.Frame{&logging.MaxDataFrame{MaximumData: 987}},
 				)
@@ -461,6 +464,7 @@ var _ = Describe("Tracing", func() {
 				Expect(raw).To(HaveKeyWithValue("length", float64(123)))
 				Expect(raw).ToNot(HaveKey("payload_length"))
 				Expect(ev).To(HaveKey("header"))
+				Expect(ev).ToNot(HaveKey("ecn"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
@@ -485,6 +489,7 @@ var _ = Describe("Tracing", func() {
 						PacketNumber: 1337,
 					},
 					789,
+					logging.ECT0,
 					[]logging.Frame{
 						&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
 						&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
@@ -498,6 +503,7 @@ var _ = Describe("Tracing", func() {
 				raw := ev["raw"].(map[string]interface{})
 				Expect(raw).To(HaveKeyWithValue("length", float64(789)))
 				Expect(raw).To(HaveKeyWithValue("payload_length", float64(1234)))
+				Expect(ev).To(HaveKeyWithValue("ecn", "ECT(0)"))
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "initial"))
@@ -520,6 +526,7 @@ var _ = Describe("Tracing", func() {
 				tracer.ReceivedShortHeaderPacket(
 					shdr,
 					789,
+					logging.ECT1,
 					[]logging.Frame{
 						&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
 						&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
@@ -533,6 +540,7 @@ var _ = Describe("Tracing", func() {
 				raw := ev["raw"].(map[string]interface{})
 				Expect(raw).To(HaveKeyWithValue("length", float64(789)))
 				Expect(raw).To(HaveKeyWithValue("payload_length", float64(789-(1+8+3))))
+				Expect(ev).To(HaveKeyWithValue("ecn", "ECT(1)"))
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
@@ -855,6 +863,27 @@ var _ = Describe("Tracing", func() {
 				ev := entry.Event
 				Expect(ev).To(HaveLen(1))
 				Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
+			})
+
+			It("records an ECN state transition, without a trigger", func() {
+				tracer.ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("recovery:ecn_state_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("new", "unknown"))
+			})
+
+			It("records an ECN state transition, with a trigger", func() {
+				tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedNoECNCounts)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("recovery:ecn_state_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(2))
+				Expect(ev).To(HaveKeyWithValue("new", "failed"))
+				Expect(ev).To(HaveKeyWithValue("trigger", "ACK doesn't contain ECN marks"))
 			})
 
 			It("records a generic event", func() {

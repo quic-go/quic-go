@@ -44,7 +44,7 @@ var _ = Describe("SentPacketHandler", func() {
 	JustBeforeEach(func() {
 		lostPackets = nil
 		rttStats := utils.NewRTTStats()
-		handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, false, perspective, nil, utils.DefaultLogger)
+		handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, false, false, perspective, nil, utils.DefaultLogger)
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
@@ -106,7 +106,7 @@ var _ = Describe("SentPacketHandler", func() {
 	}
 
 	sentPacket := func(p *packet) {
-		handler.SentPacket(p.SendTime, p.PacketNumber, p.LargestAcked, p.StreamFrames, p.Frames, p.EncryptionLevel, p.Length, p.IsPathMTUProbePacket)
+		handler.SentPacket(p.SendTime, p.PacketNumber, p.LargestAcked, p.StreamFrames, p.Frames, p.EncryptionLevel, protocol.ECNNon, p.Length, p.IsPathMTUProbePacket)
 	}
 
 	expectInPacketHistory := func(expected []protocol.PacketNumber, encLevel protocol.EncryptionLevel) {
@@ -563,7 +563,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// lose packet 1
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
-				cong.EXPECT().OnPacketLost(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
 			)
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -575,7 +575,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("doesn't call OnPacketLost when a Path MTU probe packet is lost", func() {
+		It("doesn't call OnCongestionEvent when a Path MTU probe packet is lost", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
 			var mtuPacketDeclaredLost bool
 			sentPacket(ackElicitingPacket(&packet{
@@ -590,7 +590,7 @@ var _ = Describe("SentPacketHandler", func() {
 				},
 			}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2}))
-			// lose packet 1, but don't EXPECT any calls to OnPacketLost()
+			// lose packet 1, but don't EXPECT any calls to OnCongestionEvent()
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
@@ -602,7 +602,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(BeZero())
 		})
 
-		It("calls OnPacketAcked and OnPacketLost with the right bytes_in_flight value", func() {
+		It("calls OnPacketAcked and OnCongestionEvent with the right bytes_in_flight value", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(4)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2, SendTime: time.Now().Add(-30 * time.Minute)}))
@@ -611,7 +611,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// receive the first ACK
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
-				cong.EXPECT().OnPacketLost(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(4)),
+				cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(4)),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(4), gomock.Any()),
 			)
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -620,7 +620,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// receive the second ACK
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(),
-				cong.EXPECT().OnPacketLost(protocol.PacketNumber(3), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(3), protocol.ByteCount(1), protocol.ByteCount(2)),
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(4), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
 			)
 			ack = &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 4, Largest: 4}}}
@@ -984,7 +984,7 @@ var _ = Describe("SentPacketHandler", func() {
 	Context("amplification limit, for the server, with validated address", func() {
 		JustBeforeEach(func() {
 			rttStats := utils.NewRTTStats()
-			handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, true, perspective, nil, utils.DefaultLogger)
+			handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, true, false, perspective, nil, utils.DefaultLogger)
 		})
 
 		It("do not limits the window", func() {
@@ -1427,6 +1427,153 @@ var _ = Describe("SentPacketHandler", func() {
 			}))
 			Expect(handler.ResetForRetry(now.Add(time.Second))).To(Succeed())
 			Expect(handler.rttStats.SmoothedRTT()).To(BeZero())
+		})
+	})
+
+	Context("ECN handling", func() {
+		var ecnHandler *MockECNHandler
+		var cong *mocks.MockSendAlgorithmWithDebugInfos
+
+		JustBeforeEach(func() {
+			cong = mocks.NewMockSendAlgorithmWithDebugInfos(mockCtrl)
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			cong.EXPECT().OnPacketAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			cong.EXPECT().MaybeExitSlowStart().AnyTimes()
+			ecnHandler = NewMockECNHandler(mockCtrl)
+			lostPackets = nil
+			rttStats := utils.NewRTTStats()
+			rttStats.UpdateRTT(time.Hour, 0, time.Now())
+			handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, false, false, perspective, nil, utils.DefaultLogger)
+			handler.ecnTracker = ecnHandler
+			handler.congestion = cong
+		})
+
+		It("informs about sent packets", func() {
+			// Check that only 1-RTT packets are reported
+			handler.SentPacket(time.Now(), 100, -1, nil, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false)
+			handler.SentPacket(time.Now(), 101, -1, nil, nil, protocol.EncryptionHandshake, protocol.ECT0, 1200, false)
+			handler.SentPacket(time.Now(), 102, -1, nil, nil, protocol.Encryption0RTT, protocol.ECNCE, 1200, false)
+
+			ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(103), protocol.ECT1)
+			handler.SentPacket(time.Now(), 103, -1, nil, nil, protocol.Encryption1RTT, protocol.ECT1, 1200, false)
+		})
+
+		It("informs about sent packets", func() {
+			// Check that only 1-RTT packets are reported
+			handler.SentPacket(time.Now(), 100, -1, nil, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false)
+			handler.SentPacket(time.Now(), 101, -1, nil, nil, protocol.EncryptionHandshake, protocol.ECT0, 1200, false)
+			handler.SentPacket(time.Now(), 102, -1, nil, nil, protocol.Encryption0RTT, protocol.ECNCE, 1200, false)
+
+			ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(103), protocol.ECT1)
+			handler.SentPacket(time.Now(), 103, -1, nil, nil, protocol.Encryption1RTT, protocol.ECT1, 1200, false)
+		})
+
+		It("informs about lost packets", func() {
+			for i := 10; i < 20; i++ {
+				ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(i), protocol.ECT1)
+				handler.SentPacket(time.Now(), protocol.PacketNumber(i), -1, []StreamFrame{{Frame: &streamFrame}}, nil, protocol.Encryption1RTT, protocol.ECT1, 1200, false)
+			}
+			cong.EXPECT().OnCongestionEvent(gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			ecnHandler.EXPECT().LostPacket(protocol.PacketNumber(10))
+			ecnHandler.EXPECT().LostPacket(protocol.PacketNumber(11))
+			ecnHandler.EXPECT().LostPacket(protocol.PacketNumber(12))
+			ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			_, err := handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 16, Smallest: 13}}}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("processes ACKs", func() {
+			// Check that we only care about 1-RTT packets.
+			handler.SentPacket(time.Now(), 100, -1, []StreamFrame{{Frame: &streamFrame}}, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false)
+			_, err := handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100, Smallest: 100}}}, protocol.EncryptionInitial, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+
+			for i := 10; i < 20; i++ {
+				ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(i), protocol.ECT1)
+				handler.SentPacket(time.Now(), protocol.PacketNumber(i), -1, []StreamFrame{{Frame: &streamFrame}}, nil, protocol.Encryption1RTT, protocol.ECT1, 1200, false)
+			}
+			ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(1), int64(2), int64(3)).DoAndReturn(func(packets []*packet, _, _, _ int64) bool {
+				Expect(packets).To(HaveLen(5))
+				Expect(packets[0].PacketNumber).To(Equal(protocol.PacketNumber(10)))
+				Expect(packets[1].PacketNumber).To(Equal(protocol.PacketNumber(11)))
+				Expect(packets[2].PacketNumber).To(Equal(protocol.PacketNumber(12)))
+				Expect(packets[3].PacketNumber).To(Equal(protocol.PacketNumber(14)))
+				Expect(packets[4].PacketNumber).To(Equal(protocol.PacketNumber(15)))
+				return false
+			})
+			_, err = handler.ReceivedAck(&wire.AckFrame{
+				AckRanges: []wire.AckRange{
+					{Largest: 15, Smallest: 14},
+					{Largest: 12, Smallest: 10},
+				},
+				ECT0:  1,
+				ECT1:  2,
+				ECNCE: 3,
+			}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("ignores reordered ACKs", func() {
+			for i := 10; i < 20; i++ {
+				ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(i), protocol.ECT1)
+				handler.SentPacket(time.Now(), protocol.PacketNumber(i), -1, []StreamFrame{{Frame: &streamFrame}}, nil, protocol.Encryption1RTT, protocol.ECT1, 1200, false)
+			}
+			ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(1), int64(2), int64(3)).DoAndReturn(func(packets []*packet, _, _, _ int64) bool {
+				Expect(packets).To(HaveLen(2))
+				Expect(packets[0].PacketNumber).To(Equal(protocol.PacketNumber(11)))
+				Expect(packets[1].PacketNumber).To(Equal(protocol.PacketNumber(12)))
+				return false
+			})
+			_, err := handler.ReceivedAck(&wire.AckFrame{
+				AckRanges: []wire.AckRange{{Largest: 12, Smallest: 11}},
+				ECT0:      1,
+				ECT1:      2,
+				ECNCE:     3,
+			}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			// acknowledge packet 10 now, but don't increase the largest acked
+			_, err = handler.ReceivedAck(&wire.AckFrame{
+				AckRanges: []wire.AckRange{{Largest: 12, Smallest: 10}},
+				ECT0:      1,
+				ECNCE:     3,
+			}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("ignores ACKs that don't increase the largest acked", func() {
+			for i := 10; i < 20; i++ {
+				ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(i), protocol.ECT1)
+				handler.SentPacket(time.Now(), protocol.PacketNumber(i), -1, []StreamFrame{{Frame: &streamFrame}}, nil, protocol.Encryption1RTT, protocol.ECT1, 1200, false)
+			}
+			ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(1), int64(2), int64(3)).DoAndReturn(func(packets []*packet, _, _, _ int64) bool {
+				Expect(packets).To(HaveLen(1))
+				Expect(packets[0].PacketNumber).To(Equal(protocol.PacketNumber(11)))
+				return false
+			})
+			_, err := handler.ReceivedAck(&wire.AckFrame{
+				AckRanges: []wire.AckRange{{Largest: 11, Smallest: 11}},
+				ECT0:      1,
+				ECT1:      2,
+				ECNCE:     3,
+			}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			_, err = handler.ReceivedAck(&wire.AckFrame{
+				AckRanges: []wire.AckRange{{Largest: 11, Smallest: 10}},
+				ECT0:      1,
+				ECNCE:     3,
+			}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("informs the congestion controller about CE events", func() {
+			for i := 10; i < 20; i++ {
+				ecnHandler.EXPECT().SentPacket(protocol.PacketNumber(i), protocol.ECT0)
+				handler.SentPacket(time.Now(), protocol.PacketNumber(i), -1, []StreamFrame{{Frame: &streamFrame}}, nil, protocol.Encryption1RTT, protocol.ECT0, 1200, false)
+			}
+			ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(0), int64(0), int64(0)).Return(true)
+			cong.EXPECT().OnCongestionEvent(protocol.PacketNumber(15), gomock.Any(), gomock.Any())
+			_, err := handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 15, Smallest: 10}}}, protocol.Encryption1RTT, time.Now())
+			Expect(err).ToNot(HaveOccurred())
 		})
 	})
 })

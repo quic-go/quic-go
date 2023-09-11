@@ -93,15 +93,15 @@ func (m *connTracerMultiplexer) RestoredTransportParameters(tp *TransportParamet
 	}
 }
 
-func (m *connTracerMultiplexer) SentLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame) {
+func (m *connTracerMultiplexer) SentLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ecn ECN, ack *AckFrame, frames []Frame) {
 	for _, t := range m.tracers {
-		t.SentLongHeaderPacket(hdr, size, ack, frames)
+		t.SentLongHeaderPacket(hdr, size, ecn, ack, frames)
 	}
 }
 
-func (m *connTracerMultiplexer) SentShortHeaderPacket(hdr *ShortHeader, size ByteCount, ack *AckFrame, frames []Frame) {
+func (m *connTracerMultiplexer) SentShortHeaderPacket(hdr *ShortHeader, size ByteCount, ecn ECN, ack *AckFrame, frames []Frame) {
 	for _, t := range m.tracers {
-		t.SentShortHeaderPacket(hdr, size, ack, frames)
+		t.SentShortHeaderPacket(hdr, size, ecn, ack, frames)
 	}
 }
 
@@ -117,15 +117,15 @@ func (m *connTracerMultiplexer) ReceivedRetry(hdr *Header) {
 	}
 }
 
-func (m *connTracerMultiplexer) ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame) {
+func (m *connTracerMultiplexer) ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ecn ECN, frames []Frame) {
 	for _, t := range m.tracers {
-		t.ReceivedLongHeaderPacket(hdr, size, frames)
+		t.ReceivedLongHeaderPacket(hdr, size, ecn, frames)
 	}
 }
 
-func (m *connTracerMultiplexer) ReceivedShortHeaderPacket(hdr *ShortHeader, size ByteCount, frames []Frame) {
+func (m *connTracerMultiplexer) ReceivedShortHeaderPacket(hdr *ShortHeader, size ByteCount, ecn ECN, frames []Frame) {
 	for _, t := range m.tracers {
-		t.ReceivedShortHeaderPacket(hdr, size, frames)
+		t.ReceivedShortHeaderPacket(hdr, size, ecn, frames)
 	}
 }
 
@@ -210,6 +210,12 @@ func (m *connTracerMultiplexer) LossTimerExpired(typ TimerType, encLevel Encrypt
 func (m *connTracerMultiplexer) LossTimerCanceled() {
 	for _, t := range m.tracers {
 		t.LossTimerCanceled()
+	}
+}
+
+func (m *connTracerMultiplexer) ECNStateUpdated(state ECNState, trigger ECNStateTrigger) {
+	for _, t := range m.tracers {
+		t.ECNStateUpdated(state, trigger)
 	}
 }
 

@@ -3,12 +3,13 @@ package quic
 import (
 	"net"
 
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.
 type sendConn interface {
-	Write(b []byte, gsoSize uint16) error
+	Write(b []byte, gsoSize uint16, ecn protocol.ECN) error
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
@@ -42,10 +43,9 @@ func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger utils.Logge
 	}
 
 	oob := info.OOB()
-	// add 32 bytes, so we can add the UDP_SEGMENT msg
+	// increase oob slice capacity, so we can add the UDP_SEGMENT and ECN control messages without allocating
 	l := len(oob)
-	oob = append(oob, make([]byte, 32)...)
-	oob = oob[:l]
+	oob = append(oob, make([]byte, 64)...)[:l]
 	return &sconn{
 		rawConn:       c,
 		localAddr:     localAddr,
@@ -55,8 +55,8 @@ func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger utils.Logge
 	}
 }
 
-func (c *sconn) Write(p []byte, gsoSize uint16) error {
-	_, err := c.WritePacket(p, c.remoteAddr, c.packetInfoOOB, gsoSize)
+func (c *sconn) Write(p []byte, gsoSize uint16, ecn protocol.ECN) error {
+	_, err := c.WritePacket(p, c.remoteAddr, c.packetInfoOOB, gsoSize, ecn)
 	if err != nil && isGSOError(err) {
 		// disable GSO for future calls
 		c.gotGSOError = true
@@ -69,7 +69,7 @@ func (c *sconn) Write(p []byte, gsoSize uint16) error {
 			if l > int(gsoSize) {
 				l = int(gsoSize)
 			}
-			if _, err := c.WritePacket(p[:l], c.remoteAddr, c.packetInfoOOB, 0); err != nil {
+			if _, err := c.WritePacket(p[:l], c.remoteAddr, c.packetInfoOOB, 0, ecn); err != nil {
 				return err
 			}
 			p = p[l:]
