@@ -841,6 +841,8 @@ func (p *packetPacker) appendShortHeaderPacket(
 	}, nil
 }
 
+// appendPacketPayload serializes the payload of a packet into the raw byte slice.
+// It modifies the order of payload.frames.
 func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen protocol.ByteCount, v protocol.VersionNumber) ([]byte, error) {
 	payloadOffset := len(raw)
 	if pl.ack != nil {
