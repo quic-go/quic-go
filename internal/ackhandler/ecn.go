@@ -224,8 +224,8 @@ func (e *ecnTracker) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64
 	e.numAckedECNCE = ecnce
 
 	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
-		// Detect mangling (a path remarking all ECN-marked packets as CE.
-		if e.numSentECT0+e.numSentECT1 == e.numAckedECNCE {
+		// Detect mangling (a path remarking all ECN-marked testing packets as CE).
+		if e.numSentECT0+e.numSentECT1 == e.numAckedECNCE && e.numAckedECNCE >= numECNTestingPackets {
 			if e.tracer != nil {
 				e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
 			}
