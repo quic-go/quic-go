@@ -8,7 +8,6 @@ coverage:
     - logging/null_tracer.go
     - fuzzing/
     - metrics/
-    - "**/mockgen.go"
   status:
     project:
       default:
