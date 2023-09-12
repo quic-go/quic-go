@@ -1,12 +1,14 @@
-package logging
+package logging_test
 
 import (
 	"errors"
 	"net"
 	"time"
 
+	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
+	. "github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -19,20 +21,20 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("returns the raw tracer if only one tracer is passed in", func() {
-			tr := NewMockTracer(mockCtrl)
+			tr := mocklogging.NewMockTracer(mockCtrl)
 			tracer := NewMultiplexedTracer(tr)
-			Expect(tracer).To(BeAssignableToTypeOf(&MockTracer{}))
+			Expect(tracer).To(BeAssignableToTypeOf(&mocklogging.MockTracer{}))
 		})
 
 		Context("tracing events", func() {
 			var (
 				tracer   Tracer
-				tr1, tr2 *MockTracer
+				tr1, tr2 *mocklogging.MockTracer
 			)
 
 			BeforeEach(func() {
-				tr1 = NewMockTracer(mockCtrl)
-				tr2 = NewMockTracer(mockCtrl)
+				tr1 = mocklogging.NewMockTracer(mockCtrl)
+				tr2 = mocklogging.NewMockTracer(mockCtrl)
 				tracer = NewMultiplexedTracer(tr1, tr2)
 			})
 
@@ -67,13 +69,13 @@ var _ = Describe("Tracing", func() {
 	Context("Connection Tracer", func() {
 		var (
 			tracer ConnectionTracer
-			tr1    *MockConnectionTracer
-			tr2    *MockConnectionTracer
+			tr1    *mocklogging.MockConnectionTracer
+			tr2    *mocklogging.MockConnectionTracer
 		)
 
 		BeforeEach(func() {
-			tr1 = NewMockConnectionTracer(mockCtrl)
-			tr2 = NewMockConnectionTracer(mockCtrl)
+			tr1 = mocklogging.NewMockConnectionTracer(mockCtrl)
+			tr2 = mocklogging.NewMockConnectionTracer(mockCtrl)
 			tracer = NewMultiplexedConnectionTracer(tr1, tr2)
 		})
 
