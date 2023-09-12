@@ -175,6 +175,20 @@ var _ = Describe("ECN tracker", func() {
 		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(4, 5, 6, 15), 3, 0, 2)).To(BeFalse())
 	})
 
+	It("detects ECN mangling", func() {
+		sendAllTestingPackets()
+		for i := 10; i < 20; i++ {
+			Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
+			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECNNon)
+		}
+		// ECN capability not confirmed yet, therefore CE marks are not regarded as congestion events
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(0, 1, 2, 3), 0, 0, 4)).To(BeFalse())
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(4, 5, 6, 10, 11, 12), 0, 0, 7)).To(BeFalse())
+		// With the next ACK, all testing packets will now have been marked CE.
+		tracer.EXPECT().ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(7, 8, 9, 13), 0, 0, 10)).To(BeFalse())
+	})
+
 	It("declares congestion", func() {
 		sendAllTestingPackets()
 		for i := 10; i < 20; i++ {

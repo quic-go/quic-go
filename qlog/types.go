@@ -364,6 +364,8 @@ func (e ecnStateTrigger) String() string {
 		return "ACK contains more ECN counts than ECN-marked packets sent"
 	case logging.ECNFailedTooFewECNCounts:
 		return "ACK contains fewer new ECN counts than acknowledged ECN-marked packets"
+	case logging.ECNFailedManglingDetected:
+		return "ECN mangling detected"
 	default:
 		return "unknown ECN state trigger"
 	}
