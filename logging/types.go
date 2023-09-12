@@ -121,6 +121,8 @@ const (
 	ECNFailedLostAllTestingPackets
 	// ECNFailedMoreECNCountsThanSent is emitted when an ACK contains more ECN counts than ECN-marked packets were sent
 	ECNFailedMoreECNCountsThanSent
-	// ECNFailedTooFewECNCounts is emitted when contains fewer ECT(0) / ECT(1) counts than it acknowledges packets
+	// ECNFailedTooFewECNCounts is emitted when an ACK contains fewer ECN counts than it acknowledges packets
 	ECNFailedTooFewECNCounts
+	// ECNFailedManglingDetected is emitted when the path marks all ECN-marked packets as CE
+	ECNFailedManglingDetected
 )

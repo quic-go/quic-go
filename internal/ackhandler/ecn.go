@@ -218,7 +218,21 @@ func (e *ecnTracker) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64
 		return false
 	}
 
+	// update our counters
+	e.numAckedECT0 = ect0
+	e.numAckedECT1 = ect1
+	e.numAckedECNCE = ecnce
+
 	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
+		// Detect mangling (a path remarking all ECN-marked testing packets as CE).
+		if e.numSentECT0+e.numSentECT1 == e.numAckedECNCE && e.numAckedECNCE >= numECNTestingPackets {
+			if e.tracer != nil {
+				e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
+			}
+			e.state = ecnStateFailed
+			return false
+		}
+
 		var ackedTestingPacket bool
 		for _, p := range packets {
 			if e.isTestingPacket(p.PacketNumber) {
@@ -236,12 +250,9 @@ func (e *ecnTracker) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64
 		}
 	}
 
-	// update our counters
-	e.numAckedECT0 = ect0
-	e.numAckedECT1 = ect1
-	e.numAckedECNCE = ecnce
-
-	return newECNCE > 0
+	// Don't trust CE marks before having confirmed ECN capability of the path.
+	// Otherwise, mangling would be misinterpreted as actual congestion.
+	return e.state == ecnStateCapable && newECNCE > 0
 }
 
 func (e *ecnTracker) ecnMarking(pn protocol.PacketNumber) protocol.ECN {
