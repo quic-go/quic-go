@@ -14,8 +14,8 @@ import (
 	"github.com/quic-go/quic-go/qlog"
 )
 
-func NewQlogger(logger io.Writer) func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
-	return func(_ context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+func NewQlogger(logger io.Writer) func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+	return func(_ context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 		role := "server"
 		if p == logging.PerspectiveClient {
 			role = "client"

@@ -177,8 +177,9 @@ var _ = Describe("Server", func() {
 		)
 
 		BeforeEach(func() {
-			tracer = mocklogging.NewMockTracer(mockCtrl)
-			tr = &Transport{Conn: conn, Tracer: tracer}
+			var t *logging.Tracer
+			t, tracer = mocklogging.NewMockTracer(mockCtrl)
+			tr = &Transport{Conn: conn, Tracer: t}
 			ln, err := tr.Listen(tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.baseServer
@@ -291,7 +292,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -493,7 +494,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -552,7 +553,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -605,7 +606,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -641,7 +642,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -712,7 +713,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -1022,7 +1023,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -1099,7 +1100,7 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ logging.ConnectionTracer,
+					_ *logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -1172,7 +1173,7 @@ var _ = Describe("Server", func() {
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -1215,7 +1216,7 @@ var _ = Describe("Server", func() {
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -1279,7 +1280,7 @@ var _ = Describe("Server", func() {
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -1329,8 +1330,9 @@ var _ = Describe("Server", func() {
 		)
 
 		BeforeEach(func() {
-			tracer = mocklogging.NewMockTracer(mockCtrl)
-			tr = &Transport{Conn: conn, Tracer: tracer}
+			var t *logging.Tracer
+			t, tracer = mocklogging.NewMockTracer(mockCtrl)
+			tr = &Transport{Conn: conn, Tracer: t}
 			ln, err := tr.ListenEarly(tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			phm = NewMockPacketHandlerManager(mockCtrl)
@@ -1404,7 +1406,7 @@ var _ = Describe("Server", func() {
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,

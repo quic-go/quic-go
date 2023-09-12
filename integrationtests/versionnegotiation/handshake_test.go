@@ -21,29 +21,29 @@ type versioner interface {
 	GetVersion() protocol.VersionNumber
 }
 
-type versionNegotiationTracer struct {
-	logging.NullConnectionTracer
-
+type result struct {
 	loggedVersions                 bool
 	receivedVersionNegotiation     bool
 	chosen                         logging.VersionNumber
 	clientVersions, serverVersions []logging.VersionNumber
 }
 
-var _ logging.ConnectionTracer = &versionNegotiationTracer{}
-
-func (t *versionNegotiationTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
-	if t.loggedVersions {
-		Fail("only expected one call to NegotiatedVersions")
+func newVersionNegotiationTracer() (*result, *logging.ConnectionTracer) {
+	r := &result{}
+	return r, &logging.ConnectionTracer{
+		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+			if r.loggedVersions {
+				Fail("only expected one call to NegotiatedVersions")
+			}
+			r.loggedVersions = true
+			r.chosen = chosen
+			r.clientVersions = clientVersions
+			r.serverVersions = serverVersions
+		},
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
+			r.receivedVersionNegotiation = true
+		},
 	}
-	t.loggedVersions = true
-	t.chosen = chosen
-	t.clientVersions = clientVersions
-	t.serverVersions = serverVersions
-}
-
-func (t *versionNegotiationTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
-	t.receivedVersionNegotiation = true
 }
 
 var _ = Describe("Handshake tests", func() {
@@ -86,54 +86,54 @@ var _ = Describe("Handshake tests", func() {
 			// but it supports a bunch of versions that the client doesn't speak
 			serverConfig := &quic.Config{}
 			serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
-			serverTracer := &versionNegotiationTracer{}
-			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+			serverResult, serverTracer := newVersionNegotiationTracer()
+			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 				return serverTracer
 			}
 			server, cl := startServer(getTLSConfig(), serverConfig)
 			defer cl()
-			clientTracer := &versionNegotiationTracer{}
+			clientResult, clientTracer := newVersionNegotiationTracer()
 			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				maybeAddQLOGTracer(&quic.Config{Tracer: func(ctx context.Context, perspective logging.Perspective, id quic.ConnectionID) logging.ConnectionTracer {
+				maybeAddQLOGTracer(&quic.Config{Tracer: func(ctx context.Context, perspective logging.Perspective, id quic.ConnectionID) *logging.ConnectionTracer {
 					return clientTracer
 				}}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conn.(versioner).GetVersion()).To(Equal(expectedVersion))
 			Expect(conn.CloseWithError(0, "")).To(Succeed())
-			Expect(clientTracer.chosen).To(Equal(expectedVersion))
-			Expect(clientTracer.receivedVersionNegotiation).To(BeFalse())
-			Expect(clientTracer.clientVersions).To(Equal(protocol.SupportedVersions))
-			Expect(clientTracer.serverVersions).To(BeEmpty())
-			Expect(serverTracer.chosen).To(Equal(expectedVersion))
-			Expect(serverTracer.serverVersions).To(Equal(serverConfig.Versions))
-			Expect(serverTracer.clientVersions).To(BeEmpty())
+			Expect(clientResult.chosen).To(Equal(expectedVersion))
+			Expect(clientResult.receivedVersionNegotiation).To(BeFalse())
+			Expect(clientResult.clientVersions).To(Equal(protocol.SupportedVersions))
+			Expect(clientResult.serverVersions).To(BeEmpty())
+			Expect(serverResult.chosen).To(Equal(expectedVersion))
+			Expect(serverResult.serverVersions).To(Equal(serverConfig.Versions))
+			Expect(serverResult.clientVersions).To(BeEmpty())
 		})
 
 		It("when the client supports more versions than the server supports", func() {
 			expectedVersion := protocol.SupportedVersions[0]
 			// The server doesn't support the highest supported version, which is the first one the client will try,
 			// but it supports a bunch of versions that the client doesn't speak
-			serverTracer := &versionNegotiationTracer{}
+			serverResult, serverTracer := newVersionNegotiationTracer()
 			serverConfig := &quic.Config{}
 			serverConfig.Versions = supportedVersions
-			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 				return serverTracer
 			}
 			server, cl := startServer(getTLSConfig(), serverConfig)
 			defer cl()
 			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
-			clientTracer := &versionNegotiationTracer{}
+			clientResult, clientTracer := newVersionNegotiationTracer()
 			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				maybeAddQLOGTracer(&quic.Config{
 					Versions: clientVersions,
-					Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+					Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 						return clientTracer
 					},
 				}),
@@ -141,22 +141,22 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conn.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
 			Expect(conn.CloseWithError(0, "")).To(Succeed())
-			Expect(clientTracer.chosen).To(Equal(expectedVersion))
-			Expect(clientTracer.receivedVersionNegotiation).To(BeTrue())
-			Expect(clientTracer.clientVersions).To(Equal(clientVersions))
-			Expect(clientTracer.serverVersions).To(ContainElements(supportedVersions)) // may contain greased versions
-			Expect(serverTracer.chosen).To(Equal(expectedVersion))
-			Expect(serverTracer.serverVersions).To(Equal(serverConfig.Versions))
-			Expect(serverTracer.clientVersions).To(BeEmpty())
+			Expect(clientResult.chosen).To(Equal(expectedVersion))
+			Expect(clientResult.receivedVersionNegotiation).To(BeTrue())
+			Expect(clientResult.clientVersions).To(Equal(clientVersions))
+			Expect(clientResult.serverVersions).To(ContainElements(supportedVersions)) // may contain greased versions
+			Expect(serverResult.chosen).To(Equal(expectedVersion))
+			Expect(serverResult.serverVersions).To(Equal(serverConfig.Versions))
+			Expect(serverResult.clientVersions).To(BeEmpty())
 		})
 
 		It("fails if the server disables version negotiation", func() {
 			// The server doesn't support the highest supported version, which is the first one the client will try,
 			// but it supports a bunch of versions that the client doesn't speak
-			serverTracer := &versionNegotiationTracer{}
+			_, serverTracer := newVersionNegotiationTracer()
 			serverConfig := &quic.Config{}
 			serverConfig.Versions = supportedVersions
-			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 				return serverTracer
 			}
 			conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
@@ -170,14 +170,14 @@ var _ = Describe("Handshake tests", func() {
 			defer ln.Close()
 
 			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
-			clientTracer := &versionNegotiationTracer{}
+			clientResult, clientTracer := newVersionNegotiationTracer()
 			_, err = quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", conn.LocalAddr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				maybeAddQLOGTracer(&quic.Config{
 					Versions: clientVersions,
-					Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+					Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 						return clientTracer
 					},
 					HandshakeIdleTimeout: 100 * time.Millisecond,
@@ -187,7 +187,7 @@ var _ = Describe("Handshake tests", func() {
 			var nerr net.Error
 			Expect(errors.As(err, &nerr)).To(BeTrue())
 			Expect(nerr.Timeout()).To(BeTrue())
-			Expect(clientTracer.receivedVersionNegotiation).To(BeFalse())
+			Expect(clientResult.receivedVersionNegotiation).To(BeFalse())
 		})
 	}
 })
