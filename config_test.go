@@ -78,8 +78,6 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(time.Second))
 			case "MaxIdleTimeout":
 				f.Set(reflect.ValueOf(time.Hour))
-			case "MaxTokenAge":
-				f.Set(reflect.ValueOf(2 * time.Hour))
 			case "TokenStore":
 				f.Set(reflect.ValueOf(NewLRUTokenStore(2, 3)))
 			case "InitialStreamReceiveWindow":

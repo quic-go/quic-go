@@ -53,9 +53,6 @@ func validateConfig(config *Config) error {
 // it may be called with nil
 func populateServerConfig(config *Config) *Config {
 	config = populateConfig(config)
-	if config.MaxTokenAge == 0 {
-		config.MaxTokenAge = protocol.TokenValidity
-	}
 	if config.RequireAddressValidation == nil {
 		config.RequireAddressValidation = func(net.Addr) bool { return false }
 	}
@@ -114,7 +111,6 @@ func populateConfig(config *Config) *Config {
 		Versions:                       versions,
 		HandshakeIdleTimeout:           handshakeIdleTimeout,
 		MaxIdleTimeout:                 idleTimeout,
-		MaxTokenAge:                    config.MaxTokenAge,
 		RequireAddressValidation:       config.RequireAddressValidation,
 		KeepAlivePeriod:                config.KeepAlivePeriod,
 		InitialStreamReceiveWindow:     initialStreamReceiveWindow,
