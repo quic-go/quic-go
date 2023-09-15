@@ -57,6 +57,12 @@ type Transport struct {
 	// See section 10.3 of RFC 9000 for details.
 	StatelessResetKey *StatelessResetKey
 
+	// The TokenGeneratorKey is used to encrypt session resumption tokens.
+	// If no key is configured, a random key will be generated.
+	// If multiple servers are authoritative for the same domain, they should use the same key,
+	// see section 8.1.3 of RFC 9000 for details.
+	TokenGeneratorKey *TokenGeneratorKey
+
 	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
 	// This can be useful if version information is exchanged out-of-band.
 	// It has no effect for clients.
@@ -136,7 +142,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
-	s, err := newServer(
+	s := newServer(
 		t.conn,
 		t.handlerMap,
 		t.connIDGenerator,
@@ -144,12 +150,10 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		conf,
 		t.Tracer,
 		t.closeServer,
+		*t.TokenGeneratorKey,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
 	)
-	if err != nil {
-		return nil, err
-	}
 	t.server = s
 	return s, nil
 }
@@ -203,6 +207,14 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 
 		t.closeQueue = make(chan closePacket, 4)
 		t.statelessResetQueue = make(chan receivedPacket, 4)
+		if t.TokenGeneratorKey == nil {
+			var key TokenGeneratorKey
+			if _, err := rand.Read(key[:]); err != nil {
+				t.initErr = err
+				return
+			}
+			t.TokenGeneratorKey = &key
+		}
 
 		if t.ConnectionIDGenerator != nil {
 			t.connIDGenerator = t.ConnectionIDGenerator
