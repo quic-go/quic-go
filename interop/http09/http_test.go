@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/testdata"
@@ -42,7 +43,7 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 			defer server.mutex.Unlock()
 			ln = server.listener
 			return server.listener
-		}).ShouldNot(BeNil())
+		}, 5*time.Second).ShouldNot(BeNil())
 		saddr = ln.Addr()
 		saddr.(*net.UDPAddr).IP = net.IP{127, 0, 0, 1}
 	})
