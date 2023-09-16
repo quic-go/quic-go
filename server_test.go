@@ -1412,7 +1412,7 @@ var _ = Describe("Server", func() {
 				_ protocol.VersionNumber,
 			) quicConn {
 				conn := NewMockQUICConn(mockCtrl)
-				var calls []*gomock.Call
+				var calls []any
 				calls = append(calls, conn.EXPECT().handlePacket(initial))
 				for _, p := range zeroRTTPackets {
 					calls = append(calls, conn.EXPECT().handlePacket(p))

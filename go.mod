@@ -8,7 +8,7 @@ require (
 	github.com/onsi/gomega v1.27.6
 	github.com/quic-go/qpack v0.4.0
 	github.com/quic-go/qtls-go1-20 v0.3.4
-	go.uber.org/mock v0.2.0
+	go.uber.org/mock v0.3.0
 	golang.org/x/crypto v0.4.0
 	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db
 	golang.org/x/net v0.10.0
@@ -21,7 +21,7 @@ require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
-	golang.org/x/mod v0.10.0 // indirect
+	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
