@@ -67,6 +67,7 @@ type baseServer struct {
 	conn rawConn
 
 	tokenGenerator *handshake.TokenGenerator
+	maxTokenAge    time.Duration
 
 	connIDGenerator ConnectionIDGenerator
 	connHandler     packetHandlerManager
@@ -227,6 +228,7 @@ func newServer(
 	tracer *logging.Tracer,
 	onClose func(),
 	tokenGeneratorKey TokenGeneratorKey,
+	maxTokenAge time.Duration,
 	disableVersionNegotiation bool,
 	acceptEarly bool,
 ) *baseServer {
@@ -235,6 +237,7 @@ func newServer(
 		tlsConf:                   tlsConf,
 		config:                    config,
 		tokenGenerator:            handshake.NewTokenGenerator(tokenGeneratorKey),
+		maxTokenAge:               maxTokenAge,
 		connIDGenerator:           connIDGenerator,
 		connHandler:               connHandler,
 		connQueue:                 make(chan quicConn),
@@ -524,7 +527,7 @@ func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 	if !token.ValidateRemoteAddr(addr) {
 		return false
 	}
-	if !token.IsRetryToken && time.Since(token.SentTime) > s.config.MaxTokenAge {
+	if !token.IsRetryToken && time.Since(token.SentTime) > s.maxTokenAge {
 		return false
 	}
 	if token.IsRetryToken && time.Since(token.SentTime) > s.config.maxRetryTokenAge() {

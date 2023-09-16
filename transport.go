@@ -63,6 +63,13 @@ type Transport struct {
 	// see section 8.1.3 of RFC 9000 for details.
 	TokenGeneratorKey *TokenGeneratorKey
 
+	// MaxTokenAge is the maximum age of the resumption token presented during the handshake.
+	// These tokens allow skipping address resumption when resuming a QUIC connection,
+	// and are especially useful when using 0-RTT.
+	// If not set, it defaults to 24 hours.
+	// See section 8.1.3 of RFC 9000 for details.
+	MaxTokenAge time.Duration
+
 	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
 	// This can be useful if version information is exchanged out-of-band.
 	// It has no effect for clients.
@@ -151,6 +158,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.Tracer,
 		t.closeServer,
 		*t.TokenGeneratorKey,
+		t.MaxTokenAge,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
 	)

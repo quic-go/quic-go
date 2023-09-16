@@ -268,10 +268,6 @@ type Config struct {
 	// See https://datatracker.ietf.org/doc/html/rfc9000#section-8 for details.
 	// If not set, every client is forced to prove its remote address.
 	RequireAddressValidation func(net.Addr) bool
-	// MaxTokenAge is the maximum age of the token presented during the handshake,
-	// for tokens that were issued on a previous connection.
-	// If not set, it defaults to 24 hours. Only valid for a server.
-	MaxTokenAge time.Duration
 	// The TokenStore stores tokens received from the server.
 	// Tokens are used to skip address validation on future connection attempts.
 	// The key used to store tokens is the ServerName from the tls.Config, if set
