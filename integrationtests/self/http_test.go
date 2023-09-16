@@ -307,9 +307,10 @@ var _ = Describe("HTTP tests", func() {
 			for {
 				if _, err := w.Write([]byte("foobar")); err != nil {
 					Expect(r.Context().Done()).To(BeClosed())
-					var strErr *quic.StreamError
-					Expect(errors.As(err, &strErr)).To(BeTrue())
-					Expect(strErr.ErrorCode).To(Equal(quic.StreamErrorCode(0x10c)))
+					var http3Err *http3.Error
+					Expect(errors.As(err, &http3Err)).To(BeTrue())
+					Expect(http3Err.ErrorCode).To(Equal(http3.ErrCode(0x10c)))
+					Expect(http3Err.Error()).To(Equal("H3_REQUEST_CANCELLED"))
 					return
 				}
 			}
@@ -325,7 +326,10 @@ var _ = Describe("HTTP tests", func() {
 		cancel()
 		Eventually(handlerCalled).Should(BeClosed())
 		_, err = resp.Body.Read([]byte{0})
-		Expect(err).To(HaveOccurred())
+		var http3Err *http3.Error
+		Expect(errors.As(err, &http3Err)).To(BeTrue())
+		Expect(http3Err.ErrorCode).To(Equal(http3.ErrCode(0x10c)))
+		Expect(http3Err.Error()).To(Equal("H3_REQUEST_CANCELLED (local)"))
 	})
 
 	It("allows streamed HTTP requests", func() {
