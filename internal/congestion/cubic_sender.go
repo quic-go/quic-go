@@ -56,7 +56,7 @@ type cubicSender struct {
 	maxDatagramSize protocol.ByteCount
 
 	lastState logging.CongestionState
-	tracer    logging.ConnectionTracer
+	tracer    *logging.ConnectionTracer
 }
 
 var (
@@ -70,7 +70,7 @@ func NewCubicSender(
 	rttStats *utils.RTTStats,
 	initialMaxDatagramSize protocol.ByteCount,
 	reno bool,
-	tracer logging.ConnectionTracer,
+	tracer *logging.ConnectionTracer,
 ) *cubicSender {
 	return newCubicSender(
 		clock,
@@ -90,7 +90,7 @@ func newCubicSender(
 	initialMaxDatagramSize,
 	initialCongestionWindow,
 	initialMaxCongestionWindow protocol.ByteCount,
-	tracer logging.ConnectionTracer,
+	tracer *logging.ConnectionTracer,
 ) *cubicSender {
 	c := &cubicSender{
 		rttStats:                   rttStats,
@@ -108,7 +108,7 @@ func newCubicSender(
 		maxDatagramSize:            initialMaxDatagramSize,
 	}
 	c.pacer = newPacer(c.BandwidthEstimate)
-	if c.tracer != nil {
+	if c.tracer != nil && c.tracer.UpdatedCongestionState != nil {
 		c.lastState = logging.CongestionStateSlowStart
 		c.tracer.UpdatedCongestionState(logging.CongestionStateSlowStart)
 	}
@@ -296,7 +296,7 @@ func (c *cubicSender) OnConnectionMigration() {
 }
 
 func (c *cubicSender) maybeTraceStateChange(new logging.CongestionState) {
-	if c.tracer == nil || new == c.lastState {
+	if c.tracer == nil || c.tracer.UpdatedCongestionState == nil || new == c.lastState {
 		return
 	}
 	c.tracer.UpdatedCongestionState(new)

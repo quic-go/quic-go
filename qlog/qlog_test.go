@@ -70,7 +70,7 @@ var _ = Describe("Tracing", func() {
 
 	Context("connection tracer", func() {
 		var (
-			tracer logging.ConnectionTracer
+			tracer *logging.ConnectionTracer
 			buf    *bytes.Buffer
 		)
 

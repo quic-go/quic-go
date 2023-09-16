@@ -125,7 +125,7 @@ var _ = Describe("Config", func() {
 				GetConfigForClient:            func(info *ClientHelloInfo) (*Config, error) { return nil, errors.New("nope") },
 				AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 				RequireAddressValidation:      func(net.Addr) bool { calledAddrValidation = true; return true },
-				Tracer: func(context.Context, logging.Perspective, ConnectionID) logging.ConnectionTracer {
+				Tracer: func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer {
 					calledTracer = true
 					return nil
 				},

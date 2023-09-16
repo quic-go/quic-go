@@ -86,7 +86,7 @@ var (
 	logBuf       *syncedBuffer
 	versionParam string
 
-	qlogTracer func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer
+	qlogTracer func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer
 	enableQlog bool
 
 	version                          quic.VersionNumber
@@ -177,10 +177,16 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	}
 	if enableQlog {
 		if conf.Tracer == nil {
-			conf.Tracer = qlogTracer
+			conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+				return logging.NewMultiplexedConnectionTracer(
+					qlogTracer(ctx, p, connID),
+					// multiplex it with an empty tracer to check that we're correctly ignoring unset callbacks everywhere
+					&logging.ConnectionTracer{},
+				)
+			}
 		} else if qlogTracer != nil {
 			origTracer := conf.Tracer
-			conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+			conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 				return logging.NewMultiplexedConnectionTracer(
 					qlogTracer(ctx, p, connID),
 					origTracer(ctx, p, connID),
@@ -242,8 +248,8 @@ func scaleDuration(d time.Duration) time.Duration {
 	return time.Duration(scaleFactor) * d
 }
 
-func newTracer(tracer logging.ConnectionTracer) func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
-	return func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer { return tracer }
+func newTracer(tracer *logging.ConnectionTracer) func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+	return func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer { return tracer }
 }
 
 type packet struct {
@@ -258,49 +264,44 @@ type shortHeaderPacket struct {
 	frames []logging.Frame
 }
 
-type packetTracer struct {
-	logging.NullConnectionTracer
+type packetCounter struct {
 	closed                     chan struct{}
 	sentShortHdr, rcvdShortHdr []shortHeaderPacket
 	rcvdLongHdr                []packet
 }
 
-var _ logging.ConnectionTracer = &packetTracer{}
-
-func newPacketTracer() *packetTracer {
-	return &packetTracer{closed: make(chan struct{})}
-}
-
-func (t *packetTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
-	t.rcvdLongHdr = append(t.rcvdLongHdr, packet{time: time.Now(), hdr: hdr, frames: frames})
-}
-
-func (t *packetTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
-	t.rcvdShortHdr = append(t.rcvdShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
-}
-
-func (t *packetTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, ack *wire.AckFrame, frames []logging.Frame) {
-	if ack != nil {
-		frames = append(frames, ack)
-	}
-	t.sentShortHdr = append(t.sentShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
-}
-
-func (t *packetTracer) Close() { close(t.closed) }
-
-func (t *packetTracer) getSentShortHeaderPackets() []shortHeaderPacket {
+func (t *packetCounter) getSentShortHeaderPackets() []shortHeaderPacket {
 	<-t.closed
 	return t.sentShortHdr
 }
 
-func (t *packetTracer) getRcvdLongHeaderPackets() []packet {
+func (t *packetCounter) getRcvdLongHeaderPackets() []packet {
 	<-t.closed
 	return t.rcvdLongHdr
 }
 
-func (t *packetTracer) getRcvdShortHeaderPackets() []shortHeaderPacket {
+func (t *packetCounter) getRcvdShortHeaderPackets() []shortHeaderPacket {
 	<-t.closed
 	return t.rcvdShortHdr
+}
+
+func newPacketTracer() (*packetCounter, *logging.ConnectionTracer) {
+	c := &packetCounter{closed: make(chan struct{})}
+	return c, &logging.ConnectionTracer{
+		ReceivedLongHeaderPacket: func(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+			c.rcvdLongHdr = append(c.rcvdLongHdr, packet{time: time.Now(), hdr: hdr, frames: frames})
+		},
+		ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+			c.rcvdShortHdr = append(c.rcvdShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
+		},
+		SentShortHeaderPacket: func(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, ack *wire.AckFrame, frames []logging.Frame) {
+			if ack != nil {
+				frames = append(frames, ack)
+			}
+			c.sentShortHdr = append(c.sentShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
+		},
+		Close: func() { close(c.closed) },
+	}
 }
 
 func TestSelf(t *testing.T) {

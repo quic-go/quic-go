@@ -23,8 +23,9 @@ var _ = Describe("ECN tracker", func() {
 	}
 
 	BeforeEach(func() {
-		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
-		ecnTracker = newECNTracker(utils.DefaultLogger, tracer)
+		var tr *logging.ConnectionTracer
+		tr, tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+		ecnTracker = newECNTracker(utils.DefaultLogger, tr)
 	})
 
 	It("sends exactly 10 testing packets", func() {

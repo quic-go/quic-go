@@ -21,7 +21,7 @@ var _ = Describe("Packetization", func() {
 	It("bundles ACKs", func() {
 		const numMsg = 100
 
-		serverTracer := newPacketTracer()
+		serverCounter, serverTracer := newPacketTracer()
 		server, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
@@ -43,7 +43,7 @@ var _ = Describe("Packetization", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		clientTracer := newPacketTracer()
+		clientCounter, clientTracer := newPacketTracer()
 		conn, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
@@ -104,8 +104,8 @@ var _ = Describe("Packetization", func() {
 			return
 		}
 
-		numBundledIncoming := countBundledPackets(clientTracer.getRcvdShortHeaderPackets())
-		numBundledOutgoing := countBundledPackets(serverTracer.getRcvdShortHeaderPackets())
+		numBundledIncoming := countBundledPackets(clientCounter.getRcvdShortHeaderPackets())
+		numBundledOutgoing := countBundledPackets(serverCounter.getRcvdShortHeaderPackets())
 		fmt.Fprintf(GinkgoWriter, "bundled incoming packets: %d / %d\n", numBundledIncoming, numMsg)
 		fmt.Fprintf(GinkgoWriter, "bundled outgoing packets: %d / %d\n", numBundledOutgoing, numMsg)
 		Expect(numBundledIncoming).To(And(

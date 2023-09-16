@@ -194,7 +194,7 @@ var _ = Describe("Timeout tests", func() {
 				close(serverConnClosed)
 			}()
 
-			tr := newPacketTracer()
+			counter, tr := newPacketTracer()
 			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
@@ -215,7 +215,7 @@ var _ = Describe("Timeout tests", func() {
 			}()
 			Eventually(done, 2*idleTimeout).Should(BeClosed())
 			var lastAckElicitingPacketSentAt time.Time
-			for _, p := range tr.getSentShortHeaderPackets() {
+			for _, p := range counter.getSentShortHeaderPackets() {
 				var hasAckElicitingFrame bool
 				for _, f := range p.frames {
 					if _, ok := f.(*logging.AckFrame); ok {
@@ -228,7 +228,7 @@ var _ = Describe("Timeout tests", func() {
 					lastAckElicitingPacketSentAt = p.time
 				}
 			}
-			rcvdPackets := tr.getRcvdShortHeaderPackets()
+			rcvdPackets := counter.getRcvdShortHeaderPackets()
 			lastPacketRcvdAt := rcvdPackets[len(rcvdPackets)-1].time
 			// We're ignoring here that only the first ack-eliciting packet sent resets the idle timeout.
 			// This is ok since we're dealing with a lossless connection here,

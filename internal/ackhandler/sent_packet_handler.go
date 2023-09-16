@@ -97,7 +97,7 @@ type sentPacketHandler struct {
 
 	perspective protocol.Perspective
 
-	tracer logging.ConnectionTracer
+	tracer *logging.ConnectionTracer
 	logger utils.Logger
 }
 
@@ -115,7 +115,7 @@ func newSentPacketHandler(
 	clientAddressValidated bool,
 	enableECN bool,
 	pers protocol.Perspective,
-	tracer logging.ConnectionTracer,
+	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 ) *sentPacketHandler {
 	congestion := congestion.NewCubicSender(
@@ -196,7 +196,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	default:
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}
-	if h.tracer != nil && h.ptoCount != 0 {
+	if h.tracer != nil && h.tracer.UpdatedPTOCount != nil && h.ptoCount != 0 {
 		h.tracer.UpdatedPTOCount(0)
 	}
 	h.ptoCount = 0
@@ -286,7 +286,7 @@ func (h *sentPacketHandler) SentPacket(
 	p.includedInBytesInFlight = true
 
 	pnSpace.history.SentAckElicitingPacket(p)
-	if h.tracer != nil {
+	if h.tracer != nil && h.tracer.UpdatedMetrics != nil {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 	h.setLossDetectionTimer()
@@ -376,14 +376,14 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	// Reset the pto_count unless the client is unsure if the server has validated the client's address.
 	if h.peerCompletedAddressValidation {
-		if h.tracer != nil && h.ptoCount != 0 {
+		if h.tracer != nil && h.tracer.UpdatedPTOCount != nil && h.ptoCount != 0 {
 			h.tracer.UpdatedPTOCount(0)
 		}
 		h.ptoCount = 0
 	}
 	h.numProbesToSend = 0
 
-	if h.tracer != nil {
+	if h.tracer != nil && h.tracer.UpdatedMetrics != nil {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 
@@ -462,7 +462,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
 			return nil, err
 		}
-		if h.tracer != nil {
+		if h.tracer != nil && h.tracer.AcknowledgedPacket != nil {
 			h.tracer.AcknowledgedPacket(encLevel, p.PacketNumber)
 		}
 	}
@@ -555,7 +555,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	if !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
-		if h.tracer != nil && h.alarm != oldAlarm {
+		if h.tracer != nil && h.tracer.SetLossTimer != nil && h.alarm != oldAlarm {
 			h.tracer.SetLossTimer(logging.TimerTypeACK, encLevel, h.alarm)
 		}
 		return
@@ -566,7 +566,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		h.alarm = time.Time{}
 		if !oldAlarm.IsZero() {
 			h.logger.Debugf("Canceling loss detection timer. Amplification limited.")
-			if h.tracer != nil {
+			if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
 				h.tracer.LossTimerCanceled()
 			}
 		}
@@ -578,7 +578,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		h.alarm = time.Time{}
 		if !oldAlarm.IsZero() {
 			h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
-			if h.tracer != nil {
+			if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
 				h.tracer.LossTimerCanceled()
 			}
 		}
@@ -591,14 +591,14 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		if !oldAlarm.IsZero() {
 			h.alarm = time.Time{}
 			h.logger.Debugf("Canceling loss detection timer. No PTO needed..")
-			if h.tracer != nil {
+			if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
 				h.tracer.LossTimerCanceled()
 			}
 		}
 		return
 	}
 	h.alarm = ptoTime
-	if h.tracer != nil && h.alarm != oldAlarm {
+	if h.tracer != nil && h.tracer.SetLossTimer != nil && h.alarm != oldAlarm {
 		h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
 	}
 }
@@ -629,7 +629,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 				if h.logger.Debug() {
 					h.logger.Debugf("\tlost packet %d (time threshold)", p.PacketNumber)
 				}
-				if h.tracer != nil {
+				if h.tracer != nil && h.tracer.LostPacket != nil {
 					h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossTimeThreshold)
 				}
 			}
@@ -639,7 +639,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 				if h.logger.Debug() {
 					h.logger.Debugf("\tlost packet %d (reordering threshold)", p.PacketNumber)
 				}
-				if h.tracer != nil {
+				if h.tracer != nil && h.tracer.LostPacket != nil {
 					h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossReorderingThreshold)
 				}
 			}
@@ -676,7 +676,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
 		}
-		if h.tracer != nil {
+		if h.tracer != nil && h.tracer.LossTimerExpired != nil {
 			h.tracer.LossTimerExpired(logging.TimerTypeACK, encLevel)
 		}
 		// Early retransmit or time loss detection
@@ -713,8 +713,12 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
 	}
 	if h.tracer != nil {
-		h.tracer.LossTimerExpired(logging.TimerTypePTO, encLevel)
-		h.tracer.UpdatedPTOCount(h.ptoCount)
+		if h.tracer.LossTimerExpired != nil {
+			h.tracer.LossTimerExpired(logging.TimerTypePTO, encLevel)
+		}
+		if h.tracer.UpdatedPTOCount != nil {
+			h.tracer.UpdatedPTOCount(h.ptoCount)
+		}
 	}
 	h.numProbesToSend += 2
 	//nolint:exhaustive // We never arm a PTO timer for 0-RTT packets.
@@ -890,7 +894,7 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) error {
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}
-		if h.tracer != nil {
+		if h.tracer != nil && h.tracer.UpdatedMetrics != nil {
 			h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 		}
 	}
@@ -899,8 +903,10 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) error {
 	oldAlarm := h.alarm
 	h.alarm = time.Time{}
 	if h.tracer != nil {
-		h.tracer.UpdatedPTOCount(0)
-		if !oldAlarm.IsZero() {
+		if h.tracer.UpdatedPTOCount != nil {
+			h.tracer.UpdatedPTOCount(0)
+		}
+		if !oldAlarm.IsZero() && h.tracer.LossTimerCanceled != nil {
 			h.tracer.LossTimerCanceled()
 		}
 	}

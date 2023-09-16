@@ -63,11 +63,9 @@ type connectionTracer struct {
 	lastMetrics *metrics
 }
 
-var _ logging.ConnectionTracer = &connectionTracer{}
-
 // NewConnectionTracer creates a new tracer to record a qlog for a connection.
-func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
-	t := &connectionTracer{
+func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
+	t := connectionTracer{
 		w:             w,
 		perspective:   p,
 		odcid:         odcid,
@@ -76,7 +74,84 @@ func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protoco
 		referenceTime: time.Now(),
 	}
 	go t.run()
-	return t
+	return &logging.ConnectionTracer{
+		StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
+			t.StartedConnection(local, remote, srcConnID, destConnID)
+		},
+		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+			t.NegotiatedVersion(chosen, clientVersions, serverVersions)
+		},
+		ClosedConnection:            func(e error) { t.ClosedConnection(e) },
+		SentTransportParameters:     func(tp *wire.TransportParameters) { t.SentTransportParameters(tp) },
+		ReceivedTransportParameters: func(tp *wire.TransportParameters) { t.ReceivedTransportParameters(tp) },
+		RestoredTransportParameters: func(tp *wire.TransportParameters) { t.RestoredTransportParameters(tp) },
+		SentLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
+			t.SentLongHeaderPacket(hdr, size, ecn, ack, frames)
+		},
+		SentShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
+			t.SentShortHeaderPacket(hdr, size, ecn, ack, frames)
+		},
+		ReceivedLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
+			t.ReceivedLongHeaderPacket(hdr, size, ecn, frames)
+		},
+		ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
+			t.ReceivedShortHeaderPacket(hdr, size, ecn, frames)
+		},
+		ReceivedRetry: func(hdr *wire.Header) {
+			t.ReceivedRetry(hdr)
+		},
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
+			t.ReceivedVersionNegotiationPacket(dest, src, versions)
+		},
+		BufferedPacket: func(pt logging.PacketType, size protocol.ByteCount) {
+			t.BufferedPacket(pt, size)
+		},
+		DroppedPacket: func(pt logging.PacketType, size protocol.ByteCount, reason logging.PacketDropReason) {
+			t.DroppedPacket(pt, size, reason)
+		},
+		UpdatedMetrics: func(rttStats *utils.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
+			t.UpdatedMetrics(rttStats, cwnd, bytesInFlight, packetsInFlight)
+		},
+		LostPacket: func(encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason logging.PacketLossReason) {
+			t.LostPacket(encLevel, pn, lossReason)
+		},
+		UpdatedCongestionState: func(state logging.CongestionState) {
+			t.UpdatedCongestionState(state)
+		},
+		UpdatedPTOCount: func(value uint32) {
+			t.UpdatedPTOCount(value)
+		},
+		UpdatedKeyFromTLS: func(encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
+			t.UpdatedKeyFromTLS(encLevel, pers)
+		},
+		UpdatedKey: func(generation protocol.KeyPhase, remote bool) {
+			t.UpdatedKey(generation, remote)
+		},
+		DroppedEncryptionLevel: func(encLevel protocol.EncryptionLevel) {
+			t.DroppedEncryptionLevel(encLevel)
+		},
+		DroppedKey: func(generation protocol.KeyPhase) {
+			t.DroppedKey(generation)
+		},
+		SetLossTimer: func(tt logging.TimerType, encLevel protocol.EncryptionLevel, timeout time.Time) {
+			t.SetLossTimer(tt, encLevel, timeout)
+		},
+		LossTimerExpired: func(tt logging.TimerType, encLevel protocol.EncryptionLevel) {
+			t.LossTimerExpired(tt, encLevel)
+		},
+		LossTimerCanceled: func() {
+			t.LossTimerCanceled()
+		},
+		ECNStateUpdated: func(state logging.ECNState, trigger logging.ECNStateTrigger) {
+			t.ECNStateUpdated(state, trigger)
+		},
+		Debug: func(name, msg string) {
+			t.Debug(name, msg)
+		},
+		Close: func() {
+			t.Close()
+		},
+	}
 }
 
 func (t *connectionTracer) run() {

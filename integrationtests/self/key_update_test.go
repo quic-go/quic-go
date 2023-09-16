@@ -38,18 +38,13 @@ func countKeyPhases() (sent, received int) {
 	return
 }
 
-type keyUpdateConnTracer struct {
-	logging.NullConnectionTracer
-}
-
-var _ logging.ConnectionTracer = &keyUpdateConnTracer{}
-
-func (t *keyUpdateConnTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
-	sentHeaders = append(sentHeaders, hdr)
-}
-
-func (t *keyUpdateConnTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ []logging.Frame) {
-	receivedHeaders = append(receivedHeaders, hdr)
+var keyUpdateConnTracer = &logging.ConnectionTracer{
+	SentShortHeaderPacket: func(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
+		sentHeaders = append(sentHeaders, hdr)
+	},
+	ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ []logging.Frame) {
+		receivedHeaders = append(receivedHeaders, hdr)
+	},
 }
 
 var _ = Describe("Key Update tests", func() {
@@ -77,8 +72,8 @@ var _ = Describe("Key Update tests", func() {
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
-				return &keyUpdateConnTracer{}
+			getQuicConfig(&quic.Config{Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+				return keyUpdateConnTracer
 			}}),
 		)
 		Expect(err).ToNot(HaveOccurred())

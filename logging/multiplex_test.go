@@ -21,21 +21,22 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("returns the raw tracer if only one tracer is passed in", func() {
-			tr := mocklogging.NewMockTracer(mockCtrl)
+			tr := &Tracer{}
 			tracer := NewMultiplexedTracer(tr)
-			Expect(tracer).To(BeAssignableToTypeOf(&mocklogging.MockTracer{}))
+			Expect(tracer).To(Equal(tr))
 		})
 
 		Context("tracing events", func() {
 			var (
-				tracer   Tracer
+				tracer   *Tracer
 				tr1, tr2 *mocklogging.MockTracer
 			)
 
 			BeforeEach(func() {
-				tr1 = mocklogging.NewMockTracer(mockCtrl)
-				tr2 = mocklogging.NewMockTracer(mockCtrl)
-				tracer = NewMultiplexedTracer(tr1, tr2)
+				var t1, t2 *Tracer
+				t1, tr1 = mocklogging.NewMockTracer(mockCtrl)
+				t2, tr2 = mocklogging.NewMockTracer(mockCtrl)
+				tracer = NewMultiplexedTracer(t1, t2, &Tracer{})
 			})
 
 			It("traces the PacketSent event", func() {
@@ -68,18 +69,19 @@ var _ = Describe("Tracing", func() {
 
 	Context("Connection Tracer", func() {
 		var (
-			tracer ConnectionTracer
+			tracer *ConnectionTracer
 			tr1    *mocklogging.MockConnectionTracer
 			tr2    *mocklogging.MockConnectionTracer
 		)
 
 		BeforeEach(func() {
-			tr1 = mocklogging.NewMockConnectionTracer(mockCtrl)
-			tr2 = mocklogging.NewMockConnectionTracer(mockCtrl)
-			tracer = NewMultiplexedConnectionTracer(tr1, tr2)
+			var t1, t2 *ConnectionTracer
+			t1, tr1 = mocklogging.NewMockConnectionTracer(mockCtrl)
+			t2, tr2 = mocklogging.NewMockConnectionTracer(mockCtrl)
+			tracer = NewMultiplexedConnectionTracer(t1, t2)
 		})
 
-		It("trace the ConnectionStarted event", func() {
+		It("traces the StartedConnection event", func() {
 			local := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4)}
 			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
 			dest := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
@@ -87,6 +89,15 @@ var _ = Describe("Tracing", func() {
 			tr1.EXPECT().StartedConnection(local, remote, src, dest)
 			tr2.EXPECT().StartedConnection(local, remote, src, dest)
 			tracer.StartedConnection(local, remote, src, dest)
+		})
+
+		It("traces the NegotiatedVersion event", func() {
+			chosen := protocol.Version2
+			client := []protocol.VersionNumber{protocol.Version1}
+			server := []protocol.VersionNumber{13, 37}
+			tr1.EXPECT().NegotiatedVersion(chosen, client, server)
+			tr2.EXPECT().NegotiatedVersion(chosen, client, server)
+			tracer.NegotiatedVersion(chosen, client, server)
 		})
 
 		It("traces the ClosedConnection event", func() {

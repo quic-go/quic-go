@@ -43,7 +43,7 @@ var _ = Describe("Client", func() {
 			initialPacketNumber protocol.PacketNumber,
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
-			tracer logging.ConnectionTracer,
+			tracer *logging.ConnectionTracer,
 			tracingID uint64,
 			logger utils.Logger,
 			v protocol.VersionNumber,
@@ -54,10 +54,11 @@ var _ = Describe("Client", func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0x13, 0x37})
 		originalClientConnConstructor = newClientConnection
-		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+		var tr *logging.ConnectionTracer
+		tr, tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		config = &Config{
-			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) logging.ConnectionTracer {
-				return tracer
+			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) *logging.ConnectionTracer {
+				return tr
 			},
 			Versions: []protocol.VersionNumber{protocol.Version1},
 		}
@@ -70,7 +71,7 @@ var _ = Describe("Client", func() {
 			destConnID: connID,
 			version:    protocol.Version1,
 			sendConn:   packetConn,
-			tracer:     tracer,
+			tracer:     tr,
 			logger:     utils.DefaultLogger,
 		}
 		getMultiplexer() // make the sync.Once execute
@@ -121,7 +122,7 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				enable0RTT bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -158,7 +159,7 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				enable0RTT bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -195,7 +196,7 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				_ bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -280,7 +281,7 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				_ bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
@@ -323,7 +324,7 @@ var _ = Describe("Client", func() {
 				pn protocol.PacketNumber,
 				_ bool,
 				hasNegotiatedVersion bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
