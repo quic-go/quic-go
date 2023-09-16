@@ -82,6 +82,26 @@ var _ = Describe("Handshake tests", func() {
 		}()
 	}
 
+	It("returns the cancellation reason when a dial is canceled", func() {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		errChan := make(chan error, 1)
+		go func() {
+			_, err := quic.DialAddr(
+				ctx,
+				"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			errChan <- err
+		}()
+
+		cancel(errors.New("application cancelled"))
+		var err error
+		Eventually(errChan).Should(Receive(&err))
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError("application cancelled"))
+	})
+
 	Context("using different cipher suites", func() {
 		for n, id := range map[string]uint16{
 			"TLS_AES_128_GCM_SHA256":       tls.TLS_AES_128_GCM_SHA256,
