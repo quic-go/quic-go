@@ -111,6 +111,7 @@ type baseServer struct {
 	versionNegotiationQueue chan receivedPacket
 	invalidTokenQueue       chan rejectedPacket
 	connectionRefusedQueue  chan rejectedPacket
+	retryQueue              chan rejectedPacket
 
 	connQueue    chan quicConn
 	connQueueLen int32 // to be used as an atomic
@@ -253,6 +254,7 @@ func newServer(
 		versionNegotiationQueue:   make(chan receivedPacket, 4),
 		invalidTokenQueue:         make(chan rejectedPacket, 4),
 		connectionRefusedQueue:    make(chan rejectedPacket, 4),
+		retryQueue:                make(chan rejectedPacket, 8),
 		newConn:                   newConnection,
 		tracer:                    tracer,
 		logger:                    utils.DefaultLogger.WithPrefix("server"),
@@ -299,6 +301,8 @@ func (s *baseServer) runSendQueue() {
 			s.maybeSendInvalidToken(p)
 		case p := <-s.connectionRefusedQueue:
 			s.sendConnectionRefused(p)
+		case p := <-s.retryQueue:
+			s.sendRetry(p)
 		}
 	}
 }
@@ -601,12 +605,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	if token == nil && s.config.RequireAddressValidation(p.remoteAddr) {
 		// Retry invalidates all 0-RTT packets sent.
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
-		go func() {
-			defer p.buffer.Release()
-			if err := s.sendRetry(p.remoteAddr, hdr, p.info); err != nil {
-				s.logger.Debugf("Error sending Retry: %s", err)
-			}
-		}()
+		select {
+		case s.retryQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
+		default:
+			// drop packet if we can't send out Retry packets fast enough
+			p.buffer.Release()
+		}
 		return nil
 	}
 
@@ -722,7 +726,14 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	}
 }
 
-func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info packetInfo) error {
+func (s *baseServer) sendRetry(p rejectedPacket) {
+	if err := s.sendRetryPacket(p); err != nil {
+		s.logger.Debugf("Error sending Retry packet: %s", err)
+	}
+}
+
+func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
+	hdr := p.hdr
 	// Log the Initial packet now.
 	// If no Retry is sent, the packet will be logged by the connection.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
@@ -730,7 +741,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info packe
 	if err != nil {
 		return err
 	}
-	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID, srcConnID)
+	token, err := s.tokenGenerator.NewRetryToken(p.remoteAddr, hdr.DestConnectionID, srcConnID)
 	if err != nil {
 		return err
 	}
@@ -756,9 +767,9 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info packe
 	tag := handshake.GetRetryIntegrityTag(buf.Data, hdr.DestConnectionID, hdr.Version)
 	buf.Data = append(buf.Data, tag[:]...)
 	if s.tracer != nil && s.tracer.SentPacket != nil {
-		s.tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(buf.Data)), nil)
+		s.tracer.SentPacket(p.remoteAddr, &replyHdr.Header, protocol.ByteCount(len(buf.Data)), nil)
 	}
-	_, err = s.conn.WritePacket(buf.Data, remoteAddr, info.OOB(), 0, protocol.ECNUnsupported)
+	_, err = s.conn.WritePacket(buf.Data, p.remoteAddr, p.info.OOB(), 0, protocol.ECNUnsupported)
 	return err
 }
 
