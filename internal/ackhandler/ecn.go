@@ -125,7 +125,7 @@ func (e *ecnTracker) LostPacket(pn protocol.PacketNumber) {
 		return
 	}
 	e.numLostTesting++
-	if e.numLostTesting >= e.numSentTesting {
+	if e.numSentTesting >= numECNTestingPackets && e.numLostTesting >= e.numSentTesting {
 		e.logger.Debugf("Disabling ECN. All testing packets were lost.")
 		if e.tracer != nil && e.tracer.ECNStateUpdated != nil {
 			e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedLostAllTestingPackets)
