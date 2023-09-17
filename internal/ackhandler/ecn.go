@@ -125,6 +125,10 @@ func (e *ecnTracker) LostPacket(pn protocol.PacketNumber) {
 		return
 	}
 	e.numLostTesting++
+	// Only proceed if we have sent all 10 testing packets.
+	if e.state != ecnStateUnknown {
+		return
+	}
 	if e.numLostTesting >= e.numSentTesting {
 		e.logger.Debugf("Disabling ECN. All testing packets were lost.")
 		if e.tracer != nil && e.tracer.ECNStateUpdated != nil {
@@ -223,16 +227,16 @@ func (e *ecnTracker) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64
 	e.numAckedECT1 = ect1
 	e.numAckedECNCE = ecnce
 
-	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
-		// Detect mangling (a path remarking all ECN-marked testing packets as CE).
-		if e.numSentECT0+e.numSentECT1 == e.numAckedECNCE && e.numAckedECNCE >= numECNTestingPackets {
-			if e.tracer != nil && e.tracer.ECNStateUpdated != nil {
-				e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
-			}
-			e.state = ecnStateFailed
-			return false
+	// Detect mangling (a path remarking all ECN-marked testing packets as CE),
+	// once all 10 testing packets have been sent out.
+	if e.state == ecnStateUnknown && e.numSentECT0+e.numSentECT1 == e.numAckedECNCE {
+		if e.tracer != nil && e.tracer.ECNStateUpdated != nil {
+			e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
 		}
-
+		e.state = ecnStateFailed
+		return false
+	}
+	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
 		var ackedTestingPacket bool
 		for _, p := range packets {
 			if e.isTestingPacket(p.PacketNumber) {
