@@ -110,6 +110,7 @@ type baseServer struct {
 	running                 chan struct{} // closed as soon as run() returns
 	versionNegotiationQueue chan receivedPacket
 	invalidTokenQueue       chan rejectedPacket
+	connectionRefusedQueue  chan rejectedPacket
 
 	connQueue    chan quicConn
 	connQueueLen int32 // to be used as an atomic
@@ -251,6 +252,7 @@ func newServer(
 		receivedPackets:           make(chan receivedPacket, protocol.MaxServerUnprocessedPackets),
 		versionNegotiationQueue:   make(chan receivedPacket, 4),
 		invalidTokenQueue:         make(chan rejectedPacket, 4),
+		connectionRefusedQueue:    make(chan rejectedPacket, 4),
 		newConn:                   newConnection,
 		tracer:                    tracer,
 		logger:                    utils.DefaultLogger.WithPrefix("server"),
@@ -295,6 +297,8 @@ func (s *baseServer) runSendQueue() {
 			s.maybeSendVersionNegotiationPacket(p)
 		case p := <-s.invalidTokenQueue:
 			s.maybeSendInvalidToken(p)
+		case p := <-s.connectionRefusedQueue:
+			s.sendConnectionRefused(p)
 		}
 	}
 }
@@ -588,7 +592,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			select {
 			case s.invalidTokenQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
 			default:
-				// it's fine to drop INVALID_TOKEN packets when we are busy
+				// drop packet if we can't send out the  INVALID_TOKEN packets fast enough
 				p.buffer.Release()
 			}
 			return nil
@@ -608,12 +612,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 
 	if queueLen := atomic.LoadInt32(&s.connQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
-		go func() {
-			defer p.buffer.Release()
-			if err := s.sendConnectionRefused(p.remoteAddr, hdr, p.info); err != nil {
-				s.logger.Debugf("Error rejecting connection: %s", err)
-			}
-		}()
+		select {
+		case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
+		default:
+			// drop packet if we can't send out the CONNECTION_REFUSED fast enough
+			p.buffer.Release()
+		}
 		return nil
 	}
 
@@ -673,12 +677,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 
 		return conn, true
 	}); !added {
-		go func() {
-			defer p.buffer.Release()
-			if err := s.sendConnectionRefused(p.remoteAddr, hdr, p.info); err != nil {
-				s.logger.Debugf("Error rejecting connection: %s", err)
-			}
-		}()
+		select {
+		case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
+		default:
+			// drop packet if we can't send out the CONNECTION_REFUSED fast enough
+			p.buffer.Release()
+		}
 		return nil
 	}
 	go conn.run()
@@ -790,9 +794,12 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 	}
 }
 
-func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header, info packetInfo) error {
-	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
-	return s.sendError(remoteAddr, hdr, sealer, qerr.ConnectionRefused, info)
+func (s *baseServer) sendConnectionRefused(p rejectedPacket) {
+	defer p.buffer.Release()
+	sealer, _ := handshake.NewInitialAEAD(p.hdr.DestConnectionID, protocol.PerspectiveServer, p.hdr.Version)
+	if err := s.sendError(p.remoteAddr, p.hdr, sealer, qerr.ConnectionRefused, p.info); err != nil {
+		s.logger.Debugf("Error sending CONNECTION_REFUSED error: %s", err)
+	}
 }
 
 // sendError sends the error as a response to the packet received with header hdr
