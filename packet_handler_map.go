@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"errors"
 	"hash"
 	"io"
 	"net"
@@ -44,13 +43,6 @@ type closePacket struct {
 	addr    net.Addr
 	info    packetInfo
 }
-
-type unknownPacketHandler interface {
-	handlePacket(receivedPacket)
-	setCloseError(error)
-}
-
-var errListenerAlreadySet = errors.New("listener already set")
 
 type packetHandlerMap struct {
 	mutex       sync.Mutex
