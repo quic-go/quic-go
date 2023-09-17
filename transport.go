@@ -16,6 +16,8 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
+var errListenerAlreadySet = errors.New("listener already set")
+
 // The Transport is the central point to manage incoming and outgoing QUIC connections.
 // QUIC demultiplexes connections based on their QUIC Connection IDs, not based on the 4-tuple.
 // This means that a single UDP socket can be used for listening for incoming connections, as well as
@@ -91,7 +93,7 @@ type Transport struct {
 	// If no ConnectionIDGenerator is set, this is set to a default.
 	connIDGenerator ConnectionIDGenerator
 
-	server unknownPacketHandler
+	server *baseServer
 
 	conn rawConn
 

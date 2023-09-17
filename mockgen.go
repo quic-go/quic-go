@@ -62,9 +62,6 @@ type QUICConn = quicConn
 //go:generate sh -c "go run go.uber.org/mock/mockgen -build_flags=\"-tags=gomock\" -package quic -self_package github.com/quic-go/quic-go -destination mock_packet_handler_test.go github.com/quic-go/quic-go PacketHandler"
 type PacketHandler = packetHandler
 
-//go:generate sh -c "go run go.uber.org/mock/mockgen -build_flags=\"-tags=gomock\" -package quic -self_package github.com/quic-go/quic-go -destination mock_unknown_packet_handler_test.go github.com/quic-go/quic-go UnknownPacketHandler"
-type UnknownPacketHandler = unknownPacketHandler
-
 //go:generate sh -c "go run go.uber.org/mock/mockgen -build_flags=\"-tags=gomock\" -package quic -self_package github.com/quic-go/quic-go -destination mock_packet_handler_manager_test.go github.com/quic-go/quic-go PacketHandlerManager"
 type PacketHandlerManager = packetHandlerManager
 
