@@ -135,7 +135,10 @@ func (e *ecnTracker) LostPacket(pn protocol.PacketNumber) {
 			e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedLostAllTestingPackets)
 		}
 		e.state = ecnStateFailed
+		return
 	}
+	// Path validation also fails if some testing packets are lost, and all other testing packets where CE-marked
+	e.failIfMangled()
 }
 
 // HandleNewlyAcked handles the ECN counts on an ACK frame.
@@ -229,12 +232,11 @@ func (e *ecnTracker) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64
 
 	// Detect mangling (a path remarking all ECN-marked testing packets as CE),
 	// once all 10 testing packets have been sent out.
-	if e.state == ecnStateUnknown && e.numSentECT0+e.numSentECT1 == e.numAckedECNCE {
-		if e.tracer != nil && e.tracer.ECNStateUpdated != nil {
-			e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
+	if e.state == ecnStateUnknown {
+		e.failIfMangled()
+		if e.state == ecnStateFailed {
+			return false
 		}
-		e.state = ecnStateFailed
-		return false
 	}
 	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
 		var ackedTestingPacket bool
@@ -257,6 +259,18 @@ func (e *ecnTracker) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64
 	// Don't trust CE marks before having confirmed ECN capability of the path.
 	// Otherwise, mangling would be misinterpreted as actual congestion.
 	return e.state == ecnStateCapable && newECNCE > 0
+}
+
+// failIfMangled fails ECN validation if all testing packets are lost or CE-marked.
+func (e *ecnTracker) failIfMangled() {
+	numAckedECNCE := e.numAckedECNCE + int64(e.numLostTesting)
+	if e.numSentECT0+e.numSentECT1 > numAckedECNCE {
+		return
+	}
+	if e.tracer != nil && e.tracer.ECNStateUpdated != nil {
+		e.tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
+	}
+	e.state = ecnStateFailed
 }
 
 func (e *ecnTracker) ecnMarking(pn protocol.PacketNumber) protocol.ECN {

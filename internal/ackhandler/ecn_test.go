@@ -192,7 +192,7 @@ var _ = Describe("ECN tracker", func() {
 		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(4, 5, 6, 15), 3, 0, 2)).To(BeFalse())
 	})
 
-	It("detects ECN mangling", func() {
+	It("detects ECN mangling if all testing packets are marked CE", func() {
 		sendAllTestingPackets()
 		for i := 10; i < 20; i++ {
 			Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
@@ -220,6 +220,39 @@ var _ = Describe("ECN tracker", func() {
 		// This ACK now reports the last testing packets as CE as well.
 		tracer.EXPECT().ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
 		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(9), 0, 0, 10)).To(BeFalse())
+	})
+
+	It("detects ECN mangling, if some testing packets are marked CE, and then others are lost", func() {
+		sendAllTestingPackets()
+		for i := 10; i < 20; i++ {
+			Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
+			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECNNon)
+		}
+		// ECN capability not confirmed yet, therefore CE marks are not regarded as congestion events
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(0, 1, 2, 3), 0, 0, 4)).To(BeFalse())
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(6, 7, 8, 9), 0, 0, 8)).To(BeFalse())
+		// Lose one of the two unacknowledged packets.
+		ecnTracker.LostPacket(4)
+		// By losing the last unacknowledged testing packets, we should detect the mangling.
+		tracer.EXPECT().ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
+		ecnTracker.LostPacket(5)
+	})
+
+	It("detects ECN mangling, if some testing packets are lost, and then others are marked CE", func() {
+		sendAllTestingPackets()
+		for i := 10; i < 20; i++ {
+			Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
+			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECNNon)
+		}
+		// Lose a few packets.
+		ecnTracker.LostPacket(0)
+		ecnTracker.LostPacket(1)
+		ecnTracker.LostPacket(2)
+		// ECN capability not confirmed yet, therefore CE marks are not regarded as congestion events
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(3, 4, 5, 6, 7, 8), 0, 0, 6)).To(BeFalse())
+		// By CE-marking the last unacknowledged testing packets, we should detect the mangling.
+		tracer.EXPECT().ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedManglingDetected)
+		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(9), 0, 0, 7)).To(BeFalse())
 	})
 
 	It("declares congestion", func() {
