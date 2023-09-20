@@ -599,6 +599,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, conn, s.logger)
+	r.isHEAD = req.Method == "HEAD"
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -630,7 +631,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	if !panicked {
 		// response not written to the client yet, set Content-Length
 		if !r.written {
-			if _, haveCL := r.header["Content-Length"]; !haveCL {
+			if _, haveCL := r.header["Content-Length"]; !haveCL && !r.isHEAD {
 				r.header.Set("Content-Length", strconv.FormatInt(r.numWritten, 10))
 			}
 		}

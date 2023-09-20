@@ -66,6 +66,7 @@ type responseWriter struct {
 	conn        quic.Connection
 	bufferedStr *bufio.Writer
 	buf         []byte
+	isHEAD      bool
 
 	headerWritten bool
 	contentLen    int64 // if handler set valid Content-Length header
@@ -155,6 +156,11 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	}
 	if !bodyAllowed {
 		return 0, http.ErrBodyNotAllowed
+	}
+
+	// A response to a HEAD method should not have a body.
+	if w.isHEAD {
+		return len(p), nil
 	}
 
 	w.numWritten += int64(len(p))
