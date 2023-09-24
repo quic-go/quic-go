@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,7 +27,7 @@ var _ = Describe("Basic Conn Test", func() {
 		p, err := conn.ReadPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p.data).To(Equal([]byte("foobar")))
-		Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(100*time.Millisecond)))
+		Expect(p.rcvTime).To(BeTemporally("~", time.Now(), testutils.ScaleDuration(100*time.Millisecond)))
 		Expect(p.remoteAddr).To(Equal(addr))
 	})
 })

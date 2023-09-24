@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -93,7 +94,7 @@ var _ = Describe("Connection Flow controller", func() {
 				}
 				oldOffset := controller.bytesRead
 				oldWindowSize := controller.receiveWindowSize
-				rtt := scaleDuration(20 * time.Millisecond)
+				rtt := testutils.ScaleDuration(20 * time.Millisecond)
 				setRtt(rtt)
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.epochStartOffset = oldOffset
@@ -110,7 +111,7 @@ var _ = Describe("Connection Flow controller", func() {
 				controller.allowWindowIncrease = func(protocol.ByteCount) bool { return false }
 				oldOffset := controller.bytesRead
 				oldWindowSize := controller.receiveWindowSize
-				rtt := scaleDuration(20 * time.Millisecond)
+				rtt := testutils.ScaleDuration(20 * time.Millisecond)
 				setRtt(rtt)
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.epochStartOffset = oldOffset

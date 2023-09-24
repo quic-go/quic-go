@@ -10,6 +10,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/mocks"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -33,7 +34,7 @@ var _ = Describe("Receive Stream", func() {
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
 		str = newReceiveStream(streamID, mockSender, mockFC)
 
-		timeout := scaleDuration(250 * time.Millisecond)
+		timeout := testutils.ScaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutReader(str, timeout)
 	})
 
@@ -251,22 +252,22 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("unblocks after the deadline", func() {
-				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				str.SetReadDeadline(deadline)
 				b := make([]byte, 6)
 				n, err := strWithTimeout.Read(b)
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline, testutils.ScaleDuration(20*time.Millisecond)))
 			})
 
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
-				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
-				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))
+				deadline1 := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
+				deadline2 := time.Now().Add(testutils.ScaleDuration(100 * time.Millisecond))
 				str.SetReadDeadline(deadline1)
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(scaleDuration(20 * time.Millisecond))
+					time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 					str.SetReadDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline1))
@@ -276,15 +277,15 @@ var _ = Describe("Receive Stream", func() {
 				n, err := strWithTimeout.Read(b)
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, testutils.ScaleDuration(20*time.Millisecond)))
 			})
 
 			It("unblocks earlier, when a new deadline is set", func() {
-				deadline1 := time.Now().Add(scaleDuration(200 * time.Millisecond))
-				deadline2 := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline1 := time.Now().Add(testutils.ScaleDuration(200 * time.Millisecond))
+				deadline2 := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(scaleDuration(10 * time.Millisecond))
+					time.Sleep(testutils.ScaleDuration(10 * time.Millisecond))
 					str.SetReadDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline2))
@@ -294,16 +295,16 @@ var _ = Describe("Receive Stream", func() {
 				b := make([]byte, 10)
 				_, err := strWithTimeout.Read(b)
 				Expect(err).To(MatchError(errDeadline))
-				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(25*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, testutils.ScaleDuration(25*time.Millisecond)))
 			})
 
 			It("doesn't unblock if the deadline is removed", func() {
-				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				str.SetReadDeadline(deadline)
 				deadlineUnset := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(scaleDuration(20 * time.Millisecond))
+					time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 					str.SetReadDeadline(time.Time{})
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline))
@@ -318,7 +319,7 @@ var _ = Describe("Receive Stream", func() {
 				}()
 				runtime.Gosched()
 				Eventually(deadlineUnset).Should(BeClosed())
-				Consistently(done, scaleDuration(100*time.Millisecond)).ShouldNot(BeClosed())
+				Consistently(done, testutils.ScaleDuration(100*time.Millisecond)).ShouldNot(BeClosed())
 				// make the go routine return
 				str.closeForShutdown(errors.New("test done"))
 				Eventually(done).Should(BeClosed())

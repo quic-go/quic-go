@@ -14,6 +14,7 @@ import (
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/mocks"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -37,7 +38,7 @@ var _ = Describe("Send Stream", func() {
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
 		str = newSendStream(streamID, mockSender, mockFC)
 
-		timeout := scaleDuration(250 * time.Millisecond)
+		timeout := testutils.ScaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutWriter(str, timeout)
 	})
 
@@ -393,12 +394,12 @@ var _ = Describe("Send Stream", func() {
 
 			It("unblocks after the deadline", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
-				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				n, err := strWithTimeout.Write(getData(5000))
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline, testutils.ScaleDuration(20*time.Millisecond)))
 			})
 
 			It("unblocks when the deadline is changed to the past", func() {
@@ -419,7 +420,7 @@ var _ = Describe("Send Stream", func() {
 			It("returns the number of bytes written, when the deadline expires", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
-				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				var n int
 				writeReturned := make(chan struct{})
@@ -430,21 +431,21 @@ var _ = Describe("Send Stream", func() {
 					var err error
 					n, err = strWithTimeout.Write(getData(5000))
 					Expect(err).To(MatchError(errDeadline))
-					Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
+					Expect(time.Now()).To(BeTemporally("~", deadline, testutils.ScaleDuration(20*time.Millisecond)))
 				}()
 				waitForWrite()
 				frame, ok, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 				Expect(ok).To(BeTrue())
 				Expect(frame).ToNot(BeNil())
 				Expect(hasMoreData).To(BeTrue())
-				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
+				Eventually(writeReturned, testutils.ScaleDuration(80*time.Millisecond)).Should(BeClosed())
 				Expect(n).To(BeEquivalentTo(frame.Frame.DataLen()))
 			})
 
 			It("doesn't pop any data after the deadline expired", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
-				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				writeReturned := make(chan struct{})
 				go func() {
@@ -459,7 +460,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(ok).To(BeTrue())
 				Expect(frame).ToNot(BeNil())
 				Expect(hasMoreData).To(BeTrue())
-				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
+				Eventually(writeReturned, testutils.ScaleDuration(80*time.Millisecond)).Should(BeClosed())
 				_, ok, hasMoreData = str.popStreamFrame(50, protocol.Version1)
 				Expect(ok).To(BeFalse())
 				Expect(hasMoreData).To(BeFalse())
@@ -467,13 +468,13 @@ var _ = Describe("Send Stream", func() {
 
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
-				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
-				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))
+				deadline1 := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
+				deadline2 := time.Now().Add(testutils.ScaleDuration(100 * time.Millisecond))
 				str.SetWriteDeadline(deadline1)
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(scaleDuration(20 * time.Millisecond))
+					time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 					str.SetWriteDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline1))
@@ -483,18 +484,18 @@ var _ = Describe("Send Stream", func() {
 				n, err := strWithTimeout.Write(getData(5000))
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, testutils.ScaleDuration(20*time.Millisecond)))
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("unblocks earlier, when a new deadline is set", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
-				deadline1 := time.Now().Add(scaleDuration(200 * time.Millisecond))
-				deadline2 := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline1 := time.Now().Add(testutils.ScaleDuration(200 * time.Millisecond))
+				deadline2 := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(scaleDuration(10 * time.Millisecond))
+					time.Sleep(testutils.ScaleDuration(10 * time.Millisecond))
 					str.SetWriteDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline2))
@@ -504,18 +505,18 @@ var _ = Describe("Send Stream", func() {
 				runtime.Gosched()
 				_, err := strWithTimeout.Write(getData(5000))
 				Expect(err).To(MatchError(errDeadline))
-				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, testutils.ScaleDuration(20*time.Millisecond)))
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("doesn't unblock if the deadline is removed", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
-				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline := time.Now().Add(testutils.ScaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				deadlineUnset := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(scaleDuration(20 * time.Millisecond))
+					time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 					str.SetWriteDeadline(time.Time{})
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline))
@@ -530,7 +531,7 @@ var _ = Describe("Send Stream", func() {
 				}()
 				runtime.Gosched()
 				Eventually(deadlineUnset).Should(BeClosed())
-				Consistently(done, scaleDuration(100*time.Millisecond)).ShouldNot(BeClosed())
+				Consistently(done, testutils.ScaleDuration(100*time.Millisecond)).ShouldNot(BeClosed())
 				// make the go routine return
 				str.closeForShutdown(errors.New("test done"))
 				Eventually(done).Should(BeClosed())

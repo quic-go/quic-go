@@ -12,6 +12,7 @@ import (
 
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 
@@ -344,7 +345,7 @@ var _ = Describe("Transport", func() {
 		}()
 		// Receiving of non-QUIC packets is enabled when ReadNonQUICPacket is called.
 		// Give the Go routine some time to spin up.
-		time.Sleep(scaleDuration(50 * time.Millisecond))
+		time.Sleep(testutils.ScaleDuration(50 * time.Millisecond))
 		packetChan <- packetToRead{
 			addr: remoteAddr,
 			data: []byte{0 /* don't set the QUIC bit */, 1, 2, 3},

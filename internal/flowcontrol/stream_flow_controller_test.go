@@ -5,6 +5,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -203,7 +204,7 @@ var _ = Describe("Stream Flow controller", func() {
 					return true
 				}
 				oldOffset := controller.bytesRead
-				setRtt(scaleDuration(20 * time.Millisecond))
+				setRtt(testutils.ScaleDuration(20 * time.Millisecond))
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
@@ -218,7 +219,7 @@ var _ = Describe("Stream Flow controller", func() {
 				oldOffset := controller.bytesRead
 				oldConnectionSize := controller.connection.(*connectionFlowController).receiveWindowSize
 				controller.connection.(*connectionFlowController).allowWindowIncrease = func(protocol.ByteCount) bool { return false }
-				setRtt(scaleDuration(20 * time.Millisecond))
+				setRtt(testutils.ScaleDuration(20 * time.Millisecond))
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)

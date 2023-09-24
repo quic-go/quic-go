@@ -15,6 +15,7 @@ import (
 	mockackhandler "github.com/quic-go/quic-go/internal/mocks/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 
@@ -578,7 +579,7 @@ var _ = Describe("Packet packer", func() {
 					datagramQueue.AddAndWait(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
-				time.Sleep(scaleDuration(20 * time.Millisecond))
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 
 				framer.EXPECT().HasData()
 				buffer := getPacketBuffer()
@@ -607,7 +608,7 @@ var _ = Describe("Packet packer", func() {
 					datagramQueue.AddAndWait(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
-				time.Sleep(scaleDuration(20 * time.Millisecond))
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 
 				framer.EXPECT().HasData()
 				buffer := getPacketBuffer()

@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -81,7 +82,7 @@ var _ = Describe("OOB Conn Test", func() {
 
 			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
-			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
+			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), testutils.ScaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
 			Expect(p.ecn).To(Equal(protocol.ECT0))
@@ -101,7 +102,7 @@ var _ = Describe("OOB Conn Test", func() {
 
 			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
-			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
+			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), testutils.ScaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
 			Expect(p.ecn).To(Equal(protocol.ECNCE))
@@ -197,7 +198,7 @@ var _ = Describe("OOB Conn Test", func() {
 
 			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
-			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
+			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), testutils.ScaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
 			Expect(p.info.addr.IsValid()).To(BeTrue())
@@ -215,7 +216,7 @@ var _ = Describe("OOB Conn Test", func() {
 
 			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
-			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
+			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), testutils.ScaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
 			Expect(p.info).To(Not(BeNil()))

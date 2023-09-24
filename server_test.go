@@ -16,6 +16,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/testdata"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
@@ -393,7 +394,7 @@ var _ = Describe("Server", func() {
 				})
 				Eventually(done).Should(BeClosed())
 				// make sure no other packet is sent
-				time.Sleep(scaleDuration(20 * time.Millisecond))
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 			})
 
 			It("doesn't send a Version Negotiation Packet for unsupported versions, if the packet is too small", func() {
@@ -415,7 +416,7 @@ var _ = Describe("Server", func() {
 				serv.handlePacket(p)
 				Eventually(done).Should(BeClosed())
 				// make sure no other packet is sent
-				time.Sleep(scaleDuration(20 * time.Millisecond))
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond))
 			})
 
 			It("replies with a Retry packet, if a token is required", func() {
@@ -585,7 +586,7 @@ var _ = Describe("Server", func() {
 				close(acceptConn)
 				Eventually(
 					func() uint32 { return atomic.LoadUint32(&counter) },
-					scaleDuration(100*time.Millisecond),
+					testutils.ScaleDuration(100*time.Millisecond),
 				).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 				Consistently(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 			})
@@ -740,7 +741,7 @@ var _ = Describe("Server", func() {
 				time.Sleep(50 * time.Millisecond)
 				Eventually(connCreated).Should(BeClosed())
 				cancel()
-				time.Sleep(scaleDuration(200 * time.Millisecond))
+				time.Sleep(testutils.ScaleDuration(200 * time.Millisecond))
 
 				done := make(chan struct{})
 				go func() {
@@ -1304,7 +1305,7 @@ var _ = Describe("Server", func() {
 			time.Sleep(50 * time.Millisecond)
 			Eventually(connCreated).Should(BeClosed())
 			cancel()
-			time.Sleep(scaleDuration(200 * time.Millisecond))
+			time.Sleep(testutils.ScaleDuration(200 * time.Millisecond))
 
 			done := make(chan struct{})
 			go func() {

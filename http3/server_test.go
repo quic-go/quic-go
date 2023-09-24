@@ -17,6 +17,7 @@ import (
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/testdata"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -288,7 +289,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			It("cancels writing when hijacker didn't hijack a bidirectional stream", func() {
@@ -311,7 +312,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			It("cancels writing when hijacker returned error", func() {
@@ -334,7 +335,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			It("handles errors that occur when reading the stream type", func() {
@@ -358,7 +359,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 		})
 
@@ -399,7 +400,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			It("handles errors that occur when reading the stream type", func() {
@@ -422,7 +423,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
@@ -447,7 +448,7 @@ var _ = Describe("Server", func() {
 				})
 				s.handleConn(conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 		})
 
@@ -481,7 +482,7 @@ var _ = Describe("Server", func() {
 					return nil, errors.New("test done")
 				})
 				s.handleConn(conn)
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+				time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			for _, t := range []uint64{streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream} {
@@ -504,7 +505,7 @@ var _ = Describe("Server", func() {
 						return nil, errors.New("test done")
 					})
 					s.handleConn(conn)
-					time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to str.CancelRead
+					time.Sleep(testutils.ScaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to str.CancelRead
 				})
 			}
 

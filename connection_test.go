@@ -1597,7 +1597,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("paces packets", func() {
-			pacingDelay := scaleDuration(100 * time.Millisecond)
+			pacingDelay := testutils.ScaleDuration(100 * time.Millisecond)
 			gomock.InOrder(
 				sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny),
 				sph.EXPECT().ECNMode(gomock.Any()),
@@ -1665,7 +1665,7 @@ var _ = Describe("Connection", func() {
 					conn.run()
 				}()
 				conn.scheduleSending()
-				time.Sleep(scaleDuration(50 * time.Millisecond))
+				time.Sleep(testutils.ScaleDuration(50 * time.Millisecond))
 
 				written := make(chan struct{})
 				sender.EXPECT().WouldBlock().AnyTimes()
@@ -1702,7 +1702,7 @@ var _ = Describe("Connection", func() {
 			sender.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*packetBuffer, uint16, protocol.ECN) { close(written) })
 
 			conn.scheduleSending()
-			time.Sleep(scaleDuration(50 * time.Millisecond))
+			time.Sleep(testutils.ScaleDuration(50 * time.Millisecond))
 
 			Eventually(written).Should(BeClosed())
 		})
@@ -1726,7 +1726,7 @@ var _ = Describe("Connection", func() {
 			sender.EXPECT().Available().Return(available)
 			conn.scheduleSending()
 			Eventually(written).Should(Receive())
-			time.Sleep(scaleDuration(50 * time.Millisecond))
+			time.Sleep(testutils.ScaleDuration(50 * time.Millisecond))
 
 			// now make room in the send queue
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
@@ -1741,7 +1741,7 @@ var _ = Describe("Connection", func() {
 
 			// The send queue is not full any more. Sending on the available channel should have no effect.
 			available <- struct{}{}
-			time.Sleep(scaleDuration(50 * time.Millisecond))
+			time.Sleep(testutils.ScaleDuration(50 * time.Millisecond))
 		})
 
 		It("doesn't set a pacing timer when there is no data to send", func() {
@@ -2312,7 +2312,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("closes the connection due to the idle timeout before handshake", func() {
-			conn.config.HandshakeIdleTimeout = scaleDuration(25 * time.Millisecond)
+			conn.config.HandshakeIdleTimeout = testutils.ScaleDuration(25 * time.Millisecond)
 			packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), conn.version).AnyTimes()
 			connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()

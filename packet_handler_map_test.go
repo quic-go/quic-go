@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -45,7 +46,7 @@ var _ = Describe("Packet Handler Map", func() {
 
 	It("retires", func() {
 		m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
-		dur := scaleDuration(50 * time.Millisecond)
+		dur := testutils.ScaleDuration(50 * time.Millisecond)
 		m.deleteRetiredConnsAfter = dur
 		connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 		handler := NewMockPacketHandler(mockCtrl)
@@ -118,7 +119,7 @@ var _ = Describe("Packet Handler Map", func() {
 	It("replaces locally closed connections", func() {
 		var closePackets []closePacket
 		m := newPacketHandlerMap(nil, func(p closePacket) { closePackets = append(closePackets, p) }, utils.DefaultLogger)
-		dur := scaleDuration(50 * time.Millisecond)
+		dur := testutils.ScaleDuration(50 * time.Millisecond)
 		m.deleteRetiredConnsAfter = dur
 
 		handler := NewMockPacketHandler(mockCtrl)
@@ -141,7 +142,7 @@ var _ = Describe("Packet Handler Map", func() {
 	It("replaces remote closed connections", func() {
 		var closePackets []closePacket
 		m := newPacketHandlerMap(nil, func(p closePacket) { closePackets = append(closePackets, p) }, utils.DefaultLogger)
-		dur := scaleDuration(50 * time.Millisecond)
+		dur := testutils.ScaleDuration(50 * time.Millisecond)
 		m.deleteRetiredConnsAfter = dur
 
 		handler := NewMockPacketHandler(mockCtrl)
