@@ -54,6 +54,11 @@ type zeroRTTQueue struct {
 	expiration time.Time
 }
 
+type rejectedPacket struct {
+	receivedPacket
+	hdr *wire.Header
+}
+
 // A Listener of QUIC
 type baseServer struct {
 	mutex sync.Mutex
@@ -104,7 +109,7 @@ type baseServer struct {
 	closed                  bool
 	running                 chan struct{} // closed as soon as run() returns
 	versionNegotiationQueue chan receivedPacket
-	invalidTokenQueue       chan receivedPacket
+	invalidTokenQueue       chan rejectedPacket
 
 	connQueue    chan quicConn
 	connQueueLen int32 // to be used as an atomic
@@ -245,7 +250,7 @@ func newServer(
 		running:                   make(chan struct{}),
 		receivedPackets:           make(chan receivedPacket, protocol.MaxServerUnprocessedPackets),
 		versionNegotiationQueue:   make(chan receivedPacket, 4),
-		invalidTokenQueue:         make(chan receivedPacket, 4),
+		invalidTokenQueue:         make(chan rejectedPacket, 4),
 		newConn:                   newConnection,
 		tracer:                    tracer,
 		logger:                    utils.DefaultLogger.WithPrefix("server"),
@@ -580,7 +585,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			// For Retry tokens, we send an INVALID_ERROR if
 			// * the token is too old, or
 			// * the token is invalid, in case of a retry token.
-			s.enqueueInvalidToken(p)
+			select {
+			case s.invalidTokenQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
+			default:
+				// it's fine to drop INVALID_TOKEN packets when we are busy
+				p.buffer.Release()
+			}
 			return nil
 		}
 	}
@@ -748,29 +758,12 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info packe
 	return err
 }
 
-func (s *baseServer) enqueueInvalidToken(p receivedPacket) {
-	select {
-	case s.invalidTokenQueue <- p:
-	default:
-		// it's fine to drop INVALID_TOKEN packets when we are busy
-		p.buffer.Release()
-	}
-}
-
-func (s *baseServer) maybeSendInvalidToken(p receivedPacket) {
+func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 	defer p.buffer.Release()
-
-	hdr, _, _, err := wire.ParsePacket(p.data)
-	if err != nil {
-		if s.tracer != nil && s.tracer.DroppedPacket != nil {
-			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
-		}
-		s.logger.Debugf("Error parsing packet: %s", err)
-		return
-	}
 
 	// Only send INVALID_TOKEN if we can unprotect the packet.
 	// This makes sure that we won't send it for packets that were corrupted.
+	hdr := p.hdr
 	sealer, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
 	data := p.data[:hdr.ParsedLen()+hdr.Length]
 	extHdr, err := unpackLongHeader(opener, hdr, data, hdr.Version)
