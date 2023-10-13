@@ -76,4 +76,27 @@ var _ = Describe("Connection (for sending packets)", func() {
 			Expect(c.capabilities().GSO).To(BeFalse())
 		})
 	}
+
+	if runtime.GOOS == "linux" {
+		It("doesn't fail if the very first sendmsg call fails", func() {
+			rawConn := NewMockRawConn(mockCtrl)
+			rawConn.EXPECT().LocalAddr()
+			rawConn.EXPECT().capabilities().AnyTimes()
+			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
+			gomock.InOrder(
+				rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), gomock.Any(), protocol.ECNCE).Return(0, errNotPermitted),
+				rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(0), protocol.ECNCE).Return(6, nil),
+			)
+			Expect(c.Write([]byte("foobar"), 0, protocol.ECNCE)).To(Succeed())
+		})
+
+		It("fails if the sendmsg calls fail multiple times", func() {
+			rawConn := NewMockRawConn(mockCtrl)
+			rawConn.EXPECT().LocalAddr()
+			rawConn.EXPECT().capabilities().AnyTimes()
+			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
+			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), gomock.Any(), protocol.ECNCE).Return(0, errNotPermitted).Times(2)
+			Expect(c.Write([]byte("foobar"), 0, protocol.ECNCE)).To(MatchError(errNotPermitted))
+		})
+	}
 })
