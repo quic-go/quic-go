@@ -27,6 +27,8 @@ type StreamCreator interface {
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 	ConnectionState() quic.ConnectionState
+	SendMessage([]byte) error
+	ReceiveMessage(context.Context) ([]byte, error)
 }
 
 var _ StreamCreator = quic.Connection(nil)
