@@ -13,7 +13,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var errGSO = &os.SyscallError{Err: unix.EIO}
+var (
+	errGSO          = &os.SyscallError{Err: unix.EIO}
+	errNotPermitted = &os.SyscallError{Syscall: "sendmsg", Err: unix.EPERM}
+)
 
 var _ = Describe("forcing a change of send and receive buffer sizes", func() {
 	It("forces a change of the receive buffer size", func() {
