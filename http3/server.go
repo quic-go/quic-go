@@ -599,7 +599,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, conn, s.logger)
-	if req.Method == "HEAD" {
+	if req.Method == http.MethodHead {
 		r.isHead = true
 	}
 	handler := s.Handler
