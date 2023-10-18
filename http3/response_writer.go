@@ -67,9 +67,9 @@ type responseWriter struct {
 	bufferedStr *bufio.Writer
 	buf         []byte
 
-	headerWritten bool
 	contentLen    int64 // if handler set valid Content-Length header
 	numWritten    int64 // bytes written
+	headerWritten bool
 	isHead        bool
 }
 
