@@ -70,6 +70,7 @@ type responseWriter struct {
 	headerWritten bool
 	contentLen    int64 // if handler set valid Content-Length header
 	numWritten    int64 // bytes written
+	isHead        bool
 }
 
 var (
@@ -160,6 +161,10 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	w.numWritten += int64(len(p))
 	if w.contentLen != 0 && w.numWritten > w.contentLen {
 		return 0, http.ErrContentLength
+	}
+
+	if w.isHead {
+		return len(p), nil
 	}
 
 	df := &dataFrame{Length: uint64(len(p))}
