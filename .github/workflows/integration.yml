@@ -60,3 +60,21 @@ jobs:
         with:
           name: qlogs
           path: integrationtests/self/*.qlog
+  integration-freesbd:
+    runs-on: macos-latest
+    name: Integration Tests (FreeBSD, Go 1.21.x)
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v4
+      with:
+        go-version: "1.21.x"
+    - run: go version
+    - name: Compile test suite
+      run: GOOS=freebsd go test -c ./integrationtests/self -o self.test
+    - name: Test in FreeBSD
+      uses: vmactions/freebsd-vm@v0
+      with:
+        envs: "TIMESCALE_FACTOR=3"
+        usesh: true
+        run: |
+          ./self.test -ginkgo.v -ginkgo.randomize-all -ginkgo.trace
