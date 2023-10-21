@@ -513,9 +513,7 @@ var _ = Describe("Server", func() {
 				str := mockquic.NewMockStream(mockCtrl)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				done := make(chan struct{})
-				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(code quic.StreamErrorCode) {
-					close(done)
-				})
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return str, nil
@@ -542,10 +540,9 @@ var _ = Describe("Server", func() {
 					return nil, errors.New("test done")
 				})
 				done := make(chan struct{})
-				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(ErrCodeMissingSettings))
+				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) error {
 					close(done)
+					return nil
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -565,10 +562,9 @@ var _ = Describe("Server", func() {
 					return nil, errors.New("test done")
 				})
 				done := make(chan struct{})
-				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(ErrCodeFrameError))
+				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) error {
 					close(done)
+					return nil
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -588,10 +584,9 @@ var _ = Describe("Server", func() {
 					return nil, errors.New("test done")
 				})
 				done := make(chan struct{})
-				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(ErrCodeStreamCreationError))
+				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) error {
 					close(done)
+					return nil
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -613,11 +608,9 @@ var _ = Describe("Server", func() {
 				})
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
 				done := make(chan struct{})
-				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
-					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(ErrCodeSettingsError))
-					Expect(reason).To(Equal("missing QUIC Datagram support"))
+				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support").Do(func(quic.ApplicationErrorCode, string) error {
 					close(done)
+					return nil
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -663,7 +656,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Context().Return(reqContext)
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
-				str.EXPECT().Close().Do(func() { close(done) })
+				str.EXPECT().Close().Do(func() error { close(done); return nil })
 
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -738,9 +731,9 @@ var _ = Describe("Server", func() {
 				}).AnyTimes()
 
 				done := make(chan struct{})
-				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					Expect(code).To(Equal(quic.ApplicationErrorCode(ErrCodeFrameUnexpected)))
+				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) error {
 					close(done)
+					return nil
 				})
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -1050,7 +1043,7 @@ var _ = Describe("Server", func() {
 			}
 
 			stopAccept := make(chan struct{})
-			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
+			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.EarlyConnection, error) {
 				<-stopAccept
 				return nil, errors.New("closed")
 			})
@@ -1063,7 +1056,7 @@ var _ = Describe("Server", func() {
 			}()
 
 			Consistently(done).ShouldNot(BeClosed())
-			ln.EXPECT().Close().Do(func() { close(stopAccept) })
+			ln.EXPECT().Close().Do(func() error { close(stopAccept); return nil })
 			Expect(s.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
@@ -1085,13 +1078,13 @@ var _ = Describe("Server", func() {
 			}
 
 			stopAccept1 := make(chan struct{})
-			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
+			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.EarlyConnection, error) {
 				<-stopAccept1
 				return nil, errors.New("closed")
 			})
 			ln1.EXPECT().Addr() // generate alt-svc headers
 			stopAccept2 := make(chan struct{})
-			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
+			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.EarlyConnection, error) {
 				<-stopAccept2
 				return nil, errors.New("closed")
 			})
@@ -1112,8 +1105,8 @@ var _ = Describe("Server", func() {
 
 			Consistently(done1).ShouldNot(BeClosed())
 			Expect(done2).ToNot(BeClosed())
-			ln1.EXPECT().Close().Do(func() { close(stopAccept1) })
-			ln2.EXPECT().Close().Do(func() { close(stopAccept2) })
+			ln1.EXPECT().Close().Do(func() error { close(stopAccept1); return nil })
+			ln2.EXPECT().Close().Do(func() error { close(stopAccept2); return nil })
 			Expect(s.Close()).To(Succeed())
 			Eventually(done1).Should(BeClosed())
 			Eventually(done2).Should(BeClosed())
@@ -1138,7 +1131,7 @@ var _ = Describe("Server", func() {
 			s := &Server{}
 
 			stopAccept := make(chan struct{})
-			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
+			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.EarlyConnection, error) {
 				<-stopAccept
 				return nil, errors.New("closed")
 			})
@@ -1152,7 +1145,7 @@ var _ = Describe("Server", func() {
 
 			Consistently(func() int32 { return atomic.LoadInt32(&called) }).Should(Equal(int32(0)))
 			Consistently(done).ShouldNot(BeClosed())
-			ln.EXPECT().Close().Do(func() { close(stopAccept) })
+			ln.EXPECT().Close().Do(func() error { close(stopAccept); return nil })
 			Expect(s.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
@@ -1172,13 +1165,13 @@ var _ = Describe("Server", func() {
 			s := &Server{}
 
 			stopAccept1 := make(chan struct{})
-			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
+			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.EarlyConnection, error) {
 				<-stopAccept1
 				return nil, errors.New("closed")
 			})
 			ln1.EXPECT().Addr() // generate alt-svc headers
 			stopAccept2 := make(chan struct{})
-			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
+			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.EarlyConnection, error) {
 				<-stopAccept2
 				return nil, errors.New("closed")
 			})
@@ -1200,8 +1193,8 @@ var _ = Describe("Server", func() {
 			Consistently(func() int32 { return atomic.LoadInt32(&called) }).Should(Equal(int32(0)))
 			Consistently(done1).ShouldNot(BeClosed())
 			Expect(done2).ToNot(BeClosed())
-			ln1.EXPECT().Close().Do(func() { close(stopAccept1) })
-			ln2.EXPECT().Close().Do(func() { close(stopAccept2) })
+			ln1.EXPECT().Close().Do(func() error { close(stopAccept1); return nil })
+			ln2.EXPECT().Close().Do(func() error { close(stopAccept2); return nil })
 			Expect(s.Close()).To(Succeed())
 			Eventually(done1).Should(BeClosed())
 			Eventually(done2).Should(BeClosed())
