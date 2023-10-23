@@ -20,7 +20,7 @@ import (
 type listenerWrapper struct {
 	http3.QUICEarlyListener
 	listenerClosed bool
-	count          int32
+	count          atomic.Int32
 }
 
 func (ln *listenerWrapper) Close() error {
@@ -29,7 +29,7 @@ func (ln *listenerWrapper) Close() error {
 }
 
 func (ln *listenerWrapper) Faker() *fakeClosingListener {
-	atomic.AddInt32(&ln.count, 1)
+	ln.count.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	return &fakeClosingListener{ln, 0, ctx, cancel}
 }
@@ -49,7 +49,7 @@ func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection
 func (ln *fakeClosingListener) Close() error {
 	if atomic.CompareAndSwapInt32(&ln.closed, 0, 1) {
 		ln.cancel()
-		if atomic.AddInt32(&ln.listenerWrapper.count, -1) == 0 {
+		if ln.listenerWrapper.count.Add(-1) == 0 {
 			ln.listenerWrapper.Close()
 		}
 	}

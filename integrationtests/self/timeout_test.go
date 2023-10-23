@@ -22,12 +22,12 @@ type faultyConn struct {
 	net.PacketConn
 
 	MaxPackets int32
-	counter    int32
+	counter    atomic.Int32
 }
 
 func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	n, addr, err := c.PacketConn.ReadFrom(p)
-	counter := atomic.AddInt32(&c.counter, 1)
+	counter := c.counter.Add(1)
 	if counter <= c.MaxPackets {
 		return n, addr, err
 	}
@@ -35,7 +35,7 @@ func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	counter := atomic.AddInt32(&c.counter, 1)
+	counter := c.counter.Add(1)
 	if counter <= c.MaxPackets {
 		return c.PacketConn.WriteTo(p, addr)
 	}
