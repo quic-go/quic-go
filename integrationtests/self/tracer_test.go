@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Handshake tests", func() {
+var _ = Describe("Tracer tests", func() {
 	addTracers := func(pers protocol.Perspective, conf *quic.Config) *quic.Config {
 		enableQlog := mrand.Int()%3 != 0
 		enableCustomTracer := mrand.Int()%3 != 0
@@ -30,10 +30,10 @@ var _ = Describe("Handshake tests", func() {
 		if enableQlog {
 			tracerConstructors = append(tracerConstructors, func(_ context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 				if mrand.Int()%2 == 0 { // simulate that a qlog collector might only want to log some connections
-					fmt.Fprintf(GinkgoWriter, "%s qlog tracer deciding to not trace connection %x\n", p, connID)
+					fmt.Fprintf(GinkgoWriter, "%s qlog tracer deciding to not trace connection %s\n", p, connID)
 					return nil
 				}
-				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %x\n", p, connID)
+				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %s\n", p, connID)
 				return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil)), p, connID)
 			})
 		}
