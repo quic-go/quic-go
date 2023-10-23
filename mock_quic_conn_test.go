@@ -541,41 +541,41 @@ func (c *QUICConnOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (Sen
 	return c
 }
 
-// ReceiveMessage mocks base method.
-func (m *MockQUICConn) ReceiveMessage(arg0 context.Context) ([]byte, error) {
+// ReceiveDatagram mocks base method.
+func (m *MockQUICConn) ReceiveDatagram(arg0 context.Context) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReceiveMessage", arg0)
+	ret := m.ctrl.Call(m, "ReceiveDatagram", arg0)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReceiveMessage indicates an expected call of ReceiveMessage.
-func (mr *MockQUICConnMockRecorder) ReceiveMessage(arg0 any) *QUICConnReceiveMessageCall {
+// ReceiveDatagram indicates an expected call of ReceiveDatagram.
+func (mr *MockQUICConnMockRecorder) ReceiveDatagram(arg0 any) *QUICConnReceiveDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveMessage", reflect.TypeOf((*MockQUICConn)(nil).ReceiveMessage), arg0)
-	return &QUICConnReceiveMessageCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveDatagram", reflect.TypeOf((*MockQUICConn)(nil).ReceiveDatagram), arg0)
+	return &QUICConnReceiveDatagramCall{Call: call}
 }
 
-// QUICConnReceiveMessageCall wrap *gomock.Call
-type QUICConnReceiveMessageCall struct {
+// QUICConnReceiveDatagramCall wrap *gomock.Call
+type QUICConnReceiveDatagramCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *QUICConnReceiveMessageCall) Return(arg0 []byte, arg1 error) *QUICConnReceiveMessageCall {
+func (c *QUICConnReceiveDatagramCall) Return(arg0 []byte, arg1 error) *QUICConnReceiveDatagramCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *QUICConnReceiveMessageCall) Do(f func(context.Context) ([]byte, error)) *QUICConnReceiveMessageCall {
+func (c *QUICConnReceiveDatagramCall) Do(f func(context.Context) ([]byte, error)) *QUICConnReceiveDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *QUICConnReceiveMessageCall) DoAndReturn(f func(context.Context) ([]byte, error)) *QUICConnReceiveMessageCall {
+func (c *QUICConnReceiveDatagramCall) DoAndReturn(f func(context.Context) ([]byte, error)) *QUICConnReceiveDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -618,40 +618,40 @@ func (c *QUICConnRemoteAddrCall) DoAndReturn(f func() net.Addr) *QUICConnRemoteA
 	return c
 }
 
-// SendMessage mocks base method.
-func (m *MockQUICConn) SendMessage(arg0 []byte) error {
+// SendDatagram mocks base method.
+func (m *MockQUICConn) SendDatagram(arg0 []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendMessage", arg0)
+	ret := m.ctrl.Call(m, "SendDatagram", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SendMessage indicates an expected call of SendMessage.
-func (mr *MockQUICConnMockRecorder) SendMessage(arg0 any) *QUICConnSendMessageCall {
+// SendDatagram indicates an expected call of SendDatagram.
+func (mr *MockQUICConnMockRecorder) SendDatagram(arg0 any) *QUICConnSendDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessage", reflect.TypeOf((*MockQUICConn)(nil).SendMessage), arg0)
-	return &QUICConnSendMessageCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockQUICConn)(nil).SendDatagram), arg0)
+	return &QUICConnSendDatagramCall{Call: call}
 }
 
-// QUICConnSendMessageCall wrap *gomock.Call
-type QUICConnSendMessageCall struct {
+// QUICConnSendDatagramCall wrap *gomock.Call
+type QUICConnSendDatagramCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *QUICConnSendMessageCall) Return(arg0 error) *QUICConnSendMessageCall {
+func (c *QUICConnSendDatagramCall) Return(arg0 error) *QUICConnSendDatagramCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *QUICConnSendMessageCall) Do(f func([]byte) error) *QUICConnSendMessageCall {
+func (c *QUICConnSendDatagramCall) Do(f func([]byte) error) *QUICConnSendDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *QUICConnSendMessageCall) DoAndReturn(f func([]byte) error) *QUICConnSendMessageCall {
+func (c *QUICConnSendDatagramCall) DoAndReturn(f func([]byte) error) *QUICConnSendDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

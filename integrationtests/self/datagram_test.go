@@ -57,7 +57,7 @@ var _ = Describe("Datagram test", func() {
 							defer wg.Done()
 							b := make([]byte, 8)
 							binary.BigEndian.PutUint64(b, uint64(i))
-							Expect(conn.SendMessage(b)).To(Succeed())
+							Expect(conn.SendDatagram(b)).To(Succeed())
 						}(i)
 					}
 					wg.Wait()
@@ -120,7 +120,7 @@ var _ = Describe("Datagram test", func() {
 		for {
 			// Close the connection if no message is received for 100 ms.
 			timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() { conn.CloseWithError(0, "") })
-			if _, err := conn.ReceiveMessage(context.Background()); err != nil {
+			if _, err := conn.ReceiveDatagram(context.Background()); err != nil {
 				break
 			}
 			timer.Stop()
@@ -170,7 +170,7 @@ var _ = Describe("Datagram test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 
-		Expect(conn.SendMessage([]byte{0})).To(HaveOccurred())
+		Expect(conn.SendDatagram([]byte{0})).To(HaveOccurred())
 
 		close()
 		conn.CloseWithError(0, "")
