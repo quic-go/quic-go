@@ -221,6 +221,45 @@ var _ = Describe("Server", func() {
 			Expect(hfs).To(HaveLen(3))
 		})
 
+		It("response to HEAD request should not have body", func() {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("foobar"))
+			})
+
+			headRequest, err := http.NewRequest("HEAD", "https://www.example.com", nil)
+			Expect(err).ToNot(HaveOccurred())
+			responseBuf := &bytes.Buffer{}
+			setRequest(encodeRequest(headRequest))
+			str.EXPECT().Context().Return(reqContext)
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+			str.EXPECT().CancelRead(gomock.Any())
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			Expect(serr.err).ToNot(HaveOccurred())
+			hfs := decodeHeader(responseBuf)
+			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
+			Expect(responseBuf.Bytes()).To(HaveLen(0))
+		})
+
+		It("response to HEAD request should also do content sniffing", func() {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("<html></html>"))
+			})
+
+			headRequest, err := http.NewRequest("HEAD", "https://www.example.com", nil)
+			Expect(err).ToNot(HaveOccurred())
+			responseBuf := &bytes.Buffer{}
+			setRequest(encodeRequest(headRequest))
+			str.EXPECT().Context().Return(reqContext)
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+			str.EXPECT().CancelRead(gomock.Any())
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			Expect(serr.err).ToNot(HaveOccurred())
+			hfs := decodeHeader(responseBuf)
+			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
+			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
+			Expect(hfs).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
+		})
+
 		It("handles a aborting handler", func() {
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				panic(http.ErrAbortHandler)
