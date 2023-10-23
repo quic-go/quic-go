@@ -1,6 +1,7 @@
 package quicproxy
 
 import (
+	"log"
 	"net"
 	"sort"
 	"sync"
@@ -201,7 +202,11 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 	}
 
 	p.logger.Debugf("Starting UDP Proxy %s <-> %s", conn.LocalAddr(), raddr)
-	go p.runProxy()
+	go func() {
+		if err := p.runProxy(); err != nil && !p.isClosed() {
+			log.Fatalf("runProxy failed: %s", err)
+		}
+	}()
 	return &p, nil
 }
 
@@ -218,6 +223,15 @@ func (p *QuicProxy) Close() error {
 		c.Outgoing.Close()
 	}
 	return p.conn.Close()
+}
+
+func (p *QuicProxy) isClosed() bool {
+	select {
+	case <-p.closeChan:
+		return true
+	default:
+		return false
+	}
 }
 
 // LocalAddr is the address the proxy is listening on.
@@ -271,8 +285,16 @@ func (p *QuicProxy) runProxy() error {
 				return err
 			}
 			p.clientDict[saddr] = conn
-			go p.runIncomingConnection(conn)
-			go p.runOutgoingConnection(conn)
+			go func() {
+				if err := p.runIncomingConnection(conn); err != nil && !p.isClosed() {
+					log.Fatalf("runIncomingConnection failed: %s", err)
+				}
+			}()
+			go func() {
+				if err := p.runOutgoingConnection(conn); err != nil && !p.isClosed() {
+					log.Fatalf("runOutgoingConnection failed: %s", err)
+				}
+			}()
 		}
 		p.mutex.Unlock()
 
