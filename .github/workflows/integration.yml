@@ -17,7 +17,7 @@ jobs:
       run:
         shell: bash # by default Windows uses PowerShell, which uses a different syntax for setting environment variables
     env:
-      DEBUG: false # set this to true to export qlogs and save them as artifacts
+      DEBUG: true # set this to true to export qlogs and save them as artifacts
       TIMESCALE_FACTOR: 3
     name: Integration Tests (${{ matrix.os }}, Go ${{ matrix.go }})
     steps:
