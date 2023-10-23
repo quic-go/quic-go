@@ -56,7 +56,8 @@ jobs:
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- ${{ env.QLOGFLAG }}
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
-          name: qlogs
+          name: qlogs-${{ matrix.os }}-go${{ matrix.go }}
           path: integrationtests/self/*.qlog
+          retention-days: 7
