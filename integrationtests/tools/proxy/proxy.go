@@ -1,6 +1,7 @@
 package quicproxy
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"sort"
@@ -272,6 +273,7 @@ func (p *QuicProxy) runProxy() error {
 		if err != nil {
 			return err
 		}
+		fmt.Printf("proxy read packet (%d bytes) from %s\n", n, cliaddr)
 		raw := buffer[0:n]
 
 		saddr := cliaddr.String()
@@ -368,7 +370,9 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 			conn.Outgoing.Add(e)
 		case <-conn.Outgoing.Timer():
 			conn.Outgoing.SetTimerRead()
-			if _, err := p.conn.WriteTo(conn.Outgoing.Get(), conn.ClientAddr); err != nil {
+			packet := conn.Outgoing.Get()
+			fmt.Printf("proxy sending packet (%d bytes) to %s\n", len(packet), conn.ClientAddr)
+			if _, err := p.conn.WriteTo(packet, conn.ClientAddr); err != nil {
 				return err
 			}
 		}
@@ -385,7 +389,9 @@ func (p *QuicProxy) runIncomingConnection(conn *connection) error {
 			conn.Incoming.Add(e)
 		case <-conn.Incoming.Timer():
 			conn.Incoming.SetTimerRead()
-			if _, err := conn.ServerConn.Write(conn.Incoming.Get()); err != nil {
+			packet := conn.Incoming.Get()
+			fmt.Printf("proxy sending packet (%d bytes) to %s\n", len(packet), conn.ServerConn.RemoteAddr())
+			if _, err := conn.ServerConn.Write(packet); err != nil {
 				return err
 			}
 		}
