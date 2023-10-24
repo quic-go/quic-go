@@ -8,7 +8,7 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           skip-pkg-cache: true
-          go-version: "1.20.x"
+          go-version: "1.21.x"
       - name: Check that no non-test files import Ginkgo or Gomega
         run: .github/workflows/no_ginkgo.sh
       - name: Check for //go:build ignore in .go files
@@ -36,11 +36,16 @@ jobs:
           go mod vendor
   golangci-lint:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [ "1.20.x", "1.21.x" ]
+    name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v4
         with:
-          go-version: "1.20.x"
+          go-version: ${{ matrix.go }}
       - name: golangci-lint (Linux)
         uses: golangci/golangci-lint-action@v3
         with:
