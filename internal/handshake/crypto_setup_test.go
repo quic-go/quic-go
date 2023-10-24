@@ -450,8 +450,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				Eventually(receivedSessionTicket).Should(BeClosed())
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
-				Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
 				if !strings.Contains(runtime.Version(), "go1.20") {
+					Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
 					Expect(serverRTTStats.SmoothedRTT()).To(Equal(serverRTT))
 				}
 			})
