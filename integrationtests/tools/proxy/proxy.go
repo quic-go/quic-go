@@ -1,9 +1,11 @@
 package quicproxy
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -155,6 +157,9 @@ type QuicProxy struct {
 	// Mapping from client addresses (as host:port) to connection
 	clientDict map[string]*connection
 
+	logFile *os.File
+	log     *bufio.Writer
+
 	logger utils.Logger
 }
 
@@ -192,6 +197,13 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 		packetDelayer = opts.DelayPacket
 	}
 
+	filename := fmt.Sprintf("proxy_%d.log", time.Now().UnixNano())
+	fmt.Printf("creating log file: %s", filename)
+	logFile, err := os.Create(filename)
+	if err != nil {
+		return nil, err
+	}
+
 	p := QuicProxy{
 		clientDict:  make(map[string]*connection),
 		conn:        conn,
@@ -200,6 +212,8 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 		dropPacket:  packetDropper,
 		delayPacket: packetDelayer,
 		logger:      utils.DefaultLogger.WithPrefix("proxy"),
+		logFile:     logFile,
+		log:         bufio.NewWriterSize(logFile, 16<<10),
 	}
 
 	p.logger.Debugf("Starting UDP Proxy %s <-> %s", conn.LocalAddr(), raddr)
@@ -215,6 +229,10 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 func (p *QuicProxy) Close() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	defer func() {
+		p.log.Flush()
+		p.logFile.Close()
+	}()
 	close(p.closeChan)
 	for _, c := range p.clientDict {
 		if err := c.ServerConn.Close(); err != nil {
@@ -273,7 +291,7 @@ func (p *QuicProxy) runProxy() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("proxy read packet (%d bytes) from %s\n", n, cliaddr)
+		fmt.Fprintf(p.log, "read packet (%d bytes) from %s\n", n, cliaddr)
 		raw := buffer[0:n]
 
 		saddr := cliaddr.String()
@@ -371,7 +389,7 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 		case <-conn.Outgoing.Timer():
 			conn.Outgoing.SetTimerRead()
 			packet := conn.Outgoing.Get()
-			fmt.Printf("proxy sending packet (%d bytes) to %s\n", len(packet), conn.ClientAddr)
+			fmt.Fprintf(p.log, "sending packet (%d bytes) to %s\n", len(packet), conn.ClientAddr)
 			if _, err := p.conn.WriteTo(packet, conn.ClientAddr); err != nil {
 				return err
 			}
@@ -390,7 +408,7 @@ func (p *QuicProxy) runIncomingConnection(conn *connection) error {
 		case <-conn.Incoming.Timer():
 			conn.Incoming.SetTimerRead()
 			packet := conn.Incoming.Get()
-			fmt.Printf("proxy sending packet (%d bytes) to %s\n", len(packet), conn.ServerConn.RemoteAddr())
+			fmt.Fprintf(p.log, "sending packet (%d bytes) to %s\n", len(packet), conn.ServerConn.RemoteAddr())
 			if _, err := conn.ServerConn.Write(packet); err != nil {
 				return err
 			}

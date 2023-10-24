@@ -62,5 +62,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: qlogs-${{ matrix.os }}-go${{ matrix.go }}
-          path: integrationtests/self/*.qlog
+          path: |
+            integrationtests/self/*.qlog
+            integrationtests/self/proxy*.log
           retention-days: 7
