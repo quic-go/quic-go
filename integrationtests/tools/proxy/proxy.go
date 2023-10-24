@@ -291,7 +291,7 @@ func (p *QuicProxy) runProxy() error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(p.log, "read packet (%d bytes) from %s\n", n, cliaddr)
+		fmt.Fprintf(p.log, "incoming: read packet (%d bytes) from %s\n", n, cliaddr)
 		raw := buffer[0:n]
 
 		saddr := cliaddr.String()
@@ -354,6 +354,7 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 				return
 			}
 			raw := buffer[0:n]
+			fmt.Fprintf(p.log, "outgoing: read packet (%d bytes) from %s\n", n, conn.ServerConn.RemoteAddr())
 
 			if p.dropPacket(DirectionOutgoing, raw) {
 				if p.logger.Debug() {
@@ -389,7 +390,7 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 		case <-conn.Outgoing.Timer():
 			conn.Outgoing.SetTimerRead()
 			packet := conn.Outgoing.Get()
-			fmt.Fprintf(p.log, "sending packet (%d bytes) to %s\n", len(packet), conn.ClientAddr)
+			fmt.Fprintf(p.log, "outgoing: sending packet (%d bytes) to %s\n", len(packet), conn.ClientAddr)
 			if _, err := p.conn.WriteTo(packet, conn.ClientAddr); err != nil {
 				return err
 			}
@@ -408,7 +409,7 @@ func (p *QuicProxy) runIncomingConnection(conn *connection) error {
 		case <-conn.Incoming.Timer():
 			conn.Incoming.SetTimerRead()
 			packet := conn.Incoming.Get()
-			fmt.Fprintf(p.log, "sending packet (%d bytes) to %s\n", len(packet), conn.ServerConn.RemoteAddr())
+			fmt.Fprintf(p.log, "incoming: sending packet (%d bytes) to %s\n", len(packet), conn.ServerConn.RemoteAddr())
 			if _, err := conn.ServerConn.Write(packet); err != nil {
 				return err
 			}
