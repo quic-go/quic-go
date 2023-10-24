@@ -46,3 +46,58 @@ jobs:
         with:
           files: coverage.txt,coverage-root.txt
           env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
+  freebsd:
+    runs-on: macos-12
+    name: Unit tests (freebsd, Go ${{ matrix.go }})
+    env:
+      TIMESCALE_FACTOR: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [ "1.20.x", "1.21.x" ]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: pick go version
+        env:
+          GO_VERSION: ${{ matrix.go }}
+        run: |
+          GO_VERSION="$(sed "s/x/*/g" <<< $GO_VERSION)"
+          curl -s https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | jq -r 'map(.version) | map(select(test(env.GO_VERSION))) | .[0]' | xargs -I {} echo "GO_VERSION={}" | tee -a $GITHUB_ENV
+      - uses: cross-platform-actions/action@6785ab118e0f221bdacd2e64a39253e7a1913103 # v0.19.1
+        with:
+          operating_system: 'freebsd'
+          version: '13.2'
+          environment_variables: TIMESCALE_FACTOR GO_VERSION
+          shell: bash
+          run: |
+            echo "::group::Increase the Buffer Size to prevent 'setsockopt: no buffer space available'"
+            sysctl kern.ipc.maxsockbuf
+            sudo sysctl kern.ipc.maxsockbuf=16777216
+            echo "::endgroup::"
+
+            echo "::group::Install Go"
+            curl -o go${GO_VERSION}.freebsd-amd64.tar.gz https://dl.google.com/go/go${GO_VERSION}.freebsd-amd64.tar.gz
+            sudo tar -C /usr/local -xzf go${GO_VERSION}.freebsd-amd64.tar.gz
+            export PATH="${PATH}:/usr/local/go/bin"
+            go version
+            echo "::endgroup::"
+
+            failures=()
+
+            echo "::group::Run tests"
+            go run github.com/onsi/ginkgo/v2/ginkgo -r -v -cover -randomize-all -randomize-suites -trace -skip-package integrationtests
+            echo "::endgroup::"
+
+            if [ ${#failures[@]} -gt 0 ]; then
+              echo "Failures:"
+              for fail in "${failures[@]}"; do
+                echo "❌ $fail"
+              done
+              exit 1
+            fi
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: coverage.txt,coverage-root.txt
+          env_vars: OS=freebsd, GO=${{ matrix.go }}
