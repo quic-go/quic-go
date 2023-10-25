@@ -482,6 +482,37 @@ var _ = Describe("0-RTT", func() {
 		Expect(zeroRTTPackets[0]).To(BeNumerically(">=", protocol.PacketNumber(5)))
 	})
 
+	It("doesn't use 0-RTT when Dial is used for the resumed connection", func() {
+		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+
+		ln, err := quic.ListenAddrEarly(
+			"localhost:0",
+			tlsConf,
+			getQuicConfig(&quic.Config{Allow0RTT: true}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+		proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+		defer proxy.Close()
+
+		conn, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+			clientConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
+		Expect(conn.ConnectionState().TLS.DidResume).To(BeTrue())
+		Expect(conn.ConnectionState().Used0RTT).To(BeFalse())
+		Expect(num0RTTPackets.Load()).To(BeZero())
+
+		serverConn, err := ln.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeTrue())
+		Expect(serverConn.ConnectionState().Used0RTT).To(BeFalse())
+	})
+
 	It("doesn't reject 0-RTT when the server's transport stream limit increased", func() {
 		const maxStreams = 1
 		tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{

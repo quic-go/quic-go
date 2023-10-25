@@ -41,7 +41,10 @@ var _ = Describe("Client Session Cache", func() {
 			ClientSessionCache: &clientSessionCache{
 				wrapped: tls.NewLRUClientSessionCache(10),
 				getData: func() []byte { return []byte("session") },
-				setData: func(data []byte) { restored <- data },
+				setData: func(data []byte) bool {
+					restored <- data
+					return true
+				},
 			},
 		}
 		conn, err := tls.Dial(
