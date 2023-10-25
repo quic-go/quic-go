@@ -142,6 +142,23 @@ type Opts struct {
 	DelayPacket DelayCallback
 }
 
+type logWriter struct {
+	mx sync.Mutex
+	*bufio.Writer
+}
+
+func (w *logWriter) Write(b []byte) (int, error) {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+	return w.Writer.Write(b)
+}
+
+func (w *logWriter) Flush() error {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+	return w.Writer.Flush()
+}
+
 // QuicProxy is a QUIC proxy that can drop and delay packets.
 type QuicProxy struct {
 	mutex sync.Mutex
@@ -158,7 +175,7 @@ type QuicProxy struct {
 	clientDict map[string]*connection
 
 	logFile *os.File
-	log     *bufio.Writer
+	log     *logWriter
 
 	logger utils.Logger
 }
@@ -198,7 +215,7 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 	}
 
 	filename := fmt.Sprintf("proxy_%d.log", time.Now().UnixNano())
-	fmt.Printf("creating log file: %s", filename)
+	fmt.Printf("creating log file: %s\n", filename)
 	logFile, err := os.Create(filename)
 	if err != nil {
 		return nil, err
@@ -213,7 +230,7 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 		delayPacket: packetDelayer,
 		logger:      utils.DefaultLogger.WithPrefix("proxy"),
 		logFile:     logFile,
-		log:         bufio.NewWriterSize(logFile, 16<<10),
+		log:         &logWriter{Writer: bufio.NewWriterSize(logFile, 16<<10)},
 	}
 
 	p.logger.Debugf("Starting UDP Proxy %s <-> %s", conn.LocalAddr(), raddr)
