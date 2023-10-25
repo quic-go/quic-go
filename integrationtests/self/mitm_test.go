@@ -244,17 +244,17 @@ var _ = Describe("MITM test", func() {
 		Context("corrupting packets", func() {
 			const idleTimeout = time.Second
 
-			var numCorrupted, numPackets int32
+			var numCorrupted, numPackets atomic.Int32
 
 			BeforeEach(func() {
-				numCorrupted = 0
-				numPackets = 0
+				numCorrupted.Store(0)
+				numPackets.Store(0)
 				serverConfig.MaxIdleTimeout = idleTimeout
 			})
 
 			AfterEach(func() {
-				num := atomic.LoadInt32(&numCorrupted)
-				fmt.Fprintf(GinkgoWriter, "Corrupted %d of %d packets.", num, atomic.LoadInt32(&numPackets))
+				num := numCorrupted.Load()
+				fmt.Fprintf(GinkgoWriter, "Corrupted %d of %d packets.", num, numPackets.Load())
 				Expect(num).To(BeNumerically(">=", 1))
 				// If the packet containing the CONNECTION_CLOSE is corrupted,
 				// we have to wait for the connection to time out.
@@ -266,13 +266,13 @@ var _ = Describe("MITM test", func() {
 				dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionIncoming {
-						atomic.AddInt32(&numPackets, 1)
+						numPackets.Add(1)
 						if rand.Intn(interval) == 0 {
 							pos := rand.Intn(len(raw))
 							raw[pos] = byte(rand.Intn(256))
 							_, err := clientTransport.WriteTo(raw, serverTransport.Conn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
-							atomic.AddInt32(&numCorrupted, 1)
+							numCorrupted.Add(1)
 							return true
 						}
 					}
@@ -286,13 +286,13 @@ var _ = Describe("MITM test", func() {
 				dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionOutgoing {
-						atomic.AddInt32(&numPackets, 1)
+						numPackets.Add(1)
 						if rand.Intn(interval) == 0 {
 							pos := rand.Intn(len(raw))
 							raw[pos] = byte(rand.Intn(256))
 							_, err := serverTransport.WriteTo(raw, clientTransport.Conn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
-							atomic.AddInt32(&numCorrupted, 1)
+							numCorrupted.Add(1)
 							return true
 						}
 					}
