@@ -960,7 +960,7 @@ var _ = Describe("0-RTT", func() {
 			defer close(received)
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			receivedMessage, err = conn.ReceiveMessage(context.Background())
+			receivedMessage, err = conn.ReceiveDatagram(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
 		}()
@@ -974,7 +974,7 @@ var _ = Describe("0-RTT", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-		Expect(conn.SendMessage(sentMessage)).To(Succeed())
+		Expect(conn.SendDatagram(sentMessage)).To(Succeed())
 		<-conn.HandshakeComplete()
 		<-received
 
@@ -1016,7 +1016,7 @@ var _ = Describe("0-RTT", func() {
 			defer GinkgoRecover()
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			_, err = conn.ReceiveMessage(context.Background())
+			_, err = conn.ReceiveDatagram(context.Background())
 			Expect(err.Error()).To(Equal("datagram support disabled"))
 			<-conn.HandshakeComplete()
 			Expect(conn.ConnectionState().Used0RTT).To(BeFalse())
@@ -1032,7 +1032,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		// the client can temporarily send datagrams but the server doesn't process them.
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-		Expect(conn.SendMessage(make([]byte, 100))).To(Succeed())
+		Expect(conn.SendDatagram(make([]byte, 100))).To(Succeed())
 		<-conn.HandshakeComplete()
 
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())

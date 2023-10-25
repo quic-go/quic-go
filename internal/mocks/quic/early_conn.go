@@ -503,41 +503,41 @@ func (c *EarlyConnectionOpenUniStreamSyncCall) DoAndReturn(f func(context.Contex
 	return c
 }
 
-// ReceiveMessage mocks base method.
-func (m *MockEarlyConnection) ReceiveMessage(arg0 context.Context) ([]byte, error) {
+// ReceiveDatagram mocks base method.
+func (m *MockEarlyConnection) ReceiveDatagram(arg0 context.Context) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReceiveMessage", arg0)
+	ret := m.ctrl.Call(m, "ReceiveDatagram", arg0)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReceiveMessage indicates an expected call of ReceiveMessage.
-func (mr *MockEarlyConnectionMockRecorder) ReceiveMessage(arg0 any) *EarlyConnectionReceiveMessageCall {
+// ReceiveDatagram indicates an expected call of ReceiveDatagram.
+func (mr *MockEarlyConnectionMockRecorder) ReceiveDatagram(arg0 any) *EarlyConnectionReceiveDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveMessage", reflect.TypeOf((*MockEarlyConnection)(nil).ReceiveMessage), arg0)
-	return &EarlyConnectionReceiveMessageCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveDatagram", reflect.TypeOf((*MockEarlyConnection)(nil).ReceiveDatagram), arg0)
+	return &EarlyConnectionReceiveDatagramCall{Call: call}
 }
 
-// EarlyConnectionReceiveMessageCall wrap *gomock.Call
-type EarlyConnectionReceiveMessageCall struct {
+// EarlyConnectionReceiveDatagramCall wrap *gomock.Call
+type EarlyConnectionReceiveDatagramCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionReceiveMessageCall) Return(arg0 []byte, arg1 error) *EarlyConnectionReceiveMessageCall {
+func (c *EarlyConnectionReceiveDatagramCall) Return(arg0 []byte, arg1 error) *EarlyConnectionReceiveDatagramCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionReceiveMessageCall) Do(f func(context.Context) ([]byte, error)) *EarlyConnectionReceiveMessageCall {
+func (c *EarlyConnectionReceiveDatagramCall) Do(f func(context.Context) ([]byte, error)) *EarlyConnectionReceiveDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionReceiveMessageCall) DoAndReturn(f func(context.Context) ([]byte, error)) *EarlyConnectionReceiveMessageCall {
+func (c *EarlyConnectionReceiveDatagramCall) DoAndReturn(f func(context.Context) ([]byte, error)) *EarlyConnectionReceiveDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -580,40 +580,40 @@ func (c *EarlyConnectionRemoteAddrCall) DoAndReturn(f func() net.Addr) *EarlyCon
 	return c
 }
 
-// SendMessage mocks base method.
-func (m *MockEarlyConnection) SendMessage(arg0 []byte) error {
+// SendDatagram mocks base method.
+func (m *MockEarlyConnection) SendDatagram(arg0 []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendMessage", arg0)
+	ret := m.ctrl.Call(m, "SendDatagram", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SendMessage indicates an expected call of SendMessage.
-func (mr *MockEarlyConnectionMockRecorder) SendMessage(arg0 any) *EarlyConnectionSendMessageCall {
+// SendDatagram indicates an expected call of SendDatagram.
+func (mr *MockEarlyConnectionMockRecorder) SendDatagram(arg0 any) *EarlyConnectionSendDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessage", reflect.TypeOf((*MockEarlyConnection)(nil).SendMessage), arg0)
-	return &EarlyConnectionSendMessageCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockEarlyConnection)(nil).SendDatagram), arg0)
+	return &EarlyConnectionSendDatagramCall{Call: call}
 }
 
-// EarlyConnectionSendMessageCall wrap *gomock.Call
-type EarlyConnectionSendMessageCall struct {
+// EarlyConnectionSendDatagramCall wrap *gomock.Call
+type EarlyConnectionSendDatagramCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionSendMessageCall) Return(arg0 error) *EarlyConnectionSendMessageCall {
+func (c *EarlyConnectionSendDatagramCall) Return(arg0 error) *EarlyConnectionSendDatagramCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionSendMessageCall) Do(f func([]byte) error) *EarlyConnectionSendMessageCall {
+func (c *EarlyConnectionSendDatagramCall) Do(f func([]byte) error) *EarlyConnectionSendDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionSendMessageCall) DoAndReturn(f func([]byte) error) *EarlyConnectionSendMessageCall {
+func (c *EarlyConnectionSendDatagramCall) DoAndReturn(f func([]byte) error) *EarlyConnectionSendDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
