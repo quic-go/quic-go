@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -100,9 +101,11 @@ type baseServer struct {
 		protocol.VersionNumber,
 	) quicConn
 
-	errorChan               chan struct{} // is closed when the server is closed
-	closeErr                error
-	running                 chan struct{} // closed as soon as run() returns
+	closeOnce sync.Once
+	errorChan chan struct{} // is closed when the server is closed
+	closeErr  error
+	running   chan struct{} // closed as soon as run() returns
+
 	versionNegotiationQueue chan receivedPacket
 	invalidTokenQueue       chan rejectedPacket
 	connectionRefusedQueue  chan rejectedPacket
@@ -329,18 +332,15 @@ func (s *baseServer) Close() error {
 }
 
 func (s *baseServer) close(e error, notifyOnClose bool) {
-	select {
-	case <-s.errorChan: // already closed
-		return
-	default:
-	}
-	s.closeErr = e
-	close(s.errorChan)
+	s.closeOnce.Do(func() {
+		s.closeErr = e
+		close(s.errorChan)
 
-	<-s.running
-	if notifyOnClose {
-		s.onClose()
-	}
+		<-s.running
+		if notifyOnClose {
+			s.onClose()
+		}
+	})
 }
 
 // Addr returns the server's network address
