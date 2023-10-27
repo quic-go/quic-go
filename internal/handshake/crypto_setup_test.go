@@ -140,10 +140,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 				},
 			}
 			addConnToClientHelloInfo(tlsConf, local, remote)
-			_, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(localAddr).To(Equal(local))
 			Expect(remoteAddr).To(Equal(remote))
+			Expect(conf).ToNot(BeNil())
+			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
 		})
 
 		It("wraps GetConfigForClient, recursively", func() {
@@ -158,18 +160,23 @@ var _ = Describe("Crypto Setup TLS", func() {
 			}
 			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
 				innerConf = tlsConf.Clone()
+				// set the MaxVersion, so we can check that quic-go doesn't overwrite the user's config
+				innerConf.MaxVersion = tls.VersionTLS12
 				innerConf.GetCertificate = getCert
 				return innerConf, nil
 			}
 			addConnToClientHelloInfo(tlsConf, local, remote)
 			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
+			Expect(conf).ToNot(BeNil())
+			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
 			_, err = conf.GetCertificate(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(localAddr).To(Equal(local))
 			Expect(remoteAddr).To(Equal(remote))
 			// make sure that the tls.Config returned by GetConfigForClient isn't modified
 			Expect(reflect.ValueOf(innerConf.GetCertificate).Pointer() == reflect.ValueOf(getCert).Pointer()).To(BeTrue())
+			Expect(innerConf.MaxVersion).To(BeEquivalentTo(tls.VersionTLS12))
 		})
 	})
 
