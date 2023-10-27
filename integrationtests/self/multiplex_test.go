@@ -251,6 +251,9 @@ var _ = Describe("Multiplexing", func() {
 				b := make([]byte, packetLen)
 				rand.Read(b[1:]) // keep the first byte set to 0, so it's not classified as a QUIC packet
 				_, err := tr1.WriteTo(b, tr2.Conn.LocalAddr())
+				if ctx.Err() != nil { // ctx canceled while Read was executing
+					return
+				}
 				Expect(err).ToNot(HaveOccurred())
 				sentPackets.Add(1)
 			}
