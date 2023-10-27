@@ -147,6 +147,7 @@ func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) 
 			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
 			c, err := gcfc(info)
 			if c != nil {
+				c = c.Clone()
 				// We're returning a tls.Config here, so we need to apply this recursively.
 				addConnToClientHelloInfo(c, localAddr, remoteAddr)
 			}

@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -148,15 +149,17 @@ var _ = Describe("Crypto Setup TLS", func() {
 		It("wraps GetConfigForClient, recursively", func() {
 			var localAddr, remoteAddr net.Addr
 			tlsConf := &tls.Config{}
+			var innerConf *tls.Config
+			getCert := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) { //nolint:unparam
+				localAddr = info.Conn.LocalAddr()
+				remoteAddr = info.Conn.RemoteAddr()
+				cert := generateCert()
+				return &cert, nil
+			}
 			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-				conf := tlsConf.Clone()
-				conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					localAddr = info.Conn.LocalAddr()
-					remoteAddr = info.Conn.RemoteAddr()
-					cert := generateCert()
-					return &cert, nil
-				}
-				return conf, nil
+				innerConf = tlsConf.Clone()
+				innerConf.GetCertificate = getCert
+				return innerConf, nil
 			}
 			addConnToClientHelloInfo(tlsConf, local, remote)
 			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
@@ -165,6 +168,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(localAddr).To(Equal(local))
 			Expect(remoteAddr).To(Equal(remote))
+			// make sure that the tls.Config returned by GetConfigForClient isn't modified
+			Expect(reflect.ValueOf(innerConf.GetCertificate).Pointer() == reflect.ValueOf(getCert).Pointer()).To(BeTrue())
 		})
 	})
 
