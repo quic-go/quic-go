@@ -185,11 +185,13 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
+			serverConnChan := make(chan quic.Connection, 1)
 			serverConnClosed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				conn, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
+				serverConnChan <- conn
 				conn.AcceptStream(context.Background()) // blocks until the connection is closed
 				close(serverConnClosed)
 			}()
@@ -240,7 +242,7 @@ var _ = Describe("Timeout tests", func() {
 			Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 			// make the go routine return
-			Expect(server.Close()).To(Succeed())
+			(<-serverConnChan).CloseWithError(0, "")
 			Eventually(serverConnClosed).Should(BeClosed())
 		})
 
@@ -266,11 +268,13 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer proxy.Close()
 
+			serverConnChan := make(chan quic.Connection, 1)
 			serverConnClosed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				conn, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
+				serverConnChan <- conn
 				<-conn.Context().Done() // block until the connection is closed
 				close(serverConnClosed)
 			}()
@@ -309,7 +313,7 @@ var _ = Describe("Timeout tests", func() {
 			Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 			// make the go routine return
-			Expect(server.Close()).To(Succeed())
+			(<-serverConnChan).CloseWithError(0, "")
 			Eventually(serverConnClosed).Should(BeClosed())
 		})
 	})
@@ -325,11 +329,13 @@ var _ = Describe("Timeout tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
 
+		serverConnChan := make(chan quic.Connection, 1)
 		serverConnClosed := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
 			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
+			serverConnChan <- conn
 			conn.AcceptStream(context.Background()) // blocks until the connection is closed
 			close(serverConnClosed)
 		}()
@@ -370,7 +376,7 @@ var _ = Describe("Timeout tests", func() {
 		_, err = str.Write([]byte("foobar"))
 		checkTimeoutError(err)
 
-		Expect(server.Close()).To(Succeed())
+		(<-serverConnChan).CloseWithError(0, "")
 		Eventually(serverConnClosed).Should(BeClosed())
 	})
 

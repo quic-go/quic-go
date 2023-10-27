@@ -159,23 +159,6 @@ var _ = Describe("Packet Handler Map", func() {
 		Eventually(func() bool { _, ok := m.Get(connID); return ok }).Should(BeFalse())
 	})
 
-	It("closes the server", func() {
-		m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
-		for i := 0; i < 10; i++ {
-			conn := NewMockPacketHandler(mockCtrl)
-			if i%2 == 0 {
-				conn.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
-			} else {
-				conn.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
-				conn.EXPECT().shutdown()
-			}
-			b := make([]byte, 12)
-			rand.Read(b)
-			m.Add(protocol.ParseConnectionID(b), conn)
-		}
-		m.CloseServer()
-	})
-
 	It("closes", func() {
 		m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
 		testErr := errors.New("shutdown")

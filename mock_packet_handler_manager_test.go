@@ -186,42 +186,6 @@ func (c *PacketHandlerManagerCloseCall) DoAndReturn(f func(error)) *PacketHandle
 	return c
 }
 
-// CloseServer mocks base method.
-func (m *MockPacketHandlerManager) CloseServer() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "CloseServer")
-}
-
-// CloseServer indicates an expected call of CloseServer.
-func (mr *MockPacketHandlerManagerMockRecorder) CloseServer() *PacketHandlerManagerCloseServerCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseServer", reflect.TypeOf((*MockPacketHandlerManager)(nil).CloseServer))
-	return &PacketHandlerManagerCloseServerCall{Call: call}
-}
-
-// PacketHandlerManagerCloseServerCall wrap *gomock.Call
-type PacketHandlerManagerCloseServerCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerCloseServerCall) Return() *PacketHandlerManagerCloseServerCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerCloseServerCall) Do(f func()) *PacketHandlerManagerCloseServerCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerCloseServerCall) DoAndReturn(f func()) *PacketHandlerManagerCloseServerCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // Get mocks base method.
 func (m *MockPacketHandlerManager) Get(arg0 protocol.ConnectionID) (packetHandler, bool) {
 	m.ctrl.T.Helper()

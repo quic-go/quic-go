@@ -14,7 +14,7 @@ import (
 )
 
 var _ = Describe("Stream deadline tests", func() {
-	setup := func() (*quic.Listener, quic.Stream, quic.Stream) {
+	setup := func() (serverStr, clientStr quic.Stream, close func()) {
 		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())
 		strChan := make(chan quic.SendStream)
@@ -36,19 +36,21 @@ var _ = Describe("Stream deadline tests", func() {
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		clientStr, err := conn.OpenStream()
+		clientStr, err = conn.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientStr.Write([]byte{0}) // need to write one byte so the server learns about the stream
 		Expect(err).ToNot(HaveOccurred())
-		var serverStr quic.Stream
 		Eventually(strChan).Should(Receive(&serverStr))
-		return server, serverStr, clientStr
+		return serverStr, clientStr, func() {
+			Expect(server.Close()).To(Succeed())
+			Expect(conn.CloseWithError(0, "")).To(Succeed())
+		}
 	}
 
 	Context("read deadlines", func() {
 		It("completes a transfer when the deadline is set", func() {
-			server, serverStr, clientStr := setup()
-			defer server.Close()
+			serverStr, clientStr, closeFn := setup()
+			defer closeFn()
 
 			const timeout = time.Millisecond
 			done := make(chan struct{})
@@ -82,8 +84,8 @@ var _ = Describe("Stream deadline tests", func() {
 		})
 
 		It("completes a transfer when the deadline is set concurrently", func() {
-			server, serverStr, clientStr := setup()
-			defer server.Close()
+			serverStr, clientStr, closeFn := setup()
+			defer closeFn()
 
 			const timeout = time.Millisecond
 			go func() {
@@ -132,8 +134,8 @@ var _ = Describe("Stream deadline tests", func() {
 
 	Context("write deadlines", func() {
 		It("completes a transfer when the deadline is set", func() {
-			server, serverStr, clientStr := setup()
-			defer server.Close()
+			serverStr, clientStr, closeFn := setup()
+			defer closeFn()
 
 			const timeout = time.Millisecond
 			done := make(chan struct{})
@@ -165,8 +167,8 @@ var _ = Describe("Stream deadline tests", func() {
 		})
 
 		It("completes a transfer when the deadline is set concurrently", func() {
-			server, serverStr, clientStr := setup()
-			defer server.Close()
+			serverStr, clientStr, closeFn := setup()
+			defer closeFn()
 
 			const timeout = time.Millisecond
 			readDone := make(chan struct{})

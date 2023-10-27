@@ -34,7 +34,6 @@ type packetHandlerManager interface {
 	GetByResetToken(protocol.StatelessResetToken) (packetHandler, bool)
 	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() (packetHandler, bool)) bool
 	Close(error)
-	CloseServer()
 	connRunner
 }
 
@@ -61,8 +60,6 @@ type rejectedPacket struct {
 
 // A Listener of QUIC
 type baseServer struct {
-	mutex sync.Mutex
-
 	disableVersionNegotiation bool
 	acceptEarlyConns          bool
 
@@ -104,10 +101,11 @@ type baseServer struct {
 		protocol.VersionNumber,
 	) quicConn
 
-	serverError             error
-	errorChan               chan struct{}
-	closed                  bool
-	running                 chan struct{} // closed as soon as run() returns
+	closeOnce sync.Once
+	errorChan chan struct{} // is closed when the server is closed
+	closeErr  error
+	running   chan struct{} // closed as soon as run() returns
+
 	versionNegotiationQueue chan receivedPacket
 	invalidTokenQueue       chan rejectedPacket
 	connectionRefusedQueue  chan rejectedPacket
@@ -132,7 +130,10 @@ func (l *Listener) Accept(ctx context.Context) (Connection, error) {
 	return l.baseServer.Accept(ctx)
 }
 
-// Close the server. All active connections will be closed.
+// Close closes the listener.
+// Accept will return ErrServerClosed as soon as all connections in the accept queue have been accepted.
+// QUIC handshakes that are still in flight will be rejected with a CONNECTION_REFUSED error.
+// Closing the listener doesn't have any effect on already established connections.
 func (l *Listener) Close() error {
 	return l.baseServer.Close()
 }
@@ -321,38 +322,25 @@ func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 		atomic.AddInt32(&s.connQueueLen, -1)
 		return conn, nil
 	case <-s.errorChan:
-		return nil, s.serverError
+		return nil, s.closeErr
 	}
 }
 
-// Close the server
 func (s *baseServer) Close() error {
-	s.mutex.Lock()
-	if s.closed {
-		s.mutex.Unlock()
-		return nil
-	}
-	if s.serverError == nil {
-		s.serverError = ErrServerClosed
-	}
-	s.closed = true
-	close(s.errorChan)
-	s.mutex.Unlock()
-
-	<-s.running
-	s.onClose()
+	s.close(ErrServerClosed, true)
 	return nil
 }
 
-func (s *baseServer) setCloseError(e error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.closed {
-		return
-	}
-	s.closed = true
-	s.serverError = e
-	close(s.errorChan)
+func (s *baseServer) close(e error, notifyOnClose bool) {
+	s.closeOnce.Do(func() {
+		s.closeErr = e
+		close(s.errorChan)
+
+		<-s.running
+		if notifyOnClose {
+			s.onClose()
+		}
+	})
 }
 
 // Addr returns the server's network address
@@ -701,8 +689,11 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 func (s *baseServer) handleNewConn(conn quicConn) {
 	connCtx := conn.Context()
 	if s.acceptEarlyConns {
-		// wait until the early connection is ready (or the handshake fails)
+		// wait until the early connection is ready, the handshake fails, or the server is closed
 		select {
+		case <-s.errorChan:
+			conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
+			return
 		case <-conn.earlyConnReady():
 		case <-connCtx.Done():
 			return
@@ -710,6 +701,9 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	} else {
 		// wait until the handshake is complete (or fails)
 		select {
+		case <-s.errorChan:
+			conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
+			return
 		case <-conn.HandshakeComplete():
 		case <-connCtx.Done():
 			return

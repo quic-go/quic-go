@@ -326,6 +326,8 @@ var _ = Describe("Server", func() {
 				// make sure we're using a server-generated connection ID
 				Eventually(run).Should(BeClosed())
 				Eventually(done).Should(BeClosed())
+				// shutdown
+				conn.EXPECT().destroy(gomock.Any())
 			})
 
 			It("sends a Version Negotiation Packet for unsupported versions", func() {
@@ -527,6 +529,8 @@ var _ = Describe("Server", func() {
 				// make sure we're using a server-generated connection ID
 				Eventually(run).Should(BeClosed())
 				Eventually(done).Should(BeClosed())
+				// shutdown
+				conn.EXPECT().destroy(gomock.Any())
 			})
 
 			It("drops packets if the receive queue is full", func() {
@@ -565,6 +569,8 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().run().MaxTimes(1)
 					conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
 					conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
+					// shutdown
+					conn.EXPECT().destroy(gomock.Any()).MaxTimes(1)
 					return conn
 				}
 
@@ -956,30 +962,69 @@ var _ = Describe("Server", func() {
 		})
 
 		Context("accepting connections", func() {
-			It("returns Accept when an error occurs", func() {
-				testErr := errors.New("test err")
-
+			It("returns Accept when closed", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					_, err := serv.Accept(context.Background())
-					Expect(err).To(MatchError(testErr))
+					Expect(err).To(MatchError(ErrServerClosed))
 					close(done)
 				}()
 
-				serv.setCloseError(testErr)
+				serv.Close()
 				Eventually(done).Should(BeClosed())
-				serv.onClose() // shutdown
 			})
 
 			It("returns immediately, if an error occurred before", func() {
-				testErr := errors.New("test err")
-				serv.setCloseError(testErr)
+				serv.Close()
 				for i := 0; i < 3; i++ {
 					_, err := serv.Accept(context.Background())
-					Expect(err).To(MatchError(testErr))
+					Expect(err).To(MatchError(ErrServerClosed))
 				}
-				serv.onClose() // shutdown
+			})
+
+			It("closes connection that are still handshaking after Close", func() {
+				serv.Close()
+
+				destroyed := make(chan struct{})
+				serv.newConn = func(
+					_ sendConn,
+					_ connRunner,
+					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
+					_ protocol.StatelessResetToken,
+					conf *Config,
+					_ *tls.Config,
+					_ *handshake.TokenGenerator,
+					_ bool,
+					_ *logging.ConnectionTracer,
+					_ uint64,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) quicConn {
+					conn := NewMockQUICConn(mockCtrl)
+					conn.EXPECT().handlePacket(gomock.Any())
+					conn.EXPECT().destroy(&qerr.TransportError{ErrorCode: ConnectionRefused}).Do(func(error) { close(destroyed) })
+					conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
+					conn.EXPECT().run().MaxTimes(1)
+					conn.EXPECT().Context().Return(context.Background())
+					return conn
+				}
+				phm.EXPECT().Get(gomock.Any())
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
+					phm.EXPECT().GetStatelessResetToken(gomock.Any())
+					_, ok := fn()
+					return ok
+				})
+				serv.handleInitialImpl(
+					receivedPacket{buffer: getPacketBuffer()},
+					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
+				)
+				Eventually(destroyed).Should(BeClosed())
 			})
 
 			It("returns when the context is canceled", func() {
@@ -1343,10 +1388,7 @@ var _ = Describe("Server", func() {
 			serv.connHandler = phm
 		})
 
-		AfterEach(func() {
-			phm.EXPECT().CloseServer().MaxTimes(1)
-			tr.Close()
-		})
+		AfterEach(func() { tr.Close() })
 
 		It("passes packets to existing connections", func() {
 			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
@@ -1425,6 +1467,8 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().earlyConnReady()
 				conn.EXPECT().Context().Return(context.Background())
 				close(called)
+				// shutdown
+				conn.EXPECT().destroy(gomock.Any())
 				return conn
 			}
 
