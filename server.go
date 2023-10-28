@@ -133,7 +133,9 @@ func (l *Listener) Accept(ctx context.Context) (Connection, error) {
 // Close closes the listener.
 // Accept will return ErrServerClosed as soon as all connections in the accept queue have been accepted.
 // QUIC handshakes that are still in flight will be rejected with a CONNECTION_REFUSED error.
-// Closing the listener doesn't have any effect on already established connections.
+// The effect of closing the listener depends on how it was created:
+// * if it was created using Transport.Listen, already established connections will be unaffected
+// * if it was created using the Listen convenience method, all established connection will be closed immediately
 func (l *Listener) Close() error {
 	return l.baseServer.Close()
 }
@@ -216,6 +218,7 @@ func listenUDP(addr string) (*net.UDPConn, error) {
 // This is a convenience function. More advanced use cases should instantiate a Transport,
 // which offers configuration options for a more fine-grained control of the connection establishment,
 // including reusing the underlying UDP socket for outgoing QUIC connections.
+// When closing a listener created with Listen, all established QUIC connections will be closed immediately.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener, error) {
 	tr := &Transport{Conn: conn, isSingleUse: true}
 	return tr.Listen(tlsConf, config)
