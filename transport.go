@@ -100,8 +100,8 @@ type Transport struct {
 	closeQueue          chan closePacket
 	statelessResetQueue chan receivedPacket
 
-	listening   chan struct{} // is closed when listen returns
-	closed      bool
+	refCount    sync.WaitGroup
+	closed      chan struct{}
 	createdConn bool
 	isSingleUse bool // was created for a single server or client, i.e. by calling quic.Listen or quic.Dial
 
@@ -213,7 +213,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
 		t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)
-		t.listening = make(chan struct{})
+		t.closed = make(chan struct{})
 
 		t.closeQueue = make(chan closePacket, 4)
 		t.statelessResetQueue = make(chan receivedPacket, 4)
@@ -239,8 +239,15 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 		}
 
 		getMultiplexer().AddConn(t.Conn)
-		go t.listen(conn)
-		go t.runSendQueue()
+		t.refCount.Add(2)
+		go func() {
+			defer t.refCount.Done()
+			t.listen(conn)
+		}()
+		go func() {
+			defer t.refCount.Done()
+			t.runSendQueue()
+		}()
 	})
 	return t.initErr
 }
@@ -258,14 +265,14 @@ func (t *Transport) enqueueClosePacket(p closePacket) {
 	case t.closeQueue <- p:
 	default:
 		// Oops, we're backlogged.
-		// Just drop the packet, sending CONNECTION_CLOSE copies is best effort anyway.
+		// Just drop the packet, sending CONNECTION_CLOSE copies is best-effort anyway.
 	}
 }
 
 func (t *Transport) runSendQueue() {
 	for {
 		select {
-		case <-t.listening:
+		case <-t.closed:
 			return
 		case p := <-t.closeQueue:
 			t.conn.WritePacket(p.payload, p.addr, p.info.OOB(), 0, protocol.ECNUnsupported)
@@ -288,17 +295,26 @@ func (t *Transport) Close() error {
 		t.conn.SetReadDeadline(time.Now())
 		defer func() { t.conn.SetReadDeadline(time.Time{}) }()
 	}
-	if t.listening != nil {
-		<-t.listening // wait until listening returns
+	if t.closed != nil {
+		t.refCount.Wait()
 	}
 	return nil
 }
 
 func (t *Transport) closeServer() {
 	t.mutex.Lock()
+	if t.closed == nil { // init was never called
+		t.mutex.Unlock()
+		return
+	}
 	t.server = nil
 	if t.isSingleUse {
-		t.closed = true
+		select {
+		case <-t.closed:
+			return
+		default:
+			close(t.closed)
+		}
 	}
 	t.mutex.Unlock()
 	if t.createdConn {
@@ -307,15 +323,21 @@ func (t *Transport) closeServer() {
 	if t.isSingleUse {
 		t.conn.SetReadDeadline(time.Now())
 		defer func() { t.conn.SetReadDeadline(time.Time{}) }()
-		<-t.listening // wait until listening returns
+		t.refCount.Wait()
 	}
 }
 
 func (t *Transport) close(e error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	if t.closed {
+	if t.closed == nil { // init was never called
 		return
+	}
+	select {
+	case <-t.closed:
+		return
+	default:
+		defer close(t.closed)
 	}
 
 	if t.handlerMap != nil {
@@ -324,14 +346,12 @@ func (t *Transport) close(e error) {
 	if t.server != nil {
 		t.server.close(e, false)
 	}
-	t.closed = true
 }
 
 // only print warnings about the UDP receive buffer size once
 var setBufferWarningOnce sync.Once
 
 func (t *Transport) listen(conn rawConn) {
-	defer close(t.listening)
 	defer getMultiplexer().RemoveConn(t.Conn)
 
 	for {
@@ -341,13 +361,12 @@ func (t *Transport) listen(conn rawConn) {
 		// Since net.Error.Temporary is deprecated as of Go 1.18, we should find a better solution.
 		// See https://github.com/quic-go/quic-go/issues/1737 for details.
 		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
-			t.mutex.Lock()
-			closed := t.closed
-			t.mutex.Unlock()
-			if closed {
+			select {
+			case <-t.closed:
 				return
+			default:
 			}
-			t.logger.Debugf("Temporary error reading from conn: %w", err)
+			t.logger.Debugf("temporary error reading from conn: %w", err)
 			continue
 		}
 		if err != nil {
@@ -493,7 +512,7 @@ func (t *Transport) ReadNonQUICPacket(ctx context.Context, b []byte) (int, net.A
 	case p := <-t.nonQUICPackets:
 		n := copy(b, p.data)
 		return n, p.remoteAddr, nil
-	case <-t.listening:
+	case <-t.closed:
 		return 0, nil, errors.New("closed")
 	}
 }
