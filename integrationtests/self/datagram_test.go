@@ -179,7 +179,7 @@ var _ = Describe("Datagram test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 
-		Expect(conn.SendDatagram([]byte{0})).To(HaveOccurred())
+		Expect(conn.SendDatagram(context.Background(), []byte{0})).To(HaveOccurred())
 
 		close()
 		conn.CloseWithError(0, "")

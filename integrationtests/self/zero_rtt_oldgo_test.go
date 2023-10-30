@@ -872,7 +872,7 @@ var _ = Describe("0-RTT", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-		Expect(conn.SendDatagram(sentMessage)).To(Succeed())
+		Expect(conn.SendDatagram(context.Background(), sentMessage)).To(Succeed())
 		<-conn.HandshakeComplete()
 		<-received
 
@@ -928,7 +928,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		// the client can temporarily send datagrams but the server doesn't process them.
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-		Expect(conn.SendDatagram(make([]byte, 100))).To(Succeed())
+		Expect(conn.SendDatagram(context.Background(), make([]byte, 100))).To(Succeed())
 		<-conn.HandshakeComplete()
 
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())

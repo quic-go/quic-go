@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -9,9 +10,13 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+var (
+	dropDatagramCtxCancelledErr = fmt.Errorf("Dropped datagram due to context cancelled")
+)
+
 type datagramQueue struct {
-	sendQueue chan *wire.DatagramFrame
-	nextFrame *wire.DatagramFrame
+	sendQueue chan *queuedDatagramFrame
+	nextFrame *queuedDatagramFrame
 
 	rcvMx    sync.Mutex
 	rcvQueue [][]byte
@@ -22,17 +27,22 @@ type datagramQueue struct {
 
 	hasData func()
 
-	dequeued chan struct{}
+	dequeued chan error
 
 	logger utils.Logger
+}
+
+type queuedDatagramFrame struct {
+	cancelChan <-chan struct{}
+	frame      *wire.DatagramFrame
 }
 
 func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
 	return &datagramQueue{
 		hasData:   hasData,
-		sendQueue: make(chan *wire.DatagramFrame, 1),
+		sendQueue: make(chan *queuedDatagramFrame, 1),
 		rcvd:      make(chan struct{}, 1),
-		dequeued:  make(chan struct{}),
+		dequeued:  make(chan error),
 		closed:    make(chan struct{}),
 		logger:    logger,
 	}
@@ -40,17 +50,24 @@ func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
 
 // AddAndWait queues a new DATAGRAM frame for sending.
 // It blocks until the frame has been dequeued.
-func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
+func (h *datagramQueue) AddAndWait(ctx context.Context, f *wire.DatagramFrame) error {
+	frame := &queuedDatagramFrame{
+		cancelChan: ctx.Done(),
+		frame:      f,
+	}
+
 	select {
-	case h.sendQueue <- f:
+	case <-ctx.Done():
+		return dropDatagramCtxCancelledErr
+	case h.sendQueue <- frame:
 		h.hasData()
 	case <-h.closed:
 		return h.closeErr
 	}
 
 	select {
-	case <-h.dequeued:
-		return nil
+	case err := <-h.dequeued:
+		return err
 	case <-h.closed:
 		return h.closeErr
 	}
@@ -60,22 +77,33 @@ func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 // If actually sent out, Pop needs to be called before the next call to Peek.
 func (h *datagramQueue) Peek() *wire.DatagramFrame {
 	if h.nextFrame != nil {
-		return h.nextFrame
+		return h.dequeueNextFrame()
 	}
 	select {
 	case h.nextFrame = <-h.sendQueue:
-		h.dequeued <- struct{}{}
+		return h.dequeueNextFrame()
 	default:
 		return nil
 	}
-	return h.nextFrame
 }
 
-func (h *datagramQueue) Pop() {
+func (h *datagramQueue) dequeueNextFrame() *wire.DatagramFrame {
+	select {
+	case <-h.nextFrame.cancelChan:
+		// Drop DATAGRAM frames that have expired and notifier the sender with an error
+		h.Pop(dropDatagramCtxCancelledErr)
+		return nil
+	default:
+		return h.nextFrame.frame
+	}
+}
+
+func (h *datagramQueue) Pop(err error) {
 	if h.nextFrame == nil {
 		panic("datagramQueue BUG: Pop called for nil frame")
 	}
 	h.nextFrame = nil
+	h.dequeued <- err
 }
 
 // HandleDatagramFrame handles a received DATAGRAM frame.
