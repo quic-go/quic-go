@@ -101,6 +101,17 @@ var _ = Describe("Pacer", func() {
 		Expect(p.Budget(t.Add(5 * t2.Sub(t)))).To(BeEquivalentTo(5 * packetSize))
 	})
 
+	It("has enough budget for at least one packet when the timer expires", func() {
+		t := time.Now()
+		sendBurst(t)
+		for bw := uint64(100); bw < uint64(5*initialMaxDatagramSize); bw++ {
+			bandwidth = bw // reduce the bandwidth to 5 packet per second
+			t2 := p.TimeUntilSend()
+			Expect(t2).To(BeTemporally(">", t))
+			Expect(p.Budget(t2)).To(BeNumerically(">=", initialMaxDatagramSize))
+		}
+	})
+
 	It("never allows bursts larger than the maximum burst size", func() {
 		t := time.Now()
 		sendBurst(t)
