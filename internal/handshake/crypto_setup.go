@@ -178,11 +178,10 @@ func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
 	}
 	for {
 		ev := h.conn.NextEvent()
-		done, err := h.handleEvent(ev)
-		if err != nil {
+		if err := h.handleEvent(ev); err != nil {
 			return wrapError(err)
 		}
-		if done {
+		if ev.Kind == tls.QUICNoEvent {
 			break
 		}
 	}
@@ -218,48 +217,44 @@ func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLev
 	}
 	for {
 		ev := h.conn.NextEvent()
-		done, err := h.handleEvent(ev)
-		if err != nil {
+		if err := h.handleEvent(ev); err != nil {
 			return err
 		}
-		if done {
+		if ev.Kind == tls.QUICNoEvent {
 			return nil
 		}
 	}
 }
 
-func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
-	//nolint:exhaustive
-	// Go 1.23 added new 0-RTT events, see https://github.com/quic-go/quic-go/issues/4272.
-	// We will start using these events when dropping support for Go 1.22.
+func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
 	switch ev.Kind {
 	case tls.QUICNoEvent:
-		return true, nil
+		return nil
 	case tls.QUICSetReadSecret:
 		h.setReadKey(ev.Level, ev.Suite, ev.Data)
-		return false, nil
+		return nil
 	case tls.QUICSetWriteSecret:
 		h.setWriteKey(ev.Level, ev.Suite, ev.Data)
-		return false, nil
+		return nil
 	case tls.QUICTransportParameters:
-		return false, h.handleTransportParameters(ev.Data)
+		return h.handleTransportParameters(ev.Data)
 	case tls.QUICTransportParametersRequired:
 		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
-		return false, nil
+		return nil
 	case tls.QUICRejectedEarlyData:
 		h.rejected0RTT()
-		return false, nil
+		return nil
 	case tls.QUICWriteData:
 		h.writeRecord(ev.Level, ev.Data)
-		return false, nil
+		return nil
 	case tls.QUICHandshakeDone:
 		h.handshakeComplete()
-		return false, nil
+		return nil
 	default:
 		// Unknown events should be ignored.
 		// crypto/tls will ensure that this is safe to do.
 		// See the discussion following https://github.com/golang/go/issues/68124#issuecomment-2187042510 for details.
-		return false, nil
+		return nil
 	}
 }
 
