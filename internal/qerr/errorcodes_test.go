@@ -7,14 +7,16 @@ import (
 	"path"
 	"runtime"
 	"strconv"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
 )
 
-var _ = Describe("error codes", func() {
-	// If this test breaks, you should run `go generate ./...`
-	It("has a string representation for every error code", func() {
+func TestErrorCodes(t *testing.T) {
+	t.Run("Stringer", func(t *testing.T) {
+		defer func() {
+			if t.Failed() {
+				t.Log("If this test breaks, you should run `go generate ./...`")
+			}
+		}()
 		// We parse the error code file, extract all constants, and verify that
 		// each of them has a string version. Go FTW!
 		_, thisfile, _, ok := runtime.Caller(0)
@@ -23,30 +25,38 @@ var _ = Describe("error codes", func() {
 		}
 		filename := path.Join(path.Dir(thisfile), "error_codes.go")
 		fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
-		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			t.Error(err)
+		}
 		constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
-		Expect(len(constSpecs)).To(BeNumerically(">", 4)) // at time of writing
+		if got, want := len(constSpecs), 16; got < want { // at time of writing
+			t.Errorf("not enough constants: got: %d, want: >= %d", got, want)
+		}
 		for _, c := range constSpecs {
 			valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
 			val, err := strconv.ParseInt(valString, 0, 64)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(TransportErrorCode(val).String()).ToNot(Equal("unknown error code"))
+			if err != nil {
+				t.Error(err)
+			}
+			if s := TransportErrorCode(val).String(); s == "unknown error code" {
+				t.Errorf("%d: %s", val, s)
+			}
 		}
 	})
 
-	It("has a string representation for unknown error codes", func() {
-		Expect(TransportErrorCode(0x1337).String()).To(Equal("unknown error code: 0x1337"))
+	t.Run("Unknown", func(t *testing.T) {
+		got, want := TransportErrorCode(0x1337).String(), "unknown error code: 0x1337"
+		if got != want {
+			t.Errorf("bad fmt.Stringer: got: %q, want %q", got, want)
+		}
 	})
 
-	It("says if an error is a crypto error", func() {
-		for i := 0; i < 0x100; i++ {
-			Expect(TransportErrorCode(i).IsCryptoError()).To(BeFalse())
-		}
-		for i := 0x100; i < 0x200; i++ {
-			Expect(TransportErrorCode(i).IsCryptoError()).To(BeTrue())
-		}
-		for i := 0x200; i < 0x300; i++ {
-			Expect(TransportErrorCode(i).IsCryptoError()).To(BeFalse())
+	t.Run("Crypto", func(t *testing.T) {
+		want := func(i int) bool { return i >= 0x100 && i < 0x200 }
+		for i := 0; i < 0x300; i++ {
+			if got, want := TransportErrorCode(i).IsCryptoError(), want(i); got != want {
+				t.Errorf("unexpected `IsCryptoError` return: got: %v, want: %v", got, want)
+			}
 		}
 	})
-})
+}
