@@ -84,6 +84,23 @@ var _ = Describe("Datagram Queue", func() {
 			Eventually(errChan).Should(Receive(Equal(&DatagramQueuedTooLong{})))
 		})
 
+		It("drop after peeking too many times", func() {
+			f := &wire.DatagramFrame{Data: []byte("foobar")}
+			errChan := make(chan error, 1)
+
+			go func() {
+				defer GinkgoRecover()
+				mtuDiscoverer.EXPECT().CurrentSize().Return(1234)
+				errChan <- queue.AddAndWait(context.Background(), f)
+			}()
+			Eventually(queued).Should(HaveLen(1))
+			for i := 0; i < int(maxPeekAttempt); i++ {
+				Expect(queue.Peek()).To(Equal(f))
+			}
+			Expect(queue.Peek()).To(BeNil())
+			Eventually(errChan).Should(Receive(Equal(dropDatagramCtxCancelledErr)))
+		})
+
 		It("closes", func() {
 			errChan := make(chan error, 1)
 			go func() {

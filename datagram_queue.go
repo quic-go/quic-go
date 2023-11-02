@@ -10,6 +10,10 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+const (
+	maxPeekAttempt uint8 = 5
+)
+
 var (
 	dropDatagramCtxCancelledErr = fmt.Errorf("Dropped datagram due to context cancelled")
 )
@@ -35,6 +39,7 @@ type datagramQueue struct {
 type queuedDatagramFrame struct {
 	cancelChan <-chan struct{}
 	frame      *wire.DatagramFrame
+	peekCount  uint8
 }
 
 func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
@@ -92,9 +97,8 @@ func (h *datagramQueue) dequeueNextFrame() *wire.DatagramFrame {
 	if h.nextFrame.peekCount > maxPeekAttempt {
 		h.Pop(&DatagramQueuedTooLong{})
 		return nil
-	default:
-		return h.nextFrame.frame
 	}
+	return h.nextFrame.frame
 }
 
 func (h *datagramQueue) Pop(err error) {
