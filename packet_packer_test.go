@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -576,7 +575,7 @@ var _ = Describe("Packet packer", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					datagramQueue.AddAndWait(context.Background(), f)
+					datagramQueue.AddAndWait(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
 				time.Sleep(scaleDuration(20 * time.Millisecond))
@@ -605,7 +604,7 @@ var _ = Describe("Packet packer", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					datagramQueue.AddAndWait(context.Background(), f)
+					datagramQueue.AddAndWait(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
 				time.Sleep(scaleDuration(20 * time.Millisecond))

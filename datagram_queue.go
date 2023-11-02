@@ -50,7 +50,7 @@ func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
 
 // AddAndWait queues a new DATAGRAM frame for sending.
 // It blocks until the frame has been dequeued.
-func (h *datagramQueue) AddAndWait(ctx context.Context, f *wire.DatagramFrame) error {
+func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 	frame := &queuedDatagramFrame{
 		cancelChan: ctx.Done(),
 		frame:      f,
@@ -88,10 +88,9 @@ func (h *datagramQueue) Peek() *wire.DatagramFrame {
 }
 
 func (h *datagramQueue) dequeueNextFrame() *wire.DatagramFrame {
-	select {
-	case <-h.nextFrame.cancelChan:
-		// Drop DATAGRAM frames that have expired and notifier the sender with an error
-		h.Pop(dropDatagramCtxCancelledErr)
+	h.nextFrame.peekCount++
+	if h.nextFrame.peekCount > maxPeekAttempt {
+		h.Pop(&DatagramQueuedTooLong{})
 		return nil
 	default:
 		return h.nextFrame.frame

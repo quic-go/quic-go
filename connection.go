@@ -2349,8 +2349,11 @@ func (s *connection) SendDatagram(ctx context.Context, p []byte) error {
 	}
 
 	f := &wire.DatagramFrame{DataLenPresent: true}
-	if protocol.ByteCount(len(p)) > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) {
+	datagramLen := protocol.ByteCount(len(p))
+	currentMTU := s.mtuDiscoverer.CurrentSize()
+	if datagramLen > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) || datagramLen > currentMTU {
 		return &DatagramTooLargeError{
+			CurrentMTU:               int64(currentMTU),
 			PeerMaxDatagramFrameSize: int64(s.peerParams.MaxDatagramFrameSize),
 		}
 	}
