@@ -143,17 +143,13 @@ func (h *receivedPacketTracker) maybeQueueACK(pn protocol.PacketNumber, rcvTime 
 
 	// queue an ACK if there are new missing packets to report
 	if h.hasNewMissingPackets() {
-		if h.logger.Debug() {
-			h.logger.Debugf("\tQueuing ACK because there's a new missing packet to report.")
-		}
+		h.logger.Debugf("\tQueuing ACK because there's a new missing packet to report.")
 		h.ackQueued = true
 	}
 
 	// queue an ACK if the packet was ECN-CE marked
 	if ecn == protocol.ECNCE {
-		if h.logger.Debug() {
-			h.logger.Debugf("\tQueuing ACK because the packet was ECN-CE marked.")
-		}
+		h.logger.Debugf("\tQueuing ACK because the packet was ECN-CE marked.")
 		h.ackQueued = true
 	}
 
