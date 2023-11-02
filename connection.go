@@ -2343,7 +2343,7 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 	}
 }
 
-func (s *connection) SendDatagram(ctx context.Context, p []byte) error {
+func (s *connection) SendDatagram(p []byte) error {
 	if !s.supportsDatagrams() {
 		return errors.New("datagram support disabled")
 	}
@@ -2359,7 +2359,7 @@ func (s *connection) SendDatagram(ctx context.Context, p []byte) error {
 	}
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)
-	return s.datagramQueue.AddAndWait(ctx, f)
+	return s.datagramQueue.AddAndWait(f)
 }
 
 func (s *connection) ReceiveDatagram(ctx context.Context) ([]byte, error) {

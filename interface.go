@@ -188,7 +188,7 @@ type Connection interface {
 	ConnectionState() ConnectionState
 
 	// SendDatagram sends a message as a datagram, as specified in RFC 9221.
-	SendDatagram(context.Context, []byte) error
+	SendDatagram([]byte) error
 	// ReceiveDatagram gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveDatagram(context.Context) ([]byte, error)
 }

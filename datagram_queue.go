@@ -37,9 +37,8 @@ type datagramQueue struct {
 }
 
 type queuedDatagramFrame struct {
-	cancelChan <-chan struct{}
-	frame      *wire.DatagramFrame
-	peekCount  uint8
+	frame     *wire.DatagramFrame
+	peekCount uint8
 }
 
 func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
@@ -57,13 +56,10 @@ func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
 // It blocks until the frame has been dequeued.
 func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 	frame := &queuedDatagramFrame{
-		cancelChan: ctx.Done(),
-		frame:      f,
+		frame: f,
 	}
 
 	select {
-	case <-ctx.Done():
-		return dropDatagramCtxCancelledErr
 	case h.sendQueue <- frame:
 		h.hasData()
 	case <-h.closed:

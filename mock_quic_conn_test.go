@@ -619,17 +619,17 @@ func (c *QUICConnRemoteAddrCall) DoAndReturn(f func() net.Addr) *QUICConnRemoteA
 }
 
 // SendDatagram mocks base method.
-func (m *MockQUICConn) SendDatagram(arg0 context.Context, arg1 []byte) error {
+func (m *MockQUICConn) SendDatagram(arg0 []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendDatagram", arg0, arg1)
+	ret := m.ctrl.Call(m, "SendDatagram", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendDatagram indicates an expected call of SendDatagram.
-func (mr *MockQUICConnMockRecorder) SendDatagram(arg0, arg1 any) *QUICConnSendDatagramCall {
+func (mr *MockQUICConnMockRecorder) SendDatagram(arg0 any) *QUICConnSendDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockQUICConn)(nil).SendDatagram), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockQUICConn)(nil).SendDatagram), arg0)
 	return &QUICConnSendDatagramCall{Call: call}
 }
 
@@ -645,13 +645,13 @@ func (c *QUICConnSendDatagramCall) Return(arg0 error) *QUICConnSendDatagramCall 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *QUICConnSendDatagramCall) Do(f func(context.Context, []byte) error) *QUICConnSendDatagramCall {
+func (c *QUICConnSendDatagramCall) Do(f func([]byte) error) *QUICConnSendDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *QUICConnSendDatagramCall) DoAndReturn(f func(context.Context, []byte) error) *QUICConnSendDatagramCall {
+func (c *QUICConnSendDatagramCall) DoAndReturn(f func([]byte) error) *QUICConnSendDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
