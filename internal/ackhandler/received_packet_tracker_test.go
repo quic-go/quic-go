@@ -50,6 +50,7 @@ var _ = Describe("Received Packet Tracker", func() {
 
 	Context("ACKs", func() {
 		Context("queueing ACKs", func() {
+			// receives and gets ACKs for packet numbers 1 to 10 (including)
 			receiveAndAck10Packets := func() {
 				for i := 1; i <= 10; i++ {
 					Expect(tracker.ReceivedPacket(protocol.PacketNumber(i), protocol.ECNNon, time.Time{}, true)).To(Succeed())
@@ -124,6 +125,16 @@ var _ = Describe("Received Packet Tracker", func() {
 				Expect(tracker.ReceivedPacket(12, protocol.ECNNon, rcvTime, true)).To(Succeed())
 				Expect(tracker.ackQueued).To(BeFalse())
 				Expect(tracker.GetAlarmTimeout()).To(Equal(rcvTime.Add(protocol.MaxAckDelay)))
+			})
+
+			It("queues an ACK if the packet was ECN-CE marked", func() {
+				receiveAndAck10Packets()
+				Expect(tracker.ReceivedPacket(11, protocol.ECNCE, time.Now(), true)).To(Succeed())
+				ack := tracker.GetAckFrame(true)
+				Expect(ack).ToNot(BeNil())
+				Expect(ack.AckRanges).To(HaveLen(1))
+				Expect(ack.AckRanges[0].Largest).To(Equal(protocol.PacketNumber(11)))
+				Expect(ack.ECNCE).To(BeEquivalentTo(1))
 			})
 
 			It("queues an ACK if it was reported missing before", func() {
