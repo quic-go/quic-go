@@ -30,6 +30,7 @@ var _ = Describe("Packet packer", func() {
 	var (
 		packer              *packetPacker
 		retransmissionQueue *retransmissionQueue
+		datagramQueued      chan struct{}
 		datagramQueue       *datagramQueue
 		framer              *MockFrameSource
 		ackFramer           *MockAckFrameSource
@@ -95,7 +96,10 @@ var _ = Describe("Packet packer", func() {
 		ackFramer = NewMockAckFrameSource(mockCtrl)
 		sealingManager = NewMockSealingManager(mockCtrl)
 		pnManager = mockackhandler.NewMockSentPacketHandler(mockCtrl)
-		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
+		datagramQueued = make(chan struct{}, 100)
+		datagramQueue = newDatagramQueue(func() {
+			datagramQueued <- struct{}{}
+		}, utils.DefaultLogger)
 
 		packer = newPacketPacker(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), func() protocol.ConnectionID { return connID }, initialStream, handshakeStream, pnManager, retransmissionQueue, sealingManager, framer, ackFramer, datagramQueue, protocol.PerspectiveServer)
 	})
@@ -589,6 +593,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.Frames[0].Frame).To(Equal(f))
 				Expect(buffer.Data).ToNot(BeEmpty())
 				Eventually(done).Should(BeClosed())
+
 			})
 
 			It("doesn't pack a DATAGRAM frame if the ACK frame is too large", func() {
@@ -619,6 +624,59 @@ var _ = Describe("Packet packer", func() {
 				Expect(buffer.Data).ToNot(BeEmpty())
 				datagramQueue.CloseWithError(nil)
 				Eventually(done).Should(BeClosed())
+			})
+
+			It("large datagram doesn't block send queue indefinitely", func() {
+				for i := 0; i < int(maxPeekAttempt+1); i++ {
+					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, true).Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100}}})
+					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+					sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+					framer.EXPECT().HasData()
+				}
+				largeFrame := &wire.DatagramFrame{
+					DataLenPresent: true,
+					Data:           make([]byte, maxPacketSize),
+				}
+				smallFrame := &wire.DatagramFrame{
+					DataLenPresent: true,
+					Data:           make([]byte, 10),
+				}
+				largeSender := make(chan error)
+				go func() {
+					defer GinkgoRecover()
+					largeSender <- datagramQueue.AddAndWait(largeFrame)
+				}()
+
+				smallerSender := make(chan error)
+				go func() {
+					defer GinkgoRecover()
+					Eventually(datagramQueued).Should(HaveLen(1))
+					smallerSender <- datagramQueue.AddAndWait(smallFrame)
+				}()
+				// make sure the DATAGRAM has actually been queued
+				time.Sleep(scaleDuration(20 * time.Millisecond))
+
+				buffer := getPacketBuffer()
+				for i := 0; i < int(maxPeekAttempt); i++ {
+					p, err := packer.AppendPacket(buffer, maxPacketSize, protocol.Version1)
+					Expect(p).ToNot(BeNil())
+					Expect(err).ToNot(HaveOccurred())
+					Expect(p.Ack).ToNot(BeNil())
+					Expect(p.Frames).To(BeEmpty())
+					Expect(buffer.Data).ToNot(BeEmpty())
+				}
+				Eventually(largeSender).Should(Receive(Equal(&DatagramQueuedTooLong{})))
+
+				Eventually(datagramQueued).Should(HaveLen(2))
+				p, err := packer.AppendPacket(buffer, maxPacketSize, protocol.Version1)
+				Expect(p).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.Ack).ToNot(BeNil())
+				Expect(p.Frames[0].Frame).To(Equal(smallFrame))
+				Expect(buffer.Data).ToNot(BeEmpty())
+				Eventually(smallerSender).Should(Receive(BeNil()))
+				datagramQueue.CloseWithError(nil)
 			})
 
 			It("accounts for the space consumed by control frames", func() {

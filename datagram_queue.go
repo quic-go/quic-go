@@ -90,7 +90,7 @@ func (h *datagramQueue) Peek() *wire.DatagramFrame {
 
 func (h *datagramQueue) dequeueNextFrame() *wire.DatagramFrame {
 	h.nextFrame.peekCount++
-	if h.nextFrame.peekCount > maxPeekAttempt {
+	if h.nextFrame.peekCount >= maxPeekAttempt {
 		h.Pop(&DatagramQueuedTooLong{})
 		return nil
 	}

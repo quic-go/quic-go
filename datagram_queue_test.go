@@ -76,7 +76,7 @@ var _ = Describe("Datagram Queue", func() {
 				errChan <- queue.AddAndWait(f)
 			}()
 			Eventually(queued).Should(HaveLen(1))
-			for i := 0; i < int(maxPeekAttempt); i++ {
+			for i := 0; i < int(maxPeekAttempt-1); i++ {
 				Expect(queue.Peek()).To(Equal(f))
 			}
 			Expect(queue.Peek()).To(BeNil())
