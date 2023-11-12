@@ -162,3 +162,12 @@ func (f *settingsFrame) Append(b []byte) []byte {
 	}
 	return b
 }
+
+type datagramFrame struct {
+	QuarterStreamID uint64
+}
+
+func (f *datagramFrame) Append(b []byte) []byte {
+	b = quicvarint.Append(b, f.QuarterStreamID)
+	return b
+}

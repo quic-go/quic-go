@@ -65,6 +65,8 @@ type client struct {
 	hostname string
 	conn     atomic.Pointer[quic.EarlyConnection]
 
+	datagrammerMap *datagrammerMap
+
 	logger utils.Logger
 }
 
@@ -135,7 +137,9 @@ func (c *client) dial(ctx context.Context) error {
 			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
-
+	if c.config.EnableDatagrams {
+		c.datagrammerMap = newDatagramManager(conn, c.logger)
+	}
 	if c.opts.StreamHijacker != nil {
 		go c.handleBidirectionalStreams(conn)
 	}
@@ -224,14 +228,15 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 				return
 			}
-			if !sf.Datagram {
-				return
-			}
 			// If datagram support was enabled on our side as well as on the server side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if c.opts.EnableDatagram && !conn.ConnectionState().SupportsDatagrams {
+			if sf.Datagram && c.opts.EnableDatagram && !conn.ConnectionState().SupportsDatagrams {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
+				return
+			}
+			if c.datagrammerMap != nil {
+				c.datagrammerMap.OnSettingReiceived(sf.Datagram)
 			}
 		}(str)
 	}
@@ -325,6 +330,94 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		<-done
 	}
 	return rsp, maybeReplaceError(rerr.err)
+}
+
+// RoundTripOptWithDatagrams executes a request and returns a Datagrammer and a channel for receiving response
+func (c *client) RoundTripOptWithDatagrams(req *http.Request, opt RoundTripOpt) (Datagrammer, <-chan RoundTripResult, error) {
+	if !c.config.EnableDatagrams {
+		return nil, nil, errors.New("datagram support disabled")
+	}
+	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
+		return nil, nil, fmt.Errorf("http3 client BUG: RoundTripOpt called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
+	}
+
+	c.dialOnce.Do(func() {
+		c.handshakeErr = c.dial(req.Context())
+	})
+	if c.handshakeErr != nil {
+		return nil, nil, c.handshakeErr
+	}
+
+	// At this point, c.conn is guaranteed to be set.
+	conn := *c.conn.Load()
+
+	// Immediately send out this request, if this is a 0-RTT request.
+	if req.Method == MethodGet0RTT {
+		req.Method = http.MethodGet
+	} else {
+		// wait for the handshake to complete
+		select {
+		case <-conn.HandshakeComplete():
+		case <-req.Context().Done():
+			return nil, nil, req.Context().Err()
+		}
+	}
+
+	str, err := conn.OpenStreamSync(req.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	datagrammer := c.datagrammerMap.newStreamAssociatedDatagrammer(conn, str)
+
+	// Request Cancellation:
+	// This go routine keeps running even after RoundTripOpt() returns.
+	// It is shut down when the application is done processing the body.
+	reqDone := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case <-req.Context().Done():
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		case <-reqDone:
+		}
+	}()
+
+	doneChan := reqDone
+	if opt.DontCloseRequestStream {
+		doneChan = nil
+	}
+
+	rspChan := make(chan RoundTripResult)
+	go func() {
+		defer close(rspChan)
+		rsp, rerr := c.doRequest(req, conn, str, opt, doneChan)
+		if rerr.err != nil { // if any error occurred
+			close(reqDone)
+			<-done
+			if rerr.streamErr != 0 { // if it was a stream error
+				str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
+			}
+			if rerr.connErr != 0 { // if it was a connection error
+				var reason string
+				if rerr.err != nil {
+					reason = rerr.err.Error()
+				}
+				conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+			}
+			rspChan <- RoundTripResult{nil, maybeReplaceError(rerr.err)}
+			return
+		}
+		if opt.DontCloseRequestStream {
+			close(reqDone)
+			<-done
+		}
+		rspChan <- RoundTripResult{rsp, nil}
+	}()
+
+	return datagrammer, rspChan, nil
 }
 
 // cancelingReader reads from the io.Reader.

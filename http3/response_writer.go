@@ -3,6 +3,7 @@ package http3
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -64,6 +65,7 @@ func (hw *headerWriter) Write(p []byte) (int, error) {
 type responseWriter struct {
 	*headerWriter
 	conn        quic.Connection
+	datagrammer *streamAssociatedDatagrammer
 	bufferedStr *bufio.Writer
 	buf         []byte
 
@@ -206,6 +208,22 @@ func (w *responseWriter) SetReadDeadline(deadline time.Time) error {
 
 func (w *responseWriter) SetWriteDeadline(deadline time.Time) error {
 	return w.str.SetWriteDeadline(deadline)
+}
+
+// SendMessage sends a sends an HTTP Datagram
+func (w *responseWriter) SendMessage(data []byte) error {
+	if w.datagrammer == nil {
+		return fmt.Errorf("datagram support disabled")
+	}
+	return w.datagrammer.SendMessage(data)
+}
+
+// SendMessage sends a receives an HTTP Datagram
+func (w *responseWriter) ReceiveMessage(ctx context.Context) ([]byte, error) {
+	if w.datagrammer == nil {
+		return nil, fmt.Errorf("datagram support disabled")
+	}
+	return w.datagrammer.ReceiveMessage(ctx)
 }
 
 // copied from http2/http2.go

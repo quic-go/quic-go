@@ -152,3 +152,43 @@ func (c *RoundTripCloserRoundTripOptCall) DoAndReturn(f func(*http.Request, Roun
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// RoundTripOptWithDatagrams mocks base method.
+func (m *MockRoundTripCloser) RoundTripOptWithDatagrams(arg0 *http.Request, arg1 RoundTripOpt) (Datagrammer, <-chan RoundTripResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RoundTripOptWithDatagrams", arg0, arg1)
+	ret0, _ := ret[0].(Datagrammer)
+	ret1, _ := ret[1].(<-chan RoundTripResult)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// RoundTripOptWithDatagrams indicates an expected call of RoundTripOptWithDatagrams.
+func (mr *MockRoundTripCloserMockRecorder) RoundTripOptWithDatagrams(arg0, arg1 any) *RoundTripCloserRoundTripOptWithDatagramsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTripOptWithDatagrams", reflect.TypeOf((*MockRoundTripCloser)(nil).RoundTripOptWithDatagrams), arg0, arg1)
+	return &RoundTripCloserRoundTripOptWithDatagramsCall{Call: call}
+}
+
+// RoundTripCloserRoundTripOptWithDatagramsCall wrap *gomock.Call
+type RoundTripCloserRoundTripOptWithDatagramsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *RoundTripCloserRoundTripOptWithDatagramsCall) Return(arg0 Datagrammer, arg1 <-chan RoundTripResult, arg2 error) *RoundTripCloserRoundTripOptWithDatagramsCall {
+	c.Call = c.Call.Return(arg0, arg1, arg2)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *RoundTripCloserRoundTripOptWithDatagramsCall) Do(f func(*http.Request, RoundTripOpt) (Datagrammer, <-chan RoundTripResult, error)) *RoundTripCloserRoundTripOptWithDatagramsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *RoundTripCloserRoundTripOptWithDatagramsCall) DoAndReturn(f func(*http.Request, RoundTripOpt) (Datagrammer, <-chan RoundTripResult, error)) *RoundTripCloserRoundTripOptWithDatagramsCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

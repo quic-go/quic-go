@@ -1036,4 +1036,109 @@ var _ = Describe("Client", func() {
 			})
 		})
 	})
+
+	Context("Doing datagram requests", func() {
+		var (
+			req                  *http.Request
+			str                  *mockquic.MockStream
+			conn                 *mockquic.MockEarlyConnection
+			settingsFrameWritten chan struct{}
+		)
+		testDone := make(chan struct{})
+		settingsReceived := make(chan struct{})
+		streamID := quic.StreamID(12)
+
+		getResponse := func(status int) []byte {
+			buf := &bytes.Buffer{}
+			rstr := mockquic.NewMockStream(mockCtrl)
+			rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
+			rw := newResponseWriter(rstr, nil, utils.DefaultLogger)
+			rw.WriteHeader(status)
+			rw.Flush()
+			return buf.Bytes()
+		}
+
+		BeforeEach(func() {
+			settingsFrameWritten = make(chan struct{})
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
+				defer GinkgoRecover()
+				r := bytes.NewReader(b)
+				streamType, err := quicvarint.Read(r)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(streamType).To(BeEquivalentTo(streamTypeControlStream))
+				close(settingsFrameWritten)
+				return len(b), nil
+			}) // SETTINGS frame
+			str = mockquic.NewMockStream(mockCtrl)
+			conn = mockquic.NewMockEarlyConnection(mockCtrl)
+			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+				return conn, nil
+			}
+			var err error
+			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			testDone <- struct{}{}
+			Eventually(settingsFrameWritten).Should(BeClosed())
+		})
+
+		Context("send request with datagrams", func() {
+			It("send request and handle datagrams", func() {
+				rspBuf := bytes.NewBuffer(getResponse(418))
+				cl.config.EnableDatagrams = true
+				b := quicvarint.Append(nil, streamTypeControlStream)
+				b = (&settingsFrame{Datagram: true}).Append(b)
+				r := bytes.NewReader(b)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+					if r.Len() == 0 {
+						return 0, io.EOF
+					}
+					n, data := r.Read(b)
+					if r.Len() == 0 {
+						close(settingsReceived)
+					}
+					return n, data
+				}).AnyTimes()
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return controlStr, nil
+				})
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				datagramBuf := make([]byte, 0)
+				datagramBuf = (&datagramFrame{QuarterStreamID: uint64(streamID / 4)}).Append(datagramBuf)
+				datagramBuf = append(datagramBuf, []byte("bar")...)
+				conn.EXPECT().ReceiveDatagram(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]byte, error) {
+					return datagramBuf, nil
+				}).AnyTimes()
+				conn.EXPECT().SendDatagram(gomock.Any()).Return(nil)
+				gomock.InOrder(
+					conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+					conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: true}),
+				)
+				str.EXPECT().StreamID().AnyTimes().Return(streamID)
+				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+				streamCtx, closeStream := context.WithCancel(context.Background())
+				str.EXPECT().Context().Return(streamCtx).AnyTimes()
+				defer closeStream()
+				datagrammer, rspChan, err := cl.RoundTripOptWithDatagrams(req, RoundTripOpt{DontCloseRequestStream: true})
+				Expect(err).ToNot(HaveOccurred())
+				<-settingsReceived
+				Expect(datagrammer.SendMessage([]byte("foo"))).ToNot(HaveOccurred())
+				data, err := datagrammer.ReceiveMessage(context.Background())
+				Expect(data).To(Equal([]byte("bar")))
+				Expect(err).ToNot(HaveOccurred())
+				res := <-rspChan
+				Expect(res.Err).ToNot(HaveOccurred())
+			})
+		})
+	})
 })

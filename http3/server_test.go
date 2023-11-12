@@ -157,7 +157,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			Expect(s.handleRequest(conn, str, qpackDecoder, nil)).To(Equal(requestError{}))
+			Expect(s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -174,7 +174,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -191,7 +191,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -213,7 +213,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -233,7 +233,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -252,7 +252,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -271,7 +271,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
@@ -287,7 +287,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
@@ -819,7 +819,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -842,7 +842,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, newResponseWriter, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
