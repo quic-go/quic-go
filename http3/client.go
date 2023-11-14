@@ -66,6 +66,7 @@ type client struct {
 	conn     atomic.Pointer[quic.EarlyConnection]
 
 	datagrammerMap *datagrammerMap
+	peerSettingsHandler
 
 	logger utils.Logger
 }
@@ -138,7 +139,7 @@ func (c *client) dial(ctx context.Context) error {
 		}
 	}()
 	if c.config.EnableDatagrams {
-		c.datagrammerMap = newDatagramManager(conn, c.logger)
+		c.datagrammerMap = newDatagrammerMap(conn, c.logger)
 	}
 	if c.opts.StreamHijacker != nil {
 		go c.handleBidirectionalStreams(conn)
@@ -235,9 +236,7 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 				return
 			}
-			if c.datagrammerMap != nil {
-				c.datagrammerMap.OnSettingReiceived(sf.Datagram)
-			}
+			c.HandleSettings(sf)
 		}(str)
 	}
 }
@@ -368,7 +367,7 @@ func (c *client) RoundTripOptWithDatagrams(req *http.Request, opt RoundTripOpt) 
 		return nil, nil, err
 	}
 
-	datagrammer := c.datagrammerMap.newStreamAssociatedDatagrammer(conn, str)
+	datagrammer := c.datagrammerMap.newStreamAssociatedDatagrammer(conn, str, c)
 
 	// Request Cancellation:
 	// This go routine keeps running even after RoundTripOpt() returns.

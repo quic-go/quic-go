@@ -638,6 +638,10 @@ var _ = Describe("Server", func() {
 				r := bytes.NewReader(b)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+				conn.EXPECT().ReceiveDatagram(gomock.Any()).DoAndReturn(func(ctx context.Context) ([]byte, error) {
+					<-testDone
+					return []byte{}, nil
+				}).AnyTimes()
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return controlStr, nil
 				})

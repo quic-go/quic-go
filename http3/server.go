@@ -437,17 +437,17 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	b = (&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Append(b)
 	str.Write(b)
 
-	var datagrammerMap *datagrammerMap
 	makeResponseWriter := newResponseWriter
+	settingsHandler := &peerSettingsHandler{}
 	if s.EnableDatagrams {
-		datagrammerMap = newDatagramManager(conn, s.logger)
+		datagrammerMap := newDatagrammerMap(conn, s.logger)
 		makeResponseWriter = func(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
 			r := newResponseWriter(str, conn, logger)
-			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(conn, str)
+			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(conn, str, settingsHandler)
 			return r
 		}
 	}
-	go s.handleUnidirectionalStreams(conn, datagrammerMap)
+	go s.handleUnidirectionalStreams(conn, settingsHandler)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -486,7 +486,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(conn quic.Connection, datagrammers *datagrammerMap) {
+func (s *Server) handleUnidirectionalStreams(conn quic.Connection, settingsHandler PeerSettingsHandler) {
 	for {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
@@ -537,8 +537,8 @@ func (s *Server) handleUnidirectionalStreams(conn quic.Connection, datagrammers 
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 				return
 			}
-			if datagrammers != nil {
-				datagrammers.OnSettingReiceived(sf.Datagram)
+			if settingsHandler != nil {
+				settingsHandler.HandleSettings(sf)
 			}
 		}(str)
 	}

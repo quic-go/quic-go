@@ -13,32 +13,46 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+var ErrDatagramNegotiationNotFinished = errors.New("the datagram setting negotiation is not finished")
+
 const DatagramRcvQueueLen = 128
 
 type datagrammerMap struct {
-	mutex   sync.RWMutex
-	conn    quic.Connection
-	streams map[protocol.StreamID]*streamAssociatedDatagrammer
-
-	// supported means HTTP/3 datagram is supported on both sides
-	supported                   bool
-	settingNegotiationCtx       context.Context
-	settingNegotiationCtxCancel context.CancelFunc
-
-	logger utils.Logger
-
-	runReceivingOnce sync.Once
+	mutex        sync.RWMutex
+	conn         quic.Connection
+	datagrammers map[protocol.StreamID]*streamAssociatedDatagrammer
+	logger       utils.Logger
 }
 
-func newDatagramManager(conn quic.Connection, logger utils.Logger) *datagrammerMap {
+func newDatagrammerMap(conn quic.Connection, logger utils.Logger) *datagrammerMap {
 	m := &datagrammerMap{
-		conn:    conn,
-		streams: make(map[protocol.StreamID]*streamAssociatedDatagrammer),
-		logger:  logger,
+		conn:         conn,
+		datagrammers: make(map[protocol.StreamID]*streamAssociatedDatagrammer),
+		logger:       logger,
 	}
-	m.settingNegotiationCtx, m.settingNegotiationCtxCancel = context.WithCancel(context.Background())
+
+	go m.runReceiving()
 
 	return m
+}
+
+func (m *datagrammerMap) newStreamAssociatedDatagrammer(conn quic.Connection, str quic.Stream, settingsHandler PeerSettingsHandler) *streamAssociatedDatagrammer {
+	d := &streamAssociatedDatagrammer{
+		str:             str,
+		conn:            conn,
+		rcvd:            make(chan struct{}),
+		settingsHandler: settingsHandler,
+	}
+	m.mutex.Lock()
+	m.datagrammers[str.StreamID()] = d
+	m.mutex.Unlock()
+	go func() {
+		<-str.Context().Done()
+		m.mutex.Lock()
+		delete(m.datagrammers, str.StreamID())
+		m.mutex.Unlock()
+	}()
+	return d
 }
 
 func (m *datagrammerMap) runReceiving() {
@@ -56,7 +70,7 @@ func (m *datagrammerMap) runReceiving() {
 		}
 		streamID := quarterStreamID * 4
 		m.mutex.RLock()
-		stream, ok := m.streams[protocol.StreamID(streamID)]
+		stream, ok := m.datagrammers[protocol.StreamID(streamID)]
 		m.mutex.RUnlock()
 		if !ok {
 			m.logger.Debugf("Received datagram for unknown stream: %d", streamID)
@@ -64,25 +78,6 @@ func (m *datagrammerMap) runReceiving() {
 		}
 		stream.handleDatagram(buf.Bytes())
 	}
-}
-
-func (m *datagrammerMap) OnSettingReiceived(setting bool) {
-	m.supported = setting
-
-	if setting {
-		m.runReceivingOnce.Do(func() {
-			go m.runReceiving()
-		})
-	}
-	m.settingNegotiationCtxCancel()
-}
-
-func (m *datagrammerMap) SettingNegotiationComplete() <-chan struct{} {
-	return m.settingNegotiationCtx.Done()
-}
-
-func (m *datagrammerMap) Supported() bool {
-	return m.supported
 }
 
 // Datagrammer is an interface that can send and receive HTTP datagrams
@@ -106,42 +101,24 @@ type streamAssociatedDatagrammer struct {
 	conn quic.Connection
 
 	buf      []byte
-	rcvMx    sync.Mutex
+	mutex    sync.Mutex
 	rcvQueue [][]byte
 	rcvd     chan struct{}
 
-	manager *datagrammerMap
-}
+	settingsHandler PeerSettingsHandler
 
-func (m *datagrammerMap) newStreamAssociatedDatagrammer(conn quic.Connection, str quic.Stream) *streamAssociatedDatagrammer {
-	d := &streamAssociatedDatagrammer{
-		str:     str,
-		conn:    conn,
-		rcvd:    make(chan struct{}),
-		manager: m,
-	}
-	m.mutex.Lock()
-	m.streams[str.StreamID()] = d
-	m.mutex.Unlock()
-	go func() {
-		<-str.Context().Done()
-		m.mutex.Lock()
-		delete(m.streams, str.StreamID())
-		m.mutex.Unlock()
-	}()
-	return d
+	ctx context.Context
 }
 
 func (d *streamAssociatedDatagrammer) SendMessage(data []byte) error {
-	select {
-	case <-d.str.Context().Done():
-		return fmt.Errorf("the corresponding stream is closed")
-	case <-d.manager.SettingNegotiationComplete():
+	settings := d.settingsHandler.GetPeerSettings()
+	if settings == nil {
+		return ErrDatagramNegotiationNotFinished
+	}
+	if !settings.Datagram {
+		return errors.New("peer doesn't support datagram")
 	}
 
-	if !d.manager.Supported() {
-		return errors.New("datagram is not supported by peer")
-	}
 	d.buf = d.buf[:0]
 	d.buf = (&datagramFrame{QuarterStreamID: uint64(d.str.StreamID() / 4)}).Append(d.buf)
 	d.buf = append(d.buf, data...)
@@ -149,31 +126,29 @@ func (d *streamAssociatedDatagrammer) SendMessage(data []byte) error {
 }
 
 func (d *streamAssociatedDatagrammer) ReceiveMessage(ctx context.Context) ([]byte, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-d.str.Context().Done():
-		return nil, fmt.Errorf("the corresponding stream is closed")
-	case <-d.manager.SettingNegotiationComplete():
+	settings := d.settingsHandler.GetPeerSettings()
+	if settings == nil {
+		return nil, ErrDatagramNegotiationNotFinished
 	}
-
-	if !d.manager.Supported() {
-		return nil, errors.New("datagram is not supported by peer")
+	if !settings.Datagram {
+		return nil, errors.New("peer doesn't support datagram")
 	}
 	for {
-		d.rcvMx.Lock()
+		d.mutex.Lock()
 		if len(d.rcvQueue) > 0 {
 			data := d.rcvQueue[0]
 			d.rcvQueue = d.rcvQueue[1:]
-			d.rcvMx.Unlock()
+			d.mutex.Unlock()
 			return data, nil
 		}
-		d.rcvMx.Unlock()
+		d.mutex.Unlock()
 		select {
 		case <-d.rcvd:
 			continue
 		case <-d.str.Context().Done():
 			return nil, fmt.Errorf("the corresponding stream is closed")
+		case <-d.ctx.Done():
+			return nil, d.ctx.Err()
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -181,7 +156,7 @@ func (d *streamAssociatedDatagrammer) ReceiveMessage(ctx context.Context) ([]byt
 }
 
 func (d *streamAssociatedDatagrammer) handleDatagram(data []byte) {
-	d.rcvMx.Lock()
+	d.mutex.Lock()
 	if len(d.rcvQueue) < DatagramRcvQueueLen {
 		d.rcvQueue = append(d.rcvQueue, data)
 		select {
@@ -189,5 +164,5 @@ func (d *streamAssociatedDatagrammer) handleDatagram(data []byte) {
 		default:
 		}
 	}
-	d.rcvMx.Unlock()
+	d.mutex.Unlock()
 }
