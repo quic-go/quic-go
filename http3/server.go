@@ -437,7 +437,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	b = (&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Append(b)
 	str.Write(b)
 
-	go s.handleUnidirectionalStreams(conn)
+	settingsHandler := &peerSettingsHandler{}
+	go s.handleUnidirectionalStreams(conn, settingsHandler)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -451,7 +452,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 		go func() {
-			rerr := s.handleRequest(conn, str, decoder, func() {
+			rerr := s.handleRequest(conn, str, settingsHandler, decoder, func() {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			})
 			if rerr.err == errHijacked {
@@ -476,7 +477,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(conn quic.Connection) {
+func (s *Server) handleUnidirectionalStreams(conn quic.Connection, settingsHandler PeerSettingsHandler) {
 	for {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
@@ -520,14 +521,16 @@ func (s *Server) handleUnidirectionalStreams(conn quic.Connection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 				return
 			}
-			if !sf.Datagram {
-				return
-			}
 			// If datagram support was enabled on our side as well as on the client side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
+			if sf.Datagram && s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
+			}
+			// only one settings frame is allowed
+			if err = settingsHandler.HandleSettings(sf); err != nil {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+				return
 			}
 		}(str)
 	}
@@ -540,7 +543,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, settingsGetter PeerSettingsGetter, decoder *qpack.Decoder, onFrameError func()) requestError {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) { return s.StreamHijacker(ft, conn, str, e) }
@@ -598,7 +601,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
-	r := newResponseWriter(str, conn, s.logger)
+	r := newResponseWriter(str, conn, settingsGetter, s.logger)
 	if req.Method == http.MethodHead {
 		r.isHead = true
 	}

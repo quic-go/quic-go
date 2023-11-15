@@ -64,6 +64,7 @@ type client struct {
 
 	hostname string
 	conn     atomic.Pointer[quic.EarlyConnection]
+	peerSettingsHandler
 
 	logger utils.Logger
 }
@@ -224,14 +225,16 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 				return
 			}
-			if !sf.Datagram {
-				return
-			}
 			// If datagram support was enabled on our side as well as on the server side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if c.opts.EnableDatagram && !conn.ConnectionState().SupportsDatagrams {
+			if sf.Datagram && c.opts.EnableDatagram && !conn.ConnectionState().SupportsDatagrams {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
+			}
+			// only one settings frame is allowed
+			if err = c.HandleSettings(sf); err != nil {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+				return
 			}
 		}(str)
 	}
@@ -434,7 +437,7 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 	} else {
 		httpStr = hstr
 	}
-	respBody := newResponseBody(httpStr, conn, reqDone)
+	respBody := newResponseBody(httpStr, conn, &c.peerSettingsHandler, reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]

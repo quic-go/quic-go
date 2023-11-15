@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -18,6 +19,33 @@ type unknownFrameHandlerFunc func(FrameType, error) (processed bool, err error)
 type frame interface{}
 
 var errHijacked = errors.New("hijacked")
+
+// PeerSettingsGetter gets the settings frame sent by peer.
+// It returns nil if the settings frame is not received yet
+type PeerSettingsGetter interface {
+	GetPeerSettings() *settingsFrame
+}
+
+// PeerSettingsHandler handles the settings frame sent by peer
+type PeerSettingsHandler interface {
+	HandleSettings(*settingsFrame) error
+}
+
+type peerSettingsHandler struct {
+	settings atomic.Pointer[settingsFrame]
+}
+
+func (m *peerSettingsHandler) HandleSettings(settings *settingsFrame) error {
+	if m.settings.Load() != nil {
+		return errors.New("received more than one settings frame")
+	}
+	m.settings.Store(settings)
+	return nil
+}
+
+func (m *peerSettingsHandler) GetPeerSettings() *settingsFrame {
+	return m.settings.Load()
+}
 
 func parseNextFrame(r io.Reader, unknownFrameHandler unknownFrameHandlerFunc) (frame, error) {
 	qr := quicvarint.NewReader(r)

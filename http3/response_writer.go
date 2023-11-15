@@ -63,9 +63,10 @@ func (hw *headerWriter) Write(p []byte) (int, error) {
 
 type responseWriter struct {
 	*headerWriter
-	conn        quic.Connection
-	bufferedStr *bufio.Writer
-	buf         []byte
+	conn           quic.Connection
+	settingsGetter PeerSettingsGetter
+	bufferedStr    *bufio.Writer
+	buf            []byte
 
 	contentLen    int64 // if handler set valid Content-Length header
 	numWritten    int64 // bytes written
@@ -79,17 +80,18 @@ var (
 	_ Hijacker            = &responseWriter{}
 )
 
-func newResponseWriter(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
+func newResponseWriter(str quic.Stream, conn quic.Connection, settingsGetter PeerSettingsGetter, logger utils.Logger) *responseWriter {
 	hw := &headerWriter{
 		str:    str,
 		header: http.Header{},
 		logger: logger,
 	}
 	return &responseWriter{
-		headerWriter: hw,
-		buf:          make([]byte, frameHeaderLen),
-		conn:         conn,
-		bufferedStr:  bufio.NewWriter(hw),
+		headerWriter:   hw,
+		buf:            make([]byte, frameHeaderLen),
+		conn:           conn,
+		settingsGetter: settingsGetter,
+		bufferedStr:    bufio.NewWriter(hw),
 	}
 }
 
@@ -198,6 +200,10 @@ func (w *responseWriter) Flush() {
 
 func (w *responseWriter) StreamCreator() StreamCreator {
 	return w.conn
+}
+
+func (w *responseWriter) SettingsGetter() PeerSettingsGetter {
+	return w.settingsGetter
 }
 
 func (w *responseWriter) SetReadDeadline(deadline time.Time) error {

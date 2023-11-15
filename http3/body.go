@@ -35,6 +35,7 @@ var _ StreamCreator = quic.Connection(nil)
 // It is used by WebTransport to create WebTransport streams after a session has been established.
 type Hijacker interface {
 	StreamCreator() StreamCreator
+	SettingsGetter() PeerSettingsGetter
 }
 
 // The body of a http.Request or http.Response.
@@ -74,7 +75,8 @@ func (r *body) Close() error {
 
 type hijackableBody struct {
 	body
-	conn quic.Connection // only needed to implement Hijacker
+	conn           quic.Connection // only needed to implement Hijacker
+	settingsGetter PeerSettingsGetter
 
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
@@ -88,18 +90,23 @@ var (
 	_ HTTPStreamer = &hijackableBody{}
 )
 
-func newResponseBody(str Stream, conn quic.Connection, done chan<- struct{}) *hijackableBody {
+func newResponseBody(str Stream, conn quic.Connection, settingsGetter PeerSettingsGetter, done chan<- struct{}) *hijackableBody {
 	return &hijackableBody{
 		body: body{
 			str: str,
 		},
-		reqDone: done,
-		conn:    conn,
+		reqDone:        done,
+		conn:           conn,
+		settingsGetter: settingsGetter,
 	}
 }
 
 func (r *hijackableBody) StreamCreator() StreamCreator {
 	return r.conn
+}
+
+func (r *hijackableBody) SettingsGetter() PeerSettingsGetter {
+	return r.settingsGetter
 }
 
 func (r *hijackableBody) Read(b []byte) (int, error) {
