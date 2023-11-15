@@ -19,32 +19,32 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Handshake tests", func() {
+var _ = Describe("Tracer tests", func() {
 	addTracers := func(pers protocol.Perspective, conf *quic.Config) *quic.Config {
 		enableQlog := mrand.Int()%3 != 0
 		enableCustomTracer := mrand.Int()%3 != 0
 
 		fmt.Fprintf(GinkgoWriter, "%s using qlog: %t, custom: %t\n", pers, enableQlog, enableCustomTracer)
 
-		var tracerConstructors []func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer
+		var tracerConstructors []func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer
 		if enableQlog {
-			tracerConstructors = append(tracerConstructors, func(_ context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+			tracerConstructors = append(tracerConstructors, func(_ context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 				if mrand.Int()%2 == 0 { // simulate that a qlog collector might only want to log some connections
-					fmt.Fprintf(GinkgoWriter, "%s qlog tracer deciding to not trace connection %x\n", p, connID)
+					fmt.Fprintf(GinkgoWriter, "%s qlog tracer deciding to not trace connection %s\n", p, connID)
 					return nil
 				}
-				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %x\n", p, connID)
+				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %s\n", p, connID)
 				return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil)), p, connID)
 			})
 		}
 		if enableCustomTracer {
-			tracerConstructors = append(tracerConstructors, func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
-				return logging.NullConnectionTracer{}
+			tracerConstructors = append(tracerConstructors, func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+				return &logging.ConnectionTracer{}
 			})
 		}
 		c := conf.Clone()
-		c.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
-			tracers := make([]logging.ConnectionTracer, 0, len(tracerConstructors))
+		c.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+			tracers := make([]*logging.ConnectionTracer, 0, len(tracerConstructors))
 			for _, c := range tracerConstructors {
 				if tr := c(ctx, p, connID); tr != nil {
 					tracers = append(tracers, tr)

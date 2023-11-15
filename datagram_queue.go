@@ -1,10 +1,12 @@
 package quic
 
 import (
+	"context"
+	"sync"
+
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
-	"sync"
 )
 
 type datagramQueue struct {
@@ -97,7 +99,7 @@ func (h *datagramQueue) HandleDatagramFrame(f *wire.DatagramFrame) {
 }
 
 // Receive gets a received DATAGRAM frame.
-func (h *datagramQueue) Receive() ([]byte, error) {
+func (h *datagramQueue) Receive(ctx context.Context) ([]byte, error) {
 	for {
 		h.rcvMx.Lock()
 		if len(h.rcvQueue) > 0 {
@@ -112,6 +114,8 @@ func (h *datagramQueue) Receive() ([]byte, error) {
 			continue
 		case <-h.closed:
 			return nil, h.closeErr
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 }

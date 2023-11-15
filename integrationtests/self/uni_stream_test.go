@@ -142,5 +142,6 @@ var _ = Describe("Unidirectional Streams", func() {
 		runReceivingPeer(client)
 		<-done1
 		<-done2
+		client.CloseWithError(0, "")
 	})
 })

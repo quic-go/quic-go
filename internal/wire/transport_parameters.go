@@ -2,14 +2,13 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/prng"
@@ -26,15 +25,6 @@ import (
 var AdditionalTransportParametersClient map[uint64][]byte
 
 const transportParameterMarshalingVersion = 1
-
-var (
-	randomMutex sync.Mutex
-	random      rand.Rand
-)
-
-func init() {
-	random = *rand.New(rand.NewSource(time.Now().UnixNano()))
-}
 
 type transportParameterID uint64
 
@@ -349,13 +339,12 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective, clientHelloPRNG
 	b := make([]byte, 0, 256)
 
 	// add a greased value
-	b = quicvarint.Append(b, uint64(27+31*rand.Intn(100)))
-	randomMutex.Lock()
-	length := random.Intn(16)
+	random := make([]byte, 18)
+	rand.Read(random)
+	b = quicvarint.Append(b, 27+31*uint64(random[0]))
+	length := random[1] % 16
 	b = quicvarint.Append(b, uint64(length))
-	b = b[:len(b)+length]
-	random.Read(b[len(b)-length:])
-	randomMutex.Unlock()
+	b = append(b, random[2:2+length]...)
 
 	// initial_max_stream_data_bidi_local
 	b = p.marshalVarintParam(b, initialMaxStreamDataBidiLocalParameterID, uint64(p.InitialMaxStreamDataBidiLocal))
@@ -585,6 +574,10 @@ func (p *TransportParameters) MarshalForSessionTicket(b []byte) []byte {
 	b = p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
 	// initial_max_uni_streams
 	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+	// max_datagram_frame_size
+	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
+		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
+	}
 	// active_connection_id_limit
 	return p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
 }
@@ -603,6 +596,9 @@ func (p *TransportParameters) UnmarshalFromSessionTicket(r *bytes.Reader) error 
 
 // ValidFor0RTT checks if the transport parameters match those saved in the session ticket.
 func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
+	if saved.MaxDatagramFrameSize != protocol.InvalidByteCount && (p.MaxDatagramFrameSize == protocol.InvalidByteCount || p.MaxDatagramFrameSize < saved.MaxDatagramFrameSize) {
+		return false
+	}
 	return p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
 		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
 		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
@@ -610,6 +606,21 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
 		p.MaxUniStreamNum >= saved.MaxUniStreamNum &&
 		p.ActiveConnectionIDLimit == saved.ActiveConnectionIDLimit
+}
+
+// ValidForUpdate checks that the new transport parameters don't reduce limits after resuming a 0-RTT connection.
+// It is only used on the client side.
+func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
+	if saved.MaxDatagramFrameSize != protocol.InvalidByteCount && (p.MaxDatagramFrameSize == protocol.InvalidByteCount || p.MaxDatagramFrameSize < saved.MaxDatagramFrameSize) {
+		return false
+	}
+	return p.ActiveConnectionIDLimit >= saved.ActiveConnectionIDLimit &&
+		p.InitialMaxData >= saved.InitialMaxData &&
+		p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
+		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
+		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
+		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
+		p.MaxUniStreamNum >= saved.MaxUniStreamNum
 }
 
 // String returns a string representation, intended for logging.

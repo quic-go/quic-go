@@ -3,15 +3,16 @@ package quic
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"time"
 
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/wire"
+	"golang.org/x/exp/rand"
 
-	"github.com/golang/mock/gomock"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 type mockGenericStream struct {
@@ -274,7 +275,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 		BeforeEach(func() { maxNumStreams = num })
 
 		It("opens and accepts streams", func() {
-			rand.Seed(GinkgoRandomSeed())
+			rand.Seed(uint64(GinkgoRandomSeed()))
 			ids := make([]protocol.StreamNum, num)
 			for i := 0; i < num; i++ {
 				ids[i] = protocol.StreamNum(i + 1)

@@ -6,9 +6,9 @@ import (
 	"github.com/Psiphon-Labs/quic-go"
 	mockquic "github.com/Psiphon-Labs/quic-go/internal/mocks/quic"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Response Body", func() {

@@ -1,5 +1,4 @@
-//go:build !windows
-// +build !windows
+//go:build darwin || linux || freebsd
 
 package quic
 
@@ -14,21 +13,32 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
+type oobRecordingConn struct {
+	*net.UDPConn
+	oobs [][]byte
+}
+
+func (c *oobRecordingConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
+	c.oobs = append(c.oobs, oob)
+	return c.UDPConn.WriteMsgUDP(b, oob, addr)
+}
+
 var _ = Describe("OOB Conn Test", func() {
-	runServer := func(network, address string) (*net.UDPConn, <-chan *receivedPacket) {
+	runServer := func(network, address string) (*net.UDPConn, <-chan receivedPacket) {
 		addr, err := net.ResolveUDPAddr(network, address)
 		Expect(err).ToNot(HaveOccurred())
 		udpConn, err := net.ListenUDP(network, addr)
 		Expect(err).ToNot(HaveOccurred())
-		oobConn, err := newConn(udpConn)
+		oobConn, err := newConn(udpConn, true)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(oobConn.capabilities().DF).To(BeTrue())
 
-		packetChan := make(chan *receivedPacket)
+		packetChan := make(chan receivedPacket)
 		go func() {
 			defer GinkgoRecover()
 			for {
@@ -43,7 +53,7 @@ var _ = Describe("OOB Conn Test", func() {
 		return udpConn, packetChan
 	}
 
-	Context("ECN conn", func() {
+	Context("reading ECN-marked packets", func() {
 		sendPacketWithECN := func(network string, addr *net.UDPAddr, setECN func(uintptr)) net.Addr {
 			conn, err := net.DialUDP(network, nil, addr)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
@@ -69,7 +79,7 @@ var _ = Describe("OOB Conn Test", func() {
 				},
 			)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
@@ -89,7 +99,7 @@ var _ = Describe("OOB Conn Test", func() {
 				},
 			)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
@@ -111,7 +121,7 @@ var _ = Describe("OOB Conn Test", func() {
 				},
 			)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
 			Expect(p.ecn).To(Equal(protocol.ECNCE))
@@ -128,6 +138,42 @@ var _ = Describe("OOB Conn Test", func() {
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeFalse())
 			Expect(p.ecn).To(Equal(protocol.ECT1))
+		})
+
+		It("sends packets with ECN on IPv4", func() {
+			conn, packetChan := runServer("udp4", "localhost:0")
+			defer conn.Close()
+
+			c, err := net.ListenUDP("udp4", nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.Close()
+
+			for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+				_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv4ECNMsg([]byte{}, val), conn.LocalAddr().(*net.UDPAddr))
+				Expect(err).ToNot(HaveOccurred())
+				var p receivedPacket
+				Eventually(packetChan).Should(Receive(&p))
+				Expect(p.data).To(Equal([]byte("foobar")))
+				Expect(p.ecn).To(Equal(val))
+			}
+		})
+
+		It("sends packets with ECN on IPv6", func() {
+			conn, packetChan := runServer("udp6", "[::1]:0")
+			defer conn.Close()
+
+			c, err := net.ListenUDP("udp6", nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.Close()
+
+			for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+				_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv6ECNMsg([]byte{}, val), conn.LocalAddr().(*net.UDPAddr))
+				Expect(err).ToNot(HaveOccurred())
+				var p receivedPacket
+				Eventually(packetChan).Should(Receive(&p))
+				Expect(p.data).To(Equal([]byte("foobar")))
+				Expect(p.ecn).To(Equal(val))
+			}
 		})
 	})
 
@@ -149,13 +195,13 @@ var _ = Describe("OOB Conn Test", func() {
 			addr.IP = ip
 			sentFrom := sendPacket("udp4", addr)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
-			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr.To4()).To(Equal(ip))
+			Expect(p.info.addr.IsValid()).To(BeTrue())
+			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip))
 		})
 
 		It("reads packet info on IPv6", func() {
@@ -167,13 +213,13 @@ var _ = Describe("OOB Conn Test", func() {
 			addr.IP = ip
 			sentFrom := sendPacket("udp6", addr)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr).To(Equal(ip))
+			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip))
 		})
 
 		It("reads packet info on a connection that supports both IPv4 and IPv6", func() {
@@ -182,14 +228,16 @@ var _ = Describe("OOB Conn Test", func() {
 			port := conn.LocalAddr().(*net.UDPAddr).Port
 
 			// IPv4
-			ip4 := net.ParseIP("127.0.0.1").To4()
+			ip4 := net.ParseIP("127.0.0.1")
 			sendPacket("udp4", &net.UDPAddr{IP: ip4, Port: port})
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr.To4()).To(Equal(ip4))
+			Expect(p.info.addr.Is4In6() || p.info.addr.Is4()).To(BeTrue())
+			ip := p.info.addr.As4()
+			Expect(net.IP(ip[:])).To(Equal(ip4.To4()))
 
 			// IPv6
 			ip6 := net.ParseIP("::1")
@@ -198,7 +246,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeFalse())
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr).To(Equal(ip6))
+			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip6))
 		})
 	})
 
@@ -216,7 +264,7 @@ var _ = Describe("OOB Conn Test", func() {
 				Expect(ms).To(HaveLen(batchSize))
 				for i := 0; i < numMsgRead; i++ {
 					Expect(ms[i].Buffers).To(HaveLen(1))
-					Expect(ms[i].Buffers[0]).To(HaveLen(int(protocol.MaxPacketBufferSize)))
+					Expect(ms[i].Buffers[0]).To(HaveLen(protocol.MaxPacketBufferSize))
 					data := []byte(fmt.Sprintf("message %d", counter))
 					counter++
 					ms[i].Buffers[0] = data
@@ -229,7 +277,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(err).ToNot(HaveOccurred())
 			udpConn, err := net.ListenUDP("udp", addr)
 			Expect(err).ToNot(HaveOccurred())
-			oobConn, err := newConn(udpConn)
+			oobConn, err := newConn(udpConn, true)
 			Expect(err).ToNot(HaveOccurred())
 			oobConn.batchConn = batchConn
 
@@ -240,4 +288,50 @@ var _ = Describe("OOB Conn Test", func() {
 			}
 		})
 	})
+
+	Context("sending ECN-marked packets", func() {
+		It("sets the ECN control message", func() {
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			c := &oobRecordingConn{UDPConn: udpConn}
+			oobConn, err := newConn(c, true)
+			Expect(err).ToNot(HaveOccurred())
+
+			oob := make([]byte, 0, 123)
+			oobConn.WritePacket([]byte("foobar"), addr, oob, 0, protocol.ECNCE)
+			Expect(c.oobs).To(HaveLen(1))
+			oobMsg := c.oobs[0]
+			Expect(oobMsg).ToNot(BeEmpty())
+			Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
+			expected := appendIPv4ECNMsg([]byte{}, protocol.ECNCE)
+			Expect(oobMsg).To(Equal(expected))
+		})
+	})
+
+	if platformSupportsGSO {
+		Context("GSO", func() {
+			It("appends the GSO control message", func() {
+				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+				Expect(err).ToNot(HaveOccurred())
+				udpConn, err := net.ListenUDP("udp", addr)
+				Expect(err).ToNot(HaveOccurred())
+				c := &oobRecordingConn{UDPConn: udpConn}
+				oobConn, err := newConn(c, true)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(oobConn.capabilities().GSO).To(BeTrue())
+
+				oob := make([]byte, 0, 123)
+				oobConn.WritePacket([]byte("foobar"), addr, oob, 3, protocol.ECNCE)
+				Expect(c.oobs).To(HaveLen(1))
+				oobMsg := c.oobs[0]
+				Expect(oobMsg).ToNot(BeEmpty())
+				Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
+				expected := appendUDPSegmentSizeMsg([]byte{}, 3)
+				// Check that the first control message is the OOB control message.
+				Expect(oobMsg[:len(expected)]).To(Equal(expected))
+			})
+		})
+	}
 })

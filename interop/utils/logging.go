@@ -29,7 +29,7 @@ func GetSSLKeyLog() (io.WriteCloser, error) {
 }
 
 // NewQLOGConnectionTracer create a qlog file in QLOGDIR
-func NewQLOGConnectionTracer(_ context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+func NewQLOGConnectionTracer(_ context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 	qlogDir := os.Getenv("QLOGDIR")
 	if len(qlogDir) == 0 {
 		return nil

@@ -312,3 +312,61 @@ func (s congestionState) String() string {
 		return "unknown congestion state"
 	}
 }
+
+type ecn logging.ECN
+
+func (e ecn) String() string {
+	//nolint:exhaustive // The unsupported value is never logged.
+	switch logging.ECN(e) {
+	case logging.ECTNot:
+		return "Not-ECT"
+	case logging.ECT0:
+		return "ECT(0)"
+	case logging.ECT1:
+		return "ECT(1)"
+	case logging.ECNCE:
+		return "CE"
+	default:
+		return "unknown ECN"
+	}
+}
+
+type ecnState logging.ECNState
+
+func (e ecnState) String() string {
+	switch logging.ECNState(e) {
+	case logging.ECNStateTesting:
+		return "testing"
+	case logging.ECNStateUnknown:
+		return "unknown"
+	case logging.ECNStateCapable:
+		return "capable"
+	case logging.ECNStateFailed:
+		return "failed"
+	default:
+		return "unknown ECN state"
+	}
+}
+
+type ecnStateTrigger logging.ECNStateTrigger
+
+func (e ecnStateTrigger) String() string {
+	switch logging.ECNStateTrigger(e) {
+	case logging.ECNTriggerNoTrigger:
+		return ""
+	case logging.ECNFailedNoECNCounts:
+		return "ACK doesn't contain ECN marks"
+	case logging.ECNFailedDecreasedECNCounts:
+		return "ACK decreases ECN counts"
+	case logging.ECNFailedLostAllTestingPackets:
+		return "all ECN testing packets declared lost"
+	case logging.ECNFailedMoreECNCountsThanSent:
+		return "ACK contains more ECN counts than ECN-marked packets sent"
+	case logging.ECNFailedTooFewECNCounts:
+		return "ACK contains fewer new ECN counts than acknowledged ECN-marked packets"
+	case logging.ECNFailedManglingDetected:
+		return "ECN mangling detected"
+	default:
+		return "unknown ECN state trigger"
+	}
+}

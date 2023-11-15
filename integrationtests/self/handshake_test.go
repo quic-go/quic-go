@@ -9,10 +9,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/Psiphon-Labs/quic-go"
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/qerr"
-	"github.com/Psiphon-Labs/quic-go/internal/qtls"
+	"github.com/quic-go/quic-go"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -81,6 +82,26 @@ var _ = Describe("Handshake tests", func() {
 		}()
 	}
 
+	It("returns the cancellation reason when a dial is canceled", func() {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		errChan := make(chan error, 1)
+		go func() {
+			_, err := quic.DialAddr(
+				ctx,
+				"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			errChan <- err
+		}()
+
+		cancel(errors.New("application cancelled"))
+		var err error
+		Eventually(errChan).Should(Receive(&err))
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError("application cancelled"))
+	})
+
 	Context("using different cipher suites", func() {
 		for n, id := range map[string]uint16{
 			"TLS_AES_128_GCM_SHA256":       tls.TLS_AES_128_GCM_SHA256,
@@ -131,24 +152,60 @@ var _ = Describe("Handshake tests", func() {
 	Context("Certificate validation", func() {
 		It("accepts the certificate", func() {
 			runServer(getTLSConfig())
-			_, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			conn.CloseWithError(0, "")
+		})
+
+		It("has the right local and remote address on the tls.Config.GetConfigForClient ClientHelloInfo.Conn", func() {
+			var local, remote net.Addr
+			var local2, remote2 net.Addr
+			done := make(chan struct{})
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+					local = info.Conn.LocalAddr()
+					remote = info.Conn.RemoteAddr()
+					conf := getTLSConfig()
+					conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+						defer close(done)
+						local2 = info.Conn.LocalAddr()
+						remote2 = info.Conn.RemoteAddr()
+						return &(conf.Certificates[0]), nil
+					}
+					return conf, nil
+				},
+			}
+			runServer(tlsConf)
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer conn.CloseWithError(0, "")
+			Eventually(done).Should(BeClosed())
+			Expect(server.Addr()).To(Equal(local))
+			Expect(conn.LocalAddr().(*net.UDPAddr).Port).To(Equal(remote.(*net.UDPAddr).Port))
+			Expect(local).To(Equal(local2))
+			Expect(remote).To(Equal(remote2))
 		})
 
 		It("works with a long certificate chain", func() {
 			runServer(getTLSConfigWithLongCertChain())
-			_, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			conn.CloseWithError(0, "")
 		})
 
 		It("errors if the server name doesn't match", func() {
@@ -169,6 +226,8 @@ var _ = Describe("Handshake tests", func() {
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
 			Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
+			var certErr *tls.CertificateVerificationError
+			Expect(errors.As(transportErr, &certErr)).To(BeTrue())
 		})
 
 		It("fails the handshake if the client fails to provide the requested client cert", func() {
@@ -198,7 +257,10 @@ var _ = Describe("Handshake tests", func() {
 			var transportErr *quic.TransportError
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(ContainSubstring("tls: bad certificate"))
+			Expect(transportErr.Error()).To(Or(
+				ContainSubstring("tls: certificate required"),
+				ContainSubstring("tls: bad certificate"),
+			))
 		})
 
 		It("uses the ServerName in the tls.Config", func() {
@@ -416,16 +478,31 @@ var _ = Describe("Handshake tests", func() {
 		})
 
 		It("rejects invalid Retry token with the INVALID_TOKEN error", func() {
+			const rtt = 10 * time.Millisecond
 			serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
-			serverConfig.MaxRetryTokenAge = time.Nanosecond
+			// The validity period of the retry token is the handshake timeout,
+			// which is twice the handshake idle timeout.
+			// By setting the handshake timeout shorter than the RTT, the token will have expired by the time
+			// it reaches the server.
+			serverConfig.HandshakeIdleTimeout = rtt / 5
 
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
+			serverPort := server.Addr().(*net.UDPAddr).Port
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+				DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
+					return rtt / 2
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			defer proxy.Close()
+
 			_, err = quic.DialAddr(
 				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				nil,
 			)

@@ -1,12 +1,11 @@
 package ackhandler
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 func TestCrypto(t *testing.T) {
@@ -15,10 +14,6 @@ func TestCrypto(t *testing.T) {
 }
 
 var mockCtrl *gomock.Controller
-
-var _ = BeforeSuite(func() {
-	rand.Seed(GinkgoRandomSeed())
-})
 
 var _ = BeforeEach(func() {
 	mockCtrl = gomock.NewController(GinkgoT())

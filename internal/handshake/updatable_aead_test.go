@@ -7,14 +7,15 @@ import (
 	"testing"
 	"time"
 
-	mocklogging "github.com/Psiphon-Labs/quic-go/internal/mocks/logging"
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/qerr"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/logging"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Updatable AEAD", func() {
@@ -47,7 +48,7 @@ var _ = Describe("Updatable AEAD", func() {
 		),
 	)
 
-	for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.Version1, protocol.Version2} {
+	for _, ver := range []protocol.VersionNumber{protocol.Version1, protocol.Version2} {
 		v := ver
 
 		Context(fmt.Sprintf("using version %s", v), func() {
@@ -62,7 +63,8 @@ var _ = Describe("Updatable AEAD", func() {
 					)
 
 					BeforeEach(func() {
-						serverTracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+						var tr *logging.ConnectionTracer
+						tr, serverTracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 						trafficSecret1 := make([]byte, 16)
 						trafficSecret2 := make([]byte, 16)
 						rand.Read(trafficSecret1)
@@ -70,7 +72,7 @@ var _ = Describe("Updatable AEAD", func() {
 
 						rttStats = utils.NewRTTStats()
 						client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, v)
-						server = newUpdatableAEAD(rttStats, serverTracer, utils.DefaultLogger, v)
+						server = newUpdatableAEAD(rttStats, tr, utils.DefaultLogger, v)
 						client.SetReadKey(cs, trafficSecret2)
 						client.SetWriteKey(cs, trafficSecret1)
 						server.SetReadKey(cs, trafficSecret1)

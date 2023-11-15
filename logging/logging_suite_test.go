@@ -1,12 +1,11 @@
-package logging
+package logging_test
 
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 func TestLogging(t *testing.T) {

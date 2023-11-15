@@ -4,13 +4,14 @@
 package quic
 
 import (
+	"net/netip"
 	"syscall"
 
 	"golang.org/x/sys/windows"
 )
 
-func newConn(c OOBCapablePacketConn) (rawConn, error) {
-	return &basicConn{PacketConn: c}, nil
+func newConn(c OOBCapablePacketConn, supportsDF bool) (*basicConn, error) {
+	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
 }
 
 func inspectReadBuffer(c syscall.RawConn) (int, error) {
@@ -33,6 +34,10 @@ func inspectWriteBuffer(c syscall.RawConn) (int, error) {
 		return 0, err
 	}
 	return size, serr
+}
+
+type packetInfo struct {
+	addr netip.Addr
 }
 
 func (i *packetInfo) OOB() []byte { return nil }

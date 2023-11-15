@@ -23,7 +23,7 @@ var _ = Describe("Datagram test", func() {
 
 	var (
 		serverConn, clientConn *net.UDPConn
-		dropped, total         int32
+		dropped, total         atomic.Int32
 	)
 
 	startServerAndProxy := func(enableDatagram, expectDatagramSupport bool) (port int, closeFn func()) {
@@ -57,7 +57,7 @@ var _ = Describe("Datagram test", func() {
 							defer wg.Done()
 							b := make([]byte, 8)
 							binary.BigEndian.PutUint64(b, uint64(i))
-							Expect(conn.SendMessage(b)).To(Succeed())
+							Expect(conn.SendDatagram(b)).To(Succeed())
 						}(i)
 					}
 					wg.Wait()
@@ -81,9 +81,9 @@ var _ = Describe("Datagram test", func() {
 				}
 				drop := mrand.Int()%10 == 0
 				if drop {
-					atomic.AddInt32(&dropped, 1)
+					dropped.Add(1)
 				}
-				atomic.AddInt32(&total, 1)
+				total.Add(1)
 				return drop
 			},
 		})
@@ -119,20 +119,17 @@ var _ = Describe("Datagram test", func() {
 		var counter int
 		for {
 			// Close the connection if no message is received for 100 ms.
-			timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() {
-				fmt.Println("closing conn")
-				conn.CloseWithError(0, "")
-			})
-			if _, err := conn.ReceiveMessage(); err != nil {
+			timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() { conn.CloseWithError(0, "") })
+			if _, err := conn.ReceiveDatagram(context.Background()); err != nil {
 				break
 			}
 			timer.Stop()
 			counter++
 		}
 
-		numDropped := int(atomic.LoadInt32(&dropped))
+		numDropped := int(dropped.Load())
 		expVal := num - numDropped
-		fmt.Fprintf(GinkgoWriter, "Dropped %d out of %d packets.\n", numDropped, atomic.LoadInt32(&total))
+		fmt.Fprintf(GinkgoWriter, "Dropped %d out of %d packets.\n", numDropped, total.Load())
 		fmt.Fprintf(GinkgoWriter, "Received %d out of %d sent datagrams.\n", counter, num)
 		Expect(counter).To(And(
 			BeNumerically(">", expVal*9/10),
@@ -173,7 +170,7 @@ var _ = Describe("Datagram test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 
-		Expect(conn.SendMessage([]byte{0})).To(HaveOccurred())
+		Expect(conn.SendDatagram([]byte{0})).To(HaveOccurred())
 
 		close()
 		conn.CloseWithError(0, "")

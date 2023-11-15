@@ -12,10 +12,9 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/logging"
 
-	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 type nullMultiplexer struct{}
@@ -44,7 +43,7 @@ var _ = Describe("Client", func() {
 			initialPacketNumber protocol.PacketNumber,
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
-			tracer logging.ConnectionTracer,
+			tracer *logging.ConnectionTracer,
 			tracingID uint64,
 			logger utils.Logger,
 			v protocol.VersionNumber,
@@ -55,10 +54,11 @@ var _ = Describe("Client", func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0x13, 0x37})
 		originalClientConnConstructor = newClientConnection
-		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+		var tr *logging.ConnectionTracer
+		tr, tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		config = &Config{
-			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) logging.ConnectionTracer {
-				return tracer
+			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) *logging.ConnectionTracer {
+				return tr
 			},
 			Versions: []protocol.VersionNumber{protocol.Version1},
 		}
@@ -71,7 +71,7 @@ var _ = Describe("Client", func() {
 			destConnID: connID,
 			version:    protocol.Version1,
 			sendConn:   packetConn,
-			tracer:     tracer,
+			tracer:     tr,
 			logger:     utils.DefaultLogger,
 		}
 		getMultiplexer() // make the sync.Once execute
@@ -122,14 +122,14 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				enable0RTT bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicConn {
 				Expect(enable0RTT).To(BeFalse())
 				conn := NewMockQUICConn(mockCtrl)
-				conn.EXPECT().run().Do(func() { close(run) })
+				conn.EXPECT().run().Do(func() error { close(run); return nil })
 				c := make(chan struct{})
 				close(c)
 				conn.EXPECT().HandshakeComplete().Return(c)
@@ -159,14 +159,14 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				enable0RTT bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
 				conn := NewMockQUICConn(mockCtrl)
-				conn.EXPECT().run().Do(func() { close(done) })
+				conn.EXPECT().run().Do(func() error { close(done); return nil })
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 				conn.EXPECT().earlyConnReady().Return(readyChan)
 				return conn
@@ -196,7 +196,7 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				_ bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -281,7 +281,7 @@ var _ = Describe("Client", func() {
 				_ protocol.PacketNumber,
 				_ bool,
 				_ bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
@@ -293,7 +293,7 @@ var _ = Describe("Client", func() {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().run()
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-				conn.EXPECT().destroy(gomock.Any())
+				conn.EXPECT().destroy(gomock.Any()).MaxTimes(1)
 				close(done)
 				return conn
 			}
@@ -324,7 +324,7 @@ var _ = Describe("Client", func() {
 				pn protocol.PacketNumber,
 				_ bool,
 				hasNegotiatedVersion bool,
-				_ logging.ConnectionTracer,
+				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,

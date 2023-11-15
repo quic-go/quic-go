@@ -9,6 +9,7 @@ var _ = Describe("Send Mode", func() {
 	It("has a string representation", func() {
 		Expect(SendNone.String()).To(Equal("none"))
 		Expect(SendAny.String()).To(Equal("any"))
+		Expect(SendPacingLimited.String()).To(Equal("pacing limited"))
 		Expect(SendAck.String()).To(Equal("ack"))
 		Expect(SendPTOInitial.String()).To(Equal("pto (Initial)"))
 		Expect(SendPTOHandshake.String()).To(Equal("pto (Handshake)"))

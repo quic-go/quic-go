@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go"
@@ -17,11 +18,11 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/quicvarint"
 
-	"github.com/golang/mock/gomock"
 	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Client", func() {
@@ -54,7 +55,7 @@ var _ = Describe("Client", func() {
 
 	It("rejects quic.Configs that allow multiple QUIC versions", func() {
 		qconf := &quic.Config{
-			Versions: []quic.VersionNumber{protocol.VersionDraft29, protocol.Version1},
+			Versions: []quic.VersionNumber{protocol.Version2, protocol.Version1},
 		}
 		_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
 		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
@@ -212,9 +213,10 @@ var _ = Describe("Client", func() {
 			testDone = make(chan struct{})
 			settingsFrameWritten = make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) {
+			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
 				defer GinkgoRecover()
 				close(settingsFrameWritten)
+				return len(b), nil
 			})
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
@@ -338,9 +340,10 @@ var _ = Describe("Client", func() {
 			testDone = make(chan struct{})
 			settingsFrameWritten = make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) {
+			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
 				defer GinkgoRecover()
 				close(settingsFrameWritten)
+				return len(b), nil
 			})
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
@@ -444,9 +447,10 @@ var _ = Describe("Client", func() {
 		BeforeEach(func() {
 			settingsFrameWritten = make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) {
+			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
 				defer GinkgoRecover()
 				close(settingsFrameWritten)
+				return len(b), nil
 			})
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
@@ -513,9 +517,7 @@ var _ = Describe("Client", func() {
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			done := make(chan struct{})
-			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(code quic.StreamErrorCode) {
-				close(done)
-			})
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				return str, nil
@@ -543,10 +545,9 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			done := make(chan struct{})
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-				defer GinkgoRecover()
-				Expect(code).To(BeEquivalentTo(ErrCodeMissingSettings))
+			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) error {
 				close(done)
+				return nil
 			})
 			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
@@ -567,10 +568,9 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			done := make(chan struct{})
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-				defer GinkgoRecover()
-				Expect(code).To(BeEquivalentTo(ErrCodeFrameError))
+			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) error {
 				close(done)
+				return nil
 			})
 			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
@@ -589,10 +589,9 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			done := make(chan struct{})
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-				defer GinkgoRecover()
-				Expect(code).To(BeEquivalentTo(ErrCodeIDError))
+			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) error {
 				close(done)
+				return nil
 			})
 			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
@@ -615,11 +614,9 @@ var _ = Describe("Client", func() {
 			})
 			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
 			done := make(chan struct{})
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
-				defer GinkgoRecover()
-				Expect(code).To(BeEquivalentTo(ErrCodeSettingsError))
-				Expect(reason).To(Equal("missing QUIC Datagram support"))
+			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support").Do(func(quic.ApplicationErrorCode, string) error {
 				close(done)
+				return nil
 			})
 			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
@@ -635,18 +632,6 @@ var _ = Describe("Client", func() {
 			settingsFrameWritten chan struct{}
 		)
 		testDone := make(chan struct{})
-
-		getHeadersFrame := func(headers map[string]string) []byte {
-			headerBuf := &bytes.Buffer{}
-			enc := qpack.NewEncoder(headerBuf)
-			for name, value := range headers {
-				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
-			}
-			Expect(enc.Close()).To(Succeed())
-			b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
-			b = append(b, headerBuf.Bytes()...)
-			return b
-		}
 
 		decodeHeader := func(str io.Reader) map[string]string {
 			fields := make(map[string]string)
@@ -680,13 +665,14 @@ var _ = Describe("Client", func() {
 		BeforeEach(func() {
 			settingsFrameWritten = make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) {
+			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
 				defer GinkgoRecover()
 				r := bytes.NewReader(b)
 				streamType, err := quicvarint.Read(r)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(streamType).To(BeEquivalentTo(streamTypeControlStream))
 				close(settingsFrameWritten)
+				return len(b), nil
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
@@ -804,7 +790,7 @@ var _ = Describe("Client", func() {
 			It("sends a request", func() {
 				done := make(chan struct{})
 				gomock.InOrder(
-					str.EXPECT().Close().Do(func() { close(done) }),
+					str.EXPECT().Close().Do(func() error { close(done); return nil }),
 					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1), // when reading the response errors
 				)
 				// the response body is sent asynchronously, while already reading the response
@@ -817,6 +803,29 @@ var _ = Describe("Client", func() {
 				hfs := decodeHeader(strBuf)
 				Expect(hfs).To(HaveKeyWithValue(":method", "POST"))
 				Expect(hfs).To(HaveKeyWithValue(":path", "/upload"))
+			})
+
+			It("doesn't send more bytes than allowed by http.Request.ContentLength", func() {
+				req.ContentLength = 7
+				var once sync.Once
+				done := make(chan struct{})
+				gomock.InOrder(
+					str.EXPECT().CancelWrite(gomock.Any()).Do(func(c quic.StreamErrorCode) {
+						once.Do(func() {
+							Expect(c).To(Equal(quic.StreamErrorCode(ErrCodeRequestCanceled)))
+							close(done)
+						})
+					}).AnyTimes(),
+					str.EXPECT().Close().MaxTimes(1),
+					str.EXPECT().CancelWrite(gomock.Any()).AnyTimes(),
+				)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+					<-done
+					return 0, errors.New("done")
+				})
+				cl.RoundTripOpt(req, RoundTripOpt{})
+				Expect(strBuf.String()).To(ContainSubstring("request"))
+				Expect(strBuf.String()).ToNot(ContainSubstring("request body"))
 			})
 
 			It("returns the error that occurred when reading the body", func() {
@@ -835,30 +844,10 @@ var _ = Describe("Client", func() {
 					return 0, errors.New("test done")
 				})
 				closed := make(chan struct{})
-				str.EXPECT().Close().Do(func() { close(closed) })
+				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
 				Eventually(closed).Should(BeClosed())
-			})
-
-			It("sets the Content-Length", func() {
-				done := make(chan struct{})
-				b := getHeadersFrame(map[string]string{
-					":status":        "200",
-					"Content-Length": "1337",
-				})
-				b = (&dataFrame{Length: 0x6}).Append(b)
-				b = append(b, []byte("foobar")...)
-				r := bytes.NewReader(b)
-				str.EXPECT().Close().Do(func() { close(done) })
-				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
-				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1) // when reading the response errors
-				// the response body is sent asynchronously, while already reading the response
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
-				req, err := cl.RoundTripOpt(req, RoundTripOpt{})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(req.ContentLength).To(BeEquivalentTo(1337))
-				Eventually(done).Should(BeClosed())
 			})
 
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
@@ -866,10 +855,28 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				r := bytes.NewReader(b)
-				str.EXPECT().Close().Do(func() { close(closed) })
+				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("expected first frame to be a HEADERS frame"))
+				Eventually(closed).Should(BeClosed())
+			})
+
+			It("cancels the stream when parsing the headers fails", func() {
+				headerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(headerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: ":method", Value: "GET"})).To(Succeed()) // not a valid response pseudo header
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+				b = append(b, headerBuf.Bytes()...)
+
+				r := bytes.NewReader(b)
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+				closed := make(chan struct{})
+				str.EXPECT().Close().Do(func() error { close(closed); return nil })
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				Expect(err).To(HaveOccurred())
 				Eventually(closed).Should(BeClosed())
 			})
 
@@ -878,7 +885,7 @@ var _ = Describe("Client", func() {
 				r := bytes.NewReader(b)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 				closed := make(chan struct{})
-				str.EXPECT().Close().Do(func() { close(closed) })
+				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("HEADERS frame too large: 1338 bytes (max: 1337)"))

@@ -7,39 +7,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type zeroReader struct{}
-
-func (r *zeroReader) Read(b []byte) (int, error) {
-	for i := range b {
-		b[i] = 0
-	}
-	return len(b), nil
-}
-
 var _ = Describe("Token Protector", func() {
 	var tp tokenProtector
 
 	BeforeEach(func() {
+		var key TokenProtectorKey
+		rand.Read(key[:])
 		var err error
-		tp, err = newTokenProtector(rand.Reader)
+		tp = newTokenProtector(key)
 		Expect(err).ToNot(HaveOccurred())
-	})
-
-	It("uses the random source", func() {
-		tp1, err := newTokenProtector(&zeroReader{})
-		Expect(err).ToNot(HaveOccurred())
-		tp2, err := newTokenProtector(&zeroReader{})
-		Expect(err).ToNot(HaveOccurred())
-		t1, err := tp1.NewToken([]byte("foo"))
-		Expect(err).ToNot(HaveOccurred())
-		t2, err := tp2.NewToken([]byte("foo"))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t1).To(Equal(t2))
-		tp3, err := newTokenProtector(rand.Reader)
-		Expect(err).ToNot(HaveOccurred())
-		t3, err := tp3.NewToken([]byte("foo"))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t3).ToNot(Equal(t1))
 	})
 
 	It("encodes and decodes tokens", func() {
@@ -51,11 +27,34 @@ var _ = Describe("Token Protector", func() {
 		Expect(decoded).To(Equal([]byte("foobar")))
 	})
 
-	It("fails deconding invalid tokens", func() {
+	It("uses the different keys", func() {
+		var key1, key2 TokenProtectorKey
+		rand.Read(key1[:])
+		rand.Read(key2[:])
+		tp1 := newTokenProtector(key1)
+		tp2 := newTokenProtector(key2)
+		t1, err := tp1.NewToken([]byte("foo"))
+		Expect(err).ToNot(HaveOccurred())
+		t2, err := tp2.NewToken([]byte("foo"))
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = tp1.DecodeToken(t1)
+		Expect(err).ToNot(HaveOccurred())
+		_, err = tp1.DecodeToken(t2)
+		Expect(err).To(HaveOccurred())
+
+		// now create another token protector, reusing key1
+		tp3 := newTokenProtector(key1)
+		_, err = tp3.DecodeToken(t1)
+		Expect(err).ToNot(HaveOccurred())
+		_, err = tp3.DecodeToken(t2)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("doesn't decode invalid tokens", func() {
 		token, err := tp.NewToken([]byte("foobar"))
 		Expect(err).ToNot(HaveOccurred())
-		token = token[1:] // remove the first byte
-		_, err = tp.DecodeToken(token)
+		_, err = tp.DecodeToken(token[1:]) // the token is invalid without the first byte
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("message authentication failed"))
 	})

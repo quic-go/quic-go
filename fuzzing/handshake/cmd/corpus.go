@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"log"
+	"net"
 
 	fuzzhandshake "github.com/Psiphon-Labs/quic-go/fuzzing/handshake"
 	"github.com/Psiphon-Labs/quic-go/fuzzing/internal/helper"
@@ -13,74 +14,14 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
-type chunk struct {
-	data     []byte
-	encLevel protocol.EncryptionLevel
-}
-
-type stream struct {
-	chunkChan chan<- chunk
-	encLevel  protocol.EncryptionLevel
-}
-
-func (s *stream) Write(b []byte) (int, error) {
-	data := append([]byte{}, b...)
-	select {
-	case s.chunkChan <- chunk{data: data, encLevel: s.encLevel}:
-	default:
-		panic("chunkChan too small")
-	}
-	return len(b), nil
-}
-
-func initStreams() (chan chunk, *stream /* initial */, *stream /* handshake */) {
-	chunkChan := make(chan chunk, 10)
-	initialStream := &stream{chunkChan: chunkChan, encLevel: protocol.EncryptionInitial}
-	handshakeStream := &stream{chunkChan: chunkChan, encLevel: protocol.EncryptionHandshake}
-	return chunkChan, initialStream, handshakeStream
-}
-
-type handshakeRunner interface {
-	OnReceivedParams(*wire.TransportParameters)
-	OnHandshakeComplete()
-	OnError(error)
-	DropKeys(protocol.EncryptionLevel)
-}
-
-type runner struct {
-	client, server *handshake.CryptoSetup
-}
-
-var _ handshakeRunner = &runner{}
-
-func newRunner(client, server *handshake.CryptoSetup) *runner {
-	return &runner{client: client, server: server}
-}
-
-func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
-func (r *runner) OnHandshakeComplete()                       {}
-func (r *runner) OnError(err error) {
-	(*r.client).Close()
-	(*r.server).Close()
-	log.Fatal("runner error:", err)
-}
-func (r *runner) DropKeys(protocol.EncryptionLevel) {}
-
 const alpn = "fuzz"
 
 func main() {
-	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-	var client, server handshake.CryptoSetup
-	runner := newRunner(&client, &server)
-	client, _ = handshake.NewCryptoSetupClient(
-		cInitialStream,
-		cHandshakeStream,
+	client := handshake.NewCryptoSetupClient(
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
-		runner,
 		&tls.Config{
+			MinVersion:         tls.VersionTLS13,
 			ServerName:         "localhost",
 			NextProtos:         []string{alpn},
 			RootCAs:            testdata.GetRootCA(),
@@ -95,17 +36,13 @@ func main() {
 		protocol.Version1,
 	)
 
-	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 	config := testdata.GetTLSConfig()
 	config.NextProtos = []string{alpn}
-	server = handshake.NewCryptoSetupServer(
-		sInitialStream,
-		sHandshakeStream,
+	server := handshake.NewCryptoSetupServer(
 		protocol.ConnectionID{},
-		nil,
-		nil,
+		&net.UDPAddr{IP: net.IPv6loopback, Port: 1234},
+		&net.UDPAddr{IP: net.IPv6loopback, Port: 4321},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
-		runner,
 		config,
 		false,
 		utils.NewRTTStats(),
@@ -114,37 +51,63 @@ func main() {
 		protocol.Version1,
 	)
 
-	serverHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(serverHandshakeCompleted)
-		server.RunHandshake()
-	}()
+	if err := client.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
-	clientHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(clientHandshakeCompleted)
-		client.RunHandshake()
-	}()
+	if err := server.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
-	done := make(chan struct{})
-	go func() {
-		<-serverHandshakeCompleted
-		<-clientHandshakeCompleted
-		close(done)
-	}()
-
+	var clientHandshakeComplete, serverHandshakeComplete bool
 	var messages [][]byte
-messageLoop:
 	for {
-		select {
-		case c := <-cChunkChan:
-			messages = append(messages, c.data)
-			server.HandleMessage(c.data, c.encLevel)
-		case c := <-sChunkChan:
-			messages = append(messages, c.data)
-			client.HandleMessage(c.data, c.encLevel)
-		case <-done:
-			break messageLoop
+	clientLoop:
+		for {
+			ev := client.NextEvent()
+			//nolint:exhaustive // only need to process a few events
+			switch ev.Kind {
+			case handshake.EventNoEvent:
+				break clientLoop
+			case handshake.EventWriteInitialData:
+				messages = append(messages, ev.Data)
+				if err := server.HandleMessage(ev.Data, protocol.EncryptionInitial); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventWriteHandshakeData:
+				messages = append(messages, ev.Data)
+				if err := server.HandleMessage(ev.Data, protocol.EncryptionHandshake); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventHandshakeComplete:
+				clientHandshakeComplete = true
+			}
+		}
+
+	serverLoop:
+		for {
+			ev := server.NextEvent()
+			//nolint:exhaustive // only need to process a few events
+			switch ev.Kind {
+			case handshake.EventNoEvent:
+				break serverLoop
+			case handshake.EventWriteInitialData:
+				messages = append(messages, ev.Data)
+				if err := client.HandleMessage(ev.Data, protocol.EncryptionInitial); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventWriteHandshakeData:
+				messages = append(messages, ev.Data)
+				if err := client.HandleMessage(ev.Data, protocol.EncryptionHandshake); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventHandshakeComplete:
+				serverHandshakeComplete = true
+			}
+		}
+
+		if serverHandshakeComplete && clientHandshakeComplete {
+			break
 		}
 	}
 

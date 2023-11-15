@@ -15,7 +15,7 @@ import (
 )
 
 var _ = Describe("Long Header AEAD", func() {
-	for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.Version1, protocol.Version2} {
+	for _, ver := range []protocol.VersionNumber{protocol.Version1, protocol.Version2} {
 		v := ver
 
 		Context(fmt.Sprintf("using version %s", v), func() {
@@ -132,73 +132,6 @@ var _ = Describe("Long Header AEAD", func() {
 					})
 				})
 			}
-		})
-
-		Describe("Long Header AEAD", func() {
-			var (
-				dropped chan struct{} // use a chan because closing it twice will panic
-				aead    cipher.AEAD
-				hp      headerProtector
-			)
-			dropCb := func() { close(dropped) }
-			msg := []byte("Lorem ipsum dolor sit amet.")
-			ad := []byte("Donec in velit neque.")
-
-			BeforeEach(func() {
-				dropped = make(chan struct{})
-				key := make([]byte, 16)
-				hpKey := make([]byte, 16)
-				rand.Read(key)
-				rand.Read(hpKey)
-				block, err := aes.NewCipher(key)
-				Expect(err).ToNot(HaveOccurred())
-				aead, err = cipher.NewGCM(block)
-				Expect(err).ToNot(HaveOccurred())
-				hp = newHeaderProtector(cipherSuites[0], hpKey, true, protocol.Version1)
-			})
-
-			Context("for the server", func() {
-				It("drops keys when first successfully processing a Handshake packet", func() {
-					serverOpener := newHandshakeOpener(aead, hp, dropCb, protocol.PerspectiveServer)
-					// first try to open an invalid message
-					_, err := serverOpener.Open(nil, []byte("invalid"), 0, []byte("invalid"))
-					Expect(err).To(HaveOccurred())
-					Expect(dropped).ToNot(BeClosed())
-					// then open a valid message
-					enc := newLongHeaderSealer(aead, hp).Seal(nil, msg, 10, ad)
-					_, err = serverOpener.Open(nil, enc, 10, ad)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(dropped).To(BeClosed())
-					// now open the same message again to make sure the callback is only called once
-					_, err = serverOpener.Open(nil, enc, 10, ad)
-					Expect(err).ToNot(HaveOccurred())
-				})
-
-				It("doesn't drop keys when sealing a Handshake packet", func() {
-					serverSealer := newHandshakeSealer(aead, hp, dropCb, protocol.PerspectiveServer)
-					serverSealer.Seal(nil, msg, 1, ad)
-					Expect(dropped).ToNot(BeClosed())
-				})
-			})
-
-			Context("for the client", func() {
-				It("drops keys when first sealing a Handshake packet", func() {
-					clientSealer := newHandshakeSealer(aead, hp, dropCb, protocol.PerspectiveClient)
-					// seal the first message
-					clientSealer.Seal(nil, msg, 1, ad)
-					Expect(dropped).To(BeClosed())
-					// seal another message to make sure the callback is only called once
-					clientSealer.Seal(nil, msg, 2, ad)
-				})
-
-				It("doesn't drop keys when processing a Handshake packet", func() {
-					enc := newLongHeaderSealer(aead, hp).Seal(nil, msg, 42, ad)
-					clientOpener := newHandshakeOpener(aead, hp, dropCb, protocol.PerspectiveClient)
-					_, err := clientOpener.Open(nil, enc, 42, ad)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(dropped).ToNot(BeClosed())
-				})
-			})
 		})
 	}
 })

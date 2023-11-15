@@ -67,14 +67,14 @@ var _ = Describe("Drop Tests", func() {
 				fmt.Fprintf(GinkgoWriter, "Dropping packets for %s, after a delay of %s\n", dropDuration, dropDelay)
 				startTime := time.Now()
 
-				var numDroppedPackets int32
+				var numDroppedPackets atomic.Int32
 				startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 					if !d.Is(direction) {
 						return false
 					}
 					drop := time.Now().After(startTime.Add(dropDelay)) && time.Now().Before(startTime.Add(dropDelay).Add(dropDuration))
 					if drop {
-						atomic.AddInt32(&numDroppedPackets, 1)
+						numDroppedPackets.Add(1)
 					}
 					return drop
 				})
@@ -114,7 +114,7 @@ var _ = Describe("Drop Tests", func() {
 					Expect(b[0]).To(Equal(i))
 				}
 				close(done)
-				numDropped := atomic.LoadInt32(&numDroppedPackets)
+				numDropped := numDroppedPackets.Load()
 				fmt.Fprintf(GinkgoWriter, "Dropped %d packets.\n", numDropped)
 				Expect(numDropped).To(BeNumerically(">", 0))
 			})

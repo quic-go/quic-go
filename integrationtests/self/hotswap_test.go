@@ -20,7 +20,7 @@ import (
 type listenerWrapper struct {
 	http3.QUICEarlyListener
 	listenerClosed bool
-	count          int32
+	count          atomic.Int32
 }
 
 func (ln *listenerWrapper) Close() error {
@@ -29,14 +29,18 @@ func (ln *listenerWrapper) Close() error {
 }
 
 func (ln *listenerWrapper) Faker() *fakeClosingListener {
-	atomic.AddInt32(&ln.count, 1)
+	ln.count.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
-	return &fakeClosingListener{ln, 0, ctx, cancel}
+	return &fakeClosingListener{
+		listenerWrapper: ln,
+		ctx:             ctx,
+		cancel:          cancel,
+	}
 }
 
 type fakeClosingListener struct {
 	*listenerWrapper
-	closed int32
+	closed atomic.Bool
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -47,9 +51,9 @@ func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection
 }
 
 func (ln *fakeClosingListener) Close() error {
-	if atomic.CompareAndSwapInt32(&ln.closed, 0, 1) {
+	if ln.closed.CompareAndSwap(false, true) {
 		ln.cancel()
-		if atomic.AddInt32(&ln.listenerWrapper.count, -1) == 0 {
+		if ln.listenerWrapper.count.Add(-1) == 0 {
 			ln.listenerWrapper.Close()
 		}
 	}
@@ -145,8 +149,8 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		// and only the fake listener should be closed
 		Expect(server1.Close()).NotTo(HaveOccurred())
 		Eventually(stoppedServing1).Should(BeClosed())
-		Expect(fake1.closed).To(Equal(int32(1)))
-		Expect(fake2.closed).To(Equal(int32(0)))
+		Expect(fake1.closed.Load()).To(BeTrue())
+		Expect(fake2.closed.Load()).To(BeFalse())
 		Expect(ln.listenerClosed).ToNot(BeTrue())
 		Expect(client.Transport.(*http3.RoundTripper).Close()).NotTo(HaveOccurred())
 
@@ -161,7 +165,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		// close the other server - both the fake and the actual listeners must close now
 		Expect(server2.Close()).NotTo(HaveOccurred())
 		Eventually(stoppedServing2).Should(BeClosed())
-		Expect(fake2.closed).To(Equal(int32(1)))
+		Expect(fake2.closed.Load()).To(BeTrue())
 		Expect(ln.listenerClosed).To(BeTrue())
 	})
 })

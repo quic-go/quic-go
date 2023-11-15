@@ -2,7 +2,6 @@ package wire
 
 import (
 	"encoding/binary"
-	mrand "math/rand"
 
 	"golang.org/x/exp/rand"
 
@@ -15,7 +14,7 @@ import (
 var _ = Describe("Version Negotiation Packets", func() {
 	randConnID := func(l int) protocol.ArbitraryLenConnectionID {
 		b := make(protocol.ArbitraryLenConnectionID, l)
-		_, err := mrand.Read(b)
+		_, err := rand.Read(b)
 		Expect(err).ToNot(HaveOccurred())
 		return b
 	}
@@ -65,6 +64,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		versions := []protocol.VersionNumber{1001, 1003}
 		data := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 		Expect(IsLongHeaderPacket(data[0])).To(BeTrue())
+		Expect(data[0] & 0x40).ToNot(BeZero())
 		v, err := ParseVersion(data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(v).To(BeZero())

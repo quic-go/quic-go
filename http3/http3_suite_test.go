@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 func TestHttp3(t *testing.T) {

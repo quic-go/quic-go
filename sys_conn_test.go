@@ -6,10 +6,9 @@ import (
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 
-	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Basic Conn Test", func() {
@@ -18,7 +17,7 @@ var _ = Describe("Basic Conn Test", func() {
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
 		c.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(b []byte) (int, net.Addr, error) {
 			data := []byte("foobar")
-			Expect(b).To(HaveLen(int(protocol.MaxPacketBufferSize)))
+			Expect(b).To(HaveLen(protocol.MaxPacketBufferSize))
 			return copy(b, data), addr, nil
 		})
 

@@ -129,7 +129,7 @@ var _ = Describe("Packet Handler Map", func() {
 		Expect(ok).To(BeTrue())
 		Expect(h).ToNot(Equal(handler))
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		h.handlePacket(&receivedPacket{remoteAddr: addr})
+		h.handlePacket(receivedPacket{remoteAddr: addr})
 		Expect(closePackets).To(HaveLen(1))
 		Expect(closePackets[0].addr).To(Equal(addr))
 		Expect(closePackets[0].payload).To(Equal([]byte("foobar")))
@@ -152,28 +152,11 @@ var _ = Describe("Packet Handler Map", func() {
 		Expect(ok).To(BeTrue())
 		Expect(h).ToNot(Equal(handler))
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		h.handlePacket(&receivedPacket{remoteAddr: addr})
+		h.handlePacket(receivedPacket{remoteAddr: addr})
 		Expect(closePackets).To(BeEmpty())
 
 		time.Sleep(dur)
 		Eventually(func() bool { _, ok := m.Get(connID); return ok }).Should(BeFalse())
-	})
-
-	It("closes the server", func() {
-		m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
-		for i := 0; i < 10; i++ {
-			conn := NewMockPacketHandler(mockCtrl)
-			if i%2 == 0 {
-				conn.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
-			} else {
-				conn.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
-				conn.EXPECT().shutdown()
-			}
-			b := make([]byte, 12)
-			rand.Read(b)
-			m.Add(protocol.ParseConnectionID(b), conn)
-		}
-		m.CloseServer()
 	})
 
 	It("closes", func() {

@@ -127,4 +127,31 @@ var _ = Describe("Types", func() {
 		Expect(congestionState(logging.CongestionStateApplicationLimited).String()).To(Equal("application_limited"))
 		Expect(congestionState(logging.CongestionStateRecovery).String()).To(Equal("recovery"))
 	})
+
+	It("has a string representation for the ECN bits", func() {
+		Expect(ecn(logging.ECT0).String()).To(Equal("ECT(0)"))
+		Expect(ecn(logging.ECT1).String()).To(Equal("ECT(1)"))
+		Expect(ecn(logging.ECNCE).String()).To(Equal("CE"))
+		Expect(ecn(logging.ECTNot).String()).To(Equal("Not-ECT"))
+		Expect(ecn(42).String()).To(Equal("unknown ECN"))
+	})
+
+	It("has a string representation for the ECN state", func() {
+		Expect(ecnState(logging.ECNStateTesting).String()).To(Equal("testing"))
+		Expect(ecnState(logging.ECNStateUnknown).String()).To(Equal("unknown"))
+		Expect(ecnState(logging.ECNStateFailed).String()).To(Equal("failed"))
+		Expect(ecnState(logging.ECNStateCapable).String()).To(Equal("capable"))
+		Expect(ecnState(42).String()).To(Equal("unknown ECN state"))
+	})
+
+	It("has a string representation for the ECN state trigger", func() {
+		Expect(ecnStateTrigger(logging.ECNTriggerNoTrigger).String()).To(Equal(""))
+		Expect(ecnStateTrigger(logging.ECNFailedNoECNCounts).String()).To(Equal("ACK doesn't contain ECN marks"))
+		Expect(ecnStateTrigger(logging.ECNFailedDecreasedECNCounts).String()).To(Equal("ACK decreases ECN counts"))
+		Expect(ecnStateTrigger(logging.ECNFailedLostAllTestingPackets).String()).To(Equal("all ECN testing packets declared lost"))
+		Expect(ecnStateTrigger(logging.ECNFailedMoreECNCountsThanSent).String()).To(Equal("ACK contains more ECN counts than ECN-marked packets sent"))
+		Expect(ecnStateTrigger(logging.ECNFailedTooFewECNCounts).String()).To(Equal("ACK contains fewer new ECN counts than acknowledged ECN-marked packets"))
+		Expect(ecnStateTrigger(logging.ECNFailedManglingDetected).String()).To(Equal("ECN mangling detected"))
+		Expect(ecnStateTrigger(42).String()).To(Equal("unknown ECN state trigger"))
+	})
 })

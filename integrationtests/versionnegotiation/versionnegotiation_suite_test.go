@@ -70,7 +70,7 @@ func maybeAddQLOGTracer(c *quic.Config) *quic.Config {
 		c.Tracer = qlogger
 	} else if qlogger != nil {
 		origTracer := c.Tracer
-		c.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+		c.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 			return logging.NewMultiplexedConnectionTracer(
 				qlogger(ctx, p, connID),
 				origTracer(ctx, p, connID),

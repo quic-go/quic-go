@@ -1,13 +1,16 @@
 name: Build interop Docker image
 on: 
   push:
-    branches: [ interop ]
+    branches:
+      - master
+    tags:
+      - 'v*'
   
 jobs:
   interop:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars['DOCKER_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
@@ -19,9 +22,23 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: set tag name
+        id: tag
+        # Tagged releases won't be picked up by the interop runner automatically,
+        # but they can be useful when debugging regressions.
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
+            echo "gitref=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
+          else
+            echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
+            echo 'gitref=${{ github.sha }}' | tee -a $GITHUB_OUTPUT;
+          fi
       - uses: docker/build-push-action@v4
         with:
           context: "{{defaultContext}}:interop"
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: martenseemann/quic-go-interop:latest
+          build-args: |
+            GITREF=${{ steps.tag.outputs.gitref }}
+          tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}

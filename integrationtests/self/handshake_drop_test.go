@@ -194,15 +194,15 @@ var _ = Describe("Handshake drop tests", func() {
 
 							Context(app.name, func() {
 								It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
-									var incoming, outgoing int32
+									var incoming, outgoing atomic.Int32
 									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										var p int32
 										//nolint:exhaustive
 										switch d {
 										case quicproxy.DirectionIncoming:
-											p = atomic.AddInt32(&incoming, 1)
+											p = incoming.Add(1)
 										case quicproxy.DirectionOutgoing:
-											p = atomic.AddInt32(&outgoing, 1)
+											p = outgoing.Add(1)
 										}
 										return p == 1 && d.Is(direction)
 									}, doRetry, longCertChain)
@@ -210,15 +210,15 @@ var _ = Describe("Handshake drop tests", func() {
 								})
 
 								It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
-									var incoming, outgoing int32
+									var incoming, outgoing atomic.Int32
 									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										var p int32
 										//nolint:exhaustive
 										switch d {
 										case quicproxy.DirectionIncoming:
-											p = atomic.AddInt32(&incoming, 1)
+											p = incoming.Add(1)
 										case quicproxy.DirectionOutgoing:
-											p = atomic.AddInt32(&outgoing, 1)
+											p = outgoing.Add(1)
 										}
 										return p == 2 && d.Is(direction)
 									}, doRetry, longCertChain)
