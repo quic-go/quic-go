@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,10 +21,11 @@ type frame interface{}
 
 var errHijacked = errors.New("hijacked")
 
-// PeerSettingsGetter gets the settings frame sent by peer.
-// It returns nil if the settings frame is not received yet
 type PeerSettingsGetter interface {
+	// GetPeerSettings gets the settings frame sent by peer.
+	// It returns nil if the settings frame is not received yet
 	GetPeerSettings() *settingsFrame
+	PeerSettingsReceived() <-chan struct{}
 }
 
 // PeerSettingsHandler handles the settings frame sent by peer
@@ -33,18 +35,32 @@ type PeerSettingsHandler interface {
 
 type peerSettingsHandler struct {
 	settings atomic.Pointer[settingsFrame]
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func (m *peerSettingsHandler) HandleSettings(settings *settingsFrame) error {
-	if m.settings.Load() != nil {
+func newPeerSettingsHandler() *peerSettingsHandler {
+	h := &peerSettingsHandler{}
+	h.ctx, h.cancel = context.WithCancel(context.Background())
+	return h
+}
+
+func (h *peerSettingsHandler) HandleSettings(settings *settingsFrame) error {
+	if h.settings.Load() != nil {
 		return errors.New("received more than one settings frame")
 	}
-	m.settings.Store(settings)
+	h.settings.Store(settings)
+	h.cancel()
 	return nil
 }
 
-func (m *peerSettingsHandler) GetPeerSettings() *settingsFrame {
-	return m.settings.Load()
+func (h *peerSettingsHandler) GetPeerSettings() *settingsFrame {
+	return h.settings.Load()
+}
+
+func (h *peerSettingsHandler) PeerSettingsReceived() <-chan struct{} {
+	return h.ctx.Done()
 }
 
 func parseNextFrame(r io.Reader, unknownFrameHandler unknownFrameHandlerFunc) (frame, error) {

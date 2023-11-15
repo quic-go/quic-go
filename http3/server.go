@@ -437,7 +437,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	b = (&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Append(b)
 	str.Write(b)
 
-	settingsHandler := &peerSettingsHandler{}
+	settingsHandler := newPeerSettingsHandler()
 	go s.handleUnidirectionalStreams(conn, settingsHandler)
 
 	// Process all requests immediately.

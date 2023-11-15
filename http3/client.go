@@ -62,9 +62,9 @@ type client struct {
 
 	decoder *qpack.Decoder
 
-	hostname string
-	conn     atomic.Pointer[quic.EarlyConnection]
-	peerSettingsHandler
+	hostname        string
+	conn            atomic.Pointer[quic.EarlyConnection]
+	settingsHandler *peerSettingsHandler
 
 	logger utils.Logger
 }
@@ -105,14 +105,15 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	tlsConf.NextProtos = []string{versionToALPN(conf.Versions[0])}
 
 	return &client{
-		hostname:      authorityAddr("https", hostname),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        conf,
-		opts:          opts,
-		dialer:        dialer,
-		logger:        logger,
+		hostname:        authorityAddr("https", hostname),
+		settingsHandler: newPeerSettingsHandler(),
+		tlsConf:         tlsConf,
+		requestWriter:   newRequestWriter(logger),
+		decoder:         qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+		config:          conf,
+		opts:            opts,
+		dialer:          dialer,
+		logger:          logger,
 	}, nil
 }
 
@@ -232,7 +233,7 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			}
 			// only one settings frame is allowed
-			if err = c.HandleSettings(sf); err != nil {
+			if err = c.settingsHandler.HandleSettings(sf); err != nil {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				return
 			}
@@ -437,7 +438,7 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 	} else {
 		httpStr = hstr
 	}
-	respBody := newResponseBody(httpStr, conn, &c.peerSettingsHandler, reqDone)
+	respBody := newResponseBody(httpStr, conn, c.settingsHandler, reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
