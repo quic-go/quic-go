@@ -184,9 +184,9 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the DroppedPacket event", func() {
-			tr1.EXPECT().DroppedPacket(PacketTypeInitial, ByteCount(1337), PacketDropHeaderParseError)
-			tr2.EXPECT().DroppedPacket(PacketTypeInitial, ByteCount(1337), PacketDropHeaderParseError)
-			tracer.DroppedPacket(PacketTypeInitial, 1337, PacketDropHeaderParseError)
+			tr1.EXPECT().DroppedPacket(PacketTypeInitial, PacketNumber(42), ByteCount(1337), PacketDropHeaderParseError)
+			tr2.EXPECT().DroppedPacket(PacketTypeInitial, PacketNumber(42), ByteCount(1337), PacketDropHeaderParseError)
+			tracer.DroppedPacket(PacketTypeInitial, 42, 1337, PacketDropHeaderParseError)
 		})
 
 		It("traces the UpdatedCongestionState event", func() {

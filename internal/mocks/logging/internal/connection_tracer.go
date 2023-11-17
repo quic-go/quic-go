@@ -296,15 +296,15 @@ func (c *ConnectionTracerDroppedKeyCall) DoAndReturn(f func(protocol.KeyPhase)) 
 }
 
 // DroppedPacket mocks base method.
-func (m *MockConnectionTracer) DroppedPacket(arg0 logging.PacketType, arg1 protocol.ByteCount, arg2 logging.PacketDropReason) {
+func (m *MockConnectionTracer) DroppedPacket(arg0 logging.PacketType, arg1 protocol.PacketNumber, arg2 protocol.ByteCount, arg3 logging.PacketDropReason) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DroppedPacket", arg0, arg1, arg2)
+	m.ctrl.Call(m, "DroppedPacket", arg0, arg1, arg2, arg3)
 }
 
 // DroppedPacket indicates an expected call of DroppedPacket.
-func (mr *MockConnectionTracerMockRecorder) DroppedPacket(arg0, arg1, arg2 any) *ConnectionTracerDroppedPacketCall {
+func (mr *MockConnectionTracerMockRecorder) DroppedPacket(arg0, arg1, arg2, arg3 any) *ConnectionTracerDroppedPacketCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedPacket), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedPacket), arg0, arg1, arg2, arg3)
 	return &ConnectionTracerDroppedPacketCall{Call: call}
 }
 
@@ -320,13 +320,13 @@ func (c *ConnectionTracerDroppedPacketCall) Return() *ConnectionTracerDroppedPac
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerDroppedPacketCall) Do(f func(logging.PacketType, protocol.ByteCount, logging.PacketDropReason)) *ConnectionTracerDroppedPacketCall {
+func (c *ConnectionTracerDroppedPacketCall) Do(f func(logging.PacketType, protocol.PacketNumber, protocol.ByteCount, logging.PacketDropReason)) *ConnectionTracerDroppedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerDroppedPacketCall) DoAndReturn(f func(logging.PacketType, protocol.ByteCount, logging.PacketDropReason)) *ConnectionTracerDroppedPacketCall {
+func (c *ConnectionTracerDroppedPacketCall) DoAndReturn(f func(logging.PacketType, protocol.PacketNumber, protocol.ByteCount, logging.PacketDropReason)) *ConnectionTracerDroppedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

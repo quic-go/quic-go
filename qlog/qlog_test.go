@@ -616,7 +616,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records dropped packets", func() {
-				tracer.DroppedPacket(logging.PacketTypeHandshake, 1337, logging.PacketDropPayloadDecryptError)
+				tracer.DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, 1337, logging.PacketDropPayloadDecryptError)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:packet_dropped"))
@@ -626,8 +626,24 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveLen(1))
-				Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "retry"))
 				Expect(ev).To(HaveKeyWithValue("trigger", "payload_decrypt_error"))
+			})
+
+			It("records dropped packets with a packet number", func() {
+				tracer.DroppedPacket(logging.PacketTypeHandshake, 42, 1337, logging.PacketDropDuplicate)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:packet_dropped"))
+				ev := entry.Event
+				Expect(ev).To(HaveKey("raw"))
+				Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
+				Expect(ev).To(HaveKey("header"))
+				hdr := ev["header"].(map[string]interface{})
+				Expect(hdr).To(HaveLen(2))
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
+				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(42)))
+				Expect(ev).To(HaveKeyWithValue("trigger", "duplicate"))
 			})
 
 			It("records metrics updates", func() {

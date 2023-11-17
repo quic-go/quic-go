@@ -686,7 +686,7 @@ var _ = Describe("Connection", func() {
 				Version:          conn.version,
 				Token:            []byte("foobar"),
 			}}, make([]byte, 16) /* Retry integrity tag */)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -696,7 +696,7 @@ var _ = Describe("Connection", func() {
 				protocol.ArbitraryLenConnectionID(destConnID.Bytes()),
 				conn.config.Versions,
 			)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.InvalidPacketNumber, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
 			Expect(conn.handlePacketImpl(receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
@@ -712,7 +712,7 @@ var _ = Describe("Connection", func() {
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
 			p.data[0] ^= 0x40 // unset the QUIC bit
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropHeaderParseError)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -724,7 +724,7 @@ var _ = Describe("Connection", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnsupportedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnsupportedVersion)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -745,7 +745,7 @@ var _ = Describe("Connection", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, p.Size(), logging.PacketDropUnexpectedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedVersion)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -811,7 +811,7 @@ var _ = Describe("Connection", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT).Return(true)
 			conn.receivedPacketHandler = rph
-			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, protocol.ByteCount(len(packet.data)), logging.PacketDropDuplicate)
+			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, protocol.PacketNumber(0x1337), protocol.ByteCount(len(packet.data)), logging.PacketDropDuplicate)
 			Expect(conn.handlePacketImpl(packet)).To(BeFalse())
 		})
 
@@ -837,7 +837,7 @@ var _ = Describe("Connection", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, p.Size(), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropPayloadDecryptError)
 			conn.handlePacket(p)
 			Consistently(conn.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
@@ -955,7 +955,7 @@ var _ = Describe("Connection", func() {
 				runErr <- conn.run()
 			}()
 			expectReplaceWithClosed()
-			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, protocol.InvalidPacketNumber, gomock.Any(), logging.PacketDropHeaderParseError)
 			conn.handlePacket(getShortHeaderPacket(srcConnID, 0x42, nil))
 			Consistently(runErr).ShouldNot(Receive())
 			// make the go routine return
@@ -1028,7 +1028,7 @@ var _ = Describe("Connection", func() {
 			Expect(conn.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			p2 := getLongHeaderPacket(hdr2, nil)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeInitial, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeInitial, protocol.InvalidPacketNumber, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
 			Expect(conn.handlePacketImpl(p2)).To(BeFalse())
 		})
 
@@ -1183,7 +1183,7 @@ var _ = Describe("Connection", func() {
 				// don't EXPECT any more calls to unpacker.UnpackLongHeader()
 				gomock.InOrder(
 					tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any(), gomock.Any()),
-					tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), logging.PacketDropUnknownConnectionID),
+					tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.InvalidPacketNumber, protocol.ByteCount(len(packet2.data)), logging.PacketDropUnknownConnectionID),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(conn.handlePacketImpl(packet1)).To(BeTrue())
@@ -2430,7 +2430,7 @@ var _ = Describe("Connection", func() {
 
 	It("stores up to MaxConnUnprocessedPackets packets", func() {
 		done := make(chan struct{})
-		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, logging.ByteCount(6), logging.PacketDropDOSPrevention).Do(func(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, logging.ByteCount(6), logging.PacketDropDOSPrevention).Do(func(logging.PacketType, logging.PacketNumber, logging.ByteCount, logging.PacketDropReason) {
 			close(done)
 		})
 		// Nothing here should block
@@ -2790,14 +2790,14 @@ var _ = Describe("Client Connection", func() {
 
 		It("ignores Version Negotiation packets that offer the current version", func() {
 			p := getVNP(conn.version)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropUnexpectedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedVersion)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores unparseable Version Negotiation packets", func() {
 			p := getVNP(conn.version)
 			p.data = p.data[:len(p.data)-2]
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropHeaderParseError)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2846,14 +2846,14 @@ var _ = Describe("Client Connection", func() {
 		It("ignores Retry packets after receiving a regular packet", func() {
 			conn.receivedFirstPacket = true
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
 			retryHdr.SrcConnectionID = destConnID
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -2861,7 +2861,7 @@ var _ = Describe("Client Connection", func() {
 			tag := getRetryTag(retryHdr)
 			tag[0]++
 			p := getPacket(retryHdr, tag)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropPayloadDecryptError)
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -3159,7 +3159,7 @@ var _ = Describe("Client Connection", func() {
 			tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(getPacket(hdr1, nil))).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
-			tracer.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.InvalidPacketNumber, gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
 		})
 
@@ -3174,7 +3174,7 @@ var _ = Describe("Client Connection", func() {
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, p.Size(), gomock.Any())
+			tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.InvalidPacketNumber, p.Size(), gomock.Any())
 			Expect(conn.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -3213,7 +3213,7 @@ var _ = Describe("Client Connection", func() {
 			tracer.EXPECT().ReceivedRetry(gomock.Any())
 			conn.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, destConnID, destConnID, []byte("foobar"), conn.version)))
 			initialPacket := testutils.ComposeInitialPacket(conn.connIDManager.Get(), srcConnID, conn.version, conn.connIDManager.Get(), nil)
-			tracer.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.InvalidPacketNumber, gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 	})
