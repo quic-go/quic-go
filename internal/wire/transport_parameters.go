@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	math_rand "math/rand"
 	"net"
 	"sort"
 	"time"
@@ -447,8 +448,8 @@ func (p *TransportParameters) marshalClientRandomized(clientHelloPRNG *prng.PRNG
 
 		func() {
 			// add a greased value
-			b = quicvarint.Append(b, uint64(27+31*rand.Intn(100)))
-			length := rand.Intn(16)
+			b = quicvarint.Append(b, uint64(27+31*math_rand.Intn(100)))
+			length := math_rand.Intn(16)
 			b = quicvarint.Append(b, uint64(length))
 			b = b[:len(b)+length]
 			rand.Read(b[len(b)-length:])

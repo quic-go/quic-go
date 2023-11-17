@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"log"
 	"net"
 	"os"
 	"strconv"
@@ -26,6 +25,9 @@ type OOBCapablePacketConn interface {
 
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
+// [Psiphon]
+var logger = utils.DefaultLogger
+
 func wrapConn(pc net.PacketConn) (rawConn, error) {
 	if err := setReceiveBuffer(pc); err != nil {
 		if !strings.Contains(err.Error(), "use of closed network connection") {
@@ -33,7 +35,10 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
 					return
 				}
-				t.logger.Errof("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.", err)
+
+				// [Psiphon]
+				// Do not emit alert to stderr (was log.Printf).
+				logger.Errorf("%s. See https://github.com/Psiphon-Labs/quic-go/wiki/UDP-Buffer-Sizes for details.", err)
 			})
 		}
 	}
@@ -43,7 +48,10 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
 					return
 				}
-				t.logger.Errof("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.", err)
+
+				// [Psiphon]
+				// Do not emit alert to stderr (was log.Printf).
+				logger.Errorf("%s. See https://github.com/Psiphon-Labs/quic-go/wiki/UDP-Buffer-Sizes for details.", err)
 			})
 		}
 	}

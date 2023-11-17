@@ -8,11 +8,11 @@ import (
 
 	"golang.org/x/exp/rand"
 
-	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/handshake"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/Psiphon-Labs/quic-go/internal/ackhandler"
+	"github.com/Psiphon-Labs/quic-go/internal/handshake"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/qerr"
+	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
 var errNothingToPack = errors.New("nothing to pack")
@@ -91,38 +91,6 @@ func (p *longHeaderPacket) EncryptionLevel() protocol.EncryptionLevel {
 }
 
 func (p *longHeaderPacket) IsAckEliciting() bool { return ackhandler.HasAckElicitingFrames(p.frames) }
-
-
-// TODO! this function is removed complete
-func getMaxPacketSize(addr net.Addr, maxPacketSizeAdustment int) protocol.ByteCount {
-	maxSize := protocol.ByteCount(protocol.MinInitialPacketSize)
-	// If this is not a UDP address, we don't know anything about the MTU.
-	// Use the minimum size of an Initial packet as the max packet size.
-	if udpAddr, ok := addr.(*net.UDPAddr); ok {
-		if utils.IsIPv4(udpAddr.IP) {
-			maxSize = protocol.InitialPacketSizeIPv4
-		} else {
-			maxSize = protocol.InitialPacketSizeIPv6
-		}
-
-		// [Psiphon]
-		//
-		// Adjust the max packet size to allow for obfuscation overhead. This
-		// is a best-effort operation. In practice, maxPacketSizeAdustment
-		// will be tens of bytes and maxSize is over 1200 bytes; the
-		// condition here is a sanity check guard to prevent negative sizes
-		// and possible panics. We don't expect to need to make the largest
-		// adustment that would be possible when the condition is false.
-		//
-		// TODO: internal/congestion.cubicSender continues to use
-		// initialMaxDatagramSize = protocol.InitialPacketSizeIPv4
-		if maxSize > protocol.ByteCount(maxPacketSizeAdustment) {
-			maxSize -= protocol.ByteCount(maxPacketSizeAdustment)
-		}
-
-	}
-	return maxSize
-}
 
 type packetNumberManager interface {
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)

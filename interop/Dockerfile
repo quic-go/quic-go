@@ -21,7 +21,7 @@ ARG CACHEBUST=1
 # build other branches / commits / tags using --build-arg GITREF="<git reference>"
 ARG GITREF="master"
 
-RUN git clone https://github.com/quic-go/quic-go
+RUN git clone https://github.com/Psiphon-Labs/quic-go
 WORKDIR /quic-go
 RUN git checkout ${GITREF}
 RUN go get ./...

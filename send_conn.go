@@ -3,8 +3,8 @@ package quic
 import (
 	"net"
 
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
 )
 
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.

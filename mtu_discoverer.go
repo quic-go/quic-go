@@ -27,7 +27,7 @@ const (
 	mtuProbeDelay = 5
 )
 
-func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
+func getMaxPacketSize(addr net.Addr, maxPacketSizeAdjustment int) protocol.ByteCount {
 	maxSize := protocol.ByteCount(protocol.MinInitialPacketSize)
 	// If this is not a UDP address, we don't know anything about the MTU.
 	// Use the minimum size of an Initial packet as the max packet size.
@@ -37,6 +37,22 @@ func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
 		} else {
 			maxSize = protocol.InitialPacketSizeIPv6
 		}
+
+		// [Psiphon]
+		//
+		// Adjust the max packet size to allow for obfuscation overhead. This
+		// is a best-effort operation. In practice, maxPacketSizeAdustment
+		// will be tens of bytes and maxSize is over 1200 bytes; the
+		// condition here is a sanity check guard to prevent negative sizes
+		// and possible panics. We don't expect to need to make the largest
+		// adustment that would be possible when the condition is false.
+		//
+		// TODO: internal/congestion.cubicSender continues to use
+		// initialMaxDatagramSize = protocol.InitialPacketSizeIPv4
+		if maxSize > protocol.ByteCount(maxPacketSizeAdjustment) {
+			maxSize -= protocol.ByteCount(maxPacketSizeAdjustment)
+		}
+
 	}
 	return maxSize
 }

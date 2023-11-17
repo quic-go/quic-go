@@ -536,28 +536,36 @@ type stubCryptoSetup struct {
 	initialOpener handshake.LongHeaderOpener
 }
 
-var notSupported = errors.New("not supported")
+var errNotSupported = errors.New("not supported")
 
-func (s *stubCryptoSetup) RunHandshake() {
+func (s *stubCryptoSetup) StartHandshake() error {
+	return nil
 }
 
 func (s *stubCryptoSetup) Close() error {
-	return notSupported
+	return errNotSupported
 }
 
 func (s *stubCryptoSetup) ChangeConnectionID(protocol.ConnectionID) {
 }
 
 func (s *stubCryptoSetup) GetSessionTicket() ([]byte, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
-func (s *stubCryptoSetup) HandleMessage([]byte, protocol.EncryptionLevel) bool {
-	return false
+func (s *stubCryptoSetup) HandleMessage([]byte, protocol.EncryptionLevel) error {
+	return nil
+}
+
+func (s *stubCryptoSetup) NextEvent() handshake.Event {
+	return handshake.Event{}
 }
 
 func (s *stubCryptoSetup) SetLargest1RTTAcked(protocol.PacketNumber) error {
-	return notSupported
+	return errNotSupported
+}
+
+func (s *stubCryptoSetup) DiscardInitialKeys() {
 }
 
 func (s *stubCryptoSetup) SetHandshakeConfirmed() {
@@ -572,37 +580,37 @@ func (s *stubCryptoSetup) GetInitialOpener() (handshake.LongHeaderOpener, error)
 }
 
 func (s *stubCryptoSetup) GetHandshakeOpener() (handshake.LongHeaderOpener, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 func (s *stubCryptoSetup) Get0RTTOpener() (handshake.LongHeaderOpener, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 func (s *stubCryptoSetup) Get1RTTOpener() (handshake.ShortHeaderOpener, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 func (s *stubCryptoSetup) GetInitialSealer() (handshake.LongHeaderSealer, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 func (s *stubCryptoSetup) GetHandshakeSealer() (handshake.LongHeaderSealer, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 func (s *stubCryptoSetup) Get0RTTSealer() (handshake.LongHeaderSealer, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 func (s *stubCryptoSetup) Get1RTTSealer() (handshake.ShortHeaderSealer, error) {
-	return nil, notSupported
+	return nil, errNotSupported
 }
 
 // [Psiphon]
 // verifyClientHelloRandom unpacks an Initial packet, extracts the CRYPTO
 // frame, and calls Config.VerifyClientHelloRandom.
-func (s *baseServer) verifyClientHelloRandom(p *receivedPacket, hdr *wire.Header) error {
+func (s *baseServer) verifyClientHelloRandom(p receivedPacket, hdr *wire.Header) error {
 
 	// TODO: support QUICv2
 	versionNumber := protocol.Version1

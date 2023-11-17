@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
 )
 
 func setDF(rawConn syscall.RawConn) (bool, error) {
@@ -39,7 +39,7 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 		// On macOS, the syscall for setting DF bit for IPv4 fails on dual-stack listeners.
 		// Treat the connection as not having DF enabled, even though the DF bit will be set
 		// when used for IPv6.
-		// See https://github.com/quic-go/quic-go/issues/3793 for details.
+		// See https://github.com/Psiphon-Labs/quic-go/issues/3793 for details.
 		return false, nil
 	case errDFIPv4 != nil && errDFIPv6 != nil:
 		return false, errors.New("setting DF failed for both IPv4 and IPv6")

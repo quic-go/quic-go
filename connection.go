@@ -297,7 +297,7 @@ var newConnection = func(
 		// [Psiphon]
 		getMaxPacketSize(s.conn.RemoteAddr(), maxPacketSizeAdjustment),
 
-		s.sentPacketHandler.SetMaxDatagramSize
+		s.sentPacketHandler.SetMaxDatagramSize,
 	)
 
 	params := &wire.TransportParameters{
@@ -350,10 +350,6 @@ var newConnection = func(
 		s.handshakeStream,
 		s.sentPacketHandler,
 		s.retransmissionQueue,
-
-		// [Psiphon]
-		maxPacketSizeAdjustment,
-
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
@@ -427,7 +423,14 @@ var newClientConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, getMaxPacketSize(s.conn.RemoteAddr()), s.sentPacketHandler.SetMaxDatagramSize)
+	s.mtuDiscoverer = newMTUDiscoverer(
+		s.rttStats,
+
+		// [Psiphon]
+		getMaxPacketSize(s.conn.RemoteAddr(), conf.ClientMaxPacketSizeAdjustment),
+
+		s.sentPacketHandler.SetMaxDatagramSize,
+	)
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -481,15 +484,11 @@ var newClientConnection = func(
 		s.handshakeStream,
 		s.sentPacketHandler,
 		s.retransmissionQueue,
-
-		// [Psiphon]
-		conf.ClientMaxPacketSizeAdjustment,
-
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
 		s.datagramQueue,
-		s.perspective
+		s.perspective,
 	)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName

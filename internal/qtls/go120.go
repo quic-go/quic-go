@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 
-	"github.com/quic-go/qtls-go1-20"
+	"github.com/Psiphon-Labs/qtls-go1-20"
 )
 
 type (
 	QUICConn            = qtls.QUICConn
 	QUICConfig          = qtls.QUICConfig
+	ExtraConfig         = qtls.ExtraConfig
 	QUICEvent           = qtls.QUICEvent
 	QUICEventKind       = qtls.QUICEventKind
 	QUICEncryptionLevel = qtls.QUICEncryptionLevel
@@ -151,4 +152,3 @@ func SendSessionTicket(c *QUICConn, allow0RTT bool) error {
 func ReadClientHelloRandom(data []byte) ([]byte, error) {
 	return qtls.ReadClientHelloRandom(data)
 }
-

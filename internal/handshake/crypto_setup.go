@@ -102,9 +102,6 @@ func NewCryptoSetupClient(
 		logger,
 		protocol.PerspectiveClient,
 		version,
-
-		// [Psiphon]
-		clientHelloPRNG,
 	)
 
 	tlsConf = tlsConf.Clone()
@@ -115,11 +112,11 @@ func NewCryptoSetupClient(
 	cs.allow0RTT = enable0RTT
 
 	// [Psiphon]
-	cs.extraConf.ClientHelloPRNG = clientHelloPRNG
-	cs.extraConf.GetClientHelloRandom = getClientHelloRandom
+	quicConf.ExtraConfig.ClientHelloPRNG = clientHelloPRNG
+	quicConf.ExtraConfig.GetClientHelloRandom = getClientHelloRandom
 
 	cs.conn = qtls.QUICClient(quicConf)
-	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
+	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient, clientHelloPRNG))
 
 	return cs
 }
@@ -144,9 +141,6 @@ func NewCryptoSetupServer(
 		logger,
 		protocol.PerspectiveServer,
 		version,
-
-		// [Psiphon]
-		nil,
 	)
 	cs.allow0RTT = allow0RTT
 
@@ -188,7 +182,6 @@ func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) 
 	}
 }
 
-// TODO!! clientHelloPRNG changed, function definition does not copy the old
 func newCryptoSetup(
 	connID protocol.ConnectionID,
 	tp *wire.TransportParameters,
@@ -301,7 +294,7 @@ func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (done bool, err error) {
 	case qtls.QUICTransportParameters:
 		return false, h.handleTransportParameters(ev.Data)
 	case qtls.QUICTransportParametersRequired:
-		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
+		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective, nil))
 		return false, nil
 	case qtls.QUICRejectedEarlyData:
 		h.rejected0RTT()

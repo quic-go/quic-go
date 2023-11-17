@@ -6,9 +6,9 @@ import (
 	reflect "reflect"
 	time "time"
 
-	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
-	protocol "github.com/quic-go/quic-go/internal/protocol"
-	wire "github.com/quic-go/quic-go/internal/wire"
+	ackhandler "github.com/Psiphon-Labs/quic-go/internal/ackhandler"
+	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
+	wire "github.com/Psiphon-Labs/quic-go/internal/wire"
 	gomock "go.uber.org/mock/gomock"
 )
 

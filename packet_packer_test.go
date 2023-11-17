@@ -9,14 +9,14 @@ import (
 
 	"golang.org/x/exp/rand"
 
-	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/handshake"
-	"github.com/quic-go/quic-go/internal/mocks"
-	mockackhandler "github.com/quic-go/quic-go/internal/mocks/ackhandler"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/Psiphon-Labs/quic-go/internal/ackhandler"
+	"github.com/Psiphon-Labs/quic-go/internal/handshake"
+	"github.com/Psiphon-Labs/quic-go/internal/mocks"
+	mockackhandler "github.com/Psiphon-Labs/quic-go/internal/mocks/ackhandler"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/qerr"
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -100,7 +100,6 @@ var _ = Describe("Packet packer", func() {
 		pnManager = mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
 
-		// TODO! packet.maxPacketSize is no longer a thing
 		packer = newPacketPacker(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), func() protocol.ConnectionID { return connID }, initialStream, handshakeStream, pnManager, retransmissionQueue, sealingManager, framer, ackFramer, datagramQueue, protocol.PerspectiveServer)
 	})
 
