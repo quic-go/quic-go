@@ -20,7 +20,7 @@ func NewQlogger(logger io.Writer) func(context.Context, logging.Perspective, qui
 		if p == logging.PerspectiveClient {
 			role = "client"
 		}
-		filename := fmt.Sprintf("log_%x_%s.qlog", connID.Bytes(), role)
+		filename := fmt.Sprintf("log_%s_%s.qlog", connID, role)
 		fmt.Fprintf(logger, "Creating %s.\n", filename)
 		f, err := os.Create(filename)
 		if err != nil {
