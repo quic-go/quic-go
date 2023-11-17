@@ -25,22 +25,32 @@ var _ = Describe("Connection ID generation", func() {
 		Expect(c.Len()).To(Equal(5))
 	})
 
-	It("generates random length destination connection IDs", func() {
-		var has8ByteConnID, has20ByteConnID bool
+	// [Psiphon]
+	// It("generates random length destination connection IDs", func() {
+	// 	var has8ByteConnID, has20ByteConnID bool
+	// 	for i := 0; i < 1000; i++ {
+	// 		c, err := GenerateConnectionIDForInitial()
+	// 		Expect(err).ToNot(HaveOccurred())
+	// 		Expect(c.Len()).To(BeNumerically(">=", 8))
+	// 		Expect(c.Len()).To(BeNumerically("<=", 20))
+	// 		if c.Len() == 8 {
+	// 			has8ByteConnID = true
+	// 		}
+	// 		if c.Len() == 20 {
+	// 			has20ByteConnID = true
+	// 		}
+	// 	}
+	// 	Expect(has8ByteConnID).To(BeTrue())
+	// 	Expect(has20ByteConnID).To(BeTrue())
+	// })
+
+	// [Psiphon]
+	It("generates fixed size destination connection IDs", func() {
 		for i := 0; i < 1000; i++ {
 			c, err := GenerateConnectionIDForInitial()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(c.Len()).To(BeNumerically(">=", 8))
-			Expect(c.Len()).To(BeNumerically("<=", 20))
-			if c.Len() == 8 {
-				has8ByteConnID = true
-			}
-			if c.Len() == 20 {
-				has20ByteConnID = true
-			}
+			Expect(c.Len()).To(BeNumerically("==", 8))
 		}
-		Expect(has8ByteConnID).To(BeTrue())
-		Expect(has20ByteConnID).To(BeTrue())
 	})
 
 	It("reads the connection ID", func() {
