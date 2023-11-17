@@ -192,7 +192,7 @@ quic.Config{
     if p == logging.PerspectiveClient {
       role = "client"
     }
-    filename := fmt.Sprintf("./log_%x_%s.qlog", connID, role)
+    filename := fmt.Sprintf("./log_%s_%s.qlog", connID, role)
     f, err := os.Create(filename)
     // handle the error
     return qlog.NewConnectionTracer(f, p, connID)
