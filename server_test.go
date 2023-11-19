@@ -530,7 +530,7 @@ var _ = Describe("Server", func() {
 				Eventually(run).Should(BeClosed())
 				Eventually(done).Should(BeClosed())
 				// shutdown
-				conn.EXPECT().destroy(gomock.Any())
+				conn.EXPECT().destroy(gomock.Any()).MaxTimes(1)
 			})
 
 			It("drops packets if the receive queue is full", func() {

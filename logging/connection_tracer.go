@@ -20,7 +20,7 @@ type ConnectionTracer struct {
 	ReceivedLongHeaderPacket         func(*ExtendedHeader, ByteCount, ECN, []Frame)
 	ReceivedShortHeaderPacket        func(*ShortHeader, ByteCount, ECN, []Frame)
 	BufferedPacket                   func(PacketType, ByteCount)
-	DroppedPacket                    func(PacketType, ByteCount, PacketDropReason)
+	DroppedPacket                    func(PacketType, PacketNumber, ByteCount, PacketDropReason)
 	UpdatedMetrics                   func(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
 	AcknowledgedPacket               func(EncryptionLevel, PacketNumber)
 	LostPacket                       func(EncryptionLevel, PacketNumber, PacketLossReason)
@@ -139,10 +139,10 @@ func NewMultiplexedConnectionTracer(tracers ...*ConnectionTracer) *ConnectionTra
 				}
 			}
 		},
-		DroppedPacket: func(typ PacketType, size ByteCount, reason PacketDropReason) {
+		DroppedPacket: func(typ PacketType, pn PacketNumber, size ByteCount, reason PacketDropReason) {
 			for _, t := range tracers {
 				if t.DroppedPacket != nil {
-					t.DroppedPacket(typ, size, reason)
+					t.DroppedPacket(typ, pn, size, reason)
 				}
 			}
 		},

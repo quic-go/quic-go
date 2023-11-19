@@ -106,8 +106,8 @@ func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protoco
 		BufferedPacket: func(pt logging.PacketType, size protocol.ByteCount) {
 			t.BufferedPacket(pt, size)
 		},
-		DroppedPacket: func(pt logging.PacketType, size protocol.ByteCount, reason logging.PacketDropReason) {
-			t.DroppedPacket(pt, size, reason)
+		DroppedPacket: func(pt logging.PacketType, pn logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
+			t.DroppedPacket(pt, pn, size, reason)
 		},
 		UpdatedMetrics: func(rttStats *utils.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
 			t.UpdatedMetrics(rttStats, cwnd, bytesInFlight, packetsInFlight)
@@ -444,12 +444,13 @@ func (t *connectionTracer) BufferedPacket(pt logging.PacketType, size protocol.B
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) DroppedPacket(pt logging.PacketType, size protocol.ByteCount, reason logging.PacketDropReason) {
+func (t *connectionTracer) DroppedPacket(pt logging.PacketType, pn logging.PacketNumber, size protocol.ByteCount, reason logging.PacketDropReason) {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketDropped{
-		PacketType: pt,
-		PacketSize: size,
-		Trigger:    packetDropReason(reason),
+		PacketType:   pt,
+		PacketNumber: pn,
+		PacketSize:   size,
+		Trigger:      packetDropReason(reason),
 	})
 	t.mutex.Unlock()
 }
