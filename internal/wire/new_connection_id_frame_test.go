@@ -38,7 +38,15 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			Expect(err).To(MatchError("Retire Prior To value (1001) larger than Sequence Number (1000)"))
 		})
 
-		It("errors when the connection ID has an invalid length", func() {
+		It("errors when the connection ID has a zero-length connection ID", func() {
+			data := encodeVarInt(42)                 // sequence number
+			data = append(data, encodeVarInt(12)...) // retire prior to
+			data = append(data, 0)                   // connection ID length
+			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
+			Expect(err).To(MatchError("invalid zero-length connection ID"))
+		})
+
+		It("errors when the connection ID has an invalid length (too long)", func() {
 			data := encodeVarInt(0xdeadbeef)                                                                          // sequence number
 			data = append(data, encodeVarInt(0xcafe)...)                                                              // retire prior to
 			data = append(data, 21)                                                                                   // connection ID length
