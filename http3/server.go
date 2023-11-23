@@ -641,6 +641,11 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
+
+	// abort the stream when there is a panic
+	if panicked {
+		return newStreamError(ErrCodeInternalError, errPanicked)
+	}
 	return requestError{}
 }
 

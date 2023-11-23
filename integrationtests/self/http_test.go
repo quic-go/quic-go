@@ -140,6 +140,24 @@ var _ = Describe("HTTP tests", func() {
 		Expect(resp.Header.Get("Content-Length")).To(Equal(strconv.Itoa(len("foobar"))))
 	})
 
+	It("detects stream errors when server panics when writing response", func() {
+		mux.HandleFunc("/writing_and_panicking", func(w http.ResponseWriter, r *http.Request) {
+			// no recover here as it will interfere with the handler
+			w.Write([]byte("foobar"))
+			w.(http.Flusher).Flush()
+			// simulate a large response body, some data were written
+			time.Sleep(5 * time.Second)
+			panic(http.ErrAbortHandler)
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/writing_and_panicking", port))
+		Expect(err).ToNot(HaveOccurred())
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).To(HaveOccurred())
+		// in reality the parts of the body is undetermined, but it's a test
+		Expect(body).To(Equal([]byte("foobar")))
+	})
+
 	It("requests to different servers with the same udpconn", func() {
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/remoteAddr", port))
 		Expect(err).ToNot(HaveOccurred())
