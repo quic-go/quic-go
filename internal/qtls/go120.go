@@ -52,10 +52,20 @@ func SetupConfigForServer(conf *QUICConfig, enable0RTT bool, getDataForSessionTi
 	}
 }
 
-func SetupConfigForClient(conf *QUICConfig, getDataForSessionState func() []byte, setDataFromSessionState func([]byte) bool) {
+func SetupConfigForClient(
+	conf *QUICConfig,
+	getDataForSessionState func(earlyData bool) []byte,
+	setDataFromSessionState func(data []byte, earlyData bool) (allowEarlyData bool),
+) {
 	conf.ExtraConfig = &qtls.ExtraConfig{
-		GetAppDataForSessionState:  getDataForSessionState,
-		SetAppDataFromSessionState: setDataFromSessionState,
+		GetAppDataForSessionState: func() []byte {
+			// qtls only calls the GetAppDataForSessionState when doing 0-RTT
+			return getDataForSessionState(true)
+		},
+		SetAppDataFromSessionState: func(data []byte) (allowEarlyData bool) {
+			// qtls only calls the SetAppDataFromSessionState for 0-RTT enabled tickets
+			return setDataFromSessionState(data, true)
+		},
 	}
 }
 

@@ -641,6 +641,49 @@ var _ = Describe("0-RTT", func() {
 		Expect(get0RTTPackets(counter.getRcvdLongHeaderPackets())).To(BeEmpty())
 	})
 
+	It("doesn't use 0-RTT, if the server didn't enable it", func() {
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
+
+		gets := make(chan string, 100)
+		puts := make(chan string, 100)
+		cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
+		tlsConf := getTLSClientConfig()
+		tlsConf.ClientSessionCache = cache
+		conn1, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn1.CloseWithError(0, "")
+		var sessionKey string
+		Eventually(puts).Should(Receive(&sessionKey))
+		Expect(conn1.ConnectionState().TLS.DidResume).To(BeFalse())
+
+		serverConn, err := server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
+
+		conn2, err := quic.DialAddrEarly(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(gets).To(Receive(Equal(sessionKey)))
+		Expect(conn2.ConnectionState().TLS.DidResume).To(BeTrue())
+
+		serverConn, err = server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeTrue())
+		Expect(serverConn.ConnectionState().Used0RTT).To(BeFalse())
+		conn2.CloseWithError(0, "")
+	})
+
 	DescribeTable("flow control limits",
 		func(addFlowControlLimit func(*quic.Config, uint64)) {
 			counter, tracer := newPacketTracer()

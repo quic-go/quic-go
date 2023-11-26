@@ -40,8 +40,9 @@ var _ = Describe("Client Session Cache", func() {
 			RootCAs: testdata.GetRootCA(),
 			ClientSessionCache: &clientSessionCache{
 				wrapped: tls.NewLRUClientSessionCache(10),
-				getData: func() []byte { return []byte("session") },
-				setData: func(data []byte) bool {
+				getData: func(bool) []byte { return []byte("session") },
+				setData: func(data []byte, earlyData bool) bool {
+					Expect(earlyData).To(BeFalse()) // running on top of TCP, we can only test non-0-RTT here
 					restored <- data
 					return true
 				},
