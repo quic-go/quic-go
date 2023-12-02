@@ -503,7 +503,7 @@ var _ = Describe("Transport Parameters", func() {
 				MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				ActiveConnectionIDLimit:        2 + getRandomValueUpTo(math.MaxInt64-2),
-				MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(int64(protocol.MaxDatagramFrameSize))),
+				MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(int64(MaxDatagramSize))),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
 			b := params.MarshalForSessionTicket(nil)

@@ -19,7 +19,8 @@ import (
 )
 
 var _ = Describe("Datagram test", func() {
-	const num = 100
+	const concurrentSends = 100
+	const maxDatagramSize = 250
 
 	var (
 		serverConn, clientConn *net.UDPConn
@@ -47,11 +48,11 @@ var _ = Describe("Datagram test", func() {
 
 			if expectDatagramSupport {
 				Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-
 				if enableDatagram {
+					f := &wire.DatagramFrame{DataLenPresent: true}
 					var wg sync.WaitGroup
-					wg.Add(num)
-					for i := 0; i < num; i++ {
+					wg.Add(concurrentSends)
+					for i := 0; i < concurrentSends; i++ {
 						go func(i int) {
 							defer GinkgoRecover()
 							defer wg.Done()
@@ -60,6 +61,11 @@ var _ = Describe("Datagram test", func() {
 							Expect(conn.SendDatagram(b)).To(Succeed())
 						}(i)
 					}
+					maxDatagramMessageSize := f.MaxDataLen(maxDatagramSize, conn.ConnectionState().Version)
+					b := make([]byte, maxDatagramMessageSize+1)
+					Expect(conn.SendDatagram(b)).To(MatchError(&quic.DatagramTooLargeError{
+						PeerMaxDatagramFrameSize: int64(maxDatagramMessageSize),
+					}))
 					wg.Wait()
 				}
 			} else {
@@ -103,6 +109,8 @@ var _ = Describe("Datagram test", func() {
 	})
 
 	It("sends datagrams", func() {
+		oldMaxDatagramSize := wire.MaxDatagramSize
+		wire.MaxDatagramSize = maxDatagramSize
 		proxyPort, close := startServerAndProxy(true, true)
 		defer close()
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
@@ -128,14 +136,15 @@ var _ = Describe("Datagram test", func() {
 		}
 
 		numDropped := int(dropped.Load())
-		expVal := num - numDropped
+		expVal := concurrentSends - numDropped
 		fmt.Fprintf(GinkgoWriter, "Dropped %d out of %d packets.\n", numDropped, total.Load())
-		fmt.Fprintf(GinkgoWriter, "Received %d out of %d sent datagrams.\n", counter, num)
+		fmt.Fprintf(GinkgoWriter, "Received %d out of %d sent datagrams.\n", counter, concurrentSends)
 		Expect(counter).To(And(
 			BeNumerically(">", expVal*9/10),
-			BeNumerically("<", num),
+			BeNumerically("<", concurrentSends),
 		))
 		Eventually(conn.Context().Done).Should(BeClosed())
+		wire.MaxDatagramSize = oldMaxDatagramSize
 	})
 
 	It("server can disable datagram", func() {
