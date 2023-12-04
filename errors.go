@@ -64,6 +64,7 @@ func (e *StreamError) Error() string {
 
 // DatagramTooLargeError is returned from Connection.SendDatagram if the payload is too large to be sent.
 type DatagramTooLargeError struct {
+	CurrentMTU               int64
 	PeerMaxDatagramFrameSize int64
 }
 
@@ -73,3 +74,18 @@ func (e *DatagramTooLargeError) Is(target error) bool {
 }
 
 func (e *DatagramTooLargeError) Error() string { return "DATAGRAM frame too large" }
+
+// DatagramQueuedTooLong is returned from datagramQueue.AddAndWait if a DATAGRAM cannot be sent
+// after a few retries
+type DatagramQueuedTooLong struct{}
+
+func (e *DatagramQueuedTooLong) Timeout() bool   { return true }
+func (e *DatagramQueuedTooLong) Temporary() bool { return true }
+func (e *DatagramQueuedTooLong) Error() string {
+	return "timeout: datagram waiting in queue for too long"
+}
+
+func (e *DatagramQueuedTooLong) Is(target error) bool {
+	_, ok := target.(*DatagramQueuedTooLong)
+	return ok
+}

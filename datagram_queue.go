@@ -2,7 +2,6 @@ package quic
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -12,10 +11,6 @@ import (
 
 const (
 	maxPeekAttempt uint8 = 5
-)
-
-var (
-	dropDatagramCtxCancelledErr = fmt.Errorf("Dropped datagram due to context cancelled")
 )
 
 type datagramQueue struct {

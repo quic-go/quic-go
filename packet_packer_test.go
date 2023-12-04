@@ -593,7 +593,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.Frames[0].Frame).To(Equal(f))
 				Expect(buffer.Data).ToNot(BeEmpty())
 				Eventually(done).Should(BeClosed())
-
 			})
 
 			It("doesn't pack a DATAGRAM frame if the ACK frame is too large", func() {
