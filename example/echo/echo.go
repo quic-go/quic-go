@@ -42,11 +42,14 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
+	defer conn.CloseWithError(0, "")
+
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
 		panic(err)
 	}
 	defer stream.Close()
+
 	// Echo through the loggingWriter
 	_, err = io.Copy(loggingWriter{stream}, stream)
 	return err
@@ -61,6 +64,7 @@ func clientMain() error {
 	if err != nil {
 		return err
 	}
+	defer conn.CloseWithError(0, "")
 
 	stream, err := conn.OpenStreamSync(context.Background())
 	if err != nil {
