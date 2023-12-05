@@ -36,6 +36,8 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
+	defer listener.Close()
+
 	conn, err := listener.Accept(context.Background())
 	if err != nil {
 		return err
@@ -44,6 +46,7 @@ func echoServer() error {
 	if err != nil {
 		panic(err)
 	}
+	defer stream.Close()
 	// Echo through the loggingWriter
 	_, err = io.Copy(loggingWriter{stream}, stream)
 	return err
@@ -63,6 +66,7 @@ func clientMain() error {
 	if err != nil {
 		return err
 	}
+	defer stream.Close()
 
 	fmt.Printf("Client: Sending '%s'\n", message)
 	_, err = stream.Write([]byte(message))
