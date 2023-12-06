@@ -129,10 +129,6 @@ const MaxPostHandshakeCryptoFrameSize = 1000
 // but must ensure that a maximum size ACK frame fits into one packet.
 const MaxAckFrameSize ByteCount = 1000
 
-// MaxDatagramFrameSize is the maximum size of a DATAGRAM frame (RFC 9221).
-// The size is chosen such that a DATAGRAM frame fits into a QUIC packet.
-const MaxDatagramFrameSize ByteCount = 1200
-
 // DatagramRcvQueueLen is the length of the receive queue for DATAGRAM frames (RFC 9221)
 const DatagramRcvQueueLen = 128
 

@@ -307,7 +307,7 @@ var newConnection = func(
 		RetrySourceConnectionID:   retrySrcConnID,
 	}
 	if s.config.EnableDatagrams {
-		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+		params.MaxDatagramFrameSize = wire.MaxDatagramSize
 	} else {
 		params.MaxDatagramFrameSize = protocol.InvalidByteCount
 	}
@@ -414,7 +414,7 @@ var newClientConnection = func(
 		InitialSourceConnectionID: srcConnID,
 	}
 	if s.config.EnableDatagrams {
-		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+		params.MaxDatagramFrameSize = wire.MaxDatagramSize
 	} else {
 		params.MaxDatagramFrameSize = protocol.InvalidByteCount
 	}
@@ -629,7 +629,7 @@ runLoop:
 			sendQueueAvailable = s.sendQueue.Available()
 			continue
 		}
-		if err := s.triggerSending(); err != nil {
+		if err := s.triggerSending(now); err != nil {
 			s.closeLocal(err)
 		}
 		if s.sendQueue.WouldBlock() {
@@ -1522,7 +1522,7 @@ func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encr
 }
 
 func (s *connection) handleDatagramFrame(f *wire.DatagramFrame) error {
-	if f.Length(s.version) > protocol.MaxDatagramFrameSize {
+	if f.Length(s.version) > wire.MaxDatagramSize {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "DATAGRAM frame too large",
@@ -1767,9 +1767,8 @@ func (s *connection) applyTransportParameters() {
 	}
 }
 
-func (s *connection) triggerSending() error {
+func (s *connection) triggerSending(now time.Time) error {
 	s.pacingDeadline = time.Time{}
-	now := time.Now()
 
 	sendMode := s.sentPacketHandler.SendMode(now)
 	//nolint:exhaustive // No need to handle pacing limited here.
@@ -1801,7 +1800,7 @@ func (s *connection) triggerSending() error {
 			s.scheduleSending()
 			return nil
 		}
-		return s.triggerSending()
+		return s.triggerSending(now)
 	case ackhandler.SendPTOHandshake:
 		if err := s.sendProbePacket(protocol.EncryptionHandshake, now); err != nil {
 			return err
@@ -1810,7 +1809,7 @@ func (s *connection) triggerSending() error {
 			s.scheduleSending()
 			return nil
 		}
-		return s.triggerSending()
+		return s.triggerSending(now)
 	case ackhandler.SendPTOAppData:
 		if err := s.sendProbePacket(protocol.Encryption1RTT, now); err != nil {
 			return err
@@ -1819,7 +1818,7 @@ func (s *connection) triggerSending() error {
 			s.scheduleSending()
 			return nil
 		}
-		return s.triggerSending()
+		return s.triggerSending(now)
 	default:
 		return fmt.Errorf("BUG: invalid send mode %d", sendMode)
 	}
@@ -1988,7 +1987,7 @@ func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 		if packet == nil {
 			return nil
 		}
-		return s.sendPackedCoalescedPacket(packet, ecn, time.Now())
+		return s.sendPackedCoalescedPacket(packet, ecn, now)
 	}
 
 	ecn := s.sentPacketHandler.ECNMode(true)
@@ -2350,7 +2349,9 @@ func (s *connection) SendDatagram(p []byte) error {
 
 	f := &wire.DatagramFrame{DataLenPresent: true}
 	if protocol.ByteCount(len(p)) > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) {
-		return errors.New("message too large")
+		return &DatagramTooLargeError{
+			PeerMaxDatagramFrameSize: int64(s.peerParams.MaxDatagramFrameSize),
+		}
 	}
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)

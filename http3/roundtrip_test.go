@@ -71,6 +71,21 @@ var _ = Describe("RoundTripper", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 
+		It("creates new clients with additional settings", func() {
+			testErr := errors.New("test err")
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			rt.AdditionalSettings = map[uint64]uint64{1337: 42}
+			rt.newClient = func(_ string, _ *tls.Config, opts *roundTripperOpts, conf *quic.Config, _ dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				Expect(opts.AdditionalSettings).To(HaveKeyWithValue(uint64(1337), uint64(42)))
+				return cl, nil
+			}
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(testErr))
+		})
+
 		It("uses the quic.Config, if provided", func() {
 			config := &quic.Config{HandshakeIdleTimeout: time.Millisecond}
 			var receivedConfig *quic.Config
