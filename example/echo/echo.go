@@ -42,7 +42,6 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
-	defer conn.CloseWithError(0, "")
 
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
