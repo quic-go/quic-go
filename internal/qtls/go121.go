@@ -93,7 +93,11 @@ func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, hand
 	}
 }
 
-func SetupConfigForClient(qconf *QUICConfig, getData func() []byte, setData func([]byte) bool) {
+func SetupConfigForClient(
+	qconf *QUICConfig,
+	getData func(earlyData bool) []byte,
+	setData func(data []byte, earlyData bool) (allowEarlyData bool),
+) {
 	conf := qconf.TLSConfig
 	if conf.ClientSessionCache != nil {
 		origCache := conf.ClientSessionCache
