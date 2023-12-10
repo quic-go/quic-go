@@ -29,7 +29,7 @@ const clientSessionStateRevision = 4
 
 type cryptoSetup struct {
 	tlsConf *tls.Config
-	conn    *qtls.QUICConn
+	conn    *tls.QUICConn
 
 	events []Event
 
@@ -93,12 +93,12 @@ func NewCryptoSetupClient(
 
 	tlsConf = tlsConf.Clone()
 	tlsConf.MinVersion = tls.VersionTLS13
-	quicConf := &qtls.QUICConfig{TLSConfig: tlsConf}
+	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
 	qtls.SetupConfigForClient(quicConf, cs.marshalDataForSessionState, cs.handleDataFromSessionState)
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
-	cs.conn = qtls.QUICClient(quicConf)
+	cs.conn = tls.QUICClient(quicConf)
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
 	return cs
@@ -127,12 +127,12 @@ func NewCryptoSetupServer(
 	)
 	cs.allow0RTT = allow0RTT
 
-	quicConf := &qtls.QUICConfig{TLSConfig: tlsConf}
+	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
 	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
 	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
 
 	cs.tlsConf = quicConf.TLSConfig
-	cs.conn = qtls.QUICServer(quicConf)
+	cs.conn = tls.QUICServer(quicConf)
 
 	return cs
 }
@@ -264,28 +264,28 @@ func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLev
 	}
 }
 
-func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (done bool, err error) {
+func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 	switch ev.Kind {
-	case qtls.QUICNoEvent:
+	case tls.QUICNoEvent:
 		return true, nil
-	case qtls.QUICSetReadSecret:
+	case tls.QUICSetReadSecret:
 		h.SetReadKey(ev.Level, ev.Suite, ev.Data)
 		return false, nil
-	case qtls.QUICSetWriteSecret:
+	case tls.QUICSetWriteSecret:
 		h.SetWriteKey(ev.Level, ev.Suite, ev.Data)
 		return false, nil
-	case qtls.QUICTransportParameters:
+	case tls.QUICTransportParameters:
 		return false, h.handleTransportParameters(ev.Data)
-	case qtls.QUICTransportParametersRequired:
+	case tls.QUICTransportParametersRequired:
 		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
 		return false, nil
-	case qtls.QUICRejectedEarlyData:
+	case tls.QUICRejectedEarlyData:
 		h.rejected0RTT()
 		return false, nil
-	case qtls.QUICWriteData:
+	case tls.QUICWriteData:
 		h.WriteRecord(ev.Level, ev.Data)
 		return false, nil
-	case qtls.QUICHandshakeDone:
+	case tls.QUICHandshakeDone:
 		h.handshakeComplete()
 		return false, nil
 	default:
@@ -379,7 +379,9 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 // Due to limitations in crypto/tls, it's only possible to generate a single session ticket per connection.
 // It is only valid for the server.
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
-	if err := qtls.SendSessionTicket(h.conn, h.allow0RTT); err != nil {
+	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{
+		EarlyData: h.allow0RTT,
+	}); err != nil {
 		// Session tickets might be disabled by tls.Config.SessionTicketsDisabled.
 		// We can't check h.tlsConfig here, since the actual config might have been obtained from
 		// the GetConfigForClient callback.
@@ -391,11 +393,11 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 		return nil, err
 	}
 	ev := h.conn.NextEvent()
-	if ev.Kind != qtls.QUICWriteData || ev.Level != qtls.QUICEncryptionLevelApplication {
+	if ev.Kind != tls.QUICWriteData || ev.Level != tls.QUICEncryptionLevelApplication {
 		panic("crypto/tls bug: where's my session ticket?")
 	}
 	ticket := ev.Data
-	if ev := h.conn.NextEvent(); ev.Kind != qtls.QUICNoEvent {
+	if ev := h.conn.NextEvent(); ev.Kind != tls.QUICNoEvent {
 		panic("crypto/tls bug: why more than one ticket?")
 	}
 	return ticket, nil
@@ -442,12 +444,12 @@ func (h *cryptoSetup) rejected0RTT() {
 	}
 }
 
-func (h *cryptoSetup) SetReadKey(el qtls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) SetReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
 	h.mutex.Lock()
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
-	case qtls.QUICEncryptionLevelEarly:
+	case tls.QUICEncryptionLevelEarly:
 		if h.perspective == protocol.PerspectiveClient {
 			panic("Received 0-RTT read key for the client")
 		}
@@ -459,7 +461,7 @@ func (h *cryptoSetup) SetReadKey(el qtls.QUICEncryptionLevel, suiteID uint16, tr
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed 0-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
-	case qtls.QUICEncryptionLevelHandshake:
+	case tls.QUICEncryptionLevelHandshake:
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
@@ -467,7 +469,7 @@ func (h *cryptoSetup) SetReadKey(el qtls.QUICEncryptionLevel, suiteID uint16, tr
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
-	case qtls.QUICEncryptionLevelApplication:
+	case tls.QUICEncryptionLevelApplication:
 		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
 		if h.logger.Debug() {
@@ -483,7 +485,7 @@ func (h *cryptoSetup) SetReadKey(el qtls.QUICEncryptionLevel, suiteID uint16, tr
 	}
 }
 
-func (h *cryptoSetup) SetWriteKey(el qtls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) SetWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
 	h.mutex.Lock()
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
@@ -505,7 +507,7 @@ func (h *cryptoSetup) SetWriteKey(el qtls.QUICEncryptionLevel, suiteID uint16, t
 		}
 		// don't set used0RTT here. 0-RTT might still get rejected.
 		return
-	case qtls.QUICEncryptionLevelHandshake:
+	case tls.QUICEncryptionLevelHandshake:
 		h.handshakeSealer = newLongHeaderSealer(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
@@ -513,7 +515,7 @@ func (h *cryptoSetup) SetWriteKey(el qtls.QUICEncryptionLevel, suiteID uint16, t
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed Handshake Write keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
-	case qtls.QUICEncryptionLevelApplication:
+	case tls.QUICEncryptionLevelApplication:
 		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
 		if h.logger.Debug() {
@@ -692,7 +694,7 @@ func (h *cryptoSetup) ConnectionState() ConnectionState {
 
 func wrapError(err error) error {
 	// alert 80 is an internal error
-	if alertErr := qtls.AlertError(0); errors.As(err, &alertErr) && alertErr != 80 {
+	if alertErr := tls.AlertError(0); errors.As(err, &alertErr) && alertErr != 80 {
 		return qerr.NewLocalCryptoError(uint8(alertErr), err)
 	}
 	return &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: err.Error()}
