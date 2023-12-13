@@ -51,7 +51,7 @@ jobs:
         with:
           skip-pkg-cache: true
           args: --timeout=3m
-          version: v1.52.2
+          version: v1.55.2
       - name: golangci-lint (Windows)
         if: success() || failure() # run this step even if the previous one failed
         uses: golangci/golangci-lint-action@v3
@@ -60,7 +60,7 @@ jobs:
         with:
           skip-pkg-cache: true
           args: --timeout=3m
-          version: v1.52.2
+          version: v1.55.2
       - name: golangci-lint (OSX)
         if: success() || failure() # run this step even if the previous one failed
         uses: golangci/golangci-lint-action@v3
@@ -69,7 +69,7 @@ jobs:
         with:
           skip-pkg-cache: true
           args: --timeout=3m
-          version: v1.52.2
+          version: v1.55.2
       - name: golangci-lint (FreeBSD)
         if: success() || failure() # run this step even if the previous one failed
         uses: golangci/golangci-lint-action@v3
@@ -78,7 +78,7 @@ jobs:
         with:
           skip-pkg-cache: true
           args: --timeout=3m
-          version: v1.52.2
+          version: v1.55.2
       - name: golangci-lint (others)
         if: success() || failure() # run this step even if the previous one failed
         uses: golangci/golangci-lint-action@v3
@@ -87,4 +87,4 @@ jobs:
         with:
           skip-pkg-cache: true
           args: --timeout=3m
-          version: v1.52.2
+          version: v1.55.2
