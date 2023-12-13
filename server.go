@@ -5,11 +5,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/quic-go/quic-go/qlog"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/quic-go/quic-go/qlog"
 
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"

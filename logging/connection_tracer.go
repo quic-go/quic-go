@@ -1,9 +1,10 @@
 package logging
 
 import (
-	"github.com/quic-go/quic-go/internal/protocol"
 	"net"
 	"time"
+
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // A ConnectionTracer records events.

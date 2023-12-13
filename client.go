@@ -4,8 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"github.com/quic-go/quic-go/qlog"
 	"net"
+
+	"github.com/quic-go/quic-go/qlog"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
