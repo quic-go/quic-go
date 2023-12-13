@@ -562,6 +562,37 @@ var _ = Describe("Packet packer", func() {
 				Expect(buffer.Len()).ToNot(BeZero())
 			})
 
+			It("packs PATH_CHALLENGE and PATH_RESPONSE frames", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				framer.EXPECT().HasData().Return(true)
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
+				frames := []ackhandler.Frame{
+					{Frame: &wire.PathChallengeFrame{}},
+					{Frame: &wire.PathResponseFrame{}},
+					{Frame: &wire.DataBlockedFrame{}},
+				}
+				expectAppendControlFrames(frames...)
+				expectAppendStreamFrames()
+				buffer := getPacketBuffer()
+				p, err := packer.AppendPacket(buffer, maxPacketSize, protocol.Version1)
+				Expect(p).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.Frames).To(HaveLen(3))
+				for i, f := range p.Frames {
+					Expect(f).To(BeAssignableToTypeOf(frames[i]))
+					switch f.Frame.(type) {
+					case *wire.PathChallengeFrame, *wire.PathResponseFrame:
+						// This means that the frame won't be retransmitted.
+						Expect(f.Handler).To(BeNil())
+					default:
+						Expect(f.Handler).ToNot(BeNil())
+					}
+				}
+				Expect(buffer.Len()).ToNot(BeZero())
+			})
+
 			It("packs DATAGRAM frames", func() {
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, true)
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
