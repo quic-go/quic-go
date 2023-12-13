@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/quic-go/quic-go/qlog"
 	"net"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -149,10 +150,19 @@ func dial(
 	}
 	c.packetHandlers = packetHandlers
 
-	c.tracingID = nextConnTracingID()
-	if c.config.Tracer != nil {
-		c.tracer = c.config.Tracer(context.WithValue(ctx, ConnectionTracingKey, c.tracingID), protocol.PerspectiveClient, c.destConnID)
+	var tracers []*logging.ConnectionTracer
+	{
+		ctx := context.WithValue(ctx, ConnectionTracingKey, c.tracingID)
+		c.tracingID = nextConnTracingID()
+		if c.config.Tracer != nil {
+			tracers = append(tracers, c.config.Tracer(ctx, protocol.PerspectiveClient, c.destConnID))
+		}
+		if qlog.QlogDir != "" {
+			tracers = append(tracers, qlog.NewQlogDirConnectionTracer(ctx, protocol.PerspectiveClient, c.destConnID, "client"))
+		}
 	}
+	c.tracer = logging.NewMultiplexedConnectionTracer(tracers...)
+
 	if c.tracer != nil && c.tracer.StartedConnection != nil {
 		c.tracer.StartedConnection(c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID)
 	}

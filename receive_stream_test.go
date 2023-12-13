@@ -45,6 +45,7 @@ var _ = Describe("Receive Stream", func() {
 		It("reads a single STREAM frame", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(4))
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 			frame := wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
@@ -62,6 +63,7 @@ var _ = Describe("Receive Stream", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), gomock.Any(), protocol.ByteCount(2)).Times(2)
 			frame := wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
@@ -83,6 +85,7 @@ var _ = Describe("Receive Stream", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false)
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)).Times(2)
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 			frame1 := wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
@@ -106,6 +109,7 @@ var _ = Describe("Receive Stream", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false)
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)).Times(2)
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 			frame1 := wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
@@ -128,6 +132,7 @@ var _ = Describe("Receive Stream", func() {
 		It("waits until data is available", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), gomock.Any(), protocol.ByteCount(2))
 			go func() {
 				defer GinkgoRecover()
 				frame := wire.StreamFrame{Data: []byte{0xDE, 0xAD}}
@@ -145,6 +150,7 @@ var _ = Describe("Receive Stream", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false)
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)).Times(2)
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 			frame1 := wire.StreamFrame{
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
@@ -169,6 +175,7 @@ var _ = Describe("Receive Stream", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false)
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)).Times(2)
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 			frame1 := wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
@@ -199,6 +206,7 @@ var _ = Describe("Receive Stream", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false)
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(4))
+			mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(6))
 			frame1 := wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte("foob"),
@@ -330,6 +338,7 @@ var _ = Describe("Receive Stream", func() {
 				It("returns EOFs", func() {
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), true)
 					mockFC.EXPECT().AddBytesRead(protocol.ByteCount(4))
+					mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 					str.handleStreamFrame(&wire.StreamFrame{
 						Offset: 0,
 						Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
@@ -350,6 +359,7 @@ var _ = Describe("Receive Stream", func() {
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false)
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), true)
 					mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)).Times(2)
+					mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(4))
 					frame1 := wire.StreamFrame{
 						Offset: 2,
 						Data:   []byte{0xBE, 0xEF},
@@ -377,6 +387,7 @@ var _ = Describe("Receive Stream", func() {
 				It("returns EOFs with partial read", func() {
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), true)
 					mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
+					mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(2))
 					err := str.handleStreamFrame(&wire.StreamFrame{
 						Offset: 0,
 						Data:   []byte{0xde, 0xad},
@@ -417,6 +428,7 @@ var _ = Describe("Receive Stream", func() {
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), gomock.Any()).AnyTimes()
 					var bytesRead protocol.ByteCount
 					mockFC.EXPECT().AddBytesRead(gomock.Any()).Do(func(n protocol.ByteCount) { bytesRead += n }).AnyTimes()
+					mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 					var numCompleted int32
 					mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) {
@@ -538,6 +550,7 @@ var _ = Describe("Receive Stream", func() {
 			It("doesn't send a STOP_SENDING frame, if the FIN was already read", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
+				mockSender.EXPECT().onStreamDataReadByApplication(gomock.Any(), protocol.ByteCount(0), protocol.ByteCount(6))
 				// no calls to mockSender.queueControlFrame
 				Expect(str.handleStreamFrame(&wire.StreamFrame{
 					StreamID: streamID,

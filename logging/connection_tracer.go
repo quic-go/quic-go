@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"github.com/quic-go/quic-go/internal/protocol"
 	"net"
 	"time"
 )
@@ -34,6 +35,8 @@ type ConnectionTracer struct {
 	LossTimerExpired                 func(TimerType, EncryptionLevel)
 	LossTimerCanceled                func()
 	ECNStateUpdated                  func(state ECNState, trigger ECNStateTrigger)
+	ChoseAlpn                        func(protocol string)
+	StreamDataMoved                  func(id StreamID, offset protocol.ByteCount, n protocol.ByteCount, from string, to string)
 	// Close is called when the connection is closed.
 	Close func()
 	Debug func(name, msg string)
@@ -234,6 +237,20 @@ func NewMultiplexedConnectionTracer(tracers ...*ConnectionTracer) *ConnectionTra
 			for _, t := range tracers {
 				if t.ECNStateUpdated != nil {
 					t.ECNStateUpdated(state, trigger)
+				}
+			}
+		},
+		ChoseAlpn: func(protocol string) {
+			for _, t := range tracers {
+				if t.ChoseAlpn != nil {
+					t.ChoseAlpn(protocol)
+				}
+			}
+		},
+		StreamDataMoved: func(id StreamID, offset ByteCount, n ByteCount, from string, to string) {
+			for _, t := range tracers {
+				if t.StreamDataMoved != nil {
+					t.StreamDataMoved(id, offset, n, from, to)
 				}
 			}
 		},

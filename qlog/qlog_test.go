@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -191,7 +190,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records idle timeouts", func() {
-				tracer.ClosedConnection(&quic.IdleTimeoutError{})
+				tracer.ClosedConnection(&qerr.IdleTimeoutError{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -202,7 +201,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records handshake timeouts", func() {
-				tracer.ClosedConnection(&quic.HandshakeTimeoutError{})
+				tracer.ClosedConnection(&qerr.HandshakeTimeoutError{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -213,7 +212,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records a received stateless reset packet", func() {
-				tracer.ClosedConnection(&quic.StatelessResetError{
+				tracer.ClosedConnection(&qerr.StatelessResetError{
 					Token: protocol.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
 				})
 				entry := exportAndParseSingle()
@@ -227,7 +226,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records connection closing due to version negotiation failure", func() {
-				tracer.ClosedConnection(&quic.VersionNegotiationError{})
+				tracer.ClosedConnection(&qerr.VersionNegotiationError{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -237,7 +236,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records application errors", func() {
-				tracer.ClosedConnection(&quic.ApplicationError{
+				tracer.ClosedConnection(&qerr.ApplicationError{
 					Remote:       true,
 					ErrorCode:    1337,
 					ErrorMessage: "foobar",
@@ -253,7 +252,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records transport errors", func() {
-				tracer.ClosedConnection(&quic.TransportError{
+				tracer.ClosedConnection(&qerr.TransportError{
 					ErrorCode:    qerr.AEADLimitReached,
 					ErrorMessage: "foobar",
 				})

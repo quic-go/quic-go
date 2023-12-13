@@ -98,6 +98,12 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		ECNStateUpdated: func(state logging.ECNState, trigger logging.ECNStateTrigger) {
 			t.ECNStateUpdated(state, trigger)
 		},
+		ChoseAlpn: func(protocol string) {
+			t.ChoseAlpn(protocol)
+		},
+		StreamDataMoved: func(id logging.StreamID, offset logging.ByteCount, n logging.ByteCount, from string, to string) {
+			t.StreamDataMoved(id, offset, n, from, to)
+		},
 		Close: func() {
 			t.Close()
 		},

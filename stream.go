@@ -27,6 +27,8 @@ type streamSender interface {
 	onHasStreamData(protocol.StreamID)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
+	onStreamDataReadByApplication(id protocol.StreamID, offset protocol.ByteCount, n protocol.ByteCount)
+	onStreamDataWrittenByApplication(id protocol.StreamID, offset protocol.ByteCount, n protocol.ByteCount)
 }
 
 // Each of the both stream halves gets its own uniStreamSender.
