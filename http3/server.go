@@ -115,6 +115,16 @@ func (k *contextKey) String() string { return "quic-go/http3 context value " + k
 // type *http3.Server.
 var ServerContextKey = &contextKey{"http3-server"}
 
+// RemoteAddrContextKey is a context key. It can be used in
+// HTTP handlers with Context.Value to access the remote
+// address of the connection. The associated value will be of
+// type net.Addr.
+//
+// Use this value instead of [http.Request.RemoteAddr] if you
+// require access to the remote address of the connection rather
+// than its string representation.
+var RemoteAddrContextKey = &contextKey{"remote-addr"}
+
 type requestError struct {
 	err       error
 	streamErr ErrCode
@@ -597,6 +607,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
+	ctx = context.WithValue(ctx, RemoteAddrContextKey, conn.RemoteAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, conn, s.logger)
 	if req.Method == http.MethodHead {
