@@ -154,8 +154,8 @@ var _ = Describe("HTTP tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		body, err := io.ReadAll(resp.Body)
 		Expect(err).To(HaveOccurred())
-		// in reality the parts of the body is undetermined, but it's a test
-		Expect(body).To(Equal([]byte("foobar")))
+		// the body will be a prefix of what's written
+		Expect(bytes.HasPrefix([]byte("foobar"), body)).To(BeTrue())
 	})
 
 	It("requests to different servers with the same udpconn", func() {
