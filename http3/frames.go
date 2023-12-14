@@ -19,8 +19,6 @@ type frame interface{}
 
 var errHijacked = errors.New("hijacked")
 
-var errPanicked = errors.New("panicked")
-
 func parseNextFrame(r io.Reader, unknownFrameHandler unknownFrameHandlerFunc) (frame, error) {
 	qr := quicvarint.NewReader(r)
 	for {
