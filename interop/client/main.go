@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,8 +82,11 @@ func runTestcase(testcase string) error {
 	}
 	defer r.Close()
 
+	// only enable ECN for the ECN test case
+	os.Setenv("QUIC_GO_DISABLE_ECN", strconv.FormatBool(testcase != "ecn"))
+
 	switch testcase {
-	case "handshake", "transfer", "retry":
+	case "handshake", "transfer", "retry", "ecn":
 	case "keyupdate":
 		handshake.FirstKeyUpdateInterval = 100
 	case "chacha20":

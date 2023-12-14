@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
@@ -52,8 +53,11 @@ func main() {
 		KeyLogWriter: keyLog,
 	}
 
+	// only enable ECN for the ECN test case
+	os.Setenv("QUIC_GO_DISABLE_ECN", strconv.FormatBool(testcase != "ecn"))
+
 	switch testcase {
-	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect", "zerortt":
+	case "versionnegotiation", "handshake", "ecn", "retry", "transfer", "resumption", "multiconnect", "zerortt":
 		err = runHTTP09Server(quicConf)
 	case "chacha20":
 		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
