@@ -141,16 +141,18 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	It("detects stream errors when server panics when writing response", func() {
+		respChan := make(chan struct{})
 		mux.HandleFunc("/writing_and_panicking", func(w http.ResponseWriter, r *http.Request) {
 			// no recover here as it will interfere with the handler
 			w.Write([]byte("foobar"))
 			w.(http.Flusher).Flush()
-			// simulate a large response body, some data were written
-			time.Sleep(5 * time.Second)
+			// wait for the client to receive the response
+			<-respChan
 			panic(http.ErrAbortHandler)
 		})
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/writing_and_panicking", port))
+		close(respChan)
 		Expect(err).ToNot(HaveOccurred())
 		body, err := io.ReadAll(resp.Body)
 		Expect(err).To(HaveOccurred())
