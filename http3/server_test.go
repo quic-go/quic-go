@@ -272,7 +272,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			Expect(serr.err).To(MatchError(errPanicked))
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
 
@@ -288,7 +288,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			Expect(serr.err).To(MatchError(errPanicked))
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
 
