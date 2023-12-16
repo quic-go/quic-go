@@ -481,4 +481,16 @@ var _ = Describe("HTTP tests", func() {
 		Expect(time.Now().After(expectedEnd)).To(BeTrue())
 		Expect(string(body)).To(ContainSubstring("aa"))
 	})
+
+	It("sets remote address", func() {
+		mux.HandleFunc("/remote-addr", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			_, ok := r.Context().Value(http3.RemoteAddrContextKey).(net.Addr)
+			Expect(ok).To(BeTrue())
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/remote-addr", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+	})
 })
