@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"reflect"
 	"sync"
@@ -180,9 +181,10 @@ type connection struct {
 	handshakeComplete  bool
 	handshakeConfirmed bool
 
-	receivedRetry       bool
-	versionNegotiated   bool
-	receivedFirstPacket bool
+	receivedRetry          bool
+	versionNegotiated      bool
+	receivedFirstPacket    bool
+	quicBitGreasingEnabled bool
 
 	// the minimum of the max_idle_timeout values advertised by both endpoints
 	idleTimeout  time.Duration
@@ -305,6 +307,7 @@ var newConnection = func(
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
 		RetrySourceConnectionID:   retrySrcConnID,
+		GreaseQuicBit:             s.quicBitGreasingEnabled,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
@@ -412,6 +415,7 @@ var newClientConnection = func(
 		// See https://github.com/quic-go/quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
+		GreaseQuicBit:             s.quicBitGreasingEnabled,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
@@ -489,6 +493,12 @@ func (s *connection) preSetup() {
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
 	s.connState.Version = s.version
+	// Even if greasing is enabled, we don't always enable it.
+	// That way, we grease the greasing mechanism.
+	// Essentially setting QUIC Bit to an unpredictable value (RFC9287)
+	if !s.config.DisableQUICBitGreasing {
+		s.quicBitGreasingEnabled = rand.Intn(5) != 0
+	}
 }
 
 // run the connection main loop
@@ -819,7 +829,7 @@ func (s *connection) handlePacketImpl(rp receivedPacket) bool {
 		}
 
 		if wire.IsLongHeaderPacket(p.data[0]) {
-			hdr, packetData, rest, err := wire.ParsePacket(p.data)
+			hdr, packetData, rest, err := wire.ParsePacket(p.data, s.quicBitGreasingEnabled)
 			if err != nil {
 				if s.tracer != nil && s.tracer.DroppedPacket != nil {
 					dropReason := logging.PacketDropHeaderParseError

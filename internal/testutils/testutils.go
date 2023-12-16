@@ -13,7 +13,7 @@ import (
 
 // writePacket returns a new raw packet with the specified header and payload
 func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
-	b, err := hdr.Append(nil, hdr.Version)
+	b, err := hdr.Append(nil, true, hdr.Version)
 	if err != nil {
 		panic(fmt.Sprintf("failed to write header: %s", err))
 	}

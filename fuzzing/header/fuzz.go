@@ -32,12 +32,12 @@ func Fuzz(data []byte) int {
 	}
 
 	if !wire.IsLongHeaderPacket(data[0]) {
-		wire.ParseShortHeader(data, connIDLen)
+		wire.ParseShortHeader(data, false, connIDLen)
 		return 1
 	}
 
 	is0RTTPacket := wire.Is0RTTPacket(data)
-	hdr, _, _, err := wire.ParsePacket(data)
+	hdr, _, _, err := wire.ParsePacket(data, false)
 	if err != nil {
 		return 0
 	}
@@ -64,7 +64,7 @@ func Fuzz(data []byte) int {
 	if hdr.Length > 16383 {
 		return 1
 	}
-	b, err := extHdr.Append(nil, version)
+	b, err := extHdr.Append(nil, true, version)
 	if err != nil {
 		// We are able to parse packets with connection IDs longer than 20 bytes,
 		// but in QUIC version 1, we don't write headers with longer connection IDs.

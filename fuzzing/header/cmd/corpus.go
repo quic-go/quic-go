@@ -85,7 +85,7 @@ func main() {
 			PacketNumberLen: protocol.PacketNumberLen(rand.Intn(4) + 1),
 			PacketNumber:    protocol.PacketNumber(rand.Uint64()),
 		}
-		b, err := extHdr.Append(nil, version)
+		b, err := extHdr.Append(nil, true, version)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func main() {
 	}
 
 	// short header
-	b, err := wire.AppendShortHeader(nil, protocol.ParseConnectionID(getRandomData(8)), 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+	b, err := wire.AppendShortHeader(nil, true, protocol.ParseConnectionID(getRandomData(8)), 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 	if err != nil {
 		log.Fatal(err)
 	}

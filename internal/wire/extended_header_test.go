@@ -29,7 +29,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecaf,
 					PacketNumberLen: protocol.PacketNumberLen3,
-				}).Append(nil, protocol.Version1)
+				}).Append(nil, true, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				expected := []byte{
 					0xc0 | 0x2<<4 | 0x2,
@@ -54,7 +54,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Append(nil, protocol.Version1)
+				}).Append(nil, true, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b).To(ContainSubstring(string([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20})))
 			})
@@ -69,7 +69,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Append(nil, protocol.Version1)
+				}).Append(nil, true, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b[0]>>4&0b11 == 0)
 				expectedSubstring := append(encodeVarInt(uint64(len(token))), token...)
@@ -85,7 +85,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Append(nil, protocol.Version1)
+				}).Append(nil, true, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				lengthEncoded := quicvarint.AppendWithLen(nil, 37, 2)
 				Expect(b[len(b)-6 : len(b)-4]).To(Equal(lengthEncoded))
@@ -97,7 +97,7 @@ var _ = Describe("Header", func() {
 					Version: protocol.Version1,
 					Type:    protocol.PacketTypeRetry,
 					Token:   token,
-				}}).Append(nil, protocol.Version1)
+				}}).Append(nil, true, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				expected := []byte{0xc0 | 0b11<<4}
 				expected = appendVersion(expected, protocol.Version1)
@@ -105,6 +105,20 @@ var _ = Describe("Header", func() {
 				expected = append(expected, 0x0) // src connection ID length
 				expected = append(expected, token...)
 				Expect(b).To(Equal(expected))
+			})
+
+			It("write a header without the QUIC bit", func() {
+				b, err := (&ExtendedHeader{
+					Header: Header{
+						Version: 0x1020304,
+						Type:    protocol.PacketTypeHandshake,
+						Length:  37,
+					},
+					PacketNumber:    0xdecafbad,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}).Append(nil, false, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b[0] & 0x40).To(BeZero())
 			})
 		})
 
@@ -117,7 +131,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Append(nil, protocol.Version2)
+				}).Append(nil, true, protocol.Version2)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b[0]>>4&0b11 == 0b01)
 			})
@@ -128,7 +142,7 @@ var _ = Describe("Header", func() {
 					Version: protocol.Version2,
 					Type:    protocol.PacketTypeRetry,
 					Token:   token,
-				}}).Append(nil, protocol.Version2)
+				}}).Append(nil, true, protocol.Version2)
 				Expect(err).ToNot(HaveOccurred())
 				expected := []byte{0xc0 | 0b00<<4}
 				expected = appendVersion(expected, protocol.Version2)
@@ -146,7 +160,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Append(nil, protocol.Version2)
+				}).Append(nil, true, protocol.Version2)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b[0]>>4&0b11 == 0b11)
 			})
@@ -159,7 +173,7 @@ var _ = Describe("Header", func() {
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Append(nil, protocol.Version2)
+				}).Append(nil, true, protocol.Version2)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b[0]>>4&0b11 == 0b10)
 			})
@@ -179,7 +193,7 @@ var _ = Describe("Header", func() {
 			}
 			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 8 /* src conn id */ + 2 /* length */ + 1 /* packet number */
 			Expect(h.GetLength(protocol.Version1)).To(BeEquivalentTo(expectedLen))
-			b, err := h.Append(nil, protocol.Version1)
+			b, err := h.Append(nil, true, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(expectedLen))
 		})
@@ -196,7 +210,7 @@ var _ = Describe("Header", func() {
 			}
 			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 8 /* src conn id */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(protocol.Version1)).To(BeEquivalentTo(expectedLen))
-			b, err := h.Append(nil, protocol.Version1)
+			b, err := h.Append(nil, true, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(expectedLen))
 		})
@@ -213,7 +227,7 @@ var _ = Describe("Header", func() {
 			}
 			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 4 /* src conn id */ + 1 /* token length */ + 2 /* length len */ + 2 /* packet number */
 			Expect(h.GetLength(protocol.Version1)).To(BeEquivalentTo(expectedLen))
-			b, err := h.Append(nil, protocol.Version1)
+			b, err := h.Append(nil, true, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(expectedLen))
 		})
@@ -230,7 +244,7 @@ var _ = Describe("Header", func() {
 			}
 			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 4 /* src conn id */ + 1 /* token length */ + 2 /* length len */ + 2 /* packet number */
 			Expect(h.GetLength(protocol.Version1)).To(BeEquivalentTo(expectedLen))
-			b, err := h.Append(nil, protocol.Version1)
+			b, err := h.Append(nil, true, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(expectedLen))
 		})
@@ -248,7 +262,7 @@ var _ = Describe("Header", func() {
 			}
 			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn id len */ + 4 /* src conn id */ + 1 /* token length */ + 3 /* token */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(protocol.Version1)).To(BeEquivalentTo(expectedLen))
-			b, err := h.Append(nil, protocol.Version1)
+			b, err := h.Append(nil, true, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(expectedLen))
 		})

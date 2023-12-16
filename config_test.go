@@ -104,6 +104,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "Allow0RTT":
 				f.Set(reflect.ValueOf(true))
+			case "DisableQUICBitGreasing":
+				f.Set(reflect.ValueOf(true))
 			default:
 				Fail(fmt.Sprintf("all fields must be accounted for, but saw unknown field %q", fn))
 			}
@@ -185,6 +187,7 @@ var _ = Describe("Config", func() {
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
 			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
 			Expect(c.GetConfigForClient).To(BeNil())
+			Expect(c.DisableQUICBitGreasing).To(BeFalse())
 		})
 
 		It("populates empty fields with default values, for the server", func() {

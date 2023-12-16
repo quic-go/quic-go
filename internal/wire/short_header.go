@@ -12,14 +12,14 @@ import (
 // ParseShortHeader parses a short header packet.
 // It must be called after header protection was removed.
 // Otherwise, the check for the reserved bits will (most likely) fail.
-func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.PacketNumber, _ protocol.PacketNumberLen, _ protocol.KeyPhaseBit, _ error) {
+func ParseShortHeader(data []byte, ignoreQuicBit bool, connIDLen int) (length int, _ protocol.PacketNumber, _ protocol.PacketNumberLen, _ protocol.KeyPhaseBit, _ error) {
 	if len(data) == 0 {
 		return 0, 0, 0, 0, io.EOF
 	}
 	if data[0]&0x80 > 0 {
 		return 0, 0, 0, 0, errors.New("not a short header packet")
 	}
-	if data[0]&0x40 == 0 {
+	if data[0]&0x40 == 0 && !ignoreQuicBit {
 		return 0, 0, 0, 0, errors.New("not a QUIC packet")
 	}
 	pnLen := protocol.PacketNumberLen(data[0]&0b11) + 1
@@ -54,8 +54,11 @@ func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.Packet
 }
 
 // AppendShortHeader writes a short header.
-func AppendShortHeader(b []byte, connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) ([]byte, error) {
+func AppendShortHeader(b []byte, quicBit bool, connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) ([]byte, error) {
 	typeByte := 0x40 | uint8(pnLen-1)
+	if !quicBit { // unset the quic bit
+		typeByte ^= 0x40
+	}
 	if kp == protocol.KeyPhaseOne {
 		typeByte |= byte(1 << 2)
 	}

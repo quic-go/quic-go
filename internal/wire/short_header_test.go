@@ -22,7 +22,7 @@ var _ = Describe("Short Header", func() {
 				0xde, 0xad, 0xbe, 0xef,
 				0x13, 0x37, 0x99,
 			}
-			l, pn, pnLen, kp, err := ParseShortHeader(data, 4)
+			l, pn, pnLen, kp, err := ParseShortHeader(data, false, 4)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(l).To(Equal(len(data)))
 			Expect(kp).To(Equal(protocol.KeyPhaseOne))
@@ -36,8 +36,18 @@ var _ = Describe("Short Header", func() {
 				0xde, 0xad, 0xbe, 0xef,
 				0x13, 0x37,
 			}
-			_, _, _, _, err := ParseShortHeader(data, 4)
+			_, _, _, _, err := ParseShortHeader(data, false, 4)
 			Expect(err).To(MatchError("not a QUIC packet"))
+		})
+
+		It("doesn't error when QUIC bit is not set, if we're ignoring the QUIC bit", func() {
+			data := []byte{
+				0b00000101,
+				0xde, 0xad, 0xbe, 0xef,
+				0x13, 0x37,
+			}
+			_, _, _, _, err := ParseShortHeader(data, true, 4)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("errors, but returns the header, when the reserved bits are set", func() {
@@ -46,13 +56,13 @@ var _ = Describe("Short Header", func() {
 				0xde, 0xad, 0xbe, 0xef,
 				0x13, 0x37,
 			}
-			_, pn, _, _, err := ParseShortHeader(data, 4)
+			_, pn, _, _, err := ParseShortHeader(data, false, 4)
 			Expect(err).To(MatchError(ErrInvalidReservedBits))
 			Expect(pn).To(Equal(protocol.PacketNumber(0x1337)))
 		})
 
 		It("errors when passed a long header packet", func() {
-			_, _, _, _, err := ParseShortHeader([]byte{0x80}, 4)
+			_, _, _, _, err := ParseShortHeader([]byte{0x80}, false, 4)
 			Expect(err).To(MatchError("not a short header packet"))
 		})
 
@@ -62,10 +72,10 @@ var _ = Describe("Short Header", func() {
 				0xde, 0xad, 0xbe, 0xef,
 				0x13, 0x37, 0x99,
 			}
-			_, _, _, _, err := ParseShortHeader(data, 4)
+			_, _, _, _, err := ParseShortHeader(data, false, 4)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, _, _, _, err := ParseShortHeader(data[:i], 4)
+				_, _, _, _, err := ParseShortHeader(data[:i], false, 4)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -79,14 +89,21 @@ var _ = Describe("Short Header", func() {
 	Context("writing", func() {
 		It("writes a short header packet", func() {
 			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-			b, err := AppendShortHeader(nil, connID, 1337, 4, protocol.KeyPhaseOne)
+			b, err := AppendShortHeader(nil, true, connID, 1337, 4, protocol.KeyPhaseOne)
 			Expect(err).ToNot(HaveOccurred())
-			l, pn, pnLen, kp, err := ParseShortHeader(b, 4)
+			l, pn, pnLen, kp, err := ParseShortHeader(b, false, 4)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pn).To(Equal(protocol.PacketNumber(1337)))
 			Expect(pnLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(kp).To(Equal(protocol.KeyPhaseOne))
 			Expect(l).To(Equal(len(b)))
+		})
+
+		It("writes a short header without the QUIC bit", func() {
+			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+			b, err := AppendShortHeader(nil, false, connID, 1337, 4, protocol.KeyPhaseOne)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b[0] & 0x40).To(BeZero())
 		})
 	})
 
@@ -121,7 +138,7 @@ func BenchmarkWriteShortHeader(b *testing.B) {
 	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
 	for i := 0; i < b.N; i++ {
 		var err error
-		buf, err = AppendShortHeader(buf, connID, 1337, protocol.PacketNumberLen4, protocol.KeyPhaseOne)
+		buf, err = AppendShortHeader(buf, true, connID, 1337, protocol.PacketNumberLen4, protocol.KeyPhaseOne)
 		if err != nil {
 			b.Fatalf("failed to write short header: %s", err)
 		}

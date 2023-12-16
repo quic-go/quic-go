@@ -174,8 +174,10 @@ func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (int
 		&data[0],
 		data[hdrLen:hdrLen+4],
 	)
-	// 3. parse the header (and learn the actual length of the packet number)
-	l, pn, pnLen, kp, parseErr := wire.ParseShortHeader(data, u.shortHdrConnIDLen)
+	// 3. parse the header (and learn the actual length of the packet number) .
+	// An endpoint that advertises the grease_quic_bit transport parameter MUST accept packets with the QUIC Bit set to a value of 0.
+	// nTODO: should be !s.config.DisableQUICBitGreasing, but pending further investigation.
+	l, pn, pnLen, kp, parseErr := wire.ParseShortHeader(data, false, u.shortHdrConnIDLen)
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
 		return l, pn, pnLen, kp, parseErr
 	}

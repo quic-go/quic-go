@@ -36,7 +36,7 @@ var _ = Describe("Transport", func() {
 				Version:          protocol.Version1,
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
-		}).Append(nil, protocol.Version1)
+		}).Append(nil, true, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		return b
 	}
@@ -199,7 +199,7 @@ var _ = Describe("Transport", func() {
 		rand.Read(token[:])
 
 		var b []byte
-		b, err := wire.AppendShortHeader(b, connID, 1337, 2, protocol.KeyPhaseOne)
+		b, err := wire.AppendShortHeader(b, true, connID, 1337, 2, protocol.KeyPhaseOne)
 		Expect(err).ToNot(HaveOccurred())
 		b = append(b, token[:]...)
 		conn := NewMockPacketHandler(mockCtrl)
@@ -232,7 +232,7 @@ var _ = Describe("Transport", func() {
 		rand.Read(token[:])
 
 		var b []byte
-		b, err := wire.AppendShortHeader(b, connID, 1337, 2, protocol.KeyPhaseOne)
+		b, err := wire.AppendShortHeader(b, true, connID, 1337, 2, protocol.KeyPhaseOne)
 		Expect(err).ToNot(HaveOccurred())
 		b = append(b, token[:]...)
 		conn := NewMockPacketHandler(mockCtrl)
@@ -268,7 +268,7 @@ var _ = Describe("Transport", func() {
 		tr.handlerMap = phm
 
 		var b []byte
-		b, err := wire.AppendShortHeader(b, connID, 1337, 2, protocol.KeyPhaseOne)
+		b, err := wire.AppendShortHeader(b, true, connID, 1337, 2, protocol.KeyPhaseOne)
 		Expect(err).ToNot(HaveOccurred())
 		b = append(b, make([]byte, protocol.MinStatelessResetSize-len(b)+1)...)
 

@@ -124,6 +124,7 @@ func populateConfig(config *Config) *Config {
 		EnableDatagrams:                config.EnableDatagrams,
 		DisablePathMTUDiscovery:        config.DisablePathMTUDiscovery,
 		Allow0RTT:                      config.Allow0RTT,
+		DisableQUICBitGreasing:         config.DisableQUICBitGreasing,
 		Tracer:                         config.Tracer,
 	}
 }

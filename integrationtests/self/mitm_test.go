@@ -104,7 +104,7 @@ var _ = Describe("MITM test", func() {
 				defer ticker.Stop()
 
 				if wire.IsLongHeaderPacket(raw[0]) {
-					hdr, _, _, err := wire.ParsePacket(raw)
+					hdr, _, _, err := wire.ParsePacket(raw, true)
 					Expect(err).ToNot(HaveOccurred())
 					replyHdr := &wire.ExtendedHeader{
 						Header: wire.Header{
@@ -120,7 +120,7 @@ var _ = Describe("MITM test", func() {
 					for i := 0; i < numPackets; i++ {
 						payloadLen := rand.Int31n(100)
 						replyHdr.Length = protocol.ByteCount(rand.Int31n(payloadLen + 1))
-						b, err := replyHdr.Append(nil, hdr.Version)
+						b, err := replyHdr.Append(nil, true, hdr.Version)
 						Expect(err).ToNot(HaveOccurred())
 						r := make([]byte, payloadLen)
 						rand.Read(r)
@@ -133,12 +133,12 @@ var _ = Describe("MITM test", func() {
 				} else {
 					connID, err := wire.ParseConnectionID(raw, connIDLen)
 					Expect(err).ToNot(HaveOccurred())
-					_, pn, pnLen, _, err := wire.ParseShortHeader(raw, connIDLen)
+					_, pn, pnLen, _, err := wire.ParseShortHeader(raw, true, connIDLen)
 					if err != nil { // normally, ParseShortHeader is called after decrypting the header
 						Expect(err).To(MatchError(wire.ErrInvalidReservedBits))
 					}
 					for i := 0; i < numPackets; i++ {
-						b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(rand.Intn(2)))
+						b, err := wire.AppendShortHeader(nil, true, connID, pn, pnLen, protocol.KeyPhaseBit(rand.Intn(2)))
 						Expect(err).ToNot(HaveOccurred())
 						payloadLen := rand.Int31n(100)
 						r := make([]byte, payloadLen)
@@ -330,7 +330,7 @@ var _ = Describe("MITM test", func() {
 				if dir == quicproxy.DirectionIncoming {
 					defer GinkgoRecover()
 
-					hdr, _, _, err := wire.ParsePacket(raw)
+					hdr, _, _, err := wire.ParsePacket(raw, true)
 					Expect(err).ToNot(HaveOccurred())
 
 					if hdr.Type != protocol.PacketTypeInitial {
@@ -372,7 +372,7 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					defer close(done)
 
-					hdr, _, _, err := wire.ParsePacket(raw)
+					hdr, _, _, err := wire.ParsePacket(raw, true)
 					Expect(err).ToNot(HaveOccurred())
 
 					if hdr.Type != protocol.PacketTypeInitial {
@@ -405,7 +405,7 @@ var _ = Describe("MITM test", func() {
 				if dir == quicproxy.DirectionIncoming {
 					defer GinkgoRecover()
 
-					hdr, _, _, err := wire.ParsePacket(raw)
+					hdr, _, _, err := wire.ParsePacket(raw, true)
 					Expect(err).ToNot(HaveOccurred())
 					if hdr.Type != protocol.PacketTypeInitial || injected {
 						return 0
@@ -433,7 +433,7 @@ var _ = Describe("MITM test", func() {
 				if dir == quicproxy.DirectionIncoming {
 					defer GinkgoRecover()
 
-					hdr, _, _, err := wire.ParsePacket(raw)
+					hdr, _, _, err := wire.ParsePacket(raw, true)
 					Expect(err).ToNot(HaveOccurred())
 					if hdr.Type != protocol.PacketTypeInitial || injected {
 						return 0

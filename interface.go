@@ -324,7 +324,10 @@ type Config struct {
 	Allow0RTT bool
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
-	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
+	// DisableQUICBitGreasing disables greasing of the QUIC bit.
+	// By default, greasing is enabled according to RFC 9287.
+	DisableQUICBitGreasing bool
+	Tracer                 func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
 }
 
 type ClientHelloInfo struct {

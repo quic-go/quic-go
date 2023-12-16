@@ -14,6 +14,7 @@ import (
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
+	wire "github.com/quic-go/quic-go/internal/wire"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -75,6 +76,42 @@ func (c *PackerAppendPacketCall) Do(f func(*packetBuffer, protocol.ByteCount, pr
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *PackerAppendPacketCall) DoAndReturn(f func(*packetBuffer, protocol.ByteCount, protocol.VersionNumber) (shortHeaderPacket, error)) *PackerAppendPacketCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// HandleTransportParameters mocks base method.
+func (m *MockPacker) HandleTransportParameters(arg0 *wire.TransportParameters) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "HandleTransportParameters", arg0)
+}
+
+// HandleTransportParameters indicates an expected call of HandleTransportParameters.
+func (mr *MockPackerMockRecorder) HandleTransportParameters(arg0 any) *PackerHandleTransportParametersCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTransportParameters", reflect.TypeOf((*MockPacker)(nil).HandleTransportParameters), arg0)
+	return &PackerHandleTransportParametersCall{Call: call}
+}
+
+// PackerHandleTransportParametersCall wrap *gomock.Call
+type PackerHandleTransportParametersCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *PackerHandleTransportParametersCall) Return() *PackerHandleTransportParametersCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *PackerHandleTransportParametersCall) Do(f func(*wire.TransportParameters)) *PackerHandleTransportParametersCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *PackerHandleTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *PackerHandleTransportParametersCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

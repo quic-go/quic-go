@@ -24,20 +24,20 @@ var _ = Describe("Packet Unpacker", func() {
 	)
 
 	getLongHeader := func(extHdr *wire.ExtendedHeader) (*wire.Header, []byte) {
-		b, err := extHdr.Append(nil, protocol.Version1)
+		b, err := extHdr.Append(nil, true, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		hdrLen := len(b)
 		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
 			b = append(b, make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen))...)
 		}
-		hdr, _, _, err := wire.ParsePacket(b)
+		hdr, _, _, err := wire.ParsePacket(b, false)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		return hdr, b[:hdrLen]
 	}
 
 	getShortHeader := func(connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) []byte {
-		b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, kp)
+		b, err := wire.AppendShortHeader(nil, true, connID, pn, pnLen, kp)
 		Expect(err).ToNot(HaveOccurred())
 		return b
 	}
@@ -69,7 +69,7 @@ var _ = Describe("Packet Unpacker", func() {
 	})
 
 	It("errors when the packet is too small to obtain the header decryption sample, for short headers", func() {
-		b, err := wire.AppendShortHeader(nil, connID, 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+		b, err := wire.AppendShortHeader(nil, true, connID, 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 		Expect(err).ToNot(HaveOccurred())
 		data := append(b, make([]byte, 2 /* fill up packet number */ +15 /* need 16 bytes */)...)
 		opener := mocks.NewMockShortHeaderOpener(mockCtrl)

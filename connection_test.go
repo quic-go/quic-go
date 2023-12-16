@@ -581,7 +581,7 @@ var _ = Describe("Connection", func() {
 			cryptoSetup.EXPECT().Close()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-			b, err := wire.AppendShortHeader(nil, srcConnID, 42, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+			b, err := wire.AppendShortHeader(nil, true, srcConnID, 42, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 			Expect(err).ToNot(HaveOccurred())
 
 			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(time.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
@@ -659,7 +659,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		getShortHeaderPacket := func(connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) receivedPacket {
-			b, err := wire.AppendShortHeader(nil, connID, pn, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+			b, err := wire.AppendShortHeader(nil, true, connID, pn, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 			Expect(err).ToNot(HaveOccurred())
 			return receivedPacket{
 				data:    append(b, data...),
@@ -669,7 +669,7 @@ var _ = Describe("Connection", func() {
 		}
 
 		getLongHeaderPacket := func(extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
-			b, err := extHdr.Append(nil, conn.version)
+			b, err := extHdr.Append(nil, true, conn.version)
 			Expect(err).ToNot(HaveOccurred())
 			return receivedPacket{
 				data:    append(b, data...),
@@ -704,6 +704,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops packets for which header decryption fails", func() {
+			conn.quicBitGreasingEnabled = false
 			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
 					Type:    protocol.PacketTypeHandshake,
@@ -2518,7 +2519,7 @@ var _ = Describe("Client Connection", func() {
 	destConnID := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
 
 	getPacket := func(hdr *wire.ExtendedHeader, data []byte) receivedPacket {
-		b, err := hdr.Append(nil, conn.version)
+		b, err := hdr.Append(nil, true, conn.version)
 		Expect(err).ToNot(HaveOccurred())
 		return receivedPacket{
 			rcvTime: time.Now(),
@@ -2820,7 +2821,7 @@ var _ = Describe("Client Connection", func() {
 		})
 
 		getRetryTag := func(hdr *wire.ExtendedHeader) []byte {
-			b, err := hdr.Append(nil, conn.version)
+			b, err := hdr.Append(nil, true, conn.version)
 			Expect(err).ToNot(HaveOccurred())
 			return handshake.GetRetryIntegrityTag(b, origDestConnID, hdr.Version)[:]
 		}
@@ -3103,7 +3104,7 @@ var _ = Describe("Client Connection", func() {
 		var unpacker *MockUnpacker
 
 		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
-			b, err := extHdr.Append(nil, conn.version)
+			b, err := extHdr.Append(nil, true, conn.version)
 			Expect(err).ToNot(HaveOccurred())
 			return receivedPacket{
 				data:   append(b, data...),

@@ -39,7 +39,7 @@ var _ = Describe("Server", func() {
 			Header:          *hdr,
 			PacketNumber:    0x42,
 			PacketNumberLen: protocol.PacketNumberLen4,
-		}).Append(buf.Data, protocol.Version1)
+		}).Append(buf.Data, true, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		n := len(buf.Data)
 		buf.Data = append(buf.Data, p...)
@@ -78,7 +78,7 @@ var _ = Describe("Server", func() {
 	}
 
 	parseHeader := func(data []byte) *wire.Header {
-		hdr, _, _, err := wire.ParsePacket(data)
+		hdr, _, _, err := wire.ParsePacket(data, false)
 		Expect(err).ToNot(HaveOccurred())
 		return hdr
 	}
@@ -683,7 +683,7 @@ var _ = Describe("Server", func() {
 				}
 				wg.Wait()
 				p := getInitialWithRandomDestConnID()
-				hdr, _, _, err := wire.ParsePacket(p.data)
+				hdr, _, _, err := wire.ParsePacket(p.data, false)
 				Expect(err).ToNot(HaveOccurred())
 				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				done := make(chan struct{})

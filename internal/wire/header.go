@@ -143,11 +143,11 @@ type Header struct {
 // If the packet has a long header, the packet is cut according to the length field.
 // If we understand the version, the packet is header up unto the packet number.
 // Otherwise, only the invariant part of the header is parsed.
-func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
+func ParsePacket(data []byte, ignoreQuicBit bool) (*Header, []byte, []byte, error) {
 	if len(data) == 0 || !IsLongHeaderPacket(data[0]) {
 		return nil, nil, nil, errors.New("not a long header packet")
 	}
-	hdr, err := parseHeader(bytes.NewReader(data))
+	hdr, err := parseHeader(bytes.NewReader(data), ignoreQuicBit)
 	if err != nil {
 		if err == ErrUnsupportedVersion {
 			return hdr, nil, nil, ErrUnsupportedVersion
@@ -166,7 +166,7 @@ func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
 // For long header packets:
 // * if we understand the version: up to the packet number
 // * if not, only the invariant part of the header
-func parseHeader(b *bytes.Reader) (*Header, error) {
+func parseHeader(b *bytes.Reader, ignoreQuicBit bool) (*Header, error) {
 	startLen := b.Len()
 	typeByte, err := b.ReadByte()
 	if err != nil {
@@ -174,18 +174,18 @@ func parseHeader(b *bytes.Reader) (*Header, error) {
 	}
 
 	h := &Header{typeByte: typeByte}
-	err = h.parseLongHeader(b)
+	err = h.parseLongHeader(b, ignoreQuicBit)
 	h.parsedLen = protocol.ByteCount(startLen - b.Len())
 	return h, err
 }
 
-func (h *Header) parseLongHeader(b *bytes.Reader) error {
+func (h *Header) parseLongHeader(b *bytes.Reader, ignoreQuicBit bool) error {
 	v, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return err
 	}
 	h.Version = protocol.VersionNumber(v)
-	if h.Version != 0 && h.typeByte&0x40 == 0 {
+	if h.Version != 0 && h.typeByte&0x40 == 0 && !ignoreQuicBit {
 		return errors.New("not a QUIC packet")
 	}
 	destConnIDLen, err := b.ReadByte()

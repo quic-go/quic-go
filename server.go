@@ -415,7 +415,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 
 	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
-	hdr, _, _, err := wire.ParsePacket(p.data)
+	hdr, _, _, err := wire.ParsePacket(p.data, !s.config.DisableQUICBitGreasing)
 	if err != nil {
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
@@ -756,7 +756,7 @@ func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
 
 	buf := getPacketBuffer()
 	defer buf.Release()
-	buf.Data, err = replyHdr.Append(buf.Data, hdr.Version)
+	buf.Data, err = replyHdr.Append(buf.Data, true, hdr.Version)
 	if err != nil {
 		return err
 	}
@@ -825,7 +825,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	replyHdr.PacketNumberLen = protocol.PacketNumberLen4
 	replyHdr.Length = 4 /* packet number len */ + ccf.Length(hdr.Version) + protocol.ByteCount(sealer.Overhead())
 	var err error
-	b.Data, err = replyHdr.Append(b.Data, hdr.Version)
+	b.Data, err = replyHdr.Append(b.Data, true, hdr.Version)
 	if err != nil {
 		return err
 	}

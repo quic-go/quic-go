@@ -25,7 +25,7 @@ type packer interface {
 	PackConnectionClose(*qerr.TransportError, protocol.ByteCount, protocol.VersionNumber) (*coalescedPacket, error)
 	PackApplicationClose(*qerr.ApplicationError, protocol.ByteCount, protocol.VersionNumber) (*coalescedPacket, error)
 	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error)
-
+	HandleTransportParameters(*wire.TransportParameters)
 	SetToken([]byte)
 }
 
@@ -134,6 +134,8 @@ type packetPacker struct {
 	rand                rand.Rand
 
 	numNonAckElicitingAcks int
+
+	greaseQuicBit bool
 }
 
 var _ packer = &packetPacker{}
@@ -773,7 +775,7 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 
 	startLen := len(buffer.Data)
 	raw := buffer.Data[startLen:]
-	raw, err := header.Append(raw, v)
+	raw, err := header.Append(raw, !p.greaseQuicBit, v)
 	if err != nil {
 		return nil, err
 	}
@@ -818,7 +820,7 @@ func (p *packetPacker) appendShortHeaderPacket(
 
 	startLen := len(buffer.Data)
 	raw := buffer.Data[startLen:]
-	raw, err := wire.AppendShortHeader(raw, connID, pn, pnLen, kp)
+	raw, err := wire.AppendShortHeader(raw, !p.greaseQuicBit, connID, pn, pnLen, kp)
 	if err != nil {
 		return shortHeaderPacket{}, err
 	}
@@ -903,4 +905,11 @@ func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.Pack
 
 func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
+}
+
+// HandleTransportParameters handles transport parameters received from the peer.
+func (p *packetPacker) HandleTransportParameters(params *wire.TransportParameters) {
+	// grease_quic_bit (RFC 9287)
+	// peer SHOULD grease the QUIC Bit , when it recives grease_quic_bit transport parameter.
+	p.greaseQuicBit = params.GreaseQuicBit
 }

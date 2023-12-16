@@ -95,7 +95,7 @@ func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
 }
 
 // Append appends the Header.
-func (h *ExtendedHeader) Append(b []byte, v protocol.VersionNumber) ([]byte, error) {
+func (h *ExtendedHeader) Append(b []byte, quicBit bool, v protocol.VersionNumber) ([]byte, error) {
 	if h.DestConnectionID.Len() > protocol.MaxConnIDLen {
 		return nil, fmt.Errorf("invalid connection ID length: %d bytes", h.DestConnectionID.Len())
 	}
@@ -130,6 +130,9 @@ func (h *ExtendedHeader) Append(b []byte, v protocol.VersionNumber) ([]byte, err
 		}
 	}
 	firstByte := 0xc0 | packetType<<4
+	if !quicBit { // unset the quic bit
+		firstByte ^= 0x40
+	}
 	if h.Type != protocol.PacketTypeRetry {
 		// Retry packets don't have a packet number
 		firstByte |= uint8(h.PacketNumberLen - 1)
