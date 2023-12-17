@@ -495,7 +495,6 @@ func (s *connection) preSetup() {
 	s.connState.Version = s.version
 	// Even if greasing is enabled, we don't always enable it.
 	// That way, we grease the greasing mechanism.
-	// Essentially setting QUIC Bit to an unpredictable value (RFC9287)
 	if !s.config.DisableQUICBitGreasing {
 		s.quicBitGreasingEnabled = rand.Intn(5) != 0
 	}
