@@ -7,11 +7,11 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/lucas-clemente/quic-go"
-	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -56,7 +56,7 @@ var _ = Describe("QUIC Bit Greasing", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}()
 
-		conn, err := quic.DialAddr(fmt.Sprintf("localhost:%d", proxyPort), tlsClientConfig, clientConf)
+		conn, err := quic.DialAddr(context.Background(), fmt.Sprintf("localhost:%d", proxyPort), tlsClientConfig, clientConf)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := conn.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
@@ -86,7 +86,7 @@ var _ = Describe("QUIC Bit Greasing", func() {
 				c, proxy := runProxy(fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port))
 				defer proxy.Close()
 				runTransfer(
-					ln,
+					*ln,
 					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}, DisableQUICBitGreasing: true}),
 					proxy.LocalPort(),
 				)
@@ -112,7 +112,7 @@ var _ = Describe("QUIC Bit Greasing", func() {
 				// If we hit one of those cases, just rerun the transfer.
 				for i := 0; i < 10; i++ {
 					runTransfer(
-						ln,
+						*ln,
 						getQuicConfig(&quic.Config{
 							DisableQUICBitGreasing: true,
 							Versions:               []protocol.VersionNumber{version},
@@ -143,7 +143,7 @@ var _ = Describe("QUIC Bit Greasing", func() {
 				// When greasing is enabled by the quic.Config, we occasionally disable it to grease the greasing mechanism.
 				// If we hit one of those cases, just rerun the transfer.
 				for i := 0; i < 10; i++ {
-					runTransfer(ln, getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}), proxy.LocalPort())
+					runTransfer(*ln, getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}), proxy.LocalPort())
 					if atomic.LoadUint32(&c.outgoingQUICBitNotSet) > 0 {
 						break
 					}
