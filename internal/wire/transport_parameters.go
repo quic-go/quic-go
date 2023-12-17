@@ -422,8 +422,8 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
 	}
 	if p.GreaseQuicBit {
-		quicvarint.Append(b, uint64(greaseQuicBitParameterID))
-		quicvarint.Append(b, 0)
+		b = quicvarint.Append(b, uint64(greaseQuicBitParameterID))
+		b = quicvarint.Append(b, 0)
 	}
 
 	if pers == protocol.PerspectiveClient && len(AdditionalTransportParametersClient) > 0 {
