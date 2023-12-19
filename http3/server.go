@@ -284,7 +284,7 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 		}
 		go func() {
 			if err := s.handleConn(conn); err != nil {
-				s.logger.Debugf(err.Error())
+				s.logger.Debugf("handling connection failed: %s", err)
 			}
 		}()
 	}
