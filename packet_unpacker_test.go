@@ -44,7 +44,7 @@ var _ = Describe("Packet Unpacker", func() {
 
 	BeforeEach(func() {
 		cs = mocks.NewMockCryptoSetup(mockCtrl)
-		unpacker = newPacketUnpacker(cs, 4)
+		unpacker = newPacketUnpacker(cs, 4, false)
 	})
 
 	It("errors when the packet is too small to obtain the header decryption sample, for long headers", func() {
