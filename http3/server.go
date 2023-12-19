@@ -418,10 +418,11 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
 
-	if port, err := extractPort((*l).Addr().String()); err == nil {
+	laddr := (*l).Addr()
+	if port, err := extractPort(laddr.String()); err == nil {
 		s.listeners[l] = listenerInfo{port}
 	} else {
-		s.logger.Errorf("Unable to extract port from listener %+v, will not be announced using SetQuicHeaders: %s", err)
+		s.logger.Errorf("Unable to extract port from listener %s, will not be announced using SetQuicHeaders: %s", laddr, err)
 		s.listeners[l] = listenerInfo{}
 	}
 	s.generateAltSvcHeader()
