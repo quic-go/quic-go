@@ -778,6 +778,12 @@ func (s *connection) handleHandshakeConfirmed() error {
 		}
 		s.mtuDiscoverer.Start(utils.Min(maxPacketSize, protocol.MaxPacketBufferSize))
 	}
+
+	// do not log earlier to not apply additional pressure on the handshake mutex
+	if s.tracer != nil && s.tracer.ChoseAlpn != nil {
+		s.tracer.ChoseAlpn(s.cryptoStreamHandler.ConnectionState().NegotiatedProtocol)
+	}
+
 	return nil
 }
 

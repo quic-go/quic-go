@@ -1946,6 +1946,7 @@ var _ = Describe("Connection", func() {
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		conn.sentPacketHandler = sph
 		tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake)
+		tracer.EXPECT().ChoseAlpn(gomock.Any())
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().TimeUntilSend().AnyTimes()
 		sph.EXPECT().SendMode(gomock.Any()).AnyTimes()
@@ -1954,6 +1955,7 @@ var _ = Describe("Connection", func() {
 		connRunner.EXPECT().Retire(clientDestConnID)
 		cryptoSetup.EXPECT().SetHandshakeConfirmed()
 		cryptoSetup.EXPECT().GetSessionTicket()
+		cryptoSetup.EXPECT().ConnectionState()
 		handshakeCtx := conn.HandshakeComplete()
 		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		Expect(conn.handleHandshakeComplete()).To(Succeed())
@@ -1966,8 +1968,10 @@ var _ = Describe("Connection", func() {
 		connRunner.EXPECT().Retire(clientDestConnID)
 		conn.sentPacketHandler.DropPackets(protocol.EncryptionInitial)
 		tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake)
+		tracer.EXPECT().ChoseAlpn(gomock.Any())
 		cryptoSetup.EXPECT().SetHandshakeConfirmed()
 		cryptoSetup.EXPECT().GetSessionTicket().Return(make([]byte, size), nil)
+		cryptoSetup.EXPECT().ConnectionState()
 
 		handshakeCtx := conn.HandshakeComplete()
 		Consistently(handshakeCtx).ShouldNot(BeClosed())
@@ -2021,6 +2025,7 @@ var _ = Describe("Connection", func() {
 		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 		mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
 		tracer.EXPECT().SentShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+		tracer.EXPECT().ChoseAlpn(gomock.Any())
 		conn.sentPacketHandler = sph
 		done := make(chan struct{})
 		connRunner.EXPECT().Retire(clientDestConnID)
@@ -2041,6 +2046,7 @@ var _ = Describe("Connection", func() {
 			cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
 			cryptoSetup.EXPECT().SetHandshakeConfirmed()
 			cryptoSetup.EXPECT().GetSessionTicket()
+			cryptoSetup.EXPECT().ConnectionState()
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(conn.handleHandshakeComplete()).To(Succeed())
 			conn.run()
@@ -2352,6 +2358,7 @@ var _ = Describe("Connection", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake),
+				tracer.EXPECT().ChoseAlpn(gomock.Any()),
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
 					Expect(e).To(MatchError(&IdleTimeoutError{}))
 				}),
@@ -2366,6 +2373,7 @@ var _ = Describe("Connection", func() {
 				cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
 				cryptoSetup.EXPECT().GetSessionTicket().MaxTimes(1)
 				cryptoSetup.EXPECT().SetHandshakeConfirmed().MaxTimes(1)
+				cryptoSetup.EXPECT().ConnectionState()
 				Expect(conn.handleHandshakeComplete()).To(Succeed())
 				err := conn.run()
 				nerr, ok := err.(net.Error)
@@ -2652,9 +2660,11 @@ var _ = Describe("Client Connection", func() {
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		conn.sentPacketHandler = sph
 		tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake)
+		tracer.EXPECT().ChoseAlpn(gomock.Any())
 		sph.EXPECT().DropPackets(protocol.EncryptionHandshake)
 		sph.EXPECT().SetHandshakeConfirmed()
 		cryptoSetup.EXPECT().SetHandshakeConfirmed()
+		cryptoSetup.EXPECT().ConnectionState()
 		Expect(conn.handleHandshakeDoneFrame()).To(Succeed())
 	})
 
@@ -2664,11 +2674,13 @@ var _ = Describe("Client Connection", func() {
 		conn.sentPacketHandler = sph
 		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 3}}}
 		tracer.EXPECT().DroppedEncryptionLevel(protocol.EncryptionHandshake)
+		tracer.EXPECT().ChoseAlpn(gomock.Any())
 		sph.EXPECT().ReceivedAck(ack, protocol.Encryption1RTT, gomock.Any()).Return(true, nil)
 		sph.EXPECT().DropPackets(protocol.EncryptionHandshake)
 		sph.EXPECT().SetHandshakeConfirmed()
 		cryptoSetup.EXPECT().SetLargest1RTTAcked(protocol.PacketNumber(3))
 		cryptoSetup.EXPECT().SetHandshakeConfirmed()
+		cryptoSetup.EXPECT().ConnectionState()
 		Expect(conn.handleAckFrame(ack, protocol.Encryption1RTT)).To(Succeed())
 	})
 

@@ -115,6 +115,42 @@ func (c *ConnectionTracerBufferedPacketCall) DoAndReturn(f func(logging.PacketTy
 	return c
 }
 
+// ChoseAlpn mocks base method.
+func (m *MockConnectionTracer) ChoseAlpn(arg0 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ChoseAlpn", arg0)
+}
+
+// ChoseAlpn indicates an expected call of ChoseAlpn.
+func (mr *MockConnectionTracerMockRecorder) ChoseAlpn(arg0 any) *ConnectionTracerChoseAlpnCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseAlpn", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseAlpn), arg0)
+	return &ConnectionTracerChoseAlpnCall{Call: call}
+}
+
+// ConnectionTracerChoseAlpnCall wrap *gomock.Call
+type ConnectionTracerChoseAlpnCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ConnectionTracerChoseAlpnCall) Return() *ConnectionTracerChoseAlpnCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ConnectionTracerChoseAlpnCall) Do(f func(string)) *ConnectionTracerChoseAlpnCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ConnectionTracerChoseAlpnCall) DoAndReturn(f func(string)) *ConnectionTracerChoseAlpnCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Close mocks base method.
 func (m *MockConnectionTracer) Close() {
 	m.ctrl.T.Helper()
