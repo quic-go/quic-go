@@ -922,7 +922,7 @@ var _ = Describe("Client", func() {
 							return 0, errors.New("test done")
 						})
 						_, err := cl.RoundTripOpt(req, roundTripOpt)
-						Expect(err).To(MatchError("test done"))
+						Expect(err).To(MatchError(context.Canceled))
 						Eventually(done).Should(BeClosed())
 					})
 				})

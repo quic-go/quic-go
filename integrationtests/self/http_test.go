@@ -319,6 +319,21 @@ var _ = Describe("HTTP tests", func() {
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 	})
 
+	It("handles context cancellations", func() {
+		mux.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/cancel", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		time.AfterFunc(50*time.Millisecond, cancel)
+
+		_, err = client.Do(req)
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError(context.Canceled))
+	})
+
 	It("cancels requests", func() {
 		handlerCalled := make(chan struct{})
 		mux.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
