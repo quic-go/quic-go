@@ -1,12 +1,16 @@
 package qlog
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +26,10 @@ import (
 // When building a binary from this repository, the version can be set using the following go build flag:
 // -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=foobar"
 var quicGoVersion = "(devel)"
+
+// QlogDir contains the value of the QLOGDIR environment variable.
+// If it is the empty string ("") no qlog output is written.
+var QlogDir string
 
 func init() {
 	if quicGoVersion != "(devel)" { // variable set by ldflags
@@ -44,6 +52,28 @@ func init() {
 			break
 		}
 	}
+	QlogDir = os.Getenv("QLOGDIR")
+	if QlogDir != "" {
+		if _, err := os.Stat(QlogDir); os.IsNotExist(err) {
+			if err := os.MkdirAll(QlogDir, 0o755); err != nil {
+				log.Fatalf("failed to create qlog dir %s: %v", QlogDir, err)
+			}
+		}
+	}
+}
+
+// NewQlogDirConnectionTracer creates a qlog file in QLOGDIR
+func NewQlogDirConnectionTracer(_ context.Context, p logging.Perspective, connID logging.ConnectionID, label string) *logging.ConnectionTracer {
+	if QlogDir == "" {
+		return nil
+	}
+	path := fmt.Sprintf("%s/%s_%s.qlog", strings.TrimRight(QlogDir, "/"), connID, label)
+	f, err := os.Create(path)
+	if err != nil {
+		log.Printf("Failed to create qlog file %s: %s", path, err.Error())
+		return nil
+	}
+	return NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), p, connID)
 }
 
 const eventChanSize = 50
@@ -144,6 +174,16 @@ func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protoco
 		},
 		ECNStateUpdated: func(state logging.ECNState, trigger logging.ECNStateTrigger) {
 			t.ECNStateUpdated(state, trigger)
+		},
+		ChoseAlpn: func(protocol string) {
+			t.mutex.Lock()
+			t.recordEvent(time.Now(), eventAlpnInformation{chosenAlpn: protocol})
+			t.mutex.Unlock()
+		},
+		StreamDataMoved: func(id logging.StreamID, offset logging.ByteCount, n logging.ByteCount, from string, to string) {
+			t.mutex.Lock()
+			t.recordEvent(time.Now(), eventStreamDataMoved{streamID: id, offset: offset, length: n, from: from, to: to})
+			t.mutex.Unlock()
 		},
 		Debug: func(name, msg string) {
 			t.Debug(name, msg)

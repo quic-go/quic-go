@@ -6,8 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 
@@ -113,12 +113,12 @@ func (e eventConnectionClosed) IsNil() bool        { return false }
 
 func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 	var (
-		statelessResetErr     *quic.StatelessResetError
-		handshakeTimeoutErr   *quic.HandshakeTimeoutError
-		idleTimeoutErr        *quic.IdleTimeoutError
-		applicationErr        *quic.ApplicationError
-		transportErr          *quic.TransportError
-		versionNegotiationErr *quic.VersionNegotiationError
+		statelessResetErr     *qerr.StatelessResetError
+		handshakeTimeoutErr   *qerr.HandshakeTimeoutError
+		idleTimeoutErr        *qerr.IdleTimeoutError
+		applicationErr        *qerr.ApplicationError
+		transportErr          *qerr.TransportError
+		versionNegotiationErr *qerr.VersionNegotiationError
 	)
 	switch {
 	case errors.As(e.e, &statelessResetErr):
@@ -553,4 +553,36 @@ func (e eventGeneric) IsNil() bool        { return false }
 
 func (e eventGeneric) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("details", e.msg)
+}
+
+type eventAlpnInformation struct {
+	chosenAlpn string
+}
+
+func (e eventAlpnInformation) Category() category { return categoryTransport }
+func (e eventAlpnInformation) Name() string       { return "alpn_information" }
+func (e eventAlpnInformation) IsNil() bool        { return false }
+
+func (e eventAlpnInformation) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKeyOmitEmpty("chosen_alpn", e.chosenAlpn)
+}
+
+type eventStreamDataMoved struct {
+	streamID logging.StreamID
+	offset   logging.ByteCount
+	length   logging.ByteCount
+	from     string
+	to       string
+}
+
+func (e eventStreamDataMoved) Category() category { return categoryTransport }
+func (e eventStreamDataMoved) Name() string       { return "stream_data_moved" }
+func (e eventStreamDataMoved) IsNil() bool        { return false }
+
+func (e eventStreamDataMoved) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.Int64Key("stream_id", int64(e.streamID))
+	enc.Int64Key("offset", int64(e.offset))
+	enc.Int64Key("length", int64(e.length))
+	enc.StringKeyOmitEmpty("from", e.from)
+	enc.StringKeyOmitEmpty("to", e.to)
 }

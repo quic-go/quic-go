@@ -105,6 +105,13 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		return 0, nil
 	}
 
+	var streamOffset protocol.ByteCount // the stream offset where this Write call attaches
+	if s.nextFrame == nil {
+		streamOffset = s.writeOffset
+	} else {
+		streamOffset = s.nextFrame.Offset + protocol.ByteCount(len(s.nextFrame.Data))
+	}
+
 	s.dataForWriting = p
 
 	var (
@@ -143,6 +150,9 @@ func (s *sendStream) Write(p []byte) (int, error) {
 			if !deadline.IsZero() {
 				if !time.Now().Before(deadline) {
 					s.dataForWriting = nil
+					if bytesWritten > 0 {
+						s.sender.onStreamDataWrittenByApplication(s.streamID, streamOffset, protocol.ByteCount(bytesWritten))
+					}
 					return bytesWritten, errDeadline
 				}
 				if deadlineTimer == nil {
@@ -175,6 +185,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 			}
 		}
 		s.mutex.Lock()
+	}
+
+	if bytesWritten > 0 {
+		s.sender.onStreamDataWrittenByApplication(s.streamID, streamOffset, protocol.ByteCount(bytesWritten))
 	}
 
 	if bytesWritten == len(p) {

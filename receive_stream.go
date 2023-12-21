@@ -82,12 +82,22 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 	s.readOnce <- struct{}{}
 	defer func() { <-s.readOnce }()
 
+	var streamOffset protocol.ByteCount // the stream offset where this Read call starts
+
 	s.mutex.Lock()
+	if s.currentFrame != nil {
+		streamOffset = s.frameQueue.readPos - protocol.ByteCount(len(s.currentFrame)) + protocol.ByteCount(s.readPosInFrame)
+	} else {
+		streamOffset = s.frameQueue.readPos
+	}
 	completed, n, err := s.readImpl(p)
 	s.mutex.Unlock()
 
 	if completed {
 		s.sender.onStreamCompleted(s.streamID)
+	}
+	if n > 0 {
+		s.sender.onStreamDataReadByApplication(s.streamID, streamOffset, protocol.ByteCount(n))
 	}
 	return n, err
 }

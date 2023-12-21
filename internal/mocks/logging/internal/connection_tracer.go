@@ -115,6 +115,42 @@ func (c *ConnectionTracerBufferedPacketCall) DoAndReturn(f func(logging.PacketTy
 	return c
 }
 
+// ChoseAlpn mocks base method.
+func (m *MockConnectionTracer) ChoseAlpn(arg0 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ChoseAlpn", arg0)
+}
+
+// ChoseAlpn indicates an expected call of ChoseAlpn.
+func (mr *MockConnectionTracerMockRecorder) ChoseAlpn(arg0 any) *ConnectionTracerChoseAlpnCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseAlpn", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseAlpn), arg0)
+	return &ConnectionTracerChoseAlpnCall{Call: call}
+}
+
+// ConnectionTracerChoseAlpnCall wrap *gomock.Call
+type ConnectionTracerChoseAlpnCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ConnectionTracerChoseAlpnCall) Return() *ConnectionTracerChoseAlpnCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ConnectionTracerChoseAlpnCall) Do(f func(string)) *ConnectionTracerChoseAlpnCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ConnectionTracerChoseAlpnCall) DoAndReturn(f func(string)) *ConnectionTracerChoseAlpnCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Close mocks base method.
 func (m *MockConnectionTracer) Close() {
 	m.ctrl.T.Helper()
@@ -903,6 +939,42 @@ func (c *ConnectionTracerStartedConnectionCall) Do(f func(net.Addr, net.Addr, pr
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *ConnectionTracerStartedConnectionCall) DoAndReturn(f func(net.Addr, net.Addr, protocol.ConnectionID, protocol.ConnectionID)) *ConnectionTracerStartedConnectionCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// StreamDataMoved mocks base method.
+func (m *MockConnectionTracer) StreamDataMoved(arg0 protocol.StreamID, arg1, arg2 protocol.ByteCount, arg3, arg4 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StreamDataMoved", arg0, arg1, arg2, arg3, arg4)
+}
+
+// StreamDataMoved indicates an expected call of StreamDataMoved.
+func (mr *MockConnectionTracerMockRecorder) StreamDataMoved(arg0, arg1, arg2, arg3, arg4 any) *ConnectionTracerStreamDataMovedCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamDataMoved", reflect.TypeOf((*MockConnectionTracer)(nil).StreamDataMoved), arg0, arg1, arg2, arg3, arg4)
+	return &ConnectionTracerStreamDataMovedCall{Call: call}
+}
+
+// ConnectionTracerStreamDataMovedCall wrap *gomock.Call
+type ConnectionTracerStreamDataMovedCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ConnectionTracerStreamDataMovedCall) Return() *ConnectionTracerStreamDataMovedCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ConnectionTracerStreamDataMovedCall) Do(f func(protocol.StreamID, protocol.ByteCount, protocol.ByteCount, string, string)) *ConnectionTracerStreamDataMovedCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ConnectionTracerStreamDataMovedCall) DoAndReturn(f func(protocol.StreamID, protocol.ByteCount, protocol.ByteCount, string, string)) *ConnectionTracerStreamDataMovedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

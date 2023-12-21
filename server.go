@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go/qlog"
+
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -633,14 +635,20 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			}
 			config = populateConfig(conf)
 		}
-		var tracer *logging.ConnectionTracer
-		if config.Tracer != nil {
+		var tracers []*logging.ConnectionTracer
+		{
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
 			connID := hdr.DestConnectionID
 			if origDestConnID.Len() > 0 {
 				connID = origDestConnID
 			}
-			tracer = config.Tracer(context.WithValue(context.Background(), ConnectionTracingKey, tracingID), protocol.PerspectiveServer, connID)
+			ctx := context.WithValue(context.Background(), ConnectionTracingKey, tracingID)
+			if config.Tracer != nil {
+				tracers = append(tracers, config.Tracer(ctx, protocol.PerspectiveServer, connID))
+			}
+			if qlog.QlogDir != "" {
+				tracers = append(tracers, qlog.NewQlogDirConnectionTracer(ctx, protocol.PerspectiveServer, connID, "server"))
+			}
 		}
 		conn = s.newConn(
 			newSendConn(s.conn, p.remoteAddr, p.info, s.logger),
@@ -656,7 +664,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			s.tlsConf,
 			s.tokenGenerator,
 			clientAddrIsValid,
-			tracer,
+			logging.NewMultiplexedConnectionTracer(tracers...),
 			tracingID,
 			s.logger,
 			hdr.Version,
