@@ -145,7 +145,7 @@ func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protoco
 		ECNStateUpdated: func(state logging.ECNState, trigger logging.ECNStateTrigger) {
 			t.ECNStateUpdated(state, trigger)
 		},
-		ChoseAlpn: func(protocol string) {
+		ChoseALPN: func(protocol string) {
 			t.mutex.Lock()
 			t.recordEvent(time.Now(), eventAlpnInformation{chosenAlpn: protocol})
 			t.mutex.Unlock()

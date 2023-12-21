@@ -115,38 +115,38 @@ func (c *ConnectionTracerBufferedPacketCall) DoAndReturn(f func(logging.PacketTy
 	return c
 }
 
-// ChoseAlpn mocks base method.
-func (m *MockConnectionTracer) ChoseAlpn(arg0 string) {
+// ChoseALPN mocks base method.
+func (m *MockConnectionTracer) ChoseALPN(arg0 string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ChoseAlpn", arg0)
+	m.ctrl.Call(m, "ChoseALPN", arg0)
 }
 
-// ChoseAlpn indicates an expected call of ChoseAlpn.
-func (mr *MockConnectionTracerMockRecorder) ChoseAlpn(arg0 any) *ConnectionTracerChoseAlpnCall {
+// ChoseALPN indicates an expected call of ChoseALPN.
+func (mr *MockConnectionTracerMockRecorder) ChoseALPN(arg0 any) *ConnectionTracerChoseALPNCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseAlpn", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseAlpn), arg0)
-	return &ConnectionTracerChoseAlpnCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseALPN", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseALPN), arg0)
+	return &ConnectionTracerChoseALPNCall{Call: call}
 }
 
-// ConnectionTracerChoseAlpnCall wrap *gomock.Call
-type ConnectionTracerChoseAlpnCall struct {
+// ConnectionTracerChoseALPNCall wrap *gomock.Call
+type ConnectionTracerChoseALPNCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerChoseAlpnCall) Return() *ConnectionTracerChoseAlpnCall {
+func (c *ConnectionTracerChoseALPNCall) Return() *ConnectionTracerChoseALPNCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerChoseAlpnCall) Do(f func(string)) *ConnectionTracerChoseAlpnCall {
+func (c *ConnectionTracerChoseALPNCall) Do(f func(string)) *ConnectionTracerChoseALPNCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerChoseAlpnCall) DoAndReturn(f func(string)) *ConnectionTracerChoseAlpnCall {
+func (c *ConnectionTracerChoseALPNCall) DoAndReturn(f func(string)) *ConnectionTracerChoseALPNCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

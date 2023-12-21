@@ -564,5 +564,5 @@ func (e eventAlpnInformation) Name() string       { return "alpn_information" }
 func (e eventAlpnInformation) IsNil() bool        { return false }
 
 func (e eventAlpnInformation) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKeyOmitEmpty("chosen_alpn", e.chosenAlpn)
+	enc.StringKey("chosen_alpn", e.chosenAlpn)
 }

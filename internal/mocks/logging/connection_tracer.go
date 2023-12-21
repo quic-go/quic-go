@@ -98,8 +98,8 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		ECNStateUpdated: func(state logging.ECNState, trigger logging.ECNStateTrigger) {
 			t.ECNStateUpdated(state, trigger)
 		},
-		ChoseAlpn: func(protocol string) {
-			t.ChoseAlpn(protocol)
+		ChoseALPN: func(protocol string) {
+			t.ChoseALPN(protocol)
 		},
 		Close: func() {
 			t.Close()
