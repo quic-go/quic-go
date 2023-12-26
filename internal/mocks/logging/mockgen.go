@@ -45,6 +45,7 @@ type ConnectionTracer interface {
 	LossTimerExpired(logging.TimerType, logging.EncryptionLevel)
 	LossTimerCanceled()
 	ECNStateUpdated(state logging.ECNState, trigger logging.ECNStateTrigger)
+	ChoseALPN(protocol string)
 	// Close is called when the connection is closed.
 	Close()
 	Debug(name, msg string)

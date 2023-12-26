@@ -554,3 +554,15 @@ func (e eventGeneric) IsNil() bool        { return false }
 func (e eventGeneric) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("details", e.msg)
 }
+
+type eventALPNInformation struct {
+	chosenALPN string
+}
+
+func (e eventALPNInformation) Category() category { return categoryTransport }
+func (e eventALPNInformation) Name() string       { return "alpn_information" }
+func (e eventALPNInformation) IsNil() bool        { return false }
+
+func (e eventALPNInformation) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("chosen_alpn", e.chosenALPN)
+}

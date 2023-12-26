@@ -731,6 +731,10 @@ func (s *connection) handleHandshakeComplete() error {
 	s.connIDManager.SetHandshakeComplete()
 	s.connIDGenerator.SetHandshakeComplete()
 
+	if s.tracer != nil && s.tracer.ChoseALPN != nil {
+		s.tracer.ChoseALPN(s.cryptoStreamHandler.ConnectionState().NegotiatedProtocol)
+	}
+
 	// The server applies transport parameters right away, but the client side has to wait for handshake completion.
 	// During a 0-RTT connection, the client is only allowed to use the new transport parameters for 1-RTT packets.
 	if s.perspective == protocol.PerspectiveClient {
