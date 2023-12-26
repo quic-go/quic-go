@@ -147,7 +147,7 @@ func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protoco
 		},
 		ChoseALPN: func(protocol string) {
 			t.mutex.Lock()
-			t.recordEvent(time.Now(), eventAlpnInformation{chosenAlpn: protocol})
+			t.recordEvent(time.Now(), eventALPNInformation{chosenALPN: protocol})
 			t.mutex.Unlock()
 		},
 		Debug: func(name, msg string) {
