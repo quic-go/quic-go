@@ -35,14 +35,6 @@ func MinNonZeroDuration(a, b time.Duration) time.Duration {
 	return Min(a, b)
 }
 
-// AbsDuration returns the absolute value of a time duration
-func AbsDuration(d time.Duration) time.Duration {
-	if d >= 0 {
-		return d
-	}
-	return -d
-}
-
 // MinTime returns the earlier time
 func MinTime(a, b time.Time) time.Time {
 	if a.After(b) {

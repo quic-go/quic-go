@@ -50,9 +50,4 @@ var _ = Describe("Min / Max", func() {
 		Expect(MinNonZeroTime(b, b.Add(time.Second))).To(Equal(b))
 		Expect(MinNonZeroTime(b.Add(time.Second), b)).To(Equal(b))
 	})
-
-	It("returns the abs time", func() {
-		Expect(AbsDuration(time.Microsecond)).To(Equal(time.Microsecond))
-		Expect(AbsDuration(-time.Microsecond)).To(Equal(time.Microsecond))
-	})
 })
