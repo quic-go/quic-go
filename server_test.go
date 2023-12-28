@@ -78,7 +78,7 @@ var _ = Describe("Server", func() {
 	}
 
 	parseHeader := func(data []byte) *wire.Header {
-		hdr, _, _, err := wire.ParsePacket(data)
+		hdr, _, _, err := wire.ParseLongHeaderPacket(data)
 		Expect(err).ToNot(HaveOccurred())
 		return hdr
 	}
@@ -683,7 +683,7 @@ var _ = Describe("Server", func() {
 				}
 				wg.Wait()
 				p := getInitialWithRandomDestConnID()
-				hdr, _, _, err := wire.ParsePacket(p.data)
+				hdr, _, _, err := wire.ParseLongHeaderPacket(p.data)
 				Expect(err).ToNot(HaveOccurred())
 				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				done := make(chan struct{})

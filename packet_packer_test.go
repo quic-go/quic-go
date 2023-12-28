@@ -45,7 +45,7 @@ var _ = Describe("Packet packer", func() {
 			if !wire.IsLongHeaderPacket(data[0]) {
 				break
 			}
-			hdr, _, more, err := wire.ParsePacket(data)
+			hdr, _, more, err := wire.ParseLongHeaderPacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			r := bytes.NewReader(data)
 			extHdr, err := hdr.ParseExtended(r, version)
@@ -689,7 +689,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.IsOnlyShortHeaderPacket()).To(BeFalse())
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data)
+				hdr, _, _, err := wire.ParseLongHeaderPacket(packet.buffer.Data)
 				Expect(err).ToNot(HaveOccurred())
 				data := packet.buffer.Data
 				r := bytes.NewReader(data)
@@ -1211,7 +1211,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.shortHdrPacket).To(BeNil())
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data)
+				hdr, _, _, err := wire.ParseLongHeaderPacket(packet.buffer.Data)
 				Expect(err).ToNot(HaveOccurred())
 				data := packet.buffer.Data
 				r := bytes.NewReader(data)

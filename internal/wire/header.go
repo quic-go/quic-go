@@ -139,15 +139,15 @@ type Header struct {
 	parsedLen protocol.ByteCount // how many bytes were read while parsing this header
 }
 
-// ParsePacket parses a packet.
+// ParseLongHeaderPacket parses a packet.
 // If the packet has a long header, the packet is cut according to the length field.
 // If we understand the version, the packet is header up unto the packet number.
 // Otherwise, only the invariant part of the header is parsed.
-func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
+func ParseLongHeaderPacket(data []byte) (*Header, []byte, []byte, error) {
 	if len(data) == 0 || !IsLongHeaderPacket(data[0]) {
 		return nil, nil, nil, errors.New("not a long header packet")
 	}
-	hdr, err := parseHeader(bytes.NewReader(data))
+	hdr, err := parseLongHeader(bytes.NewReader(data))
 	if err != nil {
 		if err == ErrUnsupportedVersion {
 			return hdr, nil, nil, ErrUnsupportedVersion
@@ -166,7 +166,7 @@ func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
 // For long header packets:
 // * if we understand the version: up to the packet number
 // * if not, only the invariant part of the header
-func parseHeader(b *bytes.Reader) (*Header, error) {
+func parseLongHeader(b *bytes.Reader) (*Header, error) {
 	startLen := b.Len()
 	typeByte, err := b.ReadByte()
 	if err != nil {

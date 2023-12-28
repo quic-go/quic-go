@@ -31,7 +31,7 @@ var _ = Describe("Packet Unpacker", func() {
 		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
 			b = append(b, make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen))...)
 		}
-		hdr, _, _, err := wire.ParsePacket(b)
+		hdr, _, _, err := wire.ParseLongHeaderPacket(b)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		return hdr, b[:hdrLen]
 	}

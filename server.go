@@ -415,7 +415,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 
 	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
-	hdr, _, _, err := wire.ParsePacket(p.data)
+	hdr, _, _, err := wire.ParseLongHeaderPacket(p.data)
 	if err != nil {
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)

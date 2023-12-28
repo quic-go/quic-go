@@ -63,7 +63,7 @@ var _ = Describe("0-RTT", func() {
 					if !wire.IsLongHeaderPacket(data[0]) {
 						break
 					}
-					hdr, _, rest, err := wire.ParsePacket(data)
+					hdr, _, rest, err := wire.ParseLongHeaderPacket(data)
 					Expect(err).ToNot(HaveOccurred())
 					if hdr.Type == protocol.PacketType0RTT {
 						num0RTTPackets.Add(1)
@@ -402,7 +402,7 @@ var _ = Describe("0-RTT", func() {
 			RemoteAddr: fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
 				if wire.IsLongHeaderPacket(data[0]) {
-					hdr, _, _, err := wire.ParsePacket(data)
+					hdr, _, _, err := wire.ParseLongHeaderPacket(data)
 					Expect(err).ToNot(HaveOccurred())
 					if hdr.Type == protocol.PacketType0RTT {
 						num0RTTPackets.Add(1)
@@ -414,7 +414,7 @@ var _ = Describe("0-RTT", func() {
 				if !wire.IsLongHeaderPacket(data[0]) {
 					return false
 				}
-				hdr, _, _, err := wire.ParsePacket(data)
+				hdr, _, _, err := wire.ParseLongHeaderPacket(data)
 				Expect(err).ToNot(HaveOccurred())
 				if hdr.Type == protocol.PacketType0RTT {
 					// drop 25% of the 0-RTT packets
@@ -451,7 +451,7 @@ var _ = Describe("0-RTT", func() {
 
 		countZeroRTTBytes := func(data []byte) (n protocol.ByteCount) {
 			for len(data) > 0 {
-				hdr, _, rest, err := wire.ParsePacket(data)
+				hdr, _, rest, err := wire.ParseLongHeaderPacket(data)
 				if err != nil {
 					return
 				}

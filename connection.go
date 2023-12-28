@@ -823,7 +823,7 @@ func (s *connection) handlePacketImpl(rp receivedPacket) bool {
 		}
 
 		if wire.IsLongHeaderPacket(p.data[0]) {
-			hdr, packetData, rest, err := wire.ParsePacket(p.data)
+			hdr, packetData, rest, err := wire.ParseLongHeaderPacket(p.data)
 			if err != nil {
 				if s.tracer != nil && s.tracer.DroppedPacket != nil {
 					dropReason := logging.PacketDropHeaderParseError

@@ -37,7 +37,7 @@ func Fuzz(data []byte) int {
 	}
 
 	is0RTTPacket := wire.Is0RTTPacket(data)
-	hdr, _, _, err := wire.ParsePacket(data)
+	hdr, _, _, err := wire.ParseLongHeaderPacket(data)
 	if err != nil {
 		return 0
 	}
