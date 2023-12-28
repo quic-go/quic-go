@@ -8,16 +8,6 @@ import (
 )
 
 var _ = Describe("Min / Max", func() {
-	It("returns the maximum", func() {
-		Expect(Max(5, 7)).To(Equal(7))
-		Expect(Max(5.5, 5.7)).To(Equal(5.7))
-	})
-
-	It("returns the minimum", func() {
-		Expect(Min(5, 7)).To(Equal(5))
-		Expect(Min(5.5, 5.7)).To(Equal(5.5))
-	})
-
 	It("returns the maximum time", func() {
 		a := time.Now()
 		b := a.Add(time.Second)

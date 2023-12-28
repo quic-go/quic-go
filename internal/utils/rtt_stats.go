@@ -55,7 +55,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 	if r.SmoothedRTT() == 0 {
 		return 2 * defaultInitialRTT
 	}
-	pto := r.SmoothedRTT() + Max(4*r.MeanDeviation(), protocol.TimerGranularity)
+	pto := r.SmoothedRTT() + max(4*r.MeanDeviation(), protocol.TimerGranularity)
 	if includeMaxAckDelay {
 		pto += r.MaxAckDelay()
 	}
@@ -126,6 +126,6 @@ func (r *RTTStats) OnConnectionMigration() {
 // is larger. The mean deviation is increased to the most recent deviation if
 // it's larger.
 func (r *RTTStats) ExpireSmoothedMetrics() {
-	r.meanDeviation = Max(r.meanDeviation, (r.smoothedRTT - r.latestRTT).Abs())
-	r.smoothedRTT = Max(r.smoothedRTT, r.latestRTT)
+	r.meanDeviation = max(r.meanDeviation, (r.smoothedRTT - r.latestRTT).Abs())
+	r.smoothedRTT = max(r.smoothedRTT, r.latestRTT)
 }
