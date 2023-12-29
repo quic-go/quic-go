@@ -283,7 +283,7 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 		h.rejected0RTT()
 		return false, nil
 	case tls.QUICWriteData:
-		h.WriteRecord(ev.Level, ev.Data)
+		h.writeRecord(ev.Level, ev.Data)
 		return false, nil
 	case tls.QUICHandshakeDone:
 		h.handshakeComplete()
@@ -539,8 +539,8 @@ func (h *cryptoSetup) SetWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 	}
 }
 
-// WriteRecord is called when TLS writes data
-func (h *cryptoSetup) WriteRecord(encLevel tls.QUICEncryptionLevel, p []byte) {
+// writeRecord is called when TLS writes data
+func (h *cryptoSetup) writeRecord(encLevel tls.QUICEncryptionLevel, p []byte) {
 	//nolint:exhaustive // handshake records can only be written for Initial and Handshake.
 	switch encLevel {
 	case tls.QUICEncryptionLevelInitial:
