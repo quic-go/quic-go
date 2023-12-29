@@ -8,17 +8,6 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
-type (
-	QUICEncryptionLevel = tls.QUICEncryptionLevel
-)
-
-const (
-	QUICEncryptionLevelInitial     = tls.QUICEncryptionLevelInitial
-	QUICEncryptionLevelEarly       = tls.QUICEncryptionLevelEarly
-	QUICEncryptionLevelHandshake   = tls.QUICEncryptionLevelHandshake
-	QUICEncryptionLevelApplication = tls.QUICEncryptionLevelApplication
-)
-
 func SetupConfigForServer(qconf *tls.QUICConfig, _ bool, getData func() []byte, handleSessionTicket func([]byte, bool) bool) {
 	conf := qconf.TLSConfig
 
