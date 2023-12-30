@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -15,8 +16,8 @@ const (
 
 type datagramQueue struct {
 	sendMx    sync.Mutex
-	sendQueue []*wire.DatagramFrame // TODO: this could be a ring buffer
-	sent      chan struct{}         // used to notify Add that a datagram was dequeued
+	sendQueue ringbuffer.RingBuffer[*wire.DatagramFrame]
+	sent      chan struct{} // used to notify Add that a datagram was dequeued
 
 	rcvMx    sync.Mutex
 	rcvQueue [][]byte
@@ -47,8 +48,8 @@ func (h *datagramQueue) Add(f *wire.DatagramFrame) error {
 	h.sendMx.Lock()
 
 	for {
-		if len(h.sendQueue) < maxDatagramSendQueueLen {
-			h.sendQueue = append(h.sendQueue, f)
+		if h.sendQueue.Len() < maxDatagramSendQueueLen {
+			h.sendQueue.PushBack(f)
 			h.sendMx.Unlock()
 			h.hasData()
 			return nil
@@ -72,19 +73,16 @@ func (h *datagramQueue) Add(f *wire.DatagramFrame) error {
 func (h *datagramQueue) Peek() *wire.DatagramFrame {
 	h.sendMx.Lock()
 	defer h.sendMx.Unlock()
-	if len(h.sendQueue) == 0 {
+	if h.sendQueue.Empty() {
 		return nil
 	}
-	return h.sendQueue[0]
+	return h.sendQueue.PeekFront()
 }
 
 func (h *datagramQueue) Pop() {
 	h.sendMx.Lock()
 	defer h.sendMx.Unlock()
-	if len(h.sendQueue) == 0 {
-		panic("datagramQueue BUG: Pop called for nil frame")
-	}
-	h.sendQueue = h.sendQueue[1:]
+	_ = h.sendQueue.PopFront()
 	select {
 	case h.sent <- struct{}{}:
 	default:
