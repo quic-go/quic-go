@@ -602,7 +602,7 @@ var _ = Describe("Packet packer", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					datagramQueue.AddAndWait(f)
+					datagramQueue.Add(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
 				time.Sleep(scaleDuration(20 * time.Millisecond))
@@ -630,7 +630,7 @@ var _ = Describe("Packet packer", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					datagramQueue.AddAndWait(f)
+					datagramQueue.Add(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
 				time.Sleep(scaleDuration(20 * time.Millisecond))
@@ -659,7 +659,7 @@ var _ = Describe("Packet packer", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					datagramQueue.AddAndWait(f)
+					datagramQueue.Add(f)
 				}()
 				// make sure the DATAGRAM has actually been queued
 				time.Sleep(scaleDuration(20 * time.Millisecond))
