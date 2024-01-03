@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -456,8 +457,7 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type preferredAddress struct {
-	IPv4, IPv6          net.IP
-	PortV4, PortV6      uint16
+	IPv4, IPv6          netip.AddrPort
 	ConnectionID        protocol.ConnectionID
 	StatelessResetToken protocol.StatelessResetToken
 }
@@ -466,10 +466,10 @@ var _ gojay.MarshalerJSONObject = &preferredAddress{}
 
 func (a preferredAddress) IsNil() bool { return false }
 func (a preferredAddress) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("ip_v4", a.IPv4.String())
-	enc.Uint16Key("port_v4", a.PortV4)
-	enc.StringKey("ip_v6", a.IPv6.String())
-	enc.Uint16Key("port_v6", a.PortV6)
+	enc.StringKey("ip_v4", a.IPv4.Addr().String())
+	enc.Uint16Key("port_v4", a.IPv4.Port())
+	enc.StringKey("ip_v6", a.IPv6.Addr().String())
+	enc.Uint16Key("port_v6", a.IPv6.Port())
 	enc.StringKey("connection_id", a.ConnectionID.String())
 	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", a.StatelessResetToken))
 }

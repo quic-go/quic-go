@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"net"
+	"net/netip"
 	"time"
 
 	"golang.org/x/exp/rand"
@@ -425,10 +425,8 @@ var _ = Describe("Transport Parameters", func() {
 
 		BeforeEach(func() {
 			pa = &PreferredAddress{
-				IPv4:                net.IPv4(127, 0, 0, 1),
-				IPv4Port:            42,
-				IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-				IPv6Port:            13,
+				IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
+				IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
 				ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 				StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 			}
@@ -442,10 +440,8 @@ var _ = Describe("Transport Parameters", func() {
 			}).Marshal(protocol.PerspectiveServer)
 			p := &TransportParameters{}
 			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
-			Expect(p.PreferredAddress.IPv4.String()).To(Equal(pa.IPv4.String()))
-			Expect(p.PreferredAddress.IPv4Port).To(Equal(pa.IPv4Port))
-			Expect(p.PreferredAddress.IPv6.String()).To(Equal(pa.IPv6.String()))
-			Expect(p.PreferredAddress.IPv6Port).To(Equal(pa.IPv6Port))
+			Expect(p.PreferredAddress.IPv4).To(Equal(pa.IPv4))
+			Expect(p.PreferredAddress.IPv6).To(Equal(pa.IPv6))
 			Expect(p.PreferredAddress.ConnectionID).To(Equal(pa.ConnectionID))
 			Expect(p.PreferredAddress.StatelessResetToken).To(Equal(pa.StatelessResetToken))
 		})
