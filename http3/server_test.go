@@ -67,13 +67,14 @@ var _ = Describe("Server", func() {
 		s                  *Server
 		origQuicListenAddr = quicListenAddr
 	)
+	type testConnContextKey string
 
 	BeforeEach(func() {
 		s = &Server{
 			TLSConfig: testdata.GetTLSConfig(),
 			logger:    utils.DefaultLogger,
 			ConnContext: func(ctx context.Context, c quic.Connection) context.Context {
-				return context.WithValue(ctx, "test-conn-context-key", c)
+				return context.WithValue(ctx, testConnContextKey("test"), c)
 			},
 		}
 		origQuicListenAddr = quicListenAddr
@@ -166,7 +167,7 @@ var _ = Describe("Server", func() {
 			Expect(req.Host).To(Equal("www.example.com"))
 			Expect(req.RemoteAddr).To(Equal("127.0.0.1:1337"))
 			Expect(req.Context().Value(ServerContextKey)).To(Equal(s))
-			Expect(req.Context().Value("test-conn-context-key")).ToNot(Equal(nil))
+			Expect(req.Context().Value(testConnContextKey("test"))).ToNot(Equal(nil))
 		})
 
 		It("returns 200 with an empty handler", func() {
