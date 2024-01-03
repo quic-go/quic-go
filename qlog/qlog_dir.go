@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/logging"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/logging"
 )
 
 // QlogDir contains the value of the QLOGDIR environment variable.
@@ -29,7 +30,7 @@ func init() {
 // DefaultTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
 // File names are <odcid>_<perspective>.qlog.
 // Returns nil if QLOGDIR is not set.
-func DefaultTracer(ctx context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
+func DefaultTracer(_ context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
 	var label string
 	switch p {
 	case logging.PerspectiveClient:

@@ -3,15 +3,15 @@ package qlog
 import (
 	"context"
 	"fmt"
+	"os"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
-	"os"
 )
 
 var _ = Describe("Tracing", func() {
-
 	var tempTestDirPath string
 	ctx := context.Background()
 	perspective := logging.PerspectiveClient
@@ -48,5 +48,4 @@ var _ = Describe("Tracing", func() {
 		tracer := DefaultTracer(ctx, perspective, connID)
 		Expect(tracer).To(BeNil())
 	})
-
 })
