@@ -304,9 +304,7 @@ func (t *connectionTracer) toTransportParameters(tp *wire.TransportParameters) *
 	if tp.PreferredAddress != nil {
 		pa = &preferredAddress{
 			IPv4:                tp.PreferredAddress.IPv4,
-			PortV4:              tp.PreferredAddress.IPv4Port,
 			IPv6:                tp.PreferredAddress.IPv6,
-			PortV6:              tp.PreferredAddress.IPv6Port,
 			ConnectionID:        tp.PreferredAddress.ConnectionID,
 			StatelessResetToken: tp.PreferredAddress.StatelessResetToken,
 		}

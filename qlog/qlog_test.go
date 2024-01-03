@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"time"
 
@@ -338,10 +339,8 @@ var _ = Describe("Tracing", func() {
 			It("records transport parameters with a preferred address", func() {
 				tracer.SentTransportParameters(&logging.TransportParameters{
 					PreferredAddress: &logging.PreferredAddress{
-						IPv4:                net.IPv4(12, 34, 56, 78),
-						IPv4Port:            123,
-						IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-						IPv6Port:            456,
+						IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{12, 34, 56, 78}), 123),
+						IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 456),
 						ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
 						StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 					},

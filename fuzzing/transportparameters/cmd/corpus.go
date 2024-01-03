@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"math"
-	"net"
+	"net/netip"
 	"time"
 
 	"golang.org/x/exp/rand"
@@ -59,11 +59,13 @@ func main() {
 		if rand.Int()%2 == 0 {
 			var token protocol.StatelessResetToken
 			rand.Read(token[:])
+			var ip4 [4]byte
+			rand.Read(ip4[:])
+			var ip6 [16]byte
+			rand.Read(ip6[:])
 			tp.PreferredAddress = &wire.PreferredAddress{
-				IPv4:                net.IPv4(uint8(rand.Int()), uint8(rand.Int()), uint8(rand.Int()), uint8(rand.Int())),
-				IPv4Port:            uint16(rand.Int()),
-				IPv6:                net.IP(getRandomData(16)),
-				IPv6Port:            uint16(rand.Int()),
+				IPv4:                netip.AddrPortFrom(netip.AddrFrom4(ip4), uint16(rand.Int())),
+				IPv6:                netip.AddrPortFrom(netip.AddrFrom16(ip6), uint16(rand.Int())),
 				ConnectionID:        protocol.ParseConnectionID(getRandomData(rand.Intn(21))),
 				StatelessResetToken: token,
 			}
