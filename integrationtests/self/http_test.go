@@ -546,8 +546,9 @@ var _ = Describe("HTTP tests", func() {
 			Expect(ok).To(BeTrue())
 			Expect(v).To(Equal("Hello"))
 
-			_, ok = r.Context().Value(ctxKey(1)).(quic.Connection)
-			Expect(ok).ToNot(Equal(nil))
+			c, ok := r.Context().Value(ctxKey(1)).(quic.Connection)
+			Expect(ok).To(BeTrue())
+			Expect(c).ToNot(BeNil())
 
 			serv, ok := r.Context().Value(http3.ServerContextKey).(*http3.Server)
 			Expect(ok).To(BeTrue())
