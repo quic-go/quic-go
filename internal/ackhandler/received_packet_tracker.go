@@ -56,10 +56,6 @@ func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn pro
 		h.largestObservedRcvdTime = rcvTime
 	}
 
-	if ackEliciting {
-		h.hasNewAck = true
-		h.maybeQueueACK(pn, rcvTime, ecn, isMissing)
-	}
 	//nolint:exhaustive // Only need to count ECT(0), ECT(1) and ECN-CE.
 	switch ecn {
 	case protocol.ECT0:
@@ -68,6 +64,24 @@ func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn pro
 		h.ect1++
 	case protocol.ECNCE:
 		h.ecnce++
+	}
+
+	if !ackEliciting {
+		return nil
+	}
+
+	h.hasNewAck = true
+	h.ackElicitingPacketsReceivedSinceLastAck++
+	if !h.ackQueued && h.shouldQueueACK(pn, ecn, isMissing) {
+		h.ackQueued = true
+		h.ackAlarm = time.Time{} // cancel the ack alarm
+	}
+	if !h.ackQueued {
+		// No ACK queued, but we'll need to acknowledge the packet after max_ack_delay.
+		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
+		if h.logger.Debug() {
+			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
+		}
 	}
 	return nil
 }
@@ -101,22 +115,12 @@ func (h *receivedPacketTracker) hasNewMissingPackets() bool {
 	return highestRange.Smallest > h.lastAck.LargestAcked()+1 && highestRange.Len() == 1
 }
 
-// maybeQueueACK queues an ACK, if necessary.
-func (h *receivedPacketTracker) maybeQueueACK(pn protocol.PacketNumber, rcvTime time.Time, ecn protocol.ECN, wasMissing bool) {
+func (h *receivedPacketTracker) shouldQueueACK(pn protocol.PacketNumber, ecn protocol.ECN, wasMissing bool) bool {
 	// always acknowledge the first packet
 	if h.lastAck == nil {
-		if !h.ackQueued {
-			h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
-		}
-		h.ackQueued = true
-		return
+		h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
+		return true
 	}
-
-	if h.ackQueued {
-		return
-	}
-
-	h.ackElicitingPacketsReceivedSinceLastAck++
 
 	// Send an ACK if this packet was reported missing in an ACK sent before.
 	// Ack decimation with reordering relies on the timer to send an ACK, but if
@@ -125,7 +129,7 @@ func (h *receivedPacketTracker) maybeQueueACK(pn protocol.PacketNumber, rcvTime 
 		if h.logger.Debug() {
 			h.logger.Debugf("\tQueueing ACK because packet %d was missing before.", pn)
 		}
-		h.ackQueued = true
+		return true
 	}
 
 	// send an ACK every 2 ack-eliciting packets
@@ -133,30 +137,21 @@ func (h *receivedPacketTracker) maybeQueueACK(pn protocol.PacketNumber, rcvTime 
 		if h.logger.Debug() {
 			h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, packetsBeforeAck)
 		}
-		h.ackQueued = true
-	} else if h.ackAlarm.IsZero() {
-		if h.logger.Debug() {
-			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
-		}
-		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
+		return true
 	}
 
 	// queue an ACK if there are new missing packets to report
 	if h.hasNewMissingPackets() {
 		h.logger.Debugf("\tQueuing ACK because there's a new missing packet to report.")
-		h.ackQueued = true
+		return true
 	}
 
 	// queue an ACK if the packet was ECN-CE marked
 	if ecn == protocol.ECNCE {
 		h.logger.Debugf("\tQueuing ACK because the packet was ECN-CE marked.")
-		h.ackQueued = true
+		return true
 	}
-
-	if h.ackQueued {
-		// cancel the ack alarm
-		h.ackAlarm = time.Time{}
-	}
+	return false
 }
 
 func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
