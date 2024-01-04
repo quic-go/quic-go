@@ -618,7 +618,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	if s.ConnContext != nil {
 		ctx = s.ConnContext(ctx, conn)
 		if ctx == nil {
-			panic("ConnContext returned nil")
+			panic("http3: ConnContext returned nil")
 		}
 	}
 	req = req.WithContext(ctx)
