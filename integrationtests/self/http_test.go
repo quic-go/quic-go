@@ -532,6 +532,10 @@ var _ = Describe("HTTP tests", func() {
 	It("sets conn context", func() {
 		type ctxKey int
 		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
+			serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
+			Expect(ok).To(BeTrue())
+			Expect(serv).To(Equal(server))
+
 			ctx = context.WithValue(ctx, ctxKey(0), "Hello")
 			ctx = context.WithValue(ctx, ctxKey(1), c)
 			return ctx
