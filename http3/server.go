@@ -617,6 +617,9 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx = context.WithValue(ctx, RemoteAddrContextKey, conn.RemoteAddr())
 	if s.ConnContext != nil {
 		ctx = s.ConnContext(ctx, conn)
+		if ctx == nil {
+			panic("ConnContext returned nil")
+		}
 	}
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, conn, s.logger)
