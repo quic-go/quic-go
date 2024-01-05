@@ -528,4 +528,35 @@ var _ = Describe("HTTP tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 	})
+
+	It("sets conn context", func() {
+		type ctxKey int
+		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
+			serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
+			Expect(ok).To(BeTrue())
+			Expect(serv).To(Equal(server))
+
+			ctx = context.WithValue(ctx, ctxKey(0), "Hello")
+			ctx = context.WithValue(ctx, ctxKey(1), c)
+			return ctx
+		}
+		mux.HandleFunc("/conn-context", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			v, ok := r.Context().Value(ctxKey(0)).(string)
+			Expect(ok).To(BeTrue())
+			Expect(v).To(Equal("Hello"))
+
+			c, ok := r.Context().Value(ctxKey(1)).(quic.Connection)
+			Expect(ok).To(BeTrue())
+			Expect(c).ToNot(BeNil())
+
+			serv, ok := r.Context().Value(http3.ServerContextKey).(*http3.Server)
+			Expect(ok).To(BeTrue())
+			Expect(serv).To(Equal(server))
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/conn-context", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+	})
 })
