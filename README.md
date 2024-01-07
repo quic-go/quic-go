@@ -183,25 +183,19 @@ quic-go logs a wide range of events defined in [draft-ietf-quic-qlog-quic-events
 
 qlog files can be processed by a number of 3rd-party tools. [qviz](https://qvis.quictools.info/) has proven very useful for debugging all kinds of QUIC connection failures.
 
-qlog is activated by setting a `Tracer` callback on the `Config`. It is called as soon as quic-go decides to starts the QUIC handshake on a new connection.
-A useful implementation of this callback could look like this:
+qlog can be activated by setting a `Tracer` callback on the `Config`. It is called as soon as quic-go decides to starts the QUIC handshake on a new connection.
+The default qlog tracer is `qlog.DefaultTracer`, which writes qlog files to a directory specified by the `QLOGDIR` environment variable, and only if it is set.
+The default qlog tracer can be used like this:
 ```go
 quic.Config{
-  Tracer: func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-    role := "server"
-    if p == logging.PerspectiveClient {
-      role = "client"
-    }
-    filename := fmt.Sprintf("./log_%s_%s.qlog", connID, role)
-    f, err := os.Create(filename)
-    // handle the error
-    return qlog.NewConnectionTracer(f, p, connID)
-  }
+  Tracer: qlog.DefaultTracer
 }
 ```
 
-This implementation of the callback creates a new qlog file in the current directory named `log_<client / server>_<QUIC connection ID>.qlog`.
+This example creates a new qlog file under `<QLOGDIR>/<Original Destination Connection ID>_<Vantage Point>.qlog`, e.g. `qlogs/2e0407da_client.qlog`.
 
+
+For a custom qlog behavior, `qlog.NewConnectionTracer` can be used.
 
 ## Using HTTP/3
 
