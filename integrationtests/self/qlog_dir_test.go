@@ -12,7 +12,7 @@ import (
 	"github.com/quic-go/quic-go/qlog"
 )
 
-var _ = Describe("qlog dir tests", func() {
+var _ = Describe("qlog dir tests", Serial, func() {
 	var originalQlogDirValue string
 	var tempTestDirPath string
 
