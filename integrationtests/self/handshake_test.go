@@ -75,9 +75,11 @@ var _ = Describe("Handshake tests", func() {
 			defer GinkgoRecover()
 			defer close(acceptStopped)
 			for {
-				if _, err := server.Accept(context.Background()); err != nil {
+				conn, err := server.Accept(context.Background())
+				if err != nil {
 					return
 				}
+				defer conn.CloseWithError(0, "")
 			}
 		}()
 	}
@@ -368,7 +370,8 @@ var _ = Describe("Handshake tests", func() {
 			time.Sleep(scaleDuration(200 * time.Millisecond))
 
 			// dial again, and expect that this dial succeeds
-			_, err = dial()
+			anotherConn, err := dial()
+			defer anotherConn.CloseWithError(0, "")
 			Expect(err).ToNot(HaveOccurred())
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
 
