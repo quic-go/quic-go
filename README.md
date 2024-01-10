@@ -195,7 +195,7 @@ quic.Config{
 This example creates a new qlog file under `<QLOGDIR>/<Original Destination Connection ID>_<Vantage Point>.qlog`, e.g. `qlogs/2e0407da_client.qlog`.
 
 
-For a custom qlog behavior, `qlog.NewConnectionTracer` can be used.
+For custom qlog behavior, `qlog.NewConnectionTracer` can be used.
 
 ## Using HTTP/3
 
