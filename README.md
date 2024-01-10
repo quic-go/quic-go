@@ -188,7 +188,7 @@ qlog can be activated by setting the `Tracer` callback on the `Config`. It is ca
 The default qlog tracer can be used like this:
 ```go
 quic.Config{
-  Tracer: qlog.DefaultTracer
+  Tracer: qlog.DefaultTracer,
 }
 ```
 
