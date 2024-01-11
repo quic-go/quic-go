@@ -153,10 +153,16 @@ var _ = Describe("Frame logging", func() {
 	It("logs NEW_CONNECTION_ID frames", func() {
 		LogFrame(logger, &NewConnectionIDFrame{
 			SequenceNumber:      42,
+			RetirePriorTo:       24,
 			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 			StatelessResetToken: protocol.StatelessResetToken{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10},
 		}, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, ConnectionID: deadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, RetirePriorTo: 24, ConnectionID: deadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
+	})
+
+	It("logs RETIRE_CONNECTION_ID frames", func() {
+		LogFrame(logger, &RetireConnectionIDFrame{SequenceNumber: 42}, false)
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.RetireConnectionIDFrame{SequenceNumber: 42}"))
 	})
 
 	It("logs NEW_TOKEN frames", func() {
