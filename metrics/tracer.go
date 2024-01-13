@@ -44,12 +44,21 @@ var (
 	)
 )
 
+// NewTracer creates a new tracer using the default Prometheus registerer.
+// The Tracer returned from this function can be used to collect metrics for
+// events happening before the establishment of a QUIC connection.
+// It can be set on the Tracer field of quic.Transport.
 func NewTracer() *logging.Tracer {
+	return NewTracerWithRegisterer(prometheus.DefaultRegisterer)
+}
+
+// NewTracerWithRegisterer creates a new tracer using a given Prometheus registerer.
+func NewTracerWithRegisterer(registerer prometheus.Registerer) *logging.Tracer {
 	for _, c := range [...]prometheus.Collector{
 		connsRejected,
 		packetDropped,
 	} {
-		if err := prometheus.DefaultRegisterer.Register(c); err != nil {
+		if err := registerer.Register(c); err != nil {
 			if ok := errors.As(err, &prometheus.AlreadyRegisteredError{}); !ok {
 				panic(err)
 			}
