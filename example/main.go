@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -11,7 +9,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,8 +18,6 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/logging"
 	"github.com/quic-go/quic-go/qlog"
 )
 
@@ -145,7 +140,6 @@ func main() {
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	key := flag.String("key", "", "TLS key (requires -cert option)")
 	cert := flag.String("cert", "", "TLS certificate (requires -key option)")
-	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
 	flag.Parse()
 
 	if len(bs) == 0 {
@@ -153,18 +147,6 @@ func main() {
 	}
 
 	handler := setupHandler(*www)
-	quicConf := &quic.Config{}
-	if *enableQlog {
-		quicConf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-			filename := fmt.Sprintf("server_%s.qlog", connID)
-			f, err := os.Create(filename)
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("Creating qlog file %s.\n", filename)
-			return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), p, connID)
-		}
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(bs))
@@ -176,6 +158,7 @@ func main() {
 		certFile, keyFile = testdata.GetCertificatePaths()
 	}
 	for _, b := range bs {
+		fmt.Println("listening on", b)
 		bCap := b
 		go func() {
 			var err error
@@ -183,9 +166,11 @@ func main() {
 				err = http3.ListenAndServe(bCap, certFile, keyFile, handler)
 			} else {
 				server := http3.Server{
-					Handler:    handler,
-					Addr:       bCap,
-					QuicConfig: quicConf,
+					Handler: handler,
+					Addr:    bCap,
+					QuicConfig: &quic.Config{
+						Tracer: qlog.DefaultTracer,
+					},
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)
 			}
