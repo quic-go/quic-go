@@ -19,6 +19,18 @@ quic.Transport{
 
 When using multiple `Transport`s, it is recommended to use the metrics tracer struct for all of them.
 
+
+Set a metrics connection tracer on the `Config`:
+```go
+tracer := metrics.DefaultTracer()
+quic.Config{
+	Tracer: tracer,
+}
+```
+
+It is recommended to use the same connection tracer returned by `DefaultTracer` on the `Config`s for all connections.
+
+
 Running:
 ```shell
 docker-compose up

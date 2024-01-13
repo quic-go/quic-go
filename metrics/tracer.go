@@ -83,6 +83,11 @@ func NewTracerWithRegisterer(registerer prometheus.Registerer) *logging.Tracer {
 						break
 					}
 				}
+				// This should never happen. We only send Initials before creating the connection in order to
+				// reject a connection attempt.
+				if ccf == nil {
+					return
+				}
 				if ccf.IsApplicationError {
 					//nolint:exhaustive // Only a few error codes applicable.
 					switch qerr.TransportErrorCode(ccf.ErrorCode) {
