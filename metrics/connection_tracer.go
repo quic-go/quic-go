@@ -3,9 +3,12 @@ package metrics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,7 +29,7 @@ var (
 			Name:      "connections_closed_total",
 			Help:      "Connections Closed",
 		},
-		[]string{"dir"},
+		[]string{"dir", "reason"},
 	)
 	connDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -115,15 +118,70 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 			*tags = append(*tags, direction)
 			connStarted.WithLabelValues(*tags...).Inc()
 		},
-		ClosedConnection: func(_ error) {
+		ClosedConnection: func(e error) {
 			tags := getStringSlice()
 			defer putStringSlice(tags)
 
 			*tags = append(*tags, direction)
-			connClosed.WithLabelValues(*tags...).Inc()
+			// call connDuration.Observe before adding any more labels
 			if handshakeComplete {
 				connDuration.WithLabelValues(*tags...).Observe(time.Since(startTime).Seconds())
 			}
+
+			var (
+				statelessResetErr     *quic.StatelessResetError
+				handshakeTimeoutErr   *quic.HandshakeTimeoutError
+				idleTimeoutErr        *quic.IdleTimeoutError
+				applicationErr        *quic.ApplicationError
+				transportErr          *quic.TransportError
+				versionNegotiationErr *quic.VersionNegotiationError
+			)
+			var reason string
+			switch {
+			case errors.As(e, &statelessResetErr):
+				reason = "stateless_reset"
+			case errors.As(e, &handshakeTimeoutErr):
+				reason = "handshake_timeout"
+			case errors.As(e, &idleTimeoutErr):
+				if handshakeComplete {
+					reason = "idle_timeout"
+				} else {
+					reason = "handshake_timeout"
+				}
+			case errors.As(e, &applicationErr):
+				if applicationErr.Remote {
+					reason = "application_error (remote)"
+				} else {
+					reason = "application_error (local)"
+				}
+			case errors.As(e, &transportErr):
+				switch {
+				case transportErr.ErrorCode == qerr.ApplicationErrorErrorCode:
+					if transportErr.Remote {
+						reason = "application_error (remote)"
+					} else {
+						reason = "application_error (local)"
+					}
+				case transportErr.ErrorCode.IsCryptoError():
+					if transportErr.Remote {
+						reason = "crypto_error (remote)"
+					} else {
+						reason = "crypto_error (local)"
+					}
+				default:
+					if transportErr.Remote {
+						reason = "transport_error (remote)"
+					} else {
+						reason = fmt.Sprintf("transport_error (local): %s", transportErr.ErrorCode)
+					}
+				}
+			case errors.As(e, &versionNegotiationErr):
+				reason = "version_mismatch"
+			default:
+				reason = "unknown"
+			}
+			*tags = append(*tags, reason)
+			connClosed.WithLabelValues(*tags...).Inc()
 		},
 		UpdatedKeyFromTLS: func(l logging.EncryptionLevel, p logging.Perspective) {
 			// The client derives both 1-RTT keys when the handshake completes.
