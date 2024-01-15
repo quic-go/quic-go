@@ -37,6 +37,15 @@ var (
 		},
 		[]string{"dir"},
 	)
+	connHandshakeDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: metricNamespace,
+			Name:      "handshake_duration_seconds",
+			Help:      "Duration of the QUIC Handshake",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 1.3, 35),
+		},
+		[]string{"dir"},
+	)
 )
 
 // DefaultTracer returns a callback that creates a metrics ConnectionTracer.
@@ -76,6 +85,7 @@ func NewServerConnectionTracerWithRegisterer(registerer prometheus.Registerer) *
 func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClient bool) *logging.ConnectionTracer {
 	for _, c := range [...]prometheus.Collector{
 		connStarted,
+		connHandshakeDuration,
 		connClosed,
 		connDuration,
 	} {
@@ -91,7 +101,10 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 		direction = "outgoing"
 	}
 
-	var startTime time.Time
+	var (
+		startTime         time.Time
+		handshakeComplete bool
+	)
 	return &logging.ConnectionTracer{
 		StartedConnection: func(_, _ net.Addr, _, _ logging.ConnectionID) {
 			tags := getStringSlice()
@@ -107,8 +120,24 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 			defer putStringSlice(tags)
 
 			*tags = append(*tags, direction)
-			connDuration.WithLabelValues(*tags...).Observe(time.Since(startTime).Seconds())
 			connClosed.WithLabelValues(*tags...).Inc()
+			if handshakeComplete {
+				connDuration.WithLabelValues(*tags...).Observe(time.Since(startTime).Seconds())
+			}
+		},
+		UpdatedKeyFromTLS: func(l logging.EncryptionLevel, p logging.Perspective) {
+			// The client derives both 1-RTT keys when the handshake completes.
+			// The server derives the 1-RTT read key when the handshake completes.
+			if l != logging.Encryption1RTT || p != logging.PerspectiveClient {
+				return
+			}
+			handshakeComplete = true
+
+			tags := getStringSlice()
+			defer putStringSlice(tags)
+
+			*tags = append(*tags, direction)
+			connHandshakeDuration.WithLabelValues(*tags...).Observe(time.Since(startTime).Seconds())
 		},
 	}
 }
