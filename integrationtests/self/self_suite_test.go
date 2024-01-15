@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"github.com/quic-go/quic-go/internal/testutils"
 	"log"
 	"os"
 	"runtime/pprof"
@@ -207,6 +208,10 @@ var _ = BeforeEach(func() {
 		utils.DefaultLogger.SetLogLevel(utils.LogLevelDebug)
 		log.SetOutput(logBuf)
 	}
+})
+
+var _ = AfterEach(func() {
+	Eventually(testutils.AreConnsRunning).Should(BeFalse())
 })
 
 func areHandshakesRunning() bool {
