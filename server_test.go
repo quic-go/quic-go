@@ -699,68 +699,6 @@ var _ = Describe("Server", func() {
 				serv.handlePacket(p)
 				Eventually(done).Should(BeClosed())
 			})
-
-			It("doesn't accept new connections if they were closed in the mean time", func() {
-				p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
-				ctx, cancel := context.WithCancel(context.Background())
-				connCreated := make(chan struct{})
-				conn := NewMockQUICConn(mockCtrl)
-				serv.newConn = func(
-					_ sendConn,
-					runner connRunner,
-					_ protocol.ConnectionID,
-					_ *protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ ConnectionIDGenerator,
-					_ protocol.StatelessResetToken,
-					_ *Config,
-					_ *tls.Config,
-					_ *handshake.TokenGenerator,
-					_ bool,
-					_ *logging.ConnectionTracer,
-					_ uint64,
-					_ utils.Logger,
-					_ protocol.VersionNumber,
-				) quicConn {
-					conn.EXPECT().handlePacket(p)
-					conn.EXPECT().run()
-					conn.EXPECT().Context().Return(ctx)
-					c := make(chan struct{})
-					close(c)
-					conn.EXPECT().HandshakeComplete().Return(c)
-					close(connCreated)
-					return conn
-				}
-
-				phm.EXPECT().Get(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
-					phm.EXPECT().GetStatelessResetToken(gomock.Any())
-					_, ok := fn()
-					return ok
-				})
-
-				serv.handlePacket(p)
-				// make sure there are no Write calls on the packet conn
-				time.Sleep(50 * time.Millisecond)
-				Eventually(connCreated).Should(BeClosed())
-				cancel()
-				time.Sleep(scaleDuration(200 * time.Millisecond))
-
-				done := make(chan struct{})
-				go func() {
-					defer GinkgoRecover()
-					serv.Accept(context.Background())
-					close(done)
-				}()
-				Consistently(done).ShouldNot(BeClosed())
-
-				// make the go routine return
-				conn.EXPECT().getPerspective().MaxTimes(2) // initOnce for every conn ID
-				Expect(serv.Close()).To(Succeed())
-				Eventually(done).Should(BeClosed())
-			})
 		})
 
 		Context("token validation", func() {
@@ -1289,7 +1227,7 @@ var _ = Describe("Server", func() {
 				serv.baseServer.handlePacket(getInitialWithRandomDestConnID())
 			}
 
-			Eventually(func() int32 { return atomic.LoadInt32(&serv.baseServer.connQueueLen) }).Should(BeEquivalentTo(protocol.MaxAcceptQueueSize))
+			Eventually(serv.baseServer.connQueue).Should(HaveLen(protocol.MaxAcceptQueueSize))
 			// make sure there are no Write calls on the packet conn
 			time.Sleep(50 * time.Millisecond)
 

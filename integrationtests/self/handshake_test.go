@@ -382,20 +382,34 @@ var _ = Describe("Handshake tests", func() {
 			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
 
 			// Now close the one of the connection that are waiting to be accepted.
-			// This should free one spot in the queue.
-			Expect(firstConn.CloseWithError(0, ""))
+			const appErrCode quic.ApplicationErrorCode = 12345
+			Expect(firstConn.CloseWithError(appErrCode, ""))
 			Eventually(firstConn.Context().Done()).Should(BeClosed())
 			time.Sleep(scaleDuration(200 * time.Millisecond))
 
-			// dial again, and expect that this dial succeeds
-			_, err = dial()
-			Expect(err).ToNot(HaveOccurred())
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
-
+			// dial again, and expect that this fails again
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
+
+			// now accept all connections
+			var closedConn quic.Connection
+			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+				conn, err := server.Accept(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				if conn.Context().Err() != nil {
+					if closedConn != nil {
+						Fail("only expected a single closed connection")
+					}
+					closedConn = conn
+				}
+			}
+			Expect(closedConn).ToNot(BeNil()) // there should be exactly one closed connection
+			_, err = closedConn.AcceptStream(context.Background())
+			var appErr *quic.ApplicationError
+			Expect(errors.As(err, &appErr)).To(BeTrue())
+			Expect(appErr.ErrorCode).To(Equal(appErrCode))
 		})
 
 		It("closes handshaking connections when the server is closed", func() {
