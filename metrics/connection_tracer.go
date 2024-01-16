@@ -45,9 +45,18 @@ var (
 			Namespace: metricNamespace,
 			Name:      "handshake_duration_seconds",
 			Help:      "Duration of the QUIC Handshake",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 1.3, 35),
+			Buckets:   prometheus.ExponentialBuckets(0.001, 1.3, 40), // up to 36s
 		},
 		[]string{"dir"},
+	)
+	clientHelloProcessingDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: metricNamespace,
+			Name:      "client_hello_processing_seconds",
+			Help:      "Duration of the QUIC Handshake",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 1.3, 40), // up to 36s
+		},
+		[]string{}, // no need to add the direction here, it only applies to the server side
 	)
 )
 
@@ -89,6 +98,7 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 	for _, c := range [...]prometheus.Collector{
 		connStarted,
 		connHandshakeDuration,
+		clientHelloProcessingDuration,
 		connClosed,
 		connDuration,
 	} {
@@ -184,7 +194,11 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 			connClosed.WithLabelValues(*tags...).Inc()
 		},
 		UpdatedKeyFromTLS: func(l logging.EncryptionLevel, p logging.Perspective) {
-			// The client derives both 1-RTT keys when the handshake completes.
+			// On the server side, the 1-RTT write key is derived once the ClientHello was processed.
+			if !isClient && l == logging.Encryption1RTT && p == logging.PerspectiveServer {
+				clientHelloProcessingDuration.WithLabelValues().Observe(time.Since(startTime).Seconds())
+			}
+			// The client derives both read and write 1-RTT keys when the handshake completes.
 			// The server derives the 1-RTT read key when the handshake completes.
 			if l != logging.Encryption1RTT || p != logging.PerspectiveClient {
 				return
