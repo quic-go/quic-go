@@ -18,6 +18,11 @@ import (
 
 var errListenerAlreadySet = errors.New("listener already set")
 
+const (
+	defaultMaxNumUnvalidatedHandshakes = 32
+	defaultMaxNumHandshakes            = 64
+)
+
 // The Transport is the central point to manage incoming and outgoing QUIC connections.
 // QUIC demultiplexes connections based on their QUIC Connection IDs, not based on the 4-tuple.
 // This means that a single UDP socket can be used for listening for incoming connections, as well as
@@ -76,6 +81,21 @@ type Transport struct {
 	// This can be useful if version information is exchanged out-of-band.
 	// It has no effect for clients.
 	DisableVersionNegotiationPackets bool
+
+	// MaxUnvalidatedHandshakes is the maximum number of concurrent QUIC handshakes originating
+	// from unvalidated source addresses.
+	// If the number of handshakes from unvalidated addresses reaches this number, new incoming
+	// connection attempts will need to proof reachability at the respective source address using the
+	// Retry mechanism, as described in RFC 9000 section 8.1.2.
+	// Validating the source address adds one additional network roundtrip to the handshake.
+	// When set to a negative value, every connection attempt will need to validate the source address.
+	// It does not make sense to set this value higher than MaxHandshakes.
+	MaxUnvalidatedHandshakes int
+	// MaxHandshakes is the maximum number of concurrent handshakes, both from validated and
+	// unvalidated source addresses.
+	// If the number of handshakes reaches this number, new connection attempts will be rejected by
+	// terminating the connection attempt using a CONNECTION_REFUSED error.
+	MaxHandshakes int
 
 	// A Tracer traces events that don't belong to a single QUIC connection.
 	Tracer *logging.Tracer
@@ -151,6 +171,14 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
+	maxUnvalidatedHandshakes := t.MaxUnvalidatedHandshakes
+	if maxUnvalidatedHandshakes == 0 {
+		maxUnvalidatedHandshakes = defaultMaxNumUnvalidatedHandshakes
+	}
+	maxHandshakes := t.MaxHandshakes
+	if maxHandshakes == 0 {
+		maxHandshakes = defaultMaxNumHandshakes
+	}
 	s := newServer(
 		t.conn,
 		t.handlerMap,
@@ -161,6 +189,8 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.closeServer,
 		*t.TokenGeneratorKey,
 		t.MaxTokenAge,
+		maxUnvalidatedHandshakes,
+		maxHandshakes,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
 	)
