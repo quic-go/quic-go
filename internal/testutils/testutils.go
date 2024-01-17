@@ -1,7 +1,10 @@
 package testutils
 
 import (
+	"bytes"
 	"fmt"
+	"runtime/pprof"
+	"strings"
 
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -98,4 +101,10 @@ func ComposeRetryPacket(
 	}
 	data := writePacket(hdr, nil)
 	return append(data, handshake.GetRetryIntegrityTag(data, origDestConnID, version)[:]...)
+}
+
+func AreConnsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*connection).run")
 }

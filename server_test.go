@@ -660,6 +660,7 @@ var _ = Describe("Server", func() {
 					c := make(chan struct{})
 					close(c)
 					conn.EXPECT().HandshakeComplete().Return(c)
+					conn.EXPECT().destroy(gomock.Any())
 					return conn
 				}
 
@@ -1276,6 +1277,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().run()
 				conn.EXPECT().earlyConnReady().Return(ready)
 				conn.EXPECT().Context().Return(context.Background())
+				conn.EXPECT().destroy(gomock.Any())
 				return conn
 			}
 

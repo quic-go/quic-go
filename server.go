@@ -101,10 +101,11 @@ type baseServer struct {
 		protocol.VersionNumber,
 	) quicConn
 
-	closeOnce sync.Once
-	errorChan chan struct{} // is closed when the server is closed
-	closeErr  error
-	running   chan struct{} // closed as soon as run() returns
+	closeOnce          sync.Once
+	errorChan          chan struct{} // is closed when the server is closed
+	closeErr           error
+	running            chan struct{}  // closed as soon as run() returns
+	handshakeWaitGroup sync.WaitGroup // connections that are started but not passed to connQueue yet
 
 	versionNegotiationQueue chan receivedPacket
 	invalidTokenQueue       chan rejectedPacket
@@ -340,6 +341,19 @@ func (s *baseServer) close(e error, notifyOnClose bool) {
 		close(s.errorChan)
 
 		<-s.running
+		s.handshakeWaitGroup.Wait()
+
+	loop: // drain connQueue
+		for {
+			select {
+			case conn := <-s.connQueue:
+				conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
+				atomic.AddInt32(&s.connQueueLen, -1)
+			default:
+				break loop
+			}
+		}
+
 		if notifyOnClose {
 			s.onClose()
 		}
@@ -681,6 +695,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		return nil
 	}
 	go conn.run()
+	s.handshakeWaitGroup.Add(1)
 	go s.handleNewConn(conn)
 	if conn == nil {
 		p.buffer.Release()
@@ -690,6 +705,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 }
 
 func (s *baseServer) handleNewConn(conn quicConn) {
+	defer s.handshakeWaitGroup.Done()
 	connCtx := conn.Context()
 	if s.acceptEarlyConns {
 		// wait until the early connection is ready, the handshake fails, or the server is closed
@@ -720,6 +736,10 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	case <-connCtx.Done():
 		atomic.AddInt32(&s.connQueueLen, -1)
 		// don't pass connections that were already closed to Accept()
+	case <-s.errorChan:
+		conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
+		atomic.AddInt32(&s.connQueueLen, -1)
+		// don't pass connections to Accept() if server already closed
 	}
 }
 
