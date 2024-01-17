@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	_ "net/http/pprof"
 
@@ -172,7 +174,17 @@ func main() {
 						Tracer: qlog.DefaultTracer,
 					},
 				}
-				err = server.ListenAndServeTLS(certFile, keyFile)
+				cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+				if err != nil {
+					panic(err)
+				}
+				server.TLSConfig = &tls.Config{
+					GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+						time.Sleep(42 * time.Millisecond)
+						return &cert, nil
+					},
+				}
+				server.ListenAndServe()
 			}
 			if err != nil {
 				fmt.Println(err)

@@ -121,7 +121,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					return &cert, nil
 				},
 			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
+			addConnToClientHelloInfo(tlsConf, local, remote, nil)
 			_, err := tlsConf.GetCertificate(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(localAddr).To(Equal(local))
@@ -137,7 +137,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					return &tls.Config{}, nil
 				},
 			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
+			addConnToClientHelloInfo(tlsConf, local, remote, nil)
 			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(localAddr).To(Equal(local))
@@ -163,7 +163,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				innerConf.GetCertificate = getCert
 				return innerConf, nil
 			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
+			addConnToClientHelloInfo(tlsConf, local, remote, nil)
 			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conf).ToNot(BeNil())

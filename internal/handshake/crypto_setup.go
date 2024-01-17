@@ -126,7 +126,7 @@ func NewCryptoSetupServer(
 
 	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
 	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
-	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
+	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr, tracer)
 
 	cs.tlsConf = quicConf.TLSConfig
 	cs.conn = tls.QUICServer(quicConf)
@@ -137,10 +137,11 @@ func NewCryptoSetupServer(
 // The tls.Config contains two callbacks that pass in a tls.ClientHelloInfo.
 // Since crypto/tls doesn't do it, we need to make sure to set the Conn field with a fake net.Conn
 // that allows the caller to get the local and the remote address.
-func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) {
+func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr, tracer *logging.ConnectionTracer) {
 	if conf.GetConfigForClient != nil {
 		gcfc := conf.GetConfigForClient
 		conf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			start := time.Now()
 			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
 			c, err := gcfc(info)
 			if c != nil {
@@ -148,7 +149,10 @@ func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) 
 				// This won't be necessary anymore once https://github.com/golang/go/issues/63722 is accepted.
 				c.MinVersion = tls.VersionTLS13
 				// We're returning a tls.Config here, so we need to apply this recursively.
-				addConnToClientHelloInfo(c, localAddr, remoteAddr)
+				addConnToClientHelloInfo(c, localAddr, remoteAddr, tracer)
+			}
+			if tracer != nil && tracer.Debug != nil {
+				tracer.Debug("get_config_for_client", time.Since(start).String())
 			}
 			return c, err
 		}
@@ -156,8 +160,13 @@ func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) 
 	if conf.GetCertificate != nil {
 		gc := conf.GetCertificate
 		conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			start := time.Now()
 			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			return gc(info)
+			cert, err := gc(info)
+			if tracer != nil && tracer.Debug != nil {
+				tracer.Debug("get_certificate", time.Since(start).String())
+			}
+			return cert, err
 		}
 	}
 }
