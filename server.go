@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -111,8 +110,7 @@ type baseServer struct {
 	connectionRefusedQueue  chan rejectedPacket
 	retryQueue              chan rejectedPacket
 
-	connQueue    chan quicConn
-	connQueueLen int32 // to be used as an atomic
+	connQueue chan quicConn
 
 	tracer *logging.Tracer
 
@@ -251,7 +249,7 @@ func newServer(
 		maxTokenAge:               maxTokenAge,
 		connIDGenerator:           connIDGenerator,
 		connHandler:               connHandler,
-		connQueue:                 make(chan quicConn),
+		connQueue:                 make(chan quicConn, protocol.MaxAcceptQueueSize),
 		errorChan:                 make(chan struct{}),
 		running:                   make(chan struct{}),
 		receivedPackets:           make(chan receivedPacket, protocol.MaxServerUnprocessedPackets),
@@ -322,7 +320,6 @@ func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case conn := <-s.connQueue:
-		atomic.AddInt32(&s.connQueueLen, -1)
 		return conn, nil
 	case <-s.errorChan:
 		return nil, s.closeErr
@@ -605,7 +602,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		return nil
 	}
 
-	if queueLen := atomic.LoadInt32(&s.connQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
+	if queueLen := len(s.connQueue); queueLen >= protocol.MaxAcceptQueueSize {
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
 		select {
 		case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
@@ -713,13 +710,10 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 		}
 	}
 
-	atomic.AddInt32(&s.connQueueLen, 1)
 	select {
 	case s.connQueue <- conn:
-		// blocks until the connection is accepted
-	case <-connCtx.Done():
-		atomic.AddInt32(&s.connQueueLen, -1)
-		// don't pass connections that were already closed to Accept()
+	default:
+		conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
 	}
 }
 
