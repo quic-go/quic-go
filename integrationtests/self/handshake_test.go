@@ -397,6 +397,41 @@ var _ = Describe("Handshake tests", func() {
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
 		})
+
+		It("closes handshaking connections when the server is closed", func() {
+			laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", laddr)
+			Expect(err).ToNot(HaveOccurred())
+			tr := quic.Transport{
+				Conn: udpConn,
+			}
+			defer tr.Close()
+			tlsConf := &tls.Config{}
+			done := make(chan struct{})
+			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+				<-done
+				return nil, errors.New("closed")
+			}
+			ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
+			Expect(err).ToNot(HaveOccurred())
+
+			errChan := make(chan error, 1)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			go func() {
+				defer GinkgoRecover()
+				_, err := quic.DialAddr(ctx, ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+				errChan <- err
+			}()
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
+			Expect(ln.Close()).To(Succeed())
+			close(done)
+			err = <-errChan
+			var transportErr *quic.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
+		})
 	})
 
 	Context("ALPN", func() {

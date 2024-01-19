@@ -1581,6 +1581,11 @@ func (s *connection) CloseWithError(code ApplicationErrorCode, desc string) erro
 	return nil
 }
 
+func (s *connection) closeWithTransportError(code TransportErrorCode) {
+	s.closeLocal(&qerr.TransportError{ErrorCode: code})
+	<-s.ctx.Done()
+}
+
 func (s *connection) handleCloseError(closeErr *closeError) {
 	e := closeErr.err
 	if e == nil {
