@@ -701,14 +701,24 @@ var _ = Describe("Handshake tests", func() {
 
 		It("rejects invalid Retry token with the INVALID_TOKEN error", func() {
 			const rtt = 10 * time.Millisecond
-			serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
+
 			// The validity period of the retry token is the handshake timeout,
 			// which is twice the handshake idle timeout.
 			// By setting the handshake timeout shorter than the RTT, the token will have expired by the time
 			// it reaches the server.
 			serverConfig.HandshakeIdleTimeout = rtt / 5
 
-			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", laddr)
+			Expect(err).ToNot(HaveOccurred())
+			defer udpConn.Close()
+			tr := &quic.Transport{
+				Conn:                     udpConn,
+				MaxUnvalidatedHandshakes: -1,
+			}
+			defer tr.Close()
+			server, err := tr.Listen(getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 

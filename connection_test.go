@@ -118,7 +118,7 @@ var _ = Describe("Connection", func() {
 			srcConnID,
 			&protocol.DefaultConnectionIDGenerator{},
 			protocol.StatelessResetToken{},
-			populateServerConfig(&Config{DisablePathMTUDiscovery: true}),
+			populateConfig(&Config{DisablePathMTUDiscovery: true}),
 			&tls.Config{},
 			tokenGenerator,
 			false,

@@ -179,7 +179,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	if t.server != nil {
 		return nil, errListenerAlreadySet
 	}
-	conf = populateServerConfig(conf)
+	conf = populateConfig(conf)
 	if err := t.init(false); err != nil {
 		return nil, err
 	}

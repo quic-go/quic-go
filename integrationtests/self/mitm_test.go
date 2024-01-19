@@ -32,7 +32,7 @@ var _ = Describe("MITM test", func() {
 		serverConfig                     *quic.Config
 	)
 
-	startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) (proxyPort int, closeFn func()) {
+	startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback, forceAddressValidation bool) (proxyPort int, closeFn func()) {
 		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
 		c, err := net.ListenUDP("udp", addr)
@@ -40,6 +40,9 @@ var _ = Describe("MITM test", func() {
 		serverTransport = &quic.Transport{
 			Conn:               c,
 			ConnectionIDLength: connIDLen,
+		}
+		if forceAddressValidation {
+			serverTransport.MaxUnvalidatedHandshakes = -1
 		}
 		ln, err := serverTransport.Listen(getTLSConfig(), serverConfig)
 		Expect(err).ToNot(HaveOccurred())
@@ -153,7 +156,7 @@ var _ = Describe("MITM test", func() {
 			}
 
 			runTest := func(delayCb quicproxy.DelayCallback) {
-				proxyPort, closeFn := startServerAndProxy(delayCb, nil)
+				proxyPort, closeFn := startServerAndProxy(delayCb, nil, false)
 				defer closeFn()
 				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 				Expect(err).ToNot(HaveOccurred())
@@ -196,7 +199,7 @@ var _ = Describe("MITM test", func() {
 		})
 
 		runTest := func(dropCb quicproxy.DropCallback) {
-			proxyPort, closeFn := startServerAndProxy(nil, dropCb)
+			proxyPort, closeFn := startServerAndProxy(nil, dropCb, false)
 			defer closeFn()
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
@@ -310,17 +313,16 @@ var _ = Describe("MITM test", func() {
 
 		const rtt = 20 * time.Millisecond
 
-		runTest := func(delayCb quicproxy.DelayCallback) (closeFn func(), err error) {
-			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil)
+		runTest := func(proxyPort int) (closeFn func(), err error) {
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
 			_, err = clientTransport.Dial(
 				context.Background(),
 				raddr,
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 2 * time.Second}),
+				getQuicConfig(&quic.Config{HandshakeIdleTimeout: scaleDuration(200 * time.Millisecond)}),
 			)
-			return func() { clientTransport.Close(); serverCloseFn() }, err
+			return func() { clientTransport.Close() }, err
 		}
 
 		// fails immediately because client connection closes when it can't find compatible version
@@ -352,7 +354,9 @@ var _ = Describe("MITM test", func() {
 				}
 				return rtt / 2
 			}
-			closeFn, err := runTest(delayCb)
+			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil, false)
+			defer serverCloseFn()
+			closeFn, err := runTest(proxyPort)
 			defer closeFn()
 			Expect(err).To(HaveOccurred())
 			vnErr := &quic.VersionNegotiationError{}
@@ -363,8 +367,7 @@ var _ = Describe("MITM test", func() {
 		// times out, because client doesn't accept subsequent real retry packets from server
 		// as it has already accepted a retry.
 		// TODO: determine behavior when server does not send Retry packets
-		It("fails when a forged Retry packet with modified srcConnID is sent to client", func() {
-			serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
+		It("fails when a forged Retry packet with modified Source Connection ID is sent to client", func() {
 			var initialPacketIntercepted bool
 			done := make(chan struct{})
 			delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
@@ -388,7 +391,9 @@ var _ = Describe("MITM test", func() {
 				}
 				return rtt / 2
 			}
-			closeFn, err := runTest(delayCb)
+			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil, true)
+			defer serverCloseFn()
+			closeFn, err := runTest(proxyPort)
 			defer closeFn()
 			Expect(err).To(HaveOccurred())
 			Expect(err.(net.Error).Timeout()).To(BeTrue())
@@ -418,7 +423,9 @@ var _ = Describe("MITM test", func() {
 				}
 				return rtt
 			}
-			closeFn, err := runTest(delayCb)
+			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil, false)
+			defer serverCloseFn()
+			closeFn, err := runTest(proxyPort)
 			defer closeFn()
 			Expect(err).To(HaveOccurred())
 			Expect(err.(net.Error).Timeout()).To(BeTrue())
@@ -448,7 +455,9 @@ var _ = Describe("MITM test", func() {
 				}
 				return rtt
 			}
-			closeFn, err := runTest(delayCb)
+			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil, false)
+			defer serverCloseFn()
+			closeFn, err := runTest(proxyPort)
 			defer closeFn()
 			Expect(err).To(HaveOccurred())
 			var transportErr *quic.TransportError

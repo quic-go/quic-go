@@ -464,14 +464,19 @@ var _ = Describe("0-RTT", func() {
 		}
 
 		counter, tracer := newPacketTracer()
-		ln, err := quic.ListenAddrEarly(
-			"localhost:0",
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		udpConn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		defer udpConn.Close()
+		tr := &quic.Transport{
+			Conn:                     udpConn,
+			MaxUnvalidatedHandshakes: -1,
+		}
+		defer tr.Close()
+		ln, err := tr.ListenEarly(
 			tlsConf,
-			getQuicConfig(&quic.Config{
-				RequireAddressValidation: func(net.Addr) bool { return true },
-				Allow0RTT:                true,
-				Tracer:                   newTracer(tracer),
-			}),
+			getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()

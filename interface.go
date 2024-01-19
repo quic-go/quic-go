@@ -267,11 +267,6 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	MaxIdleTimeout time.Duration
-	// RequireAddressValidation determines if a QUIC Retry packet is sent.
-	// This allows the server to verify the client's address, at the cost of increasing the handshake latency by 1 RTT.
-	// See https://datatracker.ietf.org/doc/html/rfc9000#section-8 for details.
-	// If not set, every client is forced to prove its remote address.
-	RequireAddressValidation func(net.Addr) bool
 	// The TokenStore stores tokens received from the server.
 	// Tokens are used to skip address validation on future connection attempts.
 	// The key used to store tokens is the ServerName from the tls.Config, if set
