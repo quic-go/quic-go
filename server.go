@@ -25,6 +25,7 @@ var ErrServerClosed = errors.New("quic: server closed")
 type packetHandler interface {
 	handlePacket(receivedPacket)
 	destroy(error)
+	closeWithTransportError(qerr.TransportErrorCode)
 	getPerspective() protocol.Perspective
 }
 
@@ -44,6 +45,7 @@ type quicConn interface {
 	getPerspective() protocol.Perspective
 	run() error
 	destroy(error)
+	closeWithTransportError(TransportErrorCode)
 }
 
 type zeroRTTQueue struct {
@@ -693,7 +695,7 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 		// wait until the early connection is ready, the handshake fails, or the server is closed
 		select {
 		case <-s.errorChan:
-			conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
+			conn.closeWithTransportError(ConnectionRefused)
 			return
 		case <-conn.earlyConnReady():
 		case <-connCtx.Done():
@@ -703,7 +705,7 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 		// wait until the handshake is complete (or fails)
 		select {
 		case <-s.errorChan:
-			conn.destroy(&qerr.TransportError{ErrorCode: ConnectionRefused})
+			conn.closeWithTransportError(ConnectionRefused)
 			return
 		case <-conn.HandshakeComplete():
 		case <-connCtx.Done():

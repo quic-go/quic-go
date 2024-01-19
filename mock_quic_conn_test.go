@@ -656,6 +656,42 @@ func (c *QUICConnSendDatagramCall) DoAndReturn(f func([]byte) error) *QUICConnSe
 	return c
 }
 
+// closeWithTransportError mocks base method.
+func (m *MockQUICConn) closeWithTransportError(arg0 qerr.TransportErrorCode) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "closeWithTransportError", arg0)
+}
+
+// closeWithTransportError indicates an expected call of closeWithTransportError.
+func (mr *MockQUICConnMockRecorder) closeWithTransportError(arg0 any) *QUICConncloseWithTransportErrorCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeWithTransportError", reflect.TypeOf((*MockQUICConn)(nil).closeWithTransportError), arg0)
+	return &QUICConncloseWithTransportErrorCall{Call: call}
+}
+
+// QUICConncloseWithTransportErrorCall wrap *gomock.Call
+type QUICConncloseWithTransportErrorCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *QUICConncloseWithTransportErrorCall) Return() *QUICConncloseWithTransportErrorCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *QUICConncloseWithTransportErrorCall) Do(f func(qerr.TransportErrorCode)) *QUICConncloseWithTransportErrorCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *QUICConncloseWithTransportErrorCall) DoAndReturn(f func(qerr.TransportErrorCode)) *QUICConncloseWithTransportErrorCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // destroy mocks base method.
 func (m *MockQUICConn) destroy(arg0 error) {
 	m.ctrl.T.Helper()

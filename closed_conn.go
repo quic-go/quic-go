@@ -41,8 +41,9 @@ func (c *closedLocalConn) handlePacket(p receivedPacket) {
 	c.sendPacket(p.remoteAddr, p.info)
 }
 
-func (c *closedLocalConn) destroy(error)                        {}
-func (c *closedLocalConn) getPerspective() protocol.Perspective { return c.perspective }
+func (c *closedLocalConn) destroy(error)                              {}
+func (c *closedLocalConn) closeWithTransportError(TransportErrorCode) {}
+func (c *closedLocalConn) getPerspective() protocol.Perspective       { return c.perspective }
 
 // A closedRemoteConn is a connection that was closed remotely.
 // For such a connection, we might receive reordered packets that were sent before the CONNECTION_CLOSE.
@@ -57,6 +58,7 @@ func newClosedRemoteConn(pers protocol.Perspective) packetHandler {
 	return &closedRemoteConn{perspective: pers}
 }
 
-func (s *closedRemoteConn) handlePacket(receivedPacket)          {}
-func (s *closedRemoteConn) destroy(error)                        {}
-func (s *closedRemoteConn) getPerspective() protocol.Perspective { return s.perspective }
+func (c *closedRemoteConn) handlePacket(receivedPacket)                {}
+func (c *closedRemoteConn) destroy(error)                              {}
+func (c *closedRemoteConn) closeWithTransportError(TransportErrorCode) {}
+func (c *closedRemoteConn) getPerspective() protocol.Perspective       { return c.perspective }

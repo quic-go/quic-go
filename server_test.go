@@ -327,7 +327,7 @@ var _ = Describe("Server", func() {
 				Eventually(run).Should(BeClosed())
 				Eventually(done).Should(BeClosed())
 				// shutdown
-				conn.EXPECT().destroy(gomock.Any())
+				conn.EXPECT().closeWithTransportError(gomock.Any())
 			})
 
 			It("sends a Version Negotiation Packet for unsupported versions", func() {
@@ -530,7 +530,7 @@ var _ = Describe("Server", func() {
 				Eventually(run).Should(BeClosed())
 				Eventually(done).Should(BeClosed())
 				// shutdown
-				conn.EXPECT().destroy(gomock.Any()).MaxTimes(1)
+				conn.EXPECT().closeWithTransportError(gomock.Any()).MaxTimes(1)
 			})
 
 			It("drops packets if the receive queue is full", func() {
@@ -570,7 +570,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
 					conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
 					// shutdown
-					conn.EXPECT().destroy(gomock.Any()).MaxTimes(1)
+					conn.EXPECT().closeWithTransportError(gomock.Any()).MaxTimes(1)
 					return conn
 				}
 
@@ -1008,7 +1008,7 @@ var _ = Describe("Server", func() {
 				) quicConn {
 					conn := NewMockQUICConn(mockCtrl)
 					conn.EXPECT().handlePacket(gomock.Any())
-					conn.EXPECT().destroy(&qerr.TransportError{ErrorCode: ConnectionRefused}).Do(func(error) { close(destroyed) })
+					conn.EXPECT().closeWithTransportError(ConnectionRefused).Do(func(TransportErrorCode) { close(destroyed) })
 					conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 					conn.EXPECT().run().MaxTimes(1)
 					conn.EXPECT().Context().Return(context.Background())
@@ -1468,7 +1468,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().Context().Return(context.Background())
 				close(called)
 				// shutdown
-				conn.EXPECT().destroy(gomock.Any())
+				conn.EXPECT().closeWithTransportError(gomock.Any())
 				return conn
 			}
 
