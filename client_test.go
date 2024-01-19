@@ -87,7 +87,7 @@ var _ = Describe("Client", func() {
 
 	AfterEach(func() {
 		if s, ok := cl.conn.(*connection); ok {
-			s.shutdown()
+			s.destroy(nil)
 		}
 		Eventually(areConnsRunning).Should(BeFalse())
 	})

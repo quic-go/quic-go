@@ -24,7 +24,6 @@ var ErrServerClosed = errors.New("quic: server closed")
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(receivedPacket)
-	shutdown()
 	destroy(error)
 	getPerspective() protocol.Perspective
 }
@@ -45,7 +44,6 @@ type quicConn interface {
 	getPerspective() protocol.Perspective
 	run() error
 	destroy(error)
-	shutdown()
 }
 
 type zeroRTTQueue struct {

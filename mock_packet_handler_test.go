@@ -147,39 +147,3 @@ func (c *PacketHandlerhandlePacketCall) DoAndReturn(f func(receivedPacket)) *Pac
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
-
-// shutdown mocks base method.
-func (m *MockPacketHandler) shutdown() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "shutdown")
-}
-
-// shutdown indicates an expected call of shutdown.
-func (mr *MockPacketHandlerMockRecorder) shutdown() *PacketHandlershutdownCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "shutdown", reflect.TypeOf((*MockPacketHandler)(nil).shutdown))
-	return &PacketHandlershutdownCall{Call: call}
-}
-
-// PacketHandlershutdownCall wrap *gomock.Call
-type PacketHandlershutdownCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *PacketHandlershutdownCall) Return() *PacketHandlershutdownCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *PacketHandlershutdownCall) Do(f func()) *PacketHandlershutdownCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlershutdownCall) DoAndReturn(f func()) *PacketHandlershutdownCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}

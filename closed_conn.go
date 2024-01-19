@@ -41,7 +41,6 @@ func (c *closedLocalConn) handlePacket(p receivedPacket) {
 	c.sendPacket(p.remoteAddr, p.info)
 }
 
-func (c *closedLocalConn) shutdown()                            {}
 func (c *closedLocalConn) destroy(error)                        {}
 func (c *closedLocalConn) getPerspective() protocol.Perspective { return c.perspective }
 
@@ -59,6 +58,5 @@ func newClosedRemoteConn(pers protocol.Perspective) packetHandler {
 }
 
 func (s *closedRemoteConn) handlePacket(receivedPacket)          {}
-func (s *closedRemoteConn) shutdown()                            {}
 func (s *closedRemoteConn) destroy(error)                        {}
 func (s *closedRemoteConn) getPerspective() protocol.Perspective { return s.perspective }

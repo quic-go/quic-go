@@ -232,7 +232,7 @@ func (c *client) dial(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		c.conn.shutdown()
+		c.conn.destroy(nil)
 		return context.Cause(ctx)
 	case err := <-errorChan:
 		return err

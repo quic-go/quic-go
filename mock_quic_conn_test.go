@@ -841,39 +841,3 @@ func (c *QUICConnrunCall) DoAndReturn(f func() error) *QUICConnrunCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
-
-// shutdown mocks base method.
-func (m *MockQUICConn) shutdown() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "shutdown")
-}
-
-// shutdown indicates an expected call of shutdown.
-func (mr *MockQUICConnMockRecorder) shutdown() *QUICConnshutdownCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "shutdown", reflect.TypeOf((*MockQUICConn)(nil).shutdown))
-	return &QUICConnshutdownCall{Call: call}
-}
-
-// QUICConnshutdownCall wrap *gomock.Call
-type QUICConnshutdownCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *QUICConnshutdownCall) Return() *QUICConnshutdownCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *QUICConnshutdownCall) Do(f func()) *QUICConnshutdownCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *QUICConnshutdownCall) DoAndReturn(f func()) *QUICConnshutdownCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}

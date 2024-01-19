@@ -82,6 +82,26 @@ var _ = Describe("Handshake tests", func() {
 		}()
 	}
 
+	It("returns the context cancellation error on timeouts", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(20*time.Millisecond))
+		defer cancel()
+		errChan := make(chan error, 1)
+		go func() {
+			_, err := quic.DialAddr(
+				ctx,
+				"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			errChan <- err
+		}()
+
+		var err error
+		Eventually(errChan).Should(Receive(&err))
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+	})
+
 	It("returns the cancellation reason when a dial is canceled", func() {
 		ctx, cancel := context.WithCancelCause(context.Background())
 		errChan := make(chan error, 1)

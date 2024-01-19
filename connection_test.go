@@ -465,7 +465,7 @@ var _ = Describe("Connection", func() {
 				}),
 				tracer.EXPECT().Close(),
 			)
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(conn.Context().Done()).To(BeClosed())
 		})
@@ -479,8 +479,8 @@ var _ = Describe("Connection", func() {
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
-			conn.shutdown()
-			conn.shutdown()
+			conn.CloseWithError(0, "")
+			conn.CloseWithError(0, "")
 			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(conn.Context().Done()).To(BeClosed())
 		})
@@ -549,29 +549,6 @@ var _ = Describe("Connection", func() {
 				ErrorCode:    qerr.InternalError,
 				ErrorMessage: testErr.Error(),
 			}
-		})
-
-		It("cancels the context when the run loop exists", func() {
-			runConn()
-			streamManager.EXPECT().CloseWithError(gomock.Any())
-			expectReplaceWithClosed()
-			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
-			returned := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				ctx := conn.Context()
-				<-ctx.Done()
-				Expect(ctx.Err()).To(MatchError(context.Canceled))
-				close(returned)
-			}()
-			Consistently(returned).ShouldNot(BeClosed())
-			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ClosedConnection(gomock.Any())
-			tracer.EXPECT().Close()
-			conn.shutdown()
-			Eventually(returned).Should(BeClosed())
-			Expect(context.Cause(conn.Context())).To(MatchError(context.Canceled))
 		})
 
 		It("doesn't send any more packets after receiving a CONNECTION_CLOSE", func() {
@@ -964,7 +941,7 @@ var _ = Describe("Connection", func() {
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -1219,7 +1196,7 @@ var _ = Describe("Connection", func() {
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sender.EXPECT().Close()
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 			Eventually(connDone).Should(BeClosed())
 		})
@@ -1422,7 +1399,7 @@ var _ = Describe("Connection", func() {
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sender.EXPECT().Close()
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -1811,7 +1788,7 @@ var _ = Describe("Connection", func() {
 			sender.EXPECT().Close()
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -1937,7 +1914,7 @@ var _ = Describe("Connection", func() {
 		mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
 		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
-		conn.shutdown()
+		conn.CloseWithError(0, "")
 		Eventually(conn.Context().Done()).Should(BeClosed())
 	})
 
@@ -2059,7 +2036,7 @@ var _ = Describe("Connection", func() {
 		cryptoSetup.EXPECT().Close()
 		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
-		conn.shutdown()
+		conn.CloseWithError(0, "")
 		Eventually(conn.Context().Done()).Should(BeClosed())
 	})
 
@@ -2073,13 +2050,11 @@ var _ = Describe("Connection", func() {
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
-		expectReplaceWithClosed()
-		packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
-		mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
+		connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
-		conn.shutdown()
+		conn.destroy(nil)
 		Eventually(done).Should(BeClosed())
 		Expect(context.Cause(conn.Context())).To(MatchError(context.Canceled))
 	})
@@ -2165,7 +2140,7 @@ var _ = Describe("Connection", func() {
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -2316,7 +2291,7 @@ var _ = Describe("Connection", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -2403,7 +2378,7 @@ var _ = Describe("Connection", func() {
 			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -2623,7 +2598,7 @@ var _ = Describe("Client Connection", func() {
 		mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
-		conn.shutdown()
+		conn.CloseWithError(0, "")
 		Eventually(conn.Context().Done()).Should(BeClosed())
 		time.Sleep(200 * time.Millisecond)
 	})
@@ -2930,7 +2905,7 @@ var _ = Describe("Client Connection", func() {
 		}
 
 		AfterEach(func() {
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			Eventually(conn.Context().Done()).Should(BeClosed())
 			Eventually(errChan).Should(BeClosed())
 		})
@@ -2974,7 +2949,7 @@ var _ = Describe("Client Connection", func() {
 			Eventually(processed).Should(BeClosed())
 			// close first
 			expectClose(true, false)
-			conn.shutdown()
+			conn.CloseWithError(0, "")
 			// then check. Avoids race condition when accessing idleTimeout
 			Expect(conn.idleTimeout).To(Equal(18 * time.Second))
 		})
