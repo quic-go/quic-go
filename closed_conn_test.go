@@ -14,8 +14,6 @@ var _ = Describe("Closed local connection", func() {
 	It("tells its perspective", func() {
 		conn := newClosedLocalConn(nil, protocol.PerspectiveClient, utils.DefaultLogger)
 		Expect(conn.getPerspective()).To(Equal(protocol.PerspectiveClient))
-		// stop the connection
-		conn.shutdown()
 	})
 
 	It("repeats the packet containing the CONNECTION_CLOSE frame", func() {
