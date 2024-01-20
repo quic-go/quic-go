@@ -266,10 +266,10 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 	case tls.QUICNoEvent:
 		return true, nil
 	case tls.QUICSetReadSecret:
-		h.SetReadKey(ev.Level, ev.Suite, ev.Data)
+		h.setReadKey(ev.Level, ev.Suite, ev.Data)
 		return false, nil
 	case tls.QUICSetWriteSecret:
-		h.SetWriteKey(ev.Level, ev.Suite, ev.Data)
+		h.setWriteKey(ev.Level, ev.Suite, ev.Data)
 		return false, nil
 	case tls.QUICTransportParameters:
 		return false, h.handleTransportParameters(ev.Data)
@@ -439,7 +439,7 @@ func (h *cryptoSetup) rejected0RTT() {
 	}
 }
 
-func (h *cryptoSetup) SetReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
@@ -478,7 +478,7 @@ func (h *cryptoSetup) SetReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 	}
 }
 
-func (h *cryptoSetup) SetWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
