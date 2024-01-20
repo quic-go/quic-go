@@ -133,7 +133,7 @@ func (a *updatableAEAD) SetReadKey(suite *cipherSuite, trafficSecret []byte) {
 
 // SetWriteKey sets the write key.
 // For the client, this function is called after SetReadKey.
-// For the server, this function is called before SetWriteKey.
+// For the server, this function is called before SetReadKey.
 func (a *updatableAEAD) SetWriteKey(suite *cipherSuite, trafficSecret []byte) {
 	a.sendAEAD = createAEAD(suite, trafficSecret, a.version)
 	a.headerEncrypter = newHeaderProtector(suite, trafficSecret, false, a.version)
