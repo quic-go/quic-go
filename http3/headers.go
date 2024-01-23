@@ -128,7 +128,8 @@ func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error)
 
 	var u *url.URL
 	var requestURI string
-	var protocol string
+
+	protocol := "HTTP/3.0"
 
 	if isConnect {
 		u = &url.URL{}
@@ -143,9 +144,10 @@ func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error)
 		u.Scheme = hdr.Scheme
 		u.Host = hdr.Authority
 		requestURI = hdr.Authority
-		protocol = hdr.Protocol
+		if hdr.Protocol != "" {
+			protocol = hdr.Protocol
+		}
 	} else {
-		protocol = "HTTP/3.0"
 		u, err = url.ParseRequestURI(hdr.Path)
 		if err != nil {
 			return nil, fmt.Errorf("invalid content length: %w", err)

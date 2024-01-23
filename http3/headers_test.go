@@ -221,6 +221,7 @@ var _ = Describe("Request", func() {
 			req, err := requestFromHeaders(headers)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(req.Method).To(Equal(http.MethodConnect))
+			Expect(req.Proto).To(Equal("HTTP/3.0"))
 			Expect(req.RequestURI).To(Equal("quic.clemente.io"))
 		})
 
