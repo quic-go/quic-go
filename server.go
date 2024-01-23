@@ -699,7 +699,25 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		s.numHandshakesUnvalidated.Add(1)
 	}
 	go conn.run()
-	go s.handleNewConn(conn, clientAddrValidated)
+	go func() {
+		completed := s.handleNewConn(conn)
+		if clientAddrValidated {
+			if s.numHandshakesValidated.Add(-1) < 0 {
+				panic("server BUG: number of validated handshakes negative")
+			}
+		} else if s.numHandshakesUnvalidated.Add(-1) < 0 {
+			panic("server BUG: number of unvalidated handshakes negative")
+		}
+		if !completed {
+			return
+		}
+
+		select {
+		case s.connQueue <- conn:
+		default:
+			conn.closeWithTransportError(ConnectionRefused)
+		}
+	}()
 	if conn == nil {
 		p.buffer.Release()
 		return nil
@@ -707,44 +725,28 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	return nil
 }
 
-func (s *baseServer) handleNewConn(conn quicConn, clientAddrValidated bool) {
-	connCtx := conn.Context()
+func (s *baseServer) handleNewConn(conn quicConn) bool {
 	if s.acceptEarlyConns {
 		// wait until the early connection is ready, the handshake fails, or the server is closed
 		select {
 		case <-s.errorChan:
 			conn.closeWithTransportError(ConnectionRefused)
-			return
+			return false
+		case <-conn.Context().Done():
+			return false
 		case <-conn.earlyConnReady():
-		case <-connCtx.Done():
-			return
-		}
-	} else {
-		// wait until the handshake is complete (or fails)
-		select {
-		case <-s.errorChan:
-			conn.closeWithTransportError(ConnectionRefused)
-			return
-		case <-conn.HandshakeComplete():
-		case <-connCtx.Done():
-			return
+			return true
 		}
 	}
-
-	if clientAddrValidated {
-		if s.numHandshakesValidated.Add(-1) < 0 {
-			panic("server BUG: number of validated handshakes negative")
-		}
-	} else {
-		if s.numHandshakesUnvalidated.Add(-1) < 0 {
-			panic("server BUG: number of unvalidated handshakes negative")
-		}
-	}
-
+	// wait until the handshake completes, fails, or the server is closed
 	select {
-	case s.connQueue <- conn:
-	default:
+	case <-s.errorChan:
 		conn.closeWithTransportError(ConnectionRefused)
+		return false
+	case <-conn.Context().Done():
+		return false
+	case <-conn.HandshakeComplete():
+		return true
 	}
 }
 
