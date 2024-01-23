@@ -718,10 +718,6 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			conn.closeWithTransportError(ConnectionRefused)
 		}
 	}()
-	if conn == nil {
-		p.buffer.Release()
-		return nil
-	}
 	return nil
 }
 
