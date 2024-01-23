@@ -55,8 +55,17 @@ var _ = Describe("Handshake RTT tests", func() {
 	// 1 RTT for verifying the source address
 	// 1 RTT for the TLS handshake
 	It("is forward-secure after 2 RTTs", func() {
-		serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
-		ln, err := quic.ListenAddr("localhost:0", serverTLSConfig, serverConfig)
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		udpConn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		defer udpConn.Close()
+		tr := &quic.Transport{
+			Conn:                     udpConn,
+			MaxUnvalidatedHandshakes: -1,
+		}
+		defer tr.Close()
+		ln, err := tr.Listen(serverTLSConfig, serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
 

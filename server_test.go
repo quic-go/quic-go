@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -138,7 +137,6 @@ var _ = Describe("Server", func() {
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
-		Expect(server.config.RequireAddressValidation).ToNot(BeNil())
 		Expect(server.config.KeepAlivePeriod).To(BeZero())
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
@@ -146,13 +144,11 @@ var _ = Describe("Server", func() {
 
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.Version1}
-		requireAddrVal := func(net.Addr) bool { return true }
 		config := Config{
-			Versions:                 supportedVersions,
-			HandshakeIdleTimeout:     1337 * time.Hour,
-			MaxIdleTimeout:           42 * time.Minute,
-			KeepAlivePeriod:          5 * time.Second,
-			RequireAddressValidation: requireAddrVal,
+			Versions:             supportedVersions,
+			HandshakeIdleTimeout: 1337 * time.Hour,
+			MaxIdleTimeout:       42 * time.Minute,
+			KeepAlivePeriod:      5 * time.Second,
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -161,7 +157,6 @@ var _ = Describe("Server", func() {
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
-		Expect(reflect.ValueOf(server.config.RequireAddressValidation)).To(Equal(reflect.ValueOf(requireAddrVal)))
 		Expect(server.config.KeepAlivePeriod).To(Equal(5 * time.Second))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
@@ -263,7 +258,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("creates a connection when the token is accepted", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				retryToken, err := serv.tokenGenerator.NewRetryToken(
 					raddr,
@@ -441,7 +436,7 @@ var _ = Describe("Server", func() {
 
 			It("replies with a Retry packet, if a token is required", func() {
 				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				hdr := &wire.Header{
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
@@ -846,7 +841,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends an INVALID_TOKEN error, if an invalid retry token is received", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
@@ -882,7 +877,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends an INVALID_TOKEN error, if an expired retry token is received", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				serv.config.HandshakeIdleTimeout = time.Millisecond / 2 // the maximum retry token age is equivalent to the handshake timeout
 				Expect(serv.config.maxRetryTokenAge()).To(Equal(time.Millisecond))
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
@@ -920,7 +915,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't send an INVALID_TOKEN error, if an invalid non-retry token is received", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				token, err := serv.tokenGenerator.NewToken(&net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
@@ -949,7 +944,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends an INVALID_TOKEN error, if an expired non-retry token is received", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				serv.maxTokenAge = time.Millisecond
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				token, err := serv.tokenGenerator.NewToken(raddr)
@@ -978,7 +973,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't send an INVALID_TOKEN error, if the packet is corrupted", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				serv.maxNumHandshakesUnvalidated = 0
 				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
@@ -1086,7 +1081,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQUICConn(mockCtrl)
 
 				conf := &Config{MaxIncomingStreams: 1234}
-				serv.config = populateServerConfig(&Config{GetConfigForClient: func(*ClientHelloInfo) (*Config, error) { return conf, nil }})
+				serv.config = populateConfig(&Config{GetConfigForClient: func(*ClientHelloInfo) (*Config, error) { return conf, nil }})
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -1139,7 +1134,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("rejects a connection attempt when GetConfigClient returns an error", func() {
-				serv.config = populateServerConfig(&Config{GetConfigForClient: func(*ClientHelloInfo) (*Config, error) { return nil, errors.New("rejected") }})
+				serv.config = populateConfig(&Config{GetConfigForClient: func(*ClientHelloInfo) (*Config, error) { return nil, errors.New("rejected") }})
 
 				phm.EXPECT().Get(gomock.Any())
 				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {

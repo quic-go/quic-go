@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 
@@ -38,9 +37,8 @@ func main() {
 	testcase := os.Getenv("TESTCASE")
 
 	quicConf := &quic.Config{
-		RequireAddressValidation: func(net.Addr) bool { return testcase == "retry" },
-		Allow0RTT:                testcase == "zerortt",
-		Tracer:                   utils.NewQLOGConnectionTracer,
+		Allow0RTT: testcase == "zerortt",
+		Tracer:    utils.NewQLOGConnectionTracer,
 	}
 	cert, err := tls.LoadX509KeyPair("/certs/cert.pem", "/certs/priv.key")
 	if err != nil {
@@ -54,11 +52,11 @@ func main() {
 
 	switch testcase {
 	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect", "zerortt":
-		err = runHTTP09Server(quicConf)
+		err = runHTTP09Server(quicConf, testcase == "retry")
 	case "chacha20":
 		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
 		defer reset()
-		err = runHTTP09Server(quicConf)
+		err = runHTTP09Server(quicConf, false)
 	case "http3":
 		err = runHTTP3Server(quicConf)
 	default:
@@ -72,12 +70,13 @@ func main() {
 	}
 }
 
-func runHTTP09Server(quicConf *quic.Config) error {
+func runHTTP09Server(quicConf *quic.Config, forceRetry bool) error {
 	server := http09.Server{
 		Server: &http.Server{
 			Addr:      ":443",
 			TLSConfig: tlsConf,
 		},
+		ForceRetry: forceRetry,
 		QuicConfig: quicConf,
 	}
 	http.DefaultServeMux.Handle("/", http.FileServer(http.Dir("/www")))

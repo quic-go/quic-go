@@ -26,23 +26,17 @@ var directions = []quicproxy.Direction{quicproxy.DirectionIncoming, quicproxy.Di
 
 type applicationProtocol struct {
 	name string
-	run  func()
+	run  func(ln *quic.Listener, port int)
 }
 
 var _ = Describe("Handshake drop tests", func() {
-	var (
-		proxy *quicproxy.QuicProxy
-		ln    *quic.Listener
-	)
-
 	data := GeneratePRData(5000)
 	const timeout = 2 * time.Minute
 
-	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool) {
+	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool) (ln *quic.Listener, proxyPort int, closeFn func()) {
 		conf := getQuicConfig(&quic.Config{
-			MaxIdleTimeout:           timeout,
-			HandshakeIdleTimeout:     timeout,
-			RequireAddressValidation: func(net.Addr) bool { return doRetry },
+			MaxIdleTimeout:       timeout,
+			HandshakeIdleTimeout: timeout,
 		})
 		var tlsConf *tls.Config
 		if longCertChain {
@@ -50,11 +44,18 @@ var _ = Describe("Handshake drop tests", func() {
 		} else {
 			tlsConf = getTLSConfig()
 		}
-		var err error
-		ln, err = quic.ListenAddr("localhost:0", tlsConf, conf)
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		conn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		tr := &quic.Transport{Conn: conn}
+		if doRetry {
+			tr.MaxUnvalidatedHandshakes = -1
+		}
+		ln, err = tr.Listen(tlsConf, conf)
 		Expect(err).ToNot(HaveOccurred())
 		serverPort := ln.Addr().(*net.UDPAddr).Port
-		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 			DropPacket: dropCallback,
 			DelayPacket: func(dir quicproxy.Direction, packet []byte) time.Duration {
@@ -62,11 +63,18 @@ var _ = Describe("Handshake drop tests", func() {
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
+
+		return ln, proxy.LocalPort(), func() {
+			ln.Close()
+			tr.Close()
+			conn.Close()
+			proxy.Close()
+		}
 	}
 
 	clientSpeaksFirst := &applicationProtocol{
 		name: "client speaks first",
-		run: func() {
+		run: func(ln *quic.Listener, port int) {
 			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
@@ -82,7 +90,7 @@ var _ = Describe("Handshake drop tests", func() {
 			}()
 			conn, err := quic.DialAddr(
 				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				fmt.Sprintf("localhost:%d", port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:       timeout,
@@ -105,7 +113,7 @@ var _ = Describe("Handshake drop tests", func() {
 
 	serverSpeaksFirst := &applicationProtocol{
 		name: "server speaks first",
-		run: func() {
+		run: func(ln *quic.Listener, port int) {
 			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
@@ -120,7 +128,7 @@ var _ = Describe("Handshake drop tests", func() {
 			}()
 			conn, err := quic.DialAddr(
 				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				fmt.Sprintf("localhost:%d", port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:       timeout,
@@ -143,7 +151,7 @@ var _ = Describe("Handshake drop tests", func() {
 
 	nobodySpeaks := &applicationProtocol{
 		name: "nobody speaks",
-		run: func() {
+		run: func(ln *quic.Listener, port int) {
 			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
@@ -153,7 +161,7 @@ var _ = Describe("Handshake drop tests", func() {
 			}()
 			conn, err := quic.DialAddr(
 				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				fmt.Sprintf("localhost:%d", port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:       timeout,
@@ -168,11 +176,6 @@ var _ = Describe("Handshake drop tests", func() {
 			serverConn.CloseWithError(0, "")
 		},
 	}
-
-	AfterEach(func() {
-		Expect(ln.Close()).To(Succeed())
-		Expect(proxy.Close()).To(Succeed())
-	})
 
 	for _, d := range directions {
 		direction := d
@@ -195,7 +198,7 @@ var _ = Describe("Handshake drop tests", func() {
 							Context(app.name, func() {
 								It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
 									var incoming, outgoing atomic.Int32
-									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+									ln, proxyPort, closeFn := startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										var p int32
 										//nolint:exhaustive
 										switch d {
@@ -206,12 +209,13 @@ var _ = Describe("Handshake drop tests", func() {
 										}
 										return p == 1 && d.Is(direction)
 									}, doRetry, longCertChain)
-									app.run()
+									defer closeFn()
+									app.run(ln, proxyPort)
 								})
 
 								It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
 									var incoming, outgoing atomic.Int32
-									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+									ln, proxyPort, closeFn := startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										var p int32
 										//nolint:exhaustive
 										switch d {
@@ -222,7 +226,8 @@ var _ = Describe("Handshake drop tests", func() {
 										}
 										return p == 2 && d.Is(direction)
 									}, doRetry, longCertChain)
-									app.run()
+									defer closeFn()
+									app.run(ln, proxyPort)
 								})
 
 								It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
@@ -230,7 +235,7 @@ var _ = Describe("Handshake drop tests", func() {
 									var mx sync.Mutex
 									var incoming, outgoing int
 
-									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+									ln, proxyPort, closeFn := startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										drop := mrand.Int63n(int64(3)) == 0
 
 										mx.Lock()
@@ -260,7 +265,8 @@ var _ = Describe("Handshake drop tests", func() {
 										}
 										return drop
 									}, doRetry, longCertChain)
-									app.run()
+									defer closeFn()
+									app.run(ln, proxyPort)
 								})
 							})
 						}
@@ -281,13 +287,14 @@ var _ = Describe("Handshake drop tests", func() {
 				uint64(27+31*(1000+mrand.Int63()/31)) % quicvarint.Max: b,
 			}
 
-			startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+			ln, proxyPort, closeFn := startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 				if d == quicproxy.DirectionOutgoing {
 					return false
 				}
 				return mrand.Intn(3) == 0
 			}, false, false)
-			clientSpeaksFirst.run()
+			defer closeFn()
+			clientSpeaksFirst.run(ln, proxyPort)
 		})
 	}
 })
