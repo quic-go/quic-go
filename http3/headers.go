@@ -124,6 +124,8 @@ func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error)
 		}
 	} else if len(hdr.Path) == 0 || len(hdr.Authority) == 0 || len(hdr.Method) == 0 {
 		return nil, errors.New(":path, :authority and :method must not be empty")
+	} else if len(hdr.Protocol) > 0 {
+		return nil, errors.New(":protocol must be empty")
 	}
 
 	var u *url.URL
