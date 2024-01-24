@@ -140,15 +140,13 @@ func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error)
 			if err != nil {
 				return nil, err
 			}
+			protocol = hdr.Protocol
 		} else {
 			u.Path = hdr.Path
 		}
 		u.Scheme = hdr.Scheme
 		u.Host = hdr.Authority
 		requestURI = hdr.Authority
-		if hdr.Protocol != "" {
-			protocol = hdr.Protocol
-		}
 	} else {
 		u, err = url.ParseRequestURI(hdr.Path)
 		if err != nil {
