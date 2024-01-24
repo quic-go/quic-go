@@ -54,7 +54,8 @@ type Transport struct {
 	Conn net.PacketConn
 
 	// The length of the connection ID in bytes.
-	// It can be 0, or any value between 4 and 18.
+	// It can be any value between 1 and 20.
+	// Due to the increased risk of collisions, it is not recommended to use connection IDs shorter than 4 bytes.
 	// If unset, a 4 byte connection ID will be used.
 	ConnectionIDLength int
 
