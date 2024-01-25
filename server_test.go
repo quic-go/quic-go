@@ -807,11 +807,16 @@ var _ = Describe("Server", func() {
 					_, err := serv.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 				}
+				// make sure we can enqueue and accept more connections after that
 				for i := 0; i < limit; i++ {
 					conn := NewMockQUICConn(mockCtrl)
 					conn.EXPECT().closeWithTransportError(gomock.Any()).MaxTimes(1) // called when the server is closed
 					connChan <- conn
 					serv.handlePacket(getInitialWithRandomDestConnID())
+				}
+				for i := 0; i < limit; i++ {
+					_, err := serv.Accept(context.Background())
+					Expect(err).ToNot(HaveOccurred())
 				}
 			})
 		})
