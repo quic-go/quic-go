@@ -300,9 +300,11 @@ func (c *StreamFlowControllerUpdateHighestReceivedCall) DoAndReturn(f func(proto
 }
 
 // UpdateSendWindow mocks base method.
-func (m *MockStreamFlowController) UpdateSendWindow(arg0 protocol.ByteCount) {
+func (m *MockStreamFlowController) UpdateSendWindow(arg0 protocol.ByteCount) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateSendWindow", arg0)
+	ret := m.ctrl.Call(m, "UpdateSendWindow", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // UpdateSendWindow indicates an expected call of UpdateSendWindow.
@@ -318,19 +320,19 @@ type StreamFlowControllerUpdateSendWindowCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamFlowControllerUpdateSendWindowCall) Return() *StreamFlowControllerUpdateSendWindowCall {
-	c.Call = c.Call.Return()
+func (c *StreamFlowControllerUpdateSendWindowCall) Return(arg0 bool) *StreamFlowControllerUpdateSendWindowCall {
+	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamFlowControllerUpdateSendWindowCall) Do(f func(protocol.ByteCount)) *StreamFlowControllerUpdateSendWindowCall {
+func (c *StreamFlowControllerUpdateSendWindowCall) Do(f func(protocol.ByteCount) bool) *StreamFlowControllerUpdateSendWindowCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamFlowControllerUpdateSendWindowCall) DoAndReturn(f func(protocol.ByteCount)) *StreamFlowControllerUpdateSendWindowCall {
+func (c *StreamFlowControllerUpdateSendWindowCall) DoAndReturn(f func(protocol.ByteCount) bool) *StreamFlowControllerUpdateSendWindowCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

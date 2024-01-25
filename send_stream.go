@@ -404,11 +404,13 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 }
 
 func (s *sendStream) updateSendWindow(limit protocol.ByteCount) {
+	updated := s.flowController.UpdateSendWindow(limit)
+	if !updated { // duplicate or reordered MAX_STREAM_DATA frame
+		return
+	}
 	s.mutex.Lock()
 	hasStreamData := s.dataForWriting != nil || s.nextFrame != nil
 	s.mutex.Unlock()
-
-	s.flowController.UpdateSendWindow(limit)
 	if hasStreamData {
 		s.sender.onHasStreamData(s.streamID)
 	}
