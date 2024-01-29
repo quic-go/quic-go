@@ -177,6 +177,7 @@ type connection struct {
 
 	earlyConnReadyChan chan struct{}
 	sentFirstPacket    bool
+	droppedInitialKeys bool
 	handshakeComplete  bool
 	handshakeConfirmed bool
 
@@ -1185,7 +1186,8 @@ func (s *connection) handleUnpackedLongHeaderPacket(
 		}
 	}
 
-	if s.perspective == protocol.PerspectiveServer && packet.encryptionLevel == protocol.EncryptionHandshake {
+	if s.perspective == protocol.PerspectiveServer && packet.encryptionLevel == protocol.EncryptionHandshake &&
+		!s.droppedInitialKeys {
 		// On the server side, Initial keys are dropped as soon as the first Handshake packet is received.
 		// See Section 4.9.1 of RFC 9001.
 		if err := s.dropEncryptionLevel(protocol.EncryptionInitial); err != nil {
@@ -1659,6 +1661,7 @@ func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel) erro
 	//nolint:exhaustive // only Initial and 0-RTT need special treatment
 	switch encLevel {
 	case protocol.EncryptionInitial:
+		s.droppedInitialKeys = true
 		s.cryptoStreamHandler.DiscardInitialKeys()
 	case protocol.Encryption0RTT:
 		s.streamsMap.ResetFor0RTT()
@@ -2075,7 +2078,8 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, ecn prot
 			largestAcked = p.ack.LargestAcked()
 		}
 		s.sentPacketHandler.SentPacket(now, p.header.PacketNumber, largestAcked, p.streamFrames, p.frames, p.EncryptionLevel(), ecn, p.length, false)
-		if s.perspective == protocol.PerspectiveClient && p.EncryptionLevel() == protocol.EncryptionHandshake {
+		if s.perspective == protocol.PerspectiveClient && p.EncryptionLevel() == protocol.EncryptionHandshake &&
+			!s.droppedInitialKeys {
 			// On the client side, Initial keys are dropped as soon as the first Handshake packet is sent.
 			// See Section 4.9.1 of RFC 9001.
 			if err := s.dropEncryptionLevel(protocol.EncryptionInitial); err != nil {
