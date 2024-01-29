@@ -1289,6 +1289,8 @@ var _ = Describe("Server", func() {
 
 		It("rejects new connection attempts if the accept queue is full", func() {
 			connChan := make(chan *MockQUICConn, 1)
+			var wg sync.WaitGroup // to make sure the test fully completes
+			wg.Add(protocol.MaxAcceptQueueSize + 1)
 			serv.baseServer.newConn = func(
 				_ sendConn,
 				runner connRunner,
@@ -1308,6 +1310,7 @@ var _ = Describe("Server", func() {
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicConn {
+				defer wg.Done()
 				ready := make(chan struct{})
 				close(ready)
 				conn := <-connChan
@@ -1341,6 +1344,7 @@ var _ = Describe("Server", func() {
 			conn.EXPECT().closeWithTransportError(ConnectionRefused)
 			connChan <- conn
 			serv.baseServer.handlePacket(getInitialWithRandomDestConnID())
+			wg.Wait()
 		})
 
 		It("doesn't accept new connections if they were closed in the mean time", func() {
