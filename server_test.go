@@ -664,6 +664,8 @@ var _ = Describe("Server", func() {
 
 				handshakeChan := make(chan struct{})
 				connChan := make(chan *MockQUICConn, 1)
+				var wg sync.WaitGroup
+				wg.Add(2 * limit)
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -687,7 +689,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().handlePacket(gomock.Any())
 					conn.EXPECT().run()
 					conn.EXPECT().Context().Return(context.Background())
-					conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+					conn.EXPECT().HandshakeComplete().Return(handshakeChan).Do(func() <-chan struct{} { wg.Done(); return nil })
 					return conn
 				}
 
@@ -727,6 +729,7 @@ var _ = Describe("Server", func() {
 					connChan <- conn
 					serv.handlePacket(getInitialWithRandomDestConnID())
 				}
+				wg.Wait()
 			})
 
 			It("limits the number of total handshakes", func() {
