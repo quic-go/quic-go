@@ -33,7 +33,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			m.mutex.Lock()
 			defer m.mutex.Unlock()
 			return len(m.openQueue)
-		}, 50*time.Millisecond, 100*time.Microsecond).Should(Equal(n))
+		}, scaleDuration(100*time.Millisecond), scaleDuration(10*time.Microsecond)).Should(Equal(n))
 	}
 
 	BeforeEach(func() {
