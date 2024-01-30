@@ -12,14 +12,10 @@ import (
 )
 
 var _ = Describe("Received Packet Tracker", func() {
-	var (
-		tracker  *receivedPacketTracker
-		rttStats *utils.RTTStats
-	)
+	var tracker *receivedPacketTracker
 
 	BeforeEach(func() {
-		rttStats = &utils.RTTStats{}
-		tracker = newReceivedPacketTracker(rttStats, utils.DefaultLogger)
+		tracker = newReceivedPacketTracker(utils.DefaultLogger)
 	})
 
 	Context("accepting packets", func() {

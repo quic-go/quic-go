@@ -21,7 +21,6 @@ type receivedPacketTracker struct {
 	packetHistory *receivedPacketHistory
 
 	maxAckDelay time.Duration
-	rttStats    *utils.RTTStats
 
 	hasNewAck bool // true as soon as we received an ack-eliciting new packet
 	ackQueued bool // true once we received more than 2 (or later in the connection 10) ack-eliciting packets
@@ -33,14 +32,10 @@ type receivedPacketTracker struct {
 	logger utils.Logger
 }
 
-func newReceivedPacketTracker(
-	rttStats *utils.RTTStats,
-	logger utils.Logger,
-) *receivedPacketTracker {
+func newReceivedPacketTracker(logger utils.Logger) *receivedPacketTracker {
 	return &receivedPacketTracker{
 		packetHistory: newReceivedPacketHistory(),
 		maxAckDelay:   protocol.MaxAckDelay,
-		rttStats:      rttStats,
 		logger:        logger,
 	}
 }
