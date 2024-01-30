@@ -21,16 +21,12 @@ type receivedPacketHandler struct {
 
 var _ ReceivedPacketHandler = &receivedPacketHandler{}
 
-func newReceivedPacketHandler(
-	sentPackets sentPacketTracker,
-	rttStats *utils.RTTStats,
-	logger utils.Logger,
-) ReceivedPacketHandler {
+func newReceivedPacketHandler(sentPackets sentPacketTracker, logger utils.Logger) ReceivedPacketHandler {
 	return &receivedPacketHandler{
 		sentPackets:      sentPackets,
-		initialPackets:   newReceivedPacketTracker(rttStats, logger),
-		handshakePackets: newReceivedPacketTracker(rttStats, logger),
-		appDataPackets:   newReceivedPacketTracker(rttStats, logger),
+		initialPackets:   newReceivedPacketTracker(logger),
+		handshakePackets: newReceivedPacketTracker(logger),
+		appDataPackets:   newReceivedPacketTracker(logger),
 		lowest1RTTPacket: protocol.InvalidPacketNumber,
 	}
 }
