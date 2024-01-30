@@ -14,14 +14,14 @@ import (
 type receivedPacketTracker struct {
 	ect0, ect1, ecnce uint64
 
-	packetHistory *receivedPacketHistory
+	packetHistory receivedPacketHistory
 
 	lastAck   *wire.AckFrame
 	hasNewAck bool // true as soon as we received an ack-eliciting new packet
 }
 
 func newReceivedPacketTracker() *receivedPacketTracker {
-	return &receivedPacketTracker{packetHistory: newReceivedPacketHistory()}
+	return &receivedPacketTracker{packetHistory: *newReceivedPacketHistory()}
 }
 
 func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, ackEliciting bool) error {
