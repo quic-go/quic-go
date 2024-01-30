@@ -1,10 +1,13 @@
 package protocol
 
 import (
-	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sync"
+	"time"
+
+	"golang.org/x/exp/rand"
 )
 
 // Version is a version number as int
@@ -85,18 +88,24 @@ func ChooseSupportedVersion(ours, theirs []Version) (Version, bool) {
 	return 0, false
 }
 
-// generateReservedVersion generates a reserved version number (v & 0x0f0f0f0f == 0x0a0a0a0a)
+var (
+	versionNegotiationMx   sync.Mutex
+	versionNegotiationRand = rand.New(rand.NewSource(uint64(time.Now().UnixNano())))
+)
+
+// generateReservedVersion generates a reserved version (v & 0x0f0f0f0f == 0x0a0a0a0a)
 func generateReservedVersion() Version {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
-	return Version((binary.BigEndian.Uint32(b) | 0x0a0a0a0a) & 0xfafafafa)
+	var b [4]byte
+	_, _ = versionNegotiationRand.Read(b[:]) // ignore the error here. Failure to read random data doesn't break anything
+	return Version((binary.BigEndian.Uint32(b[:]) | 0x0a0a0a0a) & 0xfafafafa)
 }
 
-// GetGreasedVersions adds one reserved version number to a slice of version numbers, at a random position
+// GetGreasedVersions adds one reserved version number to a slice of version numbers, at a random position.
+// It doesn't modify the supported slice.
 func GetGreasedVersions(supported []Version) []Version {
-	b := make([]byte, 1)
-	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
-	randPos := int(b[0]) % (len(supported) + 1)
+	versionNegotiationMx.Lock()
+	defer versionNegotiationMx.Unlock()
+	randPos := rand.Intn(len(supported) + 1)
 	greased := make([]Version, len(supported)+1)
 	copy(greased, supported[:randPos])
 	greased[randPos] = generateReservedVersion()
