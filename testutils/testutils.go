@@ -1,3 +1,6 @@
+// Package testutils contains utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
+// It is not supposed to be used for non-testing purposes.
+// The API is not guaranteed to be stable.
 package testutils
 
 import (
@@ -7,9 +10,6 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
-
-// Utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
-// Do not use for non-testing purposes.
 
 // writePacket returns a new raw packet with the specified header and payload
 func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
