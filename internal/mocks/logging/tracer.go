@@ -25,5 +25,8 @@ func NewMockTracer(ctrl *gomock.Controller) (*logging.Tracer, *MockTracer) {
 		DroppedPacket: func(remote net.Addr, typ logging.PacketType, size logging.ByteCount, reason logging.PacketDropReason) {
 			t.DroppedPacket(remote, typ, size, reason)
 		},
+		Debug: func(name, msg string) {
+			t.Debug(name, msg)
+		},
 	}, t
 }
