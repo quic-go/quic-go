@@ -340,7 +340,7 @@ var _ = Describe("MITM test", func() {
 					}
 
 					// Create fake version negotiation packet with no supported versions
-					versions := []protocol.VersionNumber{}
+					versions := []protocol.Version{}
 					packet := wire.ComposeVersionNegotiation(
 						protocol.ArbitraryLenConnectionID(hdr.SrcConnectionID.Bytes()),
 						protocol.ArbitraryLenConnectionID(hdr.DestConnectionID.Bytes()),

@@ -6,6 +6,6 @@ import (
 
 // A Frame in QUIC
 type Frame interface {
-	Append(b []byte, version protocol.VersionNumber) ([]byte, error)
-	Length(version protocol.VersionNumber) protocol.ByteCount
+	Append(b []byte, version protocol.Version) ([]byte, error)
+	Length(version protocol.Version) protocol.ByteCount
 }

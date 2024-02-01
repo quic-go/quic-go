@@ -89,7 +89,7 @@ var (
 	qlogTracer func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer
 	enableQlog bool
 
-	version                          quic.VersionNumber
+	version                          quic.Version
 	tlsConfig                        *tls.Config
 	tlsConfigLongChain               *tls.Config
 	tlsClientConfig                  *tls.Config
@@ -150,7 +150,7 @@ var _ = BeforeSuite(func() {
 		Fail(fmt.Sprintf("unknown QUIC version: %s", versionParam))
 	}
 	fmt.Printf("Using QUIC version: %s\n", version)
-	protocol.SupportedVersions = []quic.VersionNumber{version}
+	protocol.SupportedVersions = []quic.Version{version}
 })
 
 func getTLSConfig() *tls.Config {

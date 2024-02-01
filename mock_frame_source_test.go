@@ -40,7 +40,7 @@ func (m *MockFrameSource) EXPECT() *MockFrameSourceMockRecorder {
 }
 
 // AppendControlFrames mocks base method.
-func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]ackhandler.Frame)
@@ -67,19 +67,19 @@ func (c *FrameSourceAppendControlFramesCall) Return(arg0 []ackhandler.Frame, arg
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *FrameSourceAppendControlFramesCall) Do(f func([]ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount)) *FrameSourceAppendControlFramesCall {
+func (c *FrameSourceAppendControlFramesCall) Do(f func([]ackhandler.Frame, protocol.ByteCount, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)) *FrameSourceAppendControlFramesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *FrameSourceAppendControlFramesCall) DoAndReturn(f func([]ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount)) *FrameSourceAppendControlFramesCall {
+func (c *FrameSourceAppendControlFramesCall) DoAndReturn(f func([]ackhandler.Frame, protocol.ByteCount, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)) *FrameSourceAppendControlFramesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // AppendStreamFrames mocks base method.
-func (m *MockFrameSource) AppendStreamFrames(arg0 []ackhandler.StreamFrame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendStreamFrames(arg0 []ackhandler.StreamFrame, arg1 protocol.ByteCount, arg2 protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendStreamFrames", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]ackhandler.StreamFrame)
@@ -106,13 +106,13 @@ func (c *FrameSourceAppendStreamFramesCall) Return(arg0 []ackhandler.StreamFrame
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *FrameSourceAppendStreamFramesCall) Do(f func([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)) *FrameSourceAppendStreamFramesCall {
+func (c *FrameSourceAppendStreamFramesCall) Do(f func([]ackhandler.StreamFrame, protocol.ByteCount, protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount)) *FrameSourceAppendStreamFramesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *FrameSourceAppendStreamFramesCall) DoAndReturn(f func([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)) *FrameSourceAppendStreamFramesCall {
+func (c *FrameSourceAppendStreamFramesCall) DoAndReturn(f func([]ackhandler.StreamFrame, protocol.ByteCount, protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount)) *FrameSourceAppendStreamFramesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -93,8 +93,8 @@ var _ = Describe("Tracing", func() {
 
 		It("traces the NegotiatedVersion event", func() {
 			chosen := protocol.Version2
-			client := []protocol.VersionNumber{protocol.Version1}
-			server := []protocol.VersionNumber{13, 37}
+			client := []protocol.Version{protocol.Version1}
+			server := []protocol.Version{13, 37}
 			tr1.EXPECT().NegotiatedVersion(chosen, client, server)
 			tr2.EXPECT().NegotiatedVersion(chosen, client, server)
 			tracer.NegotiatedVersion(chosen, client, server)

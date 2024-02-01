@@ -512,7 +512,7 @@ func (c *ConnectionTracerLostPacketCall) DoAndReturn(f func(protocol.EncryptionL
 }
 
 // NegotiatedVersion mocks base method.
-func (m *MockConnectionTracer) NegotiatedVersion(arg0 protocol.VersionNumber, arg1, arg2 []protocol.VersionNumber) {
+func (m *MockConnectionTracer) NegotiatedVersion(arg0 protocol.Version, arg1, arg2 []protocol.Version) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NegotiatedVersion", arg0, arg1, arg2)
 }
@@ -536,13 +536,13 @@ func (c *ConnectionTracerNegotiatedVersionCall) Return() *ConnectionTracerNegoti
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerNegotiatedVersionCall) Do(f func(protocol.VersionNumber, []protocol.VersionNumber, []protocol.VersionNumber)) *ConnectionTracerNegotiatedVersionCall {
+func (c *ConnectionTracerNegotiatedVersionCall) Do(f func(protocol.Version, []protocol.Version, []protocol.Version)) *ConnectionTracerNegotiatedVersionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerNegotiatedVersionCall) DoAndReturn(f func(protocol.VersionNumber, []protocol.VersionNumber, []protocol.VersionNumber)) *ConnectionTracerNegotiatedVersionCall {
+func (c *ConnectionTracerNegotiatedVersionCall) DoAndReturn(f func(protocol.Version, []protocol.Version, []protocol.Version)) *ConnectionTracerNegotiatedVersionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -692,7 +692,7 @@ func (c *ConnectionTracerReceivedTransportParametersCall) DoAndReturn(f func(*wi
 }
 
 // ReceivedVersionNegotiationPacket mocks base method.
-func (m *MockConnectionTracer) ReceivedVersionNegotiationPacket(arg0, arg1 protocol.ArbitraryLenConnectionID, arg2 []protocol.VersionNumber) {
+func (m *MockConnectionTracer) ReceivedVersionNegotiationPacket(arg0, arg1 protocol.ArbitraryLenConnectionID, arg2 []protocol.Version) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ReceivedVersionNegotiationPacket", arg0, arg1, arg2)
 }
@@ -716,13 +716,13 @@ func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) Return() *Connect
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) Do(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.VersionNumber)) *ConnectionTracerReceivedVersionNegotiationPacketCall {
+func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) Do(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.Version)) *ConnectionTracerReceivedVersionNegotiationPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) DoAndReturn(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.VersionNumber)) *ConnectionTracerReceivedVersionNegotiationPacketCall {
+func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) DoAndReturn(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.Version)) *ConnectionTracerReceivedVersionNegotiationPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

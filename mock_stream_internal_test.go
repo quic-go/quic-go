@@ -646,7 +646,7 @@ func (c *StreamIhasDataCall) DoAndReturn(f func() bool) *StreamIhasDataCall {
 }
 
 // popStreamFrame mocks base method.
-func (m *MockStreamI) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+func (m *MockStreamI) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0, arg1)
 	ret0, _ := ret[0].(ackhandler.StreamFrame)
@@ -674,13 +674,13 @@ func (c *StreamIpopStreamFrameCall) Return(arg0 ackhandler.StreamFrame, arg1, ar
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamIpopStreamFrameCall) Do(f func(protocol.ByteCount, protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool)) *StreamIpopStreamFrameCall {
+func (c *StreamIpopStreamFrameCall) Do(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, bool, bool)) *StreamIpopStreamFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamIpopStreamFrameCall) DoAndReturn(f func(protocol.ByteCount, protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool)) *StreamIpopStreamFrameCall {
+func (c *StreamIpopStreamFrameCall) DoAndReturn(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, bool, bool)) *StreamIpopStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

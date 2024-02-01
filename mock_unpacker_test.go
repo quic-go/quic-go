@@ -41,7 +41,7 @@ func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 }
 
 // UnpackLongHeader mocks base method.
-func (m *MockUnpacker) UnpackLongHeader(arg0 *wire.Header, arg1 time.Time, arg2 []byte, arg3 protocol.VersionNumber) (*unpackedPacket, error) {
+func (m *MockUnpacker) UnpackLongHeader(arg0 *wire.Header, arg1 time.Time, arg2 []byte, arg3 protocol.Version) (*unpackedPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnpackLongHeader", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*unpackedPacket)
@@ -68,13 +68,13 @@ func (c *UnpackerUnpackLongHeaderCall) Return(arg0 *unpackedPacket, arg1 error) 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *UnpackerUnpackLongHeaderCall) Do(f func(*wire.Header, time.Time, []byte, protocol.VersionNumber) (*unpackedPacket, error)) *UnpackerUnpackLongHeaderCall {
+func (c *UnpackerUnpackLongHeaderCall) Do(f func(*wire.Header, time.Time, []byte, protocol.Version) (*unpackedPacket, error)) *UnpackerUnpackLongHeaderCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *UnpackerUnpackLongHeaderCall) DoAndReturn(f func(*wire.Header, time.Time, []byte, protocol.VersionNumber) (*unpackedPacket, error)) *UnpackerUnpackLongHeaderCall {
+func (c *UnpackerUnpackLongHeaderCall) DoAndReturn(f func(*wire.Header, time.Time, []byte, protocol.Version) (*unpackedPacket, error)) *UnpackerUnpackLongHeaderCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

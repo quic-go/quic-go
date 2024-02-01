@@ -25,7 +25,7 @@ import (
 )
 
 type unpacker interface {
-	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte, v protocol.VersionNumber) (*unpackedPacket, error)
+	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte, v protocol.Version) (*unpackedPacket, error)
 	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
@@ -106,7 +106,7 @@ type closeError struct {
 
 type errCloseForRecreating struct {
 	nextPacketNumber protocol.PacketNumber
-	nextVersion      protocol.VersionNumber
+	nextVersion      protocol.Version
 }
 
 func (e *errCloseForRecreating) Error() string {
@@ -128,7 +128,7 @@ type connection struct {
 	srcConnIDLen int
 
 	perspective protocol.Perspective
-	version     protocol.VersionNumber
+	version     protocol.Version
 	config      *Config
 
 	conn      sendConn
@@ -236,7 +236,7 @@ var newConnection = func(
 	tracer *logging.ConnectionTracer,
 	tracingID uint64,
 	logger utils.Logger,
-	v protocol.VersionNumber,
+	v protocol.Version,
 ) quicConn {
 	s := &connection{
 		conn:                conn,
@@ -349,7 +349,7 @@ var newClientConnection = func(
 	tracer *logging.ConnectionTracer,
 	tracingID uint64,
 	logger utils.Logger,
-	v protocol.VersionNumber,
+	v protocol.Version,
 ) quicConn {
 	s := &connection{
 		conn:                conn,
@@ -1149,7 +1149,7 @@ func (s *connection) handleUnpackedLongHeaderPacket(
 	if !s.receivedFirstPacket {
 		s.receivedFirstPacket = true
 		if !s.versionNegotiated && s.tracer != nil && s.tracer.NegotiatedVersion != nil {
-			var clientVersions, serverVersions []protocol.VersionNumber
+			var clientVersions, serverVersions []protocol.Version
 			switch s.perspective {
 			case protocol.PerspectiveClient:
 				clientVersions = s.config.Versions
@@ -2383,7 +2383,7 @@ func (s *connection) getPerspective() protocol.Perspective {
 	return s.perspective
 }
 
-func (s *connection) GetVersion() protocol.VersionNumber {
+func (s *connection) GetVersion() protocol.Version {
 	return s.version
 }
 

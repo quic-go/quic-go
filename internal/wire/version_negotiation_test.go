@@ -22,7 +22,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 	It("parses a Version Negotiation packet", func() {
 		srcConnID := randConnID(rand.Intn(255) + 1)
 		destConnID := randConnID(rand.Intn(255) + 1)
-		versions := []protocol.VersionNumber{0x22334455, 0x33445566}
+		versions := []protocol.Version{0x22334455, 0x33445566}
 		data := []byte{0x80, 0, 0, 0, 0}
 		data = append(data, uint8(len(destConnID)))
 		data = append(data, destConnID...)
@@ -42,7 +42,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 
 	It("errors if it contains versions of the wrong length", func() {
 		connID := protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-		versions := []protocol.VersionNumber{0x22334455, 0x33445566}
+		versions := []protocol.Version{0x22334455, 0x33445566}
 		data := ComposeVersionNegotiation(connID, connID, versions)
 		_, _, _, err := ParseVersionNegotiationPacket(data[:len(data)-2])
 		Expect(err).To(MatchError("Version Negotiation packet has a version list with an invalid length"))
@@ -50,7 +50,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 
 	It("errors if the version list is empty", func() {
 		connID := protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-		versions := []protocol.VersionNumber{0x22334455}
+		versions := []protocol.Version{0x22334455}
 		data := ComposeVersionNegotiation(connID, connID, versions)
 		// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 		data = data[:len(data)-8]
@@ -61,7 +61,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 	It("adds a reserved version", func() {
 		srcConnID := protocol.ArbitraryLenConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
 		destConnID := protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-		versions := []protocol.VersionNumber{1001, 1003}
+		versions := []protocol.Version{1001, 1003}
 		data := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 		Expect(IsLongHeaderPacket(data[0])).To(BeTrue())
 		Expect(data[0] & 0x40).ToNot(BeZero())
@@ -77,7 +77,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		for _, v := range versions {
 			Expect(supportedVersions).To(ContainElement(v))
 		}
-		var reservedVersion protocol.VersionNumber
+		var reservedVersion protocol.Version
 	versionLoop:
 		for _, ver := range supportedVersions {
 			for _, v := range versions {

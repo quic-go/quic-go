@@ -7,7 +7,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
-func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.VersionNumber) cipher.AEAD {
+func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.Version) cipher.AEAD {
 	keyLabel := hkdfLabelKeyV1
 	ivLabel := hkdfLabelIVV1
 	if v == protocol.Version2 {

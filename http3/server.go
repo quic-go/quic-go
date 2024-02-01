@@ -55,7 +55,7 @@ type QUICEarlyListener interface {
 
 var _ QUICEarlyListener = &quic.EarlyListener{}
 
-func versionToALPN(v protocol.VersionNumber) string {
+func versionToALPN(v protocol.Version) string {
 	//nolint:exhaustive // These are all the versions we care about.
 	switch v {
 	case protocol.Version1, protocol.Version2:
@@ -77,7 +77,7 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 			// determine the ALPN from the QUIC version used
 			proto := NextProtoH3
 			val := ch.Context().Value(quic.QUICVersionContextKey)
-			if v, ok := val.(quic.VersionNumber); ok {
+			if v, ok := val.(quic.Version); ok {
 				proto = versionToALPN(v)
 			}
 			config := tlsConf

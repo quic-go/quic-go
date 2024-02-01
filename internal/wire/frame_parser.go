@@ -59,7 +59,7 @@ func NewFrameParser(supportsDatagrams bool) *FrameParser {
 
 // ParseNext parses the next frame.
 // It skips PADDING frames.
-func (p *FrameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, v protocol.VersionNumber) (int, Frame, error) {
+func (p *FrameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, v protocol.Version) (int, Frame, error) {
 	startLen := len(data)
 	p.r.Reset(data)
 	frame, err := p.parseNext(&p.r, encLevel, v)
@@ -68,7 +68,7 @@ func (p *FrameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, 
 	return n, frame, err
 }
 
-func (p *FrameParser) parseNext(r *bytes.Reader, encLevel protocol.EncryptionLevel, v protocol.VersionNumber) (Frame, error) {
+func (p *FrameParser) parseNext(r *bytes.Reader, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, error) {
 	for r.Len() != 0 {
 		typ, err := quicvarint.Read(r)
 		if err != nil {
@@ -94,7 +94,7 @@ func (p *FrameParser) parseNext(r *bytes.Reader, encLevel protocol.EncryptionLev
 	return nil, nil
 }
 
-func (p *FrameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.EncryptionLevel, v protocol.VersionNumber) (Frame, error) {
+func (p *FrameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, error) {
 	var frame Frame
 	var err error
 	if typ&0xf8 == 0x8 {
