@@ -1401,8 +1401,22 @@ func (s *connection) handleHandshakeEvents() error {
 		case handshake.EventDiscard0RTTKeys:
 			err = s.dropEncryptionLevel(protocol.Encryption0RTT)
 		case handshake.EventWriteInitialData:
+			if s.tracer != nil && s.tracer.Debug != nil {
+				var firstByte byte
+				if len(ev.Data) > 0 {
+					firstByte = ev.Data[0]
+				}
+				s.tracer.Debug("write_initial", fmt.Sprintf("len: %d, first byte: %#x", len(ev.Data), firstByte))
+			}
 			_, err = s.initialStream.Write(ev.Data)
 		case handshake.EventWriteHandshakeData:
+			if s.tracer != nil && s.tracer.Debug != nil {
+				var firstByte byte
+				if len(ev.Data) > 0 {
+					firstByte = ev.Data[0]
+				}
+				s.tracer.Debug("write_handshake", fmt.Sprintf("len: %d, first byte: %#x", len(ev.Data), firstByte))
+			}
 			_, err = s.handshakeStream.Write(ev.Data)
 		}
 		if err != nil {
