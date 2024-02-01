@@ -28,5 +28,8 @@ func NewMockTracer(ctrl *gomock.Controller) (*logging.Tracer, *MockTracer) {
 		Debug: func(name, msg string) {
 			t.Debug(name, msg)
 		},
+		Close: func() {
+			t.Close()
+		},
 	}, t
 }

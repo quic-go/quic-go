@@ -15,6 +15,7 @@ type Tracer interface {
 	SentVersionNegotiationPacket(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber)
 	DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason)
 	Debug(name, msg string)
+	Close()
 }
 
 //go:generate sh -c "go run go.uber.org/mock/mockgen -typed -build_flags=\"-tags=gomock\" -package internal -destination internal/connection_tracer.go github.com/quic-go/quic-go/internal/mocks/logging ConnectionTracer"
