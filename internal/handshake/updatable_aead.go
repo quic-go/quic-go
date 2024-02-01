@@ -59,7 +59,7 @@ type updatableAEAD struct {
 
 	tracer  *logging.ConnectionTracer
 	logger  utils.Logger
-	version protocol.VersionNumber
+	version protocol.Version
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
@@ -70,7 +70,7 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.VersionNumber) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,

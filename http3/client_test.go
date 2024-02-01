@@ -55,7 +55,7 @@ var _ = Describe("Client", func() {
 
 	It("rejects quic.Configs that allow multiple QUIC versions", func() {
 		qconf := &quic.Config{
-			Versions: []quic.VersionNumber{protocol.Version2, protocol.Version1},
+			Versions: []quic.Version{protocol.Version2, protocol.Version1},
 		}
 		_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
 		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
@@ -68,7 +68,7 @@ var _ = Describe("Client", func() {
 		dialAddr = func(_ context.Context, _ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 			Expect(quicConf.MaxIncomingStreams).To(Equal(defaultQuicConfig.MaxIncomingStreams))
 			Expect(tlsConf.NextProtos).To(Equal([]string{NextProtoH3}))
-			Expect(quicConf.Versions).To(Equal([]protocol.VersionNumber{protocol.Version1}))
+			Expect(quicConf.Versions).To(Equal([]protocol.Version{protocol.Version1}))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}

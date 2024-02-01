@@ -107,7 +107,7 @@ func runVersionNegotiationTest(r *http09.RoundTripper, urls []string) error {
 	if len(urls) != 1 {
 		return errors.New("expected at least 2 URLs")
 	}
-	protocol.SupportedVersions = []protocol.VersionNumber{0x1a2a3a4a}
+	protocol.SupportedVersions = []protocol.Version{0x1a2a3a4a}
 	err := downloadFile(r, urls[0], false)
 	if err == nil {
 		return errors.New("expected version negotiation to fail")

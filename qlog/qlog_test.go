@@ -581,7 +581,7 @@ var _ = Describe("Tracing", func() {
 				tracer.ReceivedVersionNegotiationPacket(
 					protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
-					[]protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
+					[]protocol.Version{0xdeadbeef, 0xdecafbad},
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))

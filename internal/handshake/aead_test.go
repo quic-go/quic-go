@@ -15,7 +15,7 @@ import (
 )
 
 var _ = Describe("Long Header AEAD", func() {
-	for _, ver := range []protocol.VersionNumber{protocol.Version1, protocol.Version2} {
+	for _, ver := range []protocol.Version{protocol.Version1, protocol.Version2} {
 		v := ver
 
 		Context(fmt.Sprintf("using version %s", v), func() {

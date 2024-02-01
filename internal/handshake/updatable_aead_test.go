@@ -20,7 +20,7 @@ import (
 
 var _ = Describe("Updatable AEAD", func() {
 	DescribeTable("ChaCha test vector",
-		func(v protocol.VersionNumber, expectedPayload, expectedPacket []byte) {
+		func(v protocol.Version, expectedPayload, expectedPacket []byte) {
 			secret := splitHexString("9ac312a7f877468ebe69422748ad00a1 5443f18203a07d6060f688f30f21632b")
 			aead := newUpdatableAEAD(&utils.RTTStats{}, nil, nil, v)
 			chacha := cipherSuites[2]
@@ -48,7 +48,7 @@ var _ = Describe("Updatable AEAD", func() {
 		),
 	)
 
-	for _, ver := range []protocol.VersionNumber{protocol.Version1, protocol.Version2} {
+	for _, ver := range []protocol.Version{protocol.Version1, protocol.Version2} {
 		v := ver
 
 		Context(fmt.Sprintf("using version %s", v), func() {

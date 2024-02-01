@@ -21,7 +21,7 @@ func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
 }
 
 // packRawPayload returns a new raw payload containing given frames
-func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte {
+func packRawPayload(version protocol.Version, frames []wire.Frame) []byte {
 	var b []byte
 	for _, cf := range frames {
 		var err error
@@ -39,7 +39,7 @@ func ComposeInitialPacket(
 	srcConnID, destConnID, key protocol.ConnectionID,
 	frames []wire.Frame,
 	sentBy protocol.Perspective,
-	version protocol.VersionNumber,
+	version protocol.Version,
 ) []byte {
 	sealer, _ := handshake.NewInitialAEAD(key, sentBy, version)
 
@@ -90,7 +90,7 @@ func ComposeRetryPacket(
 	destConnID protocol.ConnectionID,
 	origDestConnID protocol.ConnectionID,
 	token []byte,
-	version protocol.VersionNumber,
+	version protocol.Version,
 ) []byte {
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{

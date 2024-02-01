@@ -11,7 +11,7 @@ import (
 )
 
 // ParseVersionNegotiationPacket parses a Version Negotiation packet.
-func ParseVersionNegotiationPacket(b []byte) (dest, src protocol.ArbitraryLenConnectionID, _ []protocol.VersionNumber, _ error) {
+func ParseVersionNegotiationPacket(b []byte) (dest, src protocol.ArbitraryLenConnectionID, _ []protocol.Version, _ error) {
 	n, dest, src, err := ParseArbitraryLenConnectionIDs(b)
 	if err != nil {
 		return nil, nil, nil, err
@@ -25,16 +25,16 @@ func ParseVersionNegotiationPacket(b []byte) (dest, src protocol.ArbitraryLenCon
 		//nolint:stylecheck
 		return nil, nil, nil, errors.New("Version Negotiation packet has a version list with an invalid length")
 	}
-	versions := make([]protocol.VersionNumber, len(b)/4)
+	versions := make([]protocol.Version, len(b)/4)
 	for i := 0; len(b) > 0; i++ {
-		versions[i] = protocol.VersionNumber(binary.BigEndian.Uint32(b[:4]))
+		versions[i] = protocol.Version(binary.BigEndian.Uint32(b[:4]))
 		b = b[4:]
 	}
 	return dest, src, versions, nil
 }
 
 // ComposeVersionNegotiation composes a Version Negotiation
-func ComposeVersionNegotiation(destConnID, srcConnID protocol.ArbitraryLenConnectionID, versions []protocol.VersionNumber) []byte {
+func ComposeVersionNegotiation(destConnID, srcConnID protocol.ArbitraryLenConnectionID, versions []protocol.Version) []byte {
 	greasedVersions := protocol.GetGreasedVersions(versions)
 	expectedLen := 1 /* type byte */ + 4 /* version field */ + 1 /* dest connection ID length field */ + destConnID.Len() + 1 /* src connection ID length field */ + srcConnID.Len() + len(greasedVersions)*4
 	buf := bytes.NewBuffer(make([]byte, 0, expectedLen))

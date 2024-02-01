@@ -76,7 +76,7 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	}
 	if len(conf.Versions) == 0 {
 		conf = conf.Clone()
-		conf.Versions = []quic.VersionNumber{protocol.SupportedVersions[0]}
+		conf.Versions = []quic.Version{protocol.SupportedVersions[0]}
 	}
 	if len(conf.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")

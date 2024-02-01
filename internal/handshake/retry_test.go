@@ -28,9 +28,9 @@ var _ = Describe("Retry Integrity Check", func() {
 	})
 
 	DescribeTable("using the test vectors",
-		func(version protocol.VersionNumber, data []byte) {
+		func(version protocol.Version, data []byte) {
 			v := binary.BigEndian.Uint32(data[1:5])
-			Expect(protocol.VersionNumber(v)).To(Equal(version))
+			Expect(protocol.Version(v)).To(Equal(version))
 			connID := protocol.ParseConnectionID(splitHexString("0x8394c8f03e515708"))
 			Expect(GetRetryIntegrityTag(data[:len(data)-16], connID, version)[:]).To(Equal(data[len(data)-16:]))
 		},

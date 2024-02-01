@@ -28,7 +28,7 @@ type client struct {
 
 	initialPacketNumber  protocol.PacketNumber
 	hasNegotiatedVersion bool
-	version              protocol.VersionNumber
+	version              protocol.Version
 
 	handshakeChan chan struct{}
 

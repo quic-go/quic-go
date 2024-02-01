@@ -17,14 +17,14 @@ type headerProtector interface {
 	DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte)
 }
 
-func hkdfHeaderProtectionLabel(v protocol.VersionNumber) string {
+func hkdfHeaderProtectionLabel(v protocol.Version) string {
 	if v == protocol.Version2 {
 		return "quicv2 hp"
 	}
 	return "quic hp"
 }
 
-func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, v protocol.VersionNumber) headerProtector {
+func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, v protocol.Version) headerProtector {
 	hkdfLabel := hkdfHeaderProtectionLabel(v)
 	switch suite.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
