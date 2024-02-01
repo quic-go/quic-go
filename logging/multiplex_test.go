@@ -70,6 +70,12 @@ var _ = Describe("Tracing", func() {
 				tr2.EXPECT().Debug("foo", "bar")
 				tracer.Debug("foo", "bar")
 			})
+
+			It("traces the Close event", func() {
+				tr1.EXPECT().Close()
+				tr2.EXPECT().Close()
+				tracer.Close()
+			})
 		})
 	})
 

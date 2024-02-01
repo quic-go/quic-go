@@ -41,6 +41,42 @@ func (m *MockTracer) EXPECT() *MockTracerMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockTracer) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockTracerMockRecorder) Close() *TracerCloseCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockTracer)(nil).Close))
+	return &TracerCloseCall{Call: call}
+}
+
+// TracerCloseCall wrap *gomock.Call
+type TracerCloseCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *TracerCloseCall) Return() *TracerCloseCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *TracerCloseCall) Do(f func()) *TracerCloseCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *TracerCloseCall) DoAndReturn(f func()) *TracerCloseCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Debug mocks base method.
 func (m *MockTracer) Debug(arg0, arg1 string) {
 	m.ctrl.T.Helper()
