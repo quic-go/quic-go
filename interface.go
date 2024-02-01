@@ -343,6 +343,15 @@ type ConnectionState struct {
 	// If datagram support was negotiated, datagrams can be sent and received using the
 	// SendDatagram and ReceiveDatagram methods on the Connection.
 	SupportsDatagrams bool
+	// MaxDatagramSize specifies how big a datagram can be sent using
+	// SendDatagram. Datagrams bigger than MaxDatagramSize are silently dropped.
+	//
+	// Note: MaxDatagramSize can grow or shrink at any time. Users should call
+	// ConnectionState every once in a while to get up to date MaxDatagramSize.
+	//
+	// MaxDatagramSize is zero if datagrams are not supported on this
+	// connection.
+	MaxDatagramSize int
 	// Used0RTT says if 0-RTT resumption was used.
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.

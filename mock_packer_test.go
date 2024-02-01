@@ -79,6 +79,44 @@ func (c *PackerAppendPacketCall) DoAndReturn(f func(*packetBuffer, protocol.Byte
 	return c
 }
 
+// MaxPayloadSize mocks base method.
+func (m *MockPacker) MaxPayloadSize(arg0 protocol.ByteCount) protocol.ByteCount {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaxPayloadSize", arg0)
+	ret0, _ := ret[0].(protocol.ByteCount)
+	return ret0
+}
+
+// MaxPayloadSize indicates an expected call of MaxPayloadSize.
+func (mr *MockPackerMockRecorder) MaxPayloadSize(arg0 any) *PackerMaxPayloadSizeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxPayloadSize", reflect.TypeOf((*MockPacker)(nil).MaxPayloadSize), arg0)
+	return &PackerMaxPayloadSizeCall{Call: call}
+}
+
+// PackerMaxPayloadSizeCall wrap *gomock.Call
+type PackerMaxPayloadSizeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *PackerMaxPayloadSizeCall) Return(arg0 protocol.ByteCount) *PackerMaxPayloadSizeCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *PackerMaxPayloadSizeCall) Do(f func(protocol.ByteCount) protocol.ByteCount) *PackerMaxPayloadSizeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *PackerMaxPayloadSizeCall) DoAndReturn(f func(protocol.ByteCount) protocol.ByteCount) *PackerMaxPayloadSizeCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // MaybePackProbePacket mocks base method.
 func (m *MockPacker) MaybePackProbePacket(arg0 protocol.EncryptionLevel, arg1 protocol.ByteCount, arg2 protocol.Version) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()

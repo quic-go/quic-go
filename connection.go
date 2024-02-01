@@ -638,6 +638,8 @@ runLoop:
 		} else {
 			sendQueueAvailable = nil
 		}
+
+		s.updateMaxDatagramDataSize()
 	}
 
 	s.cryptoStreamHandler.Close()
@@ -678,6 +680,22 @@ func (s *connection) ConnectionState() ConnectionState {
 	s.connState.Used0RTT = cs.Used0RTT
 	s.connState.GSO = s.conn.capabilities().GSO
 	return s.connState
+}
+
+func (s *connection) updateMaxDatagramDataSize() {
+	if s.peerParams == nil {
+		return
+	}
+	if !s.supportsDatagrams() {
+		return
+	}
+
+	maxDatagramFrameSize := min(s.peerParams.MaxDatagramFrameSize, s.packer.MaxPayloadSize(s.mtuDiscoverer.CurrentSize()))
+	maxDatagramDataSize := (&wire.DatagramFrame{DataLenPresent: true}).MaxDataLen(maxDatagramFrameSize, s.version)
+
+	s.connStateMutex.Lock()
+	s.connState.MaxDatagramSize = int(maxDatagramDataSize)
+	s.connStateMutex.Unlock()
 }
 
 // Time when the connection should time out
