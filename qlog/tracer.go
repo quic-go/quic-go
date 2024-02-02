@@ -17,7 +17,17 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 	wr := *newWriter(w, tr)
 	go wr.Run()
 	return &logging.Tracer{
-		SentPacket: nil,
+		SentPacket: func(_ net.Addr, hdr *logging.Header, size logging.ByteCount, frames []logging.Frame) {
+			fs := make([]frame, 0, len(frames))
+			for _, f := range frames {
+				fs = append(fs, frame{Frame: f})
+			}
+			wr.RecordEvent(time.Now(), &eventPacketSent{
+				Header: transformHeader(hdr),
+				Length: size,
+				Frames: fs,
+			})
+		},
 		SentVersionNegotiationPacket: func(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
 			ver := make([]versionNumber, len(versions))
 			for i, v := range versions {
