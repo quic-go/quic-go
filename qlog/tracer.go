@@ -2,8 +2,10 @@ package qlog
 
 import (
 	"io"
+	"net"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 )
 
@@ -17,7 +19,14 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 	return &logging.Tracer{
 		SentPacket:                   nil,
 		SentVersionNegotiationPacket: nil,
-		DroppedPacket:                nil,
+		DroppedPacket: func(addr net.Addr, p logging.PacketType, count logging.ByteCount, reason logging.PacketDropReason) {
+			wr.RecordEvent(time.Now(), eventPacketDropped{
+				PacketType:   p,
+				PacketNumber: protocol.InvalidPacketNumber,
+				PacketSize:   count,
+				Trigger:      packetDropReason(reason),
+			})
+		},
 		Debug: func(name, msg string) {
 			wr.RecordEvent(time.Now(), &eventGeneric{
 				name: name,

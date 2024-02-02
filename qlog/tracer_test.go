@@ -3,6 +3,7 @@ package qlog
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"time"
 
 	"github.com/quic-go/quic-go/logging"
@@ -45,6 +46,23 @@ var _ = Describe("Tracing", func() {
 	})
 
 	Context("Events", func() {
+		It("records dropped packets", func() {
+			addr := net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
+			tracer.DroppedPacket(&addr, logging.PacketTypeInitial, 1337, logging.PacketDropPayloadDecryptError)
+			tracer.Close()
+			entry := exportAndParseSingle(buf)
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(entry.Name).To(Equal("transport:packet_dropped"))
+			ev := entry.Event
+			Expect(ev).To(HaveKey("raw"))
+			Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
+			Expect(ev).To(HaveKey("header"))
+			hdr := ev["header"].(map[string]interface{})
+			Expect(hdr).To(HaveLen(1))
+			Expect(hdr).To(HaveKeyWithValue("packet_type", "initial"))
+			Expect(ev).To(HaveKeyWithValue("trigger", "payload_decrypt_error"))
+		})
+
 		It("records a generic event", func() {
 			tracer.Debug("foo", "bar")
 			tracer.Close()
