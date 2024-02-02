@@ -47,6 +47,41 @@ var _ = Describe("Tracing", func() {
 	})
 
 	Context("Events", func() {
+		It("records a sent long header packet, without an ACK", func() {
+			tracer.SentPacket(
+				nil,
+				&logging.Header{
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
+					Length:           1337,
+					Version:          protocol.Version1,
+				},
+				1234,
+				[]logging.Frame{
+					&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+					&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
+				},
+			)
+			tracer.Close()
+			entry := exportAndParseSingle(buf)
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(entry.Name).To(Equal("transport:packet_sent"))
+			ev := entry.Event
+			Expect(ev).To(HaveKey("raw"))
+			raw := ev["raw"].(map[string]interface{})
+			Expect(raw).To(HaveKeyWithValue("length", float64(1234)))
+			Expect(ev).To(HaveKey("header"))
+			hdr := ev["header"].(map[string]interface{})
+			Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
+			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
+			Expect(ev).To(HaveKey("frames"))
+			frames := ev["frames"].([]interface{})
+			Expect(frames).To(HaveLen(2))
+			Expect(frames[0].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_stream_data"))
+			Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "stream"))
+		})
+
 		It("records sending of a Version Negotiation packet", func() {
 			tracer.SentVersionNegotiationPacket(
 				nil,
