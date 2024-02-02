@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -46,6 +47,30 @@ var _ = Describe("Tracing", func() {
 	})
 
 	Context("Events", func() {
+		It("records sending of a Version Negotiation packet", func() {
+			tracer.SentVersionNegotiationPacket(
+				nil,
+				protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
+				[]protocol.Version{0xdeadbeef, 0xdecafbad},
+			)
+			tracer.Close()
+			entry := exportAndParseSingle(buf)
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(entry.Name).To(Equal("transport:packet_sent"))
+			ev := entry.Event
+			Expect(ev).To(HaveKey("header"))
+			Expect(ev).ToNot(HaveKey("frames"))
+			Expect(ev).To(HaveKey("supported_versions"))
+			Expect(ev["supported_versions"].([]interface{})).To(Equal([]interface{}{"deadbeef", "decafbad"}))
+			header := ev["header"]
+			Expect(header).To(HaveKeyWithValue("packet_type", "version_negotiation"))
+			Expect(header).ToNot(HaveKey("packet_number"))
+			Expect(header).ToNot(HaveKey("version"))
+			Expect(header).To(HaveKeyWithValue("dcid", "0102030405060708"))
+			Expect(header).To(HaveKeyWithValue("scid", "04030201"))
+		})
+
 		It("records dropped packets", func() {
 			addr := net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
 			tracer.DroppedPacket(&addr, logging.PacketTypeInitial, 1337, logging.PacketDropPayloadDecryptError)
