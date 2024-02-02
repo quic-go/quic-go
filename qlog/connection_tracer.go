@@ -23,10 +23,10 @@ type connectionTracer struct {
 // NewConnectionTracer creates a new tracer to record a qlog for a connection.
 func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
 	tr := &trace{
-		VantagePoint: vantagePoint{Type: p},
+		VantagePoint: vantagePoint{Type: p.String()},
 		CommonFields: commonFields{
-			ODCID:         odcid,
-			GroupID:       odcid,
+			ODCID:         &odcid,
+			GroupID:       &odcid,
 			ReferenceTime: time.Now(),
 		},
 	}
