@@ -1,10 +1,7 @@
 package qlog
 
 import (
-	"bytes"
-	"fmt"
 	"io"
-	"log"
 	"net"
 	"time"
 
@@ -16,32 +13,28 @@ import (
 	"github.com/francoispqt/gojay"
 )
 
-const eventChanSize = 50
-
 type connectionTracer struct {
-	w             io.WriteCloser
-	odcid         protocol.ConnectionID
-	perspective   protocol.Perspective
-	referenceTime time.Time
-
-	events     chan event
-	encodeErr  error
-	runStopped chan struct{}
-
+	w           writer
 	lastMetrics *metrics
+
+	perspective logging.Perspective
 }
 
 // NewConnectionTracer creates a new tracer to record a qlog for a connection.
-func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
-	t := connectionTracer{
-		w:             w,
-		perspective:   p,
-		odcid:         odcid,
-		runStopped:    make(chan struct{}),
-		events:        make(chan event, eventChanSize),
-		referenceTime: time.Now(),
+func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
+	tr := &trace{
+		VantagePoint: vantagePoint{Type: p},
+		CommonFields: commonFields{
+			ODCID:         odcid,
+			GroupID:       odcid,
+			ReferenceTime: time.Now(),
+		},
 	}
-	go t.run()
+	t := connectionTracer{
+		w:           *newWriter(w, tr),
+		perspective: p,
+	}
+	go t.w.Run()
 	return &logging.ConnectionTracer{
 		StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 			t.StartedConnection(local, remote, srcConnID, destConnID)
@@ -125,65 +118,12 @@ func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protoco
 	}
 }
 
-func (t *connectionTracer) run() {
-	defer close(t.runStopped)
-	buf := &bytes.Buffer{}
-	enc := gojay.NewEncoder(buf)
-	tl := &topLevel{
-		trace: trace{
-			VantagePoint: vantagePoint{Type: t.perspective},
-			CommonFields: commonFields{
-				ODCID:         t.odcid,
-				GroupID:       t.odcid,
-				ReferenceTime: t.referenceTime,
-			},
-		},
-	}
-	if err := enc.Encode(tl); err != nil {
-		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
-	}
-	if err := buf.WriteByte('\n'); err != nil {
-		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
-	}
-	if _, err := t.w.Write(buf.Bytes()); err != nil {
-		t.encodeErr = err
-	}
-	enc = gojay.NewEncoder(t.w)
-	for ev := range t.events {
-		if t.encodeErr != nil { // if encoding failed, just continue draining the event channel
-			continue
-		}
-		if err := enc.Encode(ev); err != nil {
-			t.encodeErr = err
-			continue
-		}
-		if _, err := t.w.Write([]byte{'\n'}); err != nil {
-			t.encodeErr = err
-		}
-	}
+func (t *connectionTracer) recordEvent(eventTime time.Time, details eventDetails) {
+	t.w.RecordEvent(eventTime, details)
 }
 
 func (t *connectionTracer) Close() {
-	if err := t.export(); err != nil {
-		log.Printf("exporting qlog failed: %s\n", err)
-	}
-}
-
-// export writes a qlog.
-func (t *connectionTracer) export() error {
-	close(t.events)
-	<-t.runStopped
-	if t.encodeErr != nil {
-		return t.encodeErr
-	}
-	return t.w.Close()
-}
-
-func (t *connectionTracer) recordEvent(eventTime time.Time, details eventDetails) {
-	t.events <- event{
-		RelativeTime: eventTime.Sub(t.referenceTime),
-		eventDetails: details,
-	}
+	t.w.Close()
 }
 
 func (t *connectionTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID protocol.ConnectionID) {
