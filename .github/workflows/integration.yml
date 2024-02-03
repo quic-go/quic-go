@@ -5,14 +5,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ "ubuntu" ]
+        os: [ "ubuntu-latest" ]
         go: [ "1.21.x", "1.22.0-rc.2" ]
         include:
-          - os: "windows"
+          - os: "windows-latest"
             go: "1.21.x"
-          - os: "macos"
+          - os: "macos-14"
             go: "1.21.x"
-    runs-on: ${{ fromJSON(vars[format('INTEGRATION_RUNNER_{0}', matrix.os)] || format('"{0}-latest"', matrix.os)) }}
+    runs-on: ${{ fromJSON(vars[format('INTEGRATION_RUNNER_{0}', matrix.os)] || format('"{0}"', matrix.os)) }}
     defaults:
       run:
         shell: bash # by default Windows uses PowerShell, which uses a different syntax for setting environment variables
@@ -21,6 +21,8 @@ jobs:
       TIMESCALE_FACTOR: 3
     name: Integration Tests (${{ matrix.os }}, Go ${{ matrix.go }})
     steps:
+      - name: vars
+        run: echo ${{ vars }}
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
@@ -40,17 +42,17 @@ jobs:
         if: success() || failure() # run this step even if the previous one failed
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=2 ${{ env.QLOGFLAG }}
       - name: Run self tests, with GSO disabled
-        if: ${{ matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
+        if: ${{ matrix.os == 'ubuntu-latest' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_GSO: true
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
       - name: Run self tests, with ECN disabled
-        if: ${{ matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
+        if: ${{ matrix.os == 'ubuntu-latest' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_ECN: true
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
       - name: Run tests (32 bit)
-        if: ${{ matrix.os != 'macos' && (success() || failure()) }} # run this step even if the previous one failed
+        if: ${{ (matrix.os == 'ubuntu-latest' || matrix.os == 'windows-latest') && (success() || failure()) }} # run this step even if the previous one failed
         env:
           GOARCH: 386
         run: |
