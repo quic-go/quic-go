@@ -203,6 +203,7 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
+			tracer.EXPECT().Close()
 			tr.Close()
 		})
 
@@ -1429,7 +1430,10 @@ var _ = Describe("Server", func() {
 			serv.connHandler = phm
 		})
 
-		AfterEach(func() { tr.Close() })
+		AfterEach(func() {
+			tracer.EXPECT().Close()
+			tr.Close()
+		})
 
 		It("passes packets to existing connections", func() {
 			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
