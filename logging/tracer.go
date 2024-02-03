@@ -7,6 +7,7 @@ type Tracer struct {
 	SentPacket                   func(net.Addr, *Header, ByteCount, []Frame)
 	SentVersionNegotiationPacket func(_ net.Addr, dest, src ArbitraryLenConnectionID, _ []VersionNumber)
 	DroppedPacket                func(net.Addr, PacketType, ByteCount, PacketDropReason)
+	Debug                        func(name, msg string)
 }
 
 // NewMultiplexedTracer creates a new tracer that multiplexes events to multiple tracers.
@@ -36,6 +37,13 @@ func NewMultiplexedTracer(tracers ...*Tracer) *Tracer {
 			for _, t := range tracers {
 				if t.DroppedPacket != nil {
 					t.DroppedPacket(remote, typ, size, reason)
+				}
+			}
+		},
+		Debug: func(name, msg string) {
+			for _, t := range tracers {
+				if t.Debug != nil {
+					t.Debug(name, msg)
 				}
 			}
 		},

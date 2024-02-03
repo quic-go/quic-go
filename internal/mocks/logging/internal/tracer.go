@@ -41,6 +41,42 @@ func (m *MockTracer) EXPECT() *MockTracerMockRecorder {
 	return m.recorder
 }
 
+// Debug mocks base method.
+func (m *MockTracer) Debug(arg0, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Debug", arg0, arg1)
+}
+
+// Debug indicates an expected call of Debug.
+func (mr *MockTracerMockRecorder) Debug(arg0, arg1 any) *TracerDebugCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Debug", reflect.TypeOf((*MockTracer)(nil).Debug), arg0, arg1)
+	return &TracerDebugCall{Call: call}
+}
+
+// TracerDebugCall wrap *gomock.Call
+type TracerDebugCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *TracerDebugCall) Return() *TracerDebugCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *TracerDebugCall) Do(f func(string, string)) *TracerDebugCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *TracerDebugCall) DoAndReturn(f func(string, string)) *TracerDebugCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // DroppedPacket mocks base method.
 func (m *MockTracer) DroppedPacket(arg0 net.Addr, arg1 logging.PacketType, arg2 protocol.ByteCount, arg3 logging.PacketDropReason) {
 	m.ctrl.T.Helper()

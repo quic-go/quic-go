@@ -64,6 +64,12 @@ var _ = Describe("Tracing", func() {
 				tr2.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
 				tracer.DroppedPacket(remote, PacketTypeRetry, 1024, PacketDropDuplicate)
 			})
+
+			It("traces the Debug event", func() {
+				tr1.EXPECT().Debug("foo", "bar")
+				tr2.EXPECT().Debug("foo", "bar")
+				tracer.Debug("foo", "bar")
+			})
 		})
 	})
 
