@@ -111,6 +111,7 @@ type Transport struct {
 	MaxHandshakes int
 
 	// A Tracer traces events that don't belong to a single QUIC connection.
+	// Tracer.Close is called when the transport is closed.
 	Tracer *logging.Tracer
 
 	handlerMap packetHandlerManager
@@ -365,6 +366,9 @@ func (t *Transport) close(e error) {
 	}
 	if t.server != nil {
 		t.server.close(e, false)
+	}
+	if t.Tracer != nil && t.Tracer.Close != nil {
+		t.Tracer.Close()
 	}
 	t.closed = true
 }

@@ -141,6 +141,7 @@ var _ = Describe("Transport", func() {
 		Eventually(dropped).Should(BeClosed())
 
 		// shutdown
+		tracer.EXPECT().Close()
 		close(packetChan)
 		tr.Close()
 	})
@@ -391,6 +392,7 @@ var _ = Describe("Transport", func() {
 		Eventually(done).Should(BeClosed())
 
 		// shutdown
+		tracer.EXPECT().Close()
 		close(packetChan)
 		tr.Close()
 	})
