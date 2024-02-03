@@ -74,6 +74,7 @@ var _ = Describe("Multiplexing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
 			tr := &quic.Transport{Conn: conn}
+			addTracer(tr)
 
 			done1 := make(chan struct{})
 			done2 := make(chan struct{})
@@ -109,6 +110,7 @@ var _ = Describe("Multiplexing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
 			tr := &quic.Transport{Conn: conn}
+			addTracer(tr)
 
 			done1 := make(chan struct{})
 			done2 := make(chan struct{})
@@ -139,6 +141,7 @@ var _ = Describe("Multiplexing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
 			tr := &quic.Transport{Conn: conn}
+			addTracer(tr)
 			server, err := tr.Listen(
 				getTLSConfig(),
 				getQuicConfig(nil),
@@ -167,6 +170,7 @@ var _ = Describe("Multiplexing", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer conn1.Close()
 				tr1 := &quic.Transport{Conn: conn1}
+				addTracer(tr1)
 
 				addr2, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
@@ -174,6 +178,7 @@ var _ = Describe("Multiplexing", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer conn2.Close()
 				tr2 := &quic.Transport{Conn: conn2}
+				addTracer(tr2)
 
 				server1, err := tr1.Listen(
 					getTLSConfig(),
@@ -220,6 +225,7 @@ var _ = Describe("Multiplexing", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer conn1.Close()
 		tr1 := &quic.Transport{Conn: conn1}
+		addTracer(tr1)
 
 		addr2, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
@@ -227,6 +233,7 @@ var _ = Describe("Multiplexing", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer conn2.Close()
 		tr2 := &quic.Transport{Conn: conn2}
+		addTracer(tr2)
 
 		server, err := tr1.Listen(getTLSConfig(), getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())

@@ -175,6 +175,7 @@ var _ = Describe("0-RTT", func() {
 				Conn:               udpConn,
 				ConnectionIDLength: connIDLen,
 			}
+			addTracer(tr)
 			defer tr.Close()
 			conn, err = tr.DialEarly(
 				context.Background(),
@@ -463,6 +464,7 @@ var _ = Describe("0-RTT", func() {
 			Conn:                     udpConn,
 			MaxUnvalidatedHandshakes: -1,
 		}
+		addTracer(tr)
 		defer tr.Close()
 		ln, err := tr.ListenEarly(
 			tlsConf,

@@ -64,6 +64,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			Conn:                     udpConn,
 			MaxUnvalidatedHandshakes: -1,
 		}
+		addTracer(tr)
 		defer tr.Close()
 		ln, err := tr.Listen(serverTLSConfig, serverConfig)
 		Expect(err).ToNot(HaveOccurred())

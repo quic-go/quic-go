@@ -328,7 +328,10 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			pconn, err = net.ListenUDP("udp", laddr)
 			Expect(err).ToNot(HaveOccurred())
-			dialer = &quic.Transport{Conn: pconn, ConnectionIDLength: 4}
+			dialer = &quic.Transport{
+				Conn:               pconn,
+				ConnectionIDLength: 4,
+			}
 		})
 
 		AfterEach(func() {
@@ -431,9 +434,8 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			udpConn, err := net.ListenUDP("udp", laddr)
 			Expect(err).ToNot(HaveOccurred())
-			tr := quic.Transport{
-				Conn: udpConn,
-			}
+			tr := &quic.Transport{Conn: udpConn}
+			addTracer(tr)
 			defer tr.Close()
 			tlsConf := &tls.Config{}
 			done := make(chan struct{})
@@ -476,10 +478,11 @@ var _ = Describe("Handshake tests", func() {
 
 		It("sends a Retry when the number of handshakes reaches MaxUnvalidatedHandshakes", func() {
 			const limit = 3
-			tr := quic.Transport{
+			tr := &quic.Transport{
 				Conn:                     conn,
 				MaxUnvalidatedHandshakes: limit,
 			}
+			addTracer(tr)
 			defer tr.Close()
 
 			// Block all handshakes.
@@ -541,10 +544,11 @@ var _ = Describe("Handshake tests", func() {
 
 		It("rejects connections when the number of handshakes reaches MaxHandshakes", func() {
 			const limit = 3
-			tr := quic.Transport{
+			tr := &quic.Transport{
 				Conn:          conn,
 				MaxHandshakes: limit,
 			}
+			addTracer(tr)
 			defer tr.Close()
 
 			// Block all handshakes.
@@ -717,6 +721,7 @@ var _ = Describe("Handshake tests", func() {
 				Conn:                     udpConn,
 				MaxUnvalidatedHandshakes: -1,
 			}
+			addTracer(tr)
 			defer tr.Close()
 			server, err := tr.Listen(getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())

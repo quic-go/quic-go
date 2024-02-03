@@ -86,7 +86,6 @@ var (
 	logBuf       *syncedBuffer
 	versionParam string
 
-	qlogTracer func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer
 	enableQlog bool
 
 	version                          quic.Version
@@ -138,9 +137,6 @@ func init() {
 }
 
 var _ = BeforeSuite(func() {
-	if enableQlog {
-		qlogTracer = tools.NewQlogger(GinkgoWriter)
-	}
 	switch versionParam {
 	case "1":
 		version = quic.Version1
@@ -175,26 +171,46 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	} else {
 		conf = conf.Clone()
 	}
-	if enableQlog {
-		if conf.Tracer == nil {
-			conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-				return logging.NewMultiplexedConnectionTracer(
-					qlogTracer(ctx, p, connID),
-					// multiplex it with an empty tracer to check that we're correctly ignoring unset callbacks everywhere
-					&logging.ConnectionTracer{},
-				)
-			}
-		} else if qlogTracer != nil {
-			origTracer := conf.Tracer
-			conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-				return logging.NewMultiplexedConnectionTracer(
-					qlogTracer(ctx, p, connID),
-					origTracer(ctx, p, connID),
-				)
-			}
+	if !enableQlog {
+		return conf
+	}
+	if conf.Tracer == nil {
+		conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+			return logging.NewMultiplexedConnectionTracer(
+				tools.NewQlogConnectionTracer(GinkgoWriter)(ctx, p, connID),
+				// multiplex it with an empty tracer to check that we're correctly ignoring unset callbacks everywhere
+				&logging.ConnectionTracer{},
+			)
 		}
+		return conf
+	}
+	origTracer := conf.Tracer
+	conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+		return logging.NewMultiplexedConnectionTracer(
+			tools.NewQlogConnectionTracer(GinkgoWriter)(ctx, p, connID),
+			origTracer(ctx, p, connID),
+		)
 	}
 	return conf
+}
+
+func addTracer(tr *quic.Transport) {
+	if !enableQlog {
+		return
+	}
+	if tr.Tracer == nil {
+		tr.Tracer = logging.NewMultiplexedTracer(
+			tools.QlogTracer(GinkgoWriter),
+			// multiplex it with an empty tracer to check that we're correctly ignoring unset callbacks everywhere
+			&logging.Tracer{},
+		)
+		return
+	}
+	origTracer := tr.Tracer
+	tr.Tracer = logging.NewMultiplexedTracer(
+		tools.QlogTracer(GinkgoWriter),
+		origTracer,
+	)
 }
 
 var _ = BeforeEach(func() {
