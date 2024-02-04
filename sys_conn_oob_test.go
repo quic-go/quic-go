@@ -5,6 +5,7 @@ package quic
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"golang.org/x/net/ipv4"
@@ -307,6 +308,16 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(oobMsg).To(HaveCap(cap(oob))) // check that it appended to oob
 			expected := appendIPv4ECNMsg([]byte{}, protocol.ECNCE)
 			Expect(oobMsg).To(Equal(expected))
+		})
+	})
+
+	Context("serializing packet info", func() {
+		It("treats IPv4-mapped IPv6 addresses as IPv4", func() {
+			addr4in6 := netip.MustParseAddr("::ffff:127.0.0.1")
+			info4in6 := packetInfo{addr: addr4in6, ifIndex: 0}
+			addr4 := netip.MustParseAddr("127.0.0.1")
+			info4 := packetInfo{addr: addr4, ifIndex: 0}
+			Expect(info4in6.OOB()).To(Equal(info4.OOB()))
 		})
 	})
 
