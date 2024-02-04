@@ -274,7 +274,7 @@ func (info *packetInfo) OOB() []byte {
 	if info == nil {
 		return nil
 	}
-	if info.addr.Is4() {
+	if info.addr.Is4() || info.addr.Is4In6() {
 		ip := info.addr.As4()
 		// struct in_pktinfo {
 		// 	unsigned int   ipi_ifindex;  /* Interface index */
