@@ -298,11 +298,26 @@ func (s *baseServer) run() {
 		case <-s.errorChan:
 			return
 		case p := <-s.receivedPackets:
+			var start time.Time
+			var queueTime time.Duration
 			if s.tracer != nil && s.tracer.Debug != nil {
-				s.tracer.Debug("server_handling_packet", fmt.Sprintf("queue time: %.3fms", toMilliseconds(time.Since(p.rcvTime))))
+				start = time.Now()
+				queueTime = start.Sub(p.rcvTime)
 			}
-			if bufferStillInUse := s.handlePacketImpl(p); !bufferStillInUse {
+			tracerTook, bufferStillInUse := s.handlePacketImpl(p)
+			if !bufferStillInUse {
 				p.buffer.Release()
+			}
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug(
+					"server_handling_packet",
+					fmt.Sprintf(
+						"queue: %.3fms, tracer creation: %.3fms, handle: %.3fms",
+						toMilliseconds(queueTime),
+						toMilliseconds(tracerTook),
+						toMilliseconds(time.Since(start)),
+					),
+				)
 			}
 		}
 	}
@@ -379,7 +394,7 @@ func (s *baseServer) handlePacket(p receivedPacket) {
 	}
 }
 
-func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer still in use? */ {
+func (s *baseServer) handlePacketImpl(p receivedPacket) (time.Duration, bool) /* is the buffer still in use? */ {
 	if !s.nextZeroRTTCleanup.IsZero() && p.rcvTime.After(s.nextZeroRTTCleanup) {
 		defer s.cleanupZeroRTTQueues(p.rcvTime)
 	}
@@ -389,7 +404,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropUnexpectedPacket)
 		}
-		return false
+		return 0, false
 	}
 	// Short header packets should never end up here in the first place
 	if !wire.IsLongHeaderPacket(p.data[0]) {
@@ -402,12 +417,12 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedPacket)
 		}
-		return false
+		return 0, false
 	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, v) {
 		if s.disableVersionNegotiation {
-			return false
+			return 0, false
 		}
 
 		if p.Size() < protocol.MinUnknownVersionPacketSize {
@@ -415,9 +430,9 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			if s.tracer != nil && s.tracer.DroppedPacket != nil {
 				s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedPacket)
 			}
-			return false
+			return 0, false
 		}
-		return s.enqueueVersionNegotiationPacket(p)
+		return 0, s.enqueueVersionNegotiationPacket(p)
 	}
 
 	if wire.Is0RTTPacket(p.data) {
@@ -425,9 +440,9 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			if s.tracer != nil && s.tracer.DroppedPacket != nil {
 				s.tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropUnexpectedPacket)
 			}
-			return false
+			return 0, false
 		}
-		return s.handle0RTTPacket(p)
+		return 0, s.handle0RTTPacket(p)
 	}
 
 	// If we're creating a new connection, the packet will be passed to the connection.
@@ -438,14 +453,14 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
 		}
 		s.logger.Debugf("Error parsing packet: %s", err)
-		return false
+		return 0, false
 	}
 	if hdr.Type == protocol.PacketTypeInitial && p.Size() < protocol.MinInitialPacketSize {
 		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", p.Size())
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
 		}
-		return false
+		return 0, false
 	}
 
 	if hdr.Type != protocol.PacketTypeInitial {
@@ -456,17 +471,18 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropUnexpectedPacket)
 		}
-		return false
+		return 0, false
 	}
 
 	s.logger.Debugf("<- Received Initial packet.")
 
-	if err := s.handleInitialImpl(p, hdr); err != nil {
+	tracerTook, err := s.handleInitialImpl(p, hdr)
+	if err != nil {
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
 	}
 	// Don't put the packet buffer back.
 	// handleInitialImpl deals with the buffer.
-	return true
+	return tracerTook, true
 }
 
 func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
@@ -557,13 +573,13 @@ func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 	return true
 }
 
-func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error {
+func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) (time.Duration, error) {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
 		}
 		p.buffer.Release()
-		return errors.New("too short connection ID")
+		return 0, errors.New("too short connection ID")
 	}
 
 	// The server queues packets for a while, and we might already have established a connection by now.
@@ -571,7 +587,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	// That's ok since it's not the hot path (it's only taken by some Initial and 0-RTT packets).
 	if handler, ok := s.connHandler.Get(hdr.DestConnectionID); ok {
 		handler.handlePacket(p)
-		return nil
+		return 0, nil
 	}
 
 	var (
@@ -607,7 +623,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 				// drop packet if we can't send out the  INVALID_TOKEN packets fast enough
 				p.buffer.Release()
 			}
-			return nil
+			return 0, nil
 		}
 	}
 
@@ -626,7 +642,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			// drop packet if we can't send out the CONNECTION_REFUSED fast enough
 			p.buffer.Release()
 		}
-		return nil
+		return 0, nil
 	}
 	if token == nil && numHandshakesUnvalidated >= int64(s.maxNumHandshakesUnvalidated) {
 		// Retry invalidates all 0-RTT packets sent.
@@ -637,15 +653,16 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			// drop packet if we can't send out Retry packets fast enough
 			p.buffer.Release()
 		}
-		return nil
+		return 0, nil
 	}
 
 	connID, err := s.connIDGenerator.GenerateConnectionID()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var conn quicConn
+	var tracerTook time.Duration
 	tracingID := nextConnTracingID()
 	config := s.config
 	if s.config.GetConfigForClient != nil {
@@ -659,7 +676,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 				// drop packet if we can't send out the CONNECTION_REFUSED fast enough
 				p.buffer.Release()
 			}
-			return nil
+			return 0, nil
 		}
 		config = populateConfig(conf)
 	}
@@ -699,7 +716,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 		conn.closeWithTransportError(qerr.ConnectionRefused)
-		return nil
+		return 0, nil
 	}
 	// Pass queued 0-RTT to the newly established connection.
 	if q, ok := s.zeroRTTQueues[hdr.DestConnectionID]; ok {
@@ -734,7 +751,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			conn.closeWithTransportError(ConnectionRefused)
 		}
 	}()
-	return nil
+	return tracerTook, nil
 }
 
 func (s *baseServer) handleNewConn(conn quicConn) bool {
