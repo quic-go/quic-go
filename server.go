@@ -282,6 +282,10 @@ func newServer(
 	return s
 }
 
+func toMilliseconds(d time.Duration) float64 {
+	return float64(d.Nanoseconds()) / 1e6
+}
+
 func (s *baseServer) run() {
 	defer close(s.running)
 	for {
@@ -294,6 +298,9 @@ func (s *baseServer) run() {
 		case <-s.errorChan:
 			return
 		case p := <-s.receivedPackets:
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug("server_handling_packet", fmt.Sprintf("queue time: %.3fms", toMilliseconds(time.Since(p.rcvTime))))
+			}
 			if bufferStillInUse := s.handlePacketImpl(p); !bufferStillInUse {
 				p.buffer.Release()
 			}
@@ -358,6 +365,7 @@ func (s *baseServer) Addr() net.Addr {
 }
 
 func (s *baseServer) handlePacket(p receivedPacket) {
+	p.serverQueueTime = time.Now()
 	select {
 	case s.receivedPackets <- p:
 		if s.tracer != nil && s.tracer.Debug != nil {

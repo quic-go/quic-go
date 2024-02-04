@@ -66,9 +66,11 @@ type cryptoStreamHandler interface {
 type receivedPacket struct {
 	buffer *packetBuffer
 
-	remoteAddr net.Addr
-	rcvTime    time.Time
-	data       []byte
+	remoteAddr      net.Addr
+	rcvTime         time.Time
+	connQueueTime   time.Time
+	serverQueueTime time.Time
+	data            []byte
 
 	ecn protocol.ECN
 
@@ -787,6 +789,22 @@ func (s *connection) handleHandshakeConfirmed() error {
 }
 
 func (s *connection) handlePacketImpl(rp receivedPacket) bool {
+	if s.tracer != nil && s.tracer.Debug != nil {
+		now := time.Now()
+		var serverQueue time.Duration
+		if !rp.serverQueueTime.IsZero() {
+			serverQueue = now.Sub(rp.serverQueueTime)
+		}
+		s.tracer.Debug(
+			"handle_packet",
+			fmt.Sprintf(
+				"queue time (total): %.3fms, server: %.3f, connection: %.3fms",
+				toMilliseconds(now.Sub(rp.rcvTime)),
+				toMilliseconds(serverQueue),
+				toMilliseconds(now.Sub(rp.connQueueTime)),
+			),
+		)
+	}
 	s.sentPacketHandler.ReceivedBytes(rp.Size())
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
@@ -1345,6 +1363,7 @@ func (s *connection) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel
 func (s *connection) handlePacket(p receivedPacket) {
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxConnUnprocessedPackets
+	p.connQueueTime = time.Now()
 	select {
 	case s.receivedPackets <- p:
 	default:
