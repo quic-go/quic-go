@@ -4,7 +4,10 @@ import (
 	"crypto"
 	"crypto/cipher"
 	"crypto/tls"
+	"testing"
 	_ "unsafe"
+
+	"golang.org/x/exp/rand"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,3 +39,30 @@ var _ = Describe("HKDF", func() {
 		Entry("TLS_CHACHA20_POLY1305_SHA256", tls.TLS_CHACHA20_POLY1305_SHA256, []byte("secret"), []byte("context"), "label", 77),
 	)
 })
+
+func BenchmarkHKDFExpandLabelStandardLibrary(b *testing.B) {
+	b.Run("TLS_AES_128_GCM_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_128_GCM_SHA256, true) })
+	b.Run("TLS_AES_256_GCM_SHA384", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_256_GCM_SHA384, true) })
+	b.Run("TLS_CHACHA20_POLY1305_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_CHACHA20_POLY1305_SHA256, true) })
+}
+
+func BenchmarkHKDFExpandLabelOptimized(b *testing.B) {
+	b.Run("TLS_AES_128_GCM_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_128_GCM_SHA256, false) })
+	b.Run("TLS_AES_256_GCM_SHA384", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_256_GCM_SHA384, false) })
+	b.Run("TLS_CHACHA20_POLY1305_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_CHACHA20_POLY1305_SHA256, false) })
+}
+
+func benchmarkHKDFExpandLabel(b *testing.B, cipherSuite uint16, useStdLib bool) {
+	b.ReportAllocs()
+	cs := cipherSuiteTLS13ByID(cipherSuite)
+	secret := make([]byte, 32)
+	rand.Read(secret)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if useStdLib {
+			expandLabel(cs, secret, "label", []byte("context"), 42)
+		} else {
+			hkdfExpandLabel(cs.Hash, secret, []byte("context"), "label", 42)
+		}
+	}
+}
