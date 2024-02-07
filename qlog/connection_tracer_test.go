@@ -722,7 +722,7 @@ var _ = Describe("Tracing", func() {
 			ev := entry.Event
 			Expect(ev).To(HaveKeyWithValue("key_type", "client_handshake_secret"))
 			Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
-			Expect(ev).ToNot(HaveKey("generation"))
+			Expect(ev).ToNot(HaveKey("key_phase"))
 			Expect(ev).ToNot(HaveKey("old"))
 			Expect(ev).ToNot(HaveKey("new"))
 		})
@@ -735,7 +735,7 @@ var _ = Describe("Tracing", func() {
 			ev := entry.Event
 			Expect(ev).To(HaveKeyWithValue("key_type", "server_1rtt_secret"))
 			Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
-			Expect(ev).To(HaveKeyWithValue("generation", float64(0)))
+			Expect(ev).To(HaveKeyWithValue("key_phase", float64(0)))
 			Expect(ev).ToNot(HaveKey("old"))
 			Expect(ev).ToNot(HaveKey("new"))
 		})
@@ -749,7 +749,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("security:key_updated"))
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("generation", float64(1337)))
+				Expect(ev).To(HaveKeyWithValue("key_phase", float64(1337)))
 				Expect(ev).To(HaveKeyWithValue("trigger", "remote_update"))
 				Expect(ev).To(HaveKey("key_type"))
 				keyTypes = append(keyTypes, ev["key_type"].(string))
@@ -796,7 +796,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("security:key_discarded"))
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("generation", float64(42)))
+				Expect(ev).To(HaveKeyWithValue("key_phase", float64(42)))
 				Expect(ev).ToNot(HaveKey("trigger"))
 				Expect(ev).To(HaveKey("key_type"))
 				keyTypes = append(keyTypes, ev["key_type"].(string))

@@ -85,14 +85,14 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 		UpdatedKeyFromTLS: func(encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
 			t.UpdatedKeyFromTLS(encLevel, pers)
 		},
-		UpdatedKey: func(generation protocol.KeyPhase, remote bool) {
-			t.UpdatedKey(generation, remote)
+		UpdatedKey: func(keyPhase protocol.KeyPhase, remote bool) {
+			t.UpdatedKey(keyPhase, remote)
 		},
 		DroppedEncryptionLevel: func(encLevel protocol.EncryptionLevel) {
 			t.DroppedEncryptionLevel(encLevel)
 		},
-		DroppedKey: func(generation protocol.KeyPhase) {
-			t.DroppedKey(generation)
+		DroppedKey: func(keyPhase protocol.KeyPhase) {
+			t.DroppedKey(keyPhase)
 		},
 		SetLossTimer: func(tt logging.TimerType, encLevel protocol.EncryptionLevel, timeout time.Time) {
 			t.SetLossTimer(tt, encLevel, timeout)
@@ -389,14 +389,14 @@ func (t *connectionTracer) UpdatedKey(generation protocol.KeyPhase, remote bool)
 	}
 	now := time.Now()
 	t.recordEvent(now, &eventKeyUpdated{
-		Trigger:    trigger,
-		KeyType:    keyTypeClient1RTT,
-		Generation: generation,
+		Trigger:  trigger,
+		KeyType:  keyTypeClient1RTT,
+		KeyPhase: generation,
 	})
 	t.recordEvent(now, &eventKeyUpdated{
-		Trigger:    trigger,
-		KeyType:    keyTypeServer1RTT,
-		Generation: generation,
+		Trigger:  trigger,
+		KeyType:  keyTypeServer1RTT,
+		KeyPhase: generation,
 	})
 }
 
@@ -413,12 +413,12 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 func (t *connectionTracer) DroppedKey(generation protocol.KeyPhase) {
 	now := time.Now()
 	t.recordEvent(now, &eventKeyDiscarded{
-		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer),
-		Generation: generation,
+		KeyType:  encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer),
+		KeyPhase: generation,
 	})
 	t.recordEvent(now, &eventKeyDiscarded{
-		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient),
-		Generation: generation,
+		KeyType:  encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient),
+		KeyPhase: generation,
 	})
 }
 
