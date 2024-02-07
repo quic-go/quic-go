@@ -4,6 +4,7 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 
+	"github.com/quic-go/quic-go/internal/crypto/hkdf"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -14,8 +15,8 @@ func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.Version) ci
 		keyLabel = hkdfLabelKeyV2
 		ivLabel = hkdfLabelIVV2
 	}
-	key := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, keyLabel, suite.KeyLen)
-	iv := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, ivLabel, suite.IVLen())
+	key := hkdf.ExpandLabel(suite.Hash, trafficSecret, []byte{}, keyLabel, suite.KeyLen)
+	iv := hkdf.ExpandLabel(suite.Hash, trafficSecret, []byte{}, ivLabel, suite.IVLen())
 	return suite.AEAD(key, iv)
 }
 
