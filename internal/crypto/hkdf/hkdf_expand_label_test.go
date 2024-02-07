@@ -1,4 +1,4 @@
-package handshake
+package hkdf
 
 import (
 	"crypto"
@@ -41,7 +41,7 @@ var _ = Describe("HKDF", func() {
 		func(cipherSuite uint16, secret, context []byte, label string, length int) {
 			cs := cipherSuiteTLS13ByID(cipherSuite)
 			expected := expandLabel(cs, secret, label, context, length)
-			expanded := hkdfExpandLabel(cs.Hash, secret, context, label, length)
+			expanded := ExpandLabel(cs.Hash, secret, context, label, length)
 			Expect(expanded).To(Equal(expected))
 		},
 		Entry("TLS_AES_128_GCM_SHA256", tls.TLS_AES_128_GCM_SHA256, []byte("secret"), []byte("context"), "label", 42),
@@ -72,7 +72,7 @@ func benchmarkHKDFExpandLabel(b *testing.B, cipherSuite uint16, useStdLib bool) 
 		if useStdLib {
 			expandLabel(cs, secret, "label", []byte("context"), 42)
 		} else {
-			hkdfExpandLabel(cs.Hash, secret, []byte("context"), "label", 42)
+			ExpandLabel(cs.Hash, secret, []byte("context"), "label", 42)
 		}
 	}
 }

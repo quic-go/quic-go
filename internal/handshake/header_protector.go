@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/chacha20"
 
+	"github.com/quic-go/quic-go/internal/crypto/hkdf"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -45,7 +46,7 @@ type aesHeaderProtector struct {
 var _ headerProtector = &aesHeaderProtector{}
 
 func newAESHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
-	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
+	hpKey := hkdf.ExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
 	block, err := aes.NewCipher(hpKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
@@ -89,7 +90,7 @@ type chachaHeaderProtector struct {
 var _ headerProtector = &chachaHeaderProtector{}
 
 func newChaChaHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
-	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
+	hpKey := hkdf.ExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
 
 	p := &chachaHeaderProtector{
 		isLongHeader: isLongHeader,
