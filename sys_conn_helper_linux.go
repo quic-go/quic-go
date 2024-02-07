@@ -60,13 +60,20 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 func isGSOSupported(conn syscall.RawConn) bool {
 	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
 	if err == nil && disabled {
+		logger.Info("GSO disabled")
 		return false
 	}
 	var serr error
 	if err := conn.Control(func(fd uintptr) {
 		_, serr = unix.GetsockoptInt(int(fd), unix.IPPROTO_UDP, unix.UDP_SEGMENT)
 	}); err != nil {
+		logger.Info("GSO: setting UDP_SEGMENT failed (control)", "error", err)
 		return false
+	}
+	if serr != nil {
+		logger.Info("GSO: setting UDP_SEGMENT failed (getsockopt)", "error", serr)
+	} else {
+		logger.Info("successfully enabled GSO")
 	}
 	return serr == nil
 }
