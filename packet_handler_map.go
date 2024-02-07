@@ -129,7 +129,7 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 	return true
 }
 
-func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
+func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.ConnectionID, handler packetHandler) bool {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -137,12 +137,8 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 		h.logger.Debugf("Not adding connection ID %s for a new connection, as it already exists.", clientDestConnID)
 		return false
 	}
-	conn, ok := fn()
-	if !ok {
-		return false
-	}
-	h.handlers[clientDestConnID] = conn
-	h.handlers[newConnID] = conn
+	h.handlers[clientDestConnID] = handler
+	h.handlers[newConnID] = handler
 	h.logger.Debugf("Adding connection IDs %s and %s for a new connection.", clientDestConnID, newConnID)
 	return true
 }
