@@ -1,8 +1,11 @@
 package handshake
 
 import (
-	"crypto/rand"
+	"bytes"
 	"fmt"
+	"testing"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
@@ -187,3 +190,59 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 		})
 	}
 })
+
+func BenchmarkInitialAEADCreate(b *testing.B) {
+	b.ReportAllocs()
+	connID := protocol.ParseConnectionID([]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef})
+	for i := 0; i < b.N; i++ {
+		NewInitialAEAD(connID, protocol.PerspectiveServer, protocol.Version1)
+	}
+}
+
+func BenchmarkInitialAEAD(b *testing.B) {
+	connectionID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd})
+	clientSealer, _ := NewInitialAEAD(connectionID, protocol.PerspectiveClient, protocol.Version1)
+	_, serverOpener := NewInitialAEAD(connectionID, protocol.PerspectiveServer, protocol.Version1)
+
+	r := rand.New(rand.NewSource(1))
+	packetData := make([]byte, 1200)
+	r.Read(packetData)
+	hdr := make([]byte, 50)
+	r.Read(hdr)
+	msg := clientSealer.Seal(nil, packetData, 42, hdr)
+	m, err := serverOpener.Open(nil, msg, 42, hdr)
+	if err != nil {
+		b.Fatalf("opening failed: %s", err)
+	}
+	if !bytes.Equal(m, packetData) {
+		b.Fatal("decrypted data doesn't match")
+	}
+
+	b.Run("opening 100 bytes", func(b *testing.B) {
+		benchmarkOpen(b, serverOpener, clientSealer.Seal(nil, packetData[:100], 42, hdr), hdr)
+	})
+	b.Run("opening 1200 bytes", func(b *testing.B) { benchmarkOpen(b, serverOpener, msg, hdr) })
+
+	b.Run("sealing 100 bytes", func(b *testing.B) { benchmarkSeal(b, clientSealer, packetData[:100], hdr) })
+	b.Run("sealing 1200 bytes", func(b *testing.B) { benchmarkSeal(b, clientSealer, packetData, hdr) })
+}
+
+func benchmarkOpen(b *testing.B, aead LongHeaderOpener, msg, hdr []byte) {
+	b.ReportAllocs()
+	dst := make([]byte, 0, 1500)
+	for i := 0; i < b.N; i++ {
+		dst = dst[:0]
+		if _, err := aead.Open(dst, msg, 42, hdr); err != nil {
+			b.Fatalf("opening failed: %s", err)
+		}
+	}
+}
+
+func benchmarkSeal(b *testing.B, aead LongHeaderSealer, msg, hdr []byte) {
+	b.ReportAllocs()
+	dst := make([]byte, 0, 1500)
+	for i := 0; i < b.N; i++ {
+		dst = dst[:0]
+		aead.Seal(dst, msg, protocol.PacketNumber(i), hdr)
+	}
+}
