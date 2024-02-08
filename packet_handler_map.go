@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"hash"
@@ -10,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/crypto/hmac"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 )
