@@ -3,8 +3,6 @@ package hkdf
 import (
 	"crypto"
 	"encoding/binary"
-
-	"golang.org/x/crypto/hkdf"
 )
 
 // ExpandLabel HKDF expands a label as defined in RFC 8446, section 7.1.
@@ -21,7 +19,7 @@ func ExpandLabel(hash crypto.Hash, secret, context []byte, label string, length 
 	b = append(b, context...)
 
 	out := make([]byte, length)
-	n, err := hkdf.Expand(hash.New, secret, b).Read(out)
+	n, err := Expand(hash.New, secret, b).Read(out)
 	if err != nil || n != length {
 		panic("quic: HKDF-Expand-Label invocation failed unexpectedly")
 	}

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"golang.org/x/crypto/hkdf"
+	"github.com/quic-go/quic-go/internal/crypto/hkdf"
 )
 
 // TokenProtectorKey is the key used to encrypt both Retry and session resumption tokens.

@@ -4,8 +4,6 @@ import (
 	"crypto"
 	"crypto/tls"
 
-	stdhkdf "golang.org/x/crypto/hkdf"
-
 	"github.com/quic-go/quic-go/internal/crypto/hkdf"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
@@ -53,7 +51,7 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v p
 }
 
 func computeSecrets(connID protocol.ConnectionID, v protocol.Version) (clientSecret, serverSecret []byte) {
-	initialSecret := stdhkdf.Extract(crypto.SHA256.New, connID.Bytes(), getSalt(v))
+	initialSecret := hkdf.Extract(crypto.SHA256.New, connID.Bytes(), getSalt(v))
 	clientSecret = hkdf.ExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
 	serverSecret = hkdf.ExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
 	return
