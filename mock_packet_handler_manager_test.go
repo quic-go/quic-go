@@ -113,7 +113,7 @@ func (c *PacketHandlerManagerAddResetTokenCall) DoAndReturn(f func(protocol.Stat
 }
 
 // AddWithConnID mocks base method.
-func (m *MockPacketHandlerManager) AddWithConnID(arg0, arg1 protocol.ConnectionID, arg2 func() (packetHandler, bool)) bool {
+func (m *MockPacketHandlerManager) AddWithConnID(arg0, arg1 protocol.ConnectionID, arg2 packetHandler) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWithConnID", arg0, arg1, arg2)
 	ret0, _ := ret[0].(bool)
@@ -139,13 +139,13 @@ func (c *PacketHandlerManagerAddWithConnIDCall) Return(arg0 bool) *PacketHandler
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerAddWithConnIDCall) Do(f func(protocol.ConnectionID, protocol.ConnectionID, func() (packetHandler, bool)) bool) *PacketHandlerManagerAddWithConnIDCall {
+func (c *PacketHandlerManagerAddWithConnIDCall) Do(f func(protocol.ConnectionID, protocol.ConnectionID, packetHandler) bool) *PacketHandlerManagerAddWithConnIDCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerAddWithConnIDCall) DoAndReturn(f func(protocol.ConnectionID, protocol.ConnectionID, func() (packetHandler, bool)) bool) *PacketHandlerManagerAddWithConnIDCall {
+func (c *PacketHandlerManagerAddWithConnIDCall) DoAndReturn(f func(protocol.ConnectionID, protocol.ConnectionID, packetHandler) bool) *PacketHandlerManagerAddWithConnIDCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

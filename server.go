@@ -32,7 +32,7 @@ type packetHandler interface {
 type packetHandlerManager interface {
 	Get(protocol.ConnectionID) (packetHandler, bool)
 	GetByResetToken(protocol.StatelessResetToken) (packetHandler, bool)
-	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() (packetHandler, bool)) bool
+	AddWithConnID(destConnID, newConnID protocol.ConnectionID, h packetHandler) bool
 	Close(error)
 	connRunner
 }
@@ -636,63 +636,68 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var conn quicConn
 	tracingID := nextConnTracingID()
-	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, func() (packetHandler, bool) {
-		config := s.config
-		if s.config.GetConfigForClient != nil {
-			conf, err := s.config.GetConfigForClient(&ClientHelloInfo{RemoteAddr: p.remoteAddr})
-			if err != nil {
-				s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
-				return nil, false
-			}
-			config = populateConfig(conf)
-		}
-		var tracer *logging.ConnectionTracer
-		if config.Tracer != nil {
-			// Use the same connection ID that is passed to the client's GetLogWriter callback.
-			connID := hdr.DestConnectionID
-			if origDestConnID.Len() > 0 {
-				connID = origDestConnID
-			}
-			tracer = config.Tracer(context.WithValue(context.Background(), ConnectionTracingKey, tracingID), protocol.PerspectiveServer, connID)
-		}
-		conn = s.newConn(
-			newSendConn(s.conn, p.remoteAddr, p.info, s.logger),
-			s.connHandler,
-			origDestConnID,
-			retrySrcConnID,
-			hdr.DestConnectionID,
-			hdr.SrcConnectionID,
-			connID,
-			s.connIDGenerator,
-			s.connHandler.GetStatelessResetToken(connID),
-			config,
-			s.tlsConf,
-			s.tokenGenerator,
-			clientAddrValidated,
-			tracer,
-			tracingID,
-			s.logger,
-			hdr.Version,
-		)
-		conn.handlePacket(p)
-
-		if q, ok := s.zeroRTTQueues[hdr.DestConnectionID]; ok {
-			for _, p := range q.packets {
-				conn.handlePacket(p)
-			}
+	config := s.config
+	if s.config.GetConfigForClient != nil {
+		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{RemoteAddr: p.remoteAddr})
+		if err != nil {
+			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
 			delete(s.zeroRTTQueues, hdr.DestConnectionID)
+			select {
+			case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
+			default:
+				// drop packet if we can't send out the CONNECTION_REFUSED fast enough
+				p.buffer.Release()
+			}
+			return nil
 		}
-
-		return conn, true
-	}); !added {
-		select {
-		case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
-		default:
-			// drop packet if we can't send out the CONNECTION_REFUSED fast enough
-			p.buffer.Release()
+		config = populateConfig(conf)
+	}
+	var tracer *logging.ConnectionTracer
+	if config.Tracer != nil {
+		// Use the same connection ID that is passed to the client's GetLogWriter callback.
+		connID := hdr.DestConnectionID
+		if origDestConnID.Len() > 0 {
+			connID = origDestConnID
 		}
+		tracer = config.Tracer(context.WithValue(context.Background(), ConnectionTracingKey, tracingID), protocol.PerspectiveServer, connID)
+	}
+	conn = s.newConn(
+		newSendConn(s.conn, p.remoteAddr, p.info, s.logger),
+		s.connHandler,
+		origDestConnID,
+		retrySrcConnID,
+		hdr.DestConnectionID,
+		hdr.SrcConnectionID,
+		connID,
+		s.connIDGenerator,
+		s.connHandler.GetStatelessResetToken(connID),
+		config,
+		s.tlsConf,
+		s.tokenGenerator,
+		clientAddrValidated,
+		tracer,
+		tracingID,
+		s.logger,
+		hdr.Version,
+	)
+	conn.handlePacket(p)
+	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
+	// This is very unlikely: Even if an attacker chooses a connection ID that's already in use,
+	// under normal circumstances the packet would just be routed to that connection.
+	// The only time this collision will occur if we receive the two Initial packets at the same time.
+	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
+		delete(s.zeroRTTQueues, hdr.DestConnectionID)
+		conn.closeWithTransportError(qerr.ConnectionRefused)
 		return nil
 	}
+	// Pass queued 0-RTT to the newly established connection.
+	if q, ok := s.zeroRTTQueues[hdr.DestConnectionID]; ok {
+		for _, p := range q.packets {
+			conn.handlePacket(p)
+		}
+		delete(s.zeroRTTQueues, hdr.DestConnectionID)
+	}
+
 	if clientAddrValidated {
 		s.numHandshakesValidated.Add(1)
 	} else {
