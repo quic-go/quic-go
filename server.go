@@ -681,19 +681,21 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		hdr.Version,
 	)
 	conn.handlePacket(p)
-	if q, ok := s.zeroRTTQueues[hdr.DestConnectionID]; ok {
-		for _, p := range q.packets {
-			conn.handlePacket(p)
-		}
-		delete(s.zeroRTTQueues, hdr.DestConnectionID)
-	}
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
 	// This is very unlikely: Even if an attacker chooses a connection ID that's already in use,
 	// under normal circumstances the packet would just be routed to that connection.
 	// The only time this collision will occur if we receive the two Initial packets at the same time.
 	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
+		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 		conn.closeWithTransportError(qerr.ConnectionRefused)
 		return nil
+	}
+	// Pass queued 0-RTT to the newly established connection.
+	if q, ok := s.zeroRTTQueues[hdr.DestConnectionID]; ok {
+		for _, p := range q.packets {
+			conn.handlePacket(p)
+		}
+		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 	}
 
 	if clientAddrValidated {
