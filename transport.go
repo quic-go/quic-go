@@ -426,11 +426,19 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 
-	if isStatelessReset := t.maybeHandleStatelessReset(p.data); isStatelessReset {
-		return
-	}
+	// If there's a connection associated with the connection ID, pass the packet there.
 	if handler, ok := t.handlerMap.Get(connID); ok {
 		handler.handlePacket(p)
+		return
+	}
+	// RFC 9000 section 10.3.1 requires that the stateless reset detection logic is run for both
+	// packets that cannot be associated with any connections, and for packets that can't be decrypted.
+	// We deviate from the RFC and ignore the latter: If a packet's connection ID is associated with an
+	// existing connection, it is dropped there if if it can't be decrypted.
+	// Stateless resets use random connection IDs, and at reasonable connection ID lengths collisions are
+	// exceedingly rare. In the unlikely event that a stateless reset is misrouted to an existing connection,
+	// it is to be expected that the next stateless reset will be correctly detected.
+	if isStatelessReset := t.maybeHandleStatelessReset(p.data); isStatelessReset {
 		return
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {
