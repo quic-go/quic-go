@@ -601,8 +601,8 @@ var _ = Describe("Server", func() {
 				Consistently(func() uint32 { return counter.Load() }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 			})
 
-			PIt("only creates a single connection for a duplicate Initial", func() {
-				var createdConn bool
+			It("only creates a single connection for a duplicate Initial", func() {
+				done := make(chan struct{})
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -622,19 +622,20 @@ var _ = Describe("Server", func() {
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
-					createdConn = true
-					return NewMockQUICConn(mockCtrl)
+					conn := NewMockQUICConn(mockCtrl)
+					conn.EXPECT().handlePacket(gomock.Any())
+					conn.EXPECT().closeWithTransportError(qerr.ConnectionRefused).Do(func(qerr.TransportErrorCode) {
+						close(done)
+					})
+					return conn
 				}
 
 				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})
 				p := getInitial(connID)
 				phm.EXPECT().Get(connID)
+				phm.EXPECT().GetStatelessResetToken(gomock.Any())
 				phm.EXPECT().AddWithConnID(connID, gomock.Any(), gomock.Any()).Return(false) // connection ID collision
-				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				done := make(chan struct{})
-				conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).Do(func([]byte, net.Addr) (int, error) { close(done); return 0, nil })
 				Expect(serv.handlePacketImpl(p)).To(BeTrue())
-				Expect(createdConn).To(BeFalse())
 				Eventually(done).Should(BeClosed())
 			})
 
