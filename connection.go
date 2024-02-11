@@ -2379,10 +2379,6 @@ func (s *connection) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *connection) getPerspective() protocol.Perspective {
-	return s.perspective
-}
-
 func (s *connection) GetVersion() protocol.Version {
 	return s.version
 }

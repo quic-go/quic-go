@@ -171,11 +171,10 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 			func(addr net.Addr, info packetInfo) {
 				h.enqueueClosePacket(closePacket{payload: connClosePacket, addr: addr, info: info})
 			},
-			pers,
 			h.logger,
 		)
 	} else {
-		handler = newClosedRemoteConn(pers)
+		handler = newClosedRemoteConn()
 	}
 
 	h.mutex.Lock()

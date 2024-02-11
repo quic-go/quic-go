@@ -11,7 +11,6 @@ package quic
 import (
 	reflect "reflect"
 
-	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -107,44 +106,6 @@ func (c *PacketHandlerdestroyCall) Do(f func(error)) *PacketHandlerdestroyCall {
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *PacketHandlerdestroyCall) DoAndReturn(f func(error)) *PacketHandlerdestroyCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// getPerspective mocks base method.
-func (m *MockPacketHandler) getPerspective() protocol.Perspective {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getPerspective")
-	ret0, _ := ret[0].(protocol.Perspective)
-	return ret0
-}
-
-// getPerspective indicates an expected call of getPerspective.
-func (mr *MockPacketHandlerMockRecorder) getPerspective() *PacketHandlergetPerspectiveCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockPacketHandler)(nil).getPerspective))
-	return &PacketHandlergetPerspectiveCall{Call: call}
-}
-
-// PacketHandlergetPerspectiveCall wrap *gomock.Call
-type PacketHandlergetPerspectiveCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *PacketHandlergetPerspectiveCall) Return(arg0 protocol.Perspective) *PacketHandlergetPerspectiveCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *PacketHandlergetPerspectiveCall) Do(f func() protocol.Perspective) *PacketHandlergetPerspectiveCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlergetPerspectiveCall) DoAndReturn(f func() protocol.Perspective) *PacketHandlergetPerspectiveCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

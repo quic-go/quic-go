@@ -1364,7 +1364,6 @@ var _ = Describe("Server", func() {
 			Consistently(done).ShouldNot(BeClosed())
 
 			// make the go routine return
-			conn.EXPECT().getPerspective().MaxTimes(2) // initOnce for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
