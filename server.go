@@ -41,7 +41,6 @@ type quicConn interface {
 	EarlyConnection
 	earlyConnReady() <-chan struct{}
 	handlePacket(receivedPacket)
-	GetVersion() protocol.Version
 	getPerspective() protocol.Perspective
 	run() error
 	destroy(error)

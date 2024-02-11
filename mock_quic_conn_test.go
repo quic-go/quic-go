@@ -233,44 +233,6 @@ func (c *QUICConnContextCall) DoAndReturn(f func() context.Context) *QUICConnCon
 	return c
 }
 
-// GetVersion mocks base method.
-func (m *MockQUICConn) GetVersion() protocol.Version {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVersion")
-	ret0, _ := ret[0].(protocol.Version)
-	return ret0
-}
-
-// GetVersion indicates an expected call of GetVersion.
-func (mr *MockQUICConnMockRecorder) GetVersion() *QUICConnGetVersionCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockQUICConn)(nil).GetVersion))
-	return &QUICConnGetVersionCall{Call: call}
-}
-
-// QUICConnGetVersionCall wrap *gomock.Call
-type QUICConnGetVersionCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *QUICConnGetVersionCall) Return(arg0 protocol.Version) *QUICConnGetVersionCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *QUICConnGetVersionCall) Do(f func() protocol.Version) *QUICConnGetVersionCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *QUICConnGetVersionCall) DoAndReturn(f func() protocol.Version) *QUICConnGetVersionCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // HandshakeComplete mocks base method.
 func (m *MockQUICConn) HandshakeComplete() <-chan struct{} {
 	m.ctrl.T.Helper()
