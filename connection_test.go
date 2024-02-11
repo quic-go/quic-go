@@ -76,7 +76,7 @@ var _ = Describe("Connection", func() {
 	}
 
 	expectReplaceWithClosed := func() {
-		connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ protocol.Perspective, _ []byte) {
+		connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ []byte) {
 			Expect(connIDs).To(ContainElement(srcConnID))
 			if len(connIDs) > 1 {
 				Expect(connIDs).To(ContainElement(clientDestConnID))
@@ -346,7 +346,7 @@ var _ = Describe("Connection", func() {
 				ErrorMessage: "foobar",
 			}
 			streamManager.EXPECT().CloseWithError(expectedErr)
-			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ protocol.Perspective, _ []byte) {
+			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ []byte) {
 				Expect(connIDs).To(ConsistOf(clientDestConnID, srcConnID))
 			})
 			cryptoSetup.EXPECT().Close()
@@ -375,7 +375,7 @@ var _ = Describe("Connection", func() {
 				ErrorMessage: "foobar",
 			}
 			streamManager.EXPECT().CloseWithError(testErr)
-			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ protocol.Perspective, _ []byte) {
+			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ []byte) {
 				Expect(connIDs).To(ConsistOf(clientDestConnID, srcConnID))
 			})
 			cryptoSetup.EXPECT().Close()
@@ -558,7 +558,7 @@ var _ = Describe("Connection", func() {
 			runConn()
 			cryptoSetup.EXPECT().Close()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).AnyTimes()
 			b, err := wire.AppendShortHeader(nil, srcConnID, 42, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -2594,7 +2594,7 @@ var _ = Describe("Client Connection", func() {
 		// make sure the go routine returns
 		packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
-		connRunner.EXPECT().ReplaceWithClosed([]protocol.ConnectionID{srcConnID}, gomock.Any(), gomock.Any())
+		connRunner.EXPECT().ReplaceWithClosed([]protocol.ConnectionID{srcConnID}, gomock.Any())
 		mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
@@ -2888,7 +2888,7 @@ var _ = Describe("Client Connection", func() {
 
 		expectClose := func(applicationClose, errored bool) {
 			if !closed && !errored {
-				connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any())
+				connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 				if applicationClose {
 					packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil).MaxTimes(1)
 				} else {

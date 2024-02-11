@@ -375,15 +375,15 @@ func (c *PacketHandlerManagerRemoveResetTokenCall) DoAndReturn(f func(protocol.S
 }
 
 // ReplaceWithClosed mocks base method.
-func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 protocol.Perspective, arg2 []byte) {
+func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 []byte) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1, arg2)
+	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1)
 }
 
 // ReplaceWithClosed indicates an expected call of ReplaceWithClosed.
-func (mr *MockPacketHandlerManagerMockRecorder) ReplaceWithClosed(arg0, arg1, arg2 any) *PacketHandlerManagerReplaceWithClosedCall {
+func (mr *MockPacketHandlerManagerMockRecorder) ReplaceWithClosed(arg0, arg1 any) *PacketHandlerManagerReplaceWithClosedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockPacketHandlerManager)(nil).ReplaceWithClosed), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockPacketHandlerManager)(nil).ReplaceWithClosed), arg0, arg1)
 	return &PacketHandlerManagerReplaceWithClosedCall{Call: call}
 }
 
@@ -399,13 +399,13 @@ func (c *PacketHandlerManagerReplaceWithClosedCall) Return() *PacketHandlerManag
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, protocol.Perspective, []byte)) *PacketHandlerManagerReplaceWithClosedCall {
+func (c *PacketHandlerManagerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte)) *PacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, protocol.Perspective, []byte)) *PacketHandlerManagerReplaceWithClosedCall {
+func (c *PacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte)) *PacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
