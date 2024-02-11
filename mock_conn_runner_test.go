@@ -223,15 +223,15 @@ func (c *ConnRunnerRemoveResetTokenCall) DoAndReturn(f func(protocol.StatelessRe
 }
 
 // ReplaceWithClosed mocks base method.
-func (m *MockConnRunner) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 protocol.Perspective, arg2 []byte) {
+func (m *MockConnRunner) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 []byte) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1, arg2)
+	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1)
 }
 
 // ReplaceWithClosed indicates an expected call of ReplaceWithClosed.
-func (mr *MockConnRunnerMockRecorder) ReplaceWithClosed(arg0, arg1, arg2 any) *ConnRunnerReplaceWithClosedCall {
+func (mr *MockConnRunnerMockRecorder) ReplaceWithClosed(arg0, arg1 any) *ConnRunnerReplaceWithClosedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockConnRunner)(nil).ReplaceWithClosed), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockConnRunner)(nil).ReplaceWithClosed), arg0, arg1)
 	return &ConnRunnerReplaceWithClosedCall{Call: call}
 }
 
@@ -247,13 +247,13 @@ func (c *ConnRunnerReplaceWithClosedCall) Return() *ConnRunnerReplaceWithClosedC
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnRunnerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, protocol.Perspective, []byte)) *ConnRunnerReplaceWithClosedCall {
+func (c *ConnRunnerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte)) *ConnRunnerReplaceWithClosedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnRunnerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, protocol.Perspective, []byte)) *ConnRunnerReplaceWithClosedCall {
+func (c *ConnRunnerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte)) *ConnRunnerReplaceWithClosedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
