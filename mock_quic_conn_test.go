@@ -13,7 +13,6 @@ import (
 	net "net"
 	reflect "reflect"
 
-	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -724,44 +723,6 @@ func (c *QUICConnearlyConnReadyCall) Do(f func() <-chan struct{}) *QUICConnearly
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *QUICConnearlyConnReadyCall) DoAndReturn(f func() <-chan struct{}) *QUICConnearlyConnReadyCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// getPerspective mocks base method.
-func (m *MockQUICConn) getPerspective() protocol.Perspective {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getPerspective")
-	ret0, _ := ret[0].(protocol.Perspective)
-	return ret0
-}
-
-// getPerspective indicates an expected call of getPerspective.
-func (mr *MockQUICConnMockRecorder) getPerspective() *QUICConngetPerspectiveCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockQUICConn)(nil).getPerspective))
-	return &QUICConngetPerspectiveCall{Call: call}
-}
-
-// QUICConngetPerspectiveCall wrap *gomock.Call
-type QUICConngetPerspectiveCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *QUICConngetPerspectiveCall) Return(arg0 protocol.Perspective) *QUICConngetPerspectiveCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *QUICConngetPerspectiveCall) Do(f func() protocol.Perspective) *QUICConngetPerspectiveCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *QUICConngetPerspectiveCall) DoAndReturn(f func() protocol.Perspective) *QUICConngetPerspectiveCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

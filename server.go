@@ -26,7 +26,6 @@ type packetHandler interface {
 	handlePacket(receivedPacket)
 	destroy(error)
 	closeWithTransportError(qerr.TransportErrorCode)
-	getPerspective() protocol.Perspective
 }
 
 type packetHandlerManager interface {
@@ -41,7 +40,6 @@ type quicConn interface {
 	EarlyConnection
 	earlyConnReady() <-chan struct{}
 	handlePacket(receivedPacket)
-	getPerspective() protocol.Perspective
 	run() error
 	destroy(error)
 	closeWithTransportError(TransportErrorCode)
