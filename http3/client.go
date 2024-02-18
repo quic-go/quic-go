@@ -73,6 +73,10 @@ var _ roundTripCloser = &client{}
 func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
 	if conf == nil {
 		conf = defaultQuicConfig.Clone()
+		conf.EnableDatagrams = opts.EnableDatagram
+	}
+	if opts.EnableDatagram && !conf.EnableDatagrams {
+		return nil, errors.New("HTTP Datagrams enabled, but QUIC Datagrams disabled")
 	}
 	if len(conf.Versions) == 0 {
 		conf = conf.Clone()
@@ -84,7 +88,6 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	if conf.MaxIncomingStreams == 0 {
 		conf.MaxIncomingStreams = -1 // don't allow any bidirectional streams
 	}
-	conf.EnableDatagrams = opts.EnableDatagram
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
