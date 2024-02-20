@@ -7,8 +7,8 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 
@@ -114,12 +114,12 @@ func (e eventConnectionClosed) IsNil() bool        { return false }
 
 func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 	var (
-		statelessResetErr     *quic.StatelessResetError
-		handshakeTimeoutErr   *quic.HandshakeTimeoutError
-		idleTimeoutErr        *quic.IdleTimeoutError
-		applicationErr        *quic.ApplicationError
-		transportErr          *quic.TransportError
-		versionNegotiationErr *quic.VersionNegotiationError
+		statelessResetErr     *qerr.StatelessResetError
+		handshakeTimeoutErr   *qerr.HandshakeTimeoutError
+		idleTimeoutErr        *qerr.IdleTimeoutError
+		applicationErr        *qerr.ApplicationError
+		transportErr          *qerr.TransportError
+		versionNegotiationErr *qerr.VersionNegotiationError
 	)
 	switch {
 	case errors.As(e.e, &statelessResetErr):
