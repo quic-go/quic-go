@@ -13,7 +13,7 @@ on:
       - completed
 
 jobs:
-  upload:
+  comment:
     permissions:
       pull-requests: write
     runs-on: ubuntu-latest
@@ -21,12 +21,11 @@ jobs:
       github.event.workflow_run.event == 'pull_request'
     steps:
       - name: Download comment-data
-        uses: dawidd6/action-download-artifact@v2.11.0
+        uses: actions/download-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: main.yml
-          run_id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id }}
           name: comment-data
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Format GitHub comment
         run: |
@@ -41,7 +40,6 @@ jobs:
           echo 'Download artifacts [here](' >> comment
           cat logs-url >> comment
           echo ').' >> comment
-        if: always()
         shell: bash
 
       - name: Read PR Number
