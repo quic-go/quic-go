@@ -51,3 +51,5 @@ jobs:
           name: 'quic-go-latest'
           image: ${{ steps.docker_build_and_push.outputs.imageID }}
           url: https://github.com/quic-go/quic-go
+          client: quic-go-latest,quic-go,ngtcp2,neqo,msquic
+          server: quic-go-latest,quic-go,ngtcp2,neqo,msquic
