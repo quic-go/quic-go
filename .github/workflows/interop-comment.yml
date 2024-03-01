@@ -1,0 +1,56 @@
+# Post test results as pull request comment.
+#
+# This is done as a separate workflow as it requires write permissions. The
+# tests itself might run off of a fork, i.e. an untrusted environment and should
+# thus not be granted write permissions.
+
+name: Comment on the pull request
+
+on:
+  workflow_run:
+    workflows: ["quic-interop-runner"]
+    types:
+      - completed
+
+jobs:
+  upload:
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download comment-data
+        uses: dawidd6/action-download-artifact@v2.11.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: main.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: comment-data
+
+      - name: Format GitHub comment
+        run: |
+          pwd
+          ls -la
+          echo '[**QUIC Interop Runner**](https://github.com/quic-interop/quic-interop-runner)' >> comment
+          echo '' >> comment
+          echo '```' >> comment
+          cat summary >> comment
+          echo '```' >> comment
+          echo '' >> comment
+          echo 'Download artifacts [here](' >> comment
+          cat logs-url >> comment
+          echo ').' >> comment
+        if: always()
+        shell: bash
+
+      - name: Read PR Number
+        id: pr-number
+        run: echo "::set-output name=number::$(cat pr-number)"
+        shell: bash
+
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          filePath: comment
+          pr_number: ${{ steps.pr-number.outputs.number }}

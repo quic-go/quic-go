@@ -1,11 +1,12 @@
 name: Build interop Docker image
-on: 
+on:
   push:
     branches:
       - master
     tags:
       - 'v*'
-  
+  pull_request:
+
 jobs:
   interop:
     runs-on: ${{ fromJSON(vars['DOCKER_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
@@ -35,10 +36,18 @@ jobs:
             echo 'gitref=${{ github.sha }}' | tee -a $GITHUB_OUTPUT;
           fi
       - uses: docker/build-push-action@v4
+        id: docker_build_and_push
         with:
           context: "{{defaultContext}}:interop"
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             GITREF=${{ steps.tag.outputs.gitref }}
           tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
+      - name: Run QUIC Interop tests
+        # TODO: Replace once https://github.com/quic-interop/quic-interop-runner/pull/356 is merged.
+        uses: mxinden/quic-interop-runner@action
+        with:
+          name: 'quic-go-latest'
+          image: ${{ steps.docker_build_and_push.outputs.imageID }}
+          url: https://github.com/quic-go/quic-go
