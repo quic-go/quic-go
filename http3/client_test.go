@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -442,7 +443,7 @@ var _ = Describe("Client", func() {
 			conn                 *mockquic.MockEarlyConnection
 			settingsFrameWritten chan struct{}
 		)
-		testDone := make(chan struct{})
+		testDone := make(chan struct{}, 1)
 
 		BeforeEach(func() {
 			settingsFrameWritten = make(chan struct{})
@@ -485,6 +486,35 @@ var _ = Describe("Client", func() {
 			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+		})
+
+		It("rejects duplicate control streams", func() {
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{}).Append(b)
+			r1 := bytes.NewReader(b)
+			controlStr1 := mockquic.NewMockStream(mockCtrl)
+			controlStr1.EXPECT().Read(gomock.Any()).DoAndReturn(r1.Read).AnyTimes()
+			r2 := bytes.NewReader(b)
+			controlStr2 := mockquic.NewMockStream(mockCtrl)
+			controlStr2.EXPECT().Read(gomock.Any()).DoAndReturn(r2.Read).AnyTimes()
+			done := make(chan struct{})
+			conn.EXPECT().CloseWithError(qerr.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream").Do(func(qerr.ApplicationErrorCode, string) error {
+				close(done)
+				return nil
+			})
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr1, nil
+			})
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr2, nil
+			})
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			})
+			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+			Expect(err).To(HaveOccurred())
+			Eventually(done).Should(BeClosed())
 		})
 
 		for _, t := range []uint64{streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream} {

@@ -183,6 +183,8 @@ func (c *client) handleBidirectionalStreams(conn quic.EarlyConnection) {
 }
 
 func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
+	var rcvdControlStream atomic.Bool
+
 	for {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
@@ -215,6 +217,11 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 					return
 				}
 				str.CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
+				return
+			}
+			// Only a single control stream is allowed.
+			if isFirstControlStr := rcvdControlStream.CompareAndSwap(false, true); !isFirstControlStr {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
 			f, err := parseNextFrame(str, nil)
