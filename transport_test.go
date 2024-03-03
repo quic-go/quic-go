@@ -122,6 +122,27 @@ var _ = Describe("Transport", func() {
 		tr.Close()
 	})
 
+	It("closes transport concurrently with listener", func() {
+		// try 10 times to trigger race conditions
+		for i := 0; i < 10; i++ {
+			packetChan := make(chan packetToRead)
+			tr := &Transport{Conn: newMockPacketConn(packetChan)}
+			ln, err := tr.Listen(&tls.Config{}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			ch := make(chan bool)
+			// Close transport and listener concurrently.
+			go func() {
+				ch <- true
+				Expect(ln.Close()).To(Succeed())
+				ch <- true
+			}()
+			<-ch
+			close(packetChan)
+			Expect(tr.Close()).To(Succeed())
+			<-ch
+		}
+	})
+
 	It("drops unparseable QUIC packets", func() {
 		addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
 		packetChan := make(chan packetToRead)
