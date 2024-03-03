@@ -451,7 +451,11 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream) // stream type
-	b = (&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Append(b)
+	b = (&settingsFrame{
+		Datagram:        s.EnableDatagrams,
+		ExtendedConnect: true,
+		Other:           s.AdditionalSettings,
+	}).Append(b)
 	str.Write(b)
 
 	go s.handleUnidirectionalStreams(conn)
