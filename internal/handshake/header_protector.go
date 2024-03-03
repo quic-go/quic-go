@@ -37,7 +37,7 @@ func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader b
 }
 
 type aesHeaderProtector struct {
-	mask         []byte
+	mask         [16]byte // AES always has a 16 byte block size
 	block        cipher.Block
 	isLongHeader bool
 }
@@ -52,7 +52,6 @@ func newAESHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeade
 	}
 	return &aesHeaderProtector{
 		block:        block,
-		mask:         make([]byte, block.BlockSize()),
 		isLongHeader: isLongHeader,
 	}
 }
@@ -69,7 +68,7 @@ func (p *aesHeaderProtector) apply(sample []byte, firstByte *byte, hdrBytes []by
 	if len(sample) != len(p.mask) {
 		panic("invalid sample size")
 	}
-	p.block.Encrypt(p.mask, sample)
+	p.block.Encrypt(p.mask[:], sample)
 	if p.isLongHeader {
 		*firstByte ^= p.mask[0] & 0xf
 	} else {
