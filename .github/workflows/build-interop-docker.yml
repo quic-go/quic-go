@@ -45,7 +45,8 @@ jobs:
         id: docker_build_and_push
         with:
           context: "{{defaultContext}}:interop"
-          platforms: linux/amd64,linux/arm64
+          # TODO: Not compatible with load option
+          # platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             GITREF=${{ steps.tag.outputs.gitref }}
