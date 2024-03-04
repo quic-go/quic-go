@@ -34,7 +34,7 @@ jobs:
             echo "gitref=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
           else
             echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
-            // TODO: Clean-up. github.sha on a pull request points to a temporary merge commit with the target branch.
+            # TODO: Clean-up. github.sha on a pull request points to a temporary merge commit with the target branch.
             if [ "${{ github.event_name }}" = "pull_request" ]; then
               echo 'gitref=${{ github.event.pull_request.head.sha }}' | tee -a $GITHUB_OUTPUT;
             else
