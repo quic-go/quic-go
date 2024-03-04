@@ -50,6 +50,7 @@ jobs:
           build-args: |
             GITREF=${{ steps.tag.outputs.gitref }}
           tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
+          load: true
       - name: Run QUIC Interop tests
         # TODO: Replace once https://github.com/quic-interop/quic-interop-runner/pull/356 is merged.
         uses: mxinden/quic-interop-runner@action
