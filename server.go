@@ -98,7 +98,7 @@ type baseServer struct {
 		protocol.Version,
 	) quicConn
 
-	closeOnce sync.Once
+	closeMx   sync.Mutex
 	errorChan chan struct{} // is closed when the server is closed
 	closeErr  error
 	running   chan struct{} // closed as soon as run() returns
@@ -338,15 +338,19 @@ func (s *baseServer) Close() error {
 }
 
 func (s *baseServer) close(e error, notifyOnClose bool) {
-	s.closeOnce.Do(func() {
-		s.closeErr = e
-		close(s.errorChan)
+	s.closeMx.Lock()
+	if s.closeErr != nil {
+		s.closeMx.Unlock()
+		return
+	}
+	s.closeErr = e
+	close(s.errorChan)
+	<-s.running
+	s.closeMx.Unlock()
 
-		<-s.running
-		if notifyOnClose {
-			s.onClose()
-		}
-	})
+	if notifyOnClose {
+		s.onClose()
+	}
 }
 
 // Addr returns the server's network address

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -451,7 +452,11 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream) // stream type
-	b = (&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Append(b)
+	b = (&settingsFrame{
+		Datagram:        s.EnableDatagrams,
+		ExtendedConnect: true,
+		Other:           s.AdditionalSettings,
+	}).Append(b)
 	str.Write(b)
 
 	go s.handleUnidirectionalStreams(conn)
@@ -494,6 +499,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 }
 
 func (s *Server) handleUnidirectionalStreams(conn quic.Connection) {
+	var rcvdControlStream atomic.Bool
+
 	for {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
@@ -525,6 +532,11 @@ func (s *Server) handleUnidirectionalStreams(conn quic.Connection) {
 					return
 				}
 				str.CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
+				return
+			}
+			// Only a single control stream is allowed.
+			if isFirstControlStr := rcvdControlStream.CompareAndSwap(false, true); !isFirstControlStr {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
 			f, err := parseNextFrame(str, nil)

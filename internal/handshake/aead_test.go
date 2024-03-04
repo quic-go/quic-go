@@ -33,8 +33,8 @@ var _ = Describe("Long Header AEAD", func() {
 						aead, err := cipher.NewGCM(block)
 						Expect(err).ToNot(HaveOccurred())
 
-						return newLongHeaderSealer(aead, newHeaderProtector(cs, hpKey, true, v)),
-							newLongHeaderOpener(aead, newHeaderProtector(cs, hpKey, true, v))
+						return newLongHeaderSealer(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v)),
+							newLongHeaderOpener(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v))
 					}
 
 					Context("message encryption", func() {

@@ -50,9 +50,8 @@ type RoundTripper struct {
 	// If nil, reasonable default values will be used.
 	QuicConfig *quic.Config
 
-	// Enable support for HTTP/3 datagrams.
-	// If set to true, QuicConfig.EnableDatagram will be set.
-	// See https://datatracker.ietf.org/doc/html/rfc9297.
+	// Enable support for HTTP/3 datagrams (RFC 9297).
+	// If a QuicConfig is set, datagram support also needs to be enabled on the QUIC layer by setting EnableDatagrams.
 	EnableDatagrams bool
 
 	// Additional HTTP/3 settings.
