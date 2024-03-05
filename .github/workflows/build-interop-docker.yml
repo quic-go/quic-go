@@ -1,26 +1,24 @@
 name: Build interop Docker image
-on:
+on: 
   push:
     branches:
       - master
     tags:
       - 'v*'
-  pull_request:
-
+  
 jobs:
   interop:
     runs-on: ${{ fromJSON(vars['DOCKER_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v2
         with:
           platforms: linux/amd64,linux/arm64
       - name: Login to Docker Hub
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -34,30 +32,13 @@ jobs:
             echo "gitref=${GITHUB_REF#refs/tags/}" | tee -a $GITHUB_OUTPUT;
           else
             echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
-            # TODO: Clean-up. github.sha on a pull request points to a temporary merge commit with the target branch.
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
-              echo 'gitref=${{ github.event.pull_request.head.sha }}' | tee -a $GITHUB_OUTPUT;
-            else
-              echo 'gitref=${{ github.sha }}' | tee -a $GITHUB_OUTPUT;
-            fi
+            echo 'gitref=${{ github.sha }}' | tee -a $GITHUB_OUTPUT;
           fi
-      - uses: docker/build-push-action@v5
-        id: docker_build_and_push
+      - uses: docker/build-push-action@v4
         with:
           context: "{{defaultContext}}:interop"
-          # TODO: Not compatible with load option
-          # platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64,linux/arm64
+          push: true
           build-args: |
             GITREF=${{ steps.tag.outputs.gitref }}
           tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
-          load: true
-      - name: Run QUIC Interop tests
-        # TODO: Replace once https://github.com/quic-interop/quic-interop-runner/pull/356 is merged.
-        uses: mxinden/quic-interop-runner@action
-        with:
-          name: 'quic-go-latest'
-          image: ${{ steps.docker_build_and_push.outputs.imageID }}
-          url: https://github.com/quic-go/quic-go
-          client: quic-go-latest,quic-go,neqo
-          server: quic-go-latest,quic-go,msquic
