@@ -278,10 +278,35 @@ func isNotToken(r rune) bool {
 	return !httpguts.IsTokenRune(r)
 }
 
+func resolveUDPAddrWithCtx(ctx context.Context, netstr string, addr string) (*net.UDPAddr, error) {
+	var (
+		err        error
+		host, port string
+		portnum    int
+	)
+	if host, port, err = net.SplitHostPort(addr); err != nil {
+		return nil, err
+	}
+	if portnum, err = net.DefaultResolver.LookupPort(ctx, netstr, port); err != nil {
+		return nil, err
+	}
+	if host == "" {
+		return &net.UDPAddr{IP: net.IPAddr{}.IP, Port: portnum, Zone: net.IPAddr{}.Zone}, nil
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) == 0 {
+		return nil, &net.AddrError{Err: "No address", Addr: addr}
+	}
+	return &net.UDPAddr{IP: ips[0].IP, Port: portnum, Zone: ips[0].Zone}, nil
+}
+
 // makeDialer makes a QUIC dialer using r.udpConn.
 func (r *RoundTripper) makeDialer() func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 	return func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-		udpAddr, err := net.ResolveUDPAddr("udp", addr)
+		udpAddr, err := resolveUDPAddrWithCtx(ctx, "udp", addr)
 		if err != nil {
 			return nil, err
 		}
