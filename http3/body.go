@@ -5,7 +5,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/quic-go/quic-go"
+	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
 // The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented by:

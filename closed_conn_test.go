@@ -3,7 +3,7 @@ package quic
 import (
 	"net"
 
-	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

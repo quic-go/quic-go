@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/quic-go/quic-go/internal/testdata"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/testdata"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

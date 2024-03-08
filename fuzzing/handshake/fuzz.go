@@ -14,12 +14,12 @@ import (
 	"net"
 	"time"
 
-	"github.com/quic-go/quic-go/fuzzing/internal/helper"
-	"github.com/quic-go/quic-go/internal/handshake"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qtls"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/danielpfeifer02/quic-go-prio-packs/fuzzing/internal/helper"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/handshake"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/protocol"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/qtls"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/wire"
 )
 
 var (

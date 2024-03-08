@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

@@ -3,8 +3,8 @@ package quic
 import (
 	"net"
 
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/protocol"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
 )
 
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.

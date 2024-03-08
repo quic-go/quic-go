@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/protocol"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
 )
 
 // OOBCapablePacketConn is a connection that allows the reading of ECN bits from the IP header.
@@ -33,7 +33,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
 					return
 				}
-				log.Printf("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.", err)
+				log.Printf("%s. See https://github.com/danielpfeifer02/quic-go-prio-packs/wiki/UDP-Buffer-Sizes for details.", err)
 			})
 		}
 	}
@@ -43,7 +43,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
 					return
 				}
-				log.Printf("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.", err)
+				log.Printf("%s. See https://github.com/danielpfeifer02/quic-go-prio-packs/wiki/UDP-Buffer-Sizes for details.", err)
 			})
 		}
 	}

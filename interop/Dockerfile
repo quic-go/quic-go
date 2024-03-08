@@ -21,14 +21,14 @@ ARG CACHEBUST=1
 # build other branches / commits / tags using --build-arg GITREF="<git reference>"
 ARG GITREF="master"
 
-RUN git clone https://github.com/quic-go/quic-go
+RUN git clone https://github.com/danielpfeifer02/quic-go-prio-packs
 WORKDIR /quic-go
 RUN git checkout ${GITREF}
 RUN go get ./...
 
 RUN git rev-parse HEAD | tee commit.txt
-RUN go build -o server -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/server/main.go
-RUN go build -o client -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/client/main.go
+RUN go build -o server -ldflags="-X github.com/danielpfeifer02/quic-go-prio-packs/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/server/main.go
+RUN go build -o client -ldflags="-X github.com/danielpfeifer02/quic-go-prio-packs/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/client/main.go
 
 
 FROM martenseemann/quic-network-simulator-endpoint:latest

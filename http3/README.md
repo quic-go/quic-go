@@ -1,6 +1,6 @@
 # HTTP/3
 
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/quic-go/quic-go/http3)](https://pkg.go.dev/github.com/quic-go/quic-go/http3)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/danielpfeifer02/quic-go-prio-packs/http3)](https://pkg.go.dev/github.com/danielpfeifer02/quic-go-prio-packs/http3)
 
 This package implements HTTP/3 ([RFC 9114](https://datatracker.ietf.org/doc/html/rfc9114)), including QPACK ([RFC 9204](https://datatracker.ietf.org/doc/html/rfc9204)).
 It aims to provide feature parity with the standard library's HTTP/1.1 and HTTP/2 implementation.
@@ -26,7 +26,7 @@ server := http3.Server{
 err := server.ListenAndServe()
 ```
 
-The `http3.Server` provides a number of configuration options, please refer to the [documentation](https://pkg.go.dev/github.com/quic-go/quic-go/http3#Server) for a complete list. The `QuicConfig` is used to configure the underlying QUIC connection. More details can be found in the documentation of the QUIC package.
+The `http3.Server` provides a number of configuration options, please refer to the [documentation](https://pkg.go.dev/github.com/danielpfeifer02/quic-go-prio-packs/http3#Server) for a complete list. The `QuicConfig` is used to configure the underlying QUIC connection. More details can be found in the documentation of the QUIC package.
 
 It is also possible to manually set up a `quic.Transport`, and then pass the listener to the server. This is useful when you want to set configuration options on the `quic.Transport`.
 ```go
@@ -71,7 +71,7 @@ client := &http.Client{
 }
 ```
 
-The `http3.RoundTripper` provides a number of configuration options, please refer to the [documentation](https://pkg.go.dev/github.com/quic-go/quic-go/http3#RoundTripper) for a complete list.
+The `http3.RoundTripper` provides a number of configuration options, please refer to the [documentation](https://pkg.go.dev/github.com/danielpfeifer02/quic-go-prio-packs/http3#RoundTripper) for a complete list.
 
 To use a custom `quic.Transport`, the function used to dial new QUIC connections can be configured:
 ```go
@@ -101,4 +101,4 @@ HTTP/3 utilizes QPACK ([RFC 9204](https://datatracker.ietf.org/doc/html/rfc9204)
 
 While the current implementation is a fully interoperable implementation of the QPACK protocol, it only uses the static compression table. The dynamic table would allow for more effective compression of frequently transmitted header fields. This can be particularly beneficial in scenarios where headers have considerable redundancy or in high-throughput environments.
 
-If you think that your application would benefit from higher compression efficiency, or if you're interested in contributing improvements here, please let us know in [#2424](https://github.com/quic-go/quic-go/issues/2424).
+If you think that your application would benefit from higher compression efficiency, or if you're interested in contributing improvements here, please let us know in [#2424](https://github.com/danielpfeifer02/quic-go-prio-packs/issues/2424).

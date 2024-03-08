@@ -3,7 +3,7 @@ package quic
 import (
 	"sync"
 
-	list "github.com/quic-go/quic-go/internal/utils/linkedlist"
+	list "github.com/danielpfeifer02/quic-go-prio-packs/internal/utils/linkedlist"
 )
 
 type singleOriginTokenStore struct {

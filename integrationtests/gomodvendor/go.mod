@@ -3,7 +3,7 @@ module test
 go 1.21
 
 // The version doesn't matter here, as we're replacing it with the currently checked out code anyway.
-require github.com/quic-go/quic-go v0.21.0
+require github.com/danielpfeifer02/quic-go-prio-packs v0.21.0
 
 require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
@@ -20,4 +20,4 @@ require (
 	golang.org/x/tools v0.9.1 // indirect
 )
 
-replace github.com/quic-go/quic-go => ../../
+replace github.com/danielpfeifer02/quic-go-prio-packs => ../../

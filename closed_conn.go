@@ -4,7 +4,7 @@ import (
 	"math/bits"
 	"net"
 
-	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
 )
 
 // A closedLocalConn is a connection that we closed locally.

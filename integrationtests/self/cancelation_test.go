@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/danielpfeifer02/quic-go-prio-packs"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -172,7 +172,7 @@ var _ = Describe("Stream Cancellations", func() {
 
 		It("allows concurrent Read and CancelRead calls", func() {
 			// This test is especially valuable when run with race detector,
-			// see https://github.com/quic-go/quic-go/issues/3239.
+			// see https://github.com/danielpfeifer02/quic-go-prio-packs/issues/3239.
 			serverCanceledCounterChan := runServer(make([]byte, 100)) // make sure the FIN is sent with the STREAM frame
 
 			conn, err := quic.DialAddr(

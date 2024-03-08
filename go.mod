@@ -1,4 +1,4 @@
-module github.com/quic-go/quic-go
+module github.com/danielpfeifer02/quic-go-prio-packs
 
 go 1.21
 

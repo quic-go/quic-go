@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/quic-go/quic-go"
+	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
 func BenchmarkHandshake(b *testing.B) {
