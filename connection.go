@@ -1039,7 +1039,8 @@ func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime ti
 		s.logger.Debugf("Ignoring Retry, since we already received a packet.")
 		return false
 	}
-	destConnID := s.connIDManager.Get()
+	// PRIO_PACKS_TAG
+	destConnID := s.connIDManager.Get(-1)
 	if hdr.SrcConnectionID == destConnID {
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket)

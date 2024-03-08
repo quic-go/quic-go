@@ -278,7 +278,12 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 				connIDLen = protocol.DefaultConnectionIDLength
 			}
 			t.connIDLen = connIDLen
-			t.connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: t.connIDLen}
+			// PRIO_PACKS_TAG
+			// PriorityCounter has to start at once since if we start at 0 (i.e. low prio)
+			// and we have a high prio packet it is gonna get drupped, which is worse than
+			// not dropping a low prio packet.
+			// Once the connection has more than 1 connection IDs this problem is gone.
+			t.connIDGenerator = &protocol.PriorityConnectionIDGenerator{ConnLen: t.connIDLen, PriorityCounter: 1}
 		}
 
 		getMultiplexer().AddConn(t.Conn)

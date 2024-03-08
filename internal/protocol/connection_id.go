@@ -114,3 +114,31 @@ func (d *DefaultConnectionIDGenerator) GenerateConnectionID() (ConnectionID, err
 func (d *DefaultConnectionIDGenerator) ConnectionIDLen() int {
 	return d.ConnLen
 }
+
+// PRIO_PACKS_TAG
+type PriorityConnectionIDGenerator struct {
+	ConnLen         int
+	PriorityCounter int8
+}
+
+func (t *PriorityConnectionIDGenerator) GenerateConnectionID() (ConnectionID, error) {
+	if t.ConnLen == 20 { // TODOME better way to handle this?
+		t.ConnLen = 8
+	}
+
+	var c ConnectionID
+	c.l = uint8(t.ConnLen)
+	_, err := rand.Read(c.b[1:t.ConnLen])
+	if err != nil {
+		return c, err
+	}
+
+	// add priority counter as the first byte of the connection ID and
+	c.b[0] = byte(t.PriorityCounter)
+	t.PriorityCounter = (t.PriorityCounter + 1) % 2
+	return c, nil
+}
+
+func (t *PriorityConnectionIDGenerator) ConnectionIDLen() int {
+	return t.ConnLen
+}

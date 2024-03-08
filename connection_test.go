@@ -2612,7 +2612,8 @@ var _ = Describe("Client Connection", func() {
 			SequenceNumber: 1,
 			ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
 		})
-		Expect(conn.connIDManager.Get()).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})))
+		// PRIO_PACKS_TAG
+		Expect(conn.connIDManager.Get(-1)).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})))
 		// now receive a packet with the original source connection ID
 		unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any(), gomock.Any(), conn.version).DoAndReturn(func(hdr *wire.Header, _ time.Time, _ []byte, _ protocol.Version) (*unpackedPacket, error) {
 			return &unpackedPacket{
@@ -2930,7 +2931,8 @@ var _ = Describe("Client Connection", func() {
 			cf, _ := conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
 			Expect(cf).To(BeEmpty())
 			connRunner.EXPECT().AddResetToken(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, conn)
-			Expect(conn.connIDManager.Get()).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4})))
+			// PRIO_PACKS_TAG
+			Expect(conn.connIDManager.Get(-1)).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4})))
 			// shut down
 			connRunner.EXPECT().RemoveResetToken(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1})
 			expectClose(true, false)
@@ -3197,7 +3199,8 @@ var _ = Describe("Client Connection", func() {
 
 			tracer.EXPECT().ReceivedRetry(gomock.Any())
 			conn.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, destConnID, destConnID, []byte("foobar"), conn.version)))
-			initialPacket := testutils.ComposeInitialPacket(conn.connIDManager.Get(), srcConnID, conn.connIDManager.Get(), nil, protocol.PerspectiveServer, conn.version)
+			// PRIO_PACKS_TAG
+			initialPacket := testutils.ComposeInitialPacket(conn.connIDManager.Get(-1), srcConnID, conn.connIDManager.Get(-1), nil, protocol.PerspectiveServer, conn.version)
 			tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.InvalidPacketNumber, gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})

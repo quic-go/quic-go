@@ -129,7 +129,9 @@ func setupTransport(c net.PacketConn, tlsConf *tls.Config, createdPacketConn boo
 	return &Transport{
 		Conn:        c,
 		createdConn: createdPacketConn,
-		isSingleUse: true,
+		// PRIO_PACKS_TAG
+		// setting singleUse to false to force connection ids longer than 0 bytes
+		isSingleUse: false,
 	}, nil
 }
 
