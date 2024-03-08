@@ -5,6 +5,7 @@ mockgen_tmp.go
 *.qtr
 *.qlog
 *.txt
+*.keylog
 race.[0-9]*
 
 fuzzing/*/*.zip
