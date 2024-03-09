@@ -50,6 +50,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 			ConnectionIDLength:    connIDLen,
 			ConnectionIDGenerator: connIDGenerator,
 		}
+		addTracer(tr)
 		ln, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
@@ -92,6 +93,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 			ConnectionIDLength:    connIDLen,
 			ConnectionIDGenerator: connIDGenerator,
 		}
+		addTracer(tr)
 		defer tr.Close()
 		cl, err := tr.Dial(
 			context.Background(),

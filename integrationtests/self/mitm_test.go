@@ -41,6 +41,7 @@ var _ = Describe("MITM test", func() {
 			Conn:               c,
 			ConnectionIDLength: connIDLen,
 		}
+		addTracer(serverTransport)
 		if forceAddressValidation {
 			serverTransport.MaxUnvalidatedHandshakes = -1
 		}
@@ -86,6 +87,7 @@ var _ = Describe("MITM test", func() {
 			Conn:               clientUDPConn,
 			ConnectionIDLength: connIDLen,
 		}
+		addTracer(clientTransport)
 	})
 
 	Context("unsuccessful attacks", func() {

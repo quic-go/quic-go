@@ -233,6 +233,20 @@ func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
 }
 
+type eventVersionNegotiationSent struct {
+	Header            packetHeaderVersionNegotiation
+	SupportedVersions []versionNumber
+}
+
+func (e eventVersionNegotiationSent) Category() category { return categoryTransport }
+func (e eventVersionNegotiationSent) Name() string       { return "packet_sent" }
+func (e eventVersionNegotiationSent) IsNil() bool        { return false }
+
+func (e eventVersionNegotiationSent) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.ObjectKey("header", e.Header)
+	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
+}
+
 type eventPacketBuffered struct {
 	PacketType logging.PacketType
 	PacketSize protocol.ByteCount
