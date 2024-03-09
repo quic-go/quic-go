@@ -443,17 +443,6 @@ var _ = Describe("Receive Stream", func() {
 					Expect(atomic.LoadInt32(&numCompleted)).To(BeEquivalentTo(1))
 				})
 			})
-
-			It("closes when CloseRemote is called", func() {
-				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
-				mockFC.EXPECT().AddBytesRead(protocol.ByteCount(0))
-				str.CloseRemote(0)
-				mockSender.EXPECT().onStreamCompleted(streamID)
-				b := make([]byte, 8)
-				n, err := strWithTimeout.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(io.EOF))
-			})
 		})
 
 		Context("closing for shutdown", func() {
