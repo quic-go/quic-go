@@ -252,7 +252,7 @@ func (p *packetPacker) packConnectionClose(
 		var hdr *wire.ExtendedHeader
 		if encLevel == protocol.Encryption1RTT {
 			// PRIO_PACKS_TAG
-			connID = p.getDestConnID(1)
+			connID = p.getDestConnID(PrioConnectionClosePacket)
 			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 			size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, pl)
 		} else {
@@ -382,7 +382,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 		if err == nil { // 1-RTT
 			kp = oneRTTSealer.KeyPhase()
 			// PRIO_PACKS_TAG
-			connID = p.getDestConnID(1)
+			connID = p.getDestConnID(PrioCoalescedPacket)
 			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 			hdrLen := wire.ShortHeaderLen(connID, oneRTTPacketNumberLen)
 			oneRTTPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, hdrLen, maxPacketSize-size, onlyAck, size == 0, v)
@@ -465,7 +465,7 @@ func (p *packetPacker) appendPacket(buf *packetBuffer, onlyAck bool, maxPacketSi
 	}
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 	// PRIO_PACKS_TAG
-	connID := p.getDestConnID(1)
+	connID := p.getDestConnID(PrioAppendPacket)
 	hdrLen := wire.ShortHeaderLen(connID, pnLen)
 	pl := p.maybeGetShortHeaderPacket(sealer, hdrLen, maxPacketSize, onlyAck, true, v)
 	if pl.length == 0 {
@@ -673,7 +673,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel, m
 		}
 		kp := s.KeyPhase()
 		// PRIO_PACKS_TAG
-		connID := p.getDestConnID(1)
+		connID := p.getDestConnID(PrioProbePacket)
 		pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 		hdrLen := wire.ShortHeaderLen(connID, pnLen)
 		pl := p.maybeGetAppDataPacket(maxPacketSize-protocol.ByteCount(s.Overhead())-hdrLen, false, true, v)
@@ -743,7 +743,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 		return shortHeaderPacket{}, nil, err
 	}
 	// PRIO_PACKS_TAG
-	connID := p.getDestConnID(1)
+	connID := p.getDestConnID(PrioMTUProbePacket)
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 	padding := size - p.shortHeaderPacketLength(connID, pnLen, pl) - protocol.ByteCount(s.Overhead())
 	kp := s.KeyPhase()
@@ -760,7 +760,7 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protoc
 	hdr.Version = v
 	hdr.SrcConnectionID = p.srcConnID
 	// PRIO_PACKS_TAG
-	hdr.DestConnectionID = p.getDestConnID(1)
+	hdr.DestConnectionID = p.getDestConnID(PrioLongHeaderPacket)
 
 	//nolint:exhaustive // 1-RTT packets are not long header packets.
 	switch encLevel {
