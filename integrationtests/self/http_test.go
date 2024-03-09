@@ -559,4 +559,17 @@ var _ = Describe("HTTP tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 	})
+
+	It("checks the server's settings", func() {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/hello", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		testErr := errors.New("test error")
+		_, err = rt.RoundTripOpt(req, http3.RoundTripOpt{CheckSettings: func(settings http3.Settings) error {
+			Expect(settings.EnableExtendedConnect).To(BeTrue())
+			Expect(settings.EnableDatagram).To(BeFalse())
+			Expect(settings.Other).To(BeEmpty())
+			return testErr
+		}})
+		Expect(err).To(MatchError(err))
+	})
 })
