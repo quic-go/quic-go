@@ -85,7 +85,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(6) + 6))
+			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(6) + 6))
 		})
 
 		It("has the right length for a frame without length", func() {

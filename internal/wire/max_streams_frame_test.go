@@ -106,7 +106,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 
 		It("has the correct length", func() {
 			frame := MaxStreamsFrame{MaxStreamNum: 0x1337}
-			Expect(frame.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337)))
+			Expect(frame.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337)))
 		})
 	})
 })
