@@ -336,12 +336,12 @@ type Config struct {
 // ClientHelloInfo contains information about an incoming connection attempt.
 type ClientHelloInfo struct {
 	// RemoteAddr is the remote address on the Initial packet.
-	// Unless AddressVerified is set, the address is not yet verified, and could be a spoofed IP address.
+	// Unless AddrVerified is set, the address is not yet verified, and could be a spoofed IP address.
 	RemoteAddr net.Addr
-	// AddressVerified says if the remote address was verified using QUIC's Retry mechanism.
+	// AddrVerified says if the remote address was verified using QUIC's Retry mechanism.
 	// Note that the Retry mechanism costs one network roundtrip,
 	// and is not performed unless Transport.MaxUnvalidatedHandshakes is surpassed.
-	AddressVerified bool
+	AddrVerified bool
 }
 
 // ConnectionState records basic details about a QUIC connection

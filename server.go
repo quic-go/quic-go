@@ -640,8 +640,8 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	config := s.config
 	if s.config.GetConfigForClient != nil {
 		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{
-			RemoteAddr:      p.remoteAddr,
-			AddressVerified: clientAddrValidated,
+			RemoteAddr:   p.remoteAddr,
+			AddrVerified: clientAddrValidated,
 		})
 		if err != nil {
 			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")

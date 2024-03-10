@@ -77,7 +77,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-				Expect(info.AddressVerified).To(BeTrue())
+				Expect(info.AddrVerified).To(BeTrue())
 				return nil, nil
 			}}),
 		)
@@ -98,7 +98,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-				Expect(info.AddressVerified).To(BeFalse())
+				Expect(info.AddrVerified).To(BeFalse())
 				return nil, nil
 			}}),
 		)
