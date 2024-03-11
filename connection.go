@@ -37,9 +37,17 @@ type streamGetter interface {
 type streamManager interface {
 	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
+	// PRIO_PACKS_TAG
+	OpenStreamWithPriority(protocol.StreamPriority) (Stream, error)
 	OpenStream() (Stream, error)
+	// PRIO_PACKS_TAG
+	OpenUniStreamWithPriority(protocol.StreamPriority) (SendStream, error)
 	OpenUniStream() (SendStream, error)
+	// PRIO_PACKS_TAG
+	OpenStreamSyncWithPriority(context.Context, protocol.StreamPriority) (Stream, error)
 	OpenStreamSync(context.Context) (Stream, error)
+	// PRIO_PACKS_TAG
+	OpenUniStreamSyncWithPriority(context.Context, protocol.StreamPriority) (SendStream, error)
 	OpenUniStreamSync(context.Context) (SendStream, error)
 	AcceptStream(context.Context) (Stream, error)
 	AcceptUniStream(context.Context) (ReceiveStream, error)
@@ -2257,21 +2265,45 @@ func (s *connection) AcceptUniStream(ctx context.Context) (ReceiveStream, error)
 	return s.streamsMap.AcceptUniStream(ctx)
 }
 
+// PRIO_PACKS_TAG
+// OpenStream including a user defined priority for potential packet prioritization
+func (s *connection) OpenStreamWithPriority(priority protocol.StreamPriority) (Stream, error) {
+	return s.streamsMap.OpenStreamWithPriority(priority)
+}
+
 // OpenStream opens a stream
 func (s *connection) OpenStream() (Stream, error) {
-	return s.streamsMap.OpenStream()
+	return s.streamsMap.OpenStreamWithPriority(NoPriority)
+}
+
+// PRIO_PACKS_TAG
+// OpenStream including a user defined priority for potential packet prioritization
+func (s *connection) OpenStreamSyncWithPriority(ctx context.Context, priority protocol.StreamPriority) (Stream, error) {
+	return s.streamsMap.OpenStreamSyncWithPriority(ctx, priority)
 }
 
 func (s *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
-	return s.streamsMap.OpenStreamSync(ctx)
+	return s.streamsMap.OpenStreamSyncWithPriority(ctx, NoPriority)
+}
+
+// PRIO_PACKS_TAG
+// OpenStream including a user defined priority for potential packet prioritization
+func (s *connection) OpenUniStreamWithPriority(priority protocol.StreamPriority) (SendStream, error) {
+	return s.streamsMap.OpenUniStreamWithPriority(priority)
 }
 
 func (s *connection) OpenUniStream() (SendStream, error) {
-	return s.streamsMap.OpenUniStream()
+	return s.streamsMap.OpenUniStreamWithPriority(NoPriority)
+}
+
+// PRIO_PACKS_TAG
+// OpenStream including a user defined priority for potential packet prioritization
+func (s *connection) OpenUniStreamSyncWithPriority(ctx context.Context, priority protocol.StreamPriority) (SendStream, error) {
+	return s.streamsMap.OpenUniStreamSyncWithPriority(ctx, priority)
 }
 
 func (s *connection) OpenUniStreamSync(ctx context.Context) (SendStream, error) {
-	return s.streamsMap.OpenUniStreamSync(ctx)
+	return s.streamsMap.OpenUniStreamSyncWithPriority(ctx, NoPriority)
 }
 
 func (s *connection) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {

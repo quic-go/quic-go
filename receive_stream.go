@@ -47,6 +47,9 @@ type receiveStream struct {
 	deadline time.Time
 
 	flowController flowcontrol.StreamFlowController
+
+	// PRIO_PACKS_TAG
+	priority protocol.StreamPriority
 }
 
 var (
@@ -67,6 +70,8 @@ func newReceiveStream(
 		readChan:       make(chan struct{}, 1),
 		readOnce:       make(chan struct{}, 1),
 		finalOffset:    protocol.MaxByteCount,
+		// PRIO_PACKS_TAG
+		priority: NoPriority,
 	}
 }
 
@@ -324,4 +329,16 @@ func (s *receiveStream) signalRead() {
 	case s.readChan <- struct{}{}:
 	default:
 	}
+}
+
+// PRIO_PACKS_TAG
+// Priority returns the priority of the stream
+func (s *receiveStream) Priority() protocol.StreamPriority {
+	return s.priority
+}
+
+// PRIO_PACKS_TAG
+// SetPriority sets the priority of the stream
+func (s *receiveStream) SetPriority(priority protocol.StreamPriority) {
+	s.priority = priority
 }

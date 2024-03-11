@@ -3,6 +3,10 @@ package protocol
 // StreamType encodes if this is a unidirectional or bidirectional stream
 type StreamType uint8
 
+// PRIO_PACKS_TAG
+// StreamPriority encodes the priority of the stream
+type StreamPriority int8
+
 const (
 	// StreamTypeUni is a unidirectional stream
 	StreamTypeUni StreamType = iota

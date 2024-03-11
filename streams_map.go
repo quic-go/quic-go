@@ -118,6 +118,17 @@ func (m *streamsMap) initMaps() {
 	)
 }
 
+// PRIO_PACKS_TAG
+// OpenStream wrapper for priority setting
+func (m *streamsMap) OpenStreamWithPriority(priority protocol.StreamPriority) (Stream, error) {
+	str, err := m.OpenStream()
+	if err != nil {
+		return nil, err
+	}
+	str.SetPriority(priority)
+	return str, nil
+}
+
 func (m *streamsMap) OpenStream() (Stream, error) {
 	m.mutex.Lock()
 	reset := m.reset
@@ -128,6 +139,17 @@ func (m *streamsMap) OpenStream() (Stream, error) {
 	}
 	str, err := mm.OpenStream()
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
+}
+
+// PRIO_PACKS_TAG
+// OpenStream wrapper for priority setting
+func (m *streamsMap) OpenStreamSyncWithPriority(ctx context.Context, priority protocol.StreamPriority) (Stream, error) {
+	str, err := m.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	str.SetPriority(priority)
+	return str, nil
 }
 
 func (m *streamsMap) OpenStreamSync(ctx context.Context) (Stream, error) {
@@ -142,6 +164,17 @@ func (m *streamsMap) OpenStreamSync(ctx context.Context) (Stream, error) {
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
 }
 
+// PRIO_PACKS_TAG
+// OpenStream wrapper for priority setting
+func (m *streamsMap) OpenUniStreamWithPriority(priority protocol.StreamPriority) (SendStream, error) {
+	str, err := m.OpenUniStream()
+	if err != nil {
+		return nil, err
+	}
+	str.SetPriority(priority)
+	return str, nil
+}
+
 func (m *streamsMap) OpenUniStream() (SendStream, error) {
 	m.mutex.Lock()
 	reset := m.reset
@@ -152,6 +185,17 @@ func (m *streamsMap) OpenUniStream() (SendStream, error) {
 	}
 	str, err := mm.OpenStream()
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
+}
+
+// PRIO_PACKS_TAG
+// OpenStream wrapper for priority setting
+func (m *streamsMap) OpenUniStreamSyncWithPriority(ctx context.Context, priority protocol.StreamPriority) (SendStream, error) {
+	str, err := m.OpenUniStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	str.SetPriority(priority)
+	return str, nil
 }
 
 func (m *streamsMap) OpenUniStreamSync(ctx context.Context) (SendStream, error) {

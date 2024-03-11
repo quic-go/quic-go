@@ -80,6 +80,7 @@ type stream struct {
 	sender                 streamSender
 	receiveStreamCompleted bool
 	sendStreamCompleted    bool
+	priority               protocol.StreamPriority
 }
 
 var _ Stream = &stream{}
@@ -143,4 +144,16 @@ func (s *stream) checkIfCompleted() {
 	if s.sendStreamCompleted && s.receiveStreamCompleted {
 		s.sender.onStreamCompleted(s.StreamID())
 	}
+}
+
+// PRIO_PACKS_TAG
+// Priority returns the priority of the stream
+func (s *stream) Priority() protocol.StreamPriority {
+	return s.priority
+}
+
+// PRIO_PACKS_TAG
+// SetPriority sets the priority of the stream
+func (s *stream) SetPriority(priority protocol.StreamPriority) {
+	s.priority = priority
 }

@@ -16,6 +16,10 @@ import (
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
+// PRIO_PACKS_TAG
+// StreamPriority is the priority of a QUIC stream.
+type StreamPriority = protocol.StreamPriority
+
 // A Version is a QUIC version number.
 type Version = protocol.Version
 
@@ -75,6 +79,12 @@ type Stream interface {
 	// with the connection. It is equivalent to calling both
 	// SetReadDeadline and SetWriteDeadline.
 	SetDeadline(t time.Time) error
+	// PRIO_PACKS_TAG
+	// Priority returns the stream specific priority used for potential adaptive streaming
+	Priority() StreamPriority
+	// PRIO_PACKS_TAG
+	// SetPriority sets the stream specific priority used for potential adaptive streaming
+	SetPriority(StreamPriority)
 }
 
 // A ReceiveStream is a unidirectional Receive Stream.
@@ -99,6 +109,12 @@ type ReceiveStream interface {
 	// A zero value for t means Read will not time out.
 
 	SetReadDeadline(t time.Time) error
+	// PRIO_PACKS_TAG
+	// Priority returns the stream specific priority used for potential adaptive streaming
+	Priority() StreamPriority
+	// PRIO_PACKS_TAG
+	// SetPriority sets the stream specific priority used for potential adaptive streaming
+	SetPriority(StreamPriority)
 }
 
 // A SendStream is a unidirectional Send Stream.
@@ -135,6 +151,12 @@ type SendStream interface {
 	// some data was successfully written.
 	// A zero value for t means Write will not time out.
 	SetWriteDeadline(t time.Time) error
+	// PRIO_PACKS_TAG
+	// Priority returns the stream specific priority used for potential adaptive streaming
+	Priority() StreamPriority
+	// PRIO_PACKS_TAG
+	// SetPriority sets the stream specific priority used for potential adaptive streaming
+	SetPriority(StreamPriority)
 }
 
 // A Connection is a QUIC connection between two peers.
@@ -154,6 +176,7 @@ type Connection interface {
 	// If the connection was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
 	AcceptUniStream(context.Context) (ReceiveStream, error)
+
 	// OpenStream opens a new bidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream.
@@ -161,6 +184,10 @@ type Connection interface {
 	// When reaching the peer's stream limit, err.Temporary() will be true.
 	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenStream() (Stream, error)
+	// PRIO_PACKS_TAG
+	// same as OpenStream, but with priority
+	OpenStreamWithPriority(StreamPriority) (Stream, error)
+
 	// OpenStreamSync opens a new bidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// There is no signaling to the peer about new streams:
@@ -169,16 +196,28 @@ type Connection interface {
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenStreamSync(context.Context) (Stream, error)
+	// PRIO_PACKS_TAG
+	// same as OpenStreamSync, but with priority
+	OpenStreamSyncWithPriority(context.Context, StreamPriority) (Stream, error)
+
 	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, Temporary() will be true.
 	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenUniStream() (SendStream, error)
+	// PRIO_PACKS_TAG
+	// same as OpenUniStream, but with priotity
+	OpenUniStreamWithPriority(StreamPriority) (SendStream, error)
+
 	// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenUniStreamSync(context.Context) (SendStream, error)
+	// PRIO_PACKS_TAG
+	// same as OpenUniStreamSync, but with priority
+	OpenUniStreamSyncWithPriority(context.Context, StreamPriority) (SendStream, error)
+
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.

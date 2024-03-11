@@ -52,6 +52,9 @@ type sendStream struct {
 	deadline  time.Time
 
 	flowController flowcontrol.StreamFlowController
+
+	// PRIO_PACKS_TAG
+	priority protocol.StreamPriority
 }
 
 var (
@@ -70,6 +73,8 @@ func newSendStream(
 		flowController: flowController,
 		writeChan:      make(chan struct{}, 1),
 		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
+		// PRIO_PACKS_TAG
+		priority: NoPriority,
 	}
 	s.ctx, s.ctxCancel = context.WithCancelCause(context.Background())
 	return s
@@ -449,6 +454,18 @@ func (s *sendStream) signalWrite() {
 	case s.writeChan <- struct{}{}:
 	default:
 	}
+}
+
+// PRIO_PACKS_TAG
+// Priority returns the priority of the stream
+func (s *sendStream) Priority() protocol.StreamPriority {
+	return s.priority
+}
+
+// PRIO_PACKS_TAG
+// SetPriority sets the priority of the stream
+func (s *sendStream) SetPriority(priority protocol.StreamPriority) {
+	s.priority = priority
 }
 
 type sendStreamAckHandler sendStream
