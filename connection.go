@@ -2260,34 +2260,67 @@ func (s *connection) logCoalescedPacket(packet *coalescedPacket, ecn protocol.EC
 }
 
 // PRIO_PACKS_TAG
-//
+// The assumption now is that no matter if priority is actually used or not the
+// first byte will always be interpreted as meta data
+
+type PriorityReader interface {
+	Read([]byte) (int, error)
+}
+
+type PriorityWriter interface {
+	Write([]byte) (int, error)
+}
+
+// PRIO_PACKS_TAG
+func readPriorityFromStream(str PriorityReader) StreamPriority {
+	// Assumption is that first byte always sends the priority
+	// This happens only internally and is not exposed to the user
+	meta := make([]byte, 1)
+	_, err := str.Read(meta)
+	if err != nil {
+		panic("Failed to read stream priority when accepting stream")
+	}
+	prio := protocol.StreamPriority(meta[0])
+	return prio
+}
+
+func writePriorityToStream(str PriorityWriter, prio protocol.StreamPriority) {
+	meta := make([]byte, 1)
+	meta[0] = byte(prio)
+	_, err := str.Write(meta)
+	if err != nil {
+		panic("Failed to write stream priority when opening stream")
+	}
+}
+
 // AcceptStream returns the next stream openend by the peer
 func (s *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	str, err := s.streamsMap.AcceptStream(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	// Assumption is that first byte always sends the priority
-	// This happens only internally and is not exposed to the user
-	meta := make([]byte, 1)
-	_, err = str.Read(meta)
-	if err != nil {
-		return nil, err
-	}
-	prio := protocol.StreamPriority(meta[0])
-	str.SetPriority(prio)
+	str.SetPriority(readPriorityFromStream(str))
 	return str, nil
 }
 
 func (s *connection) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
-	return s.streamsMap.AcceptUniStream(ctx)
+	str, err := s.streamsMap.AcceptUniStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	str.SetPriority(readPriorityFromStream(str))
+	return str, nil
 }
 
 // PRIO_PACKS_TAG
 // OpenStream including a user defined priority for potential packet prioritization
 func (s *connection) OpenStreamWithPriority(priority protocol.StreamPriority) (Stream, error) {
-	return s.streamsMap.OpenStreamWithPriority(priority)
+	str, err := s.streamsMap.OpenStreamWithPriority(priority)
+	if err != nil {
+		return nil, err
+	}
+	writePriorityToStream(str, priority)
+	return str, nil
 }
 
 // OpenStream opens a stream
@@ -2302,12 +2335,7 @@ func (s *connection) OpenStreamSyncWithPriority(ctx context.Context, priority pr
 	if err != nil {
 		return nil, err
 	}
-	meta := make([]byte, 1)
-	meta[0] = byte(priority)
-	_, err = str.Write(meta)
-	if err != nil {
-		return nil, err
-	}
+	writePriorityToStream(str, priority)
 	return str, nil
 }
 
@@ -2318,7 +2346,12 @@ func (s *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
 // PRIO_PACKS_TAG
 // OpenStream including a user defined priority for potential packet prioritization
 func (s *connection) OpenUniStreamWithPriority(priority protocol.StreamPriority) (SendStream, error) {
-	return s.streamsMap.OpenUniStreamWithPriority(priority)
+	str, err := s.streamsMap.OpenUniStreamWithPriority(priority)
+	if err != nil {
+		return nil, err
+	}
+	writePriorityToStream(str, priority)
+	return str, nil
 }
 
 func (s *connection) OpenUniStream() (SendStream, error) {
@@ -2328,7 +2361,12 @@ func (s *connection) OpenUniStream() (SendStream, error) {
 // PRIO_PACKS_TAG
 // OpenStream including a user defined priority for potential packet prioritization
 func (s *connection) OpenUniStreamSyncWithPriority(ctx context.Context, priority protocol.StreamPriority) (SendStream, error) {
-	return s.streamsMap.OpenUniStreamSyncWithPriority(ctx, priority)
+	str, err := s.streamsMap.OpenUniStreamSyncWithPriority(ctx, priority)
+	if err != nil {
+		return nil, err
+	}
+	writePriorityToStream(str, priority)
+	return str, nil
 }
 
 func (s *connection) OpenUniStreamSync(ctx context.Context) (SendStream, error) {
