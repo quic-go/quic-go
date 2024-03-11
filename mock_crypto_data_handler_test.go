@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_crypto_data_handler_test.go github.com/quic-go/quic-go CryptoDataHandler
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -48,31 +49,31 @@ func (m *MockCryptoDataHandler) HandleMessage(arg0 []byte, arg1 protocol.Encrypt
 }
 
 // HandleMessage indicates an expected call of HandleMessage.
-func (mr *MockCryptoDataHandlerMockRecorder) HandleMessage(arg0, arg1 any) *CryptoDataHandlerHandleMessageCall {
+func (mr *MockCryptoDataHandlerMockRecorder) HandleMessage(arg0, arg1 any) *MockCryptoDataHandlerHandleMessageCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockCryptoDataHandler)(nil).HandleMessage), arg0, arg1)
-	return &CryptoDataHandlerHandleMessageCall{Call: call}
+	return &MockCryptoDataHandlerHandleMessageCall{Call: call}
 }
 
-// CryptoDataHandlerHandleMessageCall wrap *gomock.Call
-type CryptoDataHandlerHandleMessageCall struct {
+// MockCryptoDataHandlerHandleMessageCall wrap *gomock.Call
+type MockCryptoDataHandlerHandleMessageCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoDataHandlerHandleMessageCall) Return(arg0 error) *CryptoDataHandlerHandleMessageCall {
+func (c *MockCryptoDataHandlerHandleMessageCall) Return(arg0 error) *MockCryptoDataHandlerHandleMessageCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoDataHandlerHandleMessageCall) Do(f func([]byte, protocol.EncryptionLevel) error) *CryptoDataHandlerHandleMessageCall {
+func (c *MockCryptoDataHandlerHandleMessageCall) Do(f func([]byte, protocol.EncryptionLevel) error) *MockCryptoDataHandlerHandleMessageCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoDataHandlerHandleMessageCall) DoAndReturn(f func([]byte, protocol.EncryptionLevel) error) *CryptoDataHandlerHandleMessageCall {
+func (c *MockCryptoDataHandlerHandleMessageCall) DoAndReturn(f func([]byte, protocol.EncryptionLevel) error) *MockCryptoDataHandlerHandleMessageCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -86,31 +87,31 @@ func (m *MockCryptoDataHandler) NextEvent() handshake.Event {
 }
 
 // NextEvent indicates an expected call of NextEvent.
-func (mr *MockCryptoDataHandlerMockRecorder) NextEvent() *CryptoDataHandlerNextEventCall {
+func (mr *MockCryptoDataHandlerMockRecorder) NextEvent() *MockCryptoDataHandlerNextEventCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextEvent", reflect.TypeOf((*MockCryptoDataHandler)(nil).NextEvent))
-	return &CryptoDataHandlerNextEventCall{Call: call}
+	return &MockCryptoDataHandlerNextEventCall{Call: call}
 }
 
-// CryptoDataHandlerNextEventCall wrap *gomock.Call
-type CryptoDataHandlerNextEventCall struct {
+// MockCryptoDataHandlerNextEventCall wrap *gomock.Call
+type MockCryptoDataHandlerNextEventCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoDataHandlerNextEventCall) Return(arg0 handshake.Event) *CryptoDataHandlerNextEventCall {
+func (c *MockCryptoDataHandlerNextEventCall) Return(arg0 handshake.Event) *MockCryptoDataHandlerNextEventCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoDataHandlerNextEventCall) Do(f func() handshake.Event) *CryptoDataHandlerNextEventCall {
+func (c *MockCryptoDataHandlerNextEventCall) Do(f func() handshake.Event) *MockCryptoDataHandlerNextEventCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoDataHandlerNextEventCall) DoAndReturn(f func() handshake.Event) *CryptoDataHandlerNextEventCall {
+func (c *MockCryptoDataHandlerNextEventCall) DoAndReturn(f func() handshake.Event) *MockCryptoDataHandlerNextEventCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

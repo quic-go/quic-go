@@ -84,7 +84,7 @@ var _ = Describe("Connection", func() {
 		})
 	}
 
-	expectAppendPacket := func(packer *MockPacker, p shortHeaderPacket, b []byte) *PackerAppendPacketCall {
+	expectAppendPacket := func(packer *MockPacker, p shortHeaderPacket, b []byte) *MockPackerAppendPacketCall {
 		return packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), Version1).DoAndReturn(func(buf *packetBuffer, _ protocol.ByteCount, _ protocol.Version) (shortHeaderPacket, error) {
 			buf.Data = append(buf.Data, b...)
 			return p, nil

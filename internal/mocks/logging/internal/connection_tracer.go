@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package internal -destination internal/connection_tracer.go github.com/quic-go/quic-go/internal/mocks/logging ConnectionTracer
 //
+
 // Package internal is a generated GoMock package.
 package internal
 
@@ -50,31 +51,31 @@ func (m *MockConnectionTracer) AcknowledgedPacket(arg0 protocol.EncryptionLevel,
 }
 
 // AcknowledgedPacket indicates an expected call of AcknowledgedPacket.
-func (mr *MockConnectionTracerMockRecorder) AcknowledgedPacket(arg0, arg1 any) *ConnectionTracerAcknowledgedPacketCall {
+func (mr *MockConnectionTracerMockRecorder) AcknowledgedPacket(arg0, arg1 any) *MockConnectionTracerAcknowledgedPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcknowledgedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).AcknowledgedPacket), arg0, arg1)
-	return &ConnectionTracerAcknowledgedPacketCall{Call: call}
+	return &MockConnectionTracerAcknowledgedPacketCall{Call: call}
 }
 
-// ConnectionTracerAcknowledgedPacketCall wrap *gomock.Call
-type ConnectionTracerAcknowledgedPacketCall struct {
+// MockConnectionTracerAcknowledgedPacketCall wrap *gomock.Call
+type MockConnectionTracerAcknowledgedPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerAcknowledgedPacketCall) Return() *ConnectionTracerAcknowledgedPacketCall {
+func (c *MockConnectionTracerAcknowledgedPacketCall) Return() *MockConnectionTracerAcknowledgedPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerAcknowledgedPacketCall) Do(f func(protocol.EncryptionLevel, protocol.PacketNumber)) *ConnectionTracerAcknowledgedPacketCall {
+func (c *MockConnectionTracerAcknowledgedPacketCall) Do(f func(protocol.EncryptionLevel, protocol.PacketNumber)) *MockConnectionTracerAcknowledgedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerAcknowledgedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, protocol.PacketNumber)) *ConnectionTracerAcknowledgedPacketCall {
+func (c *MockConnectionTracerAcknowledgedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, protocol.PacketNumber)) *MockConnectionTracerAcknowledgedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -86,31 +87,31 @@ func (m *MockConnectionTracer) BufferedPacket(arg0 logging.PacketType, arg1 prot
 }
 
 // BufferedPacket indicates an expected call of BufferedPacket.
-func (mr *MockConnectionTracerMockRecorder) BufferedPacket(arg0, arg1 any) *ConnectionTracerBufferedPacketCall {
+func (mr *MockConnectionTracerMockRecorder) BufferedPacket(arg0, arg1 any) *MockConnectionTracerBufferedPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BufferedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).BufferedPacket), arg0, arg1)
-	return &ConnectionTracerBufferedPacketCall{Call: call}
+	return &MockConnectionTracerBufferedPacketCall{Call: call}
 }
 
-// ConnectionTracerBufferedPacketCall wrap *gomock.Call
-type ConnectionTracerBufferedPacketCall struct {
+// MockConnectionTracerBufferedPacketCall wrap *gomock.Call
+type MockConnectionTracerBufferedPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerBufferedPacketCall) Return() *ConnectionTracerBufferedPacketCall {
+func (c *MockConnectionTracerBufferedPacketCall) Return() *MockConnectionTracerBufferedPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerBufferedPacketCall) Do(f func(logging.PacketType, protocol.ByteCount)) *ConnectionTracerBufferedPacketCall {
+func (c *MockConnectionTracerBufferedPacketCall) Do(f func(logging.PacketType, protocol.ByteCount)) *MockConnectionTracerBufferedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerBufferedPacketCall) DoAndReturn(f func(logging.PacketType, protocol.ByteCount)) *ConnectionTracerBufferedPacketCall {
+func (c *MockConnectionTracerBufferedPacketCall) DoAndReturn(f func(logging.PacketType, protocol.ByteCount)) *MockConnectionTracerBufferedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -122,31 +123,31 @@ func (m *MockConnectionTracer) ChoseALPN(arg0 string) {
 }
 
 // ChoseALPN indicates an expected call of ChoseALPN.
-func (mr *MockConnectionTracerMockRecorder) ChoseALPN(arg0 any) *ConnectionTracerChoseALPNCall {
+func (mr *MockConnectionTracerMockRecorder) ChoseALPN(arg0 any) *MockConnectionTracerChoseALPNCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseALPN", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseALPN), arg0)
-	return &ConnectionTracerChoseALPNCall{Call: call}
+	return &MockConnectionTracerChoseALPNCall{Call: call}
 }
 
-// ConnectionTracerChoseALPNCall wrap *gomock.Call
-type ConnectionTracerChoseALPNCall struct {
+// MockConnectionTracerChoseALPNCall wrap *gomock.Call
+type MockConnectionTracerChoseALPNCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerChoseALPNCall) Return() *ConnectionTracerChoseALPNCall {
+func (c *MockConnectionTracerChoseALPNCall) Return() *MockConnectionTracerChoseALPNCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerChoseALPNCall) Do(f func(string)) *ConnectionTracerChoseALPNCall {
+func (c *MockConnectionTracerChoseALPNCall) Do(f func(string)) *MockConnectionTracerChoseALPNCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerChoseALPNCall) DoAndReturn(f func(string)) *ConnectionTracerChoseALPNCall {
+func (c *MockConnectionTracerChoseALPNCall) DoAndReturn(f func(string)) *MockConnectionTracerChoseALPNCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -158,31 +159,31 @@ func (m *MockConnectionTracer) Close() {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockConnectionTracerMockRecorder) Close() *ConnectionTracerCloseCall {
+func (mr *MockConnectionTracerMockRecorder) Close() *MockConnectionTracerCloseCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockConnectionTracer)(nil).Close))
-	return &ConnectionTracerCloseCall{Call: call}
+	return &MockConnectionTracerCloseCall{Call: call}
 }
 
-// ConnectionTracerCloseCall wrap *gomock.Call
-type ConnectionTracerCloseCall struct {
+// MockConnectionTracerCloseCall wrap *gomock.Call
+type MockConnectionTracerCloseCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerCloseCall) Return() *ConnectionTracerCloseCall {
+func (c *MockConnectionTracerCloseCall) Return() *MockConnectionTracerCloseCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerCloseCall) Do(f func()) *ConnectionTracerCloseCall {
+func (c *MockConnectionTracerCloseCall) Do(f func()) *MockConnectionTracerCloseCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerCloseCall) DoAndReturn(f func()) *ConnectionTracerCloseCall {
+func (c *MockConnectionTracerCloseCall) DoAndReturn(f func()) *MockConnectionTracerCloseCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -194,31 +195,31 @@ func (m *MockConnectionTracer) ClosedConnection(arg0 error) {
 }
 
 // ClosedConnection indicates an expected call of ClosedConnection.
-func (mr *MockConnectionTracerMockRecorder) ClosedConnection(arg0 any) *ConnectionTracerClosedConnectionCall {
+func (mr *MockConnectionTracerMockRecorder) ClosedConnection(arg0 any) *MockConnectionTracerClosedConnectionCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).ClosedConnection), arg0)
-	return &ConnectionTracerClosedConnectionCall{Call: call}
+	return &MockConnectionTracerClosedConnectionCall{Call: call}
 }
 
-// ConnectionTracerClosedConnectionCall wrap *gomock.Call
-type ConnectionTracerClosedConnectionCall struct {
+// MockConnectionTracerClosedConnectionCall wrap *gomock.Call
+type MockConnectionTracerClosedConnectionCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerClosedConnectionCall) Return() *ConnectionTracerClosedConnectionCall {
+func (c *MockConnectionTracerClosedConnectionCall) Return() *MockConnectionTracerClosedConnectionCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerClosedConnectionCall) Do(f func(error)) *ConnectionTracerClosedConnectionCall {
+func (c *MockConnectionTracerClosedConnectionCall) Do(f func(error)) *MockConnectionTracerClosedConnectionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerClosedConnectionCall) DoAndReturn(f func(error)) *ConnectionTracerClosedConnectionCall {
+func (c *MockConnectionTracerClosedConnectionCall) DoAndReturn(f func(error)) *MockConnectionTracerClosedConnectionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -230,31 +231,31 @@ func (m *MockConnectionTracer) Debug(arg0, arg1 string) {
 }
 
 // Debug indicates an expected call of Debug.
-func (mr *MockConnectionTracerMockRecorder) Debug(arg0, arg1 any) *ConnectionTracerDebugCall {
+func (mr *MockConnectionTracerMockRecorder) Debug(arg0, arg1 any) *MockConnectionTracerDebugCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Debug", reflect.TypeOf((*MockConnectionTracer)(nil).Debug), arg0, arg1)
-	return &ConnectionTracerDebugCall{Call: call}
+	return &MockConnectionTracerDebugCall{Call: call}
 }
 
-// ConnectionTracerDebugCall wrap *gomock.Call
-type ConnectionTracerDebugCall struct {
+// MockConnectionTracerDebugCall wrap *gomock.Call
+type MockConnectionTracerDebugCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerDebugCall) Return() *ConnectionTracerDebugCall {
+func (c *MockConnectionTracerDebugCall) Return() *MockConnectionTracerDebugCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerDebugCall) Do(f func(string, string)) *ConnectionTracerDebugCall {
+func (c *MockConnectionTracerDebugCall) Do(f func(string, string)) *MockConnectionTracerDebugCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerDebugCall) DoAndReturn(f func(string, string)) *ConnectionTracerDebugCall {
+func (c *MockConnectionTracerDebugCall) DoAndReturn(f func(string, string)) *MockConnectionTracerDebugCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -266,31 +267,31 @@ func (m *MockConnectionTracer) DroppedEncryptionLevel(arg0 protocol.EncryptionLe
 }
 
 // DroppedEncryptionLevel indicates an expected call of DroppedEncryptionLevel.
-func (mr *MockConnectionTracerMockRecorder) DroppedEncryptionLevel(arg0 any) *ConnectionTracerDroppedEncryptionLevelCall {
+func (mr *MockConnectionTracerMockRecorder) DroppedEncryptionLevel(arg0 any) *MockConnectionTracerDroppedEncryptionLevelCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedEncryptionLevel", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedEncryptionLevel), arg0)
-	return &ConnectionTracerDroppedEncryptionLevelCall{Call: call}
+	return &MockConnectionTracerDroppedEncryptionLevelCall{Call: call}
 }
 
-// ConnectionTracerDroppedEncryptionLevelCall wrap *gomock.Call
-type ConnectionTracerDroppedEncryptionLevelCall struct {
+// MockConnectionTracerDroppedEncryptionLevelCall wrap *gomock.Call
+type MockConnectionTracerDroppedEncryptionLevelCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerDroppedEncryptionLevelCall) Return() *ConnectionTracerDroppedEncryptionLevelCall {
+func (c *MockConnectionTracerDroppedEncryptionLevelCall) Return() *MockConnectionTracerDroppedEncryptionLevelCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerDroppedEncryptionLevelCall) Do(f func(protocol.EncryptionLevel)) *ConnectionTracerDroppedEncryptionLevelCall {
+func (c *MockConnectionTracerDroppedEncryptionLevelCall) Do(f func(protocol.EncryptionLevel)) *MockConnectionTracerDroppedEncryptionLevelCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerDroppedEncryptionLevelCall) DoAndReturn(f func(protocol.EncryptionLevel)) *ConnectionTracerDroppedEncryptionLevelCall {
+func (c *MockConnectionTracerDroppedEncryptionLevelCall) DoAndReturn(f func(protocol.EncryptionLevel)) *MockConnectionTracerDroppedEncryptionLevelCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -302,31 +303,31 @@ func (m *MockConnectionTracer) DroppedKey(arg0 protocol.KeyPhase) {
 }
 
 // DroppedKey indicates an expected call of DroppedKey.
-func (mr *MockConnectionTracerMockRecorder) DroppedKey(arg0 any) *ConnectionTracerDroppedKeyCall {
+func (mr *MockConnectionTracerMockRecorder) DroppedKey(arg0 any) *MockConnectionTracerDroppedKeyCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedKey", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedKey), arg0)
-	return &ConnectionTracerDroppedKeyCall{Call: call}
+	return &MockConnectionTracerDroppedKeyCall{Call: call}
 }
 
-// ConnectionTracerDroppedKeyCall wrap *gomock.Call
-type ConnectionTracerDroppedKeyCall struct {
+// MockConnectionTracerDroppedKeyCall wrap *gomock.Call
+type MockConnectionTracerDroppedKeyCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerDroppedKeyCall) Return() *ConnectionTracerDroppedKeyCall {
+func (c *MockConnectionTracerDroppedKeyCall) Return() *MockConnectionTracerDroppedKeyCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerDroppedKeyCall) Do(f func(protocol.KeyPhase)) *ConnectionTracerDroppedKeyCall {
+func (c *MockConnectionTracerDroppedKeyCall) Do(f func(protocol.KeyPhase)) *MockConnectionTracerDroppedKeyCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerDroppedKeyCall) DoAndReturn(f func(protocol.KeyPhase)) *ConnectionTracerDroppedKeyCall {
+func (c *MockConnectionTracerDroppedKeyCall) DoAndReturn(f func(protocol.KeyPhase)) *MockConnectionTracerDroppedKeyCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -338,31 +339,31 @@ func (m *MockConnectionTracer) DroppedPacket(arg0 logging.PacketType, arg1 proto
 }
 
 // DroppedPacket indicates an expected call of DroppedPacket.
-func (mr *MockConnectionTracerMockRecorder) DroppedPacket(arg0, arg1, arg2, arg3 any) *ConnectionTracerDroppedPacketCall {
+func (mr *MockConnectionTracerMockRecorder) DroppedPacket(arg0, arg1, arg2, arg3 any) *MockConnectionTracerDroppedPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedPacket), arg0, arg1, arg2, arg3)
-	return &ConnectionTracerDroppedPacketCall{Call: call}
+	return &MockConnectionTracerDroppedPacketCall{Call: call}
 }
 
-// ConnectionTracerDroppedPacketCall wrap *gomock.Call
-type ConnectionTracerDroppedPacketCall struct {
+// MockConnectionTracerDroppedPacketCall wrap *gomock.Call
+type MockConnectionTracerDroppedPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerDroppedPacketCall) Return() *ConnectionTracerDroppedPacketCall {
+func (c *MockConnectionTracerDroppedPacketCall) Return() *MockConnectionTracerDroppedPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerDroppedPacketCall) Do(f func(logging.PacketType, protocol.PacketNumber, protocol.ByteCount, logging.PacketDropReason)) *ConnectionTracerDroppedPacketCall {
+func (c *MockConnectionTracerDroppedPacketCall) Do(f func(logging.PacketType, protocol.PacketNumber, protocol.ByteCount, logging.PacketDropReason)) *MockConnectionTracerDroppedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerDroppedPacketCall) DoAndReturn(f func(logging.PacketType, protocol.PacketNumber, protocol.ByteCount, logging.PacketDropReason)) *ConnectionTracerDroppedPacketCall {
+func (c *MockConnectionTracerDroppedPacketCall) DoAndReturn(f func(logging.PacketType, protocol.PacketNumber, protocol.ByteCount, logging.PacketDropReason)) *MockConnectionTracerDroppedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -374,31 +375,31 @@ func (m *MockConnectionTracer) ECNStateUpdated(arg0 logging.ECNState, arg1 loggi
 }
 
 // ECNStateUpdated indicates an expected call of ECNStateUpdated.
-func (mr *MockConnectionTracerMockRecorder) ECNStateUpdated(arg0, arg1 any) *ConnectionTracerECNStateUpdatedCall {
+func (mr *MockConnectionTracerMockRecorder) ECNStateUpdated(arg0, arg1 any) *MockConnectionTracerECNStateUpdatedCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNStateUpdated", reflect.TypeOf((*MockConnectionTracer)(nil).ECNStateUpdated), arg0, arg1)
-	return &ConnectionTracerECNStateUpdatedCall{Call: call}
+	return &MockConnectionTracerECNStateUpdatedCall{Call: call}
 }
 
-// ConnectionTracerECNStateUpdatedCall wrap *gomock.Call
-type ConnectionTracerECNStateUpdatedCall struct {
+// MockConnectionTracerECNStateUpdatedCall wrap *gomock.Call
+type MockConnectionTracerECNStateUpdatedCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerECNStateUpdatedCall) Return() *ConnectionTracerECNStateUpdatedCall {
+func (c *MockConnectionTracerECNStateUpdatedCall) Return() *MockConnectionTracerECNStateUpdatedCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerECNStateUpdatedCall) Do(f func(logging.ECNState, logging.ECNStateTrigger)) *ConnectionTracerECNStateUpdatedCall {
+func (c *MockConnectionTracerECNStateUpdatedCall) Do(f func(logging.ECNState, logging.ECNStateTrigger)) *MockConnectionTracerECNStateUpdatedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerECNStateUpdatedCall) DoAndReturn(f func(logging.ECNState, logging.ECNStateTrigger)) *ConnectionTracerECNStateUpdatedCall {
+func (c *MockConnectionTracerECNStateUpdatedCall) DoAndReturn(f func(logging.ECNState, logging.ECNStateTrigger)) *MockConnectionTracerECNStateUpdatedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -410,31 +411,31 @@ func (m *MockConnectionTracer) LossTimerCanceled() {
 }
 
 // LossTimerCanceled indicates an expected call of LossTimerCanceled.
-func (mr *MockConnectionTracerMockRecorder) LossTimerCanceled() *ConnectionTracerLossTimerCanceledCall {
+func (mr *MockConnectionTracerMockRecorder) LossTimerCanceled() *MockConnectionTracerLossTimerCanceledCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LossTimerCanceled", reflect.TypeOf((*MockConnectionTracer)(nil).LossTimerCanceled))
-	return &ConnectionTracerLossTimerCanceledCall{Call: call}
+	return &MockConnectionTracerLossTimerCanceledCall{Call: call}
 }
 
-// ConnectionTracerLossTimerCanceledCall wrap *gomock.Call
-type ConnectionTracerLossTimerCanceledCall struct {
+// MockConnectionTracerLossTimerCanceledCall wrap *gomock.Call
+type MockConnectionTracerLossTimerCanceledCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerLossTimerCanceledCall) Return() *ConnectionTracerLossTimerCanceledCall {
+func (c *MockConnectionTracerLossTimerCanceledCall) Return() *MockConnectionTracerLossTimerCanceledCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerLossTimerCanceledCall) Do(f func()) *ConnectionTracerLossTimerCanceledCall {
+func (c *MockConnectionTracerLossTimerCanceledCall) Do(f func()) *MockConnectionTracerLossTimerCanceledCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerLossTimerCanceledCall) DoAndReturn(f func()) *ConnectionTracerLossTimerCanceledCall {
+func (c *MockConnectionTracerLossTimerCanceledCall) DoAndReturn(f func()) *MockConnectionTracerLossTimerCanceledCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -446,31 +447,31 @@ func (m *MockConnectionTracer) LossTimerExpired(arg0 logging.TimerType, arg1 pro
 }
 
 // LossTimerExpired indicates an expected call of LossTimerExpired.
-func (mr *MockConnectionTracerMockRecorder) LossTimerExpired(arg0, arg1 any) *ConnectionTracerLossTimerExpiredCall {
+func (mr *MockConnectionTracerMockRecorder) LossTimerExpired(arg0, arg1 any) *MockConnectionTracerLossTimerExpiredCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LossTimerExpired", reflect.TypeOf((*MockConnectionTracer)(nil).LossTimerExpired), arg0, arg1)
-	return &ConnectionTracerLossTimerExpiredCall{Call: call}
+	return &MockConnectionTracerLossTimerExpiredCall{Call: call}
 }
 
-// ConnectionTracerLossTimerExpiredCall wrap *gomock.Call
-type ConnectionTracerLossTimerExpiredCall struct {
+// MockConnectionTracerLossTimerExpiredCall wrap *gomock.Call
+type MockConnectionTracerLossTimerExpiredCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerLossTimerExpiredCall) Return() *ConnectionTracerLossTimerExpiredCall {
+func (c *MockConnectionTracerLossTimerExpiredCall) Return() *MockConnectionTracerLossTimerExpiredCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerLossTimerExpiredCall) Do(f func(logging.TimerType, protocol.EncryptionLevel)) *ConnectionTracerLossTimerExpiredCall {
+func (c *MockConnectionTracerLossTimerExpiredCall) Do(f func(logging.TimerType, protocol.EncryptionLevel)) *MockConnectionTracerLossTimerExpiredCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerLossTimerExpiredCall) DoAndReturn(f func(logging.TimerType, protocol.EncryptionLevel)) *ConnectionTracerLossTimerExpiredCall {
+func (c *MockConnectionTracerLossTimerExpiredCall) DoAndReturn(f func(logging.TimerType, protocol.EncryptionLevel)) *MockConnectionTracerLossTimerExpiredCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -482,31 +483,31 @@ func (m *MockConnectionTracer) LostPacket(arg0 protocol.EncryptionLevel, arg1 pr
 }
 
 // LostPacket indicates an expected call of LostPacket.
-func (mr *MockConnectionTracerMockRecorder) LostPacket(arg0, arg1, arg2 any) *ConnectionTracerLostPacketCall {
+func (mr *MockConnectionTracerMockRecorder) LostPacket(arg0, arg1, arg2 any) *MockConnectionTracerLostPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LostPacket", reflect.TypeOf((*MockConnectionTracer)(nil).LostPacket), arg0, arg1, arg2)
-	return &ConnectionTracerLostPacketCall{Call: call}
+	return &MockConnectionTracerLostPacketCall{Call: call}
 }
 
-// ConnectionTracerLostPacketCall wrap *gomock.Call
-type ConnectionTracerLostPacketCall struct {
+// MockConnectionTracerLostPacketCall wrap *gomock.Call
+type MockConnectionTracerLostPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerLostPacketCall) Return() *ConnectionTracerLostPacketCall {
+func (c *MockConnectionTracerLostPacketCall) Return() *MockConnectionTracerLostPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerLostPacketCall) Do(f func(protocol.EncryptionLevel, protocol.PacketNumber, logging.PacketLossReason)) *ConnectionTracerLostPacketCall {
+func (c *MockConnectionTracerLostPacketCall) Do(f func(protocol.EncryptionLevel, protocol.PacketNumber, logging.PacketLossReason)) *MockConnectionTracerLostPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerLostPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, protocol.PacketNumber, logging.PacketLossReason)) *ConnectionTracerLostPacketCall {
+func (c *MockConnectionTracerLostPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, protocol.PacketNumber, logging.PacketLossReason)) *MockConnectionTracerLostPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -518,31 +519,31 @@ func (m *MockConnectionTracer) NegotiatedVersion(arg0 protocol.Version, arg1, ar
 }
 
 // NegotiatedVersion indicates an expected call of NegotiatedVersion.
-func (mr *MockConnectionTracerMockRecorder) NegotiatedVersion(arg0, arg1, arg2 any) *ConnectionTracerNegotiatedVersionCall {
+func (mr *MockConnectionTracerMockRecorder) NegotiatedVersion(arg0, arg1, arg2 any) *MockConnectionTracerNegotiatedVersionCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NegotiatedVersion", reflect.TypeOf((*MockConnectionTracer)(nil).NegotiatedVersion), arg0, arg1, arg2)
-	return &ConnectionTracerNegotiatedVersionCall{Call: call}
+	return &MockConnectionTracerNegotiatedVersionCall{Call: call}
 }
 
-// ConnectionTracerNegotiatedVersionCall wrap *gomock.Call
-type ConnectionTracerNegotiatedVersionCall struct {
+// MockConnectionTracerNegotiatedVersionCall wrap *gomock.Call
+type MockConnectionTracerNegotiatedVersionCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerNegotiatedVersionCall) Return() *ConnectionTracerNegotiatedVersionCall {
+func (c *MockConnectionTracerNegotiatedVersionCall) Return() *MockConnectionTracerNegotiatedVersionCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerNegotiatedVersionCall) Do(f func(protocol.Version, []protocol.Version, []protocol.Version)) *ConnectionTracerNegotiatedVersionCall {
+func (c *MockConnectionTracerNegotiatedVersionCall) Do(f func(protocol.Version, []protocol.Version, []protocol.Version)) *MockConnectionTracerNegotiatedVersionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerNegotiatedVersionCall) DoAndReturn(f func(protocol.Version, []protocol.Version, []protocol.Version)) *ConnectionTracerNegotiatedVersionCall {
+func (c *MockConnectionTracerNegotiatedVersionCall) DoAndReturn(f func(protocol.Version, []protocol.Version, []protocol.Version)) *MockConnectionTracerNegotiatedVersionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -554,31 +555,31 @@ func (m *MockConnectionTracer) ReceivedLongHeaderPacket(arg0 *wire.ExtendedHeade
 }
 
 // ReceivedLongHeaderPacket indicates an expected call of ReceivedLongHeaderPacket.
-func (mr *MockConnectionTracerMockRecorder) ReceivedLongHeaderPacket(arg0, arg1, arg2, arg3 any) *ConnectionTracerReceivedLongHeaderPacketCall {
+func (mr *MockConnectionTracerMockRecorder) ReceivedLongHeaderPacket(arg0, arg1, arg2, arg3 any) *MockConnectionTracerReceivedLongHeaderPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedLongHeaderPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedLongHeaderPacket), arg0, arg1, arg2, arg3)
-	return &ConnectionTracerReceivedLongHeaderPacketCall{Call: call}
+	return &MockConnectionTracerReceivedLongHeaderPacketCall{Call: call}
 }
 
-// ConnectionTracerReceivedLongHeaderPacketCall wrap *gomock.Call
-type ConnectionTracerReceivedLongHeaderPacketCall struct {
+// MockConnectionTracerReceivedLongHeaderPacketCall wrap *gomock.Call
+type MockConnectionTracerReceivedLongHeaderPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerReceivedLongHeaderPacketCall) Return() *ConnectionTracerReceivedLongHeaderPacketCall {
+func (c *MockConnectionTracerReceivedLongHeaderPacketCall) Return() *MockConnectionTracerReceivedLongHeaderPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerReceivedLongHeaderPacketCall) Do(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *ConnectionTracerReceivedLongHeaderPacketCall {
+func (c *MockConnectionTracerReceivedLongHeaderPacketCall) Do(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *MockConnectionTracerReceivedLongHeaderPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerReceivedLongHeaderPacketCall) DoAndReturn(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *ConnectionTracerReceivedLongHeaderPacketCall {
+func (c *MockConnectionTracerReceivedLongHeaderPacketCall) DoAndReturn(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *MockConnectionTracerReceivedLongHeaderPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -590,31 +591,31 @@ func (m *MockConnectionTracer) ReceivedRetry(arg0 *wire.Header) {
 }
 
 // ReceivedRetry indicates an expected call of ReceivedRetry.
-func (mr *MockConnectionTracerMockRecorder) ReceivedRetry(arg0 any) *ConnectionTracerReceivedRetryCall {
+func (mr *MockConnectionTracerMockRecorder) ReceivedRetry(arg0 any) *MockConnectionTracerReceivedRetryCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedRetry", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedRetry), arg0)
-	return &ConnectionTracerReceivedRetryCall{Call: call}
+	return &MockConnectionTracerReceivedRetryCall{Call: call}
 }
 
-// ConnectionTracerReceivedRetryCall wrap *gomock.Call
-type ConnectionTracerReceivedRetryCall struct {
+// MockConnectionTracerReceivedRetryCall wrap *gomock.Call
+type MockConnectionTracerReceivedRetryCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerReceivedRetryCall) Return() *ConnectionTracerReceivedRetryCall {
+func (c *MockConnectionTracerReceivedRetryCall) Return() *MockConnectionTracerReceivedRetryCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerReceivedRetryCall) Do(f func(*wire.Header)) *ConnectionTracerReceivedRetryCall {
+func (c *MockConnectionTracerReceivedRetryCall) Do(f func(*wire.Header)) *MockConnectionTracerReceivedRetryCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerReceivedRetryCall) DoAndReturn(f func(*wire.Header)) *ConnectionTracerReceivedRetryCall {
+func (c *MockConnectionTracerReceivedRetryCall) DoAndReturn(f func(*wire.Header)) *MockConnectionTracerReceivedRetryCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -626,31 +627,31 @@ func (m *MockConnectionTracer) ReceivedShortHeaderPacket(arg0 *logging.ShortHead
 }
 
 // ReceivedShortHeaderPacket indicates an expected call of ReceivedShortHeaderPacket.
-func (mr *MockConnectionTracerMockRecorder) ReceivedShortHeaderPacket(arg0, arg1, arg2, arg3 any) *ConnectionTracerReceivedShortHeaderPacketCall {
+func (mr *MockConnectionTracerMockRecorder) ReceivedShortHeaderPacket(arg0, arg1, arg2, arg3 any) *MockConnectionTracerReceivedShortHeaderPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedShortHeaderPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedShortHeaderPacket), arg0, arg1, arg2, arg3)
-	return &ConnectionTracerReceivedShortHeaderPacketCall{Call: call}
+	return &MockConnectionTracerReceivedShortHeaderPacketCall{Call: call}
 }
 
-// ConnectionTracerReceivedShortHeaderPacketCall wrap *gomock.Call
-type ConnectionTracerReceivedShortHeaderPacketCall struct {
+// MockConnectionTracerReceivedShortHeaderPacketCall wrap *gomock.Call
+type MockConnectionTracerReceivedShortHeaderPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerReceivedShortHeaderPacketCall) Return() *ConnectionTracerReceivedShortHeaderPacketCall {
+func (c *MockConnectionTracerReceivedShortHeaderPacketCall) Return() *MockConnectionTracerReceivedShortHeaderPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerReceivedShortHeaderPacketCall) Do(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *ConnectionTracerReceivedShortHeaderPacketCall {
+func (c *MockConnectionTracerReceivedShortHeaderPacketCall) Do(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *MockConnectionTracerReceivedShortHeaderPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerReceivedShortHeaderPacketCall) DoAndReturn(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *ConnectionTracerReceivedShortHeaderPacketCall {
+func (c *MockConnectionTracerReceivedShortHeaderPacketCall) DoAndReturn(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, []logging.Frame)) *MockConnectionTracerReceivedShortHeaderPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -662,31 +663,31 @@ func (m *MockConnectionTracer) ReceivedTransportParameters(arg0 *wire.TransportP
 }
 
 // ReceivedTransportParameters indicates an expected call of ReceivedTransportParameters.
-func (mr *MockConnectionTracerMockRecorder) ReceivedTransportParameters(arg0 any) *ConnectionTracerReceivedTransportParametersCall {
+func (mr *MockConnectionTracerMockRecorder) ReceivedTransportParameters(arg0 any) *MockConnectionTracerReceivedTransportParametersCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedTransportParameters", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedTransportParameters), arg0)
-	return &ConnectionTracerReceivedTransportParametersCall{Call: call}
+	return &MockConnectionTracerReceivedTransportParametersCall{Call: call}
 }
 
-// ConnectionTracerReceivedTransportParametersCall wrap *gomock.Call
-type ConnectionTracerReceivedTransportParametersCall struct {
+// MockConnectionTracerReceivedTransportParametersCall wrap *gomock.Call
+type MockConnectionTracerReceivedTransportParametersCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerReceivedTransportParametersCall) Return() *ConnectionTracerReceivedTransportParametersCall {
+func (c *MockConnectionTracerReceivedTransportParametersCall) Return() *MockConnectionTracerReceivedTransportParametersCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerReceivedTransportParametersCall) Do(f func(*wire.TransportParameters)) *ConnectionTracerReceivedTransportParametersCall {
+func (c *MockConnectionTracerReceivedTransportParametersCall) Do(f func(*wire.TransportParameters)) *MockConnectionTracerReceivedTransportParametersCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerReceivedTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *ConnectionTracerReceivedTransportParametersCall {
+func (c *MockConnectionTracerReceivedTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *MockConnectionTracerReceivedTransportParametersCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -698,31 +699,31 @@ func (m *MockConnectionTracer) ReceivedVersionNegotiationPacket(arg0, arg1 proto
 }
 
 // ReceivedVersionNegotiationPacket indicates an expected call of ReceivedVersionNegotiationPacket.
-func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(arg0, arg1, arg2 any) *ConnectionTracerReceivedVersionNegotiationPacketCall {
+func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(arg0, arg1, arg2 any) *MockConnectionTracerReceivedVersionNegotiationPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedVersionNegotiationPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedVersionNegotiationPacket), arg0, arg1, arg2)
-	return &ConnectionTracerReceivedVersionNegotiationPacketCall{Call: call}
+	return &MockConnectionTracerReceivedVersionNegotiationPacketCall{Call: call}
 }
 
-// ConnectionTracerReceivedVersionNegotiationPacketCall wrap *gomock.Call
-type ConnectionTracerReceivedVersionNegotiationPacketCall struct {
+// MockConnectionTracerReceivedVersionNegotiationPacketCall wrap *gomock.Call
+type MockConnectionTracerReceivedVersionNegotiationPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) Return() *ConnectionTracerReceivedVersionNegotiationPacketCall {
+func (c *MockConnectionTracerReceivedVersionNegotiationPacketCall) Return() *MockConnectionTracerReceivedVersionNegotiationPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) Do(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.Version)) *ConnectionTracerReceivedVersionNegotiationPacketCall {
+func (c *MockConnectionTracerReceivedVersionNegotiationPacketCall) Do(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.Version)) *MockConnectionTracerReceivedVersionNegotiationPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerReceivedVersionNegotiationPacketCall) DoAndReturn(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.Version)) *ConnectionTracerReceivedVersionNegotiationPacketCall {
+func (c *MockConnectionTracerReceivedVersionNegotiationPacketCall) DoAndReturn(f func(protocol.ArbitraryLenConnectionID, protocol.ArbitraryLenConnectionID, []protocol.Version)) *MockConnectionTracerReceivedVersionNegotiationPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -734,31 +735,31 @@ func (m *MockConnectionTracer) RestoredTransportParameters(arg0 *wire.TransportP
 }
 
 // RestoredTransportParameters indicates an expected call of RestoredTransportParameters.
-func (mr *MockConnectionTracerMockRecorder) RestoredTransportParameters(arg0 any) *ConnectionTracerRestoredTransportParametersCall {
+func (mr *MockConnectionTracerMockRecorder) RestoredTransportParameters(arg0 any) *MockConnectionTracerRestoredTransportParametersCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoredTransportParameters", reflect.TypeOf((*MockConnectionTracer)(nil).RestoredTransportParameters), arg0)
-	return &ConnectionTracerRestoredTransportParametersCall{Call: call}
+	return &MockConnectionTracerRestoredTransportParametersCall{Call: call}
 }
 
-// ConnectionTracerRestoredTransportParametersCall wrap *gomock.Call
-type ConnectionTracerRestoredTransportParametersCall struct {
+// MockConnectionTracerRestoredTransportParametersCall wrap *gomock.Call
+type MockConnectionTracerRestoredTransportParametersCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerRestoredTransportParametersCall) Return() *ConnectionTracerRestoredTransportParametersCall {
+func (c *MockConnectionTracerRestoredTransportParametersCall) Return() *MockConnectionTracerRestoredTransportParametersCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerRestoredTransportParametersCall) Do(f func(*wire.TransportParameters)) *ConnectionTracerRestoredTransportParametersCall {
+func (c *MockConnectionTracerRestoredTransportParametersCall) Do(f func(*wire.TransportParameters)) *MockConnectionTracerRestoredTransportParametersCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerRestoredTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *ConnectionTracerRestoredTransportParametersCall {
+func (c *MockConnectionTracerRestoredTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *MockConnectionTracerRestoredTransportParametersCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -770,31 +771,31 @@ func (m *MockConnectionTracer) SentLongHeaderPacket(arg0 *wire.ExtendedHeader, a
 }
 
 // SentLongHeaderPacket indicates an expected call of SentLongHeaderPacket.
-func (mr *MockConnectionTracerMockRecorder) SentLongHeaderPacket(arg0, arg1, arg2, arg3, arg4 any) *ConnectionTracerSentLongHeaderPacketCall {
+func (mr *MockConnectionTracerMockRecorder) SentLongHeaderPacket(arg0, arg1, arg2, arg3, arg4 any) *MockConnectionTracerSentLongHeaderPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentLongHeaderPacket", reflect.TypeOf((*MockConnectionTracer)(nil).SentLongHeaderPacket), arg0, arg1, arg2, arg3, arg4)
-	return &ConnectionTracerSentLongHeaderPacketCall{Call: call}
+	return &MockConnectionTracerSentLongHeaderPacketCall{Call: call}
 }
 
-// ConnectionTracerSentLongHeaderPacketCall wrap *gomock.Call
-type ConnectionTracerSentLongHeaderPacketCall struct {
+// MockConnectionTracerSentLongHeaderPacketCall wrap *gomock.Call
+type MockConnectionTracerSentLongHeaderPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerSentLongHeaderPacketCall) Return() *ConnectionTracerSentLongHeaderPacketCall {
+func (c *MockConnectionTracerSentLongHeaderPacketCall) Return() *MockConnectionTracerSentLongHeaderPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerSentLongHeaderPacketCall) Do(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *ConnectionTracerSentLongHeaderPacketCall {
+func (c *MockConnectionTracerSentLongHeaderPacketCall) Do(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *MockConnectionTracerSentLongHeaderPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerSentLongHeaderPacketCall) DoAndReturn(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *ConnectionTracerSentLongHeaderPacketCall {
+func (c *MockConnectionTracerSentLongHeaderPacketCall) DoAndReturn(f func(*wire.ExtendedHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *MockConnectionTracerSentLongHeaderPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -806,31 +807,31 @@ func (m *MockConnectionTracer) SentShortHeaderPacket(arg0 *logging.ShortHeader, 
 }
 
 // SentShortHeaderPacket indicates an expected call of SentShortHeaderPacket.
-func (mr *MockConnectionTracerMockRecorder) SentShortHeaderPacket(arg0, arg1, arg2, arg3, arg4 any) *ConnectionTracerSentShortHeaderPacketCall {
+func (mr *MockConnectionTracerMockRecorder) SentShortHeaderPacket(arg0, arg1, arg2, arg3, arg4 any) *MockConnectionTracerSentShortHeaderPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentShortHeaderPacket", reflect.TypeOf((*MockConnectionTracer)(nil).SentShortHeaderPacket), arg0, arg1, arg2, arg3, arg4)
-	return &ConnectionTracerSentShortHeaderPacketCall{Call: call}
+	return &MockConnectionTracerSentShortHeaderPacketCall{Call: call}
 }
 
-// ConnectionTracerSentShortHeaderPacketCall wrap *gomock.Call
-type ConnectionTracerSentShortHeaderPacketCall struct {
+// MockConnectionTracerSentShortHeaderPacketCall wrap *gomock.Call
+type MockConnectionTracerSentShortHeaderPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerSentShortHeaderPacketCall) Return() *ConnectionTracerSentShortHeaderPacketCall {
+func (c *MockConnectionTracerSentShortHeaderPacketCall) Return() *MockConnectionTracerSentShortHeaderPacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerSentShortHeaderPacketCall) Do(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *ConnectionTracerSentShortHeaderPacketCall {
+func (c *MockConnectionTracerSentShortHeaderPacketCall) Do(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *MockConnectionTracerSentShortHeaderPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerSentShortHeaderPacketCall) DoAndReturn(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *ConnectionTracerSentShortHeaderPacketCall {
+func (c *MockConnectionTracerSentShortHeaderPacketCall) DoAndReturn(f func(*logging.ShortHeader, protocol.ByteCount, protocol.ECN, *wire.AckFrame, []logging.Frame)) *MockConnectionTracerSentShortHeaderPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -842,31 +843,31 @@ func (m *MockConnectionTracer) SentTransportParameters(arg0 *wire.TransportParam
 }
 
 // SentTransportParameters indicates an expected call of SentTransportParameters.
-func (mr *MockConnectionTracerMockRecorder) SentTransportParameters(arg0 any) *ConnectionTracerSentTransportParametersCall {
+func (mr *MockConnectionTracerMockRecorder) SentTransportParameters(arg0 any) *MockConnectionTracerSentTransportParametersCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentTransportParameters", reflect.TypeOf((*MockConnectionTracer)(nil).SentTransportParameters), arg0)
-	return &ConnectionTracerSentTransportParametersCall{Call: call}
+	return &MockConnectionTracerSentTransportParametersCall{Call: call}
 }
 
-// ConnectionTracerSentTransportParametersCall wrap *gomock.Call
-type ConnectionTracerSentTransportParametersCall struct {
+// MockConnectionTracerSentTransportParametersCall wrap *gomock.Call
+type MockConnectionTracerSentTransportParametersCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerSentTransportParametersCall) Return() *ConnectionTracerSentTransportParametersCall {
+func (c *MockConnectionTracerSentTransportParametersCall) Return() *MockConnectionTracerSentTransportParametersCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerSentTransportParametersCall) Do(f func(*wire.TransportParameters)) *ConnectionTracerSentTransportParametersCall {
+func (c *MockConnectionTracerSentTransportParametersCall) Do(f func(*wire.TransportParameters)) *MockConnectionTracerSentTransportParametersCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerSentTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *ConnectionTracerSentTransportParametersCall {
+func (c *MockConnectionTracerSentTransportParametersCall) DoAndReturn(f func(*wire.TransportParameters)) *MockConnectionTracerSentTransportParametersCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -878,31 +879,31 @@ func (m *MockConnectionTracer) SetLossTimer(arg0 logging.TimerType, arg1 protoco
 }
 
 // SetLossTimer indicates an expected call of SetLossTimer.
-func (mr *MockConnectionTracerMockRecorder) SetLossTimer(arg0, arg1, arg2 any) *ConnectionTracerSetLossTimerCall {
+func (mr *MockConnectionTracerMockRecorder) SetLossTimer(arg0, arg1, arg2 any) *MockConnectionTracerSetLossTimerCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLossTimer", reflect.TypeOf((*MockConnectionTracer)(nil).SetLossTimer), arg0, arg1, arg2)
-	return &ConnectionTracerSetLossTimerCall{Call: call}
+	return &MockConnectionTracerSetLossTimerCall{Call: call}
 }
 
-// ConnectionTracerSetLossTimerCall wrap *gomock.Call
-type ConnectionTracerSetLossTimerCall struct {
+// MockConnectionTracerSetLossTimerCall wrap *gomock.Call
+type MockConnectionTracerSetLossTimerCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerSetLossTimerCall) Return() *ConnectionTracerSetLossTimerCall {
+func (c *MockConnectionTracerSetLossTimerCall) Return() *MockConnectionTracerSetLossTimerCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerSetLossTimerCall) Do(f func(logging.TimerType, protocol.EncryptionLevel, time.Time)) *ConnectionTracerSetLossTimerCall {
+func (c *MockConnectionTracerSetLossTimerCall) Do(f func(logging.TimerType, protocol.EncryptionLevel, time.Time)) *MockConnectionTracerSetLossTimerCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerSetLossTimerCall) DoAndReturn(f func(logging.TimerType, protocol.EncryptionLevel, time.Time)) *ConnectionTracerSetLossTimerCall {
+func (c *MockConnectionTracerSetLossTimerCall) DoAndReturn(f func(logging.TimerType, protocol.EncryptionLevel, time.Time)) *MockConnectionTracerSetLossTimerCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -914,31 +915,31 @@ func (m *MockConnectionTracer) StartedConnection(arg0, arg1 net.Addr, arg2, arg3
 }
 
 // StartedConnection indicates an expected call of StartedConnection.
-func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, arg3 any) *ConnectionTracerStartedConnectionCall {
+func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, arg3 any) *MockConnectionTracerStartedConnectionCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), arg0, arg1, arg2, arg3)
-	return &ConnectionTracerStartedConnectionCall{Call: call}
+	return &MockConnectionTracerStartedConnectionCall{Call: call}
 }
 
-// ConnectionTracerStartedConnectionCall wrap *gomock.Call
-type ConnectionTracerStartedConnectionCall struct {
+// MockConnectionTracerStartedConnectionCall wrap *gomock.Call
+type MockConnectionTracerStartedConnectionCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerStartedConnectionCall) Return() *ConnectionTracerStartedConnectionCall {
+func (c *MockConnectionTracerStartedConnectionCall) Return() *MockConnectionTracerStartedConnectionCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerStartedConnectionCall) Do(f func(net.Addr, net.Addr, protocol.ConnectionID, protocol.ConnectionID)) *ConnectionTracerStartedConnectionCall {
+func (c *MockConnectionTracerStartedConnectionCall) Do(f func(net.Addr, net.Addr, protocol.ConnectionID, protocol.ConnectionID)) *MockConnectionTracerStartedConnectionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerStartedConnectionCall) DoAndReturn(f func(net.Addr, net.Addr, protocol.ConnectionID, protocol.ConnectionID)) *ConnectionTracerStartedConnectionCall {
+func (c *MockConnectionTracerStartedConnectionCall) DoAndReturn(f func(net.Addr, net.Addr, protocol.ConnectionID, protocol.ConnectionID)) *MockConnectionTracerStartedConnectionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -950,31 +951,31 @@ func (m *MockConnectionTracer) UpdatedCongestionState(arg0 logging.CongestionSta
 }
 
 // UpdatedCongestionState indicates an expected call of UpdatedCongestionState.
-func (mr *MockConnectionTracerMockRecorder) UpdatedCongestionState(arg0 any) *ConnectionTracerUpdatedCongestionStateCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedCongestionState(arg0 any) *MockConnectionTracerUpdatedCongestionStateCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedCongestionState", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedCongestionState), arg0)
-	return &ConnectionTracerUpdatedCongestionStateCall{Call: call}
+	return &MockConnectionTracerUpdatedCongestionStateCall{Call: call}
 }
 
-// ConnectionTracerUpdatedCongestionStateCall wrap *gomock.Call
-type ConnectionTracerUpdatedCongestionStateCall struct {
+// MockConnectionTracerUpdatedCongestionStateCall wrap *gomock.Call
+type MockConnectionTracerUpdatedCongestionStateCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerUpdatedCongestionStateCall) Return() *ConnectionTracerUpdatedCongestionStateCall {
+func (c *MockConnectionTracerUpdatedCongestionStateCall) Return() *MockConnectionTracerUpdatedCongestionStateCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerUpdatedCongestionStateCall) Do(f func(logging.CongestionState)) *ConnectionTracerUpdatedCongestionStateCall {
+func (c *MockConnectionTracerUpdatedCongestionStateCall) Do(f func(logging.CongestionState)) *MockConnectionTracerUpdatedCongestionStateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerUpdatedCongestionStateCall) DoAndReturn(f func(logging.CongestionState)) *ConnectionTracerUpdatedCongestionStateCall {
+func (c *MockConnectionTracerUpdatedCongestionStateCall) DoAndReturn(f func(logging.CongestionState)) *MockConnectionTracerUpdatedCongestionStateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -986,31 +987,31 @@ func (m *MockConnectionTracer) UpdatedKey(arg0 protocol.KeyPhase, arg1 bool) {
 }
 
 // UpdatedKey indicates an expected call of UpdatedKey.
-func (mr *MockConnectionTracerMockRecorder) UpdatedKey(arg0, arg1 any) *ConnectionTracerUpdatedKeyCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedKey(arg0, arg1 any) *MockConnectionTracerUpdatedKeyCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedKey", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedKey), arg0, arg1)
-	return &ConnectionTracerUpdatedKeyCall{Call: call}
+	return &MockConnectionTracerUpdatedKeyCall{Call: call}
 }
 
-// ConnectionTracerUpdatedKeyCall wrap *gomock.Call
-type ConnectionTracerUpdatedKeyCall struct {
+// MockConnectionTracerUpdatedKeyCall wrap *gomock.Call
+type MockConnectionTracerUpdatedKeyCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerUpdatedKeyCall) Return() *ConnectionTracerUpdatedKeyCall {
+func (c *MockConnectionTracerUpdatedKeyCall) Return() *MockConnectionTracerUpdatedKeyCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerUpdatedKeyCall) Do(f func(protocol.KeyPhase, bool)) *ConnectionTracerUpdatedKeyCall {
+func (c *MockConnectionTracerUpdatedKeyCall) Do(f func(protocol.KeyPhase, bool)) *MockConnectionTracerUpdatedKeyCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerUpdatedKeyCall) DoAndReturn(f func(protocol.KeyPhase, bool)) *ConnectionTracerUpdatedKeyCall {
+func (c *MockConnectionTracerUpdatedKeyCall) DoAndReturn(f func(protocol.KeyPhase, bool)) *MockConnectionTracerUpdatedKeyCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -1022,31 +1023,31 @@ func (m *MockConnectionTracer) UpdatedKeyFromTLS(arg0 protocol.EncryptionLevel, 
 }
 
 // UpdatedKeyFromTLS indicates an expected call of UpdatedKeyFromTLS.
-func (mr *MockConnectionTracerMockRecorder) UpdatedKeyFromTLS(arg0, arg1 any) *ConnectionTracerUpdatedKeyFromTLSCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedKeyFromTLS(arg0, arg1 any) *MockConnectionTracerUpdatedKeyFromTLSCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedKeyFromTLS", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedKeyFromTLS), arg0, arg1)
-	return &ConnectionTracerUpdatedKeyFromTLSCall{Call: call}
+	return &MockConnectionTracerUpdatedKeyFromTLSCall{Call: call}
 }
 
-// ConnectionTracerUpdatedKeyFromTLSCall wrap *gomock.Call
-type ConnectionTracerUpdatedKeyFromTLSCall struct {
+// MockConnectionTracerUpdatedKeyFromTLSCall wrap *gomock.Call
+type MockConnectionTracerUpdatedKeyFromTLSCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerUpdatedKeyFromTLSCall) Return() *ConnectionTracerUpdatedKeyFromTLSCall {
+func (c *MockConnectionTracerUpdatedKeyFromTLSCall) Return() *MockConnectionTracerUpdatedKeyFromTLSCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerUpdatedKeyFromTLSCall) Do(f func(protocol.EncryptionLevel, protocol.Perspective)) *ConnectionTracerUpdatedKeyFromTLSCall {
+func (c *MockConnectionTracerUpdatedKeyFromTLSCall) Do(f func(protocol.EncryptionLevel, protocol.Perspective)) *MockConnectionTracerUpdatedKeyFromTLSCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerUpdatedKeyFromTLSCall) DoAndReturn(f func(protocol.EncryptionLevel, protocol.Perspective)) *ConnectionTracerUpdatedKeyFromTLSCall {
+func (c *MockConnectionTracerUpdatedKeyFromTLSCall) DoAndReturn(f func(protocol.EncryptionLevel, protocol.Perspective)) *MockConnectionTracerUpdatedKeyFromTLSCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -1058,31 +1059,31 @@ func (m *MockConnectionTracer) UpdatedMetrics(arg0 *utils.RTTStats, arg1, arg2 p
 }
 
 // UpdatedMetrics indicates an expected call of UpdatedMetrics.
-func (mr *MockConnectionTracerMockRecorder) UpdatedMetrics(arg0, arg1, arg2, arg3 any) *ConnectionTracerUpdatedMetricsCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedMetrics(arg0, arg1, arg2, arg3 any) *MockConnectionTracerUpdatedMetricsCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedMetrics", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedMetrics), arg0, arg1, arg2, arg3)
-	return &ConnectionTracerUpdatedMetricsCall{Call: call}
+	return &MockConnectionTracerUpdatedMetricsCall{Call: call}
 }
 
-// ConnectionTracerUpdatedMetricsCall wrap *gomock.Call
-type ConnectionTracerUpdatedMetricsCall struct {
+// MockConnectionTracerUpdatedMetricsCall wrap *gomock.Call
+type MockConnectionTracerUpdatedMetricsCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerUpdatedMetricsCall) Return() *ConnectionTracerUpdatedMetricsCall {
+func (c *MockConnectionTracerUpdatedMetricsCall) Return() *MockConnectionTracerUpdatedMetricsCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerUpdatedMetricsCall) Do(f func(*utils.RTTStats, protocol.ByteCount, protocol.ByteCount, int)) *ConnectionTracerUpdatedMetricsCall {
+func (c *MockConnectionTracerUpdatedMetricsCall) Do(f func(*utils.RTTStats, protocol.ByteCount, protocol.ByteCount, int)) *MockConnectionTracerUpdatedMetricsCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerUpdatedMetricsCall) DoAndReturn(f func(*utils.RTTStats, protocol.ByteCount, protocol.ByteCount, int)) *ConnectionTracerUpdatedMetricsCall {
+func (c *MockConnectionTracerUpdatedMetricsCall) DoAndReturn(f func(*utils.RTTStats, protocol.ByteCount, protocol.ByteCount, int)) *MockConnectionTracerUpdatedMetricsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -1094,31 +1095,31 @@ func (m *MockConnectionTracer) UpdatedPTOCount(arg0 uint32) {
 }
 
 // UpdatedPTOCount indicates an expected call of UpdatedPTOCount.
-func (mr *MockConnectionTracerMockRecorder) UpdatedPTOCount(arg0 any) *ConnectionTracerUpdatedPTOCountCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedPTOCount(arg0 any) *MockConnectionTracerUpdatedPTOCountCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedPTOCount", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedPTOCount), arg0)
-	return &ConnectionTracerUpdatedPTOCountCall{Call: call}
+	return &MockConnectionTracerUpdatedPTOCountCall{Call: call}
 }
 
-// ConnectionTracerUpdatedPTOCountCall wrap *gomock.Call
-type ConnectionTracerUpdatedPTOCountCall struct {
+// MockConnectionTracerUpdatedPTOCountCall wrap *gomock.Call
+type MockConnectionTracerUpdatedPTOCountCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionTracerUpdatedPTOCountCall) Return() *ConnectionTracerUpdatedPTOCountCall {
+func (c *MockConnectionTracerUpdatedPTOCountCall) Return() *MockConnectionTracerUpdatedPTOCountCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionTracerUpdatedPTOCountCall) Do(f func(uint32)) *ConnectionTracerUpdatedPTOCountCall {
+func (c *MockConnectionTracerUpdatedPTOCountCall) Do(f func(uint32)) *MockConnectionTracerUpdatedPTOCountCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionTracerUpdatedPTOCountCall) DoAndReturn(f func(uint32)) *ConnectionTracerUpdatedPTOCountCall {
+func (c *MockConnectionTracerUpdatedPTOCountCall) DoAndReturn(f func(uint32)) *MockConnectionTracerUpdatedPTOCountCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

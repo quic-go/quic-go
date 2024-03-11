@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_stream_getter_test.go github.com/quic-go/quic-go StreamGetter
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -48,31 +49,31 @@ func (m *MockStreamGetter) GetOrOpenReceiveStream(arg0 protocol.StreamID) (recei
 }
 
 // GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream.
-func (mr *MockStreamGetterMockRecorder) GetOrOpenReceiveStream(arg0 any) *StreamGetterGetOrOpenReceiveStreamCall {
+func (mr *MockStreamGetterMockRecorder) GetOrOpenReceiveStream(arg0 any) *MockStreamGetterGetOrOpenReceiveStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenReceiveStream), arg0)
-	return &StreamGetterGetOrOpenReceiveStreamCall{Call: call}
+	return &MockStreamGetterGetOrOpenReceiveStreamCall{Call: call}
 }
 
-// StreamGetterGetOrOpenReceiveStreamCall wrap *gomock.Call
-type StreamGetterGetOrOpenReceiveStreamCall struct {
+// MockStreamGetterGetOrOpenReceiveStreamCall wrap *gomock.Call
+type MockStreamGetterGetOrOpenReceiveStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamGetterGetOrOpenReceiveStreamCall) Return(arg0 receiveStreamI, arg1 error) *StreamGetterGetOrOpenReceiveStreamCall {
+func (c *MockStreamGetterGetOrOpenReceiveStreamCall) Return(arg0 receiveStreamI, arg1 error) *MockStreamGetterGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamGetterGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (receiveStreamI, error)) *StreamGetterGetOrOpenReceiveStreamCall {
+func (c *MockStreamGetterGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (receiveStreamI, error)) *MockStreamGetterGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamGetterGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (receiveStreamI, error)) *StreamGetterGetOrOpenReceiveStreamCall {
+func (c *MockStreamGetterGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (receiveStreamI, error)) *MockStreamGetterGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -87,31 +88,31 @@ func (m *MockStreamGetter) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStre
 }
 
 // GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream.
-func (mr *MockStreamGetterMockRecorder) GetOrOpenSendStream(arg0 any) *StreamGetterGetOrOpenSendStreamCall {
+func (mr *MockStreamGetterMockRecorder) GetOrOpenSendStream(arg0 any) *MockStreamGetterGetOrOpenSendStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenSendStream), arg0)
-	return &StreamGetterGetOrOpenSendStreamCall{Call: call}
+	return &MockStreamGetterGetOrOpenSendStreamCall{Call: call}
 }
 
-// StreamGetterGetOrOpenSendStreamCall wrap *gomock.Call
-type StreamGetterGetOrOpenSendStreamCall struct {
+// MockStreamGetterGetOrOpenSendStreamCall wrap *gomock.Call
+type MockStreamGetterGetOrOpenSendStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamGetterGetOrOpenSendStreamCall) Return(arg0 sendStreamI, arg1 error) *StreamGetterGetOrOpenSendStreamCall {
+func (c *MockStreamGetterGetOrOpenSendStreamCall) Return(arg0 sendStreamI, arg1 error) *MockStreamGetterGetOrOpenSendStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamGetterGetOrOpenSendStreamCall) Do(f func(protocol.StreamID) (sendStreamI, error)) *StreamGetterGetOrOpenSendStreamCall {
+func (c *MockStreamGetterGetOrOpenSendStreamCall) Do(f func(protocol.StreamID) (sendStreamI, error)) *MockStreamGetterGetOrOpenSendStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamGetterGetOrOpenSendStreamCall) DoAndReturn(f func(protocol.StreamID) (sendStreamI, error)) *StreamGetterGetOrOpenSendStreamCall {
+func (c *MockStreamGetterGetOrOpenSendStreamCall) DoAndReturn(f func(protocol.StreamID) (sendStreamI, error)) *MockStreamGetterGetOrOpenSendStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

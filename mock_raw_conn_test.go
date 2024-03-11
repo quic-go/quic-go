@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_raw_conn_test.go github.com/quic-go/quic-go RawConn
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -49,31 +50,31 @@ func (m *MockRawConn) Close() error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockRawConnMockRecorder) Close() *RawConnCloseCall {
+func (mr *MockRawConnMockRecorder) Close() *MockRawConnCloseCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockRawConn)(nil).Close))
-	return &RawConnCloseCall{Call: call}
+	return &MockRawConnCloseCall{Call: call}
 }
 
-// RawConnCloseCall wrap *gomock.Call
-type RawConnCloseCall struct {
+// MockRawConnCloseCall wrap *gomock.Call
+type MockRawConnCloseCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RawConnCloseCall) Return(arg0 error) *RawConnCloseCall {
+func (c *MockRawConnCloseCall) Return(arg0 error) *MockRawConnCloseCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RawConnCloseCall) Do(f func() error) *RawConnCloseCall {
+func (c *MockRawConnCloseCall) Do(f func() error) *MockRawConnCloseCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RawConnCloseCall) DoAndReturn(f func() error) *RawConnCloseCall {
+func (c *MockRawConnCloseCall) DoAndReturn(f func() error) *MockRawConnCloseCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -87,31 +88,31 @@ func (m *MockRawConn) LocalAddr() net.Addr {
 }
 
 // LocalAddr indicates an expected call of LocalAddr.
-func (mr *MockRawConnMockRecorder) LocalAddr() *RawConnLocalAddrCall {
+func (mr *MockRawConnMockRecorder) LocalAddr() *MockRawConnLocalAddrCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalAddr", reflect.TypeOf((*MockRawConn)(nil).LocalAddr))
-	return &RawConnLocalAddrCall{Call: call}
+	return &MockRawConnLocalAddrCall{Call: call}
 }
 
-// RawConnLocalAddrCall wrap *gomock.Call
-type RawConnLocalAddrCall struct {
+// MockRawConnLocalAddrCall wrap *gomock.Call
+type MockRawConnLocalAddrCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RawConnLocalAddrCall) Return(arg0 net.Addr) *RawConnLocalAddrCall {
+func (c *MockRawConnLocalAddrCall) Return(arg0 net.Addr) *MockRawConnLocalAddrCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RawConnLocalAddrCall) Do(f func() net.Addr) *RawConnLocalAddrCall {
+func (c *MockRawConnLocalAddrCall) Do(f func() net.Addr) *MockRawConnLocalAddrCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RawConnLocalAddrCall) DoAndReturn(f func() net.Addr) *RawConnLocalAddrCall {
+func (c *MockRawConnLocalAddrCall) DoAndReturn(f func() net.Addr) *MockRawConnLocalAddrCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -126,31 +127,31 @@ func (m *MockRawConn) ReadPacket() (receivedPacket, error) {
 }
 
 // ReadPacket indicates an expected call of ReadPacket.
-func (mr *MockRawConnMockRecorder) ReadPacket() *RawConnReadPacketCall {
+func (mr *MockRawConnMockRecorder) ReadPacket() *MockRawConnReadPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadPacket", reflect.TypeOf((*MockRawConn)(nil).ReadPacket))
-	return &RawConnReadPacketCall{Call: call}
+	return &MockRawConnReadPacketCall{Call: call}
 }
 
-// RawConnReadPacketCall wrap *gomock.Call
-type RawConnReadPacketCall struct {
+// MockRawConnReadPacketCall wrap *gomock.Call
+type MockRawConnReadPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RawConnReadPacketCall) Return(arg0 receivedPacket, arg1 error) *RawConnReadPacketCall {
+func (c *MockRawConnReadPacketCall) Return(arg0 receivedPacket, arg1 error) *MockRawConnReadPacketCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RawConnReadPacketCall) Do(f func() (receivedPacket, error)) *RawConnReadPacketCall {
+func (c *MockRawConnReadPacketCall) Do(f func() (receivedPacket, error)) *MockRawConnReadPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RawConnReadPacketCall) DoAndReturn(f func() (receivedPacket, error)) *RawConnReadPacketCall {
+func (c *MockRawConnReadPacketCall) DoAndReturn(f func() (receivedPacket, error)) *MockRawConnReadPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -164,31 +165,31 @@ func (m *MockRawConn) SetReadDeadline(arg0 time.Time) error {
 }
 
 // SetReadDeadline indicates an expected call of SetReadDeadline.
-func (mr *MockRawConnMockRecorder) SetReadDeadline(arg0 any) *RawConnSetReadDeadlineCall {
+func (mr *MockRawConnMockRecorder) SetReadDeadline(arg0 any) *MockRawConnSetReadDeadlineCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockRawConn)(nil).SetReadDeadline), arg0)
-	return &RawConnSetReadDeadlineCall{Call: call}
+	return &MockRawConnSetReadDeadlineCall{Call: call}
 }
 
-// RawConnSetReadDeadlineCall wrap *gomock.Call
-type RawConnSetReadDeadlineCall struct {
+// MockRawConnSetReadDeadlineCall wrap *gomock.Call
+type MockRawConnSetReadDeadlineCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RawConnSetReadDeadlineCall) Return(arg0 error) *RawConnSetReadDeadlineCall {
+func (c *MockRawConnSetReadDeadlineCall) Return(arg0 error) *MockRawConnSetReadDeadlineCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RawConnSetReadDeadlineCall) Do(f func(time.Time) error) *RawConnSetReadDeadlineCall {
+func (c *MockRawConnSetReadDeadlineCall) Do(f func(time.Time) error) *MockRawConnSetReadDeadlineCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RawConnSetReadDeadlineCall) DoAndReturn(f func(time.Time) error) *RawConnSetReadDeadlineCall {
+func (c *MockRawConnSetReadDeadlineCall) DoAndReturn(f func(time.Time) error) *MockRawConnSetReadDeadlineCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -203,31 +204,31 @@ func (m *MockRawConn) WritePacket(arg0 []byte, arg1 net.Addr, arg2 []byte, arg3 
 }
 
 // WritePacket indicates an expected call of WritePacket.
-func (mr *MockRawConnMockRecorder) WritePacket(arg0, arg1, arg2, arg3, arg4 any) *RawConnWritePacketCall {
+func (mr *MockRawConnMockRecorder) WritePacket(arg0, arg1, arg2, arg3, arg4 any) *MockRawConnWritePacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WritePacket", reflect.TypeOf((*MockRawConn)(nil).WritePacket), arg0, arg1, arg2, arg3, arg4)
-	return &RawConnWritePacketCall{Call: call}
+	return &MockRawConnWritePacketCall{Call: call}
 }
 
-// RawConnWritePacketCall wrap *gomock.Call
-type RawConnWritePacketCall struct {
+// MockRawConnWritePacketCall wrap *gomock.Call
+type MockRawConnWritePacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RawConnWritePacketCall) Return(arg0 int, arg1 error) *RawConnWritePacketCall {
+func (c *MockRawConnWritePacketCall) Return(arg0 int, arg1 error) *MockRawConnWritePacketCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RawConnWritePacketCall) Do(f func([]byte, net.Addr, []byte, uint16, protocol.ECN) (int, error)) *RawConnWritePacketCall {
+func (c *MockRawConnWritePacketCall) Do(f func([]byte, net.Addr, []byte, uint16, protocol.ECN) (int, error)) *MockRawConnWritePacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RawConnWritePacketCall) DoAndReturn(f func([]byte, net.Addr, []byte, uint16, protocol.ECN) (int, error)) *RawConnWritePacketCall {
+func (c *MockRawConnWritePacketCall) DoAndReturn(f func([]byte, net.Addr, []byte, uint16, protocol.ECN) (int, error)) *MockRawConnWritePacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -241,31 +242,31 @@ func (m *MockRawConn) capabilities() connCapabilities {
 }
 
 // capabilities indicates an expected call of capabilities.
-func (mr *MockRawConnMockRecorder) capabilities() *RawConncapabilitiesCall {
+func (mr *MockRawConnMockRecorder) capabilities() *MockRawConncapabilitiesCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "capabilities", reflect.TypeOf((*MockRawConn)(nil).capabilities))
-	return &RawConncapabilitiesCall{Call: call}
+	return &MockRawConncapabilitiesCall{Call: call}
 }
 
-// RawConncapabilitiesCall wrap *gomock.Call
-type RawConncapabilitiesCall struct {
+// MockRawConncapabilitiesCall wrap *gomock.Call
+type MockRawConncapabilitiesCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RawConncapabilitiesCall) Return(arg0 connCapabilities) *RawConncapabilitiesCall {
+func (c *MockRawConncapabilitiesCall) Return(arg0 connCapabilities) *MockRawConncapabilitiesCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RawConncapabilitiesCall) Do(f func() connCapabilities) *RawConncapabilitiesCall {
+func (c *MockRawConncapabilitiesCall) Do(f func() connCapabilities) *MockRawConncapabilitiesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RawConncapabilitiesCall) DoAndReturn(f func() connCapabilities) *RawConncapabilitiesCall {
+func (c *MockRawConncapabilitiesCall) DoAndReturn(f func() connCapabilities) *MockRawConncapabilitiesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
