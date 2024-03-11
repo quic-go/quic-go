@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package mocktls -destination tls/client_session_cache.go crypto/tls ClientSessionCache
 //
+
 // Package mocktls is a generated GoMock package.
 package mocktls
 
@@ -48,31 +49,31 @@ func (m *MockClientSessionCache) Get(arg0 string) (*tls.ClientSessionState, bool
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockClientSessionCacheMockRecorder) Get(arg0 any) *ClientSessionCacheGetCall {
+func (mr *MockClientSessionCacheMockRecorder) Get(arg0 any) *MockClientSessionCacheGetCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockClientSessionCache)(nil).Get), arg0)
-	return &ClientSessionCacheGetCall{Call: call}
+	return &MockClientSessionCacheGetCall{Call: call}
 }
 
-// ClientSessionCacheGetCall wrap *gomock.Call
-type ClientSessionCacheGetCall struct {
+// MockClientSessionCacheGetCall wrap *gomock.Call
+type MockClientSessionCacheGetCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ClientSessionCacheGetCall) Return(arg0 *tls.ClientSessionState, arg1 bool) *ClientSessionCacheGetCall {
+func (c *MockClientSessionCacheGetCall) Return(arg0 *tls.ClientSessionState, arg1 bool) *MockClientSessionCacheGetCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ClientSessionCacheGetCall) Do(f func(string) (*tls.ClientSessionState, bool)) *ClientSessionCacheGetCall {
+func (c *MockClientSessionCacheGetCall) Do(f func(string) (*tls.ClientSessionState, bool)) *MockClientSessionCacheGetCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ClientSessionCacheGetCall) DoAndReturn(f func(string) (*tls.ClientSessionState, bool)) *ClientSessionCacheGetCall {
+func (c *MockClientSessionCacheGetCall) DoAndReturn(f func(string) (*tls.ClientSessionState, bool)) *MockClientSessionCacheGetCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -84,31 +85,31 @@ func (m *MockClientSessionCache) Put(arg0 string, arg1 *tls.ClientSessionState) 
 }
 
 // Put indicates an expected call of Put.
-func (mr *MockClientSessionCacheMockRecorder) Put(arg0, arg1 any) *ClientSessionCachePutCall {
+func (mr *MockClientSessionCacheMockRecorder) Put(arg0, arg1 any) *MockClientSessionCachePutCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockClientSessionCache)(nil).Put), arg0, arg1)
-	return &ClientSessionCachePutCall{Call: call}
+	return &MockClientSessionCachePutCall{Call: call}
 }
 
-// ClientSessionCachePutCall wrap *gomock.Call
-type ClientSessionCachePutCall struct {
+// MockClientSessionCachePutCall wrap *gomock.Call
+type MockClientSessionCachePutCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ClientSessionCachePutCall) Return() *ClientSessionCachePutCall {
+func (c *MockClientSessionCachePutCall) Return() *MockClientSessionCachePutCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ClientSessionCachePutCall) Do(f func(string, *tls.ClientSessionState)) *ClientSessionCachePutCall {
+func (c *MockClientSessionCachePutCall) Do(f func(string, *tls.ClientSessionState)) *MockClientSessionCachePutCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ClientSessionCachePutCall) DoAndReturn(f func(string, *tls.ClientSessionState)) *ClientSessionCachePutCall {
+func (c *MockClientSessionCachePutCall) DoAndReturn(f func(string, *tls.ClientSessionState)) *MockClientSessionCachePutCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package mocks -destination connection_flow_controller.go github.com/quic-go/quic-go/internal/flowcontrol ConnectionFlowController
 //
+
 // Package mocks is a generated GoMock package.
 package mocks
 
@@ -45,31 +46,31 @@ func (m *MockConnectionFlowController) AddBytesRead(arg0 protocol.ByteCount) {
 }
 
 // AddBytesRead indicates an expected call of AddBytesRead.
-func (mr *MockConnectionFlowControllerMockRecorder) AddBytesRead(arg0 any) *ConnectionFlowControllerAddBytesReadCall {
+func (mr *MockConnectionFlowControllerMockRecorder) AddBytesRead(arg0 any) *MockConnectionFlowControllerAddBytesReadCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddBytesRead", reflect.TypeOf((*MockConnectionFlowController)(nil).AddBytesRead), arg0)
-	return &ConnectionFlowControllerAddBytesReadCall{Call: call}
+	return &MockConnectionFlowControllerAddBytesReadCall{Call: call}
 }
 
-// ConnectionFlowControllerAddBytesReadCall wrap *gomock.Call
-type ConnectionFlowControllerAddBytesReadCall struct {
+// MockConnectionFlowControllerAddBytesReadCall wrap *gomock.Call
+type MockConnectionFlowControllerAddBytesReadCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerAddBytesReadCall) Return() *ConnectionFlowControllerAddBytesReadCall {
+func (c *MockConnectionFlowControllerAddBytesReadCall) Return() *MockConnectionFlowControllerAddBytesReadCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerAddBytesReadCall) Do(f func(protocol.ByteCount)) *ConnectionFlowControllerAddBytesReadCall {
+func (c *MockConnectionFlowControllerAddBytesReadCall) Do(f func(protocol.ByteCount)) *MockConnectionFlowControllerAddBytesReadCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerAddBytesReadCall) DoAndReturn(f func(protocol.ByteCount)) *ConnectionFlowControllerAddBytesReadCall {
+func (c *MockConnectionFlowControllerAddBytesReadCall) DoAndReturn(f func(protocol.ByteCount)) *MockConnectionFlowControllerAddBytesReadCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -81,31 +82,31 @@ func (m *MockConnectionFlowController) AddBytesSent(arg0 protocol.ByteCount) {
 }
 
 // AddBytesSent indicates an expected call of AddBytesSent.
-func (mr *MockConnectionFlowControllerMockRecorder) AddBytesSent(arg0 any) *ConnectionFlowControllerAddBytesSentCall {
+func (mr *MockConnectionFlowControllerMockRecorder) AddBytesSent(arg0 any) *MockConnectionFlowControllerAddBytesSentCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddBytesSent", reflect.TypeOf((*MockConnectionFlowController)(nil).AddBytesSent), arg0)
-	return &ConnectionFlowControllerAddBytesSentCall{Call: call}
+	return &MockConnectionFlowControllerAddBytesSentCall{Call: call}
 }
 
-// ConnectionFlowControllerAddBytesSentCall wrap *gomock.Call
-type ConnectionFlowControllerAddBytesSentCall struct {
+// MockConnectionFlowControllerAddBytesSentCall wrap *gomock.Call
+type MockConnectionFlowControllerAddBytesSentCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerAddBytesSentCall) Return() *ConnectionFlowControllerAddBytesSentCall {
+func (c *MockConnectionFlowControllerAddBytesSentCall) Return() *MockConnectionFlowControllerAddBytesSentCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerAddBytesSentCall) Do(f func(protocol.ByteCount)) *ConnectionFlowControllerAddBytesSentCall {
+func (c *MockConnectionFlowControllerAddBytesSentCall) Do(f func(protocol.ByteCount)) *MockConnectionFlowControllerAddBytesSentCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerAddBytesSentCall) DoAndReturn(f func(protocol.ByteCount)) *ConnectionFlowControllerAddBytesSentCall {
+func (c *MockConnectionFlowControllerAddBytesSentCall) DoAndReturn(f func(protocol.ByteCount)) *MockConnectionFlowControllerAddBytesSentCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -119,31 +120,31 @@ func (m *MockConnectionFlowController) GetWindowUpdate() protocol.ByteCount {
 }
 
 // GetWindowUpdate indicates an expected call of GetWindowUpdate.
-func (mr *MockConnectionFlowControllerMockRecorder) GetWindowUpdate() *ConnectionFlowControllerGetWindowUpdateCall {
+func (mr *MockConnectionFlowControllerMockRecorder) GetWindowUpdate() *MockConnectionFlowControllerGetWindowUpdateCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWindowUpdate", reflect.TypeOf((*MockConnectionFlowController)(nil).GetWindowUpdate))
-	return &ConnectionFlowControllerGetWindowUpdateCall{Call: call}
+	return &MockConnectionFlowControllerGetWindowUpdateCall{Call: call}
 }
 
-// ConnectionFlowControllerGetWindowUpdateCall wrap *gomock.Call
-type ConnectionFlowControllerGetWindowUpdateCall struct {
+// MockConnectionFlowControllerGetWindowUpdateCall wrap *gomock.Call
+type MockConnectionFlowControllerGetWindowUpdateCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerGetWindowUpdateCall) Return(arg0 protocol.ByteCount) *ConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) Return(arg0 protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerGetWindowUpdateCall) Do(f func() protocol.ByteCount) *ConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) Do(f func() protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerGetWindowUpdateCall) DoAndReturn(f func() protocol.ByteCount) *ConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) DoAndReturn(f func() protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -158,31 +159,31 @@ func (m *MockConnectionFlowController) IsNewlyBlocked() (bool, protocol.ByteCoun
 }
 
 // IsNewlyBlocked indicates an expected call of IsNewlyBlocked.
-func (mr *MockConnectionFlowControllerMockRecorder) IsNewlyBlocked() *ConnectionFlowControllerIsNewlyBlockedCall {
+func (mr *MockConnectionFlowControllerMockRecorder) IsNewlyBlocked() *MockConnectionFlowControllerIsNewlyBlockedCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNewlyBlocked", reflect.TypeOf((*MockConnectionFlowController)(nil).IsNewlyBlocked))
-	return &ConnectionFlowControllerIsNewlyBlockedCall{Call: call}
+	return &MockConnectionFlowControllerIsNewlyBlockedCall{Call: call}
 }
 
-// ConnectionFlowControllerIsNewlyBlockedCall wrap *gomock.Call
-type ConnectionFlowControllerIsNewlyBlockedCall struct {
+// MockConnectionFlowControllerIsNewlyBlockedCall wrap *gomock.Call
+type MockConnectionFlowControllerIsNewlyBlockedCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerIsNewlyBlockedCall) Return(arg0 bool, arg1 protocol.ByteCount) *ConnectionFlowControllerIsNewlyBlockedCall {
+func (c *MockConnectionFlowControllerIsNewlyBlockedCall) Return(arg0 bool, arg1 protocol.ByteCount) *MockConnectionFlowControllerIsNewlyBlockedCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerIsNewlyBlockedCall) Do(f func() (bool, protocol.ByteCount)) *ConnectionFlowControllerIsNewlyBlockedCall {
+func (c *MockConnectionFlowControllerIsNewlyBlockedCall) Do(f func() (bool, protocol.ByteCount)) *MockConnectionFlowControllerIsNewlyBlockedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerIsNewlyBlockedCall) DoAndReturn(f func() (bool, protocol.ByteCount)) *ConnectionFlowControllerIsNewlyBlockedCall {
+func (c *MockConnectionFlowControllerIsNewlyBlockedCall) DoAndReturn(f func() (bool, protocol.ByteCount)) *MockConnectionFlowControllerIsNewlyBlockedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -196,31 +197,31 @@ func (m *MockConnectionFlowController) Reset() error {
 }
 
 // Reset indicates an expected call of Reset.
-func (mr *MockConnectionFlowControllerMockRecorder) Reset() *ConnectionFlowControllerResetCall {
+func (mr *MockConnectionFlowControllerMockRecorder) Reset() *MockConnectionFlowControllerResetCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockConnectionFlowController)(nil).Reset))
-	return &ConnectionFlowControllerResetCall{Call: call}
+	return &MockConnectionFlowControllerResetCall{Call: call}
 }
 
-// ConnectionFlowControllerResetCall wrap *gomock.Call
-type ConnectionFlowControllerResetCall struct {
+// MockConnectionFlowControllerResetCall wrap *gomock.Call
+type MockConnectionFlowControllerResetCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerResetCall) Return(arg0 error) *ConnectionFlowControllerResetCall {
+func (c *MockConnectionFlowControllerResetCall) Return(arg0 error) *MockConnectionFlowControllerResetCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerResetCall) Do(f func() error) *ConnectionFlowControllerResetCall {
+func (c *MockConnectionFlowControllerResetCall) Do(f func() error) *MockConnectionFlowControllerResetCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerResetCall) DoAndReturn(f func() error) *ConnectionFlowControllerResetCall {
+func (c *MockConnectionFlowControllerResetCall) DoAndReturn(f func() error) *MockConnectionFlowControllerResetCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -234,31 +235,31 @@ func (m *MockConnectionFlowController) SendWindowSize() protocol.ByteCount {
 }
 
 // SendWindowSize indicates an expected call of SendWindowSize.
-func (mr *MockConnectionFlowControllerMockRecorder) SendWindowSize() *ConnectionFlowControllerSendWindowSizeCall {
+func (mr *MockConnectionFlowControllerMockRecorder) SendWindowSize() *MockConnectionFlowControllerSendWindowSizeCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendWindowSize", reflect.TypeOf((*MockConnectionFlowController)(nil).SendWindowSize))
-	return &ConnectionFlowControllerSendWindowSizeCall{Call: call}
+	return &MockConnectionFlowControllerSendWindowSizeCall{Call: call}
 }
 
-// ConnectionFlowControllerSendWindowSizeCall wrap *gomock.Call
-type ConnectionFlowControllerSendWindowSizeCall struct {
+// MockConnectionFlowControllerSendWindowSizeCall wrap *gomock.Call
+type MockConnectionFlowControllerSendWindowSizeCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerSendWindowSizeCall) Return(arg0 protocol.ByteCount) *ConnectionFlowControllerSendWindowSizeCall {
+func (c *MockConnectionFlowControllerSendWindowSizeCall) Return(arg0 protocol.ByteCount) *MockConnectionFlowControllerSendWindowSizeCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerSendWindowSizeCall) Do(f func() protocol.ByteCount) *ConnectionFlowControllerSendWindowSizeCall {
+func (c *MockConnectionFlowControllerSendWindowSizeCall) Do(f func() protocol.ByteCount) *MockConnectionFlowControllerSendWindowSizeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerSendWindowSizeCall) DoAndReturn(f func() protocol.ByteCount) *ConnectionFlowControllerSendWindowSizeCall {
+func (c *MockConnectionFlowControllerSendWindowSizeCall) DoAndReturn(f func() protocol.ByteCount) *MockConnectionFlowControllerSendWindowSizeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -272,31 +273,31 @@ func (m *MockConnectionFlowController) UpdateSendWindow(arg0 protocol.ByteCount)
 }
 
 // UpdateSendWindow indicates an expected call of UpdateSendWindow.
-func (mr *MockConnectionFlowControllerMockRecorder) UpdateSendWindow(arg0 any) *ConnectionFlowControllerUpdateSendWindowCall {
+func (mr *MockConnectionFlowControllerMockRecorder) UpdateSendWindow(arg0 any) *MockConnectionFlowControllerUpdateSendWindowCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSendWindow", reflect.TypeOf((*MockConnectionFlowController)(nil).UpdateSendWindow), arg0)
-	return &ConnectionFlowControllerUpdateSendWindowCall{Call: call}
+	return &MockConnectionFlowControllerUpdateSendWindowCall{Call: call}
 }
 
-// ConnectionFlowControllerUpdateSendWindowCall wrap *gomock.Call
-type ConnectionFlowControllerUpdateSendWindowCall struct {
+// MockConnectionFlowControllerUpdateSendWindowCall wrap *gomock.Call
+type MockConnectionFlowControllerUpdateSendWindowCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ConnectionFlowControllerUpdateSendWindowCall) Return(arg0 bool) *ConnectionFlowControllerUpdateSendWindowCall {
+func (c *MockConnectionFlowControllerUpdateSendWindowCall) Return(arg0 bool) *MockConnectionFlowControllerUpdateSendWindowCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ConnectionFlowControllerUpdateSendWindowCall) Do(f func(protocol.ByteCount) bool) *ConnectionFlowControllerUpdateSendWindowCall {
+func (c *MockConnectionFlowControllerUpdateSendWindowCall) Do(f func(protocol.ByteCount) bool) *MockConnectionFlowControllerUpdateSendWindowCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ConnectionFlowControllerUpdateSendWindowCall) DoAndReturn(f func(protocol.ByteCount) bool) *ConnectionFlowControllerUpdateSendWindowCall {
+func (c *MockConnectionFlowControllerUpdateSendWindowCall) DoAndReturn(f func(protocol.ByteCount) bool) *MockConnectionFlowControllerUpdateSendWindowCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

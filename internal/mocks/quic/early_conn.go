@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package mockquic -destination quic/early_conn_tmp.go github.com/quic-go/quic-go EarlyConnection
 //
+
 // Package mockquic is a generated GoMock package.
 package mockquic
 
@@ -51,31 +52,31 @@ func (m *MockEarlyConnection) AcceptStream(arg0 context.Context) (quic.Stream, e
 }
 
 // AcceptStream indicates an expected call of AcceptStream.
-func (mr *MockEarlyConnectionMockRecorder) AcceptStream(arg0 any) *EarlyConnectionAcceptStreamCall {
+func (mr *MockEarlyConnectionMockRecorder) AcceptStream(arg0 any) *MockEarlyConnectionAcceptStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockEarlyConnection)(nil).AcceptStream), arg0)
-	return &EarlyConnectionAcceptStreamCall{Call: call}
+	return &MockEarlyConnectionAcceptStreamCall{Call: call}
 }
 
-// EarlyConnectionAcceptStreamCall wrap *gomock.Call
-type EarlyConnectionAcceptStreamCall struct {
+// MockEarlyConnectionAcceptStreamCall wrap *gomock.Call
+type MockEarlyConnectionAcceptStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionAcceptStreamCall) Return(arg0 quic.Stream, arg1 error) *EarlyConnectionAcceptStreamCall {
+func (c *MockEarlyConnectionAcceptStreamCall) Return(arg0 quic.Stream, arg1 error) *MockEarlyConnectionAcceptStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionAcceptStreamCall) Do(f func(context.Context) (quic.Stream, error)) *EarlyConnectionAcceptStreamCall {
+func (c *MockEarlyConnectionAcceptStreamCall) Do(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionAcceptStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionAcceptStreamCall) DoAndReturn(f func(context.Context) (quic.Stream, error)) *EarlyConnectionAcceptStreamCall {
+func (c *MockEarlyConnectionAcceptStreamCall) DoAndReturn(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionAcceptStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -90,31 +91,31 @@ func (m *MockEarlyConnection) AcceptUniStream(arg0 context.Context) (quic.Receiv
 }
 
 // AcceptUniStream indicates an expected call of AcceptUniStream.
-func (mr *MockEarlyConnectionMockRecorder) AcceptUniStream(arg0 any) *EarlyConnectionAcceptUniStreamCall {
+func (mr *MockEarlyConnectionMockRecorder) AcceptUniStream(arg0 any) *MockEarlyConnectionAcceptUniStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockEarlyConnection)(nil).AcceptUniStream), arg0)
-	return &EarlyConnectionAcceptUniStreamCall{Call: call}
+	return &MockEarlyConnectionAcceptUniStreamCall{Call: call}
 }
 
-// EarlyConnectionAcceptUniStreamCall wrap *gomock.Call
-type EarlyConnectionAcceptUniStreamCall struct {
+// MockEarlyConnectionAcceptUniStreamCall wrap *gomock.Call
+type MockEarlyConnectionAcceptUniStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionAcceptUniStreamCall) Return(arg0 quic.ReceiveStream, arg1 error) *EarlyConnectionAcceptUniStreamCall {
+func (c *MockEarlyConnectionAcceptUniStreamCall) Return(arg0 quic.ReceiveStream, arg1 error) *MockEarlyConnectionAcceptUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionAcceptUniStreamCall) Do(f func(context.Context) (quic.ReceiveStream, error)) *EarlyConnectionAcceptUniStreamCall {
+func (c *MockEarlyConnectionAcceptUniStreamCall) Do(f func(context.Context) (quic.ReceiveStream, error)) *MockEarlyConnectionAcceptUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionAcceptUniStreamCall) DoAndReturn(f func(context.Context) (quic.ReceiveStream, error)) *EarlyConnectionAcceptUniStreamCall {
+func (c *MockEarlyConnectionAcceptUniStreamCall) DoAndReturn(f func(context.Context) (quic.ReceiveStream, error)) *MockEarlyConnectionAcceptUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -128,31 +129,31 @@ func (m *MockEarlyConnection) CloseWithError(arg0 qerr.ApplicationErrorCode, arg
 }
 
 // CloseWithError indicates an expected call of CloseWithError.
-func (mr *MockEarlyConnectionMockRecorder) CloseWithError(arg0, arg1 any) *EarlyConnectionCloseWithErrorCall {
+func (mr *MockEarlyConnectionMockRecorder) CloseWithError(arg0, arg1 any) *MockEarlyConnectionCloseWithErrorCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockEarlyConnection)(nil).CloseWithError), arg0, arg1)
-	return &EarlyConnectionCloseWithErrorCall{Call: call}
+	return &MockEarlyConnectionCloseWithErrorCall{Call: call}
 }
 
-// EarlyConnectionCloseWithErrorCall wrap *gomock.Call
-type EarlyConnectionCloseWithErrorCall struct {
+// MockEarlyConnectionCloseWithErrorCall wrap *gomock.Call
+type MockEarlyConnectionCloseWithErrorCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionCloseWithErrorCall) Return(arg0 error) *EarlyConnectionCloseWithErrorCall {
+func (c *MockEarlyConnectionCloseWithErrorCall) Return(arg0 error) *MockEarlyConnectionCloseWithErrorCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionCloseWithErrorCall) Do(f func(qerr.ApplicationErrorCode, string) error) *EarlyConnectionCloseWithErrorCall {
+func (c *MockEarlyConnectionCloseWithErrorCall) Do(f func(qerr.ApplicationErrorCode, string) error) *MockEarlyConnectionCloseWithErrorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionCloseWithErrorCall) DoAndReturn(f func(qerr.ApplicationErrorCode, string) error) *EarlyConnectionCloseWithErrorCall {
+func (c *MockEarlyConnectionCloseWithErrorCall) DoAndReturn(f func(qerr.ApplicationErrorCode, string) error) *MockEarlyConnectionCloseWithErrorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -166,31 +167,31 @@ func (m *MockEarlyConnection) ConnectionState() quic.ConnectionState {
 }
 
 // ConnectionState indicates an expected call of ConnectionState.
-func (mr *MockEarlyConnectionMockRecorder) ConnectionState() *EarlyConnectionConnectionStateCall {
+func (mr *MockEarlyConnectionMockRecorder) ConnectionState() *MockEarlyConnectionConnectionStateCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockEarlyConnection)(nil).ConnectionState))
-	return &EarlyConnectionConnectionStateCall{Call: call}
+	return &MockEarlyConnectionConnectionStateCall{Call: call}
 }
 
-// EarlyConnectionConnectionStateCall wrap *gomock.Call
-type EarlyConnectionConnectionStateCall struct {
+// MockEarlyConnectionConnectionStateCall wrap *gomock.Call
+type MockEarlyConnectionConnectionStateCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionConnectionStateCall) Return(arg0 quic.ConnectionState) *EarlyConnectionConnectionStateCall {
+func (c *MockEarlyConnectionConnectionStateCall) Return(arg0 quic.ConnectionState) *MockEarlyConnectionConnectionStateCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionConnectionStateCall) Do(f func() quic.ConnectionState) *EarlyConnectionConnectionStateCall {
+func (c *MockEarlyConnectionConnectionStateCall) Do(f func() quic.ConnectionState) *MockEarlyConnectionConnectionStateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionConnectionStateCall) DoAndReturn(f func() quic.ConnectionState) *EarlyConnectionConnectionStateCall {
+func (c *MockEarlyConnectionConnectionStateCall) DoAndReturn(f func() quic.ConnectionState) *MockEarlyConnectionConnectionStateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -204,31 +205,31 @@ func (m *MockEarlyConnection) Context() context.Context {
 }
 
 // Context indicates an expected call of Context.
-func (mr *MockEarlyConnectionMockRecorder) Context() *EarlyConnectionContextCall {
+func (mr *MockEarlyConnectionMockRecorder) Context() *MockEarlyConnectionContextCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockEarlyConnection)(nil).Context))
-	return &EarlyConnectionContextCall{Call: call}
+	return &MockEarlyConnectionContextCall{Call: call}
 }
 
-// EarlyConnectionContextCall wrap *gomock.Call
-type EarlyConnectionContextCall struct {
+// MockEarlyConnectionContextCall wrap *gomock.Call
+type MockEarlyConnectionContextCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionContextCall) Return(arg0 context.Context) *EarlyConnectionContextCall {
+func (c *MockEarlyConnectionContextCall) Return(arg0 context.Context) *MockEarlyConnectionContextCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionContextCall) Do(f func() context.Context) *EarlyConnectionContextCall {
+func (c *MockEarlyConnectionContextCall) Do(f func() context.Context) *MockEarlyConnectionContextCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionContextCall) DoAndReturn(f func() context.Context) *EarlyConnectionContextCall {
+func (c *MockEarlyConnectionContextCall) DoAndReturn(f func() context.Context) *MockEarlyConnectionContextCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -242,31 +243,31 @@ func (m *MockEarlyConnection) HandshakeComplete() <-chan struct{} {
 }
 
 // HandshakeComplete indicates an expected call of HandshakeComplete.
-func (mr *MockEarlyConnectionMockRecorder) HandshakeComplete() *EarlyConnectionHandshakeCompleteCall {
+func (mr *MockEarlyConnectionMockRecorder) HandshakeComplete() *MockEarlyConnectionHandshakeCompleteCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockEarlyConnection)(nil).HandshakeComplete))
-	return &EarlyConnectionHandshakeCompleteCall{Call: call}
+	return &MockEarlyConnectionHandshakeCompleteCall{Call: call}
 }
 
-// EarlyConnectionHandshakeCompleteCall wrap *gomock.Call
-type EarlyConnectionHandshakeCompleteCall struct {
+// MockEarlyConnectionHandshakeCompleteCall wrap *gomock.Call
+type MockEarlyConnectionHandshakeCompleteCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionHandshakeCompleteCall) Return(arg0 <-chan struct{}) *EarlyConnectionHandshakeCompleteCall {
+func (c *MockEarlyConnectionHandshakeCompleteCall) Return(arg0 <-chan struct{}) *MockEarlyConnectionHandshakeCompleteCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionHandshakeCompleteCall) Do(f func() <-chan struct{}) *EarlyConnectionHandshakeCompleteCall {
+func (c *MockEarlyConnectionHandshakeCompleteCall) Do(f func() <-chan struct{}) *MockEarlyConnectionHandshakeCompleteCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionHandshakeCompleteCall) DoAndReturn(f func() <-chan struct{}) *EarlyConnectionHandshakeCompleteCall {
+func (c *MockEarlyConnectionHandshakeCompleteCall) DoAndReturn(f func() <-chan struct{}) *MockEarlyConnectionHandshakeCompleteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -280,31 +281,31 @@ func (m *MockEarlyConnection) LocalAddr() net.Addr {
 }
 
 // LocalAddr indicates an expected call of LocalAddr.
-func (mr *MockEarlyConnectionMockRecorder) LocalAddr() *EarlyConnectionLocalAddrCall {
+func (mr *MockEarlyConnectionMockRecorder) LocalAddr() *MockEarlyConnectionLocalAddrCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalAddr", reflect.TypeOf((*MockEarlyConnection)(nil).LocalAddr))
-	return &EarlyConnectionLocalAddrCall{Call: call}
+	return &MockEarlyConnectionLocalAddrCall{Call: call}
 }
 
-// EarlyConnectionLocalAddrCall wrap *gomock.Call
-type EarlyConnectionLocalAddrCall struct {
+// MockEarlyConnectionLocalAddrCall wrap *gomock.Call
+type MockEarlyConnectionLocalAddrCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionLocalAddrCall) Return(arg0 net.Addr) *EarlyConnectionLocalAddrCall {
+func (c *MockEarlyConnectionLocalAddrCall) Return(arg0 net.Addr) *MockEarlyConnectionLocalAddrCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionLocalAddrCall) Do(f func() net.Addr) *EarlyConnectionLocalAddrCall {
+func (c *MockEarlyConnectionLocalAddrCall) Do(f func() net.Addr) *MockEarlyConnectionLocalAddrCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionLocalAddrCall) DoAndReturn(f func() net.Addr) *EarlyConnectionLocalAddrCall {
+func (c *MockEarlyConnectionLocalAddrCall) DoAndReturn(f func() net.Addr) *MockEarlyConnectionLocalAddrCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -318,31 +319,31 @@ func (m *MockEarlyConnection) NextConnection() quic.Connection {
 }
 
 // NextConnection indicates an expected call of NextConnection.
-func (mr *MockEarlyConnectionMockRecorder) NextConnection() *EarlyConnectionNextConnectionCall {
+func (mr *MockEarlyConnectionMockRecorder) NextConnection() *MockEarlyConnectionNextConnectionCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextConnection", reflect.TypeOf((*MockEarlyConnection)(nil).NextConnection))
-	return &EarlyConnectionNextConnectionCall{Call: call}
+	return &MockEarlyConnectionNextConnectionCall{Call: call}
 }
 
-// EarlyConnectionNextConnectionCall wrap *gomock.Call
-type EarlyConnectionNextConnectionCall struct {
+// MockEarlyConnectionNextConnectionCall wrap *gomock.Call
+type MockEarlyConnectionNextConnectionCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionNextConnectionCall) Return(arg0 quic.Connection) *EarlyConnectionNextConnectionCall {
+func (c *MockEarlyConnectionNextConnectionCall) Return(arg0 quic.Connection) *MockEarlyConnectionNextConnectionCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionNextConnectionCall) Do(f func() quic.Connection) *EarlyConnectionNextConnectionCall {
+func (c *MockEarlyConnectionNextConnectionCall) Do(f func() quic.Connection) *MockEarlyConnectionNextConnectionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionNextConnectionCall) DoAndReturn(f func() quic.Connection) *EarlyConnectionNextConnectionCall {
+func (c *MockEarlyConnectionNextConnectionCall) DoAndReturn(f func() quic.Connection) *MockEarlyConnectionNextConnectionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -357,31 +358,31 @@ func (m *MockEarlyConnection) OpenStream() (quic.Stream, error) {
 }
 
 // OpenStream indicates an expected call of OpenStream.
-func (mr *MockEarlyConnectionMockRecorder) OpenStream() *EarlyConnectionOpenStreamCall {
+func (mr *MockEarlyConnectionMockRecorder) OpenStream() *MockEarlyConnectionOpenStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStream", reflect.TypeOf((*MockEarlyConnection)(nil).OpenStream))
-	return &EarlyConnectionOpenStreamCall{Call: call}
+	return &MockEarlyConnectionOpenStreamCall{Call: call}
 }
 
-// EarlyConnectionOpenStreamCall wrap *gomock.Call
-type EarlyConnectionOpenStreamCall struct {
+// MockEarlyConnectionOpenStreamCall wrap *gomock.Call
+type MockEarlyConnectionOpenStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionOpenStreamCall) Return(arg0 quic.Stream, arg1 error) *EarlyConnectionOpenStreamCall {
+func (c *MockEarlyConnectionOpenStreamCall) Return(arg0 quic.Stream, arg1 error) *MockEarlyConnectionOpenStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionOpenStreamCall) Do(f func() (quic.Stream, error)) *EarlyConnectionOpenStreamCall {
+func (c *MockEarlyConnectionOpenStreamCall) Do(f func() (quic.Stream, error)) *MockEarlyConnectionOpenStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionOpenStreamCall) DoAndReturn(f func() (quic.Stream, error)) *EarlyConnectionOpenStreamCall {
+func (c *MockEarlyConnectionOpenStreamCall) DoAndReturn(f func() (quic.Stream, error)) *MockEarlyConnectionOpenStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -396,31 +397,31 @@ func (m *MockEarlyConnection) OpenStreamSync(arg0 context.Context) (quic.Stream,
 }
 
 // OpenStreamSync indicates an expected call of OpenStreamSync.
-func (mr *MockEarlyConnectionMockRecorder) OpenStreamSync(arg0 any) *EarlyConnectionOpenStreamSyncCall {
+func (mr *MockEarlyConnectionMockRecorder) OpenStreamSync(arg0 any) *MockEarlyConnectionOpenStreamSyncCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockEarlyConnection)(nil).OpenStreamSync), arg0)
-	return &EarlyConnectionOpenStreamSyncCall{Call: call}
+	return &MockEarlyConnectionOpenStreamSyncCall{Call: call}
 }
 
-// EarlyConnectionOpenStreamSyncCall wrap *gomock.Call
-type EarlyConnectionOpenStreamSyncCall struct {
+// MockEarlyConnectionOpenStreamSyncCall wrap *gomock.Call
+type MockEarlyConnectionOpenStreamSyncCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionOpenStreamSyncCall) Return(arg0 quic.Stream, arg1 error) *EarlyConnectionOpenStreamSyncCall {
+func (c *MockEarlyConnectionOpenStreamSyncCall) Return(arg0 quic.Stream, arg1 error) *MockEarlyConnectionOpenStreamSyncCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionOpenStreamSyncCall) Do(f func(context.Context) (quic.Stream, error)) *EarlyConnectionOpenStreamSyncCall {
+func (c *MockEarlyConnectionOpenStreamSyncCall) Do(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionOpenStreamSyncCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionOpenStreamSyncCall) DoAndReturn(f func(context.Context) (quic.Stream, error)) *EarlyConnectionOpenStreamSyncCall {
+func (c *MockEarlyConnectionOpenStreamSyncCall) DoAndReturn(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionOpenStreamSyncCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -435,31 +436,31 @@ func (m *MockEarlyConnection) OpenUniStream() (quic.SendStream, error) {
 }
 
 // OpenUniStream indicates an expected call of OpenUniStream.
-func (mr *MockEarlyConnectionMockRecorder) OpenUniStream() *EarlyConnectionOpenUniStreamCall {
+func (mr *MockEarlyConnectionMockRecorder) OpenUniStream() *MockEarlyConnectionOpenUniStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStream", reflect.TypeOf((*MockEarlyConnection)(nil).OpenUniStream))
-	return &EarlyConnectionOpenUniStreamCall{Call: call}
+	return &MockEarlyConnectionOpenUniStreamCall{Call: call}
 }
 
-// EarlyConnectionOpenUniStreamCall wrap *gomock.Call
-type EarlyConnectionOpenUniStreamCall struct {
+// MockEarlyConnectionOpenUniStreamCall wrap *gomock.Call
+type MockEarlyConnectionOpenUniStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionOpenUniStreamCall) Return(arg0 quic.SendStream, arg1 error) *EarlyConnectionOpenUniStreamCall {
+func (c *MockEarlyConnectionOpenUniStreamCall) Return(arg0 quic.SendStream, arg1 error) *MockEarlyConnectionOpenUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionOpenUniStreamCall) Do(f func() (quic.SendStream, error)) *EarlyConnectionOpenUniStreamCall {
+func (c *MockEarlyConnectionOpenUniStreamCall) Do(f func() (quic.SendStream, error)) *MockEarlyConnectionOpenUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionOpenUniStreamCall) DoAndReturn(f func() (quic.SendStream, error)) *EarlyConnectionOpenUniStreamCall {
+func (c *MockEarlyConnectionOpenUniStreamCall) DoAndReturn(f func() (quic.SendStream, error)) *MockEarlyConnectionOpenUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -474,31 +475,31 @@ func (m *MockEarlyConnection) OpenUniStreamSync(arg0 context.Context) (quic.Send
 }
 
 // OpenUniStreamSync indicates an expected call of OpenUniStreamSync.
-func (mr *MockEarlyConnectionMockRecorder) OpenUniStreamSync(arg0 any) *EarlyConnectionOpenUniStreamSyncCall {
+func (mr *MockEarlyConnectionMockRecorder) OpenUniStreamSync(arg0 any) *MockEarlyConnectionOpenUniStreamSyncCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockEarlyConnection)(nil).OpenUniStreamSync), arg0)
-	return &EarlyConnectionOpenUniStreamSyncCall{Call: call}
+	return &MockEarlyConnectionOpenUniStreamSyncCall{Call: call}
 }
 
-// EarlyConnectionOpenUniStreamSyncCall wrap *gomock.Call
-type EarlyConnectionOpenUniStreamSyncCall struct {
+// MockEarlyConnectionOpenUniStreamSyncCall wrap *gomock.Call
+type MockEarlyConnectionOpenUniStreamSyncCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionOpenUniStreamSyncCall) Return(arg0 quic.SendStream, arg1 error) *EarlyConnectionOpenUniStreamSyncCall {
+func (c *MockEarlyConnectionOpenUniStreamSyncCall) Return(arg0 quic.SendStream, arg1 error) *MockEarlyConnectionOpenUniStreamSyncCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionOpenUniStreamSyncCall) Do(f func(context.Context) (quic.SendStream, error)) *EarlyConnectionOpenUniStreamSyncCall {
+func (c *MockEarlyConnectionOpenUniStreamSyncCall) Do(f func(context.Context) (quic.SendStream, error)) *MockEarlyConnectionOpenUniStreamSyncCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (quic.SendStream, error)) *EarlyConnectionOpenUniStreamSyncCall {
+func (c *MockEarlyConnectionOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (quic.SendStream, error)) *MockEarlyConnectionOpenUniStreamSyncCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -513,31 +514,31 @@ func (m *MockEarlyConnection) ReceiveDatagram(arg0 context.Context) ([]byte, err
 }
 
 // ReceiveDatagram indicates an expected call of ReceiveDatagram.
-func (mr *MockEarlyConnectionMockRecorder) ReceiveDatagram(arg0 any) *EarlyConnectionReceiveDatagramCall {
+func (mr *MockEarlyConnectionMockRecorder) ReceiveDatagram(arg0 any) *MockEarlyConnectionReceiveDatagramCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveDatagram", reflect.TypeOf((*MockEarlyConnection)(nil).ReceiveDatagram), arg0)
-	return &EarlyConnectionReceiveDatagramCall{Call: call}
+	return &MockEarlyConnectionReceiveDatagramCall{Call: call}
 }
 
-// EarlyConnectionReceiveDatagramCall wrap *gomock.Call
-type EarlyConnectionReceiveDatagramCall struct {
+// MockEarlyConnectionReceiveDatagramCall wrap *gomock.Call
+type MockEarlyConnectionReceiveDatagramCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionReceiveDatagramCall) Return(arg0 []byte, arg1 error) *EarlyConnectionReceiveDatagramCall {
+func (c *MockEarlyConnectionReceiveDatagramCall) Return(arg0 []byte, arg1 error) *MockEarlyConnectionReceiveDatagramCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionReceiveDatagramCall) Do(f func(context.Context) ([]byte, error)) *EarlyConnectionReceiveDatagramCall {
+func (c *MockEarlyConnectionReceiveDatagramCall) Do(f func(context.Context) ([]byte, error)) *MockEarlyConnectionReceiveDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionReceiveDatagramCall) DoAndReturn(f func(context.Context) ([]byte, error)) *EarlyConnectionReceiveDatagramCall {
+func (c *MockEarlyConnectionReceiveDatagramCall) DoAndReturn(f func(context.Context) ([]byte, error)) *MockEarlyConnectionReceiveDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -551,31 +552,31 @@ func (m *MockEarlyConnection) RemoteAddr() net.Addr {
 }
 
 // RemoteAddr indicates an expected call of RemoteAddr.
-func (mr *MockEarlyConnectionMockRecorder) RemoteAddr() *EarlyConnectionRemoteAddrCall {
+func (mr *MockEarlyConnectionMockRecorder) RemoteAddr() *MockEarlyConnectionRemoteAddrCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockEarlyConnection)(nil).RemoteAddr))
-	return &EarlyConnectionRemoteAddrCall{Call: call}
+	return &MockEarlyConnectionRemoteAddrCall{Call: call}
 }
 
-// EarlyConnectionRemoteAddrCall wrap *gomock.Call
-type EarlyConnectionRemoteAddrCall struct {
+// MockEarlyConnectionRemoteAddrCall wrap *gomock.Call
+type MockEarlyConnectionRemoteAddrCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionRemoteAddrCall) Return(arg0 net.Addr) *EarlyConnectionRemoteAddrCall {
+func (c *MockEarlyConnectionRemoteAddrCall) Return(arg0 net.Addr) *MockEarlyConnectionRemoteAddrCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionRemoteAddrCall) Do(f func() net.Addr) *EarlyConnectionRemoteAddrCall {
+func (c *MockEarlyConnectionRemoteAddrCall) Do(f func() net.Addr) *MockEarlyConnectionRemoteAddrCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionRemoteAddrCall) DoAndReturn(f func() net.Addr) *EarlyConnectionRemoteAddrCall {
+func (c *MockEarlyConnectionRemoteAddrCall) DoAndReturn(f func() net.Addr) *MockEarlyConnectionRemoteAddrCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -589,31 +590,31 @@ func (m *MockEarlyConnection) SendDatagram(arg0 []byte) error {
 }
 
 // SendDatagram indicates an expected call of SendDatagram.
-func (mr *MockEarlyConnectionMockRecorder) SendDatagram(arg0 any) *EarlyConnectionSendDatagramCall {
+func (mr *MockEarlyConnectionMockRecorder) SendDatagram(arg0 any) *MockEarlyConnectionSendDatagramCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockEarlyConnection)(nil).SendDatagram), arg0)
-	return &EarlyConnectionSendDatagramCall{Call: call}
+	return &MockEarlyConnectionSendDatagramCall{Call: call}
 }
 
-// EarlyConnectionSendDatagramCall wrap *gomock.Call
-type EarlyConnectionSendDatagramCall struct {
+// MockEarlyConnectionSendDatagramCall wrap *gomock.Call
+type MockEarlyConnectionSendDatagramCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *EarlyConnectionSendDatagramCall) Return(arg0 error) *EarlyConnectionSendDatagramCall {
+func (c *MockEarlyConnectionSendDatagramCall) Return(arg0 error) *MockEarlyConnectionSendDatagramCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *EarlyConnectionSendDatagramCall) Do(f func([]byte) error) *EarlyConnectionSendDatagramCall {
+func (c *MockEarlyConnectionSendDatagramCall) Do(f func([]byte) error) *MockEarlyConnectionSendDatagramCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *EarlyConnectionSendDatagramCall) DoAndReturn(f func([]byte) error) *EarlyConnectionSendDatagramCall {
+func (c *MockEarlyConnectionSendDatagramCall) DoAndReturn(f func([]byte) error) *MockEarlyConnectionSendDatagramCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

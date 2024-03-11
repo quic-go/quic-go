@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_packet_handler_manager_test.go github.com/quic-go/quic-go PacketHandlerManager
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -47,31 +48,31 @@ func (m *MockPacketHandlerManager) Add(arg0 protocol.ConnectionID, arg1 packetHa
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockPacketHandlerManagerMockRecorder) Add(arg0, arg1 any) *PacketHandlerManagerAddCall {
+func (mr *MockPacketHandlerManagerMockRecorder) Add(arg0, arg1 any) *MockPacketHandlerManagerAddCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockPacketHandlerManager)(nil).Add), arg0, arg1)
-	return &PacketHandlerManagerAddCall{Call: call}
+	return &MockPacketHandlerManagerAddCall{Call: call}
 }
 
-// PacketHandlerManagerAddCall wrap *gomock.Call
-type PacketHandlerManagerAddCall struct {
+// MockPacketHandlerManagerAddCall wrap *gomock.Call
+type MockPacketHandlerManagerAddCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerAddCall) Return(arg0 bool) *PacketHandlerManagerAddCall {
+func (c *MockPacketHandlerManagerAddCall) Return(arg0 bool) *MockPacketHandlerManagerAddCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerAddCall) Do(f func(protocol.ConnectionID, packetHandler) bool) *PacketHandlerManagerAddCall {
+func (c *MockPacketHandlerManagerAddCall) Do(f func(protocol.ConnectionID, packetHandler) bool) *MockPacketHandlerManagerAddCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerAddCall) DoAndReturn(f func(protocol.ConnectionID, packetHandler) bool) *PacketHandlerManagerAddCall {
+func (c *MockPacketHandlerManagerAddCall) DoAndReturn(f func(protocol.ConnectionID, packetHandler) bool) *MockPacketHandlerManagerAddCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -83,31 +84,31 @@ func (m *MockPacketHandlerManager) AddResetToken(arg0 protocol.StatelessResetTok
 }
 
 // AddResetToken indicates an expected call of AddResetToken.
-func (mr *MockPacketHandlerManagerMockRecorder) AddResetToken(arg0, arg1 any) *PacketHandlerManagerAddResetTokenCall {
+func (mr *MockPacketHandlerManagerMockRecorder) AddResetToken(arg0, arg1 any) *MockPacketHandlerManagerAddResetTokenCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).AddResetToken), arg0, arg1)
-	return &PacketHandlerManagerAddResetTokenCall{Call: call}
+	return &MockPacketHandlerManagerAddResetTokenCall{Call: call}
 }
 
-// PacketHandlerManagerAddResetTokenCall wrap *gomock.Call
-type PacketHandlerManagerAddResetTokenCall struct {
+// MockPacketHandlerManagerAddResetTokenCall wrap *gomock.Call
+type MockPacketHandlerManagerAddResetTokenCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerAddResetTokenCall) Return() *PacketHandlerManagerAddResetTokenCall {
+func (c *MockPacketHandlerManagerAddResetTokenCall) Return() *MockPacketHandlerManagerAddResetTokenCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerAddResetTokenCall) Do(f func(protocol.StatelessResetToken, packetHandler)) *PacketHandlerManagerAddResetTokenCall {
+func (c *MockPacketHandlerManagerAddResetTokenCall) Do(f func(protocol.StatelessResetToken, packetHandler)) *MockPacketHandlerManagerAddResetTokenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerAddResetTokenCall) DoAndReturn(f func(protocol.StatelessResetToken, packetHandler)) *PacketHandlerManagerAddResetTokenCall {
+func (c *MockPacketHandlerManagerAddResetTokenCall) DoAndReturn(f func(protocol.StatelessResetToken, packetHandler)) *MockPacketHandlerManagerAddResetTokenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -121,31 +122,31 @@ func (m *MockPacketHandlerManager) AddWithConnID(arg0, arg1 protocol.ConnectionI
 }
 
 // AddWithConnID indicates an expected call of AddWithConnID.
-func (mr *MockPacketHandlerManagerMockRecorder) AddWithConnID(arg0, arg1, arg2 any) *PacketHandlerManagerAddWithConnIDCall {
+func (mr *MockPacketHandlerManagerMockRecorder) AddWithConnID(arg0, arg1, arg2 any) *MockPacketHandlerManagerAddWithConnIDCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWithConnID", reflect.TypeOf((*MockPacketHandlerManager)(nil).AddWithConnID), arg0, arg1, arg2)
-	return &PacketHandlerManagerAddWithConnIDCall{Call: call}
+	return &MockPacketHandlerManagerAddWithConnIDCall{Call: call}
 }
 
-// PacketHandlerManagerAddWithConnIDCall wrap *gomock.Call
-type PacketHandlerManagerAddWithConnIDCall struct {
+// MockPacketHandlerManagerAddWithConnIDCall wrap *gomock.Call
+type MockPacketHandlerManagerAddWithConnIDCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerAddWithConnIDCall) Return(arg0 bool) *PacketHandlerManagerAddWithConnIDCall {
+func (c *MockPacketHandlerManagerAddWithConnIDCall) Return(arg0 bool) *MockPacketHandlerManagerAddWithConnIDCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerAddWithConnIDCall) Do(f func(protocol.ConnectionID, protocol.ConnectionID, packetHandler) bool) *PacketHandlerManagerAddWithConnIDCall {
+func (c *MockPacketHandlerManagerAddWithConnIDCall) Do(f func(protocol.ConnectionID, protocol.ConnectionID, packetHandler) bool) *MockPacketHandlerManagerAddWithConnIDCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerAddWithConnIDCall) DoAndReturn(f func(protocol.ConnectionID, protocol.ConnectionID, packetHandler) bool) *PacketHandlerManagerAddWithConnIDCall {
+func (c *MockPacketHandlerManagerAddWithConnIDCall) DoAndReturn(f func(protocol.ConnectionID, protocol.ConnectionID, packetHandler) bool) *MockPacketHandlerManagerAddWithConnIDCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -157,31 +158,31 @@ func (m *MockPacketHandlerManager) Close(arg0 error) {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockPacketHandlerManagerMockRecorder) Close(arg0 any) *PacketHandlerManagerCloseCall {
+func (mr *MockPacketHandlerManagerMockRecorder) Close(arg0 any) *MockPacketHandlerManagerCloseCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPacketHandlerManager)(nil).Close), arg0)
-	return &PacketHandlerManagerCloseCall{Call: call}
+	return &MockPacketHandlerManagerCloseCall{Call: call}
 }
 
-// PacketHandlerManagerCloseCall wrap *gomock.Call
-type PacketHandlerManagerCloseCall struct {
+// MockPacketHandlerManagerCloseCall wrap *gomock.Call
+type MockPacketHandlerManagerCloseCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerCloseCall) Return() *PacketHandlerManagerCloseCall {
+func (c *MockPacketHandlerManagerCloseCall) Return() *MockPacketHandlerManagerCloseCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerCloseCall) Do(f func(error)) *PacketHandlerManagerCloseCall {
+func (c *MockPacketHandlerManagerCloseCall) Do(f func(error)) *MockPacketHandlerManagerCloseCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerCloseCall) DoAndReturn(f func(error)) *PacketHandlerManagerCloseCall {
+func (c *MockPacketHandlerManagerCloseCall) DoAndReturn(f func(error)) *MockPacketHandlerManagerCloseCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -196,31 +197,31 @@ func (m *MockPacketHandlerManager) Get(arg0 protocol.ConnectionID) (packetHandle
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockPacketHandlerManagerMockRecorder) Get(arg0 any) *PacketHandlerManagerGetCall {
+func (mr *MockPacketHandlerManagerMockRecorder) Get(arg0 any) *MockPacketHandlerManagerGetCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockPacketHandlerManager)(nil).Get), arg0)
-	return &PacketHandlerManagerGetCall{Call: call}
+	return &MockPacketHandlerManagerGetCall{Call: call}
 }
 
-// PacketHandlerManagerGetCall wrap *gomock.Call
-type PacketHandlerManagerGetCall struct {
+// MockPacketHandlerManagerGetCall wrap *gomock.Call
+type MockPacketHandlerManagerGetCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerGetCall) Return(arg0 packetHandler, arg1 bool) *PacketHandlerManagerGetCall {
+func (c *MockPacketHandlerManagerGetCall) Return(arg0 packetHandler, arg1 bool) *MockPacketHandlerManagerGetCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerGetCall) Do(f func(protocol.ConnectionID) (packetHandler, bool)) *PacketHandlerManagerGetCall {
+func (c *MockPacketHandlerManagerGetCall) Do(f func(protocol.ConnectionID) (packetHandler, bool)) *MockPacketHandlerManagerGetCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerGetCall) DoAndReturn(f func(protocol.ConnectionID) (packetHandler, bool)) *PacketHandlerManagerGetCall {
+func (c *MockPacketHandlerManagerGetCall) DoAndReturn(f func(protocol.ConnectionID) (packetHandler, bool)) *MockPacketHandlerManagerGetCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -235,31 +236,31 @@ func (m *MockPacketHandlerManager) GetByResetToken(arg0 protocol.StatelessResetT
 }
 
 // GetByResetToken indicates an expected call of GetByResetToken.
-func (mr *MockPacketHandlerManagerMockRecorder) GetByResetToken(arg0 any) *PacketHandlerManagerGetByResetTokenCall {
+func (mr *MockPacketHandlerManagerMockRecorder) GetByResetToken(arg0 any) *MockPacketHandlerManagerGetByResetTokenCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).GetByResetToken), arg0)
-	return &PacketHandlerManagerGetByResetTokenCall{Call: call}
+	return &MockPacketHandlerManagerGetByResetTokenCall{Call: call}
 }
 
-// PacketHandlerManagerGetByResetTokenCall wrap *gomock.Call
-type PacketHandlerManagerGetByResetTokenCall struct {
+// MockPacketHandlerManagerGetByResetTokenCall wrap *gomock.Call
+type MockPacketHandlerManagerGetByResetTokenCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerGetByResetTokenCall) Return(arg0 packetHandler, arg1 bool) *PacketHandlerManagerGetByResetTokenCall {
+func (c *MockPacketHandlerManagerGetByResetTokenCall) Return(arg0 packetHandler, arg1 bool) *MockPacketHandlerManagerGetByResetTokenCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerGetByResetTokenCall) Do(f func(protocol.StatelessResetToken) (packetHandler, bool)) *PacketHandlerManagerGetByResetTokenCall {
+func (c *MockPacketHandlerManagerGetByResetTokenCall) Do(f func(protocol.StatelessResetToken) (packetHandler, bool)) *MockPacketHandlerManagerGetByResetTokenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerGetByResetTokenCall) DoAndReturn(f func(protocol.StatelessResetToken) (packetHandler, bool)) *PacketHandlerManagerGetByResetTokenCall {
+func (c *MockPacketHandlerManagerGetByResetTokenCall) DoAndReturn(f func(protocol.StatelessResetToken) (packetHandler, bool)) *MockPacketHandlerManagerGetByResetTokenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -273,31 +274,31 @@ func (m *MockPacketHandlerManager) GetStatelessResetToken(arg0 protocol.Connecti
 }
 
 // GetStatelessResetToken indicates an expected call of GetStatelessResetToken.
-func (mr *MockPacketHandlerManagerMockRecorder) GetStatelessResetToken(arg0 any) *PacketHandlerManagerGetStatelessResetTokenCall {
+func (mr *MockPacketHandlerManagerMockRecorder) GetStatelessResetToken(arg0 any) *MockPacketHandlerManagerGetStatelessResetTokenCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatelessResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).GetStatelessResetToken), arg0)
-	return &PacketHandlerManagerGetStatelessResetTokenCall{Call: call}
+	return &MockPacketHandlerManagerGetStatelessResetTokenCall{Call: call}
 }
 
-// PacketHandlerManagerGetStatelessResetTokenCall wrap *gomock.Call
-type PacketHandlerManagerGetStatelessResetTokenCall struct {
+// MockPacketHandlerManagerGetStatelessResetTokenCall wrap *gomock.Call
+type MockPacketHandlerManagerGetStatelessResetTokenCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerGetStatelessResetTokenCall) Return(arg0 protocol.StatelessResetToken) *PacketHandlerManagerGetStatelessResetTokenCall {
+func (c *MockPacketHandlerManagerGetStatelessResetTokenCall) Return(arg0 protocol.StatelessResetToken) *MockPacketHandlerManagerGetStatelessResetTokenCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerGetStatelessResetTokenCall) Do(f func(protocol.ConnectionID) protocol.StatelessResetToken) *PacketHandlerManagerGetStatelessResetTokenCall {
+func (c *MockPacketHandlerManagerGetStatelessResetTokenCall) Do(f func(protocol.ConnectionID) protocol.StatelessResetToken) *MockPacketHandlerManagerGetStatelessResetTokenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerGetStatelessResetTokenCall) DoAndReturn(f func(protocol.ConnectionID) protocol.StatelessResetToken) *PacketHandlerManagerGetStatelessResetTokenCall {
+func (c *MockPacketHandlerManagerGetStatelessResetTokenCall) DoAndReturn(f func(protocol.ConnectionID) protocol.StatelessResetToken) *MockPacketHandlerManagerGetStatelessResetTokenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -309,31 +310,31 @@ func (m *MockPacketHandlerManager) Remove(arg0 protocol.ConnectionID) {
 }
 
 // Remove indicates an expected call of Remove.
-func (mr *MockPacketHandlerManagerMockRecorder) Remove(arg0 any) *PacketHandlerManagerRemoveCall {
+func (mr *MockPacketHandlerManagerMockRecorder) Remove(arg0 any) *MockPacketHandlerManagerRemoveCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockPacketHandlerManager)(nil).Remove), arg0)
-	return &PacketHandlerManagerRemoveCall{Call: call}
+	return &MockPacketHandlerManagerRemoveCall{Call: call}
 }
 
-// PacketHandlerManagerRemoveCall wrap *gomock.Call
-type PacketHandlerManagerRemoveCall struct {
+// MockPacketHandlerManagerRemoveCall wrap *gomock.Call
+type MockPacketHandlerManagerRemoveCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerRemoveCall) Return() *PacketHandlerManagerRemoveCall {
+func (c *MockPacketHandlerManagerRemoveCall) Return() *MockPacketHandlerManagerRemoveCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerRemoveCall) Do(f func(protocol.ConnectionID)) *PacketHandlerManagerRemoveCall {
+func (c *MockPacketHandlerManagerRemoveCall) Do(f func(protocol.ConnectionID)) *MockPacketHandlerManagerRemoveCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerRemoveCall) DoAndReturn(f func(protocol.ConnectionID)) *PacketHandlerManagerRemoveCall {
+func (c *MockPacketHandlerManagerRemoveCall) DoAndReturn(f func(protocol.ConnectionID)) *MockPacketHandlerManagerRemoveCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -345,31 +346,31 @@ func (m *MockPacketHandlerManager) RemoveResetToken(arg0 protocol.StatelessReset
 }
 
 // RemoveResetToken indicates an expected call of RemoveResetToken.
-func (mr *MockPacketHandlerManagerMockRecorder) RemoveResetToken(arg0 any) *PacketHandlerManagerRemoveResetTokenCall {
+func (mr *MockPacketHandlerManagerMockRecorder) RemoveResetToken(arg0 any) *MockPacketHandlerManagerRemoveResetTokenCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).RemoveResetToken), arg0)
-	return &PacketHandlerManagerRemoveResetTokenCall{Call: call}
+	return &MockPacketHandlerManagerRemoveResetTokenCall{Call: call}
 }
 
-// PacketHandlerManagerRemoveResetTokenCall wrap *gomock.Call
-type PacketHandlerManagerRemoveResetTokenCall struct {
+// MockPacketHandlerManagerRemoveResetTokenCall wrap *gomock.Call
+type MockPacketHandlerManagerRemoveResetTokenCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerRemoveResetTokenCall) Return() *PacketHandlerManagerRemoveResetTokenCall {
+func (c *MockPacketHandlerManagerRemoveResetTokenCall) Return() *MockPacketHandlerManagerRemoveResetTokenCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerRemoveResetTokenCall) Do(f func(protocol.StatelessResetToken)) *PacketHandlerManagerRemoveResetTokenCall {
+func (c *MockPacketHandlerManagerRemoveResetTokenCall) Do(f func(protocol.StatelessResetToken)) *MockPacketHandlerManagerRemoveResetTokenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerRemoveResetTokenCall) DoAndReturn(f func(protocol.StatelessResetToken)) *PacketHandlerManagerRemoveResetTokenCall {
+func (c *MockPacketHandlerManagerRemoveResetTokenCall) DoAndReturn(f func(protocol.StatelessResetToken)) *MockPacketHandlerManagerRemoveResetTokenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -381,31 +382,31 @@ func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 []protocol.ConnectionI
 }
 
 // ReplaceWithClosed indicates an expected call of ReplaceWithClosed.
-func (mr *MockPacketHandlerManagerMockRecorder) ReplaceWithClosed(arg0, arg1 any) *PacketHandlerManagerReplaceWithClosedCall {
+func (mr *MockPacketHandlerManagerMockRecorder) ReplaceWithClosed(arg0, arg1 any) *MockPacketHandlerManagerReplaceWithClosedCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockPacketHandlerManager)(nil).ReplaceWithClosed), arg0, arg1)
-	return &PacketHandlerManagerReplaceWithClosedCall{Call: call}
+	return &MockPacketHandlerManagerReplaceWithClosedCall{Call: call}
 }
 
-// PacketHandlerManagerReplaceWithClosedCall wrap *gomock.Call
-type PacketHandlerManagerReplaceWithClosedCall struct {
+// MockPacketHandlerManagerReplaceWithClosedCall wrap *gomock.Call
+type MockPacketHandlerManagerReplaceWithClosedCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerReplaceWithClosedCall) Return() *PacketHandlerManagerReplaceWithClosedCall {
+func (c *MockPacketHandlerManagerReplaceWithClosedCall) Return() *MockPacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte)) *PacketHandlerManagerReplaceWithClosedCall {
+func (c *MockPacketHandlerManagerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte)) *MockPacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte)) *PacketHandlerManagerReplaceWithClosedCall {
+func (c *MockPacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte)) *MockPacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -417,31 +418,31 @@ func (m *MockPacketHandlerManager) Retire(arg0 protocol.ConnectionID) {
 }
 
 // Retire indicates an expected call of Retire.
-func (mr *MockPacketHandlerManagerMockRecorder) Retire(arg0 any) *PacketHandlerManagerRetireCall {
+func (mr *MockPacketHandlerManagerMockRecorder) Retire(arg0 any) *MockPacketHandlerManagerRetireCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockPacketHandlerManager)(nil).Retire), arg0)
-	return &PacketHandlerManagerRetireCall{Call: call}
+	return &MockPacketHandlerManagerRetireCall{Call: call}
 }
 
-// PacketHandlerManagerRetireCall wrap *gomock.Call
-type PacketHandlerManagerRetireCall struct {
+// MockPacketHandlerManagerRetireCall wrap *gomock.Call
+type MockPacketHandlerManagerRetireCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerManagerRetireCall) Return() *PacketHandlerManagerRetireCall {
+func (c *MockPacketHandlerManagerRetireCall) Return() *MockPacketHandlerManagerRetireCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerManagerRetireCall) Do(f func(protocol.ConnectionID)) *PacketHandlerManagerRetireCall {
+func (c *MockPacketHandlerManagerRetireCall) Do(f func(protocol.ConnectionID)) *MockPacketHandlerManagerRetireCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerManagerRetireCall) DoAndReturn(f func(protocol.ConnectionID)) *PacketHandlerManagerRetireCall {
+func (c *MockPacketHandlerManagerRetireCall) DoAndReturn(f func(protocol.ConnectionID)) *MockPacketHandlerManagerRetireCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

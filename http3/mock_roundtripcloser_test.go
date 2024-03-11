@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package http3 -destination mock_roundtripcloser_test.go github.com/quic-go/quic-go/http3 RoundTripCloser
 //
+
 // Package http3 is a generated GoMock package.
 package http3
 
@@ -47,31 +48,31 @@ func (m *MockRoundTripCloser) Close() error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockRoundTripCloserMockRecorder) Close() *RoundTripCloserCloseCall {
+func (mr *MockRoundTripCloserMockRecorder) Close() *MockRoundTripCloserCloseCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockRoundTripCloser)(nil).Close))
-	return &RoundTripCloserCloseCall{Call: call}
+	return &MockRoundTripCloserCloseCall{Call: call}
 }
 
-// RoundTripCloserCloseCall wrap *gomock.Call
-type RoundTripCloserCloseCall struct {
+// MockRoundTripCloserCloseCall wrap *gomock.Call
+type MockRoundTripCloserCloseCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RoundTripCloserCloseCall) Return(arg0 error) *RoundTripCloserCloseCall {
+func (c *MockRoundTripCloserCloseCall) Return(arg0 error) *MockRoundTripCloserCloseCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RoundTripCloserCloseCall) Do(f func() error) *RoundTripCloserCloseCall {
+func (c *MockRoundTripCloserCloseCall) Do(f func() error) *MockRoundTripCloserCloseCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RoundTripCloserCloseCall) DoAndReturn(f func() error) *RoundTripCloserCloseCall {
+func (c *MockRoundTripCloserCloseCall) DoAndReturn(f func() error) *MockRoundTripCloserCloseCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -85,31 +86,31 @@ func (m *MockRoundTripCloser) HandshakeComplete() bool {
 }
 
 // HandshakeComplete indicates an expected call of HandshakeComplete.
-func (mr *MockRoundTripCloserMockRecorder) HandshakeComplete() *RoundTripCloserHandshakeCompleteCall {
+func (mr *MockRoundTripCloserMockRecorder) HandshakeComplete() *MockRoundTripCloserHandshakeCompleteCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockRoundTripCloser)(nil).HandshakeComplete))
-	return &RoundTripCloserHandshakeCompleteCall{Call: call}
+	return &MockRoundTripCloserHandshakeCompleteCall{Call: call}
 }
 
-// RoundTripCloserHandshakeCompleteCall wrap *gomock.Call
-type RoundTripCloserHandshakeCompleteCall struct {
+// MockRoundTripCloserHandshakeCompleteCall wrap *gomock.Call
+type MockRoundTripCloserHandshakeCompleteCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RoundTripCloserHandshakeCompleteCall) Return(arg0 bool) *RoundTripCloserHandshakeCompleteCall {
+func (c *MockRoundTripCloserHandshakeCompleteCall) Return(arg0 bool) *MockRoundTripCloserHandshakeCompleteCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RoundTripCloserHandshakeCompleteCall) Do(f func() bool) *RoundTripCloserHandshakeCompleteCall {
+func (c *MockRoundTripCloserHandshakeCompleteCall) Do(f func() bool) *MockRoundTripCloserHandshakeCompleteCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RoundTripCloserHandshakeCompleteCall) DoAndReturn(f func() bool) *RoundTripCloserHandshakeCompleteCall {
+func (c *MockRoundTripCloserHandshakeCompleteCall) DoAndReturn(f func() bool) *MockRoundTripCloserHandshakeCompleteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -124,31 +125,31 @@ func (m *MockRoundTripCloser) RoundTripOpt(arg0 *http.Request, arg1 RoundTripOpt
 }
 
 // RoundTripOpt indicates an expected call of RoundTripOpt.
-func (mr *MockRoundTripCloserMockRecorder) RoundTripOpt(arg0, arg1 any) *RoundTripCloserRoundTripOptCall {
+func (mr *MockRoundTripCloserMockRecorder) RoundTripOpt(arg0, arg1 any) *MockRoundTripCloserRoundTripOptCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTripOpt", reflect.TypeOf((*MockRoundTripCloser)(nil).RoundTripOpt), arg0, arg1)
-	return &RoundTripCloserRoundTripOptCall{Call: call}
+	return &MockRoundTripCloserRoundTripOptCall{Call: call}
 }
 
-// RoundTripCloserRoundTripOptCall wrap *gomock.Call
-type RoundTripCloserRoundTripOptCall struct {
+// MockRoundTripCloserRoundTripOptCall wrap *gomock.Call
+type MockRoundTripCloserRoundTripOptCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *RoundTripCloserRoundTripOptCall) Return(arg0 *http.Response, arg1 error) *RoundTripCloserRoundTripOptCall {
+func (c *MockRoundTripCloserRoundTripOptCall) Return(arg0 *http.Response, arg1 error) *MockRoundTripCloserRoundTripOptCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *RoundTripCloserRoundTripOptCall) Do(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *RoundTripCloserRoundTripOptCall {
+func (c *MockRoundTripCloserRoundTripOptCall) Do(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *MockRoundTripCloserRoundTripOptCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *RoundTripCloserRoundTripOptCall) DoAndReturn(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *RoundTripCloserRoundTripOptCall {
+func (c *MockRoundTripCloserRoundTripOptCall) DoAndReturn(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *MockRoundTripCloserRoundTripOptCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

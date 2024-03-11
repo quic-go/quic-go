@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -package quic -self_package github.com/quic-go/quic-go -self_package github.com/quic-go/quic-go -destination mock_token_store_test.go github.com/quic-go/quic-go TokenStore
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -46,31 +47,31 @@ func (m *MockTokenStore) Pop(arg0 string) *ClientToken {
 }
 
 // Pop indicates an expected call of Pop.
-func (mr *MockTokenStoreMockRecorder) Pop(arg0 any) *TokenStorePopCall {
+func (mr *MockTokenStoreMockRecorder) Pop(arg0 any) *MockTokenStorePopCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pop", reflect.TypeOf((*MockTokenStore)(nil).Pop), arg0)
-	return &TokenStorePopCall{Call: call}
+	return &MockTokenStorePopCall{Call: call}
 }
 
-// TokenStorePopCall wrap *gomock.Call
-type TokenStorePopCall struct {
+// MockTokenStorePopCall wrap *gomock.Call
+type MockTokenStorePopCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *TokenStorePopCall) Return(arg0 *ClientToken) *TokenStorePopCall {
+func (c *MockTokenStorePopCall) Return(arg0 *ClientToken) *MockTokenStorePopCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *TokenStorePopCall) Do(f func(string) *ClientToken) *TokenStorePopCall {
+func (c *MockTokenStorePopCall) Do(f func(string) *ClientToken) *MockTokenStorePopCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *TokenStorePopCall) DoAndReturn(f func(string) *ClientToken) *TokenStorePopCall {
+func (c *MockTokenStorePopCall) DoAndReturn(f func(string) *ClientToken) *MockTokenStorePopCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -82,31 +83,31 @@ func (m *MockTokenStore) Put(arg0 string, arg1 *ClientToken) {
 }
 
 // Put indicates an expected call of Put.
-func (mr *MockTokenStoreMockRecorder) Put(arg0, arg1 any) *TokenStorePutCall {
+func (mr *MockTokenStoreMockRecorder) Put(arg0, arg1 any) *MockTokenStorePutCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockTokenStore)(nil).Put), arg0, arg1)
-	return &TokenStorePutCall{Call: call}
+	return &MockTokenStorePutCall{Call: call}
 }
 
-// TokenStorePutCall wrap *gomock.Call
-type TokenStorePutCall struct {
+// MockTokenStorePutCall wrap *gomock.Call
+type MockTokenStorePutCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *TokenStorePutCall) Return() *TokenStorePutCall {
+func (c *MockTokenStorePutCall) Return() *MockTokenStorePutCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *TokenStorePutCall) Do(f func(string, *ClientToken)) *TokenStorePutCall {
+func (c *MockTokenStorePutCall) Do(f func(string, *ClientToken)) *MockTokenStorePutCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *TokenStorePutCall) DoAndReturn(f func(string, *ClientToken)) *TokenStorePutCall {
+func (c *MockTokenStorePutCall) DoAndReturn(f func(string, *ClientToken)) *MockTokenStorePutCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
