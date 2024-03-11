@@ -115,7 +115,7 @@ func clientMain() error {
 		return err
 	}
 	defer stream_low_prio.Close()
-	fmt.Printf("Prio stream one (clientside): %d\n", stream_low_prio.Priority())
+	fmt.Printf("Prio stream two (clientside): %d\n", stream_low_prio.Priority())
 
 	// Send three messages with high priority
 	for i := 0; i < 3; i++ {
