@@ -258,6 +258,8 @@ func (p *packetPacker) packConnectionClose(
 		var hdr *wire.ExtendedHeader
 		if encLevel == protocol.Encryption1RTT {
 			// PRIO_PACKS_TAG
+			// TODOME: necessary to adapt that to stream? connection close
+			// should probably always be sent with high prio connection id
 			connID = p.getDestConnID(PrioConnectionClosePacket)
 			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 			size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, pl)
@@ -389,14 +391,32 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 			kp = oneRTTSealer.KeyPhase()
 
 			// PRIO_PACKS_TAG
-			connID = p.getDestConnID(PrioCoalescedPacket)
+			// connID = p.getDestConnID(PrioCoalescedPacket)
+			connIDDummy, err := protocol.GenerateConnectionID(int(protocol.PriorityConnIDLen))
+			if err != nil {
+				panic("error generating dummy connection id")
+			}
 
 			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
-			hdrLen := wire.ShortHeaderLen(connID, oneRTTPacketNumberLen)
+			hdrLen := wire.ShortHeaderLen(connIDDummy, oneRTTPacketNumberLen)
 			oneRTTPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, hdrLen, maxPacketSize-size, onlyAck, size == 0, v)
 			if oneRTTPayload.length > 0 {
-				size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, oneRTTPayload) + protocol.ByteCount(oneRTTSealer.Overhead())
+				size += p.shortHeaderPacketLength(connIDDummy, oneRTTPacketNumberLen, oneRTTPayload) + protocol.ByteCount(oneRTTSealer.Overhead())
 			}
+
+			// PRIO_PACKS_TAG
+			// now we can go through all streamFrames, check the stream ids and look
+			// up their priority
+			prio := NoPriority
+			for i := range oneRTTPayload.streamFrames {
+				f := &oneRTTPayload.streamFrames[i]
+				sid := f.Frame.StreamID
+				prio_tmp := p.GetStreamPriority(sid) // TODOME how to get the priority?
+				fmt.Printf("stream with id %d has priority %d (coalesced)\n", sid, prio_tmp)
+				prio = max(prio, prio_tmp)
+			}
+			connID = p.getDestConnID(prio)
+
 		} else if p.perspective == protocol.PerspectiveClient && !onlyAck { // 0-RTT packets can't contain ACK frames
 			var err error
 			zeroRTTSealer, err = p.cryptoSetup.Get0RTTSealer()
@@ -494,9 +514,9 @@ func (p *packetPacker) appendPacket(buf *packetBuffer, onlyAck bool, maxPacketSi
 	for i := range pl.streamFrames {
 		f := &pl.streamFrames[i]
 		sid := f.Frame.StreamID
-		correspondingConnection := p.connection
-		prio = correspondingConnection.GetStreamPriority(sid) // TODOME how to get the priority?
-		fmt.Printf("stream with id %d has priority %d\n", sid, prio)
+		prio_tmp := p.GetStreamPriority(sid) // TODOME how to get the priority?
+		fmt.Printf("stream with id %d has priority %d (append)\n", sid, prio_tmp)
+		prio = max(prio, prio_tmp)
 	}
 	connID := p.getDestConnID(prio)
 	return p.appendShortHeaderPacket(buf, connID, pn, pnLen, kp, pl, 0, maxPacketSize, sealer, false, v)
@@ -699,6 +719,8 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel, m
 		}
 		kp := s.KeyPhase()
 		// PRIO_PACKS_TAG
+		// TODOME: should probe packets consider the priority?
+		// for now we can probably omit them since they are rare
 		connID := p.getDestConnID(PrioProbePacket)
 		pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 		hdrLen := wire.ShortHeaderLen(connID, pnLen)
@@ -769,6 +791,8 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 		return shortHeaderPacket{}, nil, err
 	}
 	// PRIO_PACKS_TAG
+	// TODOME: should MTU probe packets consider the priority?
+	// i guess MTU probing is rare and likely to be high prio
 	connID := p.getDestConnID(PrioMTUProbePacket)
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 	padding := size - p.shortHeaderPacketLength(connID, pnLen, pl) - protocol.ByteCount(s.Overhead())
@@ -786,6 +810,9 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protoc
 	hdr.Version = v
 	hdr.SrcConnectionID = p.srcConnID
 	// PRIO_PACKS_TAG
+	// long header packets are always sent with high prio connection id for now
+	// since they are not the norm and only used for stuff like initial handshake
+	// or retransmissions
 	hdr.DestConnectionID = p.getDestConnID(PrioLongHeaderPacket)
 
 	//nolint:exhaustive // 1-RTT packets are not long header packets.
@@ -946,8 +973,5 @@ func (p *packetPacker) SetToken(token []byte) {
 
 // PRIO_PACKS_TAG
 func (p *packetPacker) GetStreamPriority(streamID protocol.StreamID) StreamPriority {
-	// if p.streamPriorityHandler == nil {
-	return NoPriority
-	// }
-	// return p.streamPriorityHandler.GetPriority(streamID)
+	return p.connection.GetStreamPriority(streamID)
 }
