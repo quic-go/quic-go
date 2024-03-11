@@ -57,6 +57,9 @@ type streamManager interface {
 	CloseWithError(error)
 	ResetFor0RTT()
 	UseResetMaps()
+
+	// PRIO_PACKS_TAG
+	GetStreamPriority(StreamID) StreamPriority
 }
 
 type cryptoStreamHandler interface {
@@ -336,7 +339,7 @@ var newConnection = func(
 		s.version,
 	)
 	s.cryptoStreamHandler = cs
-	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
+	s.packer = newPacketPacker(s, srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, s.initialStream, s.handshakeStream, s.oneRTTStream)
 	return s
@@ -443,7 +446,7 @@ var newClientConnection = func(
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, s.initialStream, s.handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
-	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
+	s.packer = newPacketPacker(s, srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName
 	} else {
@@ -2256,9 +2259,25 @@ func (s *connection) logCoalescedPacket(packet *coalescedPacket, ecn protocol.EC
 	}
 }
 
+// PRIO_PACKS_TAG
+//
 // AcceptStream returns the next stream openend by the peer
 func (s *connection) AcceptStream(ctx context.Context) (Stream, error) {
-	return s.streamsMap.AcceptStream(ctx)
+	str, err := s.streamsMap.AcceptStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assumption is that first byte always sends the priority
+	// This happens only internally and is not exposed to the user
+	meta := make([]byte, 1)
+	_, err = str.Read(meta)
+	if err != nil {
+		return nil, err
+	}
+	prio := protocol.StreamPriority(meta[0])
+	str.SetPriority(prio)
+	return str, nil
 }
 
 func (s *connection) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
@@ -2279,7 +2298,17 @@ func (s *connection) OpenStream() (Stream, error) {
 // PRIO_PACKS_TAG
 // OpenStream including a user defined priority for potential packet prioritization
 func (s *connection) OpenStreamSyncWithPriority(ctx context.Context, priority protocol.StreamPriority) (Stream, error) {
-	return s.streamsMap.OpenStreamSyncWithPriority(ctx, priority)
+	str, err := s.streamsMap.OpenStreamSyncWithPriority(ctx, priority)
+	if err != nil {
+		return nil, err
+	}
+	meta := make([]byte, 1)
+	meta[0] = byte(priority)
+	_, err = str.Write(meta)
+	if err != nil {
+		return nil, err
+	}
+	return str, nil
 }
 
 func (s *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
@@ -2420,4 +2449,9 @@ func (s *connection) NextConnection() Connection {
 	<-s.HandshakeComplete()
 	s.streamsMap.UseResetMaps()
 	return s
+}
+
+// PRIO_PACKS_TAG
+func (s *connection) GetStreamPriority(sid StreamID) StreamPriority {
+	return s.streamsMap.GetStreamPriority(sid)
 }

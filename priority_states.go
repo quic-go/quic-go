@@ -1,11 +1,14 @@
 package quic
 
+// PRIO_PACKS_TAG
+// TODOME: maybe add possibility of more specifc prio handling
+// e.g. for different packet types
 var (
-	PrioRetryPacket           int8 = 1
-	PrioConnectionClosePacket int8 = 1
-	PrioCoalescedPacket       int8 = 1
-	PrioAppendPacket          int8 = 1
-	PrioProbePacket           int8 = 1
-	PrioMTUProbePacket        int8 = 1
-	PrioLongHeaderPacket      int8 = 1
+	PrioRetryPacket           StreamPriority = 1
+	PrioConnectionClosePacket StreamPriority = 1
+	PrioCoalescedPacket       StreamPriority = 1
+	PrioAppendPacket          StreamPriority = 1
+	PrioProbePacket           StreamPriority = 1
+	PrioMTUProbePacket        StreamPriority = 1
+	PrioLongHeaderPacket      StreamPriority = 1
 )

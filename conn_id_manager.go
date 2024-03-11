@@ -207,14 +207,14 @@ func (h *connIDManager) shouldUpdateConnID() bool {
 // prio == -1 means user does not care about priority
 // prio == 0 means user wants to switch to low priority connection ID
 // prio == 1 means user wants to switch to high priority connection ID
-func (h *connIDManager) Get(prio int8) protocol.ConnectionID {
+func (h *connIDManager) Get(prio StreamPriority) protocol.ConnectionID {
 	if h.shouldUpdateConnID() {
 		h.updateConnectionID()
 	}
 	// TODO: can this also be done before checking "shouldUpdateConnID"?
 	// (regarding edge case in the beginning with id == 0)
 	if prio != -1 {
-		h.SwitchToPriorityID(uint8(prio))
+		h.SwitchToPriorityID(prio)
 	}
 	return h.activeConnectionID
 }
@@ -224,9 +224,9 @@ func (h *connIDManager) SetHandshakeComplete() {
 }
 
 // PRIO_PACKS_TAG
-func (h *connIDManager) SwitchToPriorityID(prio uint8) {
+func (h *connIDManager) SwitchToPriorityID(prio StreamPriority) {
 	currentConnId := h.activeConnectionID
-	if currentConnId.Bytes()[0] == prio || h.queue.Len() == 0 {
+	if currentConnId.Bytes()[0] == byte(prio) || h.queue.Len() == 0 {
 		return
 	}
 
@@ -241,7 +241,7 @@ func (h *connIDManager) SwitchToPriorityID(prio uint8) {
 
 		// if the priority matches, switch to that state
 		// otherwise push current one back again and try the next one
-		if potential.ConnectionID.Bytes()[0] == prio {
+		if potential.ConnectionID.Bytes()[0] == byte(prio) {
 			h.queue.Remove(h.queue.Front())
 			h.queue.PushBack(newConnID{
 				SequenceNumber:      oldSeq,

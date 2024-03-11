@@ -115,9 +115,11 @@ type ackFrameSource interface {
 }
 
 type packetPacker struct {
-	srcConnID protocol.ConnectionID
 	// PRIO_PACKS_TAG
-	getDestConnID func(int8) protocol.ConnectionID
+	connection Connection
+	srcConnID  protocol.ConnectionID
+	// PRIO_PACKS_TAG
+	getDestConnID func(StreamPriority) protocol.ConnectionID
 
 	perspective protocol.Perspective
 	cryptoSetup sealingManager
@@ -140,9 +142,10 @@ type packetPacker struct {
 var _ packer = &packetPacker{}
 
 func newPacketPacker(
+	associatedConnection Connection,
 	srcConnID protocol.ConnectionID,
 	// PRIO_PACKS_TAG
-	getDestConnID func(int8) protocol.ConnectionID,
+	getDestConnID func(StreamPriority) protocol.ConnectionID,
 	initialStream, handshakeStream cryptoStream,
 	packetNumberManager packetNumberManager,
 	retransmissionQueue *retransmissionQueue,
@@ -156,6 +159,8 @@ func newPacketPacker(
 	_, _ = crand.Read(b[:])
 
 	return &packetPacker{
+		// PRIO_PACKS_TAG
+		connection:          associatedConnection,
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
 		srcConnID:           srcConnID,
@@ -214,6 +219,7 @@ func (p *packetPacker) packConnectionClose(
 			FrameType:          frameType,
 			ReasonPhrase:       reason,
 		}
+
 		// don't send application errors in Initial or Handshake packets
 		if isApplicationError && (encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake) {
 			ccf.IsApplicationError = false
@@ -381,8 +387,10 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 		}
 		if err == nil { // 1-RTT
 			kp = oneRTTSealer.KeyPhase()
+
 			// PRIO_PACKS_TAG
 			connID = p.getDestConnID(PrioCoalescedPacket)
+
 			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 			hdrLen := wire.ShortHeaderLen(connID, oneRTTPacketNumberLen)
 			oneRTTPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, hdrLen, maxPacketSize-size, onlyAck, size == 0, v)
@@ -464,15 +472,33 @@ func (p *packetPacker) appendPacket(buf *packetBuffer, onlyAck bool, maxPacketSi
 		return shortHeaderPacket{}, err
 	}
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+
 	// PRIO_PACKS_TAG
-	connID := p.getDestConnID(PrioAppendPacket)
-	hdrLen := wire.ShortHeaderLen(connID, pnLen)
+	// connID := p.getDestConnID(PrioAppendPacket)
+	connIDDummy, err := protocol.GenerateConnectionID(int(protocol.PriorityConnIDLen))
+	if err != nil {
+		panic("error generating dummy connection id")
+	}
+
+	hdrLen := wire.ShortHeaderLen(connIDDummy, pnLen)
 	pl := p.maybeGetShortHeaderPacket(sealer, hdrLen, maxPacketSize, onlyAck, true, v)
 	if pl.length == 0 {
 		return shortHeaderPacket{}, errNothingToPack
 	}
 	kp := sealer.KeyPhase()
 
+	// PRIO_PACKS_TAG
+	// now we can go through all streamFrames, check the stream ids and look
+	// up thei priority
+	prio := NoPriority
+	for i := range pl.streamFrames {
+		f := &pl.streamFrames[i]
+		sid := f.Frame.StreamID
+		correspondingConnection := p.connection
+		prio = correspondingConnection.GetStreamPriority(sid) // TODOME how to get the priority?
+		fmt.Printf("stream with id %d has priority %d\n", sid, prio)
+	}
+	connID := p.getDestConnID(prio)
 	return p.appendShortHeaderPacket(buf, connID, pn, pnLen, kp, pl, 0, maxPacketSize, sealer, false, v)
 }
 
@@ -916,4 +942,12 @@ func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.Pack
 
 func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
+}
+
+// PRIO_PACKS_TAG
+func (p *packetPacker) GetStreamPriority(streamID protocol.StreamID) StreamPriority {
+	// if p.streamPriorityHandler == nil {
+	return NoPriority
+	// }
+	// return p.streamPriorityHandler.GetPriority(streamID)
 }

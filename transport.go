@@ -283,6 +283,8 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 			// and we have a high prio packet it is gonna get drupped, which is worse than
 			// not dropping a low prio packet.
 			// Once the connection has more than 1 connection IDs this problem is gone.
+			// TODOME: temporary fix, remove once we have a better solution
+			t.connIDLen = 16
 			t.connIDGenerator = &protocol.PriorityConnectionIDGenerator{ConnLen: t.connIDLen, PriorityCounter: 1}
 		}
 

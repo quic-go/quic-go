@@ -241,6 +241,10 @@ type Connection interface {
 	SendDatagram(payload []byte) error
 	// ReceiveDatagram gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveDatagram(context.Context) ([]byte, error)
+
+	// PRIO_PACKS_TAG
+	// get the priority of a corresponding stream using the streamID
+	GetStreamPriority(StreamID) StreamPriority
 }
 
 // An EarlyConnection is a connection that is handshaking.

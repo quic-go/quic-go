@@ -57,6 +57,9 @@ func echoServer() error {
 	}
 	defer stream.Close()
 
+	// TODO: AcceptStream seems to not return the stream with the same priority?
+	fmt.Printf("Prio stream one (serverside): %d\n", stream.Priority())
+
 	// Handle the first stream opened by the client
 	// in a separate goroutine
 	go func(stream quic.Stream) {
@@ -73,6 +76,8 @@ func echoServer() error {
 		panic(err2)
 	}
 	defer stream2.Close()
+
+	fmt.Printf("Prio stream two (serverside): %d\n", stream2.Priority())
 
 	// Handle the second stream opened by the client
 	// in the current goroutine
@@ -102,6 +107,7 @@ func clientMain() error {
 		return err
 	}
 	defer stream_high_prio.Close()
+	fmt.Printf("Prio stream one (clientside): %d\n", stream_high_prio.Priority())
 
 	// Open a new stream with low priority
 	stream_low_prio, err := conn.OpenStreamSyncWithPriority(context.Background(), quic.LowPriority)
@@ -109,11 +115,12 @@ func clientMain() error {
 		return err
 	}
 	defer stream_low_prio.Close()
+	fmt.Printf("Prio stream one (clientside): %d\n", stream_low_prio.Priority())
 
 	// Send three messages with high priority
 	for i := 0; i < 3; i++ {
 
-		fmt.Printf("Client: Sending with high prio '%s%d'\n", message, i)
+		fmt.Printf("	>>Client: Sending with high prio '%s%d'\n", message, i)
 		_, err = stream_high_prio.Write([]byte(message + fmt.Sprintf("%d", i)))
 		if err != nil {
 			return err
@@ -124,15 +131,15 @@ func clientMain() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Client: Got with high prio '%s'\n", buf_high)
+		fmt.Printf("	>>Client: Got with high prio '%s'\n", buf_high)
 
 	}
 
 	// Send three messages with low priority
 	for i := 0; i < 3; i++ {
 
-		fmt.Printf("Client: Sending with low prio '%s%d'\n", message, i)
-		_, err = stream_low_prio.Write([]byte(message + fmt.Sprintf("%d", i)))
+		fmt.Printf("	>>Client: Sending with low prio '%s%d'\n", message, i+3)
+		_, err = stream_low_prio.Write([]byte(message + fmt.Sprintf("%d", i+3)))
 		if err != nil {
 			return err
 		}
@@ -142,7 +149,7 @@ func clientMain() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Client: Got with low prio '%s'\n", buf_low)
+		fmt.Printf("	>>Client: Got with low prio '%s'\n", buf_low)
 
 	}
 
@@ -153,7 +160,7 @@ func clientMain() error {
 type loggingWriter struct{ io.Writer }
 
 func (w loggingWriter) Write(b []byte) (int, error) {
-	fmt.Printf("Server: Got '%s'\n", string(b))
+	fmt.Printf("	>>Server: Got '%s'\n", string(b))
 	return w.Writer.Write(b)
 }
 

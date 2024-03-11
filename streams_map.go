@@ -360,3 +360,12 @@ func (m *streamsMap) UseResetMaps() {
 	m.reset = false
 	m.mutex.Unlock()
 }
+
+// PRIO_PACKS_TAG
+func (m *streamsMap) GetStreamPriority(id protocol.StreamID) protocol.StreamPriority {
+	str, err := m.getOrOpenSendStream(id)
+	if err != nil {
+		return NoPriority
+	}
+	return str.Priority()
+}

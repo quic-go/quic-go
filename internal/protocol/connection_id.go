@@ -14,6 +14,9 @@ var ErrInvalidConnectionIDLen = errors.New("invalid Connection ID length")
 // restricts the length to 20 bytes.
 type ArbitraryLenConnectionID []byte
 
+// PRIO_PACKS_TAG
+const PriorityConnIDLen uint8 = 16
+
 func (c ArbitraryLenConnectionID) Len() int {
 	return len(c)
 }
@@ -122,8 +125,12 @@ type PriorityConnectionIDGenerator struct {
 }
 
 func (t *PriorityConnectionIDGenerator) GenerateConnectionID() (ConnectionID, error) {
-	if t.ConnLen == 20 { // TODOME better way to handle this?
-		t.ConnLen = 8
+
+	// PRIO_PACKS_TAG
+	// TODOME: better way than casting?
+	if t.ConnLen != int(PriorityConnIDLen) {
+		fmt.Println("Priority-Connection ID length is not 16")
+		return ConnectionID{}, ErrInvalidConnectionIDLen
 	}
 
 	var c ConnectionID
