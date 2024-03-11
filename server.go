@@ -639,7 +639,10 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	tracingID := nextConnTracingID()
 	config := s.config
 	if s.config.GetConfigForClient != nil {
-		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{RemoteAddr: p.remoteAddr})
+		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{
+			RemoteAddr:   p.remoteAddr,
+			AddrVerified: clientAddrValidated,
+		})
 		if err != nil {
 			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
 			delete(s.zeroRTTQueues, hdr.DestConnectionID)
