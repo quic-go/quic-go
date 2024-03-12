@@ -58,6 +58,9 @@ type client struct {
 	dialer       dialFunc
 	handshakeErr error
 
+	receivedSettings chan struct{} // closed once the server's SETTINGS frame was processed
+	settings         *Settings     // set once receivedSettings is closed
+
 	requestWriter *requestWriter
 
 	decoder *qpack.Decoder
@@ -107,14 +110,15 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	tlsConf.NextProtos = []string{versionToALPN(conf.Versions[0])}
 
 	return &client{
-		hostname:      authorityAddr("https", hostname),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        conf,
-		opts:          opts,
-		dialer:        dialer,
-		logger:        logger,
+		hostname:         authorityAddr("https", hostname),
+		tlsConf:          tlsConf,
+		requestWriter:    newRequestWriter(logger),
+		receivedSettings: make(chan struct{}),
+		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+		config:           conf,
+		opts:             opts,
+		dialer:           dialer,
+		logger:           logger,
 	}, nil
 }
 
@@ -234,6 +238,12 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 				return
 			}
+			c.settings = &Settings{
+				EnableDatagram:        sf.Datagram,
+				EnableExtendedConnect: sf.ExtendedConnect,
+				Other:                 sf.Other,
+			}
+			close(c.receivedSettings)
 			if !sf.Datagram {
 				return
 			}
@@ -296,6 +306,18 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		case <-conn.HandshakeComplete():
 		case <-req.Context().Done():
 			return nil, req.Context().Err()
+		}
+	}
+
+	if opt.CheckSettings != nil {
+		// wait for the server's SETTINGS frame to arrive
+		select {
+		case <-c.receivedSettings:
+		case <-conn.Context().Done():
+			return nil, context.Cause(conn.Context())
+		}
+		if err := opt.CheckSettings(*c.settings); err != nil {
+			return nil, err
 		}
 	}
 
