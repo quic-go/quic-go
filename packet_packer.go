@@ -412,7 +412,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 				f := &oneRTTPayload.streamFrames[i]
 				sid := f.Frame.StreamID
 				prio_tmp := p.GetStreamPriority(sid) // TODOME how to get the priority?
-				fmt.Printf("stream with id %d has priority %d (coalesced)\n", sid, prio_tmp)
+				// fmt.Printf("stream with id %d has priority %d (coalesced)\n", sid, prio_tmp)
 				prio = max(prio, prio_tmp)
 			}
 			connID = p.getDestConnID(prio)
@@ -515,7 +515,7 @@ func (p *packetPacker) appendPacket(buf *packetBuffer, onlyAck bool, maxPacketSi
 		f := &pl.streamFrames[i]
 		sid := f.Frame.StreamID
 		prio_tmp := p.GetStreamPriority(sid) // TODOME how to get the priority?
-		fmt.Printf("stream with id %d has priority %d (append)\n", sid, prio_tmp)
+		// fmt.Printf("stream with id %d has priority %d (append)\n", sid, prio_tmp)
 		prio = max(prio, prio_tmp)
 	}
 	connID := p.getDestConnID(prio)
