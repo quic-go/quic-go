@@ -43,7 +43,7 @@ var _ = Describe("MITM test", func() {
 		}
 		addTracer(serverTransport)
 		if forceAddressValidation {
-			serverTransport.VerifySourceAddress = func() bool { return true }
+			serverTransport.VerifySourceAddress = func(net.Addr) bool { return true }
 		}
 		ln, err := serverTransport.Listen(getTLSConfig(), serverConfig)
 		Expect(err).ToNot(HaveOccurred())

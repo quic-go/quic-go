@@ -71,7 +71,7 @@ func (s *Server) ListenAndServe() error {
 	tlsConf.NextProtos = []string{h09alpn}
 	tr := quic.Transport{Conn: conn}
 	if s.ForceRetry {
-		tr.VerifySourceAddress = func() bool { return true }
+		tr.VerifySourceAddress = func(net.Addr) bool { return true }
 	}
 	ln, err := tr.ListenEarly(tlsConf, s.QuicConfig)
 	if err != nil {

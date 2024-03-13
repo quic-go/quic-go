@@ -107,7 +107,7 @@ type baseServer struct {
 	connectionRefusedQueue  chan rejectedPacket
 	retryQueue              chan rejectedPacket
 
-	verifySourceAddress func() bool
+	verifySourceAddress func(net.Addr) bool
 
 	connQueue chan quicConn
 
@@ -237,7 +237,7 @@ func newServer(
 	onClose func(),
 	tokenGeneratorKey TokenGeneratorKey,
 	maxTokenAge time.Duration,
-	verifySourceAddress func() bool,
+	verifySourceAddress func(net.Addr) bool,
 	disableVersionNegotiation bool,
 	acceptEarly bool,
 ) *baseServer {
@@ -598,7 +598,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		}
 	}
 
-	if token == nil && s.verifySourceAddress != nil && s.verifySourceAddress() {
+	if token == nil && s.verifySourceAddress != nil && s.verifySourceAddress(p.remoteAddr) {
 		// Retry invalidates all 0-RTT packets sent.
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 		select {
@@ -614,7 +614,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	if s.config.GetConfigForClient != nil {
 		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{
 			RemoteAddr:   p.remoteAddr,
-			AddrVerified: clientAddrValidated,
+			AddrVerified: clientAddrVerified,
 		})
 		if err != nil {
 			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")

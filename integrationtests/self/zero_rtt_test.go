@@ -462,7 +462,7 @@ var _ = Describe("0-RTT", func() {
 		defer udpConn.Close()
 		tr := &quic.Transport{
 			Conn:                udpConn,
-			VerifySourceAddress: func() bool { return true },
+			VerifySourceAddress: func(net.Addr) bool { return true },
 		}
 		addTracer(tr)
 		defer tr.Close()

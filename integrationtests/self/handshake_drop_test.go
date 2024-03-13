@@ -49,7 +49,7 @@ var _ = Describe("Handshake drop tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		tr := &quic.Transport{Conn: conn}
 		if doRetry {
-			tr.VerifySourceAddress = func() bool { return true }
+			tr.VerifySourceAddress = func(net.Addr) bool { return true }
 		}
 		ln, err = tr.Listen(tlsConf, conf)
 		Expect(err).ToNot(HaveOccurred())

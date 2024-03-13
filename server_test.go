@@ -262,7 +262,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("creates a connection when the token is accepted", func() {
-				serv.verifySourceAddress = func() bool { return true }
+				serv.verifySourceAddress = func(net.Addr) bool { return true }
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				retryToken, err := serv.tokenGenerator.NewRetryToken(
 					raddr,
@@ -435,7 +435,13 @@ var _ = Describe("Server", func() {
 
 			It("replies with a Retry packet, if a token is required", func() {
 				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
-				serv.verifySourceAddress = func() bool { return true }
+				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				var called bool
+				serv.verifySourceAddress = func(addr net.Addr) bool {
+					Expect(addr).To(Equal(raddr))
+					called = true
+					return true
+				}
 				hdr := &wire.Header{
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
@@ -443,7 +449,6 @@ var _ = Describe("Server", func() {
 					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
-				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				packet.remoteAddr = raddr
 				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), nil).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, _ []logging.Frame) {
 					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
@@ -465,6 +470,7 @@ var _ = Describe("Server", func() {
 				phm.EXPECT().Get(connID)
 				serv.handlePacket(packet)
 				Eventually(done).Should(BeClosed())
+				Expect(called).To(BeTrue())
 			})
 
 			It("creates a connection, if no token is required", func() {
@@ -542,7 +548,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("drops packets if the receive queue is full", func() {
-				serv.verifySourceAddress = func() bool { return false }
+				serv.verifySourceAddress = func(net.Addr) bool { return false }
 
 				phm.EXPECT().Get(gomock.Any()).AnyTimes()
 				phm.EXPECT().GetStatelessResetToken(gomock.Any()).AnyTimes()
@@ -644,7 +650,7 @@ var _ = Describe("Server", func() {
 			It("limits the number of unvalidated handshakes", func() {
 				const limit = 3
 				limiter := rate.NewLimiter(0, limit)
-				serv.verifySourceAddress = func() bool { return !limiter.Allow() }
+				serv.verifySourceAddress = func(net.Addr) bool { return !limiter.Allow() }
 
 				phm.EXPECT().Get(gomock.Any()).AnyTimes()
 				phm.EXPECT().GetStatelessResetToken(gomock.Any()).AnyTimes()
@@ -768,7 +774,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends an INVALID_TOKEN error, if an invalid retry token is received", func() {
-				serv.verifySourceAddress = func() bool { return true }
+				serv.verifySourceAddress = func(net.Addr) bool { return true }
 				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
@@ -804,7 +810,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends an INVALID_TOKEN error, if an expired retry token is received", func() {
-				serv.verifySourceAddress = func() bool { return true }
+				serv.verifySourceAddress = func(net.Addr) bool { return true }
 				serv.config.HandshakeIdleTimeout = time.Millisecond / 2 // the maximum retry token age is equivalent to the handshake timeout
 				Expect(serv.config.maxRetryTokenAge()).To(Equal(time.Millisecond))
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
@@ -842,7 +848,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't send an INVALID_TOKEN error, if an invalid non-retry token is received", func() {
-				serv.verifySourceAddress = func() bool { return true }
+				serv.verifySourceAddress = func(net.Addr) bool { return true }
 				token, err := serv.tokenGenerator.NewToken(&net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
@@ -871,7 +877,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends an INVALID_TOKEN error, if an expired non-retry token is received", func() {
-				serv.verifySourceAddress = func() bool { return true }
+				serv.verifySourceAddress = func(net.Addr) bool { return true }
 				serv.maxTokenAge = time.Millisecond
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				token, err := serv.tokenGenerator.NewToken(raddr)
@@ -900,7 +906,6 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't send an INVALID_TOKEN error, if the packet is corrupted", func() {
-				serv.verifySourceAddress = func() bool { return true }
 				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{

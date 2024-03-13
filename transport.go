@@ -81,11 +81,13 @@ type Transport struct {
 	// VerifySourceAddress decides if a connection attempt originating from unvalidated source
 	// addresses first needs to go through source address validation using QUIC's Retry mechanism,
 	// as described in RFC 9000 section 8.1.2.
+	// Note that the address passed to this callback is unvalidated, and might be spoofed in case
+	// of an attack.
 	// Validating the source address adds one additional network roundtrip to the handshake,
 	// and should therefore only be used if a suspiciously high number of incoming connection is recorded.
 	// For most use cases, wrapping the Allow function of a rate.Limiter will be a reasonable
 	// implementation of this callback (negating its return value).
-	VerifySourceAddress func() bool
+	VerifySourceAddress func(net.Addr) bool
 
 	// A Tracer traces events that don't belong to a single QUIC connection.
 	// Tracer.Close is called when the transport is closed.
