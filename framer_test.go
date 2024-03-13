@@ -109,6 +109,23 @@ var _ = Describe("Framer", func() {
 			Expect(fs).To(HaveLen(2))
 			Expect(length).To(Equal(ping.Length(version) + ncid.Length(version)))
 		})
+
+		It("detects when too many frames are queued", func() {
+			for i := 0; i < maxControlFrames-1; i++ {
+				framer.QueueControlFrame(&wire.PingFrame{})
+				framer.QueueControlFrame(&wire.PingFrame{})
+				Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
+				frames, _ := framer.AppendControlFrames([]ackhandler.Frame{}, 1, protocol.Version1)
+				Expect(frames).To(HaveLen(1))
+				Expect(framer.(*framerI).controlFrames).To(HaveLen(i + 1))
+			}
+			framer.QueueControlFrame(&wire.PingFrame{})
+			Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
+			Expect(framer.(*framerI).controlFrames).To(HaveLen(maxControlFrames))
+			framer.QueueControlFrame(&wire.PingFrame{})
+			Expect(framer.QueuedTooManyControlFrames()).To(BeTrue())
+			Expect(framer.(*framerI).controlFrames).To(HaveLen(maxControlFrames))
+		})
 	})
 
 	Context("handling PATH_RESPONSE frames", func() {
