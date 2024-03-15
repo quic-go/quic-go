@@ -461,8 +461,8 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer udpConn.Close()
 		tr := &quic.Transport{
-			Conn:                     udpConn,
-			MaxUnvalidatedHandshakes: -1,
+			Conn:                udpConn,
+			VerifySourceAddress: func(net.Addr) bool { return true },
 		}
 		addTracer(tr)
 		defer tr.Close()

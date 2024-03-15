@@ -11,11 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go/quicvarint"
-
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -50,7 +49,7 @@ var _ = Describe("Handshake drop tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		tr := &quic.Transport{Conn: conn}
 		if doRetry {
-			tr.MaxUnvalidatedHandshakes = -1
+			tr.VerifySourceAddress = func(net.Addr) bool { return true }
 		}
 		ln, err = tr.Listen(tlsConf, conf)
 		Expect(err).ToNot(HaveOccurred())
