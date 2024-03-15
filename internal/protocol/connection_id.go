@@ -120,8 +120,11 @@ func (d *DefaultConnectionIDGenerator) ConnectionIDLen() int {
 
 // PRIO_PACKS_TAG
 type PriorityConnectionIDGenerator struct {
-	ConnLen         int
-	PriorityCounter int8
+	ConnLen            int
+	NumberOfPriorities int
+	PriorityCounter    int8
+	NextPriority       int8
+	NextPriorityValid  bool
 }
 
 func (t *PriorityConnectionIDGenerator) GenerateConnectionID() (ConnectionID, error) {
@@ -133,6 +136,15 @@ func (t *PriorityConnectionIDGenerator) GenerateConnectionID() (ConnectionID, er
 		return ConnectionID{}, ErrInvalidConnectionIDLen
 	}
 
+	// PRIO_PACKS_TAG
+	// this part is for specifically setting the next priority
+	// which is used in the case that an older connection ID is
+	// retired and a new one with the same priority is needed
+	if t.NextPriorityValid {
+		t.PriorityCounter = t.NextPriority
+		t.NextPriorityValid = false
+	}
+
 	var c ConnectionID
 	c.l = uint8(t.ConnLen)
 	_, err := rand.Read(c.b[1:t.ConnLen])
@@ -142,7 +154,7 @@ func (t *PriorityConnectionIDGenerator) GenerateConnectionID() (ConnectionID, er
 
 	// add priority counter as the first byte of the connection ID and
 	c.b[0] = byte(t.PriorityCounter)
-	t.PriorityCounter = (t.PriorityCounter + 1) % 2
+	t.PriorityCounter = (t.PriorityCounter + 1) % int8(t.NumberOfPriorities)
 	return c, nil
 }
 

@@ -53,6 +53,21 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	if m.generator.ConnectionIDLen() == 0 {
 		return nil
 	}
+
+	// PRIO_PACKS_TAG
+	if _, ok := m.generator.(*protocol.PriorityConnectionIDGenerator); ok {
+		numberOfPriorities := m.generator.(*protocol.PriorityConnectionIDGenerator).NumberOfPriorities
+		// < 	ensures that for each priority we have at least one connection ID
+		// != 	would ensure that there is *exactly* one connection ID for each priority
+		if limit < uint64(numberOfPriorities) {
+			fmt.Println("WARNING: active_connection_id_limit is smaller than the number of priorities. Set to the number of priorities.")
+			limit = uint64(numberOfPriorities)
+		}
+		if protocol.MaxIssuedConnectionIDs < uint64(numberOfPriorities) {
+			panic("MaxIssuedConnectionIDs is smaller than the number of priorities. Choose a smaller number of priorities or increase MaxIssuedConnectionIDs.")
+		}
+	}
+
 	// The active_connection_id_limit transport parameter is the number of
 	// connection IDs the peer will store. This limit includes the connection ID
 	// used during the handshake, and the one sent in the preferred_address
@@ -91,6 +106,16 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 	if seq == 0 {
 		return nil
 	}
+
+	if _, ok := m.generator.(*protocol.PriorityConnectionIDGenerator); ok {
+		// PRIO_PACKS_TAG
+		// if the retired connection ID had the same priority as the next one to be issued
+		// we need to set the next priority to the one of the retired connection ID
+		prio := connID.Bytes()[0]
+		m.generator.(*protocol.PriorityConnectionIDGenerator).NextPriority = int8(prio)
+		m.generator.(*protocol.PriorityConnectionIDGenerator).NextPriorityValid = true
+	}
+
 	return m.issueNewConnID()
 }
 

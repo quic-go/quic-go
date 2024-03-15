@@ -285,7 +285,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 			// Once the connection has more than 1 connection IDs this problem is gone.
 			// TODOME: temporary fix, remove once we have a better solution
 			t.connIDLen = 16
-			t.connIDGenerator = &protocol.PriorityConnectionIDGenerator{ConnLen: t.connIDLen, PriorityCounter: 1}
+			t.connIDGenerator = &protocol.PriorityConnectionIDGenerator{ConnLen: t.connIDLen, PriorityCounter: 1, NumberOfPriorities: 2}
 		}
 
 		getMultiplexer().AddConn(t.Conn)
