@@ -39,6 +39,11 @@ type RoundTripOpt struct {
 	// If not yet received, it blocks until the server's SETTINGS frame is received.
 	// If an error is returned, the request won't be sent to the server, and the error is returned.
 	CheckSettings func(Settings) error
+	// DatagrammerReady is called as soon as the server's SETTINGS frame is received,
+	// and HTTP DATAGRAM support is enabled.
+	// If HTTP DATAGRAMs are not supported, the request won't be sent to the server
+	// and a ErrNoDatagrams error is returned.
+	DatagrammerReady func(Datagrammer)
 }
 
 type roundTripCloser interface {

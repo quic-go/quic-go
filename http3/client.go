@@ -30,6 +30,8 @@ const (
 	defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 )
 
+var ErrNoDatagrams = errors.New("no datagrams")
+
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams
 	KeepAlivePeriod:    10 * time.Second,
@@ -309,7 +311,23 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		}
 	}
 
-	if opt.CheckSettings != nil {
+	checkSettings := opt.CheckSettings
+	if opt.DatagrammerReady != nil {
+		if req.Method == http.MethodGet || req.Method == http.MethodPost {
+			return nil, errors.New("request method doesn't allow datagrams")
+		}
+		checkSettings = func(settings Settings) error {
+			if !settings.EnableDatagram {
+				return ErrNoDatagrams
+			}
+			if checkSettings != nil {
+				return checkSettings(settings)
+			}
+			return nil
+		}
+	}
+
+	if checkSettings != nil {
 		// wait for the server's SETTINGS frame to arrive
 		select {
 		case <-c.receivedSettings:
@@ -324,6 +342,10 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	str, err := conn.OpenStreamSync(req.Context())
 	if err != nil {
 		return nil, err
+	}
+
+	if opt.DatagrammerReady != nil {
+		opt.DatagrammerReady(newStreamDatagrammer(conn, str.StreamID()))
 	}
 
 	// Request Cancellation:
@@ -409,7 +431,7 @@ func (c *client) sendRequestBody(str Stream, body io.ReadCloser, contentLength i
 
 func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str quic.Stream, opt RoundTripOpt, reqDone chan<- struct{}) (*http.Response, requestError) {
 	var requestGzip bool
-	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
+	if !c.opts.DisableCompression && req.Method != http.MethodHead && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
 	}
 	if err := c.requestWriter.WriteRequestHeader(str, req, requestGzip); err != nil {
