@@ -1,5 +1,3 @@
-//go:build go1.21
-
 package self_test
 
 import (
@@ -7,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	mrand "math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -178,6 +175,7 @@ var _ = Describe("0-RTT", func() {
 				Conn:               udpConn,
 				ConnectionIDLength: connIDLen,
 			}
+			addTracer(tr)
 			defer tr.Close()
 			conn, err = tr.DialEarly(
 				context.Background(),
@@ -382,7 +380,7 @@ var _ = Describe("0-RTT", func() {
 	})
 
 	It("transfers 0-RTT data, when 0-RTT packets are lost", func() {
-		var num0RTTPackets, num0RTTDropped atomic.Uint32
+		var num0RTTPackets, numDropped atomic.Uint32
 
 		tlsConf := getTLSConfig()
 		clientConf := getTLSClientConfig()
@@ -401,17 +399,8 @@ var _ = Describe("0-RTT", func() {
 		defer ln.Close()
 
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-			RemoteAddr: fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-				if wire.IsLongHeaderPacket(data[0]) {
-					hdr, _, _, err := wire.ParsePacket(data)
-					Expect(err).ToNot(HaveOccurred())
-					if hdr.Type == protocol.PacketType0RTT {
-						num0RTTPackets.Add(1)
-					}
-				}
-				return rtt / 2
-			},
+			RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
 			DropPacket: func(_ quicproxy.Direction, data []byte) bool {
 				if !wire.IsLongHeaderPacket(data[0]) {
 					return false
@@ -419,10 +408,11 @@ var _ = Describe("0-RTT", func() {
 				hdr, _, _, err := wire.ParsePacket(data)
 				Expect(err).ToNot(HaveOccurred())
 				if hdr.Type == protocol.PacketType0RTT {
+					count := num0RTTPackets.Add(1)
 					// drop 25% of the 0-RTT packets
-					drop := mrand.Intn(4) == 0
+					drop := count%4 == 0
 					if drop {
-						num0RTTDropped.Add(1)
+						numDropped.Add(1)
 					}
 					return drop
 				}
@@ -435,9 +425,8 @@ var _ = Describe("0-RTT", func() {
 		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, PRData)
 
 		num0RTT := num0RTTPackets.Load()
-		numDropped := num0RTTDropped.Load()
-		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets. Dropped %d of those.", num0RTT, numDropped)
-		Expect(numDropped).ToNot(BeZero())
+		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets. Dropped %d of those.", num0RTT, numDropped.Load())
+		Expect(numDropped.Load()).ToNot(BeZero())
 		Expect(num0RTT).ToNot(BeZero())
 		Expect(get0RTTPackets(counter.getRcvdLongHeaderPackets())).ToNot(BeEmpty())
 	})
@@ -466,14 +455,20 @@ var _ = Describe("0-RTT", func() {
 		}
 
 		counter, tracer := newPacketTracer()
-		ln, err := quic.ListenAddrEarly(
-			"localhost:0",
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		udpConn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		defer udpConn.Close()
+		tr := &quic.Transport{
+			Conn:                udpConn,
+			VerifySourceAddress: func(net.Addr) bool { return true },
+		}
+		addTracer(tr)
+		defer tr.Close()
+		ln, err := tr.ListenEarly(
 			tlsConf,
-			getQuicConfig(&quic.Config{
-				RequireAddressValidation: func(net.Addr) bool { return true },
-				Allow0RTT:                true,
-				Tracer:                   newTracer(tracer),
-			}),
+			getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
@@ -690,6 +685,49 @@ var _ = Describe("0-RTT", func() {
 		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 		Expect(num0RTT).ToNot(BeZero())
 		Expect(get0RTTPackets(counter.getRcvdLongHeaderPackets())).To(BeEmpty())
+	})
+
+	It("doesn't use 0-RTT, if the server didn't enable it", func() {
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
+
+		gets := make(chan string, 100)
+		puts := make(chan string, 100)
+		cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
+		tlsConf := getTLSClientConfig()
+		tlsConf.ClientSessionCache = cache
+		conn1, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn1.CloseWithError(0, "")
+		var sessionKey string
+		Eventually(puts).Should(Receive(&sessionKey))
+		Expect(conn1.ConnectionState().TLS.DidResume).To(BeFalse())
+
+		serverConn, err := server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
+
+		conn2, err := quic.DialAddrEarly(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(gets).To(Receive(Equal(sessionKey)))
+		Expect(conn2.ConnectionState().TLS.DidResume).To(BeTrue())
+
+		serverConn, err = server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeTrue())
+		Expect(serverConn.ConnectionState().Used0RTT).To(BeFalse())
+		conn2.CloseWithError(0, "")
 	})
 
 	DescribeTable("flow control limits",

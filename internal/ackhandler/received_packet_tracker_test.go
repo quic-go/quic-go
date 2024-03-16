@@ -12,20 +12,70 @@ import (
 )
 
 var _ = Describe("Received Packet Tracker", func() {
-	var (
-		tracker  *receivedPacketTracker
-		rttStats *utils.RTTStats
-	)
+	var tracker *receivedPacketTracker
 
 	BeforeEach(func() {
-		rttStats = &utils.RTTStats{}
-		tracker = newReceivedPacketTracker(rttStats, utils.DefaultLogger)
+		tracker = newReceivedPacketTracker()
+	})
+
+	It("acknowledges packets", func() {
+		t := time.Now().Add(-10 * time.Second)
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, t, true)).To(Succeed())
+		ack := tracker.GetAckFrame()
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.AckRanges).To(Equal([]wire.AckRange{{Smallest: 3, Largest: 3}}))
+		Expect(ack.DelayTime).To(BeZero())
+		// now receive another packet
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(4), protocol.ECNNon, t.Add(time.Second), true)).To(Succeed())
+		ack = tracker.GetAckFrame()
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.AckRanges).To(Equal([]wire.AckRange{{Smallest: 3, Largest: 4}}))
+		Expect(ack.DelayTime).To(BeZero())
+	})
+
+	It("also acknowledges delayed packets", func() {
+		t := time.Now().Add(-10 * time.Second)
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, t, true)).To(Succeed())
+		ack := tracker.GetAckFrame()
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(3)))
+		Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(3)))
+		Expect(ack.DelayTime).To(BeZero())
+		// now receive another packet
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(1), protocol.ECNNon, t.Add(time.Second), true)).To(Succeed())
+		ack = tracker.GetAckFrame()
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.AckRanges).To(HaveLen(2))
+		Expect(ack.AckRanges).To(ContainElement(wire.AckRange{Smallest: 1, Largest: 1}))
+		Expect(ack.AckRanges).To(ContainElement(wire.AckRange{Smallest: 3, Largest: 3}))
+		Expect(ack.DelayTime).To(BeZero())
+	})
+
+	It("doesn't trigger ACKs for non-ack-eliciting packets", func() {
+		t := time.Now().Add(-10 * time.Second)
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, t, false)).To(Succeed())
+		Expect(tracker.GetAckFrame()).To(BeNil())
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(4), protocol.ECNNon, t.Add(5*time.Second), false)).To(Succeed())
+		Expect(tracker.GetAckFrame()).To(BeNil())
+		Expect(tracker.ReceivedPacket(protocol.PacketNumber(5), protocol.ECNNon, t.Add(10*time.Second), true)).To(Succeed())
+		ack := tracker.GetAckFrame()
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.AckRanges).To(Equal([]wire.AckRange{{Smallest: 3, Largest: 5}}))
+	})
+})
+
+var _ = Describe("Application Data Received Packet Tracker", func() {
+	var tracker *appDataReceivedPacketTracker
+
+	BeforeEach(func() {
+		tracker = newAppDataReceivedPacketTracker(utils.DefaultLogger)
 	})
 
 	Context("accepting packets", func() {
 		It("saves the time when each packet arrived", func() {
-			Expect(tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, time.Now(), true)).To(Succeed())
-			Expect(tracker.largestObservedRcvdTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			t := time.Now()
+			Expect(tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, t, true)).To(Succeed())
+			Expect(tracker.largestObservedRcvdTime).To(Equal(t))
 		})
 
 		It("updates the largestObserved and the largestObservedRcvdTime", func() {

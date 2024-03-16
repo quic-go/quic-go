@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package mocks -destination short_header_sealer.go github.com/quic-go/quic-go/internal/handshake ShortHeaderSealer
 //
+
 // Package mocks is a generated GoMock package.
 package mocks
 
@@ -45,31 +46,31 @@ func (m *MockShortHeaderSealer) EncryptHeader(arg0 []byte, arg1 *byte, arg2 []by
 }
 
 // EncryptHeader indicates an expected call of EncryptHeader.
-func (mr *MockShortHeaderSealerMockRecorder) EncryptHeader(arg0, arg1, arg2 any) *ShortHeaderSealerEncryptHeaderCall {
+func (mr *MockShortHeaderSealerMockRecorder) EncryptHeader(arg0, arg1, arg2 any) *MockShortHeaderSealerEncryptHeaderCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EncryptHeader", reflect.TypeOf((*MockShortHeaderSealer)(nil).EncryptHeader), arg0, arg1, arg2)
-	return &ShortHeaderSealerEncryptHeaderCall{Call: call}
+	return &MockShortHeaderSealerEncryptHeaderCall{Call: call}
 }
 
-// ShortHeaderSealerEncryptHeaderCall wrap *gomock.Call
-type ShortHeaderSealerEncryptHeaderCall struct {
+// MockShortHeaderSealerEncryptHeaderCall wrap *gomock.Call
+type MockShortHeaderSealerEncryptHeaderCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ShortHeaderSealerEncryptHeaderCall) Return() *ShortHeaderSealerEncryptHeaderCall {
+func (c *MockShortHeaderSealerEncryptHeaderCall) Return() *MockShortHeaderSealerEncryptHeaderCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ShortHeaderSealerEncryptHeaderCall) Do(f func([]byte, *byte, []byte)) *ShortHeaderSealerEncryptHeaderCall {
+func (c *MockShortHeaderSealerEncryptHeaderCall) Do(f func([]byte, *byte, []byte)) *MockShortHeaderSealerEncryptHeaderCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ShortHeaderSealerEncryptHeaderCall) DoAndReturn(f func([]byte, *byte, []byte)) *ShortHeaderSealerEncryptHeaderCall {
+func (c *MockShortHeaderSealerEncryptHeaderCall) DoAndReturn(f func([]byte, *byte, []byte)) *MockShortHeaderSealerEncryptHeaderCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -83,31 +84,31 @@ func (m *MockShortHeaderSealer) KeyPhase() protocol.KeyPhaseBit {
 }
 
 // KeyPhase indicates an expected call of KeyPhase.
-func (mr *MockShortHeaderSealerMockRecorder) KeyPhase() *ShortHeaderSealerKeyPhaseCall {
+func (mr *MockShortHeaderSealerMockRecorder) KeyPhase() *MockShortHeaderSealerKeyPhaseCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "KeyPhase", reflect.TypeOf((*MockShortHeaderSealer)(nil).KeyPhase))
-	return &ShortHeaderSealerKeyPhaseCall{Call: call}
+	return &MockShortHeaderSealerKeyPhaseCall{Call: call}
 }
 
-// ShortHeaderSealerKeyPhaseCall wrap *gomock.Call
-type ShortHeaderSealerKeyPhaseCall struct {
+// MockShortHeaderSealerKeyPhaseCall wrap *gomock.Call
+type MockShortHeaderSealerKeyPhaseCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ShortHeaderSealerKeyPhaseCall) Return(arg0 protocol.KeyPhaseBit) *ShortHeaderSealerKeyPhaseCall {
+func (c *MockShortHeaderSealerKeyPhaseCall) Return(arg0 protocol.KeyPhaseBit) *MockShortHeaderSealerKeyPhaseCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ShortHeaderSealerKeyPhaseCall) Do(f func() protocol.KeyPhaseBit) *ShortHeaderSealerKeyPhaseCall {
+func (c *MockShortHeaderSealerKeyPhaseCall) Do(f func() protocol.KeyPhaseBit) *MockShortHeaderSealerKeyPhaseCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ShortHeaderSealerKeyPhaseCall) DoAndReturn(f func() protocol.KeyPhaseBit) *ShortHeaderSealerKeyPhaseCall {
+func (c *MockShortHeaderSealerKeyPhaseCall) DoAndReturn(f func() protocol.KeyPhaseBit) *MockShortHeaderSealerKeyPhaseCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -121,31 +122,31 @@ func (m *MockShortHeaderSealer) Overhead() int {
 }
 
 // Overhead indicates an expected call of Overhead.
-func (mr *MockShortHeaderSealerMockRecorder) Overhead() *ShortHeaderSealerOverheadCall {
+func (mr *MockShortHeaderSealerMockRecorder) Overhead() *MockShortHeaderSealerOverheadCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Overhead", reflect.TypeOf((*MockShortHeaderSealer)(nil).Overhead))
-	return &ShortHeaderSealerOverheadCall{Call: call}
+	return &MockShortHeaderSealerOverheadCall{Call: call}
 }
 
-// ShortHeaderSealerOverheadCall wrap *gomock.Call
-type ShortHeaderSealerOverheadCall struct {
+// MockShortHeaderSealerOverheadCall wrap *gomock.Call
+type MockShortHeaderSealerOverheadCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ShortHeaderSealerOverheadCall) Return(arg0 int) *ShortHeaderSealerOverheadCall {
+func (c *MockShortHeaderSealerOverheadCall) Return(arg0 int) *MockShortHeaderSealerOverheadCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ShortHeaderSealerOverheadCall) Do(f func() int) *ShortHeaderSealerOverheadCall {
+func (c *MockShortHeaderSealerOverheadCall) Do(f func() int) *MockShortHeaderSealerOverheadCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ShortHeaderSealerOverheadCall) DoAndReturn(f func() int) *ShortHeaderSealerOverheadCall {
+func (c *MockShortHeaderSealerOverheadCall) DoAndReturn(f func() int) *MockShortHeaderSealerOverheadCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -159,31 +160,31 @@ func (m *MockShortHeaderSealer) Seal(arg0, arg1 []byte, arg2 protocol.PacketNumb
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockShortHeaderSealerMockRecorder) Seal(arg0, arg1, arg2, arg3 any) *ShortHeaderSealerSealCall {
+func (mr *MockShortHeaderSealerMockRecorder) Seal(arg0, arg1, arg2, arg3 any) *MockShortHeaderSealerSealCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockShortHeaderSealer)(nil).Seal), arg0, arg1, arg2, arg3)
-	return &ShortHeaderSealerSealCall{Call: call}
+	return &MockShortHeaderSealerSealCall{Call: call}
 }
 
-// ShortHeaderSealerSealCall wrap *gomock.Call
-type ShortHeaderSealerSealCall struct {
+// MockShortHeaderSealerSealCall wrap *gomock.Call
+type MockShortHeaderSealerSealCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ShortHeaderSealerSealCall) Return(arg0 []byte) *ShortHeaderSealerSealCall {
+func (c *MockShortHeaderSealerSealCall) Return(arg0 []byte) *MockShortHeaderSealerSealCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ShortHeaderSealerSealCall) Do(f func([]byte, []byte, protocol.PacketNumber, []byte) []byte) *ShortHeaderSealerSealCall {
+func (c *MockShortHeaderSealerSealCall) Do(f func([]byte, []byte, protocol.PacketNumber, []byte) []byte) *MockShortHeaderSealerSealCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ShortHeaderSealerSealCall) DoAndReturn(f func([]byte, []byte, protocol.PacketNumber, []byte) []byte) *ShortHeaderSealerSealCall {
+func (c *MockShortHeaderSealerSealCall) DoAndReturn(f func([]byte, []byte, protocol.PacketNumber, []byte) []byte) *MockShortHeaderSealerSealCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

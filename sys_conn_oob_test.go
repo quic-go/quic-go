@@ -235,7 +235,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr.Is4In6() || p.info.addr.Is4()).To(BeTrue())
+			Expect(p.info.addr.Is4()).To(BeTrue())
 			ip := p.info.addr.As4()
 			Expect(net.IP(ip[:])).To(Equal(ip4.To4()))
 

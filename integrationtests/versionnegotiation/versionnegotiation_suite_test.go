@@ -65,7 +65,7 @@ func maybeAddQLOGTracer(c *quic.Config) *quic.Config {
 	if !enableQlog {
 		return c
 	}
-	qlogger := tools.NewQlogger(GinkgoWriter)
+	qlogger := tools.NewQlogConnectionTracer(GinkgoWriter)
 	if c.Tracer == nil {
 		c.Tracer = qlogger
 	} else if qlogger != nil {

@@ -110,14 +110,18 @@ func (h packetHeaderVersionNegotiation) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("dcid", h.DestConnectionID.String())
 }
 
-// a minimal header that only outputs the packet type
+// a minimal header that only outputs the packet type, and potentially a packet number
 type packetHeaderWithType struct {
-	PacketType logging.PacketType
+	PacketType   logging.PacketType
+	PacketNumber logging.PacketNumber
 }
 
 func (h packetHeaderWithType) IsNil() bool { return false }
 func (h packetHeaderWithType) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetType(h.PacketType).String())
+	if h.PacketNumber != protocol.InvalidPacketNumber {
+		enc.Int64Key("packet_number", int64(h.PacketNumber))
+	}
 }
 
 // a minimal header that only outputs the packet type

@@ -6,14 +6,17 @@ import (
 )
 
 var _ = Describe("RingBuffer", func() {
-	It("push and pop", func() {
+	It("push, peek and pop", func() {
 		r := RingBuffer[int]{}
 		Expect(len(r.ring)).To(Equal(0))
 		Expect(func() { r.PopFront() }).To(Panic())
 		r.PushBack(1)
 		r.PushBack(2)
 		r.PushBack(3)
+		Expect(r.PeekFront()).To(Equal(1))
+		Expect(r.PeekFront()).To(Equal(1))
 		Expect(r.PopFront()).To(Equal(1))
+		Expect(r.PeekFront()).To(Equal(2))
 		Expect(r.PopFront()).To(Equal(2))
 		r.PushBack(4)
 		r.PushBack(5)
@@ -25,7 +28,16 @@ var _ = Describe("RingBuffer", func() {
 		Expect(r.PopFront()).To(Equal(5))
 		Expect(r.PopFront()).To(Equal(6))
 	})
-	It("clear", func() {
+
+	It("panics when Peek or Pop are called on an empty buffer", func() {
+		r := RingBuffer[string]{}
+		Expect(r.Empty()).To(BeTrue())
+		Expect(r.Len()).To(BeZero())
+		Expect(func() { r.PeekFront() }).To(Panic())
+		Expect(func() { r.PopFront() }).To(Panic())
+	})
+
+	It("clearing", func() {
 		r := RingBuffer[int]{}
 		r.Init(2)
 		r.PushBack(1)

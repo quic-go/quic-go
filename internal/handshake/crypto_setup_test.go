@@ -9,8 +9,6 @@ import (
 	"math/big"
 	"net"
 	"reflect"
-	"runtime"
-	"strings"
 	"time"
 
 	mocktls "github.com/quic-go/quic-go/internal/mocks/tls"
@@ -462,10 +460,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				Eventually(receivedSessionTicket).Should(BeClosed())
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
-				if !strings.Contains(runtime.Version(), "go1.20") {
-					Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
-					Expect(serverRTTStats.SmoothedRTT()).To(Equal(serverRTT))
-				}
+				Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
+				Expect(serverRTTStats.SmoothedRTT()).To(Equal(serverRTT))
 			})
 
 			It("doesn't use session resumption if the server disabled it", func() {

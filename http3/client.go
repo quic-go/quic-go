@@ -58,6 +58,9 @@ type client struct {
 	dialer       dialFunc
 	handshakeErr error
 
+	receivedSettings chan struct{} // closed once the server's SETTINGS frame was processed
+	settings         *Settings     // set once receivedSettings is closed
+
 	requestWriter *requestWriter
 
 	decoder *qpack.Decoder
@@ -76,10 +79,14 @@ var _ roundTripCloser = &client{}
 func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
 	if conf == nil {
 		conf = defaultQuicConfig.Clone()
+		conf.EnableDatagrams = opts.EnableDatagram
+	}
+	if opts.EnableDatagram && !conf.EnableDatagrams {
+		return nil, errors.New("HTTP Datagrams enabled, but QUIC Datagrams disabled")
 	}
 	if len(conf.Versions) == 0 {
 		conf = conf.Clone()
-		conf.Versions = []quic.VersionNumber{protocol.SupportedVersions[0]}
+		conf.Versions = []quic.Version{protocol.SupportedVersions[0]}
 	}
 	if len(conf.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
@@ -87,7 +94,6 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	if conf.MaxIncomingStreams == 0 {
 		conf.MaxIncomingStreams = -1 // don't allow any bidirectional streams
 	}
-	conf.EnableDatagrams = opts.EnableDatagram
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -107,14 +113,15 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	tlsConf.NextProtos = []string{versionToALPN(conf.Versions[0])}
 
 	return &client{
-		hostname:      authorityAddr("https", hostname),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        conf,
-		opts:          opts,
-		dialer:        dialer,
-		logger:        logger,
+		hostname:         authorityAddr("https", hostname),
+		tlsConf:          tlsConf,
+		requestWriter:    newRequestWriter(logger),
+		receivedSettings: make(chan struct{}),
+		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+		config:           conf,
+		opts:             opts,
+		dialer:           dialer,
+		logger:           logger,
 	}, nil
 }
 
@@ -185,6 +192,8 @@ func (c *client) handleBidirectionalStreams(conn quic.EarlyConnection) {
 }
 
 func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
+	var rcvdControlStream atomic.Bool
+
 	for {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
@@ -219,6 +228,11 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				str.CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
 				return
 			}
+			// Only a single control stream is allowed.
+			if isFirstControlStr := rcvdControlStream.CompareAndSwap(false, true); !isFirstControlStr {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
+				return
+			}
 			f, err := parseNextFrame(str, nil)
 			if err != nil {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
@@ -227,6 +241,15 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 			sf, ok := f.(*settingsFrame)
 			if !ok {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
+				return
+			}
+			c.settings = &Settings{
+				EnableDatagram:        sf.Datagram,
+				EnableExtendedConnect: sf.ExtendedConnect,
+				Other:                 sf.Other,
+			}
+			close(c.receivedSettings)
+			if !sf.Datagram {
 				return
 			}
 			// If datagram support was enabled on our side as well as on the server side,
@@ -258,6 +281,15 @@ func (c *client) maxHeaderBytes() uint64 {
 
 // RoundTripOpt executes a request and returns a response
 func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+	rsp, err := c.roundTripOpt(req, opt)
+	if err != nil && req.Context().Err() != nil {
+		// if the context was canceled, return the context cancellation error
+		err = req.Context().Err()
+	}
+	return rsp, err
+}
+
+func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
 		return nil, fmt.Errorf("http3 client BUG: RoundTripOpt called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
@@ -281,6 +313,18 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		case <-conn.HandshakeComplete():
 		case <-req.Context().Done():
 			return nil, req.Context().Err()
+		}
+	}
+
+	if opt.CheckSettings != nil {
+		// wait for the server's SETTINGS frame to arrive
+		select {
+		case <-c.receivedSettings:
+		case <-conn.Context().Done():
+			return nil, context.Cause(conn.Context())
+		}
+		if err := opt.CheckSettings(*c.settings); err != nil {
+			return nil, err
 		}
 	}
 

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -11,7 +9,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,8 +18,6 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/logging"
 	"github.com/quic-go/quic-go/qlog"
 )
 
@@ -121,7 +116,7 @@ func setupHandler(www string) http.Handler {
 					err = errors.New("couldn't get uploaded file size")
 				}
 			}
-			utils.DefaultLogger.Infof("Error receiving upload: %#v", err)
+			log.Printf("Error receiving upload: %#v", err)
 		}
 		io.WriteString(w, `<html><body><form action="/demo/upload" method="post" enctype="multipart/form-data">
 				<input type="file" name="uploadfile"><br>
@@ -139,57 +134,45 @@ func main() {
 	}()
 	// runtime.SetBlockProfileRate(1)
 
-	verbose := flag.Bool("v", false, "verbose")
 	bs := binds{}
 	flag.Var(&bs, "bind", "bind to")
 	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
-	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
+	key := flag.String("key", "", "TLS key (requires -cert option)")
+	cert := flag.String("cert", "", "TLS certificate (requires -key option)")
 	flag.Parse()
-
-	logger := utils.DefaultLogger
-
-	if *verbose {
-		logger.SetLogLevel(utils.LogLevelDebug)
-	} else {
-		logger.SetLogLevel(utils.LogLevelInfo)
-	}
-	logger.SetLogTimeFormat("")
 
 	if len(bs) == 0 {
 		bs = binds{"localhost:6121"}
 	}
 
 	handler := setupHandler(*www)
-	quicConf := &quic.Config{}
-	if *enableQlog {
-		quicConf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-			filename := fmt.Sprintf("server_%x.qlog", connID)
-			f, err := os.Create(filename)
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("Creating qlog file %s.\n", filename)
-			return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), p, connID)
-		}
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(bs))
+	var certFile, keyFile string
+	if *key != "" && *cert != "" {
+		keyFile = *key
+		certFile = *cert
+	} else {
+		certFile, keyFile = testdata.GetCertificatePaths()
+	}
 	for _, b := range bs {
+		fmt.Println("listening on", b)
 		bCap := b
 		go func() {
 			var err error
 			if *tcp {
-				certFile, keyFile := testdata.GetCertificatePaths()
 				err = http3.ListenAndServe(bCap, certFile, keyFile, handler)
 			} else {
 				server := http3.Server{
-					Handler:    handler,
-					Addr:       bCap,
-					QuicConfig: quicConf,
+					Handler: handler,
+					Addr:    bCap,
+					QuicConfig: &quic.Config{
+						Tracer: qlog.DefaultTracer,
+					},
 				}
-				err = server.ListenAndServeTLS(testdata.GetCertificatePaths())
+				err = server.ListenAndServeTLS(certFile, keyFile)
 			}
 			if err != nil {
 				fmt.Println(err)

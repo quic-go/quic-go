@@ -18,7 +18,7 @@ import (
 )
 
 type versioner interface {
-	GetVersion() protocol.VersionNumber
+	GetVersion() protocol.Version
 }
 
 type result struct {
@@ -68,11 +68,11 @@ var _ = Describe("Handshake tests", func() {
 		}
 	}
 
-	var supportedVersions []protocol.VersionNumber
+	var supportedVersions []protocol.Version
 
 	BeforeEach(func() {
-		supportedVersions = append([]quic.VersionNumber{}, protocol.SupportedVersions...)
-		protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{7, 8, 9, 10}...)
+		supportedVersions = append([]quic.Version{}, protocol.SupportedVersions...)
+		protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.Version{7, 8, 9, 10}...)
 	})
 
 	AfterEach(func() {
@@ -85,7 +85,7 @@ var _ = Describe("Handshake tests", func() {
 			// the server doesn't support the highest supported version, which is the first one the client will try
 			// but it supports a bunch of versions that the client doesn't speak
 			serverConfig := &quic.Config{}
-			serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
+			serverConfig.Versions = []protocol.Version{7, 8, protocol.SupportedVersions[0], 9}
 			serverResult, serverTracer := newVersionNegotiationTracer()
 			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 				return serverTracer
@@ -125,7 +125,7 @@ var _ = Describe("Handshake tests", func() {
 			}
 			server, cl := startServer(getTLSConfig(), serverConfig)
 			defer cl()
-			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
+			clientVersions := []protocol.Version{7, 8, 9, protocol.SupportedVersions[0], 10}
 			clientResult, clientTracer := newVersionNegotiationTracer()
 			conn, err := quic.DialAddr(
 				context.Background(),
@@ -169,7 +169,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer ln.Close()
 
-			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
+			clientVersions := []protocol.Version{7, 8, 9, protocol.SupportedVersions[0], 10}
 			clientResult, clientTracer := newVersionNegotiationTracer()
 			_, err = quic.DialAddr(
 				context.Background(),

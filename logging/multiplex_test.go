@@ -64,6 +64,18 @@ var _ = Describe("Tracing", func() {
 				tr2.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
 				tracer.DroppedPacket(remote, PacketTypeRetry, 1024, PacketDropDuplicate)
 			})
+
+			It("traces the Debug event", func() {
+				tr1.EXPECT().Debug("foo", "bar")
+				tr2.EXPECT().Debug("foo", "bar")
+				tracer.Debug("foo", "bar")
+			})
+
+			It("traces the Close event", func() {
+				tr1.EXPECT().Close()
+				tr2.EXPECT().Close()
+				tracer.Close()
+			})
 		})
 	})
 
@@ -93,8 +105,8 @@ var _ = Describe("Tracing", func() {
 
 		It("traces the NegotiatedVersion event", func() {
 			chosen := protocol.Version2
-			client := []protocol.VersionNumber{protocol.Version1}
-			server := []protocol.VersionNumber{13, 37}
+			client := []protocol.Version{protocol.Version1}
+			server := []protocol.Version{13, 37}
 			tr1.EXPECT().NegotiatedVersion(chosen, client, server)
 			tr2.EXPECT().NegotiatedVersion(chosen, client, server)
 			tracer.NegotiatedVersion(chosen, client, server)
@@ -184,9 +196,9 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the DroppedPacket event", func() {
-			tr1.EXPECT().DroppedPacket(PacketTypeInitial, ByteCount(1337), PacketDropHeaderParseError)
-			tr2.EXPECT().DroppedPacket(PacketTypeInitial, ByteCount(1337), PacketDropHeaderParseError)
-			tracer.DroppedPacket(PacketTypeInitial, 1337, PacketDropHeaderParseError)
+			tr1.EXPECT().DroppedPacket(PacketTypeInitial, PacketNumber(42), ByteCount(1337), PacketDropHeaderParseError)
+			tr2.EXPECT().DroppedPacket(PacketTypeInitial, PacketNumber(42), ByteCount(1337), PacketDropHeaderParseError)
+			tracer.DroppedPacket(PacketTypeInitial, 42, 1337, PacketDropHeaderParseError)
 		})
 
 		It("traces the UpdatedCongestionState event", func() {

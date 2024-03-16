@@ -1,13 +1,41 @@
 package qlog
 
 import (
+	"runtime/debug"
 	"time"
 
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/francoispqt/gojay"
 )
+
+// Setting of this only works when quic-go is used as a library.
+// When building a binary from this repository, the version can be set using the following go build flag:
+// -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=foobar"
+var quicGoVersion = "(devel)"
+
+func init() {
+	if quicGoVersion != "(devel)" { // variable set by ldflags
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok { // no build info available. This happens when quic-go is not used as a library.
+		return
+	}
+	for _, d := range info.Deps {
+		if d.Path == "github.com/quic-go/quic-go" {
+			quicGoVersion = d.Version
+			if d.Replace != nil {
+				if len(d.Replace.Version) > 0 {
+					quicGoVersion = d.Version
+				} else {
+					quicGoVersion += " (replaced)"
+				}
+			}
+			break
+		}
+	}
+}
 
 type topLevel struct {
 	trace trace
@@ -33,30 +61,27 @@ func (c configuration) MarshalJSONObject(enc *gojay.Encoder) {
 
 type vantagePoint struct {
 	Name string
-	Type protocol.Perspective
+	Type string
 }
 
 func (p vantagePoint) IsNil() bool { return false }
 func (p vantagePoint) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKeyOmitEmpty("name", p.Name)
-	switch p.Type {
-	case protocol.PerspectiveClient:
-		enc.StringKey("type", "client")
-	case protocol.PerspectiveServer:
-		enc.StringKey("type", "server")
-	}
+	enc.StringKeyOmitEmpty("type", p.Type)
 }
 
 type commonFields struct {
-	ODCID         logging.ConnectionID
-	GroupID       logging.ConnectionID
+	ODCID         *logging.ConnectionID
+	GroupID       *logging.ConnectionID
 	ProtocolType  string
 	ReferenceTime time.Time
 }
 
 func (f commonFields) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("ODCID", f.ODCID.String())
-	enc.StringKey("group_id", f.ODCID.String())
+	if f.ODCID != nil {
+		enc.StringKey("ODCID", f.ODCID.String())
+		enc.StringKey("group_id", f.ODCID.String())
+	}
 	enc.StringKeyOmitEmpty("protocol_type", f.ProtocolType)
 	enc.Float64Key("reference_time", float64(f.ReferenceTime.UnixNano())/1e6)
 	enc.StringKey("time_format", "relative")

@@ -56,8 +56,8 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		BufferedPacket: func(typ logging.PacketType, size logging.ByteCount) {
 			t.BufferedPacket(typ, size)
 		},
-		DroppedPacket: func(typ logging.PacketType, size logging.ByteCount, reason logging.PacketDropReason) {
-			t.DroppedPacket(typ, size, reason)
+		DroppedPacket: func(typ logging.PacketType, pn logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
+			t.DroppedPacket(typ, pn, size, reason)
 		},
 		UpdatedMetrics: func(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
 			t.UpdatedMetrics(rttStats, cwnd, bytesInFlight, packetsInFlight)
@@ -97,6 +97,9 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		},
 		ECNStateUpdated: func(state logging.ECNState, trigger logging.ECNStateTrigger) {
 			t.ECNStateUpdated(state, trigger)
+		},
+		ChoseALPN: func(protocol string) {
+			t.ChoseALPN(protocol)
 		},
 		Close: func() {
 			t.Close()

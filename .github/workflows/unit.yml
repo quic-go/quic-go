@@ -7,12 +7,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu", "windows", "macos" ]
-        go: [ "1.20.x", "1.21.x" ]
+        go: [ "1.21.x", "1.22.x" ]
     runs-on: ${{ fromJSON(vars[format('UNIT_RUNNER_{0}', matrix.os)] || format('"{0}-latest"', matrix.os)) }}
     name: Unit tests (${{ matrix.os}}, Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
       - run: go version
@@ -42,7 +42,8 @@ jobs:
           TIMESCALE_FACTOR: 20
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -race -randomize-all -randomize-suites -trace -skip-package integrationtests
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           files: coverage.txt,coverage-root.txt
           env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
+          token: ${{ secrets.CODECOV_TOKEN }}

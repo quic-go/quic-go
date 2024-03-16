@@ -4,12 +4,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.20.x", "1.21.x" ]
+        go: [ "1.21.x", "1.22.x" ]
     runs-on: ${{ fromJSON(vars['CROSS_COMPILE_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     name: "Cross Compilation (Go ${{matrix.go}})"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
       - name: Install build utils

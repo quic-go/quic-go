@@ -682,7 +682,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("says when it has data for sending", func() {
-			mockFC.EXPECT().UpdateSendWindow(gomock.Any())
+			mockFC.EXPECT().UpdateSendWindow(gomock.Any()).Return(true)
 			mockSender.EXPECT().onHasStreamData(streamID)
 			done := make(chan struct{})
 			go func() {
@@ -693,6 +693,24 @@ var _ = Describe("Send Stream", func() {
 			}()
 			waitForWrite()
 			mockSender.EXPECT().onHasStreamData(streamID)
+			str.updateSendWindow(42)
+			// make sure the Write go routine returns
+			str.closeForShutdown(nil)
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("doesn't say it has data for sending if the MAX_STREAM_DATA frame was reordered", func() {
+			mockFC.EXPECT().UpdateSendWindow(gomock.Any()).Return(false) // reordered frame
+			mockSender.EXPECT().onHasStreamData(streamID)
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := str.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
+			waitForWrite()
+			// don't expect any calls to onHasStreamData
 			str.updateSendWindow(42)
 			// make sure the Write go routine returns
 			str.closeForShutdown(nil)

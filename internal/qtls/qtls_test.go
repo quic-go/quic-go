@@ -1,5 +1,3 @@
-//go:build go1.21
-
 package qtls
 
 import (
@@ -11,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Go 1.21", func() {
+var _ = Describe("interface go crypto/tls", func() {
 	It("converts to tls.EncryptionLevel", func() {
 		Expect(ToTLSEncryptionLevel(protocol.EncryptionInitial)).To(Equal(tls.QUICEncryptionLevelInitial))
 		Expect(ToTLSEncryptionLevel(protocol.EncryptionHandshake)).To(Equal(tls.QUICEncryptionLevelHandshake))
@@ -29,14 +27,14 @@ var _ = Describe("Go 1.21", func() {
 	Context("setting up a tls.Config for the client", func() {
 		It("sets up a session cache if there's one present on the config", func() {
 			csc := tls.NewLRUClientSessionCache(1)
-			conf := &QUICConfig{TLSConfig: &tls.Config{ClientSessionCache: csc}}
+			conf := &tls.QUICConfig{TLSConfig: &tls.Config{ClientSessionCache: csc}}
 			SetupConfigForClient(conf, nil, nil)
 			Expect(conf.TLSConfig.ClientSessionCache).ToNot(BeNil())
 			Expect(conf.TLSConfig.ClientSessionCache).ToNot(Equal(csc))
 		})
 
 		It("doesn't set up a session cache if there's none present on the config", func() {
-			conf := &QUICConfig{TLSConfig: &tls.Config{}}
+			conf := &tls.QUICConfig{TLSConfig: &tls.Config{}}
 			SetupConfigForClient(conf, nil, nil)
 			Expect(conf.TLSConfig.ClientSessionCache).To(BeNil())
 		})
@@ -45,7 +43,7 @@ var _ = Describe("Go 1.21", func() {
 	Context("setting up a tls.Config for the server", func() {
 		It("sets the minimum TLS version to TLS 1.3", func() {
 			orig := &tls.Config{MinVersion: tls.VersionTLS12}
-			conf := &QUICConfig{TLSConfig: orig}
+			conf := &tls.QUICConfig{TLSConfig: orig}
 			SetupConfigForServer(conf, false, nil, nil)
 			Expect(conf.TLSConfig.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
 			// check that the original config wasn't modified

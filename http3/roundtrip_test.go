@@ -71,6 +71,21 @@ var _ = Describe("RoundTripper", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 
+		It("creates new clients with additional settings", func() {
+			testErr := errors.New("test err")
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			rt.AdditionalSettings = map[uint64]uint64{1337: 42}
+			rt.newClient = func(_ string, _ *tls.Config, opts *roundTripperOpts, conf *quic.Config, _ dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				Expect(opts.AdditionalSettings).To(HaveKeyWithValue(uint64(1337), uint64(42)))
+				return cl, nil
+			}
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(testErr))
+		})
+
 		It("uses the quic.Config, if provided", func() {
 			config := &quic.Config{HandshakeIdleTimeout: time.Millisecond}
 			var receivedConfig *quic.Config
@@ -82,6 +97,19 @@ var _ = Describe("RoundTripper", func() {
 			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("handshake error"))
 			Expect(receivedConfig.HandshakeIdleTimeout).To(Equal(config.HandshakeIdleTimeout))
+		})
+
+		It("requires quic.Config.EnableDatagram if HTTP datagrams are enabled", func() {
+			rt.QuicConfig = &quic.Config{EnableDatagrams: false}
+			rt.Dial = func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlyConnection, error) {
+				return nil, errors.New("handshake error")
+			}
+			rt.EnableDatagrams = true
+			_, err := rt.RoundTrip(req)
+			Expect(err).To(MatchError("HTTP Datagrams enabled, but QUIC Datagrams disabled"))
+			rt.QuicConfig.EnableDatagrams = true
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError("handshake error"))
 		})
 
 		It("uses the custom dialer, if provided", func() {

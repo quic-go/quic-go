@@ -140,6 +140,26 @@ var _ = Describe("HTTP tests", func() {
 		Expect(resp.Header.Get("Content-Length")).To(Equal(strconv.Itoa(len("foobar"))))
 	})
 
+	It("detects stream errors when server panics when writing response", func() {
+		respChan := make(chan struct{})
+		mux.HandleFunc("/writing_and_panicking", func(w http.ResponseWriter, r *http.Request) {
+			// no recover here as it will interfere with the handler
+			w.Write([]byte("foobar"))
+			w.(http.Flusher).Flush()
+			// wait for the client to receive the response
+			<-respChan
+			panic(http.ErrAbortHandler)
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/writing_and_panicking", port))
+		close(respChan)
+		Expect(err).ToNot(HaveOccurred())
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).To(HaveOccurred())
+		// the body will be a prefix of what's written
+		Expect(bytes.HasPrefix([]byte("foobar"), body)).To(BeTrue())
+	})
+
 	It("requests to different servers with the same udpconn", func() {
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/remoteAddr", port))
 		Expect(err).ToNot(HaveOccurred())
@@ -299,6 +319,21 @@ var _ = Describe("HTTP tests", func() {
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 	})
 
+	It("handles context cancellations", func() {
+		mux.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/cancel", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		time.AfterFunc(50*time.Millisecond, cancel)
+
+		_, err = client.Do(req)
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError(context.Canceled))
+	})
+
 	It("cancels requests", func() {
 		handlerCalled := make(chan struct{})
 		mux.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
@@ -432,55 +467,109 @@ var _ = Describe("HTTP tests", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	if go120 {
-		It("supports read deadlines", func() {
-			mux.HandleFunc("/read-deadline", func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				err := setReadDeadline(w, time.Now().Add(deadlineDelay))
-				Expect(err).ToNot(HaveOccurred())
+	It("supports read deadlines", func() {
+		mux.HandleFunc("/read-deadline", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			rc := http.NewResponseController(w)
+			Expect(rc.SetReadDeadline(time.Now().Add(deadlineDelay))).To(Succeed())
 
-				body, err := io.ReadAll(r.Body)
-				Expect(err).To(MatchError(os.ErrDeadlineExceeded))
-				Expect(body).To(ContainSubstring("aa"))
+			body, err := io.ReadAll(r.Body)
+			Expect(err).To(MatchError(os.ErrDeadlineExceeded))
+			Expect(body).To(ContainSubstring("aa"))
 
-				w.Write([]byte("ok"))
-			})
-
-			expectedEnd := time.Now().Add(deadlineDelay)
-			resp, err := client.Post(
-				fmt.Sprintf("https://localhost:%d/read-deadline", port),
-				"text/plain",
-				neverEnding('a'),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(200))
-
-			body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*deadlineDelay))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(time.Now().After(expectedEnd)).To(BeTrue())
-			Expect(string(body)).To(Equal("ok"))
+			w.Write([]byte("ok"))
 		})
 
-		It("supports write deadlines", func() {
-			mux.HandleFunc("/write-deadline", func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				err := setWriteDeadline(w, time.Now().Add(deadlineDelay))
-				Expect(err).ToNot(HaveOccurred())
+		expectedEnd := time.Now().Add(deadlineDelay)
+		resp, err := client.Post(
+			fmt.Sprintf("https://localhost:%d/read-deadline", port),
+			"text/plain",
+			neverEnding('a'),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
 
-				_, err = io.Copy(w, neverEnding('a'))
-				Expect(err).To(MatchError(os.ErrDeadlineExceeded))
-			})
+		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*deadlineDelay))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(time.Now().After(expectedEnd)).To(BeTrue())
+		Expect(string(body)).To(Equal("ok"))
+	})
 
-			expectedEnd := time.Now().Add(deadlineDelay)
+	It("supports write deadlines", func() {
+		mux.HandleFunc("/write-deadline", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			rc := http.NewResponseController(w)
+			Expect(rc.SetWriteDeadline(time.Now().Add(deadlineDelay))).To(Succeed())
 
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/write-deadline", port))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(200))
-
-			body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*deadlineDelay))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(time.Now().After(expectedEnd)).To(BeTrue())
-			Expect(string(body)).To(ContainSubstring("aa"))
+			_, err := io.Copy(w, neverEnding('a'))
+			Expect(err).To(MatchError(os.ErrDeadlineExceeded))
 		})
-	}
+
+		expectedEnd := time.Now().Add(deadlineDelay)
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/write-deadline", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+
+		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*deadlineDelay))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(time.Now().After(expectedEnd)).To(BeTrue())
+		Expect(string(body)).To(ContainSubstring("aa"))
+	})
+
+	It("sets remote address", func() {
+		mux.HandleFunc("/remote-addr", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			_, ok := r.Context().Value(http3.RemoteAddrContextKey).(net.Addr)
+			Expect(ok).To(BeTrue())
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/remote-addr", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+	})
+
+	It("sets conn context", func() {
+		type ctxKey int
+		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
+			serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
+			Expect(ok).To(BeTrue())
+			Expect(serv).To(Equal(server))
+
+			ctx = context.WithValue(ctx, ctxKey(0), "Hello")
+			ctx = context.WithValue(ctx, ctxKey(1), c)
+			return ctx
+		}
+		mux.HandleFunc("/conn-context", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			v, ok := r.Context().Value(ctxKey(0)).(string)
+			Expect(ok).To(BeTrue())
+			Expect(v).To(Equal("Hello"))
+
+			c, ok := r.Context().Value(ctxKey(1)).(quic.Connection)
+			Expect(ok).To(BeTrue())
+			Expect(c).ToNot(BeNil())
+
+			serv, ok := r.Context().Value(http3.ServerContextKey).(*http3.Server)
+			Expect(ok).To(BeTrue())
+			Expect(serv).To(Equal(server))
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/conn-context", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+	})
+
+	It("checks the server's settings", func() {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/hello", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		testErr := errors.New("test error")
+		_, err = rt.RoundTripOpt(req, http3.RoundTripOpt{CheckSettings: func(settings http3.Settings) error {
+			Expect(settings.EnableExtendedConnect).To(BeTrue())
+			Expect(settings.EnableDatagram).To(BeFalse())
+			Expect(settings.Other).To(BeEmpty())
+			return testErr
+		}})
+		Expect(err).To(MatchError(err))
+	})
 })

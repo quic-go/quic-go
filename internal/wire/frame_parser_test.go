@@ -14,7 +14,7 @@ var _ = Describe("Frame parsing", func() {
 	var parser FrameParser
 
 	BeforeEach(func() {
-		parser = NewFrameParser(true)
+		parser = *NewFrameParser(true)
 	})
 
 	It("returns nil if there's nothing more to read", func() {
@@ -315,7 +315,7 @@ var _ = Describe("Frame parsing", func() {
 	})
 
 	It("errors when DATAGRAM frames are not supported", func() {
-		parser = NewFrameParser(false)
+		parser = *NewFrameParser(false)
 		f := &DatagramFrame{Data: []byte("foobar")}
 		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())

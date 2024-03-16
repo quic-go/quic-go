@@ -46,7 +46,7 @@ var _ = Describe("Client", func() {
 			tracer *logging.ConnectionTracer,
 			tracingID uint64,
 			logger utils.Logger,
-			v protocol.VersionNumber,
+			v protocol.Version,
 		) quicConn
 	)
 
@@ -60,7 +60,7 @@ var _ = Describe("Client", func() {
 			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) *logging.ConnectionTracer {
 				return tr
 			},
-			Versions: []protocol.VersionNumber{protocol.Version1},
+			Versions: []protocol.Version{protocol.Version1},
 		}
 		Eventually(areConnsRunning).Should(BeFalse())
 		packetConn = NewMockSendConn(mockCtrl)
@@ -87,7 +87,7 @@ var _ = Describe("Client", func() {
 
 	AfterEach(func() {
 		if s, ok := cl.conn.(*connection); ok {
-			s.shutdown()
+			s.destroy(nil)
 		}
 		Eventually(areConnsRunning).Should(BeFalse())
 	})
@@ -125,7 +125,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
-				_ protocol.VersionNumber,
+				_ protocol.Version,
 			) quicConn {
 				Expect(enable0RTT).To(BeFalse())
 				conn := NewMockQUICConn(mockCtrl)
@@ -162,7 +162,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
-				_ protocol.VersionNumber,
+				_ protocol.Version,
 			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
 				conn := NewMockQUICConn(mockCtrl)
@@ -199,7 +199,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
-				_ protocol.VersionNumber,
+				_ protocol.Version,
 			) quicConn {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().run().Return(testErr)
@@ -265,9 +265,9 @@ var _ = Describe("Client", func() {
 		})
 
 		It("creates new connections with the right parameters", func() {
-			config := &Config{Versions: []protocol.VersionNumber{protocol.Version1}}
+			config := &Config{Versions: []protocol.Version{protocol.Version1}}
 			c := make(chan struct{})
-			var version protocol.VersionNumber
+			var version protocol.Version
 			var conf *Config
 			done := make(chan struct{})
 			newClientConnection = func(
@@ -284,7 +284,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
-				versionP protocol.VersionNumber,
+				versionP protocol.Version,
 			) quicConn {
 				version = versionP
 				conf = configP
@@ -327,7 +327,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
-				versionP protocol.VersionNumber,
+				versionP protocol.Version,
 			) quicConn {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
@@ -351,7 +351,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.Version1}}
+			config := &Config{Tracer: config.Tracer, Versions: []protocol.Version{protocol.Version1}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr(context.Background(), "localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())

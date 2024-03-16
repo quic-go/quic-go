@@ -2,7 +2,8 @@ package quic
 
 import (
 	"bytes"
-	"math/rand"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -23,7 +24,7 @@ var _ = Describe("Framer", func() {
 		framer           framer
 		stream1, stream2 *MockSendStreamI
 		streamGetter     *MockStreamGetter
-		version          protocol.VersionNumber
+		version          protocol.Version
 	)
 
 	BeforeEach(func() {
@@ -107,6 +108,55 @@ var _ = Describe("Framer", func() {
 			fs, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
 			Expect(fs).To(HaveLen(2))
 			Expect(length).To(Equal(ping.Length(version) + ncid.Length(version)))
+		})
+	})
+
+	Context("handling PATH_RESPONSE frames", func() {
+		It("packs a single PATH_RESPONSE per packet", func() {
+			f1 := &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
+			f2 := &wire.PathResponseFrame{Data: [8]byte{2, 3, 4, 5, 6, 7, 8, 9}}
+			cf1 := &wire.DataBlockedFrame{MaximumData: 1337}
+			cf2 := &wire.HandshakeDoneFrame{}
+			framer.QueueControlFrame(f1)
+			framer.QueueControlFrame(f2)
+			framer.QueueControlFrame(cf1)
+			framer.QueueControlFrame(cf2)
+			// the first packet should contain a single PATH_RESPONSE frame, but all the other control frames
+			Expect(framer.HasData()).To(BeTrue())
+			frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			Expect(frames).To(HaveLen(3))
+			Expect(frames[0].Frame).To(Equal(f1))
+			Expect([]wire.Frame{frames[1].Frame, frames[2].Frame}).To(ContainElement(cf1))
+			Expect([]wire.Frame{frames[1].Frame, frames[2].Frame}).To(ContainElement(cf2))
+			Expect(length).To(Equal(f1.Length(protocol.Version1) + cf1.Length(protocol.Version1) + cf2.Length(protocol.Version1)))
+			// the second packet should contain the other PATH_RESPONSE frame
+			Expect(framer.HasData()).To(BeTrue())
+			frames, length = framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f2))
+			Expect(length).To(Equal(f2.Length(protocol.Version1)))
+			Expect(framer.HasData()).To(BeFalse())
+		})
+
+		It("limits the number of queued PATH_RESPONSE frames", func() {
+			var pathResponses []*wire.PathResponseFrame
+			for i := 0; i < 2*maxPathResponses; i++ {
+				var f wire.PathResponseFrame
+				rand.Read(f.Data[:])
+				pathResponses = append(pathResponses, &f)
+				framer.QueueControlFrame(&f)
+			}
+			for i := 0; i < maxPathResponses; i++ {
+				Expect(framer.HasData()).To(BeTrue())
+				frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+				Expect(frames).To(HaveLen(1))
+				Expect(frames[0].Frame).To(Equal(pathResponses[i]))
+				Expect(length).To(Equal(pathResponses[i].Length(protocol.Version1)))
+			}
+			Expect(framer.HasData()).To(BeFalse())
+			frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			Expect(frames).To(BeEmpty())
+			Expect(length).To(BeZero())
 		})
 	})
 
@@ -296,7 +346,7 @@ var _ = Describe("Framer", func() {
 		It("pops maximum size STREAM frames", func() {
 			for i := protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id1,
 						DataLenPresent: true,
@@ -318,7 +368,7 @@ var _ = Describe("Framer", func() {
 			for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 				streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
-				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
 						DataLenPresent: true,
@@ -326,7 +376,7 @@ var _ = Describe("Framer", func() {
 					f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, v))
 					return ackhandler.StreamFrame{Frame: f}, true, false
 				})
-				stream2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+				stream2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
 						DataLenPresent: true,
