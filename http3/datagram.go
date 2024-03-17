@@ -36,13 +36,12 @@ func newDatagrammerMap(conn quic.Connection, logger utils.Logger) *datagrammerMa
 	return m
 }
 
-func (m *datagrammerMap) newStreamAssociatedDatagrammer(conn quic.Connection, str quic.Stream, settingsHandler PeerSettingsHandler) *streamAssociatedDatagrammer {
+func (m *datagrammerMap) newStreamAssociatedDatagrammer(conn quic.Connection, str quic.Stream) *streamAssociatedDatagrammer {
 	d := &streamAssociatedDatagrammer{
-		str:             str,
-		conn:            conn,
-		rcvd:            make(chan struct{}),
-		settingsHandler: settingsHandler,
-		ctx:             context.Background(),
+		str:  str,
+		conn: conn,
+		rcvd: make(chan struct{}),
+		ctx:  context.Background(),
 	}
 	m.mutex.Lock()
 	m.datagrammers[str.StreamID()] = d
@@ -106,17 +105,11 @@ type streamAssociatedDatagrammer struct {
 	rcvQueue [][]byte
 	rcvd     chan struct{}
 
-	settingsHandler PeerSettingsHandler
-
 	ctx context.Context
 }
 
 func (d *streamAssociatedDatagrammer) SendMessage(data []byte) error {
-	settings := d.settingsHandler.GetPeerSettings()
-	if settings == nil {
-		return ErrDatagramNegotiationNotFinished
-	}
-	if !settings.Datagram {
+	if !d.conn.ConnectionState().SupportsDatagrams {
 		return errors.New("peer doesn't support datagram")
 	}
 
@@ -127,11 +120,7 @@ func (d *streamAssociatedDatagrammer) SendMessage(data []byte) error {
 }
 
 func (d *streamAssociatedDatagrammer) ReceiveMessage(ctx context.Context) ([]byte, error) {
-	settings := d.settingsHandler.GetPeerSettings()
-	if settings == nil {
-		return nil, ErrDatagramNegotiationNotFinished
-	}
-	if !settings.Datagram {
+	if !d.conn.ConnectionState().SupportsDatagrams {
 		return nil, errors.New("peer doesn't support datagram")
 	}
 	for {

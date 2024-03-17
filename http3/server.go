@@ -460,16 +460,15 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	str.Write(b)
 
 	makeResponseWriter := newResponseWriter
-	settingsHandler := &peerSettingsHandler{}
 	if s.EnableDatagrams {
 		datagrammerMap := newDatagrammerMap(conn, s.logger)
 		makeResponseWriter = func(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
 			r := newResponseWriter(str, conn, logger)
-			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(conn, str, settingsHandler)
+			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(conn, str)
 			return r
 		}
 	}
-	go s.handleUnidirectionalStreams(conn, settingsHandler)
+	go s.handleUnidirectionalStreams(conn)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -508,7 +507,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(conn quic.Connection, settingsHandler PeerSettingsHandler) {
+func (s *Server) handleUnidirectionalStreams(conn quic.Connection) {
 	var rcvdControlStream atomic.Bool
 
 	for {
@@ -565,9 +564,6 @@ func (s *Server) handleUnidirectionalStreams(conn quic.Connection, settingsHandl
 			if sf.Datagram && s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 				return
-			}
-			if settingsHandler != nil {
-				settingsHandler.HandleSettings(sf)
 			}
 		}(str)
 	}
