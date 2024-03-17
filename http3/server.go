@@ -442,7 +442,8 @@ func (s *Server) removeListener(l *QUICEarlyListener) {
 	s.generateAltSvcHeader()
 }
 
-func (s *Server) handleConn(conn quic.Connection) error {
+func (s *Server) handleConn(qc quic.Connection) error {
+	conn := &connection{Connection: qc, logger: s.logger}
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
@@ -459,15 +460,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}).Append(b)
 	str.Write(b)
 
-	makeResponseWriter := newResponseWriter
-	if s.EnableDatagrams {
-		datagrammerMap := newDatagrammerMap(conn, s.logger)
-		makeResponseWriter = func(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
-			r := newResponseWriter(str, conn, logger)
-			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(str)
-			return r
-		}
-	}
 	go s.handleUnidirectionalStreams(conn)
 
 	// Process all requests immediately.
@@ -482,7 +474,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 		go func() {
-			rerr := s.handleRequest(conn, str, decoder, makeResponseWriter, func() {
+			rerr := s.handleRequest(conn, str, decoder, func() {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			})
 			if rerr.err == errHijacked {
@@ -576,7 +568,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, makeResponseWriter func(quic.Stream, quic.Connection, utils.Logger) *responseWriter, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) { return s.StreamHijacker(ft, conn, str, e) }
@@ -617,9 +609,9 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	// See section 4.1.2 of RFC 9114.
 	var httpStr Stream
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
-		httpStr = newLengthLimitedStream(newStream(str, onFrameError), req.ContentLength)
+		httpStr = newLengthLimitedStream(newStream(conn, str, onFrameError), req.ContentLength)
 	} else {
-		httpStr = newStream(str, onFrameError)
+		httpStr = newStream(conn, str, onFrameError)
 	}
 	body := newRequestBody(httpStr)
 	req.Body = body
@@ -641,7 +633,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		}
 	}
 	req = req.WithContext(ctx)
-	r := makeResponseWriter(str, conn, s.logger)
+	r := newResponseWriter(str, conn, s.logger)
 	if req.Method == http.MethodHead {
 		r.isHead = true
 	}

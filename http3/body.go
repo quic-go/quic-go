@@ -29,10 +29,6 @@ type StreamCreator interface {
 	ConnectionState() quic.ConnectionState
 }
 
-type HTTPDatagrammer interface {
-	HTTPDatagrammer() (Datagrammer, bool)
-}
-
 var _ StreamCreator = quic.Connection(nil)
 
 // A Hijacker allows hijacking of the stream creating part of a quic.Session from a http.Response.Body.
@@ -43,7 +39,7 @@ type Hijacker interface {
 
 // The body of a http.Request or http.Response.
 type body struct {
-	str quic.Stream
+	str Stream
 
 	wasHijacked bool // set when HTTPStream is called
 }
@@ -85,8 +81,6 @@ type hijackableBody struct {
 	// either when Read() errors, or when Close() is called.
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
-
-	datagrammers *datagrammerMap
 }
 
 var (
@@ -139,14 +133,4 @@ func (r *hijackableBody) Close() error {
 
 func (r *hijackableBody) HTTPStream() Stream {
 	return r.str
-}
-
-func (r *hijackableBody) Datagrammer() (Datagrammer, bool) {
-	if r.datagrammers == nil {
-		return nil, false
-	}
-
-	r.wasHijacked = true
-
-	return r.datagrammers.newStreamAssociatedDatagrammer(r.str), true
 }

@@ -9,12 +9,23 @@ import (
 
 // A Stream is a HTTP/3 stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
-type Stream quic.Stream
+type Stream interface {
+	quic.Stream
+
+	// Datagrammer returns the Datagrammer implementation to send and receive
+	// the datagram payloads according RFC 9297.
+	//
+	// If the underline connection does not enabled datagram or the peer
+	// does not support, this function will return (nil, false).
+	Datagrammer() (Datagrammer, bool)
+}
 
 // The stream conforms to the quic.Stream interface, but instead of writing to and reading directly
 // from the QUIC stream, it writes to and reads from the HTTP stream.
 type stream struct {
 	quic.Stream
+
+	conn *connection
 
 	buf []byte
 
@@ -24,9 +35,10 @@ type stream struct {
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, onFrameError func()) *stream {
+func newStream(conn *connection, str quic.Stream, onFrameError func()) *stream {
 	return &stream{
 		Stream:       str,
+		conn:         conn,
 		onFrameError: onFrameError,
 		buf:          make([]byte, 0, 16),
 	}
@@ -78,6 +90,11 @@ func (s *stream) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	return s.Stream.Write(b)
+}
+
+func (s *stream) Datagrammer() (Datagrammer, bool) {
+	d := s.conn.Datagrammer(s.Stream)
+	return d, d != nil
 }
 
 var errTooMuchData = errors.New("peer sent too much data")
