@@ -70,7 +70,7 @@ type client struct {
 
 	logger utils.Logger
 
-	datagrammers *datagrammerMap
+	dconn *connection
 }
 
 var _ roundTripCloser = &client{}
@@ -78,11 +78,8 @@ var _ roundTripCloser = &client{}
 func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
 	if conf == nil {
 		conf = defaultQuicConfig.Clone()
-		conf.EnableDatagrams = opts.EnableDatagram
 	}
-	if opts.EnableDatagram && !conf.EnableDatagrams {
-		return nil, errors.New("HTTP Datagrams enabled, but QUIC Datagrams disabled")
-	}
+	conf.EnableDatagrams = opts.EnableDatagram
 	if len(conf.Versions) == 0 {
 		conf = conf.Clone()
 		conf.Versions = []quic.Version{protocol.SupportedVersions[0]}
@@ -136,6 +133,8 @@ func (c *client) dial(ctx context.Context) error {
 		return err
 	}
 	c.conn.Store(&conn)
+
+	c.dconn = &connection{Connection: *c.conn.Load(), logger: c.logger}
 
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
@@ -255,9 +254,6 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 			if c.opts.EnableDatagram && !conn.ConnectionState().SupportsDatagrams {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			}
-			if c.opts.EnableDatagram {
-				c.datagrammers = newDatagrammerMap(conn, c.logger)
-			}
 		}(str)
 	}
 }
@@ -302,6 +298,10 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	// At this point, c.conn is guaranteed to be set.
 	conn := *c.conn.Load()
 
+	if req.Method == http.MethodConnect {
+		opt.DontCloseRequestStream = true
+	}
+
 	// Immediately send out this request, if this is a 0-RTT request.
 	if req.Method == MethodGet0RTT {
 		req.Method = http.MethodGet
@@ -314,23 +314,16 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		}
 	}
 
-	if opt.CheckSettings != nil || c.opts.EnableDatagram {
+	if opt.CheckSettings != nil {
 		// wait for the server's SETTINGS frame to arrive
 		select {
 		case <-c.receivedSettings:
 		case <-conn.Context().Done():
 			return nil, context.Cause(conn.Context())
 		}
-	}
-
-	if opt.CheckSettings != nil {
 		if err := opt.CheckSettings(*c.settings); err != nil {
 			return nil, err
 		}
-	}
-
-	if c.opts.EnableDatagram {
-		opt.DontCloseRequestStream = true
 	}
 
 	str, err := conn.OpenStreamSync(req.Context())
@@ -357,7 +350,7 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	if opt.DontCloseRequestStream {
 		doneChan = nil
 	}
-	rsp, rerr := c.doRequest(req, conn, str, opt, doneChan)
+	rsp, rerr := c.doRequest(req, c.dconn, str, opt, doneChan)
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		<-done
@@ -419,7 +412,7 @@ func (c *client) sendRequestBody(str Stream, body io.ReadCloser, contentLength i
 	return err
 }
 
-func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str quic.Stream, opt RoundTripOpt, reqDone chan<- struct{}) (*http.Response, requestError) {
+func (c *client) doRequest(req *http.Request, conn *connection, str quic.Stream, opt RoundTripOpt, reqDone chan<- struct{}) (*http.Response, requestError) {
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
@@ -432,7 +425,7 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 		str.Close()
 	}
 
-	hstr := newStream(str, func() { conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "") })
+	hstr := newStream(conn, str, func() { conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "") })
 	if req.Body != nil {
 		// send the request body asynchronously
 		go func() {
@@ -488,8 +481,6 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 		httpStr = hstr
 	}
 	respBody := newResponseBody(httpStr, conn, reqDone)
-
-	respBody.datagrammers = c.datagrammers
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]

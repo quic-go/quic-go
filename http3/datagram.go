@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 
 	"github.com/quic-go/quic-go"
@@ -83,7 +82,6 @@ func (m *datagrammerMap) runReceiving() {
 
 // Datagrammer is an interface that can send and receive HTTP datagrams
 type Datagrammer interface {
-	io.Closer
 	// SendMessage sends an HTTP Datagram associated with an HTTP request.
 	// It must only be called while the send side of the stream is still open, i.e.
 	// * on the client side: before calling Close on the request body
@@ -157,8 +155,4 @@ func (d *streamAssociatedDatagrammer) handleDatagram(data []byte) {
 		}
 	}
 	d.mutex.Unlock()
-}
-
-func (d *streamAssociatedDatagrammer) Close() error {
-	return d.str.Close()
 }
