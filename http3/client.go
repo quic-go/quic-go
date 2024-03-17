@@ -69,6 +69,8 @@ type client struct {
 	conn     atomic.Pointer[quic.EarlyConnection]
 
 	logger utils.Logger
+
+	datagrammers *datagrammerMap
 }
 
 var _ roundTripCloser = &client{}
@@ -253,6 +255,9 @@ func (c *client) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 			if c.opts.EnableDatagram && !conn.ConnectionState().SupportsDatagrams {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			}
+			if c.opts.EnableDatagram {
+				c.datagrammers = newDatagrammerMap(conn, c.logger)
+			}
 		}(str)
 	}
 }
@@ -309,16 +314,23 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		}
 	}
 
-	if opt.CheckSettings != nil {
+	if opt.CheckSettings != nil || c.opts.EnableDatagram {
 		// wait for the server's SETTINGS frame to arrive
 		select {
 		case <-c.receivedSettings:
 		case <-conn.Context().Done():
 			return nil, context.Cause(conn.Context())
 		}
+	}
+
+	if opt.CheckSettings != nil {
 		if err := opt.CheckSettings(*c.settings); err != nil {
 			return nil, err
 		}
+	}
+
+	if c.opts.EnableDatagram {
+		opt.DontCloseRequestStream = true
 	}
 
 	str, err := conn.OpenStreamSync(req.Context())
@@ -476,6 +488,8 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 		httpStr = hstr
 	}
 	respBody := newResponseBody(httpStr, conn, reqDone)
+
+	respBody.datagrammers = c.datagrammers
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
