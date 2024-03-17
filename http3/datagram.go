@@ -42,6 +42,7 @@ func (m *datagrammerMap) newStreamAssociatedDatagrammer(conn quic.Connection, st
 		conn:            conn,
 		rcvd:            make(chan struct{}),
 		settingsHandler: settingsHandler,
+		ctx:             context.Background(),
 	}
 	m.mutex.Lock()
 	m.datagrammers[str.StreamID()] = d
