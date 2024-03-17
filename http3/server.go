@@ -464,7 +464,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		datagrammerMap := newDatagrammerMap(conn, s.logger)
 		makeResponseWriter = func(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
 			r := newResponseWriter(str, conn, logger)
-			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(conn, str)
+			r.datagrammer = datagrammerMap.newStreamAssociatedDatagrammer(str)
 			return r
 		}
 	}

@@ -36,10 +36,10 @@ func newDatagrammerMap(conn quic.Connection, logger utils.Logger) *datagrammerMa
 	return m
 }
 
-func (m *datagrammerMap) newStreamAssociatedDatagrammer(conn quic.Connection, str quic.Stream) *streamAssociatedDatagrammer {
+func (m *datagrammerMap) newStreamAssociatedDatagrammer(str quic.Stream) *streamAssociatedDatagrammer {
 	d := &streamAssociatedDatagrammer{
 		str:  str,
-		conn: conn,
+		conn: m.conn,
 		rcvd: make(chan struct{}),
 		ctx:  context.Background(),
 	}
