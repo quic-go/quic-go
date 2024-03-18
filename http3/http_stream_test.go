@@ -34,7 +34,7 @@ var _ = Describe("Stream", func() {
 			qstr = mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			str = newStream(qstr, errorCb)
+			str = newStream(nil, qstr, errorCb)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -128,7 +128,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil)
+			str := newStream(nil, qstr, nil)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -163,7 +163,7 @@ var _ = Describe("length-limited streams", func() {
 		qstr = mockquic.NewMockStream(mockCtrl)
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		str = newStream(qstr, func() { Fail("didn't expect error callback to be called") })
+		str = newStream(nil, qstr, func() { Fail("didn't expect error callback to be called") })
 	})
 
 	It("reads all frames", func() {
