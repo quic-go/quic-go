@@ -21,9 +21,19 @@ type framer interface {
 	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount)
 
 	Handle0RTTRejection() error
+
+	// QueuedTooManyControlFrames says if the control frame queue exceeded its maximum queue length.
+	// This is a hack.
+	// It is easier to implement than propagating an error return value in QueueControlFrame.
+	// The correct solution would be to queue frames with their respective structs.
+	// See https://github.com/quic-go/quic-go/issues/4271 for the queueing of stream-related control frames.
+	QueuedTooManyControlFrames() bool
 }
 
-const maxPathResponses = 256
+const (
+	maxPathResponses = 256
+	maxControlFrames = 16 << 10
+)
 
 type framerI struct {
 	mutex sync.Mutex
@@ -33,9 +43,10 @@ type framerI struct {
 	activeStreams map[protocol.StreamID]struct{}
 	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
 
-	controlFrameMutex sync.Mutex
-	controlFrames     []wire.Frame
-	pathResponses     []*wire.PathResponseFrame
+	controlFrameMutex          sync.Mutex
+	controlFrames              []wire.Frame
+	pathResponses              []*wire.PathResponseFrame
+	queuedTooManyControlFrames bool
 }
 
 var _ framer = &framerI{}
@@ -73,6 +84,11 @@ func (f *framerI) QueueControlFrame(frame wire.Frame) {
 		f.pathResponses = append(f.pathResponses, pr)
 		return
 	}
+	// This is a hack.
+	if len(f.controlFrames) >= maxControlFrames {
+		f.queuedTooManyControlFrames = true
+		return
+	}
 	f.controlFrames = append(f.controlFrames, frame)
 }
 
@@ -103,6 +119,10 @@ func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
 	return frames, length
+}
+
+func (f *framerI) QueuedTooManyControlFrames() bool {
+	return f.queuedTooManyControlFrames
 }
 
 func (f *framerI) AddActiveStream(id protocol.StreamID) {
