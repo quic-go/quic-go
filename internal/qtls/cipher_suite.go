@@ -41,7 +41,10 @@ func SetCipherSuite(id uint16) (reset func()) {
 	// NO_CRYPTO_TAG
 	// based on https://pkg.go.dev/crypto/tls#pkg-constants 0x0000 is not used for any other cipher suite
 	case 0x0000:
-		// TODOME
+		// NO_CRYPTO_TAG
+		// omit cryptographic operations for prove of concept
+		// this case will be used later once the crypto
+		// omission is implemented as an *option*
 
 	default:
 		panic(fmt.Sprintf("unexpected cipher suite: %d", id))

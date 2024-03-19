@@ -158,7 +158,12 @@ func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
 
 	// NO_CRYPTO_TAG
 	if crypto_turnoff.CRYPTO_TURNED_OFF {
-		hdr.Length -= 16 //TODOME comes from sealer.Overhead() in packet_packer.go (line 900)
+		// omit cryptographic operations for prove of concept
+		// adapting the header length since no crypto overhead
+		// is present
+		// see: sealer.Overhead() in packet_packer.go (function starting at line 900)
+		// TODO is this always 16?
+		hdr.Length -= 16
 	}
 
 	if protocol.ByteCount(len(data)) < hdr.ParsedLen()+hdr.Length {

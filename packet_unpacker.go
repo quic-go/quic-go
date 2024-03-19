@@ -165,7 +165,9 @@ func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (int
 	hdrLen := 1 /* first header byte */ + u.shortHdrConnIDLen
 
 	// NO_CRYPTO_TAG
-	if len(data) < hdrLen+4 { //+16 { // TODOME remove 16 bc of decryption overhead (?)
+	// here the offset for checking if a packet is too small
+	// is different since no crypto overhead is in the data
+	if len(data) < hdrLen+4 { //+16 {
 		return 0, 0, 0, 0, fmt.Errorf("packet too small, expected at least 20 bytes after the header, got %d", len(data)-hdrLen)
 	}
 
