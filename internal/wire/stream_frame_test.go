@@ -222,7 +222,7 @@ var _ = Describe("STREAM frame", func() {
 				StreamID: 0x1337,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + 6))
+			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337) + 6))
 		})
 
 		It("has the right length for a frame with offset", func() {
@@ -231,7 +231,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x42,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x42) + 6))
+			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x42) + 6))
 		})
 
 		It("has the right length for a frame with data length", func() {
@@ -241,7 +241,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + quicvarint.Len(6) + 6))
+			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + quicvarint.Len(6) + 6))
 		})
 	})
 

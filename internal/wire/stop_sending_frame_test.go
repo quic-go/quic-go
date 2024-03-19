@@ -57,7 +57,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 				StreamID:  0xdeadbeef,
 				ErrorCode: 0x1234567,
 			}
-			Expect(frame.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0xdeadbeef) + quicvarint.Len(0x1234567)))
+			Expect(frame.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0xdeadbeef) + quicvarint.Len(0x1234567)))
 		})
 	})
 })

@@ -42,7 +42,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 				StreamID:          0x1337,
 				MaximumStreamData: 0xdeadbeef,
 			}
-			Expect(f.Length(0)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0xdeadbeef)))
+			Expect(f.Length(0)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337) + quicvarint.Len(0xdeadbeef)))
 		})
 
 		It("writes a sample frame", func() {
