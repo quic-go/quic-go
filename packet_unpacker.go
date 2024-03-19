@@ -163,13 +163,17 @@ func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpe
 
 func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (int, protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, error) {
 	hdrLen := 1 /* first header byte */ + u.shortHdrConnIDLen
-	if len(data) < hdrLen+4+16 {
+
+	// NO_CRYPTO_TAG
+	if len(data) < hdrLen+4 { //+16 { // TODOME remove 16 bc of decryption overhead (?)
 		return 0, 0, 0, 0, fmt.Errorf("packet too small, expected at least 20 bytes after the header, got %d", len(data)-hdrLen)
 	}
+
 	origPNBytes := make([]byte, 4)
 	copy(origPNBytes, data[hdrLen:hdrLen+4])
 	// 2. decrypt the header, assuming a 4 byte packet number
 	hd.DecryptHeader(
+		// here the (in case of no crypto) wrong offsed does not matter since DecryptHeader will not have an effect
 		data[hdrLen+4:hdrLen+4+16],
 		&data[0],
 		data[hdrLen:hdrLen+4],

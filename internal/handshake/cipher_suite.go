@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
+	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -89,6 +90,12 @@ func (f *xorNonceAEAD) Overhead() int         { return f.aead.Overhead() }
 func (f *xorNonceAEAD) explicitNonceLen() int { return 0 }
 
 func (f *xorNonceAEAD) Seal(out, nonce, plaintext, additionalData []byte) []byte {
+
+	// NO_CRYPTO_TAG
+	if crypto_turnoff.CRYPTO_TURNED_OFF {
+		return plaintext
+	}
+
 	for i, b := range nonce {
 		f.nonceMask[4+i] ^= b
 	}
@@ -101,6 +108,12 @@ func (f *xorNonceAEAD) Seal(out, nonce, plaintext, additionalData []byte) []byte
 }
 
 func (f *xorNonceAEAD) Open(out, nonce, ciphertext, additionalData []byte) ([]byte, error) {
+
+	// NO_CRYPTO_TAG
+	if crypto_turnoff.CRYPTO_TURNED_OFF {
+		return ciphertext, nil
+	}
+
 	for i, b := range nonce {
 		f.nonceMask[4+i] ^= b
 	}
