@@ -1,5 +1,7 @@
 package protocol
 
+import "github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
+
 // A PacketNumber in QUIC
 type PacketNumber int64
 
@@ -27,6 +29,11 @@ func DecodePacketNumber(
 	lastPacketNumber PacketNumber,
 	wirePacketNumber PacketNumber,
 ) PacketNumber {
+
+	if crypto_turnoff.CRYPTO_TURNED_OFF {
+		return wirePacketNumber
+	}
+
 	var epochDelta PacketNumber
 	switch packetNumberLength {
 	case PacketNumberLen1:

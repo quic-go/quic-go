@@ -31,6 +31,15 @@ func getCipherSuite(id uint16) *cipherSuite {
 		return &cipherSuite{ID: tls.TLS_CHACHA20_POLY1305_SHA256, Hash: crypto.SHA256, KeyLen: 32, AEAD: aeadChaCha20Poly1305}
 	case tls.TLS_AES_256_GCM_SHA384:
 		return &cipherSuite{ID: tls.TLS_AES_256_GCM_SHA384, Hash: crypto.SHA384, KeyLen: 32, AEAD: aeadAESGCMTLS13}
+
+	// NO_CRYPTO_TAG
+	// based on https://pkg.go.dev/crypto/tls#pkg-constants 0x0000 is not used for any other cipher suite
+	case 0x0000:
+		// everything except ID is not used and thus arbitrary
+		return &cipherSuite{ID: 0x0000, Hash: 0, KeyLen: 0, AEAD: func(key, nonceMask []byte) *xorNonceAEAD {
+			return nil
+		}}
+
 	default:
 		panic(fmt.Sprintf("unknown cypher suite: %d", id))
 	}

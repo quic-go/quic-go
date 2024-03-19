@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/exp/rand"
 
+	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/handshake"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/protocol"
@@ -959,6 +960,12 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 }
 
 func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.PacketNumber, payloadOffset, pnLen protocol.ByteCount) []byte {
+
+	// NO_CRYPTO_TAG
+	if crypto_turnoff.CRYPTO_TURNED_OFF {
+		return raw
+	}
+
 	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], pn, raw[:payloadOffset])
 	raw = raw[:len(raw)+sealer.Overhead()]
 	// apply header protection

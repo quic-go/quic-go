@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/protocol"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/qerr"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/utils"
@@ -154,6 +155,12 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite *cipherSuite) 
 		a.invalidPacketLimit = protocol.InvalidPacketLimitAES
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
 		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha
+
+	// NO_CRYPTO_TAG
+	// based on https://pkg.go.dev/crypto/tls#pkg-constants 0x0000 is not used for any other cipher suite
+	case 0x0000:
+		print("no AEAD parameters need to be set for 0x0000\n")
+
 	default:
 		panic(fmt.Sprintf("unknown cipher suite %d", suite.ID))
 	}
@@ -164,6 +171,12 @@ func (a *updatableAEAD) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNL
 }
 
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+
+	// NO_CRYPTO_TAG
+	if crypto_turnoff.CRYPTO_TURNED_OFF {
+		return src, nil
+	}
+
 	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
 	if err == ErrDecryptionFailed {
 		a.invalidPacketCount++

@@ -3,6 +3,7 @@ package handshake
 import (
 	"encoding/binary"
 
+	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/internal/protocol"
 )
 
@@ -75,6 +76,12 @@ func (o *longHeaderOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wire
 }
 
 func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
+
+	// NO_CRYPTO_TAG
+	if crypto_turnoff.CRYPTO_TURNED_OFF {
+		return src, nil
+	}
+
 	binary.BigEndian.PutUint64(o.nonceBuf[:], uint64(pn))
 	dec, err := o.aead.Open(dst, o.nonceBuf[:], src, ad)
 	if err == nil {

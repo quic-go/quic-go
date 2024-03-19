@@ -50,25 +50,25 @@ func echoServer() error {
 		return err
 	}
 
-	// Accept the first stream opened by the client
-	stream, err := conn.AcceptStream(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	defer stream.Close()
+	// // Accept the first stream opened by the client
+	// stream, err := conn.AcceptStream(context.Background())
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer stream.Close()
 
-	// TODO: AcceptStream seems to not return the stream with the same priority?
-	// fmt.Printf("Prio stream one (serverside): %d\n", stream.Priority())
+	// // TODO: AcceptStream seems to not return the stream with the same priority?
+	// // fmt.Printf("Prio stream one (serverside): %d\n", stream.Priority())
 
-	// Handle the first stream opened by the client
-	// in a separate goroutine
-	go func(stream quic.Stream) {
-		// Echo through the loggingWriter
-		_, err = io.Copy(loggingWriter{stream}, stream)
-		if err != nil {
-			panic(err)
-		}
-	}(stream)
+	// // Handle the first stream opened by the client
+	// // in a separate goroutine
+	// go func(stream quic.Stream) {
+	// 	// Echo through the loggingWriter
+	// 	_, err = io.Copy(loggingWriter{stream}, stream)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// }(stream)
 
 	// Accept the second stream opened by the client
 	stream2, err2 := conn.AcceptStream(context.Background())
@@ -110,11 +110,11 @@ func clientMain() error {
 	// fmt.Printf("Prio of stream one (clientside): %d\n", stream_high_prio.Priority())
 
 	// Open a new stream with low priority
-	stream_low_prio, err := conn.OpenStreamSyncWithPriority(context.Background(), quic.LowPriority)
-	if err != nil {
-		return err
-	}
-	defer stream_low_prio.Close()
+	// stream_low_prio, err := conn.OpenStreamSyncWithPriority(context.Background(), quic.LowPriority)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer stream_low_prio.Close()
 	// fmt.Printf("Prio of stream two (clientside): %d\n", stream_low_prio.Priority())
 
 	// Send three messages with high priority
@@ -135,23 +135,23 @@ func clientMain() error {
 
 	}
 
-	// Send three messages with low priority
-	for i := 0; i < 3; i++ {
+	// // Send three messages with low priority
+	// for i := 0; i < 3; i++ {
 
-		fmt.Printf("	>>Client: Sending with low prio '%s%d'\n", message, i+3)
-		_, err = stream_low_prio.Write([]byte(message + fmt.Sprintf("%d", i+3)))
-		if err != nil {
-			return err
-		}
+	// 	fmt.Printf("	>>Client: Sending with low prio '%s%d'\n", message, i+3)
+	// 	_, err = stream_low_prio.Write([]byte(message + fmt.Sprintf("%d", i+3)))
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		buf_low := make([]byte, len(message)+1)
-		_, err = io.ReadFull(stream_low_prio, buf_low)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("	>>Client: Got with low prio '%s'\n\n", buf_low)
+	// 	buf_low := make([]byte, len(message)+1)
+	// 	_, err = io.ReadFull(stream_low_prio, buf_low)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	fmt.Printf("	>>Client: Got with low prio '%s'\n\n", buf_low)
 
-	}
+	// }
 
 	return nil
 }
