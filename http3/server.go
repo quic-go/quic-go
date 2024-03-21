@@ -715,13 +715,13 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 var ErrNoAltSvcPort = errors.New("no port can be announced, specify it explicitly using Server.Port or Server.Addr")
 
 // SetQuicHeaders can be used to set the proper headers that announce that this server supports HTTP/3.
-// The values set by default advertise all of the ports the server is listening on, but can be
-// changed to a specific port by setting Server.Port before launching the serverr.
+// The values set by default advertise all the ports the server is listening on, but can be
+// changed to a specific port by setting Server.Port before launching the server.
 // If no listener's Addr().String() returns an address with a valid port, Server.Addr will be used
 // to extract the port, if specified.
 // For example, a server launched using ListenAndServe on an address with port 443 would set:
 //
-//	Alt-Svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+//	Alt-Svc: h3=":443"; ma=2592000
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -729,8 +729,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	if s.altSvcHeader == "" {
 		return ErrNoAltSvcPort
 	}
-	// use the map directly to avoid constant canonicalization
-	// since the key is already canonicalized
+	// use the map directly to avoid constant canonicalization since the key is already canonicalized
 	hdr["Alt-Svc"] = append(hdr["Alt-Svc"], s.altSvcHeader)
 	return nil
 }
