@@ -21,9 +21,14 @@ import (
 	"github.com/quic-go/qpack"
 )
 
-// MethodGet0RTT allows a GET request to be sent using 0-RTT.
-// Note that 0-RTT data doesn't provide replay protection.
-const MethodGet0RTT = "GET_0RTT"
+const (
+	// MethodGet0RTT allows a GET request to be sent using 0-RTT.
+	// Note that 0-RTT doesn't provide replay protection and should only be used for idempotent requests.
+	MethodGet0RTT = "GET_0RTT"
+	// MethodHead0RTT allows a HEAD request to be sent using 0-RTT.
+	// Note that 0-RTT doesn't provide replay protection and should only be used for idempotent requests.
+	MethodHead0RTT = "HEAD_0RTT"
+)
 
 const (
 	defaultUserAgent              = "quic-go HTTP/3"
@@ -298,9 +303,12 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	conn := *c.conn.Load()
 
 	// Immediately send out this request, if this is a 0-RTT request.
-	if req.Method == MethodGet0RTT {
+	switch req.Method {
+	case MethodGet0RTT:
 		req.Method = http.MethodGet
-	} else {
+	case MethodHead0RTT:
+		req.Method = http.MethodHead
+	default:
 		// wait for the handshake to complete
 		select {
 		case <-conn.HandshakeComplete():
