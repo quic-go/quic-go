@@ -807,22 +807,27 @@ var _ = Describe("Client", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 
-		It("performs a 0-RTT request", func() {
-			testErr := errors.New("stream open error")
-			req.Method = MethodGet0RTT
-			// don't EXPECT any calls to HandshakeComplete()
-			conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
-			buf := &bytes.Buffer{}
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str.EXPECT().Close()
-			str.EXPECT().CancelWrite(gomock.Any())
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
-				return 0, testErr
-			})
-			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
-			Expect(err).To(MatchError(testErr))
-			Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", "GET"))
-		})
+		DescribeTable(
+			"performs a 0-RTT request",
+			func(method, serialized string) {
+				testErr := errors.New("stream open error")
+				req.Method = method
+				// don't EXPECT any calls to HandshakeComplete()
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				buf := &bytes.Buffer{}
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+				str.EXPECT().Close()
+				str.EXPECT().CancelWrite(gomock.Any())
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+					return 0, testErr
+				})
+				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				Expect(err).To(MatchError(testErr))
+				Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", serialized))
+			},
+			Entry("GET", MethodGet0RTT, http.MethodGet),
+			Entry("HEAD", MethodHead0RTT, http.MethodHead),
+		)
 
 		It("returns a response", func() {
 			rspBuf := bytes.NewBuffer(getResponse(418))
