@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/crypto/hkdf"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -114,7 +115,7 @@ func (a *updatableAEAD) startKeyDropTimer(now time.Time) {
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
-	return hkdfExpandLabel(hash, ts, []byte{}, "quic ku", hash.Size())
+	return hkdf.ExpandLabel(hash, ts, []byte{}, "quic ku", hash.Size())
 }
 
 // SetReadKey sets the read key.
