@@ -32,13 +32,17 @@ var _ tls.ClientSessionCache = &clientSessionCache{}
 
 func (c *clientSessionCache) Get(sessionKey string) (*tls.ClientSessionState, bool) {
 	session, ok := c.cache.Get(sessionKey)
-	c.gets <- sessionKey
+	if c.gets != nil {
+		c.gets <- sessionKey
+	}
 	return session, ok
 }
 
 func (c *clientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
 	c.cache.Put(sessionKey, cs)
-	c.puts <- sessionKey
+	if c.puts != nil {
+		c.puts <- sessionKey
+	}
 }
 
 var _ = Describe("TLS session resumption", func() {
