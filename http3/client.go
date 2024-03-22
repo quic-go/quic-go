@@ -305,8 +305,14 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
+		// don't modify the original request
+		reqCopy := *req
+		req = &reqCopy
 		req.Method = http.MethodGet
 	case MethodHead0RTT:
+		// don't modify the original request
+		reqCopy := *req
+		req = &reqCopy
 		req.Method = http.MethodHead
 	default:
 		// wait for the handshake to complete
