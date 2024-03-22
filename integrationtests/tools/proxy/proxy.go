@@ -1,7 +1,11 @@
 package quicproxy
 
 import (
+	"bufio"
+	"fmt"
+	"log"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -138,6 +142,23 @@ type Opts struct {
 	DelayPacket DelayCallback
 }
 
+type logWriter struct {
+	mx sync.Mutex
+	*bufio.Writer
+}
+
+func (w *logWriter) Write(b []byte) (int, error) {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+	return w.Writer.Write(b)
+}
+
+func (w *logWriter) Flush() error {
+	w.mx.Lock()
+	defer w.mx.Unlock()
+	return w.Writer.Flush()
+}
+
 // QuicProxy is a QUIC proxy that can drop and delay packets.
 type QuicProxy struct {
 	mutex sync.Mutex
@@ -152,6 +173,9 @@ type QuicProxy struct {
 
 	// Mapping from client addresses (as host:port) to connection
 	clientDict map[string]*connection
+
+	logFile *os.File
+	log     *logWriter
 
 	logger utils.Logger
 }
@@ -190,6 +214,13 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 		packetDelayer = opts.DelayPacket
 	}
 
+	filename := fmt.Sprintf("proxy_%d.log", time.Now().UnixNano())
+	fmt.Printf("creating log file: %s\n", filename)
+	logFile, err := os.Create(filename)
+	if err != nil {
+		return nil, err
+	}
+
 	p := QuicProxy{
 		clientDict:  make(map[string]*connection),
 		conn:        conn,
@@ -198,10 +229,16 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 		dropPacket:  packetDropper,
 		delayPacket: packetDelayer,
 		logger:      utils.DefaultLogger.WithPrefix("proxy"),
+		logFile:     logFile,
+		log:         &logWriter{Writer: bufio.NewWriterSize(logFile, 16<<10)},
 	}
 
 	p.logger.Debugf("Starting UDP Proxy %s <-> %s", conn.LocalAddr(), raddr)
-	go p.runProxy()
+	go func() {
+		if err := p.runProxy(); err != nil && !p.isClosed() {
+			log.Fatalf("runProxy failed: %s", err)
+		}
+	}()
 	return &p, nil
 }
 
@@ -209,6 +246,10 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 func (p *QuicProxy) Close() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	defer func() {
+		p.log.Flush()
+		p.logFile.Close()
+	}()
 	close(p.closeChan)
 	for _, c := range p.clientDict {
 		if err := c.ServerConn.Close(); err != nil {
@@ -218,6 +259,15 @@ func (p *QuicProxy) Close() error {
 		c.Outgoing.Close()
 	}
 	return p.conn.Close()
+}
+
+func (p *QuicProxy) isClosed() bool {
+	select {
+	case <-p.closeChan:
+		return true
+	default:
+		return false
+	}
 }
 
 // LocalAddr is the address the proxy is listening on.
@@ -258,6 +308,7 @@ func (p *QuicProxy) runProxy() error {
 		if err != nil {
 			return err
 		}
+		fmt.Fprintf(p.log, "incoming: read packet (%d bytes) from %s\n", n, cliaddr)
 		raw := buffer[0:n]
 
 		saddr := cliaddr.String()
@@ -271,8 +322,16 @@ func (p *QuicProxy) runProxy() error {
 				return err
 			}
 			p.clientDict[saddr] = conn
-			go p.runIncomingConnection(conn)
-			go p.runOutgoingConnection(conn)
+			go func() {
+				if err := p.runIncomingConnection(conn); err != nil && !p.isClosed() {
+					log.Fatalf("runIncomingConnection failed: %s", err)
+				}
+			}()
+			go func() {
+				if err := p.runOutgoingConnection(conn); err != nil && !p.isClosed() {
+					log.Fatalf("runOutgoingConnection failed: %s", err)
+				}
+			}()
 		}
 		p.mutex.Unlock()
 
@@ -312,6 +371,7 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 				return
 			}
 			raw := buffer[0:n]
+			fmt.Fprintf(p.log, "outgoing: read packet (%d bytes) from %s\n", n, conn.ServerConn.RemoteAddr())
 
 			if p.dropPacket(DirectionOutgoing, raw) {
 				if p.logger.Debug() {
@@ -346,7 +406,9 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 			conn.Outgoing.Add(e)
 		case <-conn.Outgoing.Timer():
 			conn.Outgoing.SetTimerRead()
-			if _, err := p.conn.WriteTo(conn.Outgoing.Get(), conn.ClientAddr); err != nil {
+			packet := conn.Outgoing.Get()
+			fmt.Fprintf(p.log, "outgoing: sending packet (%d bytes) to %s\n", len(packet), conn.ClientAddr)
+			if _, err := p.conn.WriteTo(packet, conn.ClientAddr); err != nil {
 				return err
 			}
 		}
@@ -363,7 +425,9 @@ func (p *QuicProxy) runIncomingConnection(conn *connection) error {
 			conn.Incoming.Add(e)
 		case <-conn.Incoming.Timer():
 			conn.Incoming.SetTimerRead()
-			if _, err := conn.ServerConn.Write(conn.Incoming.Get()); err != nil {
+			packet := conn.Incoming.Get()
+			fmt.Fprintf(p.log, "incoming: sending packet (%d bytes) to %s\n", len(packet), conn.ServerConn.RemoteAddr())
+			if _, err := conn.ServerConn.Write(packet); err != nil {
 				return err
 			}
 		}
