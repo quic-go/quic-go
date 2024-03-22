@@ -157,10 +157,10 @@ type Server struct {
 	//
 	// Otherwise, if Port is not set and underlying QUIC listeners do not
 	// have valid port numbers, the port part is used in Alt-Svc headers set
-	// with SetQuicHeaders.
+	// with SetQUICHeaders.
 	Addr string
 
-	// Port is used in Alt-Svc response headers set with SetQuicHeaders. If
+	// Port is used in Alt-Svc response headers set with SetQUICHeaders. If
 	// needed Port can be manually set when the Server is created.
 	//
 	// This is useful when a Layer 4 firewall is redirecting UDP traffic and
@@ -176,7 +176,7 @@ type Server struct {
 	// Serve. If nil, it uses reasonable default values.
 	//
 	// Configured versions are also used in Alt-Svc response header set with
-	// SetQuicHeaders.
+	// SetQUICHeaders.
 	QuicConfig *quic.Config
 
 	// Handler is the HTTP request handler to use. If not set, defaults to
@@ -428,7 +428,7 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if port, err := extractPort(laddr.String()); err == nil {
 		s.listeners[l] = listenerInfo{port}
 	} else {
-		s.logger.Errorf("Unable to extract port from listener %s, will not be announced using SetQuicHeaders: %s", laddr, err)
+		s.logger.Errorf("Unable to extract port from listener %s, will not be announced using SetQUICHeaders: %s", laddr, err)
 		s.listeners[l] = listenerInfo{}
 	}
 	s.generateAltSvcHeader()
@@ -709,12 +709,12 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 	return nil
 }
 
-// ErrNoAltSvcPort is the error returned by SetQuicHeaders when no port was found
+// ErrNoAltSvcPort is the error returned by SetQUICHeaders when no port was found
 // for Alt-Svc to announce. This can happen if listening on a PacketConn without a port
 // (UNIX socket, for example) and no port is specified in Server.Port or Server.Addr.
 var ErrNoAltSvcPort = errors.New("no port can be announced, specify it explicitly using Server.Port or Server.Addr")
 
-// SetQuicHeaders can be used to set the proper headers that announce that this server supports HTTP/3.
+// SetQUICHeaders can be used to set the proper headers that announce that this server supports HTTP/3.
 // The values set by default advertise all the ports the server is listening on, but can be
 // changed to a specific port by setting Server.Port before launching the server.
 // If no listener's Addr().String() returns an address with a valid port, Server.Addr will be used
@@ -722,7 +722,7 @@ var ErrNoAltSvcPort = errors.New("no port can be announced, specify it explicitl
 // For example, a server launched using ListenAndServe on an address with port 443 would set:
 //
 //	Alt-Svc: h3=":443"; ma=2592000
-func (s *Server) SetQuicHeaders(hdr http.Header) error {
+func (s *Server) SetQUICHeaders(hdr http.Header) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -732,6 +732,11 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	// use the map directly to avoid constant canonicalization since the key is already canonicalized
 	hdr["Alt-Svc"] = append(hdr["Alt-Svc"], s.altSvcHeader)
 	return nil
+}
+
+// Deprecated: use SetQUICHeaders instead.
+func (s *Server) SetQuicHeaders(hdr http.Header) error {
+	return s.SetQUICHeaders(hdr)
 }
 
 // ListenAndServeQUIC listens on the UDP network address addr and calls the
@@ -791,7 +796,7 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	qErr := make(chan error, 1)
 	go func() {
 		hErr <- http.ListenAndServeTLS(addr, certFile, keyFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			quicServer.SetQuicHeaders(w.Header())
+			quicServer.SetQUICHeaders(w.Header())
 			handler.ServeHTTP(w, r)
 		}))
 	}()
