@@ -906,13 +906,13 @@ var _ = Describe("Server", func() {
 
 		checkSetHeaders := func(expected gmtypes.GomegaMatcher) {
 			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
+			Expect(s.SetQUICHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(expected)
 		}
 
 		checkSetHeaderError := func() {
 			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Equal(ErrNoAltSvcPort))
+			Expect(s.SetQUICHeaders(hdr)).To(Equal(ErrNoAltSvcPort))
 		}
 
 		It("sets proper headers with numeric port", func() {
