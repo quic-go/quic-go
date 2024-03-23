@@ -87,7 +87,7 @@ func runHTTP3Server(quicConf *quic.Config) error {
 	server := http3.Server{
 		Addr:       ":443",
 		TLSConfig:  tlsConf,
-		QuicConfig: quicConf,
+		QUICConfig: quicConf,
 	}
 	http.DefaultServeMux.Handle("/", http.FileServer(http.Dir("/www")))
 	return server.ListenAndServe()

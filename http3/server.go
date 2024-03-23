@@ -172,19 +172,18 @@ type Server struct {
 	// set for ListenAndServe and Serve methods.
 	TLSConfig *tls.Config
 
-	// QuicConfig provides the parameters for QUIC connection created with
-	// Serve. If nil, it uses reasonable default values.
+	// QUICConfig provides the parameters for QUIC connection created with Serve.
+	// If nil, it uses reasonable default values.
 	//
-	// Configured versions are also used in Alt-Svc response header set with
-	// SetQUICHeaders.
-	QuicConfig *quic.Config
+	// Configured versions are also used in Alt-Svc response header set with SetQUICHeaders.
+	QUICConfig *quic.Config
 
 	// Handler is the HTTP request handler to use. If not set, defaults to
 	// http.NotFound.
 	Handler http.Handler
 
 	// EnableDatagrams enables support for HTTP/3 datagrams.
-	// If set to true, QuicConfig.EnableDatagram will be set.
+	// If set to true, QUICConfig.EnableDatagram will be set.
 	// See https://datatracker.ietf.org/doc/html/rfc9297.
 	EnableDatagrams bool
 
@@ -311,11 +310,11 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	}
 
 	baseConf := ConfigureTLSConfig(tlsConf)
-	quicConf := s.QuicConfig
+	quicConf := s.QUICConfig
 	if quicConf == nil {
 		quicConf = &quic.Config{Allow0RTT: true}
 	} else {
-		quicConf = s.QuicConfig.Clone()
+		quicConf = s.QUICConfig.Clone()
 	}
 	if s.EnableDatagrams {
 		quicConf.EnableDatagrams = true
@@ -360,8 +359,8 @@ func (s *Server) generateAltSvcHeader() {
 
 	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
 	supportedVersions := protocol.SupportedVersions
-	if s.QuicConfig != nil && len(s.QuicConfig.Versions) > 0 {
-		supportedVersions = s.QuicConfig.Versions
+	if s.QUICConfig != nil && len(s.QUICConfig.Versions) > 0 {
+		supportedVersions = s.QUICConfig.Versions
 	}
 
 	// keep track of which have been seen so we don't yield duplicate values

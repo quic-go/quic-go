@@ -884,7 +884,7 @@ var _ = Describe("Server", func() {
 
 	Context("setting http headers", func() {
 		BeforeEach(func() {
-			s.QuicConfig = &quic.Config{Versions: []protocol.Version{protocol.Version1}}
+			s.QUICConfig = &quic.Config{Versions: []protocol.Version{protocol.Version1}}
 		})
 
 		var ln1 QUICEarlyListener
@@ -945,7 +945,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("works if the quic.Config sets QUIC versions", func() {
-			s.QuicConfig.Versions = []quic.Version{quic.Version1, quic.Version2}
+			s.QUICConfig.Versions = []quic.Version{quic.Version1, quic.Version2}
 			addListener(":443", &ln1)
 			checkSetHeaders(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000`}}))
 			removeListener(&ln1)
@@ -984,7 +984,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("doesn't duplicate Alt-Svc values", func() {
-			s.QuicConfig.Versions = []quic.Version{quic.Version1, quic.Version1}
+			s.QUICConfig.Versions = []quic.Version{quic.Version1, quic.Version1}
 			addListener(":443", &ln1)
 			checkSetHeaders(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000`}}))
 			removeListener(&ln1)
@@ -1314,7 +1314,7 @@ var _ = Describe("Server", func() {
 				receivedConf = config
 				return nil, errors.New("listen err")
 			}
-			s.QuicConfig = conf
+			s.QUICConfig = conf
 			Expect(s.ListenAndServe()).To(HaveOccurred())
 			Expect(receivedConf).To(Equal(conf))
 		})
