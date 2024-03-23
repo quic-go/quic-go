@@ -824,6 +824,8 @@ var _ = Describe("Client", func() {
 				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError(testErr))
 				Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", serialized))
+				// make sure the request wasn't modified
+				Expect(req.Method).To(Equal(method))
 			},
 			Entry("GET", MethodGet0RTT, http.MethodGet),
 			Entry("HEAD", MethodHead0RTT, http.MethodHead),
