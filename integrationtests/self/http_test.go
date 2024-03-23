@@ -89,7 +89,7 @@ var _ = Describe("HTTP tests", func() {
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
-			QuicConfig: getQuicConfig(&quic.Config{Allow0RTT: true}),
+			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true}),
 		}
 
 		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
