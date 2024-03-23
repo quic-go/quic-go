@@ -46,7 +46,7 @@ func main() {
 			InsecureSkipVerify: *insecure,
 			KeyLogWriter:       keyLog,
 		},
-		QuicConfig: &quic.Config{
+		QUICConfig: &quic.Config{
 			Tracer: qlog.DefaultTracer,
 		},
 	}

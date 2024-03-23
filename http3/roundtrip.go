@@ -70,12 +70,12 @@ type RoundTripper struct {
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
 
-	// QuicConfig is the quic.Config used for dialing new connections.
+	// QUICConfig is the quic.Config used for dialing new connections.
 	// If nil, reasonable default values will be used.
-	QuicConfig *quic.Config
+	QUICConfig *quic.Config
 
 	// Enable support for HTTP/3 datagrams (RFC 9297).
-	// If a QuicConfig is set, datagram support also needs to be enabled on the QUIC layer by setting EnableDatagrams.
+	// If a QUICConfig is set, datagram support also needs to be enabled on the QUIC layer by setting EnableDatagrams.
 	EnableDatagrams bool
 
 	// Additional HTTP/3 settings.
@@ -217,7 +217,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTr
 				UniStreamHijacker:  r.UniStreamHijacker,
 				AdditionalSettings: r.AdditionalSettings,
 			},
-			r.QuicConfig,
+			r.QUICConfig,
 			dial,
 		)
 		if err != nil {
