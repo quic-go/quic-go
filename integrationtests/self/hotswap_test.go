@@ -110,7 +110,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		rt = &http3.RoundTripper{
 			TLSClientConfig:    getTLSClientConfig(),
 			DisableCompression: true,
-			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
+			QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
 		client = &http.Client{Transport: rt}
 	})

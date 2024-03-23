@@ -69,7 +69,7 @@ func runTestcase(testcase string) error {
 	if testcase == "http3" {
 		r := &http3.RoundTripper{
 			TLSClientConfig: tlsConf,
-			QuicConfig:      quicConf,
+			QUICConfig:      quicConf,
 		}
 		defer r.Close()
 		return downloadFiles(r, urls, false)

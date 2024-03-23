@@ -93,21 +93,21 @@ var _ = Describe("RoundTripper", func() {
 				receivedConfig = config
 				return nil, errors.New("handshake error")
 			}
-			rt.QuicConfig = config
+			rt.QUICConfig = config
 			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("handshake error"))
 			Expect(receivedConfig.HandshakeIdleTimeout).To(Equal(config.HandshakeIdleTimeout))
 		})
 
 		It("requires quic.Config.EnableDatagram if HTTP datagrams are enabled", func() {
-			rt.QuicConfig = &quic.Config{EnableDatagrams: false}
+			rt.QUICConfig = &quic.Config{EnableDatagrams: false}
 			rt.Dial = func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlyConnection, error) {
 				return nil, errors.New("handshake error")
 			}
 			rt.EnableDatagrams = true
 			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("HTTP Datagrams enabled, but QUIC Datagrams disabled"))
-			rt.QuicConfig.EnableDatagrams = true
+			rt.QUICConfig.EnableDatagrams = true
 			_, err = rt.RoundTrip(req)
 			Expect(err).To(MatchError("handshake error"))
 		})

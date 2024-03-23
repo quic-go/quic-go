@@ -116,7 +116,7 @@ var _ = Describe("HTTP tests", func() {
 	BeforeEach(func() {
 		rt = &http3.RoundTripper{
 			TLSClientConfig: getTLSClientConfigWithoutServerName(),
-			QuicConfig: getQuicConfig(&quic.Config{
+			QUICConfig: getQuicConfig(&quic.Config{
 				MaxIdleTimeout: 10 * time.Second,
 				Allow0RTT:      true,
 			}),
@@ -604,7 +604,7 @@ var _ = Describe("HTTP tests", func() {
 			tlsConf.ClientSessionCache = newClientSessionCache(tls.NewLRUClientSessionCache(10), nil, puts)
 			rt := &http3.RoundTripper{
 				TLSClientConfig: tlsConf,
-				QuicConfig: getQuicConfig(&quic.Config{
+				QUICConfig: getQuicConfig(&quic.Config{
 					MaxIdleTimeout: 10 * time.Second,
 					Allow0RTT:      true,
 				}),
@@ -628,7 +628,7 @@ var _ = Describe("HTTP tests", func() {
 
 			rt2 := &http3.RoundTripper{
 				TLSClientConfig:    rt.TLSClientConfig,
-				QuicConfig:         rt.QuicConfig,
+				QUICConfig:         rt.QUICConfig,
 				DisableCompression: true,
 			}
 			defer rt2.Close()
