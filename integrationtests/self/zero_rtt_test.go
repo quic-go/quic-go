@@ -50,6 +50,23 @@ func (m metadataClientSessionCache) Put(key string, session *tls.ClientSessionSt
 	m.cache.Put(key, session)
 }
 
+// contains0RTTPacket says if a packet contains a 0-RTT long header packet.
+// It correctly handles coalesced packets.
+func contains0RTTPacket(data []byte) bool {
+	for len(data) > 0 {
+		if !wire.IsLongHeaderPacket(data[0]) {
+			return false
+		}
+		hdr, _, rest, err := wire.ParsePacket(data)
+		Expect(err).ToNot(HaveOccurred())
+		if hdr.Type == protocol.PacketType0RTT {
+			return true
+		}
+		data = rest
+	}
+	return false
+}
+
 var _ = Describe("0-RTT", func() {
 	rtt := scaleDuration(5 * time.Millisecond)
 
@@ -58,23 +75,13 @@ var _ = Describe("0-RTT", func() {
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-				for len(data) > 0 {
-					if !wire.IsLongHeaderPacket(data[0]) {
-						break
-					}
-					hdr, _, rest, err := wire.ParsePacket(data)
-					Expect(err).ToNot(HaveOccurred())
-					if hdr.Type == protocol.PacketType0RTT {
-						num0RTTPackets.Add(1)
-						break
-					}
-					data = rest
+				if contains0RTTPacket(data) {
+					num0RTTPackets.Add(1)
 				}
 				return rtt / 2
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
-
 		return proxy, &num0RTTPackets
 	}
 
