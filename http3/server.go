@@ -478,7 +478,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 		go func() {
-			rerr := s.handleRequest(conn, str, decoder, func() {
+			rerr := s.handleRequest(hconn, str, decoder, func() {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			})
 			if rerr.err == errHijacked {
@@ -510,7 +510,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) { return s.StreamHijacker(ft, conn, str, e) }
@@ -555,7 +555,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	} else {
 		httpStr = newStream(str, onFrameError)
 	}
-	body := newRequestBody(httpStr)
+	body := newRequestBody(httpStr, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
 	if s.logger.Debug() {
