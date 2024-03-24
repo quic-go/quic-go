@@ -87,7 +87,7 @@ var _ = Describe("Server", func() {
 		var (
 			qpackDecoder       *qpack.Decoder
 			str                *mockquic.MockStream
-			conn               *mockquic.MockEarlyConnection
+			conn               *connection
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)
@@ -140,11 +140,13 @@ var _ = Describe("Server", func() {
 
 			qpackDecoder = qpack.NewDecoder(nil)
 			str = mockquic.NewMockStream(mockCtrl)
-			conn = mockquic.NewMockEarlyConnection(mockCtrl)
+			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-			conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
-			conn.EXPECT().LocalAddr().AnyTimes()
-			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
+			qconn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+			qconn.EXPECT().LocalAddr().AnyTimes()
+			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
+			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
+			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, utils.DefaultLogger)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -514,6 +516,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 				conn.EXPECT().LocalAddr().AnyTimes()
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
+				conn.EXPECT().Context().Return(context.Background()).AnyTimes()
 			})
 
 			AfterEach(func() { testDone <- struct{}{} })

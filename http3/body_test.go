@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"context"
 	"errors"
 
 	"github.com/quic-go/quic-go"
@@ -10,6 +11,29 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 )
+
+var _ = Describe("Request Body", func() {
+	It("makes the SETTINGS available", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		rcvdSettings := make(chan struct{})
+		close(rcvdSettings)
+		settings := &Settings{EnableExtendedConnect: true}
+		body := newRequestBody(str, context.Background(), rcvdSettings, func() *Settings { return settings })
+		s, err := body.Settings(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(s).To(Equal(settings))
+	})
+
+	It("unblocks Settings() when the connection is closed", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		ctx, cancel := context.WithCancelCause(context.Background())
+		testErr := errors.New("test error")
+		cancel(testErr)
+		body := newRequestBody(str, ctx, make(chan struct{}), func() *Settings { return nil })
+		_, err := body.Settings(context.Background())
+		Expect(err).To(MatchError(testErr))
+	})
+})
 
 var _ = Describe("Response Body", func() {
 	var reqDone chan struct{}
