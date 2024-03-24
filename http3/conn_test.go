@@ -124,6 +124,41 @@ var _ = Describe("Connection", func() {
 				}()
 				Eventually(done).Should(BeClosed())
 			})
+
+			It(fmt.Sprintf("rejects duplicate QPACK %s streams", name), func() {
+				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
+				conn := newConnection(
+					qconn,
+					false,
+					nil,
+					protocol.PerspectiveClient,
+					utils.DefaultLogger,
+				)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
+				str1 := mockquic.NewMockStream(mockCtrl)
+				str1.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				buf2 := bytes.NewBuffer(quicvarint.Append(nil, streamType))
+				str2 := mockquic.NewMockStream(mockCtrl)
+				str2.EXPECT().Read(gomock.Any()).DoAndReturn(buf2.Read).AnyTimes()
+				qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(str1, nil)
+				qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(str2, nil)
+				testDone := make(chan struct{})
+				qconn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				qconn.EXPECT().CloseWithError(qerr.ApplicationErrorCode(ErrCodeStreamCreationError), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
+					close(testDone)
+					return nil
+				})
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					conn.HandleUnidirectionalStreams()
+				}()
+				Eventually(done).Should(BeClosed())
+			})
 		}
 
 		It("resets streams other than the control stream and the QPACK streams", func() {

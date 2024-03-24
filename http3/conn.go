@@ -40,7 +40,11 @@ func newConnection(
 }
 
 func (c *connection) HandleUnidirectionalStreams() {
-	var rcvdControlStream atomic.Bool
+	var (
+		rcvdControlStr      atomic.Bool
+		rcvdQPACKEncoderStr atomic.Bool
+		rcvdQPACKDecoderStr atomic.Bool
+	)
 
 	for {
 		str, err := c.quicConn.AcceptUniStream(context.Background())
@@ -61,9 +65,17 @@ func (c *connection) HandleUnidirectionalStreams() {
 			// We're only interested in the control stream here.
 			switch streamType {
 			case streamTypeControlStream:
-			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
+			case streamTypeQPACKEncoderStream:
+				if isFirst := rcvdQPACKEncoderStr.CompareAndSwap(false, true); !isFirst {
+					c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
+				}
 				// Our QPACK implementation doesn't use the dynamic table yet.
-				// TODO: check that only one stream of each type is opened.
+				return
+			case streamTypeQPACKDecoderStream:
+				if isFirst := rcvdQPACKDecoderStr.CompareAndSwap(false, true); !isFirst {
+					c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK decoder stream")
+				}
+				// Our QPACK implementation doesn't use the dynamic table yet.
 				return
 			case streamTypePushStream:
 				switch c.perspective {
@@ -83,7 +95,7 @@ func (c *connection) HandleUnidirectionalStreams() {
 				return
 			}
 			// Only a single control stream is allowed.
-			if isFirstControlStr := rcvdControlStream.CompareAndSwap(false, true); !isFirstControlStr {
+			if isFirstControlStr := rcvdControlStr.CompareAndSwap(false, true); !isFirstControlStr {
 				c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
