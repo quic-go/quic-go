@@ -37,6 +37,7 @@ func packRawPayload(version protocol.Version, frames []wire.Frame) []byte {
 // containing specified frames.
 func ComposeInitialPacket(
 	srcConnID, destConnID, key protocol.ConnectionID,
+	token []byte,
 	frames []wire.Frame,
 	sentBy protocol.Perspective,
 	version protocol.Version,
@@ -58,6 +59,7 @@ func ComposeInitialPacket(
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{
 			Type:             protocol.PacketTypeInitial,
+			Token:            token,
 			SrcConnectionID:  srcConnID,
 			DestConnectionID: destConnID,
 			Length:           protocol.ByteCount(length),
