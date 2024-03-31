@@ -11,7 +11,8 @@ import (
 )
 
 type connection struct {
-	quicConn    quic.Connection
+	quic.Connection
+
 	perspective protocol.Perspective
 	logger      utils.Logger
 
@@ -30,7 +31,7 @@ func newConnection(
 	logger utils.Logger,
 ) *connection {
 	return &connection{
-		quicConn:          quicConn,
+		Connection:        quicConn,
 		perspective:       perspective,
 		logger:            logger,
 		enableDatagrams:   enableDatagrams,
@@ -47,7 +48,7 @@ func (c *connection) HandleUnidirectionalStreams() {
 	)
 
 	for {
-		str, err := c.quicConn.AcceptUniStream(context.Background())
+		str, err := c.Connection.AcceptUniStream(context.Background())
 		if err != nil {
 			c.logger.Debugf("accepting unidirectional stream failed: %s", err)
 			return
@@ -56,7 +57,7 @@ func (c *connection) HandleUnidirectionalStreams() {
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
-				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), c.quicConn, str, err) {
+				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), c.Connection, str, err) {
 					return
 				}
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
@@ -67,13 +68,13 @@ func (c *connection) HandleUnidirectionalStreams() {
 			case streamTypeControlStream:
 			case streamTypeQPACKEncoderStream:
 				if isFirst := rcvdQPACKEncoderStr.CompareAndSwap(false, true); !isFirst {
-					c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
+					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
 				}
 				// Our QPACK implementation doesn't use the dynamic table yet.
 				return
 			case streamTypeQPACKDecoderStream:
 				if isFirst := rcvdQPACKDecoderStr.CompareAndSwap(false, true); !isFirst {
-					c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK decoder stream")
+					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK decoder stream")
 				}
 				// Our QPACK implementation doesn't use the dynamic table yet.
 				return
@@ -81,14 +82,14 @@ func (c *connection) HandleUnidirectionalStreams() {
 				switch c.perspective {
 				case protocol.PerspectiveClient:
 					// we never increased the Push ID, so we don't expect any push streams
-					c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				case protocol.PerspectiveServer:
 					// only the server can push
-					c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "")
+					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "")
 				}
 				return
 			default:
-				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), c.quicConn, str, nil) {
+				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), c.Connection, str, nil) {
 					return
 				}
 				str.CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
@@ -96,17 +97,17 @@ func (c *connection) HandleUnidirectionalStreams() {
 			}
 			// Only a single control stream is allowed.
 			if isFirstControlStr := rcvdControlStr.CompareAndSwap(false, true); !isFirstControlStr {
-				c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
+				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
 			f, err := parseNextFrame(str, nil)
 			if err != nil {
-				c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
 				return
 			}
 			sf, ok := f.(*settingsFrame)
 			if !ok {
-				c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
+				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 				return
 			}
 			c.settings = &Settings{
@@ -123,8 +124,8 @@ func (c *connection) HandleUnidirectionalStreams() {
 			// If datagram support was enabled on our side as well as on the server side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if c.enableDatagrams && !c.quicConn.ConnectionState().SupportsDatagrams {
-				c.quicConn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
+			if c.enableDatagrams && !c.Connection.ConnectionState().SupportsDatagrams {
+				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			}
 		}(str)
 	}

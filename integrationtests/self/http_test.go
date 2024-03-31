@@ -579,6 +579,41 @@ var _ = Describe("HTTP tests", func() {
 		Expect(err).To(MatchError(err))
 	})
 
+	It("receives the client's settings", func() {
+		settingsChan := make(chan *http3.Settings, 1)
+		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			// The http.Request.Body is guaranteed to implement the http3.Settingser interface.
+			settings, err := r.Body.(http3.Settingser).Settings(context.Background())
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			settingsChan <- settings
+			w.WriteHeader(http.StatusOK)
+		})
+
+		rt = &http3.RoundTripper{
+			TLSClientConfig: getTLSClientConfigWithoutServerName(),
+			QUICConfig: getQuicConfig(&quic.Config{
+				MaxIdleTimeout:  10 * time.Second,
+				EnableDatagrams: true,
+			}),
+			EnableDatagrams:    true,
+			AdditionalSettings: map[uint64]uint64{1337: 42},
+		}
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/settings", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = rt.RoundTrip(req)
+		Expect(err).ToNot(HaveOccurred())
+		var settings *http3.Settings
+		Eventually(settingsChan).Should(Receive(&settings))
+		Expect(settings.EnableDatagram).To(BeTrue())
+		Expect(settings.EnableExtendedConnect).To(BeFalse())
+		Expect(settings.Other).To(HaveKeyWithValue(uint64(1337), uint64(42)))
+	})
+
 	Context("0-RTT", func() {
 		runCountingProxy := func(serverPort int, rtt time.Duration) (*quicproxy.QuicProxy, *atomic.Uint32) {
 			var num0RTTPackets atomic.Uint32
