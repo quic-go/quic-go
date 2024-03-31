@@ -118,7 +118,6 @@ var _ = Describe("HTTP tests", func() {
 			TLSClientConfig: getTLSClientConfigWithoutServerName(),
 			QUICConfig: getQuicConfig(&quic.Config{
 				MaxIdleTimeout: 10 * time.Second,
-				Allow0RTT:      true,
 			}),
 			DisableCompression: true,
 		}
@@ -641,7 +640,6 @@ var _ = Describe("HTTP tests", func() {
 				TLSClientConfig: tlsConf,
 				QUICConfig: getQuicConfig(&quic.Config{
 					MaxIdleTimeout: 10 * time.Second,
-					Allow0RTT:      true,
 				}),
 				DisableCompression: true,
 			}
