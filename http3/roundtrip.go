@@ -79,7 +79,7 @@ type RoundTripper struct {
 	EnableDatagrams bool
 
 	// Additional HTTP/3 settings.
-	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
+	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
 	// When set, this callback is called for the first unknown frame parsed on a bidirectional stream.
