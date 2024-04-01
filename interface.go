@@ -59,6 +59,9 @@ var Err0RTTRejected = errors.New("0-RTT rejected")
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
 var ConnectionTracingKey = connTracingCtxKey{}
 
+// ConnectionTracingID is the type of the context value saved under the ConnectionTracingKey.
+type ConnectionTracingID uint64
+
 type connTracingCtxKey struct{}
 
 // QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the

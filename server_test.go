@@ -301,7 +301,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -503,7 +503,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -571,7 +571,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -626,7 +626,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -675,7 +675,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -736,7 +736,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -969,7 +969,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -1036,7 +1036,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -1106,7 +1106,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ uint64,
+					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -1176,7 +1176,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -1217,7 +1217,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -1272,7 +1272,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -1394,7 +1394,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
