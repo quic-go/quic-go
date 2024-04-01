@@ -181,9 +181,8 @@ type Server struct {
 	// http.NotFound.
 	Handler http.Handler
 
-	// EnableDatagrams enables support for HTTP/3 datagrams.
+	// EnableDatagrams enables support for HTTP/3 datagrams (RFC 9297).
 	// If set to true, QUICConfig.EnableDatagram will be set.
-	// See https://datatracker.ietf.org/doc/html/rfc9297.
 	EnableDatagrams bool
 
 	// MaxHeaderBytes controls the maximum number of bytes the server will
@@ -193,7 +192,7 @@ type Server struct {
 	MaxHeaderBytes int
 
 	// AdditionalSettings specifies additional HTTP/3 settings.
-	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
+	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
 	// StreamHijacker, when set, is called for the first unknown frame parsed on a bidirectional stream.
