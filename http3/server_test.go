@@ -315,9 +315,12 @@ var _ = Describe("Server", func() {
 			AfterEach(func() { testDone <- struct{}{} })
 
 			It("hijacks a bidirectional stream of unknown frame type", func() {
+				id := quic.ConnectionTracingID(1337)
 				frameTypeChan := make(chan FrameType, 1)
-				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream, e error) (hijacked bool, err error) {
+				s.StreamHijacker = func(ft FrameType, connTracingID quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
+					defer GinkgoRecover()
 					Expect(e).ToNot(HaveOccurred())
+					Expect(connTracingID).To(Equal(id))
 					frameTypeChan <- ft
 					return true, nil
 				}
@@ -331,6 +334,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -338,7 +343,7 @@ var _ = Describe("Server", func() {
 
 			It("cancels writing when hijacker didn't hijack a bidirectional stream", func() {
 				frameTypeChan := make(chan FrameType, 1)
-				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream, e error) (hijacked bool, err error) {
+				s.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
 					Expect(e).ToNot(HaveOccurred())
 					frameTypeChan <- ft
 					return false, nil
@@ -354,6 +359,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -361,7 +368,7 @@ var _ = Describe("Server", func() {
 
 			It("cancels writing when hijacker returned error", func() {
 				frameTypeChan := make(chan FrameType, 1)
-				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream, e error) (hijacked bool, err error) {
+				s.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
 					Expect(e).ToNot(HaveOccurred())
 					frameTypeChan <- ft
 					return false, errors.New("error in hijacker")
@@ -377,6 +384,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -386,7 +395,7 @@ var _ = Describe("Server", func() {
 				testErr := errors.New("test error")
 				done := make(chan struct{})
 				unknownStr := mockquic.NewMockStream(mockCtrl)
-				s.StreamHijacker = func(ft FrameType, _ quic.Connection, str quic.Stream, err error) (bool, error) {
+				s.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, str quic.Stream, err error) (bool, error) {
 					defer close(done)
 					Expect(ft).To(BeZero())
 					Expect(str).To(Equal(unknownStr))
@@ -401,6 +410,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -425,9 +436,11 @@ var _ = Describe("Server", func() {
 			AfterEach(func() { testDone <- struct{}{} })
 
 			It("hijacks an unidirectional stream of unknown stream type", func() {
+				id := quic.ConnectionTracingID(42)
 				streamTypeChan := make(chan StreamType, 1)
-				s.UniStreamHijacker = func(st StreamType, _ quic.Connection, _ quic.ReceiveStream, err error) bool {
+				s.UniStreamHijacker = func(st StreamType, connTracingID quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
 					Expect(err).ToNot(HaveOccurred())
+					Expect(connTracingID).To(Equal(id))
 					streamTypeChan <- st
 					return true
 				}
@@ -442,6 +455,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -451,7 +466,7 @@ var _ = Describe("Server", func() {
 				testErr := errors.New("test error")
 				done := make(chan struct{})
 				unknownStr := mockquic.NewMockStream(mockCtrl)
-				s.UniStreamHijacker = func(st StreamType, _ quic.Connection, str quic.ReceiveStream, err error) bool {
+				s.UniStreamHijacker = func(st StreamType, _ quic.ConnectionTracingID, str quic.ReceiveStream, err error) bool {
 					defer close(done)
 					Expect(st).To(BeZero())
 					Expect(str).To(Equal(unknownStr))
@@ -465,6 +480,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -472,7 +489,7 @@ var _ = Describe("Server", func() {
 
 			It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
 				streamTypeChan := make(chan StreamType, 1)
-				s.UniStreamHijacker = func(st StreamType, _ quic.Connection, _ quic.ReceiveStream, err error) bool {
+				s.UniStreamHijacker = func(st StreamType, _ quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
 					Expect(err).ToNot(HaveOccurred())
 					streamTypeChan <- st
 					return false
@@ -490,6 +507,8 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
+				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
+				conn.EXPECT().Context().Return(ctx).AnyTimes()
 				s.handleConn(conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError

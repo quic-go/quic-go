@@ -89,12 +89,12 @@ type RoundTripper struct {
 	// Callers can either ignore the frame and return control of the stream back to HTTP/3
 	// (by returning hijacked false).
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
-	StreamHijacker func(FrameType, quic.Connection, quic.Stream, error) (hijacked bool, err error)
+	StreamHijacker func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
 
 	// When set, this callback is called for unknown unidirectional stream of unknown stream type.
 	// If parsing the stream type fails, the error is passed to the callback.
 	// In that case, the stream type will not be set.
-	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream, error) (hijacked bool)
+	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
