@@ -44,7 +44,7 @@ var _ = Describe("Client", func() {
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
 			tracer *logging.ConnectionTracer,
-			tracingID uint64,
+			tracingID ConnectionTracingID,
 			logger utils.Logger,
 			v protocol.Version,
 		) quicConn
@@ -123,7 +123,7 @@ var _ = Describe("Client", func() {
 				enable0RTT bool,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -160,7 +160,7 @@ var _ = Describe("Client", func() {
 				enable0RTT bool,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -197,7 +197,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -282,7 +282,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				versionP protocol.Version,
 			) quicConn {
@@ -325,7 +325,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				hasNegotiatedVersion bool,
 				_ *logging.ConnectionTracer,
-				_ uint64,
+				_ ConnectionTracingID,
 				_ utils.Logger,
 				versionP protocol.Version,
 			) quicConn {

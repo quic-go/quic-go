@@ -113,8 +113,8 @@ func (e *errCloseForRecreating) Error() string {
 	return "closing connection in order to recreate it"
 }
 
-var connTracingID uint64        // to be accessed atomically
-func nextConnTracingID() uint64 { return atomic.AddUint64(&connTracingID, 1) }
+var connTracingID atomic.Uint64              // to be accessed atomically
+func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTracingID.Add(1)) }
 
 // A Connection is a QUIC connection
 type connection struct {
@@ -234,7 +234,7 @@ var newConnection = func(
 	tokenGenerator *handshake.TokenGenerator,
 	clientAddressValidated bool,
 	tracer *logging.ConnectionTracer,
-	tracingID uint64,
+	tracingID ConnectionTracingID,
 	logger utils.Logger,
 	v protocol.Version,
 ) quicConn {
@@ -347,7 +347,7 @@ var newClientConnection = func(
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
 	tracer *logging.ConnectionTracer,
-	tracingID uint64,
+	tracingID ConnectionTracingID,
 	logger utils.Logger,
 	v protocol.Version,
 ) quicConn {
