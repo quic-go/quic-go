@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/quic-go/quic-go"
 	"io"
 
 	"github.com/quic-go/quic-go/quicvarint"
@@ -59,7 +60,8 @@ func parseNextFrame(r io.Reader, unknownFrameHandler unknownFrameHandlerFunc) (f
 			return parseSettingsFrame(r, l)
 		case 0x3: // CANCEL_PUSH
 		case 0x5: // PUSH_PROMISE
-		case 0x7: // GOAWAY
+		case 0x7:
+			return parseGoawayFrame(r, l)
 		case 0xd: // MAX_PUSH_ID
 		}
 		// skip over unknown frames
@@ -182,5 +184,37 @@ func (f *settingsFrame) Append(b []byte) []byte {
 		b = quicvarint.Append(b, id)
 		b = quicvarint.Append(b, val)
 	}
+	return b
+}
+
+type goawayFrame struct {
+	ID quic.StreamID
+}
+
+func parseGoawayFrame(r io.Reader, l uint64) (*goawayFrame, error) {
+	if l > 8*(1<<10) {
+		return nil, fmt.Errorf("unexpected size for GOAWAY frame: %d", l)
+	}
+	buf := make([]byte, l)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		if err == io.ErrUnexpectedEOF {
+			return nil, io.EOF
+		}
+		return nil, err
+	}
+	frame := &goawayFrame{}
+	b := bytes.NewReader(buf)
+	id, err := quicvarint.Read(b)
+	if err != nil {
+		return nil, err
+	}
+	frame.ID = quic.StreamID(id)
+	return frame, nil
+}
+
+func (f *goawayFrame) Append(b []byte) []byte {
+	b = quicvarint.Append(b, 0x7)
+	b = quicvarint.Append(b, uint64(quicvarint.Len(uint64(f.ID))))
+	b = quicvarint.Append(b, uint64(f.ID))
 	return b
 }

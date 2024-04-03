@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -217,7 +219,8 @@ type Server struct {
 	mutex     sync.RWMutex
 	listeners map[*QUICEarlyListener]listenerInfo
 
-	closed bool
+	closed      bool
+	connections map[*quic.Connection]*atomic.Bool
 
 	altSvcHeader string
 
@@ -300,9 +303,9 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 		return errServerWithoutTLSConfig
 	}
 
-	s.mutex.Lock()
+	s.mutex.RLock()
 	closed := s.closed
-	s.mutex.Unlock()
+	s.mutex.RUnlock()
 	if closed {
 		return http.ErrServerClosed
 	}
@@ -456,6 +459,22 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}).Append(b)
 	str.Write(b)
 
+	var closed atomic.Bool
+	s.mutex.Lock()
+	s.connections[&conn] = &closed
+	s.mutex.Unlock()
+
+	defer func() {
+		s.mutex.Lock()
+		delete(s.connections, &conn)
+		s.mutex.Unlock()
+	}()
+
+	var (
+		goawaySent bool
+		controlStr = str
+	)
+
 	hconn := newConnection(
 		conn,
 		s.EnableDatagrams,
@@ -475,6 +494,19 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				return nil
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
+		}
+		if closed.Load() {
+			if !goawaySent {
+				goawaySent = true
+				id := str.StreamID()
+				b = (&goawayFrame{
+					ID: id,
+				}).Append(b)
+				controlStr.Write(b)
+			}
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
+			continue
 		}
 		go func() {
 			rerr := s.handleRequest(hconn, str, decoder, func() {
@@ -641,6 +673,12 @@ func (s *Server) Close() error {
 	s.closed = true
 
 	var err error
+	for conn := range s.connections {
+		if cerr := (*conn).CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), ""); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+
 	for ln := range s.listeners {
 		if cerr := (*ln).Close(); cerr != nil && err == nil {
 			err = cerr
@@ -649,11 +687,73 @@ func (s *Server) Close() error {
 	return err
 }
 
+func (s *Server) closeListeners() error {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	var err error
+	for conn := range s.connections {
+		if cerr := (*conn).CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), ""); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+
+	for ln := range s.listeners {
+		if cerr := (*ln).Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+	return err
+}
+
+func (s *Server) connectionsCount() int {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	for _, closed := range s.connections {
+		closed.Store(true)
+	}
+
+	return len(s.connections)
+}
+
+const shutdownPollIntervalMax = 500 * time.Millisecond
+
 // CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
 // CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
-func (s *Server) CloseGracefully(timeout time.Duration) error {
-	// TODO: implement
-	return nil
+func (s *Server) CloseGracefully(ctx context.Context) error {
+	s.mutex.Lock()
+	s.closed = true
+	s.mutex.Unlock()
+
+	// copied from http.Server Shutdown
+	pollIntervalBase := time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > shutdownPollIntervalMax {
+			pollIntervalBase = shutdownPollIntervalMax
+		}
+		return interval
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+
+	for {
+		if s.connectionsCount() == 0 {
+			return s.closeListeners()
+		}
+		select {
+		case <-ctx.Done():
+			s.closeListeners()
+			return ctx.Err()
+		case <-timer.C:
+			timer.Reset(nextPollInterval())
+		}
+	}
 }
 
 // ErrNoAltSvcPort is the error returned by SetQUICHeaders when no port was found

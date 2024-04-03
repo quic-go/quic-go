@@ -72,6 +72,9 @@ type client struct {
 	hostname string
 	conn     atomic.Pointer[quic.EarlyConnection]
 
+	runningCtx map[quic.StreamID]context.CancelCauseFunc
+	ctxLock    sync.Mutex
+
 	logger utils.Logger
 }
 
@@ -121,6 +124,7 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 		config:        conf,
 		opts:          opts,
 		dialer:        dialer,
+		runningCtx:    make(map[quic.StreamID]context.CancelCauseFunc),
 		logger:        logger,
 	}, nil
 }
@@ -156,8 +160,33 @@ func (c *client) dial(ctx context.Context) error {
 		protocol.PerspectiveClient,
 		c.logger,
 	)
+	c.hconn.client = c
 	go c.hconn.HandleUnidirectionalStreams()
 	return nil
+}
+
+var goawayError = errors.New("server sent goaway")
+
+func (c *client) readControlStream(str quic.ReceiveStream) {
+	for {
+		frame, err := parseNextFrame(str, nil)
+		if err != nil {
+			c.logger.Errorf("Error reading control stream: %s", err)
+			return
+		}
+		switch v := frame.(type) {
+		case *goawayFrame:
+			c.ctxLock.Lock()
+			for id, cancel := range c.runningCtx {
+				if id >= v.ID {
+					cancel(goawayError)
+				}
+			}
+			c.ctxLock.Unlock()
+		default:
+			c.logger.Debugf("reading frame type: %T", v)
+		}
+	}
 }
 
 func (c *client) setupConn(conn quic.EarlyConnection) error {
@@ -275,6 +304,20 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		return nil, err
 	}
 
+	id := str.StreamID()
+	ctx, cancel := context.WithCancelCause(req.Context())
+
+	c.ctxLock.Lock()
+	c.runningCtx[id] = cancel
+	c.ctxLock.Unlock()
+
+	defer func() {
+		cancel(nil)
+		c.ctxLock.Lock()
+		delete(c.runningCtx, id)
+		c.ctxLock.Unlock()
+	}()
+
 	// Request Cancellation:
 	// This go routine keeps running even after RoundTripOpt() returns.
 	// It is shut down when the application is done processing the body.
@@ -287,6 +330,11 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 		case <-reqDone:
+		case <-ctx.Done():
+			if context.Cause(ctx) == goawayError {
+				str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+				str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+			}
 		}
 	}()
 

@@ -21,6 +21,9 @@ type connection struct {
 
 	settings         *Settings
 	receivedSettings chan struct{}
+
+	// not nil if client side
+	client *client
 }
 
 func newConnection(
@@ -67,6 +70,9 @@ func (c *connection) HandleUnidirectionalStreams() {
 			// We're only interested in the control stream here.
 			switch streamType {
 			case streamTypeControlStream:
+				if c.client != nil {
+					go c.client.readControlStream(str)
+				}
 			case streamTypeQPACKEncoderStream:
 				if isFirst := rcvdQPACKEncoderStr.CompareAndSwap(false, true); !isFirst {
 					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
