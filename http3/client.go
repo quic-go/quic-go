@@ -313,7 +313,6 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 
 	id := str.StreamID()
 	ctx, cancel := context.WithCancelCause(req.Context())
-
 	c.ctxLock.Lock()
 	c.runningCtx[id] = cancel
 	c.ctxLock.Unlock()
@@ -323,6 +322,15 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		c.ctxLock.Lock()
 		delete(c.runningCtx, id)
 		c.ctxLock.Unlock()
+	}()
+
+	// Separate goroutine to prevent interference with request cancellation
+	go func() {
+		<-ctx.Done()
+		if context.Cause(ctx) == errGoaway {
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		}
 	}()
 
 	// Request Cancellation:
@@ -337,11 +345,6 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 		case <-reqDone:
-		case <-ctx.Done():
-			if context.Cause(ctx) == errGoaway {
-				str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
-				str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
-			}
 		}
 	}()
 
