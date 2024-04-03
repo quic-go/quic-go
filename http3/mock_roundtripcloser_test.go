@@ -10,6 +10,7 @@
 package http3
 
 import (
+	context "context"
 	http "net/http"
 	reflect "reflect"
 
@@ -111,6 +112,45 @@ func (c *MockRoundTripCloserHandshakeCompleteCall) Do(f func() bool) *MockRoundT
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockRoundTripCloserHandshakeCompleteCall) DoAndReturn(f func() bool) *MockRoundTripCloserHandshakeCompleteCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// OpenStream mocks base method.
+func (m *MockRoundTripCloser) OpenStream(arg0 context.Context) (RequestStream, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OpenStream", arg0)
+	ret0, _ := ret[0].(RequestStream)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenStream indicates an expected call of OpenStream.
+func (mr *MockRoundTripCloserMockRecorder) OpenStream(arg0 any) *MockRoundTripCloserOpenStreamCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStream", reflect.TypeOf((*MockRoundTripCloser)(nil).OpenStream), arg0)
+	return &MockRoundTripCloserOpenStreamCall{Call: call}
+}
+
+// MockRoundTripCloserOpenStreamCall wrap *gomock.Call
+type MockRoundTripCloserOpenStreamCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockRoundTripCloserOpenStreamCall) Return(arg0 RequestStream, arg1 error) *MockRoundTripCloserOpenStreamCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockRoundTripCloserOpenStreamCall) Do(f func(context.Context) (RequestStream, error)) *MockRoundTripCloserOpenStreamCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockRoundTripCloserOpenStreamCall) DoAndReturn(f func(context.Context) (RequestStream, error)) *MockRoundTripCloserOpenStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

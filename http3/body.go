@@ -107,7 +107,7 @@ func (r *requestBody) Settings(ctx context.Context) (*Settings, error) {
 }
 
 type hijackableBody struct {
-	body
+	body body
 	conn quic.Connection // only needed to implement Hijacker
 
 	// only set for the http.Response
@@ -120,7 +120,6 @@ type hijackableBody struct {
 var (
 	_ io.ReadCloser = &hijackableBody{}
 	_ Hijacker      = &hijackableBody{}
-	_ HTTPStreamer  = &hijackableBody{}
 )
 
 func newResponseBody(str Stream, conn quic.Connection, done chan<- struct{}) *hijackableBody {
@@ -132,7 +131,7 @@ func newResponseBody(str Stream, conn quic.Connection, done chan<- struct{}) *hi
 }
 
 func (r *hijackableBody) Read(b []byte) (int, error) {
-	n, err := r.str.Read(b)
+	n, err := r.body.str.Read(b)
 	if err != nil {
 		r.requestDone()
 	}
@@ -152,9 +151,8 @@ func (r *hijackableBody) requestDone() {
 func (r *hijackableBody) Close() error {
 	r.requestDone()
 	// If the EOF was read, CancelRead() is a no-op.
-	r.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+	r.body.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 	return nil
 }
 
-func (r *hijackableBody) HTTPStream() Stream           { return r.str }
 func (r *hijackableBody) StreamCreator() StreamCreator { return r.conn }

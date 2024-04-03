@@ -477,8 +477,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 		go func() {
-			rerr := s.handleRequest(hconn, str, decoder, func() {
-				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			rerr := s.handleRequest(hconn, str, decoder, func(e ErrCode) {
+				conn.CloseWithError(quic.ApplicationErrorCode(e), "")
 			})
 			if rerr.err == errHijacked {
 				return
@@ -509,7 +509,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder, closeConnection func(ErrCode)) requestError {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -557,9 +557,9 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 	// See section 4.1.2 of RFC 9114.
 	var httpStr Stream
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
-		httpStr = newLengthLimitedStream(newStream(str, onFrameError), req.ContentLength)
+		httpStr = newLengthLimitedStream(newStream(str, closeConnection), req.ContentLength)
 	} else {
-		httpStr = newStream(str, onFrameError)
+		httpStr = newStream(str, closeConnection)
 	}
 	body := newRequestBody(httpStr, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
