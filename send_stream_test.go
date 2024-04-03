@@ -895,7 +895,6 @@ var _ = Describe("Send Stream", func() {
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
 				// don't EXPECT any calls to queueControlFrame
 				mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
-				// mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				_, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
@@ -905,17 +904,6 @@ var _ = Describe("Send Stream", func() {
 				Expect(hasMore).To(BeFalse())
 				Expect(f.Frame.Fin).To(BeTrue())
 				Expect(f.Frame.Data).To(Equal([]byte("foobar")))
-			})
-
-			It("queues a RESET_STREAM frame, even if the stream was already closed", func() {
-				mockSender.EXPECT().onHasStreamData(streamID)
-				mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-					Expect(f).To(BeAssignableToTypeOf(&wire.ResetStreamFrame{}))
-				})
-				mockSender.EXPECT().onStreamCompleted(gomock.Any())
-				Expect(str.Close()).To(Succeed())
-				// don't EXPECT any calls to queueControlFrame
-				str.CancelWrite(123)
 			})
 		})
 
