@@ -265,6 +265,9 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	if s.logger == nil {
 		s.logger = utils.DefaultLogger.WithPrefix("server")
 	}
+	if s.connections == nil {
+		s.connections = make(map[*quic.Connection]*atomic.Bool)
+	}
 	s.mutex.Unlock()
 
 	return s.handleConn(conn)
@@ -423,6 +426,9 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.listeners == nil {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
+	if s.connections == nil {
+		s.connections = make(map[*quic.Connection]*atomic.Bool)
+	}
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
@@ -501,7 +507,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				id := str.StreamID()
 				b = (&goawayFrame{
 					ID: id,
-				}).Append(b)
+				}).Append(b[:0])
 				controlStr.Write(b)
 			}
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
