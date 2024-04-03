@@ -381,7 +381,7 @@ func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
 // must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool) {
 	s.mutex.Lock()
-	if s.cancelWriteErr != nil {
+	if s.cancelWriteErr != nil || s.finishedWriting {
 		s.mutex.Unlock()
 		return
 	}

@@ -890,6 +890,23 @@ var _ = Describe("Send Stream", func() {
 				str.CancelWrite(4321)
 			})
 
+			It("doesn't cancel after closing", func() {
+				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
+				// don't EXPECT any calls to queueControlFrame
+				mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
+				// mockSender.EXPECT().onStreamCompleted(gomock.Any())
+				_, err := strWithTimeout.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
+				str.CancelWrite(4321) // this should be a no-op
+				f, ok, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+				Expect(ok).To(BeTrue())
+				Expect(hasMore).To(BeFalse())
+				Expect(f.Frame.Fin).To(BeTrue())
+				Expect(f.Frame.Data).To(Equal([]byte("foobar")))
+			})
+
 			It("queues a RESET_STREAM frame, even if the stream was already closed", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
