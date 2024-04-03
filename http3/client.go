@@ -72,8 +72,9 @@ type client struct {
 	hostname string
 	conn     atomic.Pointer[quic.EarlyConnection]
 
-	runningCtx map[quic.StreamID]context.CancelCauseFunc
-	ctxLock    sync.Mutex
+	receivedGoway atomic.Bool
+	runningCtx    map[quic.StreamID]context.CancelCauseFunc
+	ctxLock       sync.Mutex
 
 	logger utils.Logger
 }
@@ -176,6 +177,7 @@ func (c *client) readControlStream(str quic.ReceiveStream) {
 		}
 		switch v := frame.(type) {
 		case *goawayFrame:
+			c.receivedGoway.Store(true)
 			c.ctxLock.Lock()
 			for id, cancel := range c.runningCtx {
 				if id >= v.ID {
@@ -266,6 +268,11 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	// At this point, c.conn is guaranteed to be set.
 	conn := *c.conn.Load()
 
+	// check if goaway is received
+	if c.receivedGoway.Load() {
+		return nil, errGoaway
+	}
+
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
@@ -355,6 +362,10 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 				reason = rerr.err.Error()
 			}
 			conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+		}
+		// check if goaway interrupted this request
+		if context.Cause(ctx) == errGoaway {
+			return nil, errGoaway
 		}
 		return nil, maybeReplaceError(rerr.err)
 	}

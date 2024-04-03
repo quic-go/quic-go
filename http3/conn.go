@@ -70,9 +70,6 @@ func (c *connection) HandleUnidirectionalStreams() {
 			// We're only interested in the control stream here.
 			switch streamType {
 			case streamTypeControlStream:
-				if c.client != nil {
-					go c.client.readControlStream(str)
-				}
 			case streamTypeQPACKEncoderStream:
 				if isFirst := rcvdQPACKEncoderStr.CompareAndSwap(false, true); !isFirst {
 					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate QPACK encoder stream")
@@ -140,6 +137,10 @@ func (c *connection) HandleUnidirectionalStreams() {
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
 			if c.enableDatagrams && !c.Connection.ConnectionState().SupportsDatagrams {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
+			}
+			if c.client != nil {
+				// listen for GOAWAY
+				c.client.readControlStream(str)
 			}
 		}(str)
 	}
