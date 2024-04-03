@@ -165,7 +165,7 @@ func (c *client) dial(ctx context.Context) error {
 	return nil
 }
 
-var goawayError = errors.New("server sent goaway")
+var errGoaway = errors.New("server sent goaway")
 
 func (c *client) readControlStream(str quic.ReceiveStream) {
 	for {
@@ -179,7 +179,7 @@ func (c *client) readControlStream(str quic.ReceiveStream) {
 			c.ctxLock.Lock()
 			for id, cancel := range c.runningCtx {
 				if id >= v.ID {
-					cancel(goawayError)
+					cancel(errGoaway)
 				}
 			}
 			c.ctxLock.Unlock()
@@ -331,7 +331,7 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 		case <-reqDone:
 		case <-ctx.Done():
-			if context.Cause(ctx) == goawayError {
+			if context.Cause(ctx) == errGoaway {
 				str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 				str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 			}
