@@ -161,14 +161,14 @@ func (c *client) dial(ctx context.Context) error {
 		protocol.PerspectiveClient,
 		c.logger,
 	)
-	c.hconn.client = c
+	c.hconn.controlStrHandler = c.readControlStream
 	go c.hconn.HandleUnidirectionalStreams()
 	return nil
 }
 
 var errGoaway = errors.New("server sent goaway")
 
-func (c *client) readControlStream(str quic.ReceiveStream) {
+func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
 	for {
 		frame, err := parseNextFrame(str, nil)
 		if err != nil {
@@ -177,6 +177,11 @@ func (c *client) readControlStream(str quic.ReceiveStream) {
 		}
 		switch v := frame.(type) {
 		case *goawayFrame:
+			// invalid stream ID, rfc 9114
+			if v.ID < 0 || v.ID%4 != 0 {
+				conn.CloseWithError(quic.ApplicationErrorCode(protocol.InvalidStreamID), "")
+				return
+			}
 			c.receivedGoaway.Store(true)
 			c.ctxLock.Lock()
 			for id, cancel := range c.runningCtx {

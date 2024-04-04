@@ -22,8 +22,7 @@ type connection struct {
 	settings         *Settings
 	receivedSettings chan struct{}
 
-	// not nil if client side
-	client *client
+	controlStrHandler func(quic.ReceiveStream, quic.Connection)
 }
 
 func newConnection(
@@ -138,9 +137,8 @@ func (c *connection) HandleUnidirectionalStreams() {
 			if c.enableDatagrams && !c.Connection.ConnectionState().SupportsDatagrams {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			}
-			if c.client != nil {
-				// listen for GOAWAY
-				c.client.readControlStream(str)
+			if c.controlStrHandler != nil {
+				c.controlStrHandler(str, c.Connection)
 			}
 		}(str)
 	}
