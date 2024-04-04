@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -220,7 +219,7 @@ type Server struct {
 	listeners map[*QUICEarlyListener]listenerInfo
 
 	closed      bool
-	connections map[*quic.Connection]*atomic.Bool
+	connections map[*quic.Connection]func()
 
 	altSvcHeader string
 
@@ -266,7 +265,7 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 		s.logger = utils.DefaultLogger.WithPrefix("server")
 	}
 	if s.connections == nil {
-		s.connections = make(map[*quic.Connection]*atomic.Bool)
+		s.connections = make(map[*quic.Connection]func())
 	}
 	s.mutex.Unlock()
 
@@ -427,7 +426,7 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
 	if s.connections == nil {
-		s.connections = make(map[*quic.Connection]*atomic.Bool)
+		s.connections = make(map[*quic.Connection]func())
 	}
 
 	laddr := (*l).Addr()
@@ -465,9 +464,25 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}).Append(b)
 	str.Write(b)
 
-	var closed atomic.Bool
+	var (
+		once   sync.Once
+		mutex  sync.Mutex
+		closed bool
+		// client opened bidirectional stream ID starts at 0 and increase by 4
+		lastID = quic.StreamID(-4)
+	)
 	s.mutex.Lock()
-	s.connections[&conn] = &closed
+	s.connections[&conn] = func() {
+		once.Do(func() {
+			mutex.Lock()
+			closed = true
+			b = (&goawayFrame{
+				ID: lastID + 4,
+			}).Append(b[:0])
+			str.Write(b)
+			mutex.Unlock()
+		})
+	}
 	s.mutex.Unlock()
 
 	defer func() {
@@ -475,11 +490,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		delete(s.connections, &conn)
 		s.mutex.Unlock()
 	}()
-
-	var (
-		goawaySent bool
-		controlStr = str
-	)
 
 	hconn := newConnection(
 		conn,
@@ -501,15 +511,16 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
-		if closed.Load() {
-			if !goawaySent {
-				goawaySent = true
-				id := str.StreamID()
-				b = (&goawayFrame{
-					ID: id,
-				}).Append(b[:0])
-				controlStr.Write(b)
-			}
+
+		var reject bool
+		mutex.Lock()
+		reject = closed
+		if !reject {
+			lastID = str.StreamID()
+		}
+		mutex.Unlock()
+
+		if reject {
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
 			continue
@@ -716,8 +727,8 @@ func (s *Server) connectionsCount() int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	for _, closed := range s.connections {
-		closed.Store(true)
+	for _, f := range s.connections {
+		f()
 	}
 
 	return len(s.connections)
