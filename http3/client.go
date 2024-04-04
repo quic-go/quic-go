@@ -179,7 +179,7 @@ func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection)
 		case *goawayFrame:
 			// invalid stream ID, rfc 9114
 			if v.ID < 0 || v.ID%4 != 0 {
-				conn.CloseWithError(quic.ApplicationErrorCode(protocol.InvalidStreamID), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
 			c.receivedGoaway.Store(true)
