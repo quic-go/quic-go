@@ -73,6 +73,7 @@ type client struct {
 	conn     atomic.Pointer[quic.EarlyConnection]
 
 	receivedGoaway atomic.Bool
+	goawayChan     chan struct{}
 	runningCtx     map[quic.StreamID]context.CancelCauseFunc
 	ctxLock        sync.Mutex
 
@@ -125,6 +126,7 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 		config:        conf,
 		opts:          opts,
 		dialer:        dialer,
+		goawayChan:    make(chan struct{}),
 		runningCtx:    make(map[quic.StreamID]context.CancelCauseFunc),
 		logger:        logger,
 	}, nil
@@ -183,7 +185,9 @@ func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection)
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
-			c.receivedGoaway.Store(true)
+			if c.receivedGoaway.CompareAndSwap(false, true) {
+				close(c.goawayChan)
+			}
 			c.ctxLock.Lock()
 			for id, cancel := range c.runningCtx {
 				if id >= v.ID {
@@ -332,10 +336,16 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 
 	// Separate goroutine to prevent interference with request cancellation
 	go func() {
-		<-ctx.Done()
-		if context.Cause(ctx) == errGoaway {
+		select {
+		case <-c.goawayChan:
+			cancel(errGoaway)
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		case <-ctx.Done():
+			if context.Cause(ctx) == errGoaway {
+				str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+				str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+			}
 		}
 	}()
 
