@@ -169,6 +169,7 @@ func (c *client) dial(ctx context.Context) error {
 var errGoaway = errors.New("server sent goaway")
 
 func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
+	var lastID quic.StreamID
 	for {
 		frame, err := parseNextFrame(str, nil)
 		if err != nil {
@@ -178,7 +179,7 @@ func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection)
 		switch v := frame.(type) {
 		case *goawayFrame:
 			// invalid stream ID, rfc 9114
-			if v.ID < 0 || v.ID%4 != 0 {
+			if v.ID < 0 || v.ID%4 != 0 || (c.receivedGoaway.Load() && v.ID > lastID) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
