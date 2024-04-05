@@ -60,6 +60,7 @@ var (
 )
 
 func newSendStream(
+	ctx context.Context,
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
@@ -71,7 +72,7 @@ func newSendStream(
 		writeChan:      make(chan struct{}, 1),
 		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 	}
-	s.ctx, s.ctxCancel = context.WithCancelCause(context.Background())
+	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	return s
 }
 

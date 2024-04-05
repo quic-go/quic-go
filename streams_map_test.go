@@ -87,7 +87,7 @@ var _ = Describe("Streams Map", func() {
 
 			BeforeEach(func() {
 				mockSender = NewMockStreamSender(mockCtrl)
-				m = newStreamsMap(mockSender, newFlowController, MaxBidiStreamNum, MaxUniStreamNum, perspective).(*streamsMap)
+				m = newStreamsMap(context.Background(), mockSender, newFlowController, MaxBidiStreamNum, MaxUniStreamNum, perspective).(*streamsMap)
 			})
 
 			Context("opening", func() {

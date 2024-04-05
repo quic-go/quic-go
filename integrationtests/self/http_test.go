@@ -536,6 +536,7 @@ var _ = Describe("HTTP tests", func() {
 
 	It("sets conn context", func() {
 		type ctxKey int
+		var tracingID quic.ConnectionTracingID
 		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
 			serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
 			Expect(ok).To(BeTrue())
@@ -543,6 +544,7 @@ var _ = Describe("HTTP tests", func() {
 
 			ctx = context.WithValue(ctx, ctxKey(0), "Hello")
 			ctx = context.WithValue(ctx, ctxKey(1), c)
+			tracingID = c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
 			return ctx
 		}
 		mux.HandleFunc("/conn-context", func(w http.ResponseWriter, r *http.Request) {
@@ -558,6 +560,10 @@ var _ = Describe("HTTP tests", func() {
 			serv, ok := r.Context().Value(http3.ServerContextKey).(*http3.Server)
 			Expect(ok).To(BeTrue())
 			Expect(serv).To(Equal(server))
+
+			id, ok := r.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
+			Expect(ok).To(BeTrue())
+			Expect(id).To(Equal(tracingID))
 		})
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/conn-context", port))
