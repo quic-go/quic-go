@@ -151,6 +151,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 			w.header.Set("Content-Type", http.DetectContentType(p))
 		}
 		w.WriteHeader(http.StatusOK)
+		bodyAllowed = true
 	}
 	if !bodyAllowed {
 		return 0, http.ErrBodyNotAllowed
