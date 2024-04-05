@@ -72,10 +72,10 @@ type client struct {
 	hostname string
 	conn     atomic.Pointer[quic.EarlyConnection]
 
-	receivedGoaway atomic.Bool
-	goawayChan     chan struct{}
-	runningCtx     map[quic.StreamID]context.CancelCauseFunc
-	ctxLock        sync.Mutex
+	idLock           sync.RWMutex
+	receivedGoawayID quic.StreamID
+	runningCtx       map[quic.StreamID]context.CancelCauseFunc
+	ctxLock          sync.Mutex
 
 	logger utils.Logger
 }
@@ -119,16 +119,16 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	tlsConf.NextProtos = []string{versionToALPN(conf.Versions[0])}
 
 	return &client{
-		hostname:      authorityAddr("https", hostname),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        conf,
-		opts:          opts,
-		dialer:        dialer,
-		goawayChan:    make(chan struct{}),
-		runningCtx:    make(map[quic.StreamID]context.CancelCauseFunc),
-		logger:        logger,
+		hostname:         authorityAddr("https", hostname),
+		tlsConf:          tlsConf,
+		requestWriter:    newRequestWriter(logger),
+		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+		config:           conf,
+		opts:             opts,
+		dialer:           dialer,
+		receivedGoawayID: quic.StreamID(-4),
+		runningCtx:       make(map[quic.StreamID]context.CancelCauseFunc),
+		logger:           logger,
 	}, nil
 }
 
@@ -171,7 +171,7 @@ func (c *client) dial(ctx context.Context) error {
 var errGoaway = errors.New("server sent goaway")
 
 func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
-	var lastID quic.StreamID
+	var lastID = quic.StreamID(-4)
 	for {
 		frame, err := parseNextFrame(str, nil)
 		if err != nil {
@@ -181,13 +181,14 @@ func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection)
 		switch v := frame.(type) {
 		case *goawayFrame:
 			// invalid stream ID, rfc 9114
-			if v.ID < 0 || v.ID%4 != 0 || (c.receivedGoaway.Load() && v.ID > lastID) {
+			if v.ID < 0 || v.ID%4 != 0 || (lastID >= 0 && v.ID > lastID) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
-			if c.receivedGoaway.CompareAndSwap(false, true) {
-				close(c.goawayChan)
-			}
+			c.idLock.Lock()
+			c.receivedGoawayID = v.ID
+			c.idLock.Unlock()
+
 			c.ctxLock.Lock()
 			for id, cancel := range c.runningCtx {
 				if id >= v.ID {
@@ -263,6 +264,14 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	return rsp, err
 }
 
+func (c *client) goawayReceived() (quic.StreamID, bool) {
+	var id quic.StreamID
+	c.idLock.RLock()
+	id = c.receivedGoawayID
+	c.idLock.RUnlock()
+	return id, id >= 0
+}
+
 func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
 		return nil, fmt.Errorf("http3 client BUG: RoundTripOpt called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
@@ -277,11 +286,6 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 
 	// At this point, c.conn is guaranteed to be set.
 	conn := *c.conn.Load()
-
-	// check if goaway is received
-	if c.receivedGoaway.Load() {
-		return nil, errGoaway
-	}
 
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
@@ -334,18 +338,20 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		c.ctxLock.Unlock()
 	}()
 
+	// the context may not be canceled if it's added after goaway frame is processed
+	if goawayID, ok := c.goawayReceived(); ok && goawayID <= id {
+		cancel(errGoaway)
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		return nil, errGoaway
+	}
+
 	// Separate goroutine to prevent interference with request cancellation
 	go func() {
-		select {
-		case <-c.goawayChan:
-			cancel(errGoaway)
+		<-ctx.Done()
+		if context.Cause(ctx) == errGoaway {
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
-		case <-ctx.Done():
-			if context.Cause(ctx) == errGoaway {
-				str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
-				str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
-			}
 		}
 	}()
 
