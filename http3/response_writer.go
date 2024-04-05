@@ -136,7 +136,7 @@ func (w *responseWriter) WriteHeader(status int) {
 
 func (w *responseWriter) Write(p []byte) (int, error) {
 	bodyAllowed := bodyAllowedForStatus(w.status)
-	if !w.headerWritten {
+	if !w.written {
 		// If body is not allowed, we don't need to (and we can't) sniff the content type.
 		if bodyAllowed {
 			// If no content type, apply sniffing algorithm to body.
