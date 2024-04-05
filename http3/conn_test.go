@@ -26,7 +26,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -59,7 +58,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -101,7 +99,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					protocol.PerspectiveClient,
 					utils.DefaultLogger,
 				)
@@ -130,7 +127,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					protocol.PerspectiveClient,
 					utils.DefaultLogger,
 				)
@@ -166,7 +162,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -192,7 +187,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -223,7 +217,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -261,7 +254,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					pers.Opposite(),
 					utils.DefaultLogger,
 				)
@@ -291,7 +283,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				true,
-				nil,
 				protocol.PerspectiveClient,
 				utils.DefaultLogger,
 			)

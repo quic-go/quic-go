@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -35,438 +33,19 @@ func encodeResponse(status int) []byte {
 }
 
 var _ = Describe("Client", func() {
-	var (
-		cl            *client
-		req           *http.Request
-		origDialAddr  = dialAddr
-		handshakeChan <-chan struct{} // a closed chan
-	)
+	var handshakeChan <-chan struct{} // a closed chan
 
 	BeforeEach(func() {
-		origDialAddr = dialAddr
-		hostname := "quic.clemente.io:1337"
-		c, err := newClient(hostname, nil, &roundTripperOpts{MaxHeaderBytes: 1337}, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		cl = c.(*client)
-		Expect(cl.hostname).To(Equal(hostname))
-
-		req, err = http.NewRequest("GET", "https://localhost:1337", nil)
-		Expect(err).ToNot(HaveOccurred())
-
 		ch := make(chan struct{})
 		close(ch)
 		handshakeChan = ch
-	})
-
-	AfterEach(func() {
-		dialAddr = origDialAddr
-	})
-
-	It("rejects quic.Configs that allow multiple QUIC versions", func() {
-		qconf := &quic.Config{
-			Versions: []quic.Version{protocol.Version2, protocol.Version1},
-		}
-		_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
-		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
-	})
-
-	It("uses the default QUIC and TLS config if none is give", func() {
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		var dialAddrCalled bool
-		dialAddr = func(_ context.Context, _ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
-			Expect(quicConf.MaxIncomingStreams).To(Equal(defaultQuicConfig.MaxIncomingStreams))
-			Expect(tlsConf.NextProtos).To(Equal([]string{NextProtoH3}))
-			Expect(quicConf.Versions).To(Equal([]protocol.Version{protocol.Version1}))
-			dialAddrCalled = true
-			return nil, errors.New("test done")
-		}
-		client.RoundTripOpt(req, RoundTripOpt{})
-		Expect(dialAddrCalled).To(BeTrue())
-	})
-
-	It("adds the port to the hostname, if none is given", func() {
-		client, err := newClient("quic.clemente.io", nil, &roundTripperOpts{}, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		var dialAddrCalled bool
-		dialAddr = func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
-			Expect(hostname).To(Equal("quic.clemente.io:443"))
-			dialAddrCalled = true
-			return nil, errors.New("test done")
-		}
-		req, err := http.NewRequest("GET", "https://quic.clemente.io:443", nil)
-		Expect(err).ToNot(HaveOccurred())
-		client.RoundTripOpt(req, RoundTripOpt{})
-		Expect(dialAddrCalled).To(BeTrue())
-	})
-
-	It("sets the ServerName in the tls.Config, if not set", func() {
-		const host = "foo.bar"
-		dialCalled := false
-		dialFunc := func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-			Expect(tlsCfg.ServerName).To(Equal(host))
-			dialCalled = true
-			return nil, errors.New("test done")
-		}
-		client, err := newClient(host, nil, &roundTripperOpts{}, nil, dialFunc)
-		Expect(err).ToNot(HaveOccurred())
-		req, err := http.NewRequest("GET", "https://foo.bar", nil)
-		Expect(err).ToNot(HaveOccurred())
-		client.RoundTripOpt(req, RoundTripOpt{})
-		Expect(dialCalled).To(BeTrue())
-	})
-
-	It("uses the TLS config and QUIC config", func() {
-		tlsConf := &tls.Config{
-			ServerName: "foo.bar",
-			NextProtos: []string{"proto foo", "proto bar"},
-		}
-		quicConf := &quic.Config{MaxIdleTimeout: time.Nanosecond}
-		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, nil)
-		Expect(err).ToNot(HaveOccurred())
-		var dialAddrCalled bool
-		dialAddr = func(_ context.Context, host string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
-			Expect(host).To(Equal("localhost:1337"))
-			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
-			Expect(tlsConfP.NextProtos).To(Equal([]string{NextProtoH3}))
-			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
-			dialAddrCalled = true
-			return nil, errors.New("test done")
-		}
-		client.RoundTripOpt(req, RoundTripOpt{})
-		Expect(dialAddrCalled).To(BeTrue())
-		// make sure the original tls.Config was not modified
-		Expect(tlsConf.NextProtos).To(Equal([]string{"proto foo", "proto bar"}))
-	})
-
-	It("uses the custom dialer, if provided", func() {
-		testErr := errors.New("test done")
-		tlsConf := &tls.Config{ServerName: "foo.bar"}
-		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-		defer cancel()
-		var dialerCalled bool
-		dialer := func(ctxP context.Context, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
-			Expect(ctxP).To(Equal(ctx))
-			Expect(address).To(Equal("localhost:1337"))
-			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
-			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
-			dialerCalled = true
-			return nil, testErr
-		}
-		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, dialer)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = client.RoundTripOpt(req.WithContext(ctx), RoundTripOpt{})
-		Expect(err).To(MatchError(testErr))
-		Expect(dialerCalled).To(BeTrue())
-	})
-
-	It("enables HTTP/3 Datagrams", func() {
-		testErr := errors.New("handshake error")
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagram: true}, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		dialAddr = func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
-			Expect(quicConf.EnableDatagrams).To(BeTrue())
-			return nil, testErr
-		}
-		_, err = client.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError(testErr))
-	})
-
-	It("errors when dialing fails", func() {
-		testErr := errors.New("handshake error")
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-			return nil, testErr
-		}
-		_, err = client.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError(testErr))
-	})
-
-	It("closes correctly if connection was not created", func() {
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(client.Close()).To(Succeed())
-	})
-
-	Context("validating the address", func() {
-		It("refuses to do requests for the wrong host", func() {
-			req, err := http.NewRequest("https", "https://quic.clemente.io:1336/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			_, err = cl.RoundTripOpt(req, RoundTripOpt{})
-			Expect(err).To(MatchError("http3 client BUG: RoundTripOpt called for the wrong client (expected quic.clemente.io:1337, got quic.clemente.io:1336)"))
-		})
-
-		It("allows requests using a different scheme", func() {
-			testErr := errors.New("handshake error")
-			req, err := http.NewRequest("masque", "masque://quic.clemente.io:1337/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				return nil, testErr
-			}
-			_, err = cl.RoundTripOpt(req, RoundTripOpt{})
-			Expect(err).To(MatchError(testErr))
-		})
-	})
-
-	Context("hijacking bidirectional streams", func() {
-		var (
-			request              *http.Request
-			conn                 *mockquic.MockEarlyConnection
-			settingsFrameWritten chan struct{}
-		)
-		testDone := make(chan struct{})
-
-		BeforeEach(func() {
-			testDone = make(chan struct{})
-			settingsFrameWritten = make(chan struct{})
-			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
-				defer GinkgoRecover()
-				close(settingsFrameWritten)
-				return len(b), nil
-			})
-			conn = mockquic.NewMockEarlyConnection(mockCtrl)
-			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-			conn.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("done"))
-			conn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("done")).AnyTimes()
-			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				return conn, nil
-			}
-			var err error
-			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			testDone <- struct{}{}
-			Eventually(settingsFrameWritten).Should(BeClosed())
-		})
-
-		It("hijacks a bidirectional stream of unknown frame type", func() {
-			id := quic.ConnectionTracingID(1234)
-			frameTypeChan := make(chan FrameType, 1)
-			cl.opts.StreamHijacker = func(ft FrameType, connTracingID quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
-				Expect(e).ToNot(HaveOccurred())
-				Expect(connTracingID).To(Equal(id))
-				frameTypeChan <- ft
-				return true, nil
-			}
-
-			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
-			conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := cl.RoundTripOpt(request, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
-		})
-
-		It("closes the connection when hijacker didn't hijack a bidirectional stream", func() {
-			frameTypeChan := make(chan FrameType, 1)
-			cl.opts.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
-				Expect(e).ToNot(HaveOccurred())
-				frameTypeChan <- ft
-				return false, nil
-			}
-
-			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
-			conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := cl.RoundTripOpt(request, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
-		})
-
-		It("closes the connection when hijacker returned error", func() {
-			frameTypeChan := make(chan FrameType, 1)
-			cl.opts.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
-				Expect(e).ToNot(HaveOccurred())
-				frameTypeChan <- ft
-				return false, errors.New("error in hijacker")
-			}
-
-			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
-			conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := cl.RoundTripOpt(request, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
-		})
-
-		It("handles errors that occur when reading the frame type", func() {
-			testErr := errors.New("test error")
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			done := make(chan struct{})
-			cl.opts.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, str quic.Stream, e error) (hijacked bool, err error) {
-				defer close(done)
-				Expect(e).To(MatchError(testErr))
-				Expect(ft).To(BeZero())
-				Expect(str).To(Equal(unknownStr))
-				return false, nil
-			}
-
-			unknownStr.EXPECT().Read(gomock.Any()).Return(0, testErr).AnyTimes()
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
-			conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := cl.RoundTripOpt(request, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(done).Should(BeClosed())
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
-		})
-	})
-
-	Context("hijacking unidirectional streams", func() {
-		var (
-			req                  *http.Request
-			conn                 *mockquic.MockEarlyConnection
-			settingsFrameWritten chan struct{}
-		)
-		testDone := make(chan struct{})
-
-		BeforeEach(func() {
-			testDone = make(chan struct{})
-			settingsFrameWritten = make(chan struct{})
-			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
-				defer GinkgoRecover()
-				close(settingsFrameWritten)
-				return len(b), nil
-			})
-			conn = mockquic.NewMockEarlyConnection(mockCtrl)
-			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-			conn.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("done"))
-			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				return conn, nil
-			}
-			var err error
-			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			testDone <- struct{}{}
-			Eventually(settingsFrameWritten).Should(BeClosed())
-		})
-
-		It("hijacks an unidirectional stream of unknown stream type", func() {
-			id := quic.ConnectionTracingID(100)
-			streamTypeChan := make(chan StreamType, 1)
-			cl.opts.UniStreamHijacker = func(st StreamType, connTracingID quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
-				Expect(connTracingID).To(Equal(id))
-				Expect(err).ToNot(HaveOccurred())
-				streamTypeChan <- st
-				return true
-			}
-
-			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				return unknownStr, nil
-			})
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
-		})
-
-		It("handles errors that occur when reading the stream type", func() {
-			testErr := errors.New("test error")
-			done := make(chan struct{})
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			cl.opts.UniStreamHijacker = func(st StreamType, _ quic.ConnectionTracingID, str quic.ReceiveStream, err error) bool {
-				defer close(done)
-				Expect(st).To(BeZero())
-				Expect(str).To(Equal(unknownStr))
-				Expect(err).To(MatchError(testErr))
-				return true
-			}
-
-			unknownStr.EXPECT().Read(gomock.Any()).Return(0, testErr)
-			conn.EXPECT().AcceptUniStream(gomock.Any()).Return(unknownStr, nil)
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(done).Should(BeClosed())
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
-		})
-
-		It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
-			streamTypeChan := make(chan StreamType, 1)
-			cl.opts.UniStreamHijacker = func(st StreamType, _ quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
-				Expect(err).ToNot(HaveOccurred())
-				streamTypeChan <- st
-				return false
-			}
-
-			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				return unknownStr, nil
-			})
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				<-testDone
-				return nil, errors.New("test done")
-			})
-			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
-			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
-			Expect(err).To(MatchError("done"))
-			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
-		})
 	})
 
 	Context("SETTINGS handling", func() {
 		var (
 			req                  *http.Request
 			conn                 *mockquic.MockEarlyConnection
+			cl                   *SingleDestinationRoundTripper
 			settingsFrameWritten chan struct{}
 		)
 		testDone := make(chan struct{}, 1)
@@ -482,9 +61,7 @@ var _ = Describe("Client", func() {
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				return conn, nil
-			}
+			cl = &SingleDestinationRoundTripper{Connection: conn}
 			var err error
 			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -514,6 +91,7 @@ var _ = Describe("Client", func() {
 			_, err := cl.RoundTripOpt(req, RoundTripOpt{CheckSettings: func(settings Settings) error {
 				return errors.New("wrong settings")
 			}})
+			cl.Connection = conn
 			Expect(err).To(MatchError("wrong settings"))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 		})
@@ -524,6 +102,7 @@ var _ = Describe("Client", func() {
 			req                  *http.Request
 			str                  *mockquic.MockStream
 			conn                 *mockquic.MockEarlyConnection
+			cl                   *SingleDestinationRoundTripper
 			settingsFrameWritten chan struct{}
 		)
 		testDone := make(chan struct{})
@@ -532,7 +111,7 @@ var _ = Describe("Client", func() {
 			fields := make(map[string]string)
 			decoder := qpack.NewDecoder(nil)
 
-			frame, err := parseNextFrame(str, nil)
+			frame, err := parseNextFrame(str)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
@@ -566,9 +145,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				return conn, nil
-			}
+			cl = &SingleDestinationRoundTripper{Connection: conn}
 			var err error
 			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -579,7 +156,7 @@ var _ = Describe("Client", func() {
 			Eventually(settingsFrameWritten).Should(BeClosed())
 		})
 
-		It("errors if it can't open a stream", func() {
+		It("errors if it can't open a request stream", func() {
 			testErr := errors.New("stream open error")
 			conn.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
@@ -749,6 +326,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
+				cl.MaxResponseHeaderBytes = 1337
 				b := (&headersFrame{Length: 1338}).Append(nil)
 				r := bytes.NewReader(b)
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
@@ -770,7 +348,7 @@ var _ = Describe("Client", func() {
 
 				errChan := make(chan error)
 				go func() {
-					_, err := cl.roundTripOpt(req, RoundTripOpt{})
+					_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 					errChan <- err
 				}()
 				Consistently(errChan).ShouldNot(Receive())
@@ -853,8 +431,10 @@ var _ = Describe("Client", func() {
 			})
 
 			It("doesn't add gzip if the header disable it", func() {
-				client, err := newClient("quic.clemente.io:1337", nil, &roundTripperOpts{DisableCompression: true}, nil, nil)
-				Expect(err).ToNot(HaveOccurred())
+				client := &SingleDestinationRoundTripper{
+					Connection:         conn,
+					DisableCompression: true,
+				}
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
@@ -866,7 +446,7 @@ var _ = Describe("Client", func() {
 				)
 				testErr := errors.New("test done")
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
-				_, err = client.RoundTripOpt(req, RoundTripOpt{})
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError(testErr))
 				hfs := decodeHeader(buf)
 				Expect(hfs).ToNot(HaveKey("accept-encoding"))

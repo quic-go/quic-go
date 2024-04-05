@@ -23,7 +23,7 @@ var _ = Describe("Request Writer", func() {
 	)
 
 	decode := func(str io.Reader) map[string]string {
-		frame, err := parseNextFrame(str, nil)
+		frame, err := parseNextFrame(str)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)

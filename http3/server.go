@@ -104,11 +104,11 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 
 // contextKey is a value for use with context.WithValue. It's used as
 // a pointer so it fits in an interface{} without allocation.
-type contextKey struct {
-	name string
-}
+type contextKey struct{ name string }
 
 func (k *contextKey) String() string { return "quic-go/http3 context value " + k.name }
+
+var errHijacked = errors.New("hijacked")
 
 // ServerContextKey is a context key. It can be used in HTTP
 // handlers with Context.Value to access the server that
@@ -194,20 +194,6 @@ type Server struct {
 	// AdditionalSettings specifies additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
-
-	// StreamHijacker, when set, is called for the first unknown frame parsed on a bidirectional stream.
-	// It is called right after parsing the frame type.
-	// If parsing the frame type fails, the error is passed to the callback.
-	// In that case, the frame type will not be set.
-	// Callers can either ignore the frame and return control of the stream back to HTTP/3
-	// (by returning hijacked false).
-	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
-	StreamHijacker func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
-
-	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
-	// If parsing the stream type fails, the error is passed to the callback.
-	// In that case, the stream type will not be set.
-	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
 	// ConnContext optionally specifies a function that modifies
 	// the context used for a new connection c. The provided ctx
@@ -459,7 +445,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	hconn := newConnection(
 		conn,
 		s.EnableDatagrams,
-		s.UniStreamHijacker,
 		protocol.PerspectiveServer,
 		s.logger,
 	)
@@ -510,22 +495,8 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder, closeConnection func(ErrCode)) requestError {
-	var ufh unknownFrameHandlerFunc
-	if s.StreamHijacker != nil {
-		ufh = func(ft FrameType, e error) (processed bool, err error) {
-			return s.StreamHijacker(
-				ft,
-				conn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
-				str,
-				e,
-			)
-		}
-	}
-	frame, err := parseNextFrame(str, ufh)
+	frame, err := parseNextFrame(str)
 	if err != nil {
-		if err == errHijacked {
-			return requestError{err: errHijacked}
-		}
 		return newStreamError(ErrCodeRequestIncomplete, err)
 	}
 	hf, ok := frame.(*headersFrame)

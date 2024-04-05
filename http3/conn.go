@@ -16,8 +16,7 @@ type connection struct {
 	perspective protocol.Perspective
 	logger      utils.Logger
 
-	enableDatagrams   bool
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
+	enableDatagrams bool
 
 	settings         *Settings
 	receivedSettings chan struct{}
@@ -26,17 +25,15 @@ type connection struct {
 func newConnection(
 	quicConn quic.Connection,
 	enableDatagrams bool,
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool),
 	perspective protocol.Perspective,
 	logger utils.Logger,
 ) *connection {
 	return &connection{
-		Connection:        quicConn,
-		perspective:       perspective,
-		logger:            logger,
-		enableDatagrams:   enableDatagrams,
-		uniStreamHijacker: uniStreamHijacker,
-		receivedSettings:  make(chan struct{}),
+		Connection:       quicConn,
+		perspective:      perspective,
+		logger:           logger,
+		enableDatagrams:  enableDatagrams,
+		receivedSettings: make(chan struct{}),
 	}
 }
 
@@ -57,10 +54,6 @@ func (c *connection) HandleUnidirectionalStreams() {
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
-				id := c.Connection.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), id, str, err) {
-					return
-				}
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
 			}
@@ -90,16 +83,6 @@ func (c *connection) HandleUnidirectionalStreams() {
 				}
 				return
 			default:
-				if c.uniStreamHijacker != nil {
-					if c.uniStreamHijacker(
-						StreamType(streamType),
-						c.Connection.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
-						str,
-						nil,
-					) {
-						return
-					}
-				}
 				str.CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
 				return
 			}
@@ -108,7 +91,7 @@ func (c *connection) HandleUnidirectionalStreams() {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
-			f, err := parseNextFrame(str, nil)
+			f, err := parseNextFrame(str)
 			if err != nil {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
 				return

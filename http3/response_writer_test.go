@@ -36,7 +36,7 @@ var _ = Describe("Response Writer", func() {
 		fields := make(map[string][]string)
 		decoder := qpack.NewDecoder(nil)
 
-		frame, err := parseNextFrame(str, nil)
+		frame, err := parseNextFrame(str)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)
@@ -52,7 +52,7 @@ var _ = Describe("Response Writer", func() {
 	}
 
 	getData := func(str io.Reader) []byte {
-		frame, err := parseNextFrame(str, nil)
+		frame, err := parseNextFrame(str)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
 		df := frame.(*dataFrame)
