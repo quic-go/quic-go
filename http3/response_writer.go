@@ -137,7 +137,7 @@ func (w *responseWriter) WriteHeader(status int) {
 func (w *responseWriter) Write(p []byte) (int, error) {
 	bodyAllowed := bodyAllowedForStatus(w.status)
 	// If body is not allowed, we don't need to (and we can't) sniff the content type.
-	// 1XX status is an exception, it's normally temporary and the status can be overriden.
+	// 1XX status is an exception, it's normally temporary and the status can be overridden.
 	if !w.written && (bodyAllowed || !w.headerWritten) {
 		// If no content type, apply sniffing algorithm to body.
 		// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shoundn't do sniffing.
