@@ -381,7 +381,12 @@ func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
 // must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool) {
 	s.mutex.Lock()
-	if s.cancelWriteErr != nil || s.finishedWriting {
+	// This call is a no-op if:
+	// * the stream has already been canceled before (e.g. duplicate calls to CancelWrite,
+	//	 or CancelWrite after STOP_SENDING), or
+	// * the stream was closed.
+	// However, if a STOP_SENDING is received for a closed stream, we proceed with the cancellation.
+	if s.cancelWriteErr != nil || (!remote && s.finishedWriting) {
 		s.mutex.Unlock()
 		return
 	}

@@ -958,6 +958,21 @@ var _ = Describe("Send Stream", func() {
 					Remote:    true,
 				}))
 			})
+
+			It("resets, even if the stream was closed before", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
+				Expect(str.Close()).To(Succeed())
+				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
+					StreamID:  streamID,
+					ErrorCode: 101,
+				})
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
+
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 101,
+				})
+			})
 		})
 	})
 
