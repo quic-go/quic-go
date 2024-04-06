@@ -272,8 +272,8 @@ var newConnection = func(
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
+	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -381,8 +381,8 @@ var newClientConnection = func(
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
+	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -471,6 +471,7 @@ func (s *connection) preSetup() {
 	)
 	s.earlyConnReadyChan = make(chan struct{})
 	s.streamsMap = newStreamsMap(
+		s.ctx,
 		s,
 		s.newFlowController,
 		uint64(s.config.MaxIncomingStreams),
