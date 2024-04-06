@@ -66,6 +66,8 @@ type SingleDestinationRoundTripper struct {
 	logger        utils.Logger
 }
 
+var _ http.RoundTripper = &SingleDestinationRoundTripper{}
+
 func (c *SingleDestinationRoundTripper) init() error {
 	c.logger = utils.DefaultLogger.WithPrefix("h3 client")
 	c.requestWriter = newRequestWriter(c.logger)
@@ -103,11 +105,11 @@ func (c *SingleDestinationRoundTripper) maxHeaderBytes() uint64 {
 	return uint64(c.MaxResponseHeaderBytes)
 }
 
-// RoundTripOpt executes a request and returns a response
-func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+// RoundTrip executes a request and returns a response
+func (c *SingleDestinationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.initOnce.Do(func() { c.init() })
 
-	rsp, err := c.roundTripOpt(req, opt)
+	rsp, err := c.roundTrip(req)
 	if err != nil && req.Context().Err() != nil {
 		// if the context was canceled, return the context cancellation error
 		err = req.Context().Err()
@@ -115,7 +117,7 @@ func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt Roun
 	return rsp, err
 }
 
-func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Response, error) {
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
@@ -137,19 +139,6 @@ func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt Roun
 			case <-req.Context().Done():
 				return nil, req.Context().Err()
 			}
-		}
-	}
-
-	if opt.CheckSettings != nil {
-		connCtx := c.Connection.Context()
-		// wait for the server's SETTINGS frame to arrive
-		select {
-		case <-c.hconn.ReceivedSettings():
-		case <-connCtx.Done():
-			return nil, context.Cause(connCtx)
-		}
-		if err := opt.CheckSettings(*c.hconn.Settings()); err != nil {
-			return nil, err
 		}
 	}
 
@@ -280,4 +269,15 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.St
 	res.TLS = &connState
 	res.Request = req
 	return res, nil
+}
+
+func (c *SingleDestinationRoundTripper) Settings() (*Settings, error) {
+	c.initOnce.Do(func() { c.init() })
+
+	select {
+	case <-c.hconn.ReceivedSettings():
+		return c.hconn.Settings(), nil
+	case <-c.hconn.Context().Done():
+		return nil, context.Cause(c.hconn.Context())
+	}
 }
