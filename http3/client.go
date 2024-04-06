@@ -69,6 +69,8 @@ type SingleDestinationRoundTripper struct {
 	decoder       *qpack.Decoder
 }
 
+var _ http.RoundTripper = &SingleDestinationRoundTripper{}
+
 func (c *SingleDestinationRoundTripper) Start() Connection {
 	c.initOnce.Do(func() { c.init() })
 	return c.hconn
@@ -141,11 +143,11 @@ func (c *SingleDestinationRoundTripper) maxHeaderBytes() uint64 {
 	return uint64(c.MaxResponseHeaderBytes)
 }
 
-// RoundTripOpt executes a request and returns a response
-func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+// RoundTrip executes a request and returns a response
+func (c *SingleDestinationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.initOnce.Do(func() { c.init() })
 
-	rsp, err := c.roundTripOpt(req, opt)
+	rsp, err := c.roundTrip(req)
 	if err != nil && req.Context().Err() != nil {
 		// if the context was canceled, return the context cancellation error
 		err = req.Context().Err()
@@ -153,7 +155,7 @@ func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt Roun
 	return rsp, err
 }
 
-func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Response, error) {
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
@@ -175,19 +177,6 @@ func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt Roun
 			case <-req.Context().Done():
 				return nil, req.Context().Err()
 			}
-		}
-	}
-
-	if opt.CheckSettings != nil {
-		connCtx := c.Connection.Context()
-		// wait for the server's SETTINGS frame to arrive
-		select {
-		case <-c.hconn.ReceivedSettings():
-		case <-connCtx.Done():
-			return nil, context.Cause(connCtx)
-		}
-		if err := opt.CheckSettings(*c.hconn.Settings()); err != nil {
-			return nil, err
 		}
 	}
 

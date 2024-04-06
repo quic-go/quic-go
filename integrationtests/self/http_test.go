@@ -587,16 +587,23 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	It("checks the server's settings", func() {
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/hello", port), nil)
+		tlsConf := tlsClientConfigWithoutServerName.Clone()
+		tlsConf.NextProtos = []string{http3.NextProtoH3}
+		conn, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
 		Expect(err).ToNot(HaveOccurred())
-		testErr := errors.New("test error")
-		_, err = rt.RoundTripOpt(req, http3.RoundTripOpt{CheckSettings: func(settings http3.Settings) error {
-			Expect(settings.EnableExtendedConnect).To(BeTrue())
-			Expect(settings.EnableDatagram).To(BeFalse())
-			Expect(settings.Other).To(BeEmpty())
-			return testErr
-		}})
-		Expect(err).To(MatchError(err))
+		defer conn.CloseWithError(0, "")
+		rt := http3.SingleDestinationRoundTripper{Connection: conn}
+		hconn := rt.Start()
+		Eventually(hconn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
+		settings := hconn.Settings()
+		Expect(settings.EnableExtendedConnect).To(BeTrue())
+		Expect(settings.EnableDatagram).To(BeFalse())
+		Expect(settings.Other).To(BeEmpty())
 	})
 
 	It("receives the client's settings", func() {
@@ -604,11 +611,7 @@ var _ = Describe("HTTP tests", func() {
 		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
 			conn := w.(http3.Hijacker).Connection()
-			select {
-			case <-conn.ReceivedSettings():
-			case <-time.After(5 * time.Second):
-				Fail("didn't receive SETTINGS")
-			}
+			Eventually(conn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
 			settingsChan <- conn.Settings()
 			w.WriteHeader(http.StatusOK)
 		})

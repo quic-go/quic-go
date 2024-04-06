@@ -95,7 +95,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTripOpt(request, RoundTripOpt{})
+			_, err := rt.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -123,7 +123,7 @@ var _ = Describe("Client", func() {
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := rt.RoundTripOpt(request, RoundTripOpt{})
+			_, err := rt.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 		})
@@ -150,7 +150,7 @@ var _ = Describe("Client", func() {
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := rt.RoundTripOpt(request, RoundTripOpt{})
+			_, err := rt.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 		})
@@ -179,7 +179,7 @@ var _ = Describe("Client", func() {
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := rt.RoundTripOpt(request, RoundTripOpt{})
+			_, err := rt.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -242,7 +242,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTripOpt(req, RoundTripOpt{})
+			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
 			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -271,7 +271,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTripOpt(req, RoundTripOpt{})
+			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -301,7 +301,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTripOpt(req, RoundTripOpt{})
+			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
 			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -309,58 +309,71 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("SETTINGS handling", func() {
-		var (
-			req                  *http.Request
-			conn                 *mockquic.MockEarlyConnection
-			rt                   *SingleDestinationRoundTripper
-			settingsFrameWritten chan struct{}
-		)
-		testDone := make(chan struct{}, 1)
+		var settingsFrameWritten chan struct{}
 
 		BeforeEach(func() {
 			settingsFrameWritten = make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
+			var buf bytes.Buffer
 			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
 				defer GinkgoRecover()
+				buf.Write(b)
 				close(settingsFrameWritten)
 				return len(b), nil
 			})
-			conn = mockquic.NewMockEarlyConnection(mockCtrl)
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+			conn.EXPECT().OpenStreamSync(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
+				<-settingsFrameWritten
+				return nil, errors.New("test done")
+			})
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-settingsFrameWritten
+				return nil, errors.New("test done")
+			}).AnyTimes()
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-			rt = &SingleDestinationRoundTripper{Connection: conn}
-			var err error
-			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
+			rt := &SingleDestinationRoundTripper{
+				Connection:      conn,
+				EnableDatagrams: true,
+			}
+			req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError("test done"))
+			t, err := quicvarint.Read(&buf)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(t).To(BeEquivalentTo(streamTypeControlStream))
+			settings, err := parseSettingsFrame(&buf, uint64(buf.Len()))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(settings.Datagram).To(BeTrue())
 		})
 
-		AfterEach(func() {
-			testDone <- struct{}{}
-			Eventually(settingsFrameWritten).Should(BeClosed())
-		})
-
-		It("allows the client to reject the SETTINGS using the CheckSettings RoundTripOpt", func() {
+		It("receives SETTINGS", func() {
+			done := make(chan struct{})
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
 			b := quicvarint.Append(nil, streamTypeControlStream)
-			b = (&settingsFrame{}).Append(b)
+			b = (&settingsFrame{Datagram: true}).Append(b)
 			r := bytes.NewReader(b)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
-			// Don't EXPECT any call to OpenStreamSync.
-			// When the SETTINGS are rejected, we don't even open the request stream.
+			conn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				return controlStr, nil
-			})
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				<-testDone
+				<-done
 				return nil, errors.New("test done")
 			})
-			conn.EXPECT().Context().Return(context.Background())
-			_, err := rt.RoundTripOpt(req, RoundTripOpt{CheckSettings: func(settings Settings) error {
-				return errors.New("wrong settings")
-			}})
-			rt.Connection = conn
-			Expect(err).To(MatchError("wrong settings"))
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+
+			rt := &SingleDestinationRoundTripper{Connection: conn}
+			hconn := rt.Start()
+			Eventually(hconn.ReceivedSettings()).Should(BeClosed())
+			settings := hconn.Settings()
+			Expect(settings.EnableDatagram).To(BeTrue())
+			// test shutdown
+			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
+			close(done)
 		})
 	})
 
@@ -428,7 +441,7 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-			_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+			_, err := cl.RoundTrip(req)
 			Expect(err).To(MatchError(testErr))
 		})
 
@@ -447,7 +460,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
 					return 0, testErr
 				})
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError(testErr))
 				Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", serialized))
 				// make sure the request wasn't modified
@@ -467,7 +480,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
-			rsp, err := cl.RoundTripOpt(req, RoundTripOpt{})
+			rsp, err := cl.RoundTrip(req)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
@@ -506,7 +519,7 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, testErr
 				})
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError(testErr))
 				hfs := decodeHeader(strBuf)
 				Expect(hfs).To(HaveKeyWithValue(":method", "POST"))
@@ -532,7 +545,7 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, errors.New("done")
 				})
-				cl.RoundTripOpt(req, RoundTripOpt{})
+				cl.RoundTrip(req)
 				Expect(strBuf.String()).To(ContainSubstring("request"))
 				Expect(strBuf.String()).ToNot(ContainSubstring("request body"))
 			})
@@ -556,7 +569,7 @@ var _ = Describe("Client", func() {
 				})
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError(testErr))
 				Eventually(closed).Should(BeClosed())
 			})
@@ -568,7 +581,7 @@ var _ = Describe("Client", func() {
 				r := bytes.NewReader(b)
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError("http3: expected first frame to be a HEADERS frame"))
 				Eventually(closed).Should(BeClosed())
 			})
@@ -587,7 +600,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(HaveOccurred())
 				Eventually(closed).Should(BeClosed())
 			})
@@ -601,7 +614,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError("http3: HEADERS frame too large: 1338 bytes (max: 1337)"))
 				Eventually(closed).Should(BeClosed())
 			})
@@ -627,7 +640,7 @@ var _ = Describe("Client", func() {
 
 				errChan := make(chan error)
 				go func() {
-					_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+					_, err := cl.RoundTrip(req)
 					errChan <- err
 				}()
 				Consistently(errChan).ShouldNot(Receive())
@@ -658,7 +671,7 @@ var _ = Describe("Client", func() {
 					<-canceled
 					return 0, errors.New("test done")
 				})
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError(context.Canceled))
 				Eventually(done).Should(BeClosed())
 			})
@@ -679,7 +692,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) })
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).ToNot(HaveOccurred())
 				cancel()
 				Eventually(done).Should(BeClosed())
@@ -703,7 +716,7 @@ var _ = Describe("Client", func() {
 				)
 				testErr := errors.New("test done")
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
-				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				_, err := cl.RoundTrip(req)
 				Expect(err).To(MatchError(testErr))
 				hfs := decodeHeader(buf)
 				Expect(hfs).To(HaveKeyWithValue("accept-encoding", "gzip"))
@@ -725,7 +738,7 @@ var _ = Describe("Client", func() {
 				)
 				testErr := errors.New("test done")
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
-				_, err := client.RoundTripOpt(req, RoundTripOpt{})
+				_, err := client.RoundTrip(req)
 				Expect(err).To(MatchError(testErr))
 				hfs := decodeHeader(buf)
 				Expect(hfs).ToNot(HaveKey("accept-encoding"))
@@ -747,7 +760,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
 
-				rsp, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				rsp, err := cl.RoundTrip(req)
 				Expect(err).ToNot(HaveOccurred())
 				data, err := io.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
@@ -770,7 +783,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
 
-				rsp, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				rsp, err := cl.RoundTrip(req)
 				Expect(err).ToNot(HaveOccurred())
 				data, err := io.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
