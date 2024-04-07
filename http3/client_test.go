@@ -31,6 +31,21 @@ var _ = Describe("Client", func() {
 		req           *http.Request
 		origDialAddr  = dialAddr
 		handshakeChan <-chan struct{} // a closed chan
+
+		newStreamID = func() func() quic.StreamID {
+			var (
+				id   = quic.StreamID(-4)
+				lock sync.Mutex
+			)
+			return func() quic.StreamID {
+				var nextID quic.StreamID
+				lock.Lock()
+				id += 4
+				nextID = id
+				lock.Unlock()
+				return nextID
+			}
+		}
 	)
 
 	BeforeEach(func() {
@@ -561,6 +576,7 @@ var _ = Describe("Client", func() {
 				return len(b), nil
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
+			str.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
