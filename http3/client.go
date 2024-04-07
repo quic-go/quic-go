@@ -171,7 +171,7 @@ func (c *client) dial(ctx context.Context) error {
 var errGoaway = errors.New("server sent goaway")
 
 func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
-	var lastID = quic.StreamID(-4)
+	lastID := quic.StreamID(-4)
 	for {
 		frame, err := parseNextFrame(str, nil)
 		if err != nil {
