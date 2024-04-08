@@ -236,6 +236,21 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	return s.handleConn(conn)
 }
 
+func (s *Server) UseQUICConn(conn quic.Connection) ServerConn {
+	s.mutex.Lock()
+	if s.logger == nil {
+		s.logger = utils.DefaultLogger.WithPrefix("server")
+	}
+	s.mutex.Unlock()
+
+	decoder := qpack.NewDecoder(nil)
+	c := newConnection(conn, s.EnableDatagrams, protocol.PerspectiveServer, s.logger)
+	return &serverConn{
+		connection:          c,
+		handleRequestStream: func(str quic.Stream) { s.handleRequest(c, str, decoder) },
+	}
+}
+
 // ServeListener serves an existing QUIC listener.
 // Make sure you use http3.ConfigureTLSConfig to configure a tls.Config
 // and use it to construct a http3-friendly QUIC listener.
