@@ -301,7 +301,7 @@ func (p *QuicProxy) runProxy() error {
 	}
 }
 
-// runConnection handles packets from server to a single client
+// runOutgoingConnection handles packets from server to a single client
 func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 	outgoingPackets := make(chan packetEntry, 10)
 	go func() {
