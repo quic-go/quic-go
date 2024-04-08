@@ -185,6 +185,7 @@ func (c *client) readControlStream(str quic.ReceiveStream, conn quic.Connection)
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
+			lastID = v.ID
 			c.idLock.Lock()
 			c.receivedGoawayID = v.ID
 			c.idLock.Unlock()
