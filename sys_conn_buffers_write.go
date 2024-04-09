@@ -59,11 +59,12 @@ func setSendBuffer(c net.PacketConn) error {
 	if err != nil {
 		return fmt.Errorf("failed to determine send buffer size: %w", err)
 	}
-	if newSize == size {
+	if newSize == size { 
 		return fmt.Errorf("failed to increase send buffer size (wanted: %d kiB, got %d kiB)", protocol.DesiredSendBufferSize/1024, newSize/1024)
 	}
 	if newSize < protocol.DesiredSendBufferSize {
-		return fmt.Errorf("failed to sufficiently increase send buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, protocol.DesiredSendBufferSize/1024, newSize/1024)
+		// return fmt.Errorf("failed to sufficiently increase send buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, protocol.DesiredSendBufferSize/1024, newSize/1024)
+		return nil
 	}
 	utils.DefaultLogger.Debugf("Increased send buffer size to %d kiB", newSize/1024)
 	return nil
