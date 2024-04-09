@@ -590,13 +590,13 @@ var _ = Describe("HTTP tests", func() {
 		settingsChan := make(chan *http3.Settings, 1)
 		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
-			// The http.Request.Body is guaranteed to implement the http3.Settingser interface.
-			settings, err := r.Body.(http3.Settingser).Settings(context.Background())
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+			conn := w.(http3.Hijacker).Connection()
+			select {
+			case <-conn.ReceivedSettings():
+			case <-time.After(5 * time.Second):
+				Fail("didn't receive SETTINGS")
 			}
-			settingsChan <- settings
+			settingsChan <- conn.Settings()
 			w.WriteHeader(http.StatusOK)
 		})
 
@@ -615,7 +615,8 @@ var _ = Describe("HTTP tests", func() {
 		_, err = rt.RoundTrip(req)
 		Expect(err).ToNot(HaveOccurred())
 		var settings *http3.Settings
-		Eventually(settingsChan).Should(Receive(&settings))
+		Expect(settingsChan).To(Receive(&settings))
+		Expect(settings).ToNot(BeNil())
 		Expect(settings.EnableDatagram).To(BeTrue())
 		Expect(settings.EnableExtendedConnect).To(BeFalse())
 		Expect(settings.Other).To(HaveKeyWithValue(uint64(1337), uint64(42)))
