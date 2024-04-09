@@ -2,14 +2,10 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -39,127 +35,63 @@ var defaultQuicConfig = &quic.Config{
 	KeepAlivePeriod:    10 * time.Second,
 }
 
-type dialFunc func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
+// SingleDestinationRoundTripper is an HTTP/3 client doing requests to a single remote server.
+type SingleDestinationRoundTripper struct {
+	Connection quic.Connection
 
-var dialAddr dialFunc = quic.DialAddrEarly
+	// Enable support for HTTP/3 datagrams (RFC 9297).
+	// If a QUICConfig is set, datagram support also needs to be enabled on the QUIC layer by setting EnableDatagrams.
+	EnableDatagrams bool
 
-type roundTripperOpts struct {
-	DisableCompression bool
-	EnableDatagram     bool
-	MaxHeaderBytes     int64
+	// Additional HTTP/3 settings.
+	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 	StreamHijacker     func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
 	UniStreamHijacker  func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
-}
 
-// client is a HTTP3 client doing requests
-type client struct {
-	tlsConf *tls.Config
-	config  *quic.Config
-	opts    *roundTripperOpts
+	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
+	// allowed in the server's response header.
+	// Zero means to use a default limit.
+	MaxResponseHeaderBytes int64
 
-	dialOnce     sync.Once
-	dialer       dialFunc
-	handshakeErr error
+	// DisableCompression, if true, prevents the Transport from requesting compression with an
+	// "Accept-Encoding: gzip" request header when the Request contains no existing Accept-Encoding value.
+	// If the Transport requests gzip on its own and gets a gzipped response, it's transparently
+	// decoded in the Response.Body.
+	// However, if the user explicitly requested gzip it is not automatically uncompressed.
+	DisableCompression bool
 
-	hconn *connection
-
+	initOnce      sync.Once
+	hconn         *connection
 	requestWriter *requestWriter
-
-	decoder *qpack.Decoder
-
-	hostname string
-	conn     atomic.Pointer[quic.EarlyConnection]
-
-	logger utils.Logger
+	decoder       *qpack.Decoder
+	logger        utils.Logger
 }
 
-var _ roundTripCloser = &client{}
-
-func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
-	if conf == nil {
-		conf = defaultQuicConfig.Clone()
-		conf.EnableDatagrams = opts.EnableDatagram
-	}
-	if opts.EnableDatagram && !conf.EnableDatagrams {
-		return nil, errors.New("HTTP Datagrams enabled, but QUIC Datagrams disabled")
-	}
-	if len(conf.Versions) == 0 {
-		conf = conf.Clone()
-		conf.Versions = []quic.Version{protocol.SupportedVersions[0]}
-	}
-	if len(conf.Versions) != 1 {
-		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
-	}
-	if conf.MaxIncomingStreams == 0 {
-		conf.MaxIncomingStreams = -1 // don't allow any bidirectional streams
-	}
-	logger := utils.DefaultLogger.WithPrefix("h3 client")
-
-	if tlsConf == nil {
-		tlsConf = &tls.Config{}
-	} else {
-		tlsConf = tlsConf.Clone()
-	}
-	if tlsConf.ServerName == "" {
-		sni, _, err := net.SplitHostPort(hostname)
-		if err != nil {
-			// It's ok if net.SplitHostPort returns an error - it could be a hostname/IP address without a port.
-			sni = hostname
-		}
-		tlsConf.ServerName = sni
-	}
-	// Replace existing ALPNs by H3
-	tlsConf.NextProtos = []string{versionToALPN(conf.Versions[0])}
-
-	return &client{
-		hostname:      authorityAddr(hostname),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        conf,
-		opts:          opts,
-		dialer:        dialer,
-		logger:        logger,
-	}, nil
+func (c *SingleDestinationRoundTripper) Start() Connection {
+	c.initOnce.Do(func() { c.init() })
+	return c.hconn
 }
 
-func (c *client) dial(ctx context.Context) error {
-	var err error
-	var conn quic.EarlyConnection
-	if c.dialer != nil {
-		conn, err = c.dialer(ctx, c.hostname, c.tlsConf, c.config)
-	} else {
-		conn, err = dialAddr(ctx, c.hostname, c.tlsConf, c.config)
-	}
-	if err != nil {
-		return err
-	}
-	c.conn.Store(&conn)
-
+func (c *SingleDestinationRoundTripper) init() {
+	c.logger = utils.DefaultLogger.WithPrefix("h3 client")
+	c.requestWriter = newRequestWriter(c.logger)
+	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
+	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.logger)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
-		if err := c.setupConn(conn); err != nil {
+		if err := c.setupConn(c.Connection); err != nil {
 			c.logger.Debugf("Setting up connection failed: %s", err)
-			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
+			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
-
-	if c.opts.StreamHijacker != nil {
-		go c.handleBidirectionalStreams(conn)
+	if c.StreamHijacker != nil {
+		go c.handleBidirectionalStreams()
 	}
-	c.hconn = newConnection(
-		conn,
-		c.opts.EnableDatagram,
-		c.opts.UniStreamHijacker,
-		protocol.PerspectiveClient,
-		c.logger,
-	)
 	go c.hconn.HandleUnidirectionalStreams()
-	return nil
 }
 
-func (c *client) setupConn(conn quic.EarlyConnection) error {
+func (c *SingleDestinationRoundTripper) setupConn(conn quic.Connection) error {
 	// open the control stream
 	str, err := conn.OpenUniStream()
 	if err != nil {
@@ -168,22 +100,22 @@ func (c *client) setupConn(conn quic.EarlyConnection) error {
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream)
 	// send the SETTINGS frame
-	b = (&settingsFrame{Datagram: c.opts.EnableDatagram, Other: c.opts.AdditionalSettings}).Append(b)
+	b = (&settingsFrame{Datagram: c.EnableDatagrams, Other: c.AdditionalSettings}).Append(b)
 	_, err = str.Write(b)
 	return err
 }
 
-func (c *client) handleBidirectionalStreams(conn quic.EarlyConnection) {
+func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 	for {
-		str, err := conn.AcceptStream(context.Background())
+		str, err := c.hconn.AcceptStream(context.Background())
 		if err != nil {
 			c.logger.Debugf("accepting bidirectional stream failed: %s", err)
 			return
 		}
 		go func(str quic.Stream) {
 			_, err := parseNextFrame(str, func(ft FrameType, e error) (processed bool, err error) {
-				id := conn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				return c.opts.StreamHijacker(ft, id, str, e)
+				id := c.hconn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
+				return c.StreamHijacker(ft, id, str, e)
 			})
 			if err == errHijacked {
 				return
@@ -191,28 +123,22 @@ func (c *client) handleBidirectionalStreams(conn quic.EarlyConnection) {
 			if err != nil {
 				c.logger.Debugf("error handling stream: %s", err)
 			}
-			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
+			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
 		}(str)
 	}
 }
 
-func (c *client) Close() error {
-	conn := c.conn.Load()
-	if conn == nil {
-		return nil
-	}
-	return (*conn).CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
-}
-
-func (c *client) maxHeaderBytes() uint64 {
-	if c.opts.MaxHeaderBytes <= 0 {
+func (c *SingleDestinationRoundTripper) maxHeaderBytes() uint64 {
+	if c.MaxResponseHeaderBytes <= 0 {
 		return defaultMaxResponseHeaderBytes
 	}
-	return uint64(c.opts.MaxHeaderBytes)
+	return uint64(c.MaxResponseHeaderBytes)
 }
 
 // RoundTripOpt executes a request and returns a response
-func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+	c.initOnce.Do(func() { c.init() })
+
 	rsp, err := c.roundTripOpt(req, opt)
 	if err != nil && req.Context().Err() != nil {
 		// if the context was canceled, return the context cancellation error
@@ -221,25 +147,7 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	return rsp, err
 }
 
-func (c *client) dialConn(ctx context.Context) error {
-	c.dialOnce.Do(func() {
-		c.handshakeErr = c.dial(ctx)
-	})
-	return c.handshakeErr
-}
-
-func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
-	if authorityAddr(hostnameFromURL(req.URL)) != c.hostname {
-		return nil, fmt.Errorf("http3 client BUG: RoundTripOpt called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
-	}
-
-	if err := c.dialConn(req.Context()); err != nil {
-		return nil, err
-	}
-
-	// At this point, c.conn is guaranteed to be set.
-	conn := *c.conn.Load()
-
+func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
@@ -254,26 +162,30 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		req.Method = http.MethodHead
 	default:
 		// wait for the handshake to complete
-		select {
-		case <-conn.HandshakeComplete():
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
+		earlyConn, ok := c.Connection.(quic.EarlyConnection)
+		if ok {
+			select {
+			case <-earlyConn.HandshakeComplete():
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			}
 		}
 	}
 
 	if opt.CheckSettings != nil {
+		connCtx := c.Connection.Context()
 		// wait for the server's SETTINGS frame to arrive
 		select {
 		case <-c.hconn.ReceivedSettings():
-		case <-conn.Context().Done():
-			return nil, context.Cause(conn.Context())
+		case <-connCtx.Done():
+			return nil, context.Cause(connCtx)
 		}
 		if err := opt.CheckSettings(*c.hconn.Settings()); err != nil {
 			return nil, err
 		}
 	}
 
-	str, err := conn.OpenStreamSync(req.Context())
+	str, err := c.Connection.OpenStreamSync(req.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +205,7 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		}
 	}()
 
-	rsp, err := c.doRequest(req, conn, str, reqDone)
+	rsp, err := c.doRequest(req, str, reqDone)
 	if err != nil { // if any error occurred
 		close(reqDone)
 		<-done
@@ -302,24 +214,22 @@ func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	return rsp, maybeReplaceError(err)
 }
 
-func (c *client) OpenStream(ctx context.Context) (RequestStream, error) {
-	if err := c.dialConn(ctx); err != nil {
-		return nil, err
-	}
-	conn := *c.conn.Load()
-	str, err := conn.OpenStreamSync(ctx)
+func (c *SingleDestinationRoundTripper) OpenRequestStream(ctx context.Context) (RequestStream, error) {
+	c.initOnce.Do(func() { c.init() })
+
+	str, err := c.Connection.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return newRequestStream(
-		newStream(str, func(e ErrCode) { conn.CloseWithError(quic.ApplicationErrorCode(e), "") }),
+		newStream(str, func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") }),
 		c.hconn,
 		c.requestWriter,
 		nil,
 		c.decoder,
-		c.opts.DisableCompression,
+		c.DisableCompression,
 		c.maxHeaderBytes(),
-		func(e ErrCode) { conn.CloseWithError(quic.ApplicationErrorCode(e), "") },
+		func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") },
 	), nil
 }
 
@@ -338,7 +248,7 @@ func (r *cancelingReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (c *client) sendRequestBody(str Stream, body io.ReadCloser, contentLength int64) error {
+func (c *SingleDestinationRoundTripper) sendRequestBody(str Stream, body io.ReadCloser, contentLength int64) error {
 	defer body.Close()
 	buf := make([]byte, bodyCopyBufferSize)
 	sr := &cancelingReader{str: str, r: body}
@@ -362,16 +272,16 @@ func (c *client) sendRequestBody(str Stream, body io.ReadCloser, contentLength i
 	return err
 }
 
-func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str quic.Stream, reqDone chan<- struct{}) (*http.Response, error) {
+func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.Stream, reqDone chan<- struct{}) (*http.Response, error) {
 	hstr := newRequestStream(
-		newStream(str, func(e ErrCode) { conn.CloseWithError(quic.ApplicationErrorCode(e), "") }),
+		newStream(str, func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") }),
 		c.hconn,
 		c.requestWriter,
 		reqDone,
 		c.decoder,
-		c.opts.DisableCompression,
+		c.DisableCompression,
 		c.maxHeaderBytes(),
-		func(e ErrCode) { conn.CloseWithError(quic.ApplicationErrorCode(e), "") },
+		func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") },
 	)
 	if err := hstr.SendRequestHeader(req); err != nil {
 		return nil, err
@@ -398,21 +308,8 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 	if err != nil {
 		return nil, err
 	}
-	connState := conn.ConnectionState().TLS
+	connState := c.Connection.ConnectionState().TLS
 	res.TLS = &connState
 	res.Request = req
 	return res, nil
-}
-
-func (c *client) HandshakeComplete() bool {
-	conn := c.conn.Load()
-	if conn == nil {
-		return false
-	}
-	select {
-	case <-(*conn).HandshakeComplete():
-		return true
-	default:
-		return false
-	}
 }
