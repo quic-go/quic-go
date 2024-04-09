@@ -61,7 +61,7 @@ for {
 This package provides a `http.RoundTripper` implementation that can be used on the `http.Client`:
 
 ```go
-&http3.RoundTripper{
+roundTripper := &http3.RoundTripper{
 	TLSClientConfig: &tls.Config{},  // set a TLS client config, if desired
 	QuicConfig:      &quic.Config{}, // QUIC connection options
 }
