@@ -3,9 +3,13 @@ package http3
 import (
 	"bytes"
 	"io"
+	"math"
+	"net/http"
 
+	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,7 +30,7 @@ var _ = Describe("Stream", func() {
 			errorCbCalled bool
 		)
 
-		errorCb := func() { errorCbCalled = true }
+		errorCb := func(ErrCode) { errorCbCalled = true }
 
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
@@ -163,7 +167,7 @@ var _ = Describe("length-limited streams", func() {
 		qstr = mockquic.NewMockStream(mockCtrl)
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		str = newStream(qstr, func() { Fail("didn't expect error callback to be called") })
+		str = newStream(qstr, func(ErrCode) { Fail("didn't expect error callback to be called") })
 	})
 
 	It("reads all frames", func() {
@@ -199,5 +203,58 @@ var _ = Describe("length-limited streams", func() {
 		data, err := io.ReadAll(s)
 		Expect(err).To(MatchError(errTooMuchData))
 		Expect(data).To(Equal([]byte("foo")))
+	})
+})
+
+var _ = Describe("Request Stream", func() {
+	var str *requestStream
+	var qstr *mockquic.MockStream
+
+	BeforeEach(func() {
+		qstr = mockquic.NewMockStream(mockCtrl)
+		requestWriter := newRequestWriter(utils.DefaultLogger)
+		str = newRequestStream(
+			newStream(qstr, func(code ErrCode) { Fail("errored") }),
+			mockquic.NewMockEarlyConnection(mockCtrl),
+			requestWriter,
+			make(chan struct{}),
+			qpack.NewDecoder(func(qpack.HeaderField) {}),
+			true,
+			math.MaxUint64,
+			func(code ErrCode) { Fail("errored") },
+		)
+	})
+
+	It("refuses to read before having read the response", func() {
+		_, err := str.Read(make([]byte, 100))
+		Expect(err).To(MatchError("http3: invalid use of RequestStream.Read: need to call ReadResponse first"))
+	})
+
+	It("prevents duplicate calls to SendRequestHeader", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+		Expect(str.SendRequestHeader(req)).To(MatchError("http3: invalid duplicate use of SendRequestHeader"))
+	})
+
+	It("reads after the response", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+
+		buf := bytes.NewBuffer(encodeResponse(200))
+		buf.Write((&dataFrame{Length: 6}).Append(nil))
+		buf.Write([]byte("foobar"))
+		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+		rsp, err := str.ReadResponse()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(200))
+		b := make([]byte, 10)
+		n, err := str.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(6))
+		Expect(b[:n]).To(Equal([]byte("foobar")))
 	})
 })

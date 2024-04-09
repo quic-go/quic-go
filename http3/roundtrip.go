@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,9 +33,6 @@ type RoundTripOpt struct {
 	// OnlyCachedConn controls whether the RoundTripper may create a new QUIC connection.
 	// If set true and no cached connection is available, RoundTripOpt will return ErrNoCachedConn.
 	OnlyCachedConn bool
-	// DontCloseRequestStream controls whether the request stream is closed after sending the request.
-	// If set, context cancellations have no effect after the response headers are received.
-	DontCloseRequestStream bool
 	// CheckSettings is run before the request is sent to the server.
 	// If not yet received, it blocks until the server's SETTINGS frame is received.
 	// If an error is returned, the request won't be sent to the server, and the error is returned.
@@ -44,6 +42,7 @@ type RoundTripOpt struct {
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
 	HandshakeComplete() bool
+	OpenStream(context.Context) (RequestStream, error)
 	io.Closer
 }
 
@@ -154,7 +153,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
-	hostname := authorityAddr("https", hostnameFromRequest(req))
+	hostname := authorityAddr(hostnameFromURL(req.URL))
 	cl, isReused, err := r.getClient(hostname, opt.OnlyCachedConn)
 	if err != nil {
 		return nil, err
@@ -175,6 +174,15 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 // RoundTrip does a round trip.
 func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.RoundTripOpt(req, RoundTripOpt{})
+}
+
+func (r *RoundTripper) OpenStream(ctx context.Context, url *url.URL) (RequestStream, error) {
+	hostname := authorityAddr(hostnameFromURL(url))
+	cl, _, err := r.getClient(hostname, false)
+	if err != nil {
+		return nil, err
+	}
+	return cl.OpenStream(ctx)
 }
 
 func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTripCloserWithCount, isReused bool, err error) {

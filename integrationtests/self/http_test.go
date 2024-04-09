@@ -431,11 +431,13 @@ var _ = Describe("HTTP tests", func() {
 
 		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/httpstreamer", port), nil)
 		Expect(err).ToNot(HaveOccurred())
-		rsp, err := client.Transport.(*http3.RoundTripper).RoundTripOpt(req, http3.RoundTripOpt{DontCloseRequestStream: true})
+		str, err := client.Transport.(*http3.RoundTripper).OpenStream(context.Background(), req.URL)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+		rsp, err := str.ReadResponse()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.StatusCode).To(Equal(200))
 
-		str := rsp.Body.(http3.HTTPStreamer).HTTPStream()
 		b := make([]byte, 6)
 		_, err = io.ReadFull(str, b)
 		Expect(err).ToNot(HaveOccurred())

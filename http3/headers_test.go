@@ -293,21 +293,12 @@ var _ = Describe("Request", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("uses req.URL.Host", func() {
-			req := &http.Request{URL: url}
-			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
-		})
-
-		It("uses req.URL.Host even if req.Host is available", func() {
-			req := &http.Request{
-				Host: "www.example.org",
-				URL:  url,
-			}
-			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
+		It("uses URL.Host", func() {
+			Expect(hostnameFromURL(url)).To(Equal("quic.clemente.io:1337"))
 		})
 
 		It("returns an empty hostname if nothing is set", func() {
-			Expect(hostnameFromRequest(&http.Request{})).To(BeEmpty())
+			Expect(hostnameFromURL(nil)).To(BeEmpty())
 		})
 	})
 })
