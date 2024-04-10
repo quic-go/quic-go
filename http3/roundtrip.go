@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,6 +111,14 @@ type RoundTripper struct {
 	newClient func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) // so we can mock it in tests
 	clients   map[string]*roundTripCloserWithCount
 	transport *quic.Transport
+
+	ReqIdMutex sync.Mutex
+	ReqId      int
+
+	StrManMutex sync.Mutex
+	//map every request to a stream
+	StreamManager map[int]*stream
+	StreamWaiter  map[int]chan struct{}
 }
 
 var (
@@ -119,6 +128,16 @@ var (
 
 // ErrNoCachedConn is returned when RoundTripper.OnlyCachedConn is set
 var ErrNoCachedConn = errors.New("http3: no cached connection was available")
+
+// Set the client RoundTripper
+func (r *RoundTripper) SetClientRoundTripper(cl roundTripCloser) error {
+	c, ok := cl.(*client)
+	if !ok {
+		return errors.New("convert to http3 client error.")
+	}
+	c.rt = r
+	return nil
+}
 
 // RoundTripOpt is like RoundTrip, but takes options.
 func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
@@ -160,6 +179,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, err
 	}
 	defer cl.useCount.Add(-1)
+	r.SetClientRoundTripper(cl.roundTripCloser)
 	rsp, err := cl.RoundTripOpt(req, opt)
 	if err != nil {
 		r.removeClient(hostname)
@@ -175,6 +195,71 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 // RoundTrip does a round trip.
 func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.RoundTripOpt(req, RoundTripOpt{})
+}
+
+func GetReqId(req *http.Request) (int, error) {
+	s_id := req.Header.Get("reqId")
+	if s_id == "" {
+		return -1, nil
+	} else {
+		return strconv.Atoi(s_id)
+	}
+}
+func (r *RoundTripper) InitialMap() {
+	fmt.Println("initial Map")
+	r.StreamManager = make(map[int]*stream)
+	r.StreamWaiter = make(map[int]chan struct{})
+}
+
+func (r *RoundTripper) AssignReqId(req *http.Request) error {
+	r.ReqIdMutex.Lock()
+	r.ReqId++
+	req.Header.Add("reqId", strconv.Itoa(r.ReqId))
+	r.ReqIdMutex.Unlock()
+	return nil
+}
+
+func (r *RoundTripper) RemoveReqId(req *http.Request) error {
+	if req.Header.Get("reqId") != "" {
+		req.Header.Del("reqId")
+	}
+	return nil
+}
+
+func (r *RoundTripper) GetReqStream(reqId int) *stream {
+	r.StrManMutex.Lock()
+	//Try to get stream
+	s, ok := r.StreamManager[reqId]
+	if ok {
+		r.StrManMutex.Unlock()
+		return s
+	} else {
+		r.StreamWaiter[reqId] = make(chan struct{})
+		r.StrManMutex.Unlock()
+		<-r.StreamWaiter[reqId]
+		fmt.Println("receive wait signal")
+		//receive the signal, can get the stream
+		r.StrManMutex.Lock()
+		s = r.StreamManager[reqId]
+		//may need to delete chan
+		r.StrManMutex.Unlock()
+		return s
+	}
+}
+
+func (r *RoundTripper) PutReqStream(reqId int, s *stream) {
+
+	if reqId == -1 {
+		return
+	}
+	r.StrManMutex.Lock()
+	r.StreamManager[reqId] = s
+	c, ok := r.StreamWaiter[reqId]
+	if ok {
+		//send the signal
+		c <- struct{}{}
+	}
+	r.StrManMutex.Unlock()
 }
 
 func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTripCloserWithCount, isReused bool, err error) {

@@ -71,6 +71,7 @@ type client struct {
 	logger utils.Logger
 
 	dconn *connection
+	rt    *RoundTripper
 }
 
 var _ roundTripCloser = &client{}
@@ -413,6 +414,9 @@ func (c *client) sendRequestBody(str Stream, body io.ReadCloser, contentLength i
 }
 
 func (c *client) doRequest(req *http.Request, conn *connection, str quic.Stream, opt RoundTripOpt, reqDone chan<- struct{}) (*http.Response, requestError) {
+	//get the req id, then remove it.
+	reqId, _ := GetReqId(req)
+	c.rt.RemoveReqId(req)
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
@@ -426,6 +430,11 @@ func (c *client) doRequest(req *http.Request, conn *connection, str quic.Stream,
 	}
 
 	hstr := newStream(conn, str, func() { conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "") })
+	//stream has been created, now can put it in the map
+	c.rt.PutReqStream(reqId, hstr)
+	if c.rt == nil {
+		fmt.Println("is nil")
+	}
 	if req.Body != nil {
 		// send the request body asynchronously
 		go func() {
