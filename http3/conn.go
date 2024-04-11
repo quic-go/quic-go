@@ -2,6 +2,7 @@ package http3
 
 import (
 	"context"
+	"net"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go"
@@ -11,7 +12,19 @@ import (
 )
 
 type Connection interface {
-	quic.Connection
+	// all methods from the quic.Connection expect for SendDatagram and ReceiveDatagram
+	AcceptStream(context.Context) (quic.Stream, error)
+	AcceptUniStream(context.Context) (quic.ReceiveStream, error)
+	OpenStream() (quic.Stream, error)
+	OpenStreamSync(context.Context) (quic.Stream, error)
+	OpenUniStream() (quic.SendStream, error)
+	OpenUniStreamSync(context.Context) (quic.SendStream, error)
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+	CloseWithError(quic.ApplicationErrorCode, string) error
+	Context() context.Context
+	ConnectionState() quic.ConnectionState
+
 	// ReceivedSettings returns a channel that is closed once the client's SETTINGS frame was received.
 	ReceivedSettings() <-chan struct{}
 	// Settings returns the settings received on this connection.
