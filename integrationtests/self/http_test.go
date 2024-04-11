@@ -183,6 +183,7 @@ var _ = Describe("HTTP tests", func() {
 		group, ctx := errgroup.WithContext(context.Background())
 		for i := 0; i < 2; i++ {
 			group.Go(func() error {
+				defer GinkgoRecover()
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/hello", port), nil)
 				Expect(err).ToNot(HaveOccurred())
 				resp, err := client.Do(req)
@@ -431,7 +432,18 @@ var _ = Describe("HTTP tests", func() {
 
 		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/httpstreamer", port), nil)
 		Expect(err).ToNot(HaveOccurred())
-		str, err := client.Transport.(*http3.RoundTripper).OpenStream(context.Background(), req.URL)
+		tlsConf := getTLSClientConfigWithoutServerName()
+		tlsConf.NextProtos = []string{http3.NextProtoH3}
+		conn, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
+		rt := http3.SingleDestinationRoundTripper{Connection: conn}
+		str, err := rt.OpenRequestStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.SendRequestHeader(req)).To(Succeed())
 		rsp, err := str.ReadResponse()
@@ -452,10 +464,10 @@ var _ = Describe("HTTP tests", func() {
 		Expect(repl).To(Equal(data))
 	})
 
-	It("serves other QUIC connections", func() {
+	It("serves QUIC connections", func() {
 		tlsConf := getTLSConfig()
 		tlsConf.NextProtos = []string{http3.NextProtoH3}
-		ln, err := quic.ListenAddr("localhost:0", tlsConf, nil)
+		ln, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
 		done := make(chan struct{})
@@ -464,7 +476,7 @@ var _ = Describe("HTTP tests", func() {
 			defer close(done)
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.ServeQUICConn(conn)).To(Succeed())
+			server.ServeQUICConn(conn) // returns once the client closes
 		}()
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", ln.Addr().(*net.UDPAddr).Port))
