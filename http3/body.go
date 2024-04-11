@@ -3,7 +3,6 @@ package http3
 import (
 	"context"
 	"io"
-	"net"
 
 	"github.com/quic-go/quic-go"
 )
@@ -17,33 +16,10 @@ type HTTPStreamer interface {
 	HTTPStream() Stream
 }
 
-type StreamCreator interface {
-	// Context returns a context that is cancelled when the underlying connection is closed.
-	Context() context.Context
-	OpenStream() (quic.Stream, error)
-	OpenStreamSync(context.Context) (quic.Stream, error)
-	OpenUniStream() (quic.SendStream, error)
-	OpenUniStreamSync(context.Context) (quic.SendStream, error)
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
-	ConnectionState() quic.ConnectionState
-}
-
-var _ StreamCreator = quic.Connection(nil)
-
 // A Hijacker allows hijacking of the stream creating part of a quic.Session from a http.Response.Body.
 // It is used by WebTransport to create WebTransport streams after a session has been established.
 type Hijacker interface {
-	StreamCreator() StreamCreator
-}
-
-// Settingser allows the server to retrieve the client's SETTINGS.
-// The http.Request.Body implements this interface.
-type Settingser interface {
-	// Settings returns the client's HTTP settings.
-	// It blocks until the SETTINGS frame has been received.
-	// Note that it is not guaranteed that this happens during the lifetime of the request.
-	Settings(context.Context) (*Settings, error)
+	Connection() Connection
 }
 
 // The body is used in the requestBody (for a http.Request) and the responseBody (for a http.Response).
@@ -83,7 +59,6 @@ type requestBody struct {
 var (
 	_ io.ReadCloser = &requestBody{}
 	_ HTTPStreamer  = &requestBody{}
-	_ Settingser    = &requestBody{}
 )
 
 func newRequestBody(str Stream, connCtx context.Context, rcvdSettings <-chan struct{}, getSettings func() *Settings) *requestBody {
@@ -95,20 +70,8 @@ func newRequestBody(str Stream, connCtx context.Context, rcvdSettings <-chan str
 	}
 }
 
-func (r *requestBody) Settings(ctx context.Context) (*Settings, error) {
-	select {
-	case <-ctx.Done():
-		return nil, context.Cause(ctx)
-	case <-r.connCtx.Done():
-		return nil, context.Cause(r.connCtx)
-	case <-r.rcvdSettings:
-		return r.getSettings(), nil
-	}
-}
-
 type hijackableBody struct {
 	body body
-	conn quic.Connection // only needed to implement Hijacker
 
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
@@ -117,16 +80,12 @@ type hijackableBody struct {
 	reqDoneClosed bool
 }
 
-var (
-	_ io.ReadCloser = &hijackableBody{}
-	_ Hijacker      = &hijackableBody{}
-)
+var _ io.ReadCloser = &hijackableBody{}
 
-func newResponseBody(str Stream, conn quic.Connection, done chan<- struct{}) *hijackableBody {
+func newResponseBody(str Stream, done chan<- struct{}) *hijackableBody {
 	return &hijackableBody{
 		body:    body{str: str},
 		reqDone: done,
-		conn:    conn,
 	}
 }
 
@@ -154,5 +113,3 @@ func (r *hijackableBody) Close() error {
 	r.body.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 	return nil
 }
-
-func (r *hijackableBody) StreamCreator() StreamCreator { return r.conn }

@@ -10,6 +10,14 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+type Connection interface {
+	quic.Connection
+	// ReceivedSettings returns a channel that is closed once the client's SETTINGS frame was received.
+	ReceivedSettings() <-chan struct{}
+	// Settings returns the settings received on this connection.
+	Settings() *Settings
+}
+
 type connection struct {
 	quic.Connection
 

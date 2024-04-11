@@ -63,7 +63,7 @@ func (hw *headerWriter) Write(p []byte) (int, error) {
 
 type responseWriter struct {
 	*headerWriter
-	conn        quic.Connection
+	conn        Connection
 	bufferedStr *bufio.Writer
 	buf         []byte
 
@@ -79,7 +79,7 @@ var (
 	_ Hijacker            = &responseWriter{}
 )
 
-func newResponseWriter(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
+func newResponseWriter(str quic.Stream, conn Connection, logger utils.Logger) *responseWriter {
 	hw := &headerWriter{
 		str:    str,
 		header: http.Header{},
@@ -196,7 +196,7 @@ func (w *responseWriter) Flush() {
 	}
 }
 
-func (w *responseWriter) StreamCreator() StreamCreator {
+func (w *responseWriter) Connection() Connection {
 	return w.conn
 }
 

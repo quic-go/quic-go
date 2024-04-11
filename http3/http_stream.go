@@ -210,7 +210,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	} else {
 		httpStr = s.stream
 	}
-	respBody := newResponseBody(httpStr, s.conn, s.reqDone)
+	respBody := newResponseBody(httpStr, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
