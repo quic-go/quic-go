@@ -38,6 +38,7 @@ type receiveStream struct {
 	currentFrameIsLast bool // is the currentFrame the last frame on this stream
 
 	finRead             bool // set once we read a frame with a Fin
+	cancelReadRead      bool
 	closeForShutdownErr error
 	cancelReadErr       error
 	resetRemotelyErr    *StreamError
@@ -45,6 +46,9 @@ type receiveStream struct {
 	readChan chan struct{}
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
 	deadline time.Time
+
+	onStateChange func(StreamState)
+	states        []StreamState
 
 	flowController flowcontrol.StreamFlowController
 }
@@ -58,8 +62,9 @@ func newReceiveStream(
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
+	onStateChange func(StreamState),
 ) *receiveStream {
-	return &receiveStream{
+	s := &receiveStream{
 		streamID:       streamID,
 		sender:         sender,
 		flowController: flowController,
@@ -67,7 +72,32 @@ func newReceiveStream(
 		readChan:       make(chan struct{}, 1),
 		readOnce:       make(chan struct{}, 1),
 		finalOffset:    protocol.MaxByteCount,
+		states:         make([]StreamState, 5),
+		onStateChange:  onStateChange,
 	}
+	s.stateChanged(ReceiveStreamStateRecv)
+	return s
+}
+
+// stateChanged signals a stream state change.
+// It must be called while holding the mutex.
+func (s *receiveStream) stateChanged(state StreamState) {
+	if s.onStateChange != nil {
+		s.onStateChange(state)
+		return
+	}
+	s.states = append(s.states, state)
+}
+
+func (s *receiveStream) OnStateChange(f func(StreamState)) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.onStateChange = f
+	for _, state := range s.states {
+		s.stateChanged(state)
+	}
+	s.states = nil
 }
 
 func (s *receiveStream) StreamID() protocol.StreamID {
@@ -76,14 +106,17 @@ func (s *receiveStream) StreamID() protocol.StreamID {
 
 // Read implements io.Reader. It is not thread safe!
 func (s *receiveStream) Read(p []byte) (int, error) {
-	// Concurrent use of Read is not permitted (and doesn't make any sense),
-	// but sometimes people do it anyway.
+	// Concurrent use of Read is not permitted (and doesn't make any sense), but sometimes people do it anyway.
 	// Make sure that we only execute one call at any given time to avoid hard to debug failures.
 	s.readOnce <- struct{}{}
 	defer func() { <-s.readOnce }()
 
 	s.mutex.Lock()
 	completed, n, err := s.readImpl(p)
+	if completed {
+		s.stateChanged(ReceiveStreamStateDataRecvd)
+		s.stateChanged(ReceiveStreamStateDataRead)
+	}
 	s.mutex.Unlock()
 
 	if completed {
@@ -97,6 +130,10 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		return false, 0, io.EOF
 	}
 	if s.cancelReadErr != nil {
+		if !s.cancelReadRead {
+			s.stateChanged(ReceiveStreamStateResetRead)
+			s.cancelReadRead = true
+		}
 		return false, 0, s.cancelReadErr
 	}
 	if s.resetRemotelyErr != nil {
@@ -122,6 +159,10 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				return false, bytesRead, s.closeForShutdownErr
 			}
 			if s.cancelReadErr != nil {
+				if !s.cancelReadRead {
+					s.stateChanged(ReceiveStreamStateResetRead)
+					s.cancelReadRead = true
+				}
 				return false, bytesRead, s.cancelReadErr
 			}
 			if s.resetRemotelyErr != nil {
@@ -228,6 +269,9 @@ func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) bool /* c
 func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	s.mutex.Lock()
 	completed, err := s.handleStreamFrameImpl(frame)
+	if completed {
+		s.stateChanged(ReceiveStreamStateSizeKnown)
+	}
 	s.mutex.Unlock()
 
 	if completed {
@@ -260,6 +304,9 @@ func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* 
 func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
 	s.mutex.Lock()
 	completed, err := s.handleResetStreamFrameImpl(frame)
+	if completed {
+		s.stateChanged(ReceiveStreamStateResetRecvd)
+	}
 	s.mutex.Unlock()
 
 	if completed {

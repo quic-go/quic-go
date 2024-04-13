@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"runtime"
 	"sync"
@@ -26,15 +27,29 @@ var _ = Describe("Receive Stream", func() {
 		strWithTimeout io.Reader // str wrapped with gbytes.TimeoutReader
 		mockFC         *mocks.MockStreamFlowController
 		mockSender     *MockStreamSender
+		states         []StreamState
 	)
 
 	BeforeEach(func() {
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newReceiveStream(streamID, mockSender, mockFC)
+		states = []StreamState{}
+		str = newReceiveStream(streamID, mockSender, mockFC, func(s StreamState) { states = append(states, s) })
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutReader(str, timeout)
+	})
+
+	AfterEach(func() {
+		m := make(map[StreamState]int)
+		for _, state := range states {
+			m[state]++
+		}
+		for state, count := range m {
+			if count > 1 {
+				Fail(fmt.Sprintf("found multiple (%d) state transitions to %d", count, state))
+			}
+		}
 	})
 
 	It("gets stream id", func() {

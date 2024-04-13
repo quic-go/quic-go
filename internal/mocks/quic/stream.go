@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	quic "github.com/quic-go/quic-go"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
 	gomock "go.uber.org/mock/gomock"
@@ -186,6 +187,42 @@ func (c *MockStreamContextCall) Do(f func() context.Context) *MockStreamContextC
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockStreamContextCall) DoAndReturn(f func() context.Context) *MockStreamContextCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// OnStateChange mocks base method.
+func (m *MockStream) OnStateChange(arg0 func(quic.StreamState)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnStateChange", arg0)
+}
+
+// OnStateChange indicates an expected call of OnStateChange.
+func (mr *MockStreamMockRecorder) OnStateChange(arg0 any) *MockStreamOnStateChangeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateChange", reflect.TypeOf((*MockStream)(nil).OnStateChange), arg0)
+	return &MockStreamOnStateChangeCall{Call: call}
+}
+
+// MockStreamOnStateChangeCall wrap *gomock.Call
+type MockStreamOnStateChangeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamOnStateChangeCall) Return() *MockStreamOnStateChangeCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamOnStateChangeCall) Do(f func(func(quic.StreamState))) *MockStreamOnStateChangeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamOnStateChangeCall) DoAndReturn(f func(func(quic.StreamState))) *MockStreamOnStateChangeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

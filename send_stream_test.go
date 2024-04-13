@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	mrand "math/rand"
 	"runtime"
@@ -30,15 +31,29 @@ var _ = Describe("Send Stream", func() {
 		strWithTimeout io.Writer // str wrapped with gbytes.TimeoutWriter
 		mockFC         *mocks.MockStreamFlowController
 		mockSender     *MockStreamSender
+		states         []StreamState
 	)
 
 	BeforeEach(func() {
+		states = []StreamState{}
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newSendStream(context.Background(), streamID, mockSender, mockFC)
+		str = newSendStream(context.Background(), streamID, mockSender, mockFC, func(s StreamState) { states = append(states, s) })
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutWriter(str, timeout)
+	})
+
+	AfterEach(func() {
+		m := make(map[StreamState]int)
+		for _, state := range states {
+			m[state]++
+		}
+		for state, count := range m {
+			if count > 1 {
+				Fail(fmt.Sprintf("found multiple (%d) state transitions to %d", count, state))
+			}
+		}
 	})
 
 	expectedFrameHeaderLen := func(offset protocol.ByteCount) protocol.ByteCount {
@@ -754,9 +769,18 @@ var _ = Describe("Send Stream", func() {
 				}()
 
 				runtime.Gosched()
-				go str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-				go str.CancelWrite(1234)
+				done := make(chan struct{}, 2)
+				go func() {
+					defer func() { done <- struct{}{} }()
+					str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+				}()
+				go func() {
+					defer func() { done <- struct{}{} }()
+					str.CancelWrite(1234)
+				}()
 				Eventually(errChan).Should(Receive(Not(HaveOccurred())))
+				Eventually(done).Should(Receive())
+				Eventually(done).Should(Receive())
 			})
 
 			It("unblocks Write", func() {

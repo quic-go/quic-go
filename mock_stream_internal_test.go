@@ -192,6 +192,42 @@ func (c *MockStreamIContextCall) DoAndReturn(f func() context.Context) *MockStre
 	return c
 }
 
+// OnStateChange mocks base method.
+func (m *MockStreamI) OnStateChange(arg0 func(StreamState)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnStateChange", arg0)
+}
+
+// OnStateChange indicates an expected call of OnStateChange.
+func (mr *MockStreamIMockRecorder) OnStateChange(arg0 any) *MockStreamIOnStateChangeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateChange", reflect.TypeOf((*MockStreamI)(nil).OnStateChange), arg0)
+	return &MockStreamIOnStateChangeCall{Call: call}
+}
+
+// MockStreamIOnStateChangeCall wrap *gomock.Call
+type MockStreamIOnStateChangeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamIOnStateChangeCall) Return() *MockStreamIOnStateChangeCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamIOnStateChangeCall) Do(f func(func(StreamState))) *MockStreamIOnStateChangeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamIOnStateChangeCall) DoAndReturn(f func(func(StreamState))) *MockStreamIOnStateChangeCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Read mocks base method.
 func (m *MockStreamI) Read(arg0 []byte) (int, error) {
 	m.ctrl.T.Helper()

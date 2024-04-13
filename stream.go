@@ -13,6 +13,28 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+type StreamState uint8
+
+// send stream states
+const (
+	SendStreamStateReady StreamState = iota
+	SendStreamStateSend
+	SendStreamStateDataSent
+	SendStreamStateResetSent
+	SendStreamStateDataRecvd
+	SendStreamStateResetRecvd
+)
+
+// receive stream states
+const (
+	ReceiveStreamStateRecv StreamState = iota + 128
+	ReceiveStreamStateSizeKnown
+	ReceiveStreamStateDataRecvd
+	ReceiveStreamStateResetRecvd
+	ReceiveStreamStateDataRead
+	ReceiveStreamStateResetRead
+)
+
 type deadlineError struct{}
 
 func (deadlineError) Error() string   { return "deadline exceeded" }
@@ -37,17 +59,9 @@ type uniStreamSender struct {
 	onStreamCompletedImpl func()
 }
 
-func (s *uniStreamSender) queueControlFrame(f wire.Frame) {
-	s.streamSender.queueControlFrame(f)
-}
-
-func (s *uniStreamSender) onHasStreamData(id protocol.StreamID) {
-	s.streamSender.onHasStreamData(id)
-}
-
-func (s *uniStreamSender) onStreamCompleted(protocol.StreamID) {
-	s.onStreamCompletedImpl()
-}
+func (s *uniStreamSender) queueControlFrame(f wire.Frame)       { s.streamSender.queueControlFrame(f) }
+func (s *uniStreamSender) onHasStreamData(id protocol.StreamID) { s.streamSender.onHasStreamData(id) }
+func (s *uniStreamSender) onStreamCompleted(protocol.StreamID)  { s.onStreamCompletedImpl() }
 
 var _ streamSender = &uniStreamSender{}
 
@@ -77,10 +91,13 @@ type stream struct {
 	receiveStream
 	sendStream
 
-	completedMutex         sync.Mutex
+	mutex                  sync.Mutex
 	sender                 streamSender
 	receiveStreamCompleted bool
 	sendStreamCompleted    bool
+
+	onStateChange func(state StreamState)
+	states        []StreamState
 }
 
 var _ Stream = &stream{}
@@ -92,31 +109,55 @@ func newStream(
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
 ) *stream {
-	s := &stream{sender: sender}
+	s := &stream{
+		sender: sender,
+		states: make([]StreamState, 10),
+	}
 	senderForSendStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {
-			s.completedMutex.Lock()
+			s.mutex.Lock()
 			s.sendStreamCompleted = true
 			s.checkIfCompleted()
-			s.completedMutex.Unlock()
+			s.mutex.Unlock()
 		},
 	}
-	s.sendStream = *newSendStream(ctx, streamID, senderForSendStream, flowController)
+	s.sendStream = *newSendStream(ctx, streamID, senderForSendStream, flowController, s.stateChanged)
 	senderForReceiveStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {
-			s.completedMutex.Lock()
+			s.mutex.Lock()
 			s.receiveStreamCompleted = true
 			s.checkIfCompleted()
-			s.completedMutex.Unlock()
+			s.mutex.Unlock()
 		},
 	}
-	s.receiveStream = *newReceiveStream(streamID, senderForReceiveStream, flowController)
+	s.receiveStream = *newReceiveStream(streamID, senderForReceiveStream, flowController, s.stateChanged)
 	return s
 }
 
-// need to define StreamID() here, since both receiveStream and readStream have a StreamID()
+func (s *stream) stateChanged(state StreamState) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.onStateChange != nil {
+		s.onStateChange(state)
+		return
+	}
+	s.states = append(s.states, state)
+}
+
+func (s *stream) OnStateChange(f func(StreamState)) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.onStateChange = f
+	for _, state := range s.states {
+		f(state)
+	}
+	s.states = nil
+}
+
 func (s *stream) StreamID() protocol.StreamID {
 	// the result is same for receiveStream and sendStream
 	return s.sendStream.StreamID()

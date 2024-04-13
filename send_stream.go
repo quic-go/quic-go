@@ -51,6 +51,9 @@ type sendStream struct {
 	writeOnce chan struct{}
 	deadline  time.Time
 
+	onStateChange func(StreamState)
+	states        []StreamState
+
 	flowController flowcontrol.StreamFlowController
 }
 
@@ -64,6 +67,7 @@ func newSendStream(
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
+	onStateChange func(StreamState),
 ) *sendStream {
 	s := &sendStream{
 		streamID:       streamID,
@@ -71,9 +75,33 @@ func newSendStream(
 		flowController: flowController,
 		writeChan:      make(chan struct{}, 1),
 		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
+		onStateChange:  onStateChange,
+		states:         make([]StreamState, 5),
 	}
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
+	s.stateChanged(SendStreamStateReady)
 	return s
+}
+
+// stateChanged signals a stream state change.
+// It must be called while holding the mutex.
+func (s *sendStream) stateChanged(state StreamState) {
+	if s.onStateChange != nil {
+		s.onStateChange(state)
+		return
+	}
+	s.states = append(s.states, state)
+}
+
+func (s *sendStream) OnStateChange(f func(StreamState)) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.onStateChange = f
+	for _, state := range s.states {
+		s.stateChanged(state)
+	}
+	s.states = nil
 }
 
 func (s *sendStream) StreamID() protocol.StreamID {
@@ -122,6 +150,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		// When the user now calls Close(), this is much more likely to happen before we popped that last STREAM frame,
 		// allowing us to set the FIN bit on that frame (instead of sending an empty STREAM frame with FIN).
 		if s.canBufferStreamFrame() && len(s.dataForWriting) > 0 {
+
 			if s.nextFrame == nil {
 				f := wire.GetStreamFrame()
 				f.Offset = s.writeOffset
@@ -130,6 +159,9 @@ func (s *sendStream) Write(p []byte) (int, error) {
 				f.Data = f.Data[:len(s.dataForWriting)]
 				copy(f.Data, s.dataForWriting)
 				s.nextFrame = f
+				if s.writeOffset == 0 {
+					s.stateChanged(SendStreamStateSend)
+				}
 			} else {
 				l := len(s.nextFrame.Data)
 				s.nextFrame.Data = s.nextFrame.Data[:l+len(s.dataForWriting)]
@@ -369,6 +401,7 @@ func (s *sendStream) Close() error {
 	}
 	s.ctxCancel(nil)
 	s.finishedWriting = true
+	s.stateChanged(SendStreamStateDataSent)
 	s.mutex.Unlock()
 
 	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
@@ -387,10 +420,16 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 		return
 	}
 	s.cancelWriteErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: remote}
-	s.ctxCancel(s.cancelWriteErr)
 	s.numOutstandingFrames = 0
 	s.retransmissionQueue = nil
 	newlyCompleted := s.isNewlyCompleted()
+	s.stateChanged(SendStreamStateResetSent)
+	if newlyCompleted {
+		// TODO: Technically, this is not correct. The RESET_STREAM frame hasn't received yet,
+		// but retransmissions are handled by the retransmission queue, not by this stream.
+		// With #4271, we can handle it with the stream.
+		s.stateChanged(SendStreamStateResetRecvd)
+	}
 	s.mutex.Unlock()
 
 	s.signalWrite()
@@ -399,6 +438,7 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 		FinalSize: s.writeOffset,
 		ErrorCode: errorCode,
 	})
+	s.ctxCancel(s.cancelWriteErr)
 	if newlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
 	}
@@ -469,6 +509,9 @@ func (s *sendStreamAckHandler) OnAcked(f wire.Frame) {
 		panic("numOutStandingFrames negative")
 	}
 	newlyCompleted := (*sendStream)(s).isNewlyCompleted()
+	if newlyCompleted {
+		(*sendStream)(s).stateChanged(SendStreamStateDataRecvd)
+	}
 	s.mutex.Unlock()
 
 	if newlyCompleted {

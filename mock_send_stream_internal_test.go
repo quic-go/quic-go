@@ -156,6 +156,42 @@ func (c *MockSendStreamIContextCall) DoAndReturn(f func() context.Context) *Mock
 	return c
 }
 
+// OnStateChange mocks base method.
+func (m *MockSendStreamI) OnStateChange(arg0 func(StreamState)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnStateChange", arg0)
+}
+
+// OnStateChange indicates an expected call of OnStateChange.
+func (mr *MockSendStreamIMockRecorder) OnStateChange(arg0 any) *MockSendStreamIOnStateChangeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateChange", reflect.TypeOf((*MockSendStreamI)(nil).OnStateChange), arg0)
+	return &MockSendStreamIOnStateChangeCall{Call: call}
+}
+
+// MockSendStreamIOnStateChangeCall wrap *gomock.Call
+type MockSendStreamIOnStateChangeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSendStreamIOnStateChangeCall) Return() *MockSendStreamIOnStateChangeCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSendStreamIOnStateChangeCall) Do(f func(func(StreamState))) *MockSendStreamIOnStateChangeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSendStreamIOnStateChangeCall) DoAndReturn(f func(func(StreamState))) *MockSendStreamIOnStateChangeCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // SetWriteDeadline mocks base method.
 func (m *MockSendStreamI) SetWriteDeadline(arg0 time.Time) error {
 	m.ctrl.T.Helper()
