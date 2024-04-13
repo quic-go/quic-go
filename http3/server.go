@@ -554,10 +554,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 		}
 	}
 	req = req.WithContext(ctx)
-	r := newResponseWriter(str, conn, s.logger)
-	if req.Method == http.MethodHead {
-		r.isHead = true
-	}
+	r := newResponseWriter(str, conn, req.Method == http.MethodHead, s.logger)
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -588,7 +585,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 	// only write response when there is no panic
 	if !panicked {
 		// response not written to the client yet, set Content-Length
-		if !r.written {
+		if !r.headerWritten {
 			if _, haveCL := r.header["Content-Length"]; !haveCL {
 				r.header.Set("Content-Length", strconv.FormatInt(r.numWritten, 10))
 			}

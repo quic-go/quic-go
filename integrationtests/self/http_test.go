@@ -136,13 +136,14 @@ var _ = Describe("HTTP tests", func() {
 	It("sets content-length for small response", func() {
 		mux.HandleFunc("/small", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
-			w.Write([]byte("foobar"))
+			w.Write([]byte("foo"))
+			w.Write([]byte("bar"))
 		})
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/small", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
-		Expect(resp.Header.Get("Content-Length")).To(Equal(strconv.Itoa(len("foobar"))))
+		Expect(resp.Header.Get("Content-Length")).To(Equal("6"))
 	})
 
 	It("detects stream errors when server panics when writing response", func() {
