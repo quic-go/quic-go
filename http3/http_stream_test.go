@@ -6,10 +6,12 @@ import (
 	"math"
 	"net/http"
 
-	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
+
+	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,15 +32,18 @@ var _ = Describe("Stream", func() {
 			errorCbCalled bool
 		)
 
-		errorCb := func(ErrCode) { errorCbCalled = true }
-
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			errorCbCalled = false
 			qstr = mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			str = newStream(qstr, errorCb)
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
+				errorCbCalled = true
+				return nil
+			}).AnyTimes()
+			str = newStream(qstr, conn)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -167,7 +172,7 @@ var _ = Describe("length-limited streams", func() {
 		qstr = mockquic.NewMockStream(mockCtrl)
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		str = newStream(qstr, func(ErrCode) { Fail("didn't expect error callback to be called") })
+		str = newStream(qstr, mockquic.NewMockEarlyConnection(mockCtrl))
 	})
 
 	It("reads all frames", func() {
@@ -213,15 +218,14 @@ var _ = Describe("Request Stream", func() {
 	BeforeEach(func() {
 		qstr = mockquic.NewMockStream(mockCtrl)
 		requestWriter := newRequestWriter(utils.DefaultLogger)
+		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, func(code ErrCode) { Fail("errored") }),
-			mockquic.NewMockEarlyConnection(mockCtrl),
+			newStream(qstr, conn),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),
 			true,
 			math.MaxUint64,
-			func(code ErrCode) { Fail("errored") },
 		)
 	})
 
