@@ -228,12 +228,12 @@ var _ = Describe("Server", func() {
 			Expect(hfs).To(HaveLen(3))
 		})
 
-		It("response to HEAD request should not have body", func() {
+		It("ignores calls to Write for responses to HEAD requests", func() {
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("foobar"))
 			})
 
-			headRequest, err := http.NewRequest("HEAD", "https://www.example.com", nil)
+			headRequest, err := http.NewRequest(http.MethodHead, "https://www.example.com", nil)
 			Expect(err).ToNot(HaveOccurred())
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(headRequest))
@@ -245,7 +245,7 @@ var _ = Describe("Server", func() {
 			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
-			Expect(responseBuf.Bytes()).To(HaveLen(0))
+			Expect(responseBuf.Bytes()).To(BeEmpty())
 		})
 
 		It("response to HEAD request should also do content sniffing", func() {
@@ -253,7 +253,7 @@ var _ = Describe("Server", func() {
 				w.Write([]byte("<html></html>"))
 			})
 
-			headRequest, err := http.NewRequest("HEAD", "https://www.example.com", nil)
+			headRequest, err := http.NewRequest(http.MethodHead, "https://www.example.com", nil)
 			Expect(err).ToNot(HaveOccurred())
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(headRequest))

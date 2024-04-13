@@ -28,7 +28,7 @@ var _ = Describe("Response Writer", func() {
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
 		str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
 		str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
-		rw = newResponseWriter(str, nil, utils.DefaultLogger)
+		rw = newResponseWriter(str, nil, false, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
