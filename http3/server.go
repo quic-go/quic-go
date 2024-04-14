@@ -425,8 +425,6 @@ func (s *Server) removeListener(l *QUICEarlyListener) {
 }
 
 func (s *Server) handleConn(conn quic.Connection) error {
-	decoder := qpack.NewDecoder(nil)
-
 	// send a SETTINGS frame
 	str, err := conn.OpenUniStream()
 	if err != nil {
@@ -444,16 +442,14 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	hconn := newConnection(
 		conn,
 		s.EnableDatagrams,
-		s.UniStreamHijacker,
 		protocol.PerspectiveServer,
 		s.logger,
 	)
-	go hconn.HandleUnidirectionalStreams()
-
+	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := conn.AcceptStream(context.Background())
+		str, datagrams, err := hconn.acceptStream(context.Background())
 		if err != nil {
 			var appErr *quic.ApplicationError
 			if errors.As(err, &appErr) && appErr.ErrorCode == quic.ApplicationErrorCode(ErrCodeNoError) {
@@ -461,7 +457,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
-		go s.handleRequest(hconn, str, decoder)
+		go s.handleRequest(hconn, str, datagrams, hconn.decoder)
 	}
 }
 
@@ -472,7 +468,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder) {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -531,7 +527,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn)
+	hstr := newStream(str, conn, datagrams)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
@@ -558,6 +554,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 		handler = http.DefaultServeMux
 	}
 
+	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	var panicked bool
 	func() {
 		defer func() {

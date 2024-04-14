@@ -1,14 +1,19 @@
 package http3
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
+
+	"github.com/quic-go/qpack"
 )
 
 // Connection is an HTTP/3 connection.
@@ -31,14 +36,28 @@ type Connection interface {
 	Settings() *Settings
 }
 
+type datagramState uint8
+
+const (
+	streamStateOpen datagramState = iota
+	streamStateReceiveClosed
+	streamStateSendClosed
+	streamStateForbidden = 3
+)
+
 type connection struct {
 	quic.Connection
 
 	perspective protocol.Perspective
 	logger      utils.Logger
 
-	enableDatagrams   bool
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
+	enableDatagrams bool
+
+	decoder *qpack.Decoder
+
+	streamMx      sync.Mutex
+	highestStream protocol.StreamID
+	streams       map[protocol.StreamID]*datagrammer
 
 	settings         *Settings
 	receivedSettings chan struct{}
@@ -47,21 +66,70 @@ type connection struct {
 func newConnection(
 	quicConn quic.Connection,
 	enableDatagrams bool,
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool),
 	perspective protocol.Perspective,
 	logger utils.Logger,
 ) *connection {
-	return &connection{
-		Connection:        quicConn,
-		perspective:       perspective,
-		logger:            logger,
-		enableDatagrams:   enableDatagrams,
-		uniStreamHijacker: uniStreamHijacker,
-		receivedSettings:  make(chan struct{}),
+	c := &connection{
+		Connection:       quicConn,
+		perspective:      perspective,
+		logger:           logger,
+		enableDatagrams:  enableDatagrams,
+		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+		receivedSettings: make(chan struct{}),
+		streams:          make(map[protocol.StreamID]*datagrammer),
+	}
+	return c
+}
+
+func (c *connection) onStreamStateChange(id quic.StreamID, tr quic.StreamTransition) {
+	c.streamMx.Lock()
+	defer c.streamMx.Unlock()
+
+	d, ok := c.streams[id]
+	if !ok { // should never happen
+		return
+	}
+	if isDone := d.SetState(tr); isDone {
+		delete(c.streams, id)
 	}
 }
 
-func (c *connection) HandleUnidirectionalStreams() {
+func (c *connection) openRequestStream(
+	ctx context.Context,
+	requestWriter *requestWriter,
+	reqDone chan<- struct{},
+	disableCompression bool,
+	maxHeaderBytes uint64,
+) (*requestStream, error) {
+	str, err := c.Connection.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	datagrams := newDatagrammer(c, str.StreamID())
+	hstr := newStream(str, c, datagrams)
+	c.streamMx.Lock()
+	c.streams[str.StreamID()] = datagrams
+	c.streamMx.Unlock()
+	str.OnStateTransition(func(tr quic.StreamTransition) { c.onStreamStateChange(str.StreamID(), tr) })
+	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes), nil
+}
+
+func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagrammer, error) {
+	str, err := c.AcceptStream(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	datagrams := newDatagrammer(c, str.StreamID())
+	if c.perspective == protocol.PerspectiveServer {
+		c.streamMx.Lock()
+		c.streams[str.StreamID()] = datagrams
+		c.streamMx.Unlock()
+		str.OnStateTransition(func(tr quic.StreamTransition) { c.onStreamStateChange(str.StreamID(), tr) })
+	}
+	return str, datagrams, nil
+}
+
+func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)) {
 	var (
 		rcvdControlStr      atomic.Bool
 		rcvdQPACKEncoderStr atomic.Bool
@@ -79,7 +147,7 @@ func (c *connection) HandleUnidirectionalStreams() {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
 				id := c.Connection.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), id, str, err) {
+				if hijack != nil && hijack(StreamType(streamType), id, str, err) {
 					return
 				}
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
@@ -111,8 +179,8 @@ func (c *connection) HandleUnidirectionalStreams() {
 				}
 				return
 			default:
-				if c.uniStreamHijacker != nil {
-					if c.uniStreamHijacker(
+				if hijack != nil {
+					if hijack(
 						StreamType(streamType),
 						c.Connection.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
 						str,
@@ -144,9 +212,7 @@ func (c *connection) HandleUnidirectionalStreams() {
 				EnableExtendedConnect: sf.ExtendedConnect,
 				Other:                 sf.Other,
 			}
-			if c.receivedSettings != nil {
-				close(c.receivedSettings)
-			}
+			close(c.receivedSettings)
 			if !sf.Datagram {
 				return
 			}
@@ -155,8 +221,48 @@ func (c *connection) HandleUnidirectionalStreams() {
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
 			if c.enableDatagrams && !c.Connection.ConnectionState().SupportsDatagrams {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
+				return
 			}
+			go c.receiveDatagrams()
 		}(str)
+	}
+}
+
+func (c *connection) sendDatagram(streamID protocol.StreamID, b []byte) error {
+	// TODO: this creates a lot of garbage and an additional copy
+	data := make([]byte, 0, len(b)+8)
+	data = quicvarint.Append(data, uint64(streamID/4))
+	data = append(data, b...)
+	return c.Connection.SendDatagram(data)
+}
+
+func (c *connection) receiveDatagrams() error {
+	for {
+		b, err := c.Connection.ReceiveDatagram(context.Background())
+		if err != nil {
+			return err
+		}
+		// TODO: this is quite wasteful in terms of allocations
+		r := bytes.NewReader(b)
+		quarterStreamID, err := quicvarint.Read(r)
+		if err != nil {
+			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeDatagramError), "")
+			return fmt.Errorf("could not read quarter stream id: %w", err)
+		}
+		if quarterStreamID > maxQuarterStreamID {
+			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeDatagramError), "")
+			return fmt.Errorf("invalid quarter stream id: %w", err)
+		}
+		streamID := protocol.StreamID(4 * quarterStreamID)
+		c.streamMx.Lock()
+		dg, ok := c.streams[streamID]
+		if !ok {
+			c.streamMx.Unlock()
+			return nil
+		}
+		c.streamMx.Unlock()
+		fmt.Println("enqueuing datagram for stream", streamID)
+		dg.enqueue(b[len(b)-r.Len():])
 	}
 }
 

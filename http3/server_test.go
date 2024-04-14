@@ -140,13 +140,15 @@ var _ = Describe("Server", func() {
 
 			qpackDecoder = qpack.NewDecoder(nil)
 			str = mockquic.NewMockStream(mockCtrl)
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().OnStateTransition(gomock.Any()).AnyTimes()
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			qconn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 			qconn.EXPECT().LocalAddr().AnyTimes()
 			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
-			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, utils.DefaultLogger)
+			conn = newConnection(qconn, false, protocol.PerspectiveServer, utils.DefaultLogger)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -163,7 +165,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -182,7 +184,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
@@ -199,7 +201,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"6"}))
@@ -221,7 +223,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			// status, date, content-type
@@ -242,7 +244,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(responseBuf.Bytes()).To(BeEmpty())
@@ -262,7 +264,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
@@ -281,7 +283,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
 
@@ -297,7 +299,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
 
@@ -331,6 +333,8 @@ var _ = Describe("Server", func() {
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().StreamID().AnyTimes()
+				unknownStr.EXPECT().OnStateTransition(gomock.Any())
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -354,6 +358,8 @@ var _ = Describe("Server", func() {
 
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().StreamID().AnyTimes()
+				unknownStr.EXPECT().OnStateTransition(gomock.Any())
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
@@ -380,6 +386,8 @@ var _ = Describe("Server", func() {
 
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().StreamID().AnyTimes()
+				unknownStr.EXPECT().OnStateTransition(gomock.Any())
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
@@ -407,7 +415,8 @@ var _ = Describe("Server", func() {
 					Expect(err).To(MatchError(testErr))
 					return true, nil
 				}
-
+				unknownStr.EXPECT().StreamID().AnyTimes()
+				unknownStr.EXPECT().OnStateTransition(gomock.Any())
 				unknownStr.EXPECT().Read(gomock.Any()).Return(0, testErr).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
@@ -687,7 +696,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 
@@ -710,7 +719,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 	})

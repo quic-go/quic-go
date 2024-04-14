@@ -26,7 +26,7 @@ func encodeResponse(status int) []byte {
 	buf := &bytes.Buffer{}
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil), nil, false, utils.DefaultLogger)
+	rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, utils.DefaultLogger)
 	rw.WriteHeader(status)
 	rw.Flush()
 	return buf.Bytes()
@@ -407,6 +407,8 @@ var _ = Describe("Client", func() {
 				return len(b), nil
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().OnStateTransition(gomock.Any()).AnyTimes()
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -643,7 +645,6 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
-
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
 
 				done := make(chan struct{})
@@ -737,8 +738,9 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rstr := mockquic.NewMockStream(mockCtrl)
+				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil), nil, false, utils.DefaultLogger)
+				rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, utils.DefaultLogger)
 				rw.Header().Set("Content-Encoding", "gzip")
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
@@ -763,8 +765,9 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rstr := mockquic.NewMockStream(mockCtrl)
+				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil), nil, false, utils.DefaultLogger)
+				rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, utils.DefaultLogger)
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })

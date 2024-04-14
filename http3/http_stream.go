@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -15,12 +16,17 @@ import (
 
 // A Stream is an HTTP/3 request stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
-type Stream = quic.Stream
+type Stream interface {
+	quic.Stream
+
+	SendDatagram([]byte) error
+	ReceiveDatagram(context.Context) ([]byte, error)
+}
 
 // A RequestStream is an HTTP/3 request stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
 type RequestStream interface {
-	quic.Stream
+	Stream
 
 	// SendRequestHeader sends the HTTP request.
 	// It is invalid to call it more than once.
@@ -36,20 +42,23 @@ type RequestStream interface {
 
 type stream struct {
 	quic.Stream
-	conn quic.Connection
+	conn *connection
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
 
 	bytesRemainingInFrame uint64
+
+	datagrams *datagrammer
 }
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, conn quic.Connection) *stream {
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer) *stream {
 	return &stream{
-		Stream: str,
-		conn:   conn,
-		buf:    make([]byte, 0, 16),
+		Stream:    str,
+		conn:      conn,
+		buf:       make([]byte, 16),
+		datagrams: datagrams,
 	}
 }
 
@@ -237,4 +246,14 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	}
 	res.Body = s.responseBody
 	return res, nil
+}
+
+func (s *stream) SendDatagram(b []byte) error {
+	// TODO: reject if datagrams are not negotiated (yet)
+	return s.conn.sendDatagram(s.Stream.StreamID(), b)
+}
+
+func (s *stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+	// TODO: reject if datagrams are not negotiated (yet)
+	return s.datagrams.Receive(ctx)
 }

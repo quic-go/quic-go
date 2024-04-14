@@ -23,10 +23,10 @@ var _ = Describe("Connection", func() {
 	Context("control stream handling", func() {
 		It("parses the SETTINGS frame", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("no datagrams"))
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -45,7 +45,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(conn.ReceivedSettings()).Should(BeClosed())
 			Expect(conn.Settings().EnableDatagram).To(BeTrue())
@@ -59,7 +59,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -83,7 +82,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(closed).Should(BeClosed())
 			Eventually(done).Should(BeClosed())
@@ -101,7 +100,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					protocol.PerspectiveClient,
 					utils.DefaultLogger,
 				)
@@ -120,7 +118,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams()
+					conn.HandleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 			})
@@ -130,7 +128,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					protocol.PerspectiveClient,
 					utils.DefaultLogger,
 				)
@@ -155,7 +152,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams()
+					conn.HandleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 			})
@@ -166,7 +163,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -181,7 +177,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(reset).Should(BeClosed())
@@ -192,7 +188,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -212,7 +207,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -223,7 +218,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				utils.DefaultLogger,
 			)
@@ -243,7 +237,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -261,7 +255,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					pers.Opposite(),
 					utils.DefaultLogger,
 				)
@@ -279,7 +272,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams()
+					conn.HandleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 				Eventually(closed).Should(BeClosed())
@@ -291,7 +284,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				true,
-				nil,
 				protocol.PerspectiveClient,
 				utils.DefaultLogger,
 			)
@@ -312,7 +304,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
