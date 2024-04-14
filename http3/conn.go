@@ -11,10 +11,10 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+// Connection is an HTTP/3 connection.
+// It has all methods from the quic.Connection expect for AcceptStream, AcceptUniStream,
+// SendDatagram and ReceiveDatagram.
 type Connection interface {
-	// all methods from the quic.Connection expect for SendDatagram and ReceiveDatagram
-	AcceptStream(context.Context) (quic.Stream, error)
-	AcceptUniStream(context.Context) (quic.ReceiveStream, error)
 	OpenStream() (quic.Stream, error)
 	OpenStreamSync(context.Context) (quic.Stream, error)
 	OpenUniStream() (quic.SendStream, error)
