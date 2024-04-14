@@ -35,7 +35,7 @@ type RequestStream interface {
 
 type stream struct {
 	quic.Stream
-	closeConnection func(ErrCode)
+	conn quic.Connection
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
 
@@ -44,11 +44,11 @@ type stream struct {
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, closeConnection func(ErrCode)) *stream {
+func newStream(str quic.Stream, conn quic.Connection) *stream {
 	return &stream{
-		Stream:          str,
-		closeConnection: closeConnection,
-		buf:             make([]byte, 0, 16),
+		Stream: str,
+		conn:   conn,
+		buf:    make([]byte, 0, 16),
 	}
 }
 
@@ -68,7 +68,7 @@ func (s *stream) Read(b []byte) (int, error) {
 				s.bytesRemainingInFrame = f.Length
 				break parseLoop
 			default:
-				s.closeConnection(ErrCodeFrameUnexpected)
+				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
 				// Therefore, this condition is only entered when we parsed another known frame type.
 				return 0, fmt.Errorf("peer sent an unexpected frame: %T", f)
@@ -105,13 +105,10 @@ func (s *stream) Write(b []byte) (int, error) {
 type requestStream struct {
 	*stream
 
-	conn quic.Connection
-
 	responseBody io.ReadCloser // set by ReadResponse
 
 	decoder            *qpack.Decoder
 	requestWriter      *requestWriter
-	closeConnection    func(ErrCode)
 	maxHeaderBytes     uint64
 	reqDone            chan<- struct{}
 	disableCompression bool
@@ -125,22 +122,18 @@ var _ RequestStream = &requestStream{}
 
 func newRequestStream(
 	str *stream,
-	conn quic.Connection,
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
 	decoder *qpack.Decoder,
 	disableCompression bool,
 	maxHeaderBytes uint64,
-	closeConnection func(ErrCode),
 ) *requestStream {
 	return &requestStream{
 		stream:             str,
-		conn:               conn,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
 		decoder:            decoder,
 		disableCompression: disableCompression,
-		closeConnection:    closeConnection,
 		maxHeaderBytes:     maxHeaderBytes,
 	}
 }
@@ -174,7 +167,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		s.closeConnection(ErrCodeFrameUnexpected)
+		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
 	}
 	if hf.Length > s.maxHeaderBytes {
@@ -191,7 +184,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	hfs, err := s.decoder.DecodeFull(headerBlock)
 	if err != nil {
 		// TODO: use the right error code
-		s.closeConnection(ErrCodeGeneralProtocolError)
+		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
 

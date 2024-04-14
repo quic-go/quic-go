@@ -222,14 +222,12 @@ func (c *SingleDestinationRoundTripper) OpenRequestStream(ctx context.Context) (
 		return nil, err
 	}
 	return newRequestStream(
-		newStream(str, func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") }),
-		c.hconn,
+		newStream(str, c.hconn),
 		c.requestWriter,
 		nil,
 		c.decoder,
 		c.DisableCompression,
 		c.maxHeaderBytes(),
-		func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") },
 	), nil
 }
 
@@ -274,14 +272,12 @@ func (c *SingleDestinationRoundTripper) sendRequestBody(str Stream, body io.Read
 
 func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.Stream, reqDone chan<- struct{}) (*http.Response, error) {
 	hstr := newRequestStream(
-		newStream(str, func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") }),
-		c.hconn,
+		newStream(str, c.hconn),
 		c.requestWriter,
 		reqDone,
 		c.decoder,
 		c.DisableCompression,
 		c.maxHeaderBytes(),
-		func(e ErrCode) { c.Connection.CloseWithError(quic.ApplicationErrorCode(e), "") },
 	)
 	if err := hstr.SendRequestHeader(req); err != nil {
 		return nil, err
