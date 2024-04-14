@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
+	"net/url"
 	"os"
 	"strconv"
 	"sync/atomic"
@@ -91,7 +93,7 @@ var _ = Describe("HTTP tests", func() {
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
-			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true}),
+			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true}),
 		}
 
 		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
@@ -415,9 +417,11 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	It("allows taking over the stream", func() {
+		handlerCalled := make(chan struct{})
 		mux.HandleFunc("/httpstreamer", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
-			w.WriteHeader(200)
+			close(handlerCalled)
+			w.WriteHeader(http.StatusOK)
 			w.(http.Flusher).Flush()
 
 			str := r.Body.(http3.HTTPStreamer).HTTPStream()
@@ -449,6 +453,9 @@ var _ = Describe("HTTP tests", func() {
 		str, err := rt.OpenRequestStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.SendRequestHeader(req)).To(Succeed())
+		// make sure the request is received (and not stuck in some buffer, for example)
+		Eventually(handlerCalled).Should(BeClosed())
+
 		rsp, err := str.ReadResponse()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.StatusCode).To(Equal(200))
@@ -713,6 +720,88 @@ var _ = Describe("HTTP tests", func() {
 		Expect(resp.Header).To(HaveKeyWithValue("Upgrade", []string{"proto"}))
 		Expect(status).To(Equal(0))
 		Expect(cnt).To(Equal(0))
+	})
+
+	Context("HTTP datagrams", func() {
+		It("sends an receives HTTP datagrams", func() {
+			errChan := make(chan error, 1)
+			const num = 5
+			datagramChan := make(chan struct{}, num)
+			mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				Expect(r.Method).To(Equal(http.MethodConnect))
+				conn := w.(http3.Hijacker).Connection()
+				Eventually(conn.ReceivedSettings()).Should(BeClosed())
+				Expect(conn.Settings().EnableDatagram).To(BeTrue())
+				w.WriteHeader(http.StatusOK)
+				w.(http.Flusher).Flush()
+
+				str := r.Body.(http3.HTTPStreamer).HTTPStream()
+				go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
+
+				for {
+					if _, err := str.ReceiveDatagram(context.Background()); err != nil {
+						errChan <- err
+						return
+					}
+					datagramChan <- struct{}{}
+				}
+			})
+
+			tlsConf := getTLSClientConfigWithoutServerName()
+			tlsConf.NextProtos = []string{http3.NextProtoH3}
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", port),
+				tlsConf,
+				getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer conn.CloseWithError(0, "")
+			rt := &http3.SingleDestinationRoundTripper{
+				Connection:      conn,
+				EnableDatagrams: true,
+			}
+			str, err := rt.OpenRequestStream(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			u, err := url.Parse(fmt.Sprintf("https://localhost:%d/datagrams", port))
+			Expect(err).ToNot(HaveOccurred())
+			req := &http.Request{
+				Method: http.MethodConnect,
+				Proto:  "datagrams",
+				Host:   u.Host,
+				URL:    u,
+			}
+			Expect(str.SendRequestHeader(req)).To(Succeed())
+
+			rsp, err := str.ReadResponse()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+
+			for i := 0; i < num; i++ {
+				b := make([]byte, 8)
+				binary.BigEndian.PutUint64(b, uint64(i))
+				Expect(str.SendDatagram(bytes.Repeat(b, 100))).To(Succeed())
+			}
+			var count int
+		loop:
+			for {
+				select {
+				case <-datagramChan:
+					count++
+					if count >= num*4/5 {
+						break loop
+					}
+				case err := <-errChan:
+					Fail(fmt.Sprintf("receiving datagrams failed: %s", err))
+				}
+			}
+			str.CancelWrite(42)
+
+			var resetErr error
+			Eventually(errChan).Should(Receive(&resetErr))
+			Expect(resetErr.(*quic.StreamError).ErrorCode).To(BeEquivalentTo(42))
+		})
 	})
 
 	Context("0-RTT", func() {

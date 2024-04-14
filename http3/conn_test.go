@@ -22,10 +22,10 @@ var _ = Describe("Connection", func() {
 	Context("control stream handling", func() {
 		It("parses the SETTINGS frame", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("no datagrams"))
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				nil,
 			)
@@ -44,7 +44,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(conn.ReceivedSettings()).Should(BeClosed())
 			Expect(conn.Settings().EnableDatagram).To(BeTrue())
@@ -58,7 +58,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				nil,
 			)
@@ -82,7 +81,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(closed).Should(BeClosed())
 			Eventually(done).Should(BeClosed())
@@ -100,7 +99,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					protocol.PerspectiveClient,
 					nil,
 				)
@@ -119,7 +117,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams()
+					conn.HandleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 			})
@@ -129,7 +127,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					protocol.PerspectiveClient,
 					nil,
 				)
@@ -154,7 +151,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams()
+					conn.HandleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 			})
@@ -165,7 +162,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				nil,
 			)
@@ -180,7 +176,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(reset).Should(BeClosed())
@@ -191,7 +187,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				nil,
 			)
@@ -211,7 +206,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -222,7 +217,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				false,
-				nil,
 				protocol.PerspectiveServer,
 				nil,
 			)
@@ -242,7 +236,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -260,7 +254,6 @@ var _ = Describe("Connection", func() {
 				conn := newConnection(
 					qconn,
 					false,
-					nil,
 					pers.Opposite(),
 					nil,
 				)
@@ -278,7 +271,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams()
+					conn.HandleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 				Eventually(closed).Should(BeClosed())
@@ -290,7 +283,6 @@ var _ = Describe("Connection", func() {
 			conn := newConnection(
 				qconn,
 				true,
-				nil,
 				protocol.PerspectiveClient,
 				nil,
 			)
@@ -311,10 +303,127 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams()
+				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
+		})
+	})
+
+	Context("datagram handling", func() {
+		var (
+			qconn *mockquic.MockEarlyConnection
+			conn  *connection
+		)
+
+		BeforeEach(func() {
+			qconn = mockquic.NewMockEarlyConnection(mockCtrl)
+			conn = newConnection(
+				qconn,
+				true,
+				protocol.PerspectiveClient,
+				nil,
+			)
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{Datagram: true}).Append(b)
+			r := bytes.NewReader(b)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+			qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil).MaxTimes(1)
+			qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done")).MaxTimes(1)
+			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: true}).MaxTimes(1)
+		})
+
+		It("closes the connection if it can't parse the quarter stream ID", func() {
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return([]byte{128}, nil) // return an invalid varint
+			done := make(chan struct{})
+			qconn.EXPECT().CloseWithError(qerr.ApplicationErrorCode(ErrCodeDatagramError), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
+				close(done)
+				return nil
+			})
+			go func() {
+				defer GinkgoRecover()
+				conn.HandleUnidirectionalStreams(nil)
+			}()
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("closes the connection if the quarter stream ID is invalid", func() {
+			b := quicvarint.Append([]byte{}, maxQuarterStreamID+1)
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(b, nil)
+			done := make(chan struct{})
+			qconn.EXPECT().CloseWithError(qerr.ApplicationErrorCode(ErrCodeDatagramError), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
+				close(done)
+				return nil
+			})
+			go func() {
+				defer GinkgoRecover()
+				conn.HandleUnidirectionalStreams(nil)
+			}()
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("drops datagrams for non-existent streams", func() {
+			const strID = 4
+			// first deliver the datagram...
+			b := quicvarint.Append([]byte{}, strID/4)
+			b = append(b, []byte("foobar")...)
+			delivered := make(chan struct{})
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).DoAndReturn(func(context.Context) ([]byte, error) {
+				close(delivered)
+				return b, nil
+			})
+			go func() {
+				defer GinkgoRecover()
+				conn.HandleUnidirectionalStreams(nil)
+			}()
+			Eventually(delivered).Should(BeClosed())
+
+			// ... then open the stream
+			qstr := mockquic.NewMockStream(mockCtrl)
+			qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
+			qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
+			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+			Expect(err).ToNot(HaveOccurred())
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err = str.ReceiveDatagram(ctx)
+			Expect(err).To(MatchError(context.Canceled))
+		})
+
+		It("delivers datagrams for existing streams", func() {
+			const strID = 4
+
+			// first open the stream...
+			qstr := mockquic.NewMockStream(mockCtrl)
+			qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
+			qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
+			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+			Expect(err).ToNot(HaveOccurred())
+
+			// ... then deliver the datagram
+			b := quicvarint.Append([]byte{}, strID/4)
+			b = append(b, []byte("foobar")...)
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(b, nil)
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("test done"))
+			go func() {
+				defer GinkgoRecover()
+				conn.HandleUnidirectionalStreams(nil)
+			}()
+
+			data, err := str.ReceiveDatagram(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(data).To(Equal([]byte("foobar")))
+		})
+
+		It("sends datagrams", func() {
+			const strID = 404
+			expected := quicvarint.Append([]byte{}, strID/4)
+			expected = append(expected, []byte("foobar")...)
+			testErr := errors.New("test error")
+			qconn.EXPECT().SendDatagram(expected).Return(testErr)
+
+			Expect(conn.sendDatagram(strID, []byte("foobar"))).To(MatchError(testErr))
 		})
 	})
 })
