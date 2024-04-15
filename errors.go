@@ -49,11 +49,6 @@ type StreamError struct {
 	Remote    bool
 }
 
-func (e *StreamError) Is(target error) bool {
-	_, ok := target.(*StreamError)
-	return ok
-}
-
 func (e *StreamError) Error() string {
 	pers := "local"
 	if e.Remote {
