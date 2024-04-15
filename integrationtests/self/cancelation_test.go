@@ -246,6 +246,7 @@ var _ = Describe("Stream Cancellations", func() {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
 							ErrorCode: quic.StreamErrorCode(str.StreamID()),
+							Remote:    true,
 						}))
 						return
 					}
@@ -356,6 +357,7 @@ var _ = Describe("Stream Cancellations", func() {
 							Expect(err).To(MatchError(&quic.StreamError{
 								StreamID:  str.StreamID(),
 								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+								Remote:    true,
 							}))
 							return
 						}
@@ -396,6 +398,7 @@ var _ = Describe("Stream Cancellations", func() {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
 							ErrorCode: quic.StreamErrorCode(str.StreamID()),
+							Remote:    true,
 						}))
 						return
 					}
@@ -441,6 +444,7 @@ var _ = Describe("Stream Cancellations", func() {
 							Expect(err).To(MatchError(&quic.StreamError{
 								StreamID:  str.StreamID(),
 								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+								Remote:    true,
 							}))
 							return
 						}
@@ -486,6 +490,7 @@ var _ = Describe("Stream Cancellations", func() {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
 							ErrorCode: quic.StreamErrorCode(str.StreamID()),
+							Remote:    true,
 						}))
 						return
 					}
