@@ -237,22 +237,21 @@ var errTooMuchData = errors.New("peer sent too much data")
 type lengthLimitedStream struct {
 	*stream
 
-	contentLength int64
-	read          int64
-	resetStream   bool
+	remainingContentLength int64
+	resetStream            bool
 }
 
 var _ Stream = &lengthLimitedStream{}
 
 func newLengthLimitedStream(str *stream, contentLength int64) *lengthLimitedStream {
 	return &lengthLimitedStream{
-		stream:        str,
-		contentLength: contentLength,
+		stream:                 str,
+		remainingContentLength: contentLength,
 	}
 }
 
 func (s *lengthLimitedStream) checkContentLengthViolation() error {
-	if s.read > s.contentLength || s.read == s.contentLength && s.hasMoreData() {
+	if s.remainingContentLength < 0 || s.remainingContentLength == 0 && s.hasMoreData() {
 		if !s.resetStream {
 			s.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 			s.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
@@ -267,8 +266,8 @@ func (s *lengthLimitedStream) Read(b []byte) (int, error) {
 	if err := s.checkContentLengthViolation(); err != nil {
 		return 0, err
 	}
-	n, err := s.stream.Read(b[:min(int64(len(b)), s.contentLength-s.read)])
-	s.read += int64(n)
+	n, err := s.stream.Read(b[:min(int64(len(b)), s.remainingContentLength)])
+	s.remainingContentLength -= int64(n)
 	if err := s.checkContentLengthViolation(); err != nil {
 		return n, err
 	}
