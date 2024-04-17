@@ -13,6 +13,11 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+type StreamTransition struct {
+	NewState StreamState
+	Error    error
+}
+
 type StreamState uint8
 
 // send stream states
@@ -96,8 +101,8 @@ type stream struct {
 	receiveStreamCompleted bool
 	sendStreamCompleted    bool
 
-	onStateChange func(state StreamState)
-	states        []StreamState
+	onStateTransition func(StreamTransition)
+	states            []StreamTransition
 }
 
 var _ Stream = &stream{}
@@ -111,7 +116,7 @@ func newStream(
 ) *stream {
 	s := &stream{
 		sender: sender,
-		states: make([]StreamState, 10),
+		states: make([]StreamTransition, 0, 10),
 	}
 	senderForSendStream := &uniStreamSender{
 		streamSender: sender,
@@ -136,22 +141,22 @@ func newStream(
 	return s
 }
 
-func (s *stream) stateChanged(state StreamState) {
+func (s *stream) stateChanged(tr StreamTransition) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.onStateChange != nil {
-		s.onStateChange(state)
+	if s.onStateTransition != nil {
+		s.onStateTransition(tr)
 		return
 	}
-	s.states = append(s.states, state)
+	s.states = append(s.states, tr)
 }
 
-func (s *stream) OnStateChange(f func(StreamState)) {
+func (s *stream) OnStateTransition(f func(StreamTransition)) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.onStateChange = f
+	s.onStateTransition = f
 	for _, state := range s.states {
 		f(state)
 	}

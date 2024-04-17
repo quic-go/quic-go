@@ -104,10 +104,10 @@ type ReceiveStream interface {
 	// Even if Read times out, it may return n > 0, indicating that some data was successfully read.
 	// A zero value for t means Read will not time out.
 	SetReadDeadline(t time.Time) error
-	// OnStateChange sets a callback to be called when the stream transitions between stream states.
+	// OnStateTransition sets a callback to be called when the stream transitions between stream states.
 	// It is possible to set the callback after a transition has happened.
 	// In that case, it is immediately called for that transition.
-	OnStateChange(func(StreamState))
+	OnStateTransition(func(StreamTransition))
 }
 
 // A SendStream is a unidirectional Send Stream.
@@ -144,10 +144,10 @@ type SendStream interface {
 	// Even if write times out, it may return n > 0, indicating that some data was successfully written.
 	// A zero value for t means Write will not time out.
 	SetWriteDeadline(t time.Time) error
-	// OnStateChange sets a callback to be called when the stream transitions between stream states.
+	// OnStateTransition sets a callback to be called when the stream transitions between stream states.
 	// It is possible to set the callback after a transition has happened.
 	// In that case, it is immediately called for that transition.
-	OnStateChange(func(StreamState))
+	OnStateTransition(func(StreamTransition))
 }
 
 // A Connection is a QUIC connection between two peers.

@@ -34,7 +34,7 @@ var _ = Describe("Receive Stream", func() {
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
 		states = []StreamState{}
-		str = newReceiveStream(streamID, mockSender, mockFC, func(s StreamState) { states = append(states, s) })
+		str = newReceiveStream(streamID, mockSender, mockFC, func(s StreamTransition) { states = append(states, s.NewState) })
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutReader(str, timeout)

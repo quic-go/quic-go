@@ -38,7 +38,7 @@ var _ = Describe("Send Stream", func() {
 		states = []StreamState{}
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newSendStream(context.Background(), streamID, mockSender, mockFC, func(s StreamState) { states = append(states, s) })
+		str = newSendStream(context.Background(), streamID, mockSender, mockFC, func(s StreamTransition) { states = append(states, s.NewState) })
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutWriter(str, timeout)

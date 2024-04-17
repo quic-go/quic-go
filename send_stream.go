@@ -51,8 +51,8 @@ type sendStream struct {
 	writeOnce chan struct{}
 	deadline  time.Time
 
-	onStateChange func(StreamState)
-	states        []StreamState
+	onStateTransition func(StreamTransition)
+	states            []StreamTransition
 
 	flowController flowcontrol.StreamFlowController
 }
@@ -67,39 +67,39 @@ func newSendStream(
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
-	onStateChange func(StreamState),
+	onStateTransition func(StreamTransition),
 ) *sendStream {
 	s := &sendStream{
-		streamID:       streamID,
-		sender:         sender,
-		flowController: flowController,
-		writeChan:      make(chan struct{}, 1),
-		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
-		onStateChange:  onStateChange,
-		states:         make([]StreamState, 5),
+		streamID:          streamID,
+		sender:            sender,
+		flowController:    flowController,
+		writeChan:         make(chan struct{}, 1),
+		writeOnce:         make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
+		onStateTransition: onStateTransition,
+		states:            make([]StreamTransition, 5),
 	}
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
-	s.stateChanged(SendStreamStateReady)
+	s.stateTransition(StreamTransition{NewState: SendStreamStateReady})
 	return s
 }
 
-// stateChanged signals a stream state change.
+// stateTransition signals a stream state change.
 // It must be called while holding the mutex.
-func (s *sendStream) stateChanged(state StreamState) {
-	if s.onStateChange != nil {
-		s.onStateChange(state)
+func (s *sendStream) stateTransition(tr StreamTransition) {
+	if s.onStateTransition != nil {
+		s.onStateTransition(tr)
 		return
 	}
-	s.states = append(s.states, state)
+	s.states = append(s.states, tr)
 }
 
-func (s *sendStream) OnStateChange(f func(StreamState)) {
+func (s *sendStream) OnStateTransition(f func(StreamTransition)) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.onStateChange = f
+	s.onStateTransition = f
 	for _, state := range s.states {
-		s.stateChanged(state)
+		s.stateTransition(state)
 	}
 	s.states = nil
 }
@@ -160,7 +160,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 				copy(f.Data, s.dataForWriting)
 				s.nextFrame = f
 				if s.writeOffset == 0 {
-					s.stateChanged(SendStreamStateSend)
+					s.stateTransition(StreamTransition{NewState: SendStreamStateSend})
 				}
 			} else {
 				l := len(s.nextFrame.Data)
@@ -401,7 +401,7 @@ func (s *sendStream) Close() error {
 	}
 	s.ctxCancel(nil)
 	s.finishedWriting = true
-	s.stateChanged(SendStreamStateDataSent)
+	s.stateTransition(StreamTransition{NewState: SendStreamStateDataSent})
 	s.mutex.Unlock()
 
 	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
@@ -423,12 +423,12 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 	s.numOutstandingFrames = 0
 	s.retransmissionQueue = nil
 	newlyCompleted := s.isNewlyCompleted()
-	s.stateChanged(SendStreamStateResetSent)
+	s.stateTransition(StreamTransition{NewState: SendStreamStateResetSent, Error: s.cancelWriteErr})
 	if newlyCompleted {
 		// TODO: Technically, this is not correct. The RESET_STREAM frame hasn't received yet,
 		// but retransmissions are handled by the retransmission queue, not by this stream.
 		// With #4271, we can handle it with the stream.
-		s.stateChanged(SendStreamStateResetRecvd)
+		s.stateTransition(StreamTransition{NewState: SendStreamStateResetRecvd})
 	}
 	s.mutex.Unlock()
 
@@ -510,7 +510,7 @@ func (s *sendStreamAckHandler) OnAcked(f wire.Frame) {
 	}
 	newlyCompleted := (*sendStream)(s).isNewlyCompleted()
 	if newlyCompleted {
-		(*sendStream)(s).stateChanged(SendStreamStateDataRecvd)
+		(*sendStream)(s).stateTransition(StreamTransition{NewState: SendStreamStateDataRecvd})
 	}
 	s.mutex.Unlock()
 

@@ -47,8 +47,8 @@ type receiveStream struct {
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
 	deadline time.Time
 
-	onStateChange func(StreamState)
-	states        []StreamState
+	onStateTransition func(StreamTransition)
+	states            []StreamTransition
 
 	flowController flowcontrol.StreamFlowController
 }
@@ -62,38 +62,38 @@ func newReceiveStream(
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
-	onStateChange func(StreamState),
+	onStateTransition func(StreamTransition),
 ) *receiveStream {
 	s := &receiveStream{
-		streamID:       streamID,
-		sender:         sender,
-		flowController: flowController,
-		frameQueue:     newFrameSorter(),
-		readChan:       make(chan struct{}, 1),
-		readOnce:       make(chan struct{}, 1),
-		finalOffset:    protocol.MaxByteCount,
-		states:         make([]StreamState, 5),
-		onStateChange:  onStateChange,
+		streamID:          streamID,
+		sender:            sender,
+		flowController:    flowController,
+		frameQueue:        newFrameSorter(),
+		readChan:          make(chan struct{}, 1),
+		readOnce:          make(chan struct{}, 1),
+		finalOffset:       protocol.MaxByteCount,
+		states:            make([]StreamTransition, 5),
+		onStateTransition: onStateTransition,
 	}
-	s.stateChanged(ReceiveStreamStateRecv)
+	s.stateChanged(StreamTransition{NewState: ReceiveStreamStateRecv})
 	return s
 }
 
 // stateChanged signals a stream state change.
 // It must be called while holding the mutex.
-func (s *receiveStream) stateChanged(state StreamState) {
-	if s.onStateChange != nil {
-		s.onStateChange(state)
+func (s *receiveStream) stateChanged(tr StreamTransition) {
+	if s.onStateTransition != nil {
+		s.onStateTransition(tr)
 		return
 	}
-	s.states = append(s.states, state)
+	s.states = append(s.states, tr)
 }
 
-func (s *receiveStream) OnStateChange(f func(StreamState)) {
+func (s *receiveStream) OnStateTransition(f func(StreamTransition)) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.onStateChange = f
+	s.onStateTransition = f
 	for _, state := range s.states {
 		s.stateChanged(state)
 	}
@@ -114,8 +114,8 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 	s.mutex.Lock()
 	completed, n, err := s.readImpl(p)
 	if completed {
-		s.stateChanged(ReceiveStreamStateDataRecvd)
-		s.stateChanged(ReceiveStreamStateDataRead)
+		s.stateChanged(StreamTransition{NewState: ReceiveStreamStateDataRecvd})
+		s.stateChanged(StreamTransition{NewState: ReceiveStreamStateDataRead})
 	}
 	s.mutex.Unlock()
 
@@ -131,7 +131,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 	}
 	if s.cancelReadErr != nil {
 		if !s.cancelReadRead {
-			s.stateChanged(ReceiveStreamStateResetRead)
+			s.stateChanged(StreamTransition{NewState: ReceiveStreamStateResetRead, Error: s.cancelReadErr})
 			s.cancelReadRead = true
 		}
 		return false, 0, s.cancelReadErr
@@ -160,7 +160,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			}
 			if s.cancelReadErr != nil {
 				if !s.cancelReadRead {
-					s.stateChanged(ReceiveStreamStateResetRead)
+					s.stateChanged(StreamTransition{NewState: ReceiveStreamStateResetRead})
 					s.cancelReadRead = true
 				}
 				return false, bytesRead, s.cancelReadErr
@@ -270,7 +270,7 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	s.mutex.Lock()
 	completed, err := s.handleStreamFrameImpl(frame)
 	if completed {
-		s.stateChanged(ReceiveStreamStateSizeKnown)
+		s.stateChanged(StreamTransition{NewState: ReceiveStreamStateSizeKnown})
 	}
 	s.mutex.Unlock()
 
@@ -305,7 +305,7 @@ func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) err
 	s.mutex.Lock()
 	completed, err := s.handleResetStreamFrameImpl(frame)
 	if completed {
-		s.stateChanged(ReceiveStreamStateResetRecvd)
+		s.stateChanged(StreamTransition{NewState: ReceiveStreamStateResetRecvd, Error: s.resetRemotelyErr})
 	}
 	s.mutex.Unlock()
 

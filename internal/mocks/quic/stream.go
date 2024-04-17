@@ -191,38 +191,38 @@ func (c *MockStreamContextCall) DoAndReturn(f func() context.Context) *MockStrea
 	return c
 }
 
-// OnStateChange mocks base method.
-func (m *MockStream) OnStateChange(arg0 func(quic.StreamState)) {
+// OnStateTransition mocks base method.
+func (m *MockStream) OnStateTransition(arg0 func(quic.StreamTransition)) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnStateChange", arg0)
+	m.ctrl.Call(m, "OnStateTransition", arg0)
 }
 
-// OnStateChange indicates an expected call of OnStateChange.
-func (mr *MockStreamMockRecorder) OnStateChange(arg0 any) *MockStreamOnStateChangeCall {
+// OnStateTransition indicates an expected call of OnStateTransition.
+func (mr *MockStreamMockRecorder) OnStateTransition(arg0 any) *MockStreamOnStateTransitionCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateChange", reflect.TypeOf((*MockStream)(nil).OnStateChange), arg0)
-	return &MockStreamOnStateChangeCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateTransition", reflect.TypeOf((*MockStream)(nil).OnStateTransition), arg0)
+	return &MockStreamOnStateTransitionCall{Call: call}
 }
 
-// MockStreamOnStateChangeCall wrap *gomock.Call
-type MockStreamOnStateChangeCall struct {
+// MockStreamOnStateTransitionCall wrap *gomock.Call
+type MockStreamOnStateTransitionCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamOnStateChangeCall) Return() *MockStreamOnStateChangeCall {
+func (c *MockStreamOnStateTransitionCall) Return() *MockStreamOnStateTransitionCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamOnStateChangeCall) Do(f func(func(quic.StreamState))) *MockStreamOnStateChangeCall {
+func (c *MockStreamOnStateTransitionCall) Do(f func(func(quic.StreamTransition))) *MockStreamOnStateTransitionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamOnStateChangeCall) DoAndReturn(f func(func(quic.StreamState))) *MockStreamOnStateChangeCall {
+func (c *MockStreamOnStateTransitionCall) DoAndReturn(f func(func(quic.StreamTransition))) *MockStreamOnStateTransitionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

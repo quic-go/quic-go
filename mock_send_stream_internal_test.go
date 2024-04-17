@@ -156,38 +156,38 @@ func (c *MockSendStreamIContextCall) DoAndReturn(f func() context.Context) *Mock
 	return c
 }
 
-// OnStateChange mocks base method.
-func (m *MockSendStreamI) OnStateChange(arg0 func(StreamState)) {
+// OnStateTransition mocks base method.
+func (m *MockSendStreamI) OnStateTransition(arg0 func(StreamTransition)) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnStateChange", arg0)
+	m.ctrl.Call(m, "OnStateTransition", arg0)
 }
 
-// OnStateChange indicates an expected call of OnStateChange.
-func (mr *MockSendStreamIMockRecorder) OnStateChange(arg0 any) *MockSendStreamIOnStateChangeCall {
+// OnStateTransition indicates an expected call of OnStateTransition.
+func (mr *MockSendStreamIMockRecorder) OnStateTransition(arg0 any) *MockSendStreamIOnStateTransitionCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateChange", reflect.TypeOf((*MockSendStreamI)(nil).OnStateChange), arg0)
-	return &MockSendStreamIOnStateChangeCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnStateTransition", reflect.TypeOf((*MockSendStreamI)(nil).OnStateTransition), arg0)
+	return &MockSendStreamIOnStateTransitionCall{Call: call}
 }
 
-// MockSendStreamIOnStateChangeCall wrap *gomock.Call
-type MockSendStreamIOnStateChangeCall struct {
+// MockSendStreamIOnStateTransitionCall wrap *gomock.Call
+type MockSendStreamIOnStateTransitionCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSendStreamIOnStateChangeCall) Return() *MockSendStreamIOnStateChangeCall {
+func (c *MockSendStreamIOnStateTransitionCall) Return() *MockSendStreamIOnStateTransitionCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendStreamIOnStateChangeCall) Do(f func(func(StreamState))) *MockSendStreamIOnStateChangeCall {
+func (c *MockSendStreamIOnStateTransitionCall) Do(f func(func(StreamTransition))) *MockSendStreamIOnStateTransitionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendStreamIOnStateChangeCall) DoAndReturn(f func(func(StreamState))) *MockSendStreamIOnStateChangeCall {
+func (c *MockSendStreamIOnStateTransitionCall) DoAndReturn(f func(func(StreamTransition))) *MockSendStreamIOnStateTransitionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
