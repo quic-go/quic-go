@@ -277,14 +277,15 @@ var _ = Describe("RoundTripper", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			handshakeChan := make(chan struct{})
-			close(handshakeChan)
 			var count int
 			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return conn, nil
 			}
 			testErr := errors.New("test err")
+			handshakeChan := make(chan struct{})
+			close(handshakeChan)
+			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
 			cl1.EXPECT().RoundTripOpt(req1, gomock.Any()).Return(nil, testErr)
 			cl2.EXPECT().RoundTripOpt(req2, gomock.Any()).Return(&http.Response{Request: req2}, nil)
 			_, err = rt.RoundTrip(req1)
