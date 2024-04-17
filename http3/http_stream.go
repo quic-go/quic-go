@@ -101,6 +101,10 @@ func (s *stream) Write(b []byte) (int, error) {
 	return s.Stream.Write(b)
 }
 
+func (s *stream) writeUnframed(b []byte) (int, error) {
+	return s.Stream.Write(b)
+}
+
 func (s *stream) StreamID() protocol.StreamID {
 	return s.Stream.StreamID()
 }
