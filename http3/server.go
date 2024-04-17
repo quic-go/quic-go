@@ -531,7 +531,8 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	body := newRequestBody(newStream(str, conn), contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
+	hstr := newStream(str, conn)
+	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
 	if s.logger.Debug() {
@@ -551,7 +552,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 		}
 	}
 	req = req.WithContext(ctx)
-	r := newResponseWriter(str, conn, req.Method == http.MethodHead, s.logger)
+	r := newResponseWriter(hstr, conn, req.Method == http.MethodHead, s.logger)
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
