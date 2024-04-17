@@ -527,13 +527,11 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 
 	// Check that the client doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.
-	var httpStr Stream
+	contentLength := int64(-1)
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
-		httpStr = newLengthLimitedStream(newStream(str, conn), req.ContentLength)
-	} else {
-		httpStr = newStream(str, conn)
+		contentLength = req.ContentLength
 	}
-	body := newRequestBody(httpStr, conn.Context(), conn.ReceivedSettings(), conn.Settings)
+	body := newRequestBody(newStream(str, conn), contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
 	if s.logger.Debug() {

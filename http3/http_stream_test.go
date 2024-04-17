@@ -6,7 +6,6 @@ import (
 	"math"
 	"net/http"
 
-	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -157,57 +156,6 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal([]byte("foobar")))
 		})
-	})
-})
-
-var _ = Describe("length-limited streams", func() {
-	var (
-		str  *stream
-		qstr *mockquic.MockStream
-		buf  *bytes.Buffer
-	)
-
-	BeforeEach(func() {
-		buf = &bytes.Buffer{}
-		qstr = mockquic.NewMockStream(mockCtrl)
-		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		str = newStream(qstr, mockquic.NewMockEarlyConnection(mockCtrl))
-	})
-
-	It("reads all frames", func() {
-		s := newLengthLimitedStream(str, 6)
-		buf.Write(getDataFrame([]byte("foo")))
-		buf.Write(getDataFrame([]byte("bar")))
-		data, err := io.ReadAll(s)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(data).To(Equal([]byte("foobar")))
-	})
-
-	It("errors if more data than the maximum length is sent, in the middle of a frame", func() {
-		s := newLengthLimitedStream(str, 4)
-		buf.Write(getDataFrame([]byte("foo")))
-		buf.Write(getDataFrame([]byte("bar")))
-		qstr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-		qstr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		data, err := io.ReadAll(s)
-		Expect(err).To(MatchError(errTooMuchData))
-		Expect(data).To(Equal([]byte("foob")))
-		// check that repeated calls to Read also return the right error
-		n, err := s.Read([]byte{0})
-		Expect(n).To(BeZero())
-		Expect(err).To(MatchError(errTooMuchData))
-	})
-
-	It("errors if more data than the maximum length is sent, as an additional frame", func() {
-		s := newLengthLimitedStream(str, 3)
-		buf.Write(getDataFrame([]byte("foo")))
-		buf.Write(getDataFrame([]byte("bar")))
-		qstr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-		qstr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		data, err := io.ReadAll(s)
-		Expect(err).To(MatchError(errTooMuchData))
-		Expect(data).To(Equal([]byte("foo")))
 	})
 })
 
