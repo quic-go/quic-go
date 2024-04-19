@@ -17,7 +17,6 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 const bodyCopyBufferSize = 8 * 1024
@@ -26,17 +25,14 @@ type requestWriter struct {
 	mutex     sync.Mutex
 	encoder   *qpack.Encoder
 	headerBuf *bytes.Buffer
-
-	logger utils.Logger
 }
 
-func newRequestWriter(logger utils.Logger) *requestWriter {
+func newRequestWriter() *requestWriter {
 	headerBuf := &bytes.Buffer{}
 	encoder := qpack.NewEncoder(headerBuf)
 	return &requestWriter{
 		encoder:   encoder,
 		headerBuf: headerBuf,
-		logger:    logger,
 	}
 }
 

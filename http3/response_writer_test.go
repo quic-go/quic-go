@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/utils"
-
 	"github.com/quic-go/qpack"
+	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,7 +26,7 @@ var _ = Describe("Response Writer", func() {
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
 		str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
 		str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
-		rw = newResponseWriter(newStream(str, nil), nil, false, utils.DefaultLogger)
+		rw = newResponseWriter(newStream(str, nil), nil, false, nil)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {

@@ -12,7 +12,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -26,7 +25,7 @@ func encodeResponse(status int) []byte {
 	buf := &bytes.Buffer{}
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil), nil, false, utils.DefaultLogger)
+	rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
 	rw.WriteHeader(status)
 	rw.Flush()
 	return buf.Bytes()
@@ -738,7 +737,7 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil), nil, false, utils.DefaultLogger)
+				rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
 				rw.Header().Set("Content-Encoding", "gzip")
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
@@ -764,7 +763,7 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil), nil, false, utils.DefaultLogger)
+				rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })

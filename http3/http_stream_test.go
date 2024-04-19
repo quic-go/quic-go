@@ -8,7 +8,6 @@ import (
 
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/quic-go/qpack"
 
@@ -165,7 +164,7 @@ var _ = Describe("Request Stream", func() {
 
 	BeforeEach(func() {
 		qstr = mockquic.NewMockStream(mockCtrl)
-		requestWriter := newRequestWriter(utils.DefaultLogger)
+		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
 			newStream(qstr, conn),

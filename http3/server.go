@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"runtime"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -199,14 +199,14 @@ type Server struct {
 	// has a ServerContextKey value.
 	ConnContext func(ctx context.Context, c quic.Connection) context.Context
 
+	Logger *slog.Logger
+
 	mutex     sync.RWMutex
 	listeners map[*QUICEarlyListener]listenerInfo
 
 	closed bool
 
 	altSvcHeader string
-
-	logger utils.Logger
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -243,12 +243,6 @@ func (s *Server) Serve(conn net.PacketConn) error {
 
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
-	s.mutex.Lock()
-	if s.logger == nil {
-		s.logger = utils.DefaultLogger.WithPrefix("server")
-	}
-	s.mutex.Unlock()
-
 	return s.handleConn(conn)
 }
 
@@ -272,7 +266,9 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 		}
 		go func() {
 			if err := s.handleConn(conn); err != nil {
-				s.logger.Debugf("handling connection failed: %s", err)
+				if s.Logger != nil {
+					s.Logger.Debug("handling connection failed", "error", err)
+				}
 			}
 		}()
 	}
@@ -399,9 +395,6 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.closed {
 		return http.ErrServerClosed
 	}
-	if s.logger == nil {
-		s.logger = utils.DefaultLogger.WithPrefix("server")
-	}
 	if s.listeners == nil {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
@@ -410,7 +403,11 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if port, err := extractPort(laddr.String()); err == nil {
 		s.listeners[l] = listenerInfo{port}
 	} else {
-		s.logger.Errorf("Unable to extract port from listener %s, will not be announced using SetQUICHeaders: %s", laddr, err)
+		logger := s.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("Unable to extract port from listener, will not be announced using SetQUICHeaders", "local addr", laddr, "error", err)
 		s.listeners[l] = listenerInfo{}
 	}
 	s.generateAltSvcHeader()
@@ -446,7 +443,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.EnableDatagrams,
 		s.UniStreamHijacker,
 		protocol.PerspectiveServer,
-		s.logger,
+		s.Logger,
 	)
 	go hconn.HandleUnidirectionalStreams()
 
@@ -535,10 +532,8 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
-	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
-	} else {
-		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
+	if s.Logger != nil {
+		s.Logger.Debug("handling request", "method", req.Method, "host", req.Host, "uri", req.RequestURI)
 	}
 
 	ctx := str.Context()
@@ -552,7 +547,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 		}
 	}
 	req = req.WithContext(ctx)
-	r := newResponseWriter(hstr, conn, req.Method == http.MethodHead, s.logger)
+	r := newResponseWriter(hstr, conn, req.Method == http.MethodHead, s.Logger)
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -570,7 +565,11 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
-				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
+				logger := s.Logger
+				if logger == nil {
+					logger = slog.Default()
+				}
+				logger.Error("http: panic serving", "arg", p, "trace", buf)
 			}
 		}()
 		handler.ServeHTTP(r, req)

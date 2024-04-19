@@ -11,7 +11,6 @@ import (
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,7 +27,7 @@ var _ = Describe("Connection", func() {
 				false,
 				nil,
 				protocol.PerspectiveServer,
-				utils.DefaultLogger,
+				nil,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{
@@ -61,7 +60,7 @@ var _ = Describe("Connection", func() {
 				false,
 				nil,
 				protocol.PerspectiveServer,
-				utils.DefaultLogger,
+				nil,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{}).Append(b)
@@ -103,7 +102,7 @@ var _ = Describe("Connection", func() {
 					false,
 					nil,
 					protocol.PerspectiveClient,
-					utils.DefaultLogger,
+					nil,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 				str := mockquic.NewMockStream(mockCtrl)
@@ -132,7 +131,7 @@ var _ = Describe("Connection", func() {
 					false,
 					nil,
 					protocol.PerspectiveClient,
-					utils.DefaultLogger,
+					nil,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 				str1 := mockquic.NewMockStream(mockCtrl)
@@ -168,7 +167,7 @@ var _ = Describe("Connection", func() {
 				false,
 				nil,
 				protocol.PerspectiveServer,
-				utils.DefaultLogger,
+				nil,
 			)
 			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x1337))
 			str := mockquic.NewMockStream(mockCtrl)
@@ -194,7 +193,7 @@ var _ = Describe("Connection", func() {
 				false,
 				nil,
 				protocol.PerspectiveServer,
-				utils.DefaultLogger,
+				nil,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&dataFrame{}).Append(b)
@@ -225,7 +224,7 @@ var _ = Describe("Connection", func() {
 				false,
 				nil,
 				protocol.PerspectiveServer,
-				utils.DefaultLogger,
+				nil,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{}).Append(b)
@@ -263,7 +262,7 @@ var _ = Describe("Connection", func() {
 					false,
 					nil,
 					pers.Opposite(),
-					utils.DefaultLogger,
+					nil,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamTypePushStream))
 				controlStr := mockquic.NewMockStream(mockCtrl)
@@ -293,7 +292,7 @@ var _ = Describe("Connection", func() {
 				true,
 				nil,
 				protocol.PerspectiveClient,
-				utils.DefaultLogger,
+				nil,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{Datagram: true}).Append(b)
