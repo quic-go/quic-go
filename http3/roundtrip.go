@@ -165,7 +165,10 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	defer cl.useCount.Add(-1)
 	rsp, err := cl.rt.RoundTripOpt(req, opt)
 	if err != nil {
-		r.removeClient(hostname)
+		if !errors.Is(err, context.Canceled) {
+			r.removeClient(hostname)
+		}
+
 		if isReused {
 			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 				return r.RoundTripOpt(req, opt)
