@@ -62,13 +62,18 @@ func isGSOSupported(conn syscall.RawConn) bool {
 	if err == nil && disabled {
 		return false
 	}
-	var serr error
+	var (
+		serr error
+		sval int
+	)
 	if err := conn.Control(func(fd uintptr) {
-		_, serr = unix.GetsockoptInt(int(fd), unix.IPPROTO_UDP, unix.UDP_SEGMENT)
+		sval, serr = unix.GetsockoptInt(int(fd), unix.IPPROTO_UDP, unix.UDP_SEGMENT)
 	}); err != nil {
 		return false
 	}
-	return serr == nil
+	// 0 value means GSO is disabled
+	// according to https://man7.org/linux/man-pages/man7/udp.7.html
+	return serr == nil && sval != 0
 }
 
 func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
