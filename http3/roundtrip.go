@@ -165,7 +165,13 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	defer cl.useCount.Add(-1)
 	rsp, err := cl.rt.RoundTripOpt(req, opt)
 	if err != nil {
-		r.removeClient(hostname)
+		// non-nil errors on roundtrip are likely due to a problem with the connection
+		// so we remove the client from the cache so that subsequent trips reconnect
+		// context cancelation is excluded as is does not signify a connection error
+		if !errors.Is(err, context.Canceled) {
+			r.removeClient(hostname)
+		}
+
 		if isReused {
 			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 				return r.RoundTripOpt(req, opt)

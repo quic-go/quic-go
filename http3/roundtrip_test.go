@@ -296,6 +296,37 @@ var _ = Describe("RoundTripper", func() {
 			Expect(count).To(Equal(2))
 		})
 
+		It("does not remove a client when a request returns context canceled error", func() {
+			cl1 := NewMockSingleRoundTripper(mockCtrl)
+			clientChan <- cl1
+			cl2 := NewMockSingleRoundTripper(mockCtrl)
+			clientChan <- cl2
+
+			req1, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			req2, err := http.NewRequest("GET", "https://quic-go.net/bar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			var count int
+			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+				count++
+				return conn, nil
+			}
+			testErr := context.Canceled
+			handshakeChan := make(chan struct{})
+			close(handshakeChan)
+			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+			cl1.EXPECT().RoundTripOpt(req1, gomock.Any()).Return(nil, testErr)
+			cl1.EXPECT().RoundTripOpt(req2, gomock.Any()).Return(&http.Response{Request: req2}, nil)
+			_, err = rt.RoundTrip(req1)
+			Expect(err).To(MatchError(testErr))
+			rsp, err := rt.RoundTrip(req2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Request).To(Equal(req2))
+			Expect(count).To(Equal(1))
+		})
+
 		It("recreates a client when a request times out", func() {
 			var reqCount int
 			cl1 := NewMockSingleRoundTripper(mockCtrl)
