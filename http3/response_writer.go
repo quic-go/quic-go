@@ -3,13 +3,11 @@ package http3
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/quic-go/qpack"
 )
@@ -18,46 +16,15 @@ import (
 // The frame has a type and length field, both QUIC varints (maximum 8 bytes in length)
 const frameHeaderLen = 16
 
-// headerWriter wraps the stream, so that the first Write call flushes the header to the stream
-type headerWriter struct {
-	str    quic.Stream
-	header http.Header
-	status int // status code passed to WriteHeader
-
-	logger utils.Logger
-}
-
-// writeHeader encodes and flush header to the stream
-func (hw *headerWriter) writeHeader() error {
-	var headers bytes.Buffer
-	enc := qpack.NewEncoder(&headers)
-	if err := enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(hw.status)}); err != nil {
-		return err
-	}
-
-	for k, v := range hw.header {
-		for index := range v {
-			if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]}); err != nil {
-				return err
-			}
-		}
-	}
-
-	buf := make([]byte, 0, frameHeaderLen+headers.Len())
-	buf = (&headersFrame{Length: uint64(headers.Len())}).Append(buf)
-	hw.logger.Infof("Responding with %d", hw.status)
-	buf = append(buf, headers.Bytes()...)
-
-	_, err := hw.str.Write(buf)
-	return err
-}
-
 const maxSmallResponseSize = 4096
 
 type responseWriter struct {
-	*headerWriter
-	conn Connection
-	buf  []byte
+	str *stream
+
+	conn   Connection
+	header http.Header
+	buf    []byte
+	status int // status code passed to WriteHeader
 
 	// for responses smaller than maxSmallResponseSize, we buffer calls to Write,
 	// and automatically add the Content-Length header
@@ -68,6 +35,8 @@ type responseWriter struct {
 	headerComplete bool  // set once WriteHeader is called with a status code >= 200
 	headerWritten  bool  // set once the response header has been serialized to the stream
 	isHead         bool
+
+	logger *slog.Logger
 }
 
 var (
@@ -76,17 +45,14 @@ var (
 	_ Hijacker            = &responseWriter{}
 )
 
-func newResponseWriter(str quic.Stream, conn Connection, isHead bool, logger utils.Logger) *responseWriter {
-	hw := &headerWriter{
-		str:    str,
-		header: http.Header{},
-		logger: logger,
-	}
+func newResponseWriter(str *stream, conn Connection, isHead bool, logger *slog.Logger) *responseWriter {
 	return &responseWriter{
-		headerWriter: hw,
-		buf:          make([]byte, frameHeaderLen),
-		conn:         conn,
-		isHead:       isHead,
+		str:    str,
+		conn:   conn,
+		header: http.Header{},
+		buf:    make([]byte, frameHeaderLen),
+		isHead: isHead,
+		logger: logger,
 	}
 }
 
@@ -107,7 +73,7 @@ func (w *responseWriter) WriteHeader(status int) {
 
 	// immediately write 1xx headers
 	if status < 200 {
-		w.writeHeader()
+		w.writeHeader(status)
 		return
 	}
 
@@ -126,7 +92,11 @@ func (w *responseWriter) WriteHeader(status int) {
 			w.contentLen = int64(cl)
 		} else {
 			// emit a warning for malformed Content-Length and remove it
-			w.logger.Errorf("Malformed Content-Length %s", clen)
+			logger := w.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("Malformed Content-Length", "value", clen)
 			w.header.Del("Content-Length")
 		}
 	}
@@ -178,7 +148,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 func (w *responseWriter) doWrite(p []byte) (int, error) {
 	if !w.headerWritten {
-		if err := w.writeHeader(); err != nil {
+		if err := w.writeHeader(w.status); err != nil {
 			return 0, maybeReplaceError(err)
 		}
 		w.headerWritten = true
@@ -191,11 +161,11 @@ func (w *responseWriter) doWrite(p []byte) (int, error) {
 	df := &dataFrame{Length: l}
 	w.buf = w.buf[:0]
 	w.buf = df.Append(w.buf)
-	if _, err := w.str.Write(w.buf); err != nil {
+	if _, err := w.str.writeUnframed(w.buf); err != nil {
 		return 0, maybeReplaceError(err)
 	}
 	if len(w.smallResponseBuf) > 0 {
-		if _, err := w.str.Write(w.smallResponseBuf); err != nil {
+		if _, err := w.str.writeUnframed(w.smallResponseBuf); err != nil {
 			return 0, maybeReplaceError(err)
 		}
 		w.smallResponseBuf = nil
@@ -203,12 +173,35 @@ func (w *responseWriter) doWrite(p []byte) (int, error) {
 	var n int
 	if len(p) > 0 {
 		var err error
-		n, err = w.str.Write(p)
+		n, err = w.str.writeUnframed(p)
 		if err != nil {
 			return n, maybeReplaceError(err)
 		}
 	}
 	return n, nil
+}
+
+func (w *responseWriter) writeHeader(status int) error {
+	var headers bytes.Buffer
+	enc := qpack.NewEncoder(&headers)
+	if err := enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)}); err != nil {
+		return err
+	}
+
+	for k, v := range w.header {
+		for index := range v {
+			if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]}); err != nil {
+				return err
+			}
+		}
+	}
+
+	buf := make([]byte, 0, frameHeaderLen+headers.Len())
+	buf = (&headersFrame{Length: uint64(headers.Len())}).Append(buf)
+	buf = append(buf, headers.Bytes()...)
+
+	_, err := w.str.writeUnframed(buf)
+	return err
 }
 
 func (w *responseWriter) FlushError() error {
@@ -221,7 +214,9 @@ func (w *responseWriter) FlushError() error {
 
 func (w *responseWriter) Flush() {
 	if err := w.FlushError(); err != nil {
-		w.logger.Errorf("could not flush to stream: %s", err.Error())
+		if w.logger != nil {
+			w.logger.Debug("could not flush to stream", "error", err)
+		}
 	}
 }
 

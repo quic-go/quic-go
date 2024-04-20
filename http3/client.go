@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -64,12 +64,15 @@ type SingleDestinationRoundTripper struct {
 	// However, if the user explicitly requested gzip it is not automatically uncompressed.
 	DisableCompression bool
 
+	Logger *slog.Logger
+
 	initOnce      sync.Once
 	hconn         *connection
 	requestWriter *requestWriter
 	decoder       *qpack.Decoder
-	logger        utils.Logger
 }
+
+var _ http.RoundTripper = &SingleDestinationRoundTripper{}
 
 func (c *SingleDestinationRoundTripper) Start() Connection {
 	c.initOnce.Do(func() { c.init() })
@@ -77,14 +80,15 @@ func (c *SingleDestinationRoundTripper) Start() Connection {
 }
 
 func (c *SingleDestinationRoundTripper) init() {
-	c.logger = utils.DefaultLogger.WithPrefix("h3 client")
-	c.requestWriter = newRequestWriter(c.logger)
+	c.requestWriter = newRequestWriter()
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
-	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.logger)
+	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.Logger)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
 		if err := c.setupConn(c.Connection); err != nil {
-			c.logger.Debugf("Setting up connection failed: %s", err)
+			if c.Logger != nil {
+				c.Logger.Debug("setting up connection failed", "error", err)
+			}
 			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
@@ -112,7 +116,9 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 	for {
 		str, err := c.hconn.AcceptStream(context.Background())
 		if err != nil {
-			c.logger.Debugf("accepting bidirectional stream failed: %s", err)
+			if c.Logger != nil {
+				c.Logger.Debug("accepting bidirectional stream failed", "error", err)
+			}
 			return
 		}
 		go func(str quic.Stream) {
@@ -124,7 +130,9 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 				return
 			}
 			if err != nil {
-				c.logger.Debugf("error handling stream: %s", err)
+				if c.Logger != nil {
+					c.Logger.Debug("error handling stream", "error", err)
+				}
 			}
 			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
 		}(str)
@@ -138,11 +146,11 @@ func (c *SingleDestinationRoundTripper) maxHeaderBytes() uint64 {
 	return uint64(c.MaxResponseHeaderBytes)
 }
 
-// RoundTripOpt executes a request and returns a response
-func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+// RoundTrip executes a request and returns a response
+func (c *SingleDestinationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.initOnce.Do(func() { c.init() })
 
-	rsp, err := c.roundTripOpt(req, opt)
+	rsp, err := c.roundTrip(req)
 	if err != nil && req.Context().Err() != nil {
 		// if the context was canceled, return the context cancellation error
 		err = req.Context().Err()
@@ -150,7 +158,7 @@ func (c *SingleDestinationRoundTripper) RoundTripOpt(req *http.Request, opt Roun
 	return rsp, err
 }
 
-func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Response, error) {
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
@@ -175,7 +183,9 @@ func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt Roun
 		}
 	}
 
-	if opt.CheckSettings != nil {
+	// It is only possible to send an Extended CONNECT request once the SETTINGS were received.
+	// See section 3 of RFC 8441.
+	if isExtendedConnectRequest(req) {
 		connCtx := c.Connection.Context()
 		// wait for the server's SETTINGS frame to arrive
 		select {
@@ -183,8 +193,8 @@ func (c *SingleDestinationRoundTripper) roundTripOpt(req *http.Request, opt Roun
 		case <-connCtx.Done():
 			return nil, context.Cause(connCtx)
 		}
-		if err := opt.CheckSettings(*c.hconn.Settings()); err != nil {
-			return nil, err
+		if !c.hconn.Settings().EnableExtendedConnect {
+			return nil, errors.New("http3: server didn't enable Extended CONNECT")
 		}
 	}
 
@@ -297,7 +307,9 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.St
 				contentLength = req.ContentLength
 			}
 			if err := c.sendRequestBody(hstr, req.Body, contentLength); err != nil {
-				c.logger.Errorf("Error writing request: %s", err)
+				if c.Logger != nil {
+					c.Logger.Debug("error writing request", "error", err)
+				}
 			}
 			hstr.Close()
 		}()

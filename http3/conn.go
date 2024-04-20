@@ -2,12 +2,12 @@ package http3
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -35,7 +35,7 @@ type connection struct {
 	quic.Connection
 
 	perspective protocol.Perspective
-	logger      utils.Logger
+	logger      *slog.Logger
 
 	enableDatagrams   bool
 	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
@@ -49,7 +49,7 @@ func newConnection(
 	enableDatagrams bool,
 	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool),
 	perspective protocol.Perspective,
-	logger utils.Logger,
+	logger *slog.Logger,
 ) *connection {
 	return &connection{
 		Connection:        quicConn,
@@ -71,7 +71,9 @@ func (c *connection) HandleUnidirectionalStreams() {
 	for {
 		str, err := c.Connection.AcceptUniStream(context.Background())
 		if err != nil {
-			c.logger.Debugf("accepting unidirectional stream failed: %s", err)
+			if c.logger != nil {
+				c.logger.Debug("accepting unidirectional stream failed", "error", err)
+			}
 			return
 		}
 
@@ -82,7 +84,9 @@ func (c *connection) HandleUnidirectionalStreams() {
 				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), id, str, err) {
 					return
 				}
-				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+				if c.logger != nil {
+					c.logger.Debug("reading stream type on stream failed", "stream ID", str.StreamID(), "error", err)
+				}
 				return
 			}
 			// We're only interested in the control stream here.

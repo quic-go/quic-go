@@ -2,6 +2,7 @@ package http3
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/quic-go/quic-go"
@@ -22,11 +23,26 @@ type Hijacker interface {
 	Connection() Connection
 }
 
+var errTooMuchData = errors.New("peer sent too much data")
+
 // The body is used in the requestBody (for a http.Request) and the responseBody (for a http.Response).
 type body struct {
-	str quic.Stream
+	str *stream
+
+	remainingContentLength int64
+	violatedContentLength  bool
+	hasContentLength       bool
 
 	wasHijacked bool // set when HTTPStream is called
+}
+
+func newBody(str *stream, contentLength int64) *body {
+	b := &body{str: str}
+	if contentLength >= 0 {
+		b.hasContentLength = true
+		b.remainingContentLength = contentLength
+	}
+	return b
 }
 
 func (r *body) HTTPStream() Stream {
@@ -39,8 +55,33 @@ func (r *body) wasStreamHijacked() bool {
 	return r.wasHijacked
 }
 
+func (r *body) checkContentLengthViolation() error {
+	if !r.hasContentLength {
+		return nil
+	}
+	if r.remainingContentLength < 0 || r.remainingContentLength == 0 && r.str.hasMoreData() {
+		if !r.violatedContentLength {
+			r.str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
+			r.str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+			r.violatedContentLength = true
+		}
+		return errTooMuchData
+	}
+	return nil
+}
+
 func (r *body) Read(b []byte) (int, error) {
+	if err := r.checkContentLengthViolation(); err != nil {
+		return 0, err
+	}
+	if r.hasContentLength {
+		b = b[:min(int64(len(b)), r.remainingContentLength)]
+	}
 	n, err := r.str.Read(b)
+	r.remainingContentLength -= int64(n)
+	if err := r.checkContentLengthViolation(); err != nil {
+		return n, err
+	}
 	return n, maybeReplaceError(err)
 }
 
@@ -61,9 +102,9 @@ var (
 	_ HTTPStreamer  = &requestBody{}
 )
 
-func newRequestBody(str Stream, connCtx context.Context, rcvdSettings <-chan struct{}, getSettings func() *Settings) *requestBody {
+func newRequestBody(str *stream, contentLength int64, connCtx context.Context, rcvdSettings <-chan struct{}, getSettings func() *Settings) *requestBody {
 	return &requestBody{
-		body:         body{str: str},
+		body:         *newBody(str, contentLength),
 		connCtx:      connCtx,
 		rcvdSettings: rcvdSettings,
 		getSettings:  getSettings,
@@ -82,15 +123,15 @@ type hijackableBody struct {
 
 var _ io.ReadCloser = &hijackableBody{}
 
-func newResponseBody(str Stream, done chan<- struct{}) *hijackableBody {
+func newResponseBody(str *stream, contentLength int64, done chan<- struct{}) *hijackableBody {
 	return &hijackableBody{
-		body:    body{str: str},
+		body:    *newBody(str, contentLength),
 		reqDone: done,
 	}
 }
 
 func (r *hijackableBody) Read(b []byte) (int, error) {
-	n, err := r.body.str.Read(b)
+	n, err := r.body.Read(b)
 	if err != nil {
 		r.requestDone()
 	}
