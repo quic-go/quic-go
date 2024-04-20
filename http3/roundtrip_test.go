@@ -296,7 +296,7 @@ var _ = Describe("RoundTripper", func() {
 			Expect(count).To(Equal(2))
 		})
 
-		It("does not remove a client when a request returns context cancelled error", func() {
+		It("does not remove a client when a request returns context canceled error", func() {
 			cl1 := NewMockSingleRoundTripper(mockCtrl)
 			clientChan <- cl1
 			cl2 := NewMockSingleRoundTripper(mockCtrl)
