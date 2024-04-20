@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -16,8 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools"
@@ -321,17 +318,6 @@ func newPacketTracer() (*packetCounter, *logging.ConnectionTracer) {
 		},
 		Close: func() { close(c.closed) },
 	}
-}
-
-// The first sendmsg call on a new UDP socket sometimes errors on Linux.
-// It's not clear why this happens.
-// See https://github.com/golang/go/issues/63322.
-func isPermissionError(err error) bool {
-	var serr *os.SyscallError
-	if errors.As(err, &serr) {
-		return serr.Syscall == "sendmsg" && serr.Err == unix.EPERM
-	}
-	return false
 }
 
 func TestSelf(t *testing.T) {
