@@ -3,12 +3,11 @@ package http3
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/quic-go/qpack"
 )
@@ -37,7 +36,7 @@ type responseWriter struct {
 	headerWritten  bool  // set once the response header has been serialized to the stream
 	isHead         bool
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 var (
@@ -46,7 +45,7 @@ var (
 	_ Hijacker            = &responseWriter{}
 )
 
-func newResponseWriter(str *stream, conn Connection, isHead bool, logger utils.Logger) *responseWriter {
+func newResponseWriter(str *stream, conn Connection, isHead bool, logger *slog.Logger) *responseWriter {
 	return &responseWriter{
 		str:    str,
 		conn:   conn,
@@ -93,7 +92,11 @@ func (w *responseWriter) WriteHeader(status int) {
 			w.contentLen = int64(cl)
 		} else {
 			// emit a warning for malformed Content-Length and remove it
-			w.logger.Errorf("Malformed Content-Length %s", clen)
+			logger := w.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("Malformed Content-Length", "value", clen)
 			w.header.Del("Content-Length")
 		}
 	}
@@ -211,7 +214,9 @@ func (w *responseWriter) FlushError() error {
 
 func (w *responseWriter) Flush() {
 	if err := w.FlushError(); err != nil {
-		w.logger.Errorf("could not flush to stream: %s", err.Error())
+		if w.logger != nil {
+			w.logger.Debug("could not flush to stream", "error", err)
+		}
 	}
 }
 

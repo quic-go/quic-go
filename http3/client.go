@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -61,11 +61,12 @@ type SingleDestinationRoundTripper struct {
 	// However, if the user explicitly requested gzip it is not automatically uncompressed.
 	DisableCompression bool
 
+	Logger *slog.Logger
+
 	initOnce      sync.Once
 	hconn         *connection
 	requestWriter *requestWriter
 	decoder       *qpack.Decoder
-	logger        utils.Logger
 }
 
 func (c *SingleDestinationRoundTripper) Start() Connection {
@@ -74,14 +75,15 @@ func (c *SingleDestinationRoundTripper) Start() Connection {
 }
 
 func (c *SingleDestinationRoundTripper) init() {
-	c.logger = utils.DefaultLogger.WithPrefix("h3 client")
-	c.requestWriter = newRequestWriter(c.logger)
+	c.requestWriter = newRequestWriter()
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
-	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.logger)
+	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.Logger)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
 		if err := c.setupConn(c.Connection); err != nil {
-			c.logger.Debugf("Setting up connection failed: %s", err)
+			if c.Logger != nil {
+				c.Logger.Debug("setting up connection failed", "error", err)
+			}
 			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
@@ -109,7 +111,9 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 	for {
 		str, err := c.hconn.AcceptStream(context.Background())
 		if err != nil {
-			c.logger.Debugf("accepting bidirectional stream failed: %s", err)
+			if c.Logger != nil {
+				c.Logger.Debug("accepting bidirectional stream failed", "error", err)
+			}
 			return
 		}
 		go func(str quic.Stream) {
@@ -121,7 +125,9 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 				return
 			}
 			if err != nil {
-				c.logger.Debugf("error handling stream: %s", err)
+				if c.Logger != nil {
+					c.Logger.Debug("error handling stream", "error", err)
+				}
 			}
 			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
 		}(str)
@@ -294,7 +300,9 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.St
 				contentLength = req.ContentLength
 			}
 			if err := c.sendRequestBody(hstr, req.Body, contentLength); err != nil {
-				c.logger.Errorf("Error writing request: %s", err)
+				if c.Logger != nil {
+					c.Logger.Debug("error writing request", "error", err)
+				}
 			}
 			hstr.Close()
 		}()

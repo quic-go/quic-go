@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"runtime"
@@ -16,7 +17,6 @@ import (
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -71,7 +71,6 @@ var _ = Describe("Server", func() {
 	BeforeEach(func() {
 		s = &Server{
 			TLSConfig: testdata.GetTLSConfig(),
-			logger:    utils.DefaultLogger,
 			ConnContext: func(ctx context.Context, c quic.Connection) context.Context {
 				return context.WithValue(ctx, testConnContextKey("test"), c)
 			},
@@ -116,7 +115,7 @@ var _ = Describe("Server", func() {
 			buf := &bytes.Buffer{}
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			rw := newRequestWriter(utils.DefaultLogger)
+			rw := newRequestWriter()
 			Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
 			return buf.Bytes()
 		}
@@ -146,7 +145,7 @@ var _ = Describe("Server", func() {
 			qconn.EXPECT().LocalAddr().AnyTimes()
 			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
-			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, utils.DefaultLogger)
+			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, nil)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -286,6 +285,8 @@ var _ = Describe("Server", func() {
 		})
 
 		It("handles a panicking handler", func() {
+			var logBuf bytes.Buffer
+			s.Logger = slog.New(slog.NewTextHandler(&logBuf, nil))
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				panic("foobar")
 			})
@@ -299,6 +300,8 @@ var _ = Describe("Server", func() {
 
 			s.handleRequest(conn, str, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
+			Expect(logBuf.String()).To(ContainSubstring("http: panic serving"))
+			Expect(logBuf.String()).To(ContainSubstring("foobar"))
 		})
 
 		Context("hijacking bidirectional streams", func() {
@@ -795,6 +798,8 @@ var _ = Describe("Server", func() {
 
 		It("uses s.Addr if listeners don't have ports available", func() {
 			s.Addr = ":443"
+			var logBuf bytes.Buffer
+			s.Logger = slog.New(slog.NewTextHandler(&logBuf, nil))
 			mln := &noPortListener{newMockAddrListener("")}
 			mln.EXPECT().Addr()
 			ln1 = mln
@@ -802,6 +807,7 @@ var _ = Describe("Server", func() {
 			checkSetHeaders(Equal(expected))
 			s.removeListener(&ln1)
 			checkSetHeaderError()
+			Expect(logBuf.String()).To(ContainSubstring("Unable to extract port from listener, will not be announced using SetQUICHeaders"))
 		})
 
 		It("properly announces multiple listeners", func() {
