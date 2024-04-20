@@ -29,6 +29,10 @@ func encodeResponse(status int) []byte {
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
 	rw := newResponseWriter(rstr, nil, false, utils.DefaultLogger)
+	if status == http.StatusEarlyHints {
+		rw.header.Add("Link", "</style.css>; rel=preload; as=style")
+		rw.header.Add("Link", "</script.js>; rel=preload; as=script")
+	}
 	rw.WriteHeader(status)
 	rw.Flush()
 	return buf.Bytes()
@@ -784,12 +788,18 @@ var _ = Describe("Client", func() {
 
 		Context("1xx status code", func() {
 			It("continues to read next header if code is 103", func() {
-				cnt := 0
-				status := 0
+				var (
+					cnt    int
+					status int
+					hdr    textproto.MIMEHeader
+				)
+				header1 := "</style.css>; rel=preload; as=style"
+				header2 := "</script.js>; rel=preload; as=script"
 				ctx := httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
 					Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
 						cnt++
 						status = code
+						hdr = header
 						return nil
 					},
 				})
@@ -808,8 +818,10 @@ var _ = Describe("Client", func() {
 				Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 				Expect(rsp.ProtoMajor).To(Equal(3))
 				Expect(rsp.StatusCode).To(Equal(200))
+				Expect(rsp.Header).To(HaveKeyWithValue("Link", []string{header1, header2}))
 				Expect(status).To(Equal(103))
 				Expect(cnt).To(Equal(1))
+				Expect(hdr).To(HaveKeyWithValue("Link", []string{header1, header2}))
 				Expect(rsp.Request).ToNot(BeNil())
 			})
 
