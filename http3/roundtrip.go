@@ -33,15 +33,11 @@ type RoundTripOpt struct {
 	// OnlyCachedConn controls whether the RoundTripper may create a new QUIC connection.
 	// If set true and no cached connection is available, RoundTripOpt will return ErrNoCachedConn.
 	OnlyCachedConn bool
-	// CheckSettings is run before the request is sent to the server.
-	// If not yet received, it blocks until the server's SETTINGS frame is received.
-	// If an error is returned, the request won't be sent to the server, and the error is returned.
-	CheckSettings func(Settings) error
 }
 
 type singleRoundTripper interface {
-	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
 	OpenRequestStream(context.Context) (RequestStream, error)
+	RoundTrip(*http.Request) (*http.Response, error)
 }
 
 type roundTripperWithCount struct {
@@ -163,7 +159,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, cl.dialErr
 	}
 	defer cl.useCount.Add(-1)
-	rsp, err := cl.rt.RoundTripOpt(req, opt)
+	rsp, err := cl.rt.RoundTrip(req)
 	if err != nil {
 		// non-nil errors on roundtrip are likely due to a problem with the connection
 		// so we remove the client from the cache so that subsequent trips reconnect

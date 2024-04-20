@@ -79,41 +79,41 @@ func (c *MockSingleRoundTripperOpenRequestStreamCall) DoAndReturn(f func(context
 	return c
 }
 
-// RoundTripOpt mocks base method.
-func (m *MockSingleRoundTripper) RoundTripOpt(arg0 *http.Request, arg1 RoundTripOpt) (*http.Response, error) {
+// RoundTrip mocks base method.
+func (m *MockSingleRoundTripper) RoundTrip(arg0 *http.Request) (*http.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RoundTripOpt", arg0, arg1)
+	ret := m.ctrl.Call(m, "RoundTrip", arg0)
 	ret0, _ := ret[0].(*http.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RoundTripOpt indicates an expected call of RoundTripOpt.
-func (mr *MockSingleRoundTripperMockRecorder) RoundTripOpt(arg0, arg1 any) *MockSingleRoundTripperRoundTripOptCall {
+// RoundTrip indicates an expected call of RoundTrip.
+func (mr *MockSingleRoundTripperMockRecorder) RoundTrip(arg0 any) *MockSingleRoundTripperRoundTripCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTripOpt", reflect.TypeOf((*MockSingleRoundTripper)(nil).RoundTripOpt), arg0, arg1)
-	return &MockSingleRoundTripperRoundTripOptCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RoundTrip", reflect.TypeOf((*MockSingleRoundTripper)(nil).RoundTrip), arg0)
+	return &MockSingleRoundTripperRoundTripCall{Call: call}
 }
 
-// MockSingleRoundTripperRoundTripOptCall wrap *gomock.Call
-type MockSingleRoundTripperRoundTripOptCall struct {
+// MockSingleRoundTripperRoundTripCall wrap *gomock.Call
+type MockSingleRoundTripperRoundTripCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSingleRoundTripperRoundTripOptCall) Return(arg0 *http.Response, arg1 error) *MockSingleRoundTripperRoundTripOptCall {
+func (c *MockSingleRoundTripperRoundTripCall) Return(arg0 *http.Response, arg1 error) *MockSingleRoundTripperRoundTripCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSingleRoundTripperRoundTripOptCall) Do(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *MockSingleRoundTripperRoundTripOptCall {
+func (c *MockSingleRoundTripperRoundTripCall) Do(f func(*http.Request) (*http.Response, error)) *MockSingleRoundTripperRoundTripCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSingleRoundTripperRoundTripOptCall) DoAndReturn(f func(*http.Request, RoundTripOpt) (*http.Response, error)) *MockSingleRoundTripperRoundTripOptCall {
+func (c *MockSingleRoundTripperRoundTripCall) DoAndReturn(f func(*http.Request) (*http.Response, error)) *MockSingleRoundTripperRoundTripCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
