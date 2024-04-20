@@ -375,6 +375,73 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 			close(done)
 		})
+
+		It("checks the server's SETTINGS before sending an Extended CONNECT request", func() {
+			done := make(chan struct{})
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{ExtendedConnect: true}).Append(b)
+			r := bytes.NewReader(b)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+			conn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			})
+			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+			conn.EXPECT().Context().Return(context.Background())
+			conn.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("test error"))
+
+			rt := &SingleDestinationRoundTripper{Connection: conn}
+			_, err := rt.RoundTrip(&http.Request{
+				Method: http.MethodConnect,
+				Proto:  "connect",
+				Host:   "localhost",
+			})
+			Expect(err).To(MatchError("test error"))
+
+			// test shutdown
+			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
+			close(done)
+		})
+
+		It("rejects Extended CONNECT requests if the server doesn't enable it", func() {
+			done := make(chan struct{})
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{Datagram: true}).Append(b)
+			r := bytes.NewReader(b)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+			conn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			})
+			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+			conn.EXPECT().Context().Return(context.Background())
+
+			rt := &SingleDestinationRoundTripper{Connection: conn}
+			_, err := rt.RoundTrip(&http.Request{
+				Method: http.MethodConnect,
+				Proto:  "connect",
+				Host:   "localhost",
+			})
+			Expect(err).To(MatchError("http3: server didn't enable Extended CONNECT"))
+
+			// test shutdown
+			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
+			close(done)
+		})
 	})
 
 	Context("Doing requests", func() {
