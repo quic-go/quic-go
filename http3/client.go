@@ -2,6 +2,7 @@ package http3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -177,6 +178,21 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 			case <-req.Context().Done():
 				return nil, req.Context().Err()
 			}
+		}
+	}
+
+	// It is only possible to send an Extended CONNECT request once the SETTINGS were received.
+	// See section 3 of RFC 8441.
+	if isExtendedConnectRequest(req) {
+		connCtx := c.Connection.Context()
+		// wait for the server's SETTINGS frame to arrive
+		select {
+		case <-c.hconn.ReceivedSettings():
+		case <-connCtx.Done():
+			return nil, context.Cause(connCtx)
+		}
+		if !c.hconn.Settings().EnableExtendedConnect {
+			return nil, errors.New("http3: server didn't enable Extended CONNECT")
 		}
 	}
 
