@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptrace"
+	"net/textproto"
 	"sync"
 	"time"
 
@@ -313,9 +315,37 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.St
 		}()
 	}
 
-	res, err := hstr.ReadResponse()
-	if err != nil {
-		return nil, err
+	var (
+		res *http.Response
+		err error
+	)
+
+	// copy from net/http: support 1xx responses
+	trace := httptrace.ContextClientTrace(req.Context())
+	num1xx := 0               // number of informational 1xx headers received
+	const max1xxResponses = 5 // arbitrary bound on number of informational responses
+
+	for {
+		if res, err = hstr.ReadResponse(); err != nil {
+			return nil, err
+		}
+		resCode := res.StatusCode
+		is1xx := 100 <= resCode && resCode <= 199
+		// treat 101 as a terminal status, see https://github.com/golang/go/issues/26161
+		is1xxNonTerminal := is1xx && resCode != http.StatusSwitchingProtocols
+		if is1xxNonTerminal {
+			num1xx++
+			if num1xx > max1xxResponses {
+				return nil, errors.New("http: too many 1xx informational responses")
+			}
+			if trace != nil && trace.Got1xxResponse != nil {
+				if err := trace.Got1xxResponse(resCode, textproto.MIMEHeader(res.Header)); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
+		break
 	}
 	connState := c.Connection.ConnectionState().TLS
 	res.TLS = &connState

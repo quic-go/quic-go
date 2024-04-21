@@ -11,6 +11,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
+	"net/textproto"
 	"os"
 	"strconv"
 	"sync/atomic"
@@ -636,6 +638,81 @@ var _ = Describe("HTTP tests", func() {
 		Expect(settings.EnableDatagram).To(BeTrue())
 		Expect(settings.EnableExtendedConnect).To(BeFalse())
 		Expect(settings.Other).To(HaveKeyWithValue(uint64(1337), uint64(42)))
+	})
+
+	It("processes 1xx response", func() {
+		header1 := "</style.css>; rel=preload; as=style"
+		header2 := "</script.js>; rel=preload; as=script"
+		data := "1xx-test-data"
+		mux.HandleFunc("/103-early-data", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Add("Link", header1)
+			w.Header().Add("Link", header2)
+			w.WriteHeader(http.StatusEarlyHints)
+			n, err := w.Write([]byte(data))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(len(data)))
+			w.WriteHeader(http.StatusOK)
+		})
+
+		var (
+			cnt    int
+			status int
+			hdr    textproto.MIMEHeader
+		)
+		ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+			Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+				hdr = header
+				status = code
+				cnt++
+				return nil
+			},
+		})
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/103-early-data", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal(data))
+		Expect(status).To(Equal(http.StatusEarlyHints))
+		Expect(hdr).To(HaveKeyWithValue("Link", []string{header1, header2}))
+		Expect(cnt).To(Equal(1))
+		Expect(resp.Header).To(HaveKeyWithValue("Link", []string{header1, header2}))
+		Expect(resp.Body.Close()).To(Succeed())
+	})
+
+	It("processes 1xx terminal response", func() {
+		mux.HandleFunc("/101-switch-protocols", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Add("Connection", "upgrade")
+			w.Header().Add("Upgrade", "proto")
+			w.WriteHeader(http.StatusSwitchingProtocols)
+		})
+
+		var (
+			cnt    int
+			status int
+		)
+		ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+			Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+				status = code
+				cnt++
+				return nil
+			},
+		})
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/101-switch-protocols", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusSwitchingProtocols))
+		Expect(resp.Header).To(HaveKeyWithValue("Connection", []string{"upgrade"}))
+		Expect(resp.Header).To(HaveKeyWithValue("Upgrade", []string{"proto"}))
+		Expect(status).To(Equal(0))
+		Expect(cnt).To(Equal(0))
 	})
 
 	Context("0-RTT", func() {

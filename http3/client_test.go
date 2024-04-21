@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptrace"
+	"net/textproto"
 	"sync"
 	"time"
 
@@ -26,6 +28,10 @@ func encodeResponse(status int) []byte {
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
+	if status == http.StatusEarlyHints {
+		rw.header.Add("Link", "</style.css>; rel=preload; as=style")
+		rw.header.Add("Link", "</script.js>; rel=preload; as=script")
+	}
 	rw.WriteHeader(status)
 	rw.Flush()
 	return buf.Bytes()
@@ -856,6 +862,76 @@ var _ = Describe("Client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(data)).To(Equal("not gzipped"))
 				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
+			})
+		})
+
+		Context("1xx status code", func() {
+			It("continues to read next header if code is 103", func() {
+				var (
+					cnt    int
+					status int
+					hdr    textproto.MIMEHeader
+				)
+				header1 := "</style.css>; rel=preload; as=style"
+				header2 := "</script.js>; rel=preload; as=script"
+				ctx := httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+					Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+						cnt++
+						status = code
+						hdr = header
+						return nil
+					},
+				})
+				req := req.WithContext(ctx)
+				rspBuf := bytes.NewBuffer(encodeResponse(103))
+				gomock.InOrder(
+					conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+					conn.EXPECT().OpenStreamSync(ctx).Return(str, nil),
+					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+				)
+				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+				str.EXPECT().Close()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+				rsp, err := cl.RoundTrip(req)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+				Expect(rsp.ProtoMajor).To(Equal(3))
+				Expect(rsp.StatusCode).To(Equal(200))
+				Expect(rsp.Header).To(HaveKeyWithValue("Link", []string{header1, header2}))
+				Expect(status).To(Equal(103))
+				Expect(cnt).To(Equal(1))
+				Expect(hdr).To(HaveKeyWithValue("Link", []string{header1, header2}))
+				Expect(rsp.Request).ToNot(BeNil())
+			})
+
+			It("doesn't continue to read next header if code is a terminal status", func() {
+				cnt := 0
+				status := 0
+				ctx := httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+					Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+						cnt++
+						status = code
+						return nil
+					},
+				})
+				req := req.WithContext(ctx)
+				rspBuf := bytes.NewBuffer(encodeResponse(101))
+				gomock.InOrder(
+					conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+					conn.EXPECT().OpenStreamSync(ctx).Return(str, nil),
+					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+				)
+				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+				str.EXPECT().Close()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+				rsp, err := cl.RoundTrip(req)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+				Expect(rsp.ProtoMajor).To(Equal(3))
+				Expect(rsp.StatusCode).To(Equal(101))
+				Expect(status).To(Equal(0))
+				Expect(cnt).To(Equal(0))
+				Expect(rsp.Request).ToNot(BeNil())
 			})
 		})
 	})
