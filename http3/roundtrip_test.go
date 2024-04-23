@@ -146,13 +146,13 @@ var _ = Describe("RoundTripper", func() {
 		testErr := errors.New("test done")
 		tlsConf := &tls.Config{ServerName: "foo.bar"}
 		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
-		defer cancel()
+		// nolint:staticcheck // This is a test.
+		ctx := context.WithValue(context.Background(), "foo", "bar")
 		var dialerCalled bool
 		rt := &RoundTripper{
 			Dial: func(ctxP context.Context, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
-				Expect(ctxP).To(Equal(ctx))
+				Expect(ctx.Value("foo").(string)).To(Equal("bar"))
 				Expect(address).To(Equal("www.example.org:443"))
 				Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
 				Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
@@ -513,6 +513,31 @@ var _ = Describe("RoundTripper", func() {
 			Expect(err).ToNot(HaveOccurred())
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(0), "")
 			Expect(rt.Close()).To(Succeed())
+		})
+
+		It("closes while dialing", func() {
+			rt := &RoundTripper{
+				Dial: func(ctx context.Context, _ string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
+					defer GinkgoRecover()
+					Eventually(ctx.Done()).Should(BeClosed())
+					return nil, errors.New("cancelled")
+				},
+			}
+			req, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			errChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				_, err := rt.RoundTrip(req)
+				errChan <- err
+			}()
+
+			Consistently(errChan, scaleDuration(30*time.Millisecond)).ShouldNot(Receive())
+			Expect(rt.Close()).To(Succeed())
+			var rtErr error
+			Eventually(errChan).Should(Receive(&rtErr))
+			Expect(rtErr).To(MatchError("cancelled"))
 		})
 
 		It("closes idle connections", func() {
