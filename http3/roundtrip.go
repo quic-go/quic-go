@@ -41,12 +41,22 @@ type singleRoundTripper interface {
 }
 
 type roundTripperWithCount struct {
+	cancel  context.CancelFunc
 	dialing chan struct{} // closed as soon as quic.Dial(Early) returned
 	dialErr error
 	conn    quic.EarlyConnection
 	rt      singleRoundTripper
 
 	useCount atomic.Int64
+}
+
+func (r *roundTripperWithCount) Close() error {
+	r.cancel()
+	<-r.dialing
+	if r.conn != nil {
+		return r.conn.CloseWithError(0, "")
+	}
+	return nil
 }
 
 // RoundTripper implements the http.RoundTripper interface
@@ -227,11 +237,14 @@ func (r *RoundTripper) getClient(ctx context.Context, hostname string, onlyCache
 		if onlyCached {
 			return nil, false, ErrNoCachedConn
 		}
+		ctx, cancel := context.WithCancel(ctx)
 		cl = &roundTripperWithCount{
 			dialing: make(chan struct{}),
+			cancel:  cancel,
 		}
 		go func() {
 			defer close(cl.dialing)
+			defer cancel()
 			conn, rt, err := r.dial(ctx, hostname)
 			if err != nil {
 				cl.dialErr = err
@@ -315,8 +328,8 @@ func (r *RoundTripper) removeClient(hostname string) {
 func (r *RoundTripper) Close() error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	for _, client := range r.clients {
-		if err := client.conn.CloseWithError(0, ""); err != nil {
+	for _, cl := range r.clients {
+		if err := cl.Close(); err != nil {
 			return err
 		}
 	}
@@ -364,9 +377,9 @@ func isNotToken(r rune) bool {
 func (r *RoundTripper) CloseIdleConnections() {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	for hostname, client := range r.clients {
-		if client.useCount.Load() == 0 {
-			client.conn.CloseWithError(0, "")
+	for hostname, cl := range r.clients {
+		if cl.useCount.Load() == 0 {
+			cl.Close()
 			delete(r.clients, hostname)
 		}
 	}
