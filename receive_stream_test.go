@@ -534,17 +534,14 @@ var _ = Describe("Receive Stream", func() {
 					Fin:      true,
 				})).To(Succeed())
 				mockSender.EXPECT().onStreamCompleted(streamID)
-				_, err := strWithTimeout.Read(make([]byte, 100))
+				n, err := strWithTimeout.Read(make([]byte, 100))
 				Expect(err).To(MatchError(io.EOF))
+				Expect(n).To(Equal(6))
 				str.CancelRead(1234)
 			})
 
 			It("doesn't send a STOP_SENDING frame, if the stream was already reset", func() {
-				gomock.InOrder(
-					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true),
-					mockFC.EXPECT().Abandon(),
-				)
-				mockSender.EXPECT().onStreamCompleted(streamID)
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
 				Expect(str.handleResetStreamFrame(&wire.ResetStreamFrame{
 					StreamID:  streamID,
 					FinalSize: 42,
@@ -552,16 +549,20 @@ var _ = Describe("Receive Stream", func() {
 				str.CancelRead(1234)
 			})
 
-			It("sends a STOP_SENDING and completes the stream after receiving the final offset", func() {
-				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1000), true)
+			It("sends a STOP_SENDING after receiving the final offset", func() {
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				Expect(str.handleStreamFrame(&wire.StreamFrame{
-					Offset: 1000,
-					Fin:    true,
+					Data: []byte("foobar"),
+					Fin:  true,
 				})).To(Succeed())
 				mockFC.EXPECT().Abandon()
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.CancelRead(1234)
+				// read the error
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				n, err := str.Read([]byte{0})
+				Expect(err).To(HaveOccurred())
+				Expect(n).To(BeZero())
 			})
 
 			It("completes the stream when receiving the Fin after the stream was canceled", func() {
@@ -649,25 +650,26 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("ignores duplicate RESET_STREAM frames", func() {
-				mockSender.EXPECT().onStreamCompleted(streamID)
-				mockFC.EXPECT().Abandon()
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 			})
 
 			It("doesn't call onStreamCompleted again when the final offset was already received via Fin", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				str.CancelRead(1234)
-				mockSender.EXPECT().onStreamCompleted(streamID)
-				mockFC.EXPECT().Abandon()
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
 				Expect(str.handleStreamFrame(&wire.StreamFrame{
 					StreamID: streamID,
 					Offset:   rst.FinalSize,
 					Fin:      true,
 				})).To(Succeed())
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.CancelRead(1234)
+				mockFC.EXPECT().Abandon()
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
+				// now read the error
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				_, err := str.Read([]byte{0})
+				Expect(err).To(HaveOccurred())
 			})
 
 			It("doesn't do anything when it was closed for shutdown", func() {
