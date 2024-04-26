@@ -44,7 +44,7 @@ type sendStream struct {
 	finSent         bool // set when a STREAM_FRAME with FIN bit has been sent
 	// Set when the application knows about the cancellation.
 	// This can happen because the application called CancelWrite,
-	// or because Write returned the error (for remote cancelations).
+	// or because Write returned the error (for remote cancellations).
 	cancellationFlagged bool
 	completed           bool // set when this stream has been reported to the streamSender as completed
 
@@ -379,14 +379,22 @@ func (s *sendStream) Close() error {
 		return nil
 	}
 	s.finishedWriting = true
-	if s.cancelWriteErr != nil {
-		s.mutex.Unlock()
-		return fmt.Errorf("close called for canceled stream %d", s.streamID)
+	cancelWriteErr := s.cancelWriteErr
+	if cancelWriteErr != nil {
+		s.cancellationFlagged = true
 	}
-	s.ctxCancel(nil)
+	completed := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
+	if completed {
+		s.sender.onStreamCompleted(s.streamID)
+	}
+	if cancelWriteErr != nil {
+		return fmt.Errorf("close called for canceled stream %d", s.streamID)
+	}
 	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
+
+	s.ctxCancel(nil)
 	return nil
 }
 

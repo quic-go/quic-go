@@ -953,6 +953,29 @@ var _ = Describe("Send Stream", func() {
 					Remote:    true,
 				}))
 			})
+
+			It("handles Close after STOP_SENDING", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
+				str.Close()
+			})
+
+			It("handles STOP_SENDING after Close", func() {
+				mockSender.EXPECT().onHasStreamData(gomock.Any())
+				str.Close()
+				gomock.InOrder(
+					mockSender.EXPECT().queueControlFrame(gomock.Any()),
+					mockSender.EXPECT().onStreamCompleted(gomock.Any()),
+				)
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+			})
 		})
 	})
 
