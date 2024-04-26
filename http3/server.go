@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand"
 	"net"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -31,7 +31,6 @@ var (
 	quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 		return quic.ListenAddrEarly(addr, tlsConf, config)
 	}
-	errPanicked = errors.New("panicked")
 )
 
 // NextProtoH3 is the ALPN protocol negotiated during the TLS handshake, for QUIC v1 and v2.
@@ -127,20 +126,6 @@ var ServerContextKey = &contextKey{"http3-server"}
 // than its string representation.
 var RemoteAddrContextKey = &contextKey{"remote-addr"}
 
-type requestError struct {
-	err       error
-	streamErr ErrCode
-	connErr   ErrCode
-}
-
-func newStreamError(code ErrCode, err error) requestError {
-	return requestError{err: err, streamErr: code}
-}
-
-func newConnError(code ErrCode, err error) requestError {
-	return requestError{err: err, connErr: code}
-}
-
 // listenerInfo contains info about specific listener added with addListener
 type listenerInfo struct {
 	port int // 0 means that no info about port is available
@@ -215,6 +200,8 @@ type Server struct {
 	// has a ServerContextKey value.
 	ConnContext func(ctx context.Context, c quic.Connection) context.Context
 
+	Logger *slog.Logger
+
 	mutex     sync.RWMutex
 	listeners map[*QUICEarlyListener]listenerInfo
 
@@ -222,8 +209,6 @@ type Server struct {
 	connections map[*quic.Connection]func()
 
 	altSvcHeader string
-
-	logger utils.Logger
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -292,7 +277,9 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 		}
 		go func() {
 			if err := s.handleConn(conn); err != nil {
-				s.logger.Debugf("handling connection failed: %s", err)
+				if s.Logger != nil {
+					s.Logger.Debug("handling connection failed", "error", err)
+				}
 			}
 		}()
 	}
@@ -419,9 +406,6 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.closed {
 		return http.ErrServerClosed
 	}
-	if s.logger == nil {
-		s.logger = utils.DefaultLogger.WithPrefix("server")
-	}
 	if s.listeners == nil {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
@@ -433,7 +417,11 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if port, err := extractPort(laddr.String()); err == nil {
 		s.listeners[l] = listenerInfo{port}
 	} else {
-		s.logger.Errorf("Unable to extract port from listener %s, will not be announced using SetQUICHeaders: %s", laddr, err)
+		logger := s.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("Unable to extract port from listener, will not be announced using SetQUICHeaders", "local addr", laddr, "error", err)
 		s.listeners[l] = listenerInfo{}
 	}
 	s.generateAltSvcHeader()
@@ -496,7 +484,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.EnableDatagrams,
 		s.UniStreamHijacker,
 		protocol.PerspectiveServer,
-		s.logger,
+		s.Logger,
 	)
 	go hconn.HandleUnidirectionalStreams()
 
@@ -525,29 +513,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
 			continue
 		}
-		go func() {
-			rerr := s.handleRequest(hconn, str, decoder, func() {
-				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
-			})
-			if rerr.err == errHijacked {
-				return
-			}
-			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
-				s.logger.Debugf("Handling request failed: %s", err)
-				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
-				}
-				if rerr.connErr != 0 {
-					var reason string
-					if rerr.err != nil {
-						reason = rerr.err.Error()
-					}
-					conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
-				}
-				return
-			}
-			str.Close()
-		}()
+		go s.handleRequest(hconn, str, decoder)
 	}
 }
 
@@ -558,7 +524,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack.Decoder) {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -572,30 +538,39 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 	}
 	frame, err := parseNextFrame(str, ufh)
 	if err != nil {
-		if err == errHijacked {
-			return requestError{err: errHijacked}
+		if !errors.Is(err, errHijacked) {
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		}
-		return newStreamError(ErrCodeRequestIncomplete, err)
+		return
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		return newConnError(ErrCodeFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
+		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
+		return
 	}
 	if hf.Length > s.maxHeaderBytes() {
-		return newStreamError(ErrCodeFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes()))
+		str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
+		return
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		return newStreamError(ErrCodeRequestIncomplete, err)
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		return
 	}
 	hfs, err := decoder.DecodeFull(headerBlock)
 	if err != nil {
 		// TODO: use the right error code
-		return newConnError(ErrCodeGeneralProtocolError, err)
+		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "expected first frame to be a HEADERS frame")
+		return
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {
-		return newStreamError(ErrCodeMessageError, err)
+		str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+		return
 	}
 
 	connState := conn.ConnectionState().TLS
@@ -604,19 +579,16 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 
 	// Check that the client doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.
-	var httpStr Stream
+	contentLength := int64(-1)
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
-		httpStr = newLengthLimitedStream(newStream(str, onFrameError), req.ContentLength)
-	} else {
-		httpStr = newStream(str, onFrameError)
+		contentLength = req.ContentLength
 	}
-	body := newRequestBody(httpStr, conn.Context(), conn.ReceivedSettings(), conn.Settings)
+	hstr := newStream(str, conn)
+	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
-	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
-	} else {
-		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
+	if s.Logger != nil {
+		s.Logger.Debug("handling request", "method", req.Method, "host", req.Host, "uri", req.RequestURI)
 	}
 
 	ctx := str.Context()
@@ -630,10 +602,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 		}
 	}
 	req = req.WithContext(ctx)
-	r := newResponseWriter(str, conn, s.logger)
-	if req.Method == http.MethodHead {
-		r.isHead = true
-	}
+	r := newResponseWriter(hstr, conn, req.Method == http.MethodHead, s.Logger)
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -651,34 +620,42 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, decoder *qpack
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
-				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
+				logger := s.Logger
+				if logger == nil {
+					logger = slog.Default()
+				}
+				logger.Error("http: panic serving", "arg", p, "trace", buf)
 			}
 		}()
 		handler.ServeHTTP(r, req)
 	}()
 
 	if body.wasStreamHijacked() {
-		return requestError{err: errHijacked}
+		return
 	}
 
 	// only write response when there is no panic
 	if !panicked {
 		// response not written to the client yet, set Content-Length
-		if !r.written {
+		if !r.headerWritten {
 			if _, haveCL := r.header["Content-Length"]; !haveCL {
 				r.header.Set("Content-Length", strconv.FormatInt(r.numWritten, 10))
 			}
 		}
 		r.Flush()
 	}
-	// If the EOF was read by the handler, CancelRead() is a no-op.
-	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 	// abort the stream when there is a panic
 	if panicked {
-		return newStreamError(ErrCodeInternalError, errPanicked)
+		str.CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
+		return
 	}
-	return requestError{}
+
+	// If the EOF was read by the handler, CancelRead() is a no-op.
+	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
+
+	str.Close()
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.

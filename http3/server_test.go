@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"runtime"
@@ -17,7 +18,6 @@ import (
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -88,7 +88,6 @@ var _ = Describe("Server", func() {
 		s = &Server{
 			TLSConfig:   testdata.GetTLSConfig(),
 			connections: make(map[*quic.Connection]func()),
-			logger:      utils.DefaultLogger,
 			ConnContext: func(ctx context.Context, c quic.Connection) context.Context {
 				return context.WithValue(ctx, testConnContextKey("test"), c)
 			},
@@ -133,7 +132,7 @@ var _ = Describe("Server", func() {
 			buf := &bytes.Buffer{}
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			rw := newRequestWriter(utils.DefaultLogger)
+			rw := newRequestWriter()
 			Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
 			return buf.Bytes()
 		}
@@ -164,7 +163,7 @@ var _ = Describe("Server", func() {
 			qconn.EXPECT().LocalAddr().AnyTimes()
 			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
-			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, utils.DefaultLogger)
+			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, nil)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -179,8 +178,9 @@ var _ = Describe("Server", func() {
 				return len(p), nil
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Close()
 
-			Expect(s.handleRequest(conn, str, qpackDecoder, nil)).To(Equal(requestError{}))
+			s.handleRequest(conn, str, qpackDecoder)
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -197,9 +197,9 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Close()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
@@ -214,9 +214,9 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Close()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"6"}))
@@ -236,32 +236,33 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Close()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			// status, date, content-type
 			Expect(hfs).To(HaveLen(3))
 		})
 
-		It("response to HEAD request should not have body", func() {
+		It("ignores calls to Write for responses to HEAD requests", func() {
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("foobar"))
 			})
 
-			headRequest, err := http.NewRequest("HEAD", "https://www.example.com", nil)
+			headRequest, err := http.NewRequest(http.MethodHead, "https://www.example.com", nil)
 			Expect(err).ToNot(HaveOccurred())
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(headRequest))
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			str.EXPECT().Close()
+
+			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
-			Expect(responseBuf.Bytes()).To(HaveLen(0))
+			Expect(responseBuf.Bytes()).To(BeEmpty())
 		})
 
 		It("response to HEAD request should also do content sniffing", func() {
@@ -269,22 +270,23 @@ var _ = Describe("Server", func() {
 				w.Write([]byte("<html></html>"))
 			})
 
-			headRequest, err := http.NewRequest("HEAD", "https://www.example.com", nil)
+			headRequest, err := http.NewRequest(http.MethodHead, "https://www.example.com", nil)
 			Expect(err).ToNot(HaveOccurred())
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(headRequest))
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			str.EXPECT().Close()
+
+			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
 			Expect(hfs).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
 		})
 
-		It("handles a aborting handler", func() {
+		It("handles an aborting handler", func() {
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				panic(http.ErrAbortHandler)
 			})
@@ -293,14 +295,16 @@ var _ = Describe("Server", func() {
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
+			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).To(MatchError(errPanicked))
+			s.handleRequest(conn, str, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
 
 		It("handles a panicking handler", func() {
+			var logBuf bytes.Buffer
+			s.Logger = slog.New(slog.NewTextHandler(&logBuf, nil))
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				panic("foobar")
 			})
@@ -309,11 +313,13 @@ var _ = Describe("Server", func() {
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
+			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).To(MatchError(errPanicked))
+			s.handleRequest(conn, str, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
+			Expect(logBuf.String()).To(ContainSubstring("http: panic serving"))
+			Expect(logBuf.String()).To(ContainSubstring("foobar"))
 		})
 
 		Context("hijacking bidirectional streams", func() {
@@ -371,6 +377,7 @@ var _ = Describe("Server", func() {
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
@@ -397,6 +404,7 @@ var _ = Describe("Server", func() {
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
@@ -618,6 +626,7 @@ var _ = Describe("Server", func() {
 				setRequest(append(requestData, b...))
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
@@ -633,6 +642,7 @@ var _ = Describe("Server", func() {
 				testErr := errors.New("stream reset")
 				done := make(chan struct{})
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
@@ -660,23 +670,23 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("closes the connection when the first frame is not a HEADERS frame", func() {
+			It("rejects a request that has too large request headers", func() {
 				handlerCalled := make(chan struct{})
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					close(handlerCalled)
 				})
 
-				// use 2*DefaultMaxHeaderBytes here. qpack will compress the requiest,
+				// use 2*DefaultMaxHeaderBytes here. qpack will compress the request,
 				// but the request will still end up larger than DefaultMaxHeaderBytes.
 				url := bytes.Repeat([]byte{'a'}, http.DefaultMaxHeaderBytes*2)
 				req, err := http.NewRequest(http.MethodGet, "https://"+string(url), nil)
 				Expect(err).ToNot(HaveOccurred())
 				setRequest(encodeRequest(req))
-				// str.EXPECT().Context().Return(reqContext)
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return len(p), nil
 				}).AnyTimes()
 				done := make(chan struct{})
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
@@ -700,9 +710,9 @@ var _ = Describe("Server", func() {
 				return len(p), nil
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
+			str.EXPECT().Close()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			s.handleRequest(conn, str, qpackDecoder)
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 
@@ -723,9 +733,9 @@ var _ = Describe("Server", func() {
 				return len(p), nil
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
+			str.EXPECT().Close()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			s.handleRequest(conn, str, qpackDecoder)
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 	})
@@ -810,6 +820,8 @@ var _ = Describe("Server", func() {
 
 		It("uses s.Addr if listeners don't have ports available", func() {
 			s.Addr = ":443"
+			var logBuf bytes.Buffer
+			s.Logger = slog.New(slog.NewTextHandler(&logBuf, nil))
 			mln := &noPortListener{newMockAddrListener("")}
 			mln.EXPECT().Addr()
 			ln1 = mln
@@ -817,6 +829,7 @@ var _ = Describe("Server", func() {
 			checkSetHeaders(Equal(expected))
 			s.removeListener(&ln1)
 			checkSetHeaderError()
+			Expect(logBuf.String()).To(ContainSubstring("Unable to extract port from listener, will not be announced using SetQUICHeaders"))
 		})
 
 		It("properly announces multiple listeners", func() {

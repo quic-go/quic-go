@@ -2,19 +2,40 @@ package http3
 
 import (
 	"context"
+	"log/slog"
+	"net"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
+
+// Connection is an HTTP/3 connection.
+// It has all methods from the quic.Connection expect for AcceptStream, AcceptUniStream,
+// SendDatagram and ReceiveDatagram.
+type Connection interface {
+	OpenStream() (quic.Stream, error)
+	OpenStreamSync(context.Context) (quic.Stream, error)
+	OpenUniStream() (quic.SendStream, error)
+	OpenUniStreamSync(context.Context) (quic.SendStream, error)
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+	CloseWithError(quic.ApplicationErrorCode, string) error
+	Context() context.Context
+	ConnectionState() quic.ConnectionState
+
+	// ReceivedSettings returns a channel that is closed once the client's SETTINGS frame was received.
+	ReceivedSettings() <-chan struct{}
+	// Settings returns the settings received on this connection.
+	Settings() *Settings
+}
 
 type connection struct {
 	quic.Connection
 
 	perspective protocol.Perspective
-	logger      utils.Logger
+	logger      *slog.Logger
 
 	enableDatagrams   bool
 	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
@@ -30,7 +51,7 @@ func newConnection(
 	enableDatagrams bool,
 	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool),
 	perspective protocol.Perspective,
-	logger utils.Logger,
+	logger *slog.Logger,
 ) *connection {
 	return &connection{
 		Connection:        quicConn,
@@ -52,7 +73,9 @@ func (c *connection) HandleUnidirectionalStreams() {
 	for {
 		str, err := c.Connection.AcceptUniStream(context.Background())
 		if err != nil {
-			c.logger.Debugf("accepting unidirectional stream failed: %s", err)
+			if c.logger != nil {
+				c.logger.Debug("accepting unidirectional stream failed", "error", err)
+			}
 			return
 		}
 
@@ -63,7 +86,9 @@ func (c *connection) HandleUnidirectionalStreams() {
 				if c.uniStreamHijacker != nil && c.uniStreamHijacker(StreamType(streamType), id, str, err) {
 					return
 				}
-				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+				if c.logger != nil {
+					c.logger.Debug("reading stream type on stream failed", "stream ID", str.StreamID(), "error", err)
+				}
 				return
 			}
 			// We're only interested in the control stream here.

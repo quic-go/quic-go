@@ -159,6 +159,15 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.Abandon()
 				Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(100)))
 			})
+
+			It("tolerates repeated calls to Abandon", func() {
+				controller.AddBytesRead(5)
+				Expect(controller.UpdateHighestReceived(100, true)).To(Succeed())
+				controller.Abandon()
+				controller.Abandon()
+				controller.Abandon()
+				Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(100)))
+			})
 		})
 
 		It("saves when data is read", func() {

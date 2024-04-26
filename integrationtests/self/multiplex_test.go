@@ -249,6 +249,7 @@ var _ = Describe("Multiplexing", func() {
 			defer GinkgoRecover()
 			ticker := time.NewTicker(time.Millisecond / 10)
 			defer ticker.Stop()
+			var wroteFirstPacket bool
 			for {
 				select {
 				case <-ticker.C:
@@ -258,11 +259,18 @@ var _ = Describe("Multiplexing", func() {
 				b := make([]byte, packetLen)
 				rand.Read(b[1:]) // keep the first byte set to 0, so it's not classified as a QUIC packet
 				_, err := tr1.WriteTo(b, tr2.Conn.LocalAddr())
+				// The first sendmsg call on a new UDP socket sometimes errors on Linux.
+				// It's not clear why this happens.
+				// See https://github.com/golang/go/issues/63322.
+				if err != nil && !wroteFirstPacket && isPermissionError(err) {
+					_, err = tr1.WriteTo(b, tr2.Conn.LocalAddr())
+				}
 				if ctx.Err() != nil { // ctx canceled while Read was executing
 					return
 				}
 				Expect(err).ToNot(HaveOccurred())
 				sentPackets.Add(1)
+				wroteFirstPacket = true
 			}
 		}()
 

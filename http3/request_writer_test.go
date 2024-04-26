@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/quic-go/qpack"
 	"go.uber.org/mock/gomock"
@@ -41,7 +40,7 @@ var _ = Describe("Request Writer", func() {
 	}
 
 	BeforeEach(func() {
-		rw = newRequestWriter(utils.DefaultLogger)
+		rw = newRequestWriter()
 		strBuf = &bytes.Buffer{}
 		str = mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
