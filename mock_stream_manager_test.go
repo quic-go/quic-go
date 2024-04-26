@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_stream_manager_test.go github.com/quic-go/quic-go StreamManager
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -50,31 +51,31 @@ func (m *MockStreamManager) AcceptStream(arg0 context.Context) (Stream, error) {
 }
 
 // AcceptStream indicates an expected call of AcceptStream.
-func (mr *MockStreamManagerMockRecorder) AcceptStream(arg0 any) *StreamManagerAcceptStreamCall {
+func (mr *MockStreamManagerMockRecorder) AcceptStream(arg0 any) *MockStreamManagerAcceptStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptStream), arg0)
-	return &StreamManagerAcceptStreamCall{Call: call}
+	return &MockStreamManagerAcceptStreamCall{Call: call}
 }
 
-// StreamManagerAcceptStreamCall wrap *gomock.Call
-type StreamManagerAcceptStreamCall struct {
+// MockStreamManagerAcceptStreamCall wrap *gomock.Call
+type MockStreamManagerAcceptStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerAcceptStreamCall) Return(arg0 Stream, arg1 error) *StreamManagerAcceptStreamCall {
+func (c *MockStreamManagerAcceptStreamCall) Return(arg0 Stream, arg1 error) *MockStreamManagerAcceptStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerAcceptStreamCall) Do(f func(context.Context) (Stream, error)) *StreamManagerAcceptStreamCall {
+func (c *MockStreamManagerAcceptStreamCall) Do(f func(context.Context) (Stream, error)) *MockStreamManagerAcceptStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerAcceptStreamCall) DoAndReturn(f func(context.Context) (Stream, error)) *StreamManagerAcceptStreamCall {
+func (c *MockStreamManagerAcceptStreamCall) DoAndReturn(f func(context.Context) (Stream, error)) *MockStreamManagerAcceptStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -89,31 +90,31 @@ func (m *MockStreamManager) AcceptUniStream(arg0 context.Context) (ReceiveStream
 }
 
 // AcceptUniStream indicates an expected call of AcceptUniStream.
-func (mr *MockStreamManagerMockRecorder) AcceptUniStream(arg0 any) *StreamManagerAcceptUniStreamCall {
+func (mr *MockStreamManagerMockRecorder) AcceptUniStream(arg0 any) *MockStreamManagerAcceptUniStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptUniStream), arg0)
-	return &StreamManagerAcceptUniStreamCall{Call: call}
+	return &MockStreamManagerAcceptUniStreamCall{Call: call}
 }
 
-// StreamManagerAcceptUniStreamCall wrap *gomock.Call
-type StreamManagerAcceptUniStreamCall struct {
+// MockStreamManagerAcceptUniStreamCall wrap *gomock.Call
+type MockStreamManagerAcceptUniStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerAcceptUniStreamCall) Return(arg0 ReceiveStream, arg1 error) *StreamManagerAcceptUniStreamCall {
+func (c *MockStreamManagerAcceptUniStreamCall) Return(arg0 ReceiveStream, arg1 error) *MockStreamManagerAcceptUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerAcceptUniStreamCall) Do(f func(context.Context) (ReceiveStream, error)) *StreamManagerAcceptUniStreamCall {
+func (c *MockStreamManagerAcceptUniStreamCall) Do(f func(context.Context) (ReceiveStream, error)) *MockStreamManagerAcceptUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerAcceptUniStreamCall) DoAndReturn(f func(context.Context) (ReceiveStream, error)) *StreamManagerAcceptUniStreamCall {
+func (c *MockStreamManagerAcceptUniStreamCall) DoAndReturn(f func(context.Context) (ReceiveStream, error)) *MockStreamManagerAcceptUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -125,31 +126,31 @@ func (m *MockStreamManager) CloseWithError(arg0 error) {
 }
 
 // CloseWithError indicates an expected call of CloseWithError.
-func (mr *MockStreamManagerMockRecorder) CloseWithError(arg0 any) *StreamManagerCloseWithErrorCall {
+func (mr *MockStreamManagerMockRecorder) CloseWithError(arg0 any) *MockStreamManagerCloseWithErrorCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockStreamManager)(nil).CloseWithError), arg0)
-	return &StreamManagerCloseWithErrorCall{Call: call}
+	return &MockStreamManagerCloseWithErrorCall{Call: call}
 }
 
-// StreamManagerCloseWithErrorCall wrap *gomock.Call
-type StreamManagerCloseWithErrorCall struct {
+// MockStreamManagerCloseWithErrorCall wrap *gomock.Call
+type MockStreamManagerCloseWithErrorCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerCloseWithErrorCall) Return() *StreamManagerCloseWithErrorCall {
+func (c *MockStreamManagerCloseWithErrorCall) Return() *MockStreamManagerCloseWithErrorCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerCloseWithErrorCall) Do(f func(error)) *StreamManagerCloseWithErrorCall {
+func (c *MockStreamManagerCloseWithErrorCall) Do(f func(error)) *MockStreamManagerCloseWithErrorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerCloseWithErrorCall) DoAndReturn(f func(error)) *StreamManagerCloseWithErrorCall {
+func (c *MockStreamManagerCloseWithErrorCall) DoAndReturn(f func(error)) *MockStreamManagerCloseWithErrorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -163,31 +164,31 @@ func (m *MockStreamManager) DeleteStream(arg0 protocol.StreamID) error {
 }
 
 // DeleteStream indicates an expected call of DeleteStream.
-func (mr *MockStreamManagerMockRecorder) DeleteStream(arg0 any) *StreamManagerDeleteStreamCall {
+func (mr *MockStreamManagerMockRecorder) DeleteStream(arg0 any) *MockStreamManagerDeleteStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteStream", reflect.TypeOf((*MockStreamManager)(nil).DeleteStream), arg0)
-	return &StreamManagerDeleteStreamCall{Call: call}
+	return &MockStreamManagerDeleteStreamCall{Call: call}
 }
 
-// StreamManagerDeleteStreamCall wrap *gomock.Call
-type StreamManagerDeleteStreamCall struct {
+// MockStreamManagerDeleteStreamCall wrap *gomock.Call
+type MockStreamManagerDeleteStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerDeleteStreamCall) Return(arg0 error) *StreamManagerDeleteStreamCall {
+func (c *MockStreamManagerDeleteStreamCall) Return(arg0 error) *MockStreamManagerDeleteStreamCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerDeleteStreamCall) Do(f func(protocol.StreamID) error) *StreamManagerDeleteStreamCall {
+func (c *MockStreamManagerDeleteStreamCall) Do(f func(protocol.StreamID) error) *MockStreamManagerDeleteStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerDeleteStreamCall) DoAndReturn(f func(protocol.StreamID) error) *StreamManagerDeleteStreamCall {
+func (c *MockStreamManagerDeleteStreamCall) DoAndReturn(f func(protocol.StreamID) error) *MockStreamManagerDeleteStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -202,31 +203,31 @@ func (m *MockStreamManager) GetOrOpenReceiveStream(arg0 protocol.StreamID) (rece
 }
 
 // GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream.
-func (mr *MockStreamManagerMockRecorder) GetOrOpenReceiveStream(arg0 any) *StreamManagerGetOrOpenReceiveStreamCall {
+func (mr *MockStreamManagerMockRecorder) GetOrOpenReceiveStream(arg0 any) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenReceiveStream), arg0)
-	return &StreamManagerGetOrOpenReceiveStreamCall{Call: call}
+	return &MockStreamManagerGetOrOpenReceiveStreamCall{Call: call}
 }
 
-// StreamManagerGetOrOpenReceiveStreamCall wrap *gomock.Call
-type StreamManagerGetOrOpenReceiveStreamCall struct {
+// MockStreamManagerGetOrOpenReceiveStreamCall wrap *gomock.Call
+type MockStreamManagerGetOrOpenReceiveStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerGetOrOpenReceiveStreamCall) Return(arg0 receiveStreamI, arg1 error) *StreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Return(arg0 receiveStreamI, arg1 error) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (receiveStreamI, error)) *StreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (receiveStreamI, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (receiveStreamI, error)) *StreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (receiveStreamI, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -241,31 +242,31 @@ func (m *MockStreamManager) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStr
 }
 
 // GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream.
-func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 any) *StreamManagerGetOrOpenSendStreamCall {
+func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 any) *MockStreamManagerGetOrOpenSendStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenSendStream), arg0)
-	return &StreamManagerGetOrOpenSendStreamCall{Call: call}
+	return &MockStreamManagerGetOrOpenSendStreamCall{Call: call}
 }
 
-// StreamManagerGetOrOpenSendStreamCall wrap *gomock.Call
-type StreamManagerGetOrOpenSendStreamCall struct {
+// MockStreamManagerGetOrOpenSendStreamCall wrap *gomock.Call
+type MockStreamManagerGetOrOpenSendStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerGetOrOpenSendStreamCall) Return(arg0 sendStreamI, arg1 error) *StreamManagerGetOrOpenSendStreamCall {
+func (c *MockStreamManagerGetOrOpenSendStreamCall) Return(arg0 sendStreamI, arg1 error) *MockStreamManagerGetOrOpenSendStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerGetOrOpenSendStreamCall) Do(f func(protocol.StreamID) (sendStreamI, error)) *StreamManagerGetOrOpenSendStreamCall {
+func (c *MockStreamManagerGetOrOpenSendStreamCall) Do(f func(protocol.StreamID) (sendStreamI, error)) *MockStreamManagerGetOrOpenSendStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerGetOrOpenSendStreamCall) DoAndReturn(f func(protocol.StreamID) (sendStreamI, error)) *StreamManagerGetOrOpenSendStreamCall {
+func (c *MockStreamManagerGetOrOpenSendStreamCall) DoAndReturn(f func(protocol.StreamID) (sendStreamI, error)) *MockStreamManagerGetOrOpenSendStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -277,31 +278,31 @@ func (m *MockStreamManager) HandleMaxStreamsFrame(arg0 *wire.MaxStreamsFrame) {
 }
 
 // HandleMaxStreamsFrame indicates an expected call of HandleMaxStreamsFrame.
-func (mr *MockStreamManagerMockRecorder) HandleMaxStreamsFrame(arg0 any) *StreamManagerHandleMaxStreamsFrameCall {
+func (mr *MockStreamManagerMockRecorder) HandleMaxStreamsFrame(arg0 any) *MockStreamManagerHandleMaxStreamsFrameCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMaxStreamsFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleMaxStreamsFrame), arg0)
-	return &StreamManagerHandleMaxStreamsFrameCall{Call: call}
+	return &MockStreamManagerHandleMaxStreamsFrameCall{Call: call}
 }
 
-// StreamManagerHandleMaxStreamsFrameCall wrap *gomock.Call
-type StreamManagerHandleMaxStreamsFrameCall struct {
+// MockStreamManagerHandleMaxStreamsFrameCall wrap *gomock.Call
+type MockStreamManagerHandleMaxStreamsFrameCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerHandleMaxStreamsFrameCall) Return() *StreamManagerHandleMaxStreamsFrameCall {
+func (c *MockStreamManagerHandleMaxStreamsFrameCall) Return() *MockStreamManagerHandleMaxStreamsFrameCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerHandleMaxStreamsFrameCall) Do(f func(*wire.MaxStreamsFrame)) *StreamManagerHandleMaxStreamsFrameCall {
+func (c *MockStreamManagerHandleMaxStreamsFrameCall) Do(f func(*wire.MaxStreamsFrame)) *MockStreamManagerHandleMaxStreamsFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerHandleMaxStreamsFrameCall) DoAndReturn(f func(*wire.MaxStreamsFrame)) *StreamManagerHandleMaxStreamsFrameCall {
+func (c *MockStreamManagerHandleMaxStreamsFrameCall) DoAndReturn(f func(*wire.MaxStreamsFrame)) *MockStreamManagerHandleMaxStreamsFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -316,31 +317,31 @@ func (m *MockStreamManager) OpenStream() (Stream, error) {
 }
 
 // OpenStream indicates an expected call of OpenStream.
-func (mr *MockStreamManagerMockRecorder) OpenStream() *StreamManagerOpenStreamCall {
+func (mr *MockStreamManagerMockRecorder) OpenStream() *MockStreamManagerOpenStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStream", reflect.TypeOf((*MockStreamManager)(nil).OpenStream))
-	return &StreamManagerOpenStreamCall{Call: call}
+	return &MockStreamManagerOpenStreamCall{Call: call}
 }
 
-// StreamManagerOpenStreamCall wrap *gomock.Call
-type StreamManagerOpenStreamCall struct {
+// MockStreamManagerOpenStreamCall wrap *gomock.Call
+type MockStreamManagerOpenStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerOpenStreamCall) Return(arg0 Stream, arg1 error) *StreamManagerOpenStreamCall {
+func (c *MockStreamManagerOpenStreamCall) Return(arg0 Stream, arg1 error) *MockStreamManagerOpenStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerOpenStreamCall) Do(f func() (Stream, error)) *StreamManagerOpenStreamCall {
+func (c *MockStreamManagerOpenStreamCall) Do(f func() (Stream, error)) *MockStreamManagerOpenStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerOpenStreamCall) DoAndReturn(f func() (Stream, error)) *StreamManagerOpenStreamCall {
+func (c *MockStreamManagerOpenStreamCall) DoAndReturn(f func() (Stream, error)) *MockStreamManagerOpenStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -355,31 +356,31 @@ func (m *MockStreamManager) OpenStreamSync(arg0 context.Context) (Stream, error)
 }
 
 // OpenStreamSync indicates an expected call of OpenStreamSync.
-func (mr *MockStreamManagerMockRecorder) OpenStreamSync(arg0 any) *StreamManagerOpenStreamSyncCall {
+func (mr *MockStreamManagerMockRecorder) OpenStreamSync(arg0 any) *MockStreamManagerOpenStreamSyncCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenStreamSync), arg0)
-	return &StreamManagerOpenStreamSyncCall{Call: call}
+	return &MockStreamManagerOpenStreamSyncCall{Call: call}
 }
 
-// StreamManagerOpenStreamSyncCall wrap *gomock.Call
-type StreamManagerOpenStreamSyncCall struct {
+// MockStreamManagerOpenStreamSyncCall wrap *gomock.Call
+type MockStreamManagerOpenStreamSyncCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerOpenStreamSyncCall) Return(arg0 Stream, arg1 error) *StreamManagerOpenStreamSyncCall {
+func (c *MockStreamManagerOpenStreamSyncCall) Return(arg0 Stream, arg1 error) *MockStreamManagerOpenStreamSyncCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerOpenStreamSyncCall) Do(f func(context.Context) (Stream, error)) *StreamManagerOpenStreamSyncCall {
+func (c *MockStreamManagerOpenStreamSyncCall) Do(f func(context.Context) (Stream, error)) *MockStreamManagerOpenStreamSyncCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerOpenStreamSyncCall) DoAndReturn(f func(context.Context) (Stream, error)) *StreamManagerOpenStreamSyncCall {
+func (c *MockStreamManagerOpenStreamSyncCall) DoAndReturn(f func(context.Context) (Stream, error)) *MockStreamManagerOpenStreamSyncCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -394,31 +395,31 @@ func (m *MockStreamManager) OpenUniStream() (SendStream, error) {
 }
 
 // OpenUniStream indicates an expected call of OpenUniStream.
-func (mr *MockStreamManagerMockRecorder) OpenUniStream() *StreamManagerOpenUniStreamCall {
+func (mr *MockStreamManagerMockRecorder) OpenUniStream() *MockStreamManagerOpenUniStreamCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStream", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStream))
-	return &StreamManagerOpenUniStreamCall{Call: call}
+	return &MockStreamManagerOpenUniStreamCall{Call: call}
 }
 
-// StreamManagerOpenUniStreamCall wrap *gomock.Call
-type StreamManagerOpenUniStreamCall struct {
+// MockStreamManagerOpenUniStreamCall wrap *gomock.Call
+type MockStreamManagerOpenUniStreamCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerOpenUniStreamCall) Return(arg0 SendStream, arg1 error) *StreamManagerOpenUniStreamCall {
+func (c *MockStreamManagerOpenUniStreamCall) Return(arg0 SendStream, arg1 error) *MockStreamManagerOpenUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerOpenUniStreamCall) Do(f func() (SendStream, error)) *StreamManagerOpenUniStreamCall {
+func (c *MockStreamManagerOpenUniStreamCall) Do(f func() (SendStream, error)) *MockStreamManagerOpenUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerOpenUniStreamCall) DoAndReturn(f func() (SendStream, error)) *StreamManagerOpenUniStreamCall {
+func (c *MockStreamManagerOpenUniStreamCall) DoAndReturn(f func() (SendStream, error)) *MockStreamManagerOpenUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -433,31 +434,31 @@ func (m *MockStreamManager) OpenUniStreamSync(arg0 context.Context) (SendStream,
 }
 
 // OpenUniStreamSync indicates an expected call of OpenUniStreamSync.
-func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync(arg0 any) *StreamManagerOpenUniStreamSyncCall {
+func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync(arg0 any) *MockStreamManagerOpenUniStreamSyncCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStreamSync), arg0)
-	return &StreamManagerOpenUniStreamSyncCall{Call: call}
+	return &MockStreamManagerOpenUniStreamSyncCall{Call: call}
 }
 
-// StreamManagerOpenUniStreamSyncCall wrap *gomock.Call
-type StreamManagerOpenUniStreamSyncCall struct {
+// MockStreamManagerOpenUniStreamSyncCall wrap *gomock.Call
+type MockStreamManagerOpenUniStreamSyncCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerOpenUniStreamSyncCall) Return(arg0 SendStream, arg1 error) *StreamManagerOpenUniStreamSyncCall {
+func (c *MockStreamManagerOpenUniStreamSyncCall) Return(arg0 SendStream, arg1 error) *MockStreamManagerOpenUniStreamSyncCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerOpenUniStreamSyncCall) Do(f func(context.Context) (SendStream, error)) *StreamManagerOpenUniStreamSyncCall {
+func (c *MockStreamManagerOpenUniStreamSyncCall) Do(f func(context.Context) (SendStream, error)) *MockStreamManagerOpenUniStreamSyncCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (SendStream, error)) *StreamManagerOpenUniStreamSyncCall {
+func (c *MockStreamManagerOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (SendStream, error)) *MockStreamManagerOpenUniStreamSyncCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -469,31 +470,31 @@ func (m *MockStreamManager) ResetFor0RTT() {
 }
 
 // ResetFor0RTT indicates an expected call of ResetFor0RTT.
-func (mr *MockStreamManagerMockRecorder) ResetFor0RTT() *StreamManagerResetFor0RTTCall {
+func (mr *MockStreamManagerMockRecorder) ResetFor0RTT() *MockStreamManagerResetFor0RTTCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetFor0RTT", reflect.TypeOf((*MockStreamManager)(nil).ResetFor0RTT))
-	return &StreamManagerResetFor0RTTCall{Call: call}
+	return &MockStreamManagerResetFor0RTTCall{Call: call}
 }
 
-// StreamManagerResetFor0RTTCall wrap *gomock.Call
-type StreamManagerResetFor0RTTCall struct {
+// MockStreamManagerResetFor0RTTCall wrap *gomock.Call
+type MockStreamManagerResetFor0RTTCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerResetFor0RTTCall) Return() *StreamManagerResetFor0RTTCall {
+func (c *MockStreamManagerResetFor0RTTCall) Return() *MockStreamManagerResetFor0RTTCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerResetFor0RTTCall) Do(f func()) *StreamManagerResetFor0RTTCall {
+func (c *MockStreamManagerResetFor0RTTCall) Do(f func()) *MockStreamManagerResetFor0RTTCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerResetFor0RTTCall) DoAndReturn(f func()) *StreamManagerResetFor0RTTCall {
+func (c *MockStreamManagerResetFor0RTTCall) DoAndReturn(f func()) *MockStreamManagerResetFor0RTTCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -505,31 +506,31 @@ func (m *MockStreamManager) UpdateLimits(arg0 *wire.TransportParameters) {
 }
 
 // UpdateLimits indicates an expected call of UpdateLimits.
-func (mr *MockStreamManagerMockRecorder) UpdateLimits(arg0 any) *StreamManagerUpdateLimitsCall {
+func (mr *MockStreamManagerMockRecorder) UpdateLimits(arg0 any) *MockStreamManagerUpdateLimitsCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLimits", reflect.TypeOf((*MockStreamManager)(nil).UpdateLimits), arg0)
-	return &StreamManagerUpdateLimitsCall{Call: call}
+	return &MockStreamManagerUpdateLimitsCall{Call: call}
 }
 
-// StreamManagerUpdateLimitsCall wrap *gomock.Call
-type StreamManagerUpdateLimitsCall struct {
+// MockStreamManagerUpdateLimitsCall wrap *gomock.Call
+type MockStreamManagerUpdateLimitsCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerUpdateLimitsCall) Return() *StreamManagerUpdateLimitsCall {
+func (c *MockStreamManagerUpdateLimitsCall) Return() *MockStreamManagerUpdateLimitsCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerUpdateLimitsCall) Do(f func(*wire.TransportParameters)) *StreamManagerUpdateLimitsCall {
+func (c *MockStreamManagerUpdateLimitsCall) Do(f func(*wire.TransportParameters)) *MockStreamManagerUpdateLimitsCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerUpdateLimitsCall) DoAndReturn(f func(*wire.TransportParameters)) *StreamManagerUpdateLimitsCall {
+func (c *MockStreamManagerUpdateLimitsCall) DoAndReturn(f func(*wire.TransportParameters)) *MockStreamManagerUpdateLimitsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -541,31 +542,31 @@ func (m *MockStreamManager) UseResetMaps() {
 }
 
 // UseResetMaps indicates an expected call of UseResetMaps.
-func (mr *MockStreamManagerMockRecorder) UseResetMaps() *StreamManagerUseResetMapsCall {
+func (mr *MockStreamManagerMockRecorder) UseResetMaps() *MockStreamManagerUseResetMapsCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseResetMaps", reflect.TypeOf((*MockStreamManager)(nil).UseResetMaps))
-	return &StreamManagerUseResetMapsCall{Call: call}
+	return &MockStreamManagerUseResetMapsCall{Call: call}
 }
 
-// StreamManagerUseResetMapsCall wrap *gomock.Call
-type StreamManagerUseResetMapsCall struct {
+// MockStreamManagerUseResetMapsCall wrap *gomock.Call
+type MockStreamManagerUseResetMapsCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *StreamManagerUseResetMapsCall) Return() *StreamManagerUseResetMapsCall {
+func (c *MockStreamManagerUseResetMapsCall) Return() *MockStreamManagerUseResetMapsCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *StreamManagerUseResetMapsCall) Do(f func()) *StreamManagerUseResetMapsCall {
+func (c *MockStreamManagerUseResetMapsCall) Do(f func()) *MockStreamManagerUseResetMapsCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *StreamManagerUseResetMapsCall) DoAndReturn(f func()) *StreamManagerUseResetMapsCall {
+func (c *MockStreamManagerUseResetMapsCall) DoAndReturn(f func()) *MockStreamManagerUseResetMapsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

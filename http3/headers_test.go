@@ -212,6 +212,17 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
 	})
 
+	It("errors with invalid protocol", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: ":protocol", Value: "connect-udp"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError(":protocol must be empty"))
+	})
+
 	Context("regular HTTP CONNECT", func() {
 		It("handles CONNECT method", func() {
 			headers := []qpack.HeaderField{
@@ -221,6 +232,7 @@ var _ = Describe("Request", func() {
 			req, err := requestFromHeaders(headers)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(req.Method).To(Equal(http.MethodConnect))
+			Expect(req.Proto).To(Equal("HTTP/3.0"))
 			Expect(req.RequestURI).To(Equal("quic.clemente.io"))
 		})
 
@@ -281,21 +293,12 @@ var _ = Describe("Request", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("uses req.URL.Host", func() {
-			req := &http.Request{URL: url}
-			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
-		})
-
-		It("uses req.URL.Host even if req.Host is available", func() {
-			req := &http.Request{
-				Host: "www.example.org",
-				URL:  url,
-			}
-			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
+		It("uses URL.Host", func() {
+			Expect(hostnameFromURL(url)).To(Equal("quic.clemente.io:1337"))
 		})
 
 		It("returns an empty hostname if nothing is set", func() {
-			Expect(hostnameFromRequest(&http.Request{})).To(BeEmpty())
+			Expect(hostnameFromURL(nil)).To(BeEmpty())
 		})
 	})
 })

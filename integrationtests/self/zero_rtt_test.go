@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	mrand "math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -51,6 +50,23 @@ func (m metadataClientSessionCache) Put(key string, session *tls.ClientSessionSt
 	m.cache.Put(key, session)
 }
 
+// contains0RTTPacket says if a packet contains a 0-RTT long header packet.
+// It correctly handles coalesced packets.
+func contains0RTTPacket(data []byte) bool {
+	for len(data) > 0 {
+		if !wire.IsLongHeaderPacket(data[0]) {
+			return false
+		}
+		hdr, _, rest, err := wire.ParsePacket(data)
+		Expect(err).ToNot(HaveOccurred())
+		if hdr.Type == protocol.PacketType0RTT {
+			return true
+		}
+		data = rest
+	}
+	return false
+}
+
 var _ = Describe("0-RTT", func() {
 	rtt := scaleDuration(5 * time.Millisecond)
 
@@ -59,23 +75,13 @@ var _ = Describe("0-RTT", func() {
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-				for len(data) > 0 {
-					if !wire.IsLongHeaderPacket(data[0]) {
-						break
-					}
-					hdr, _, rest, err := wire.ParsePacket(data)
-					Expect(err).ToNot(HaveOccurred())
-					if hdr.Type == protocol.PacketType0RTT {
-						num0RTTPackets.Add(1)
-						break
-					}
-					data = rest
+				if contains0RTTPacket(data) {
+					num0RTTPackets.Add(1)
 				}
 				return rtt / 2
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
-
 		return proxy, &num0RTTPackets
 	}
 
@@ -176,6 +182,7 @@ var _ = Describe("0-RTT", func() {
 				Conn:               udpConn,
 				ConnectionIDLength: connIDLen,
 			}
+			addTracer(tr)
 			defer tr.Close()
 			conn, err = tr.DialEarly(
 				context.Background(),
@@ -380,7 +387,7 @@ var _ = Describe("0-RTT", func() {
 	})
 
 	It("transfers 0-RTT data, when 0-RTT packets are lost", func() {
-		var num0RTTPackets, num0RTTDropped atomic.Uint32
+		var num0RTTPackets, numDropped atomic.Uint32
 
 		tlsConf := getTLSConfig()
 		clientConf := getTLSClientConfig()
@@ -399,17 +406,8 @@ var _ = Describe("0-RTT", func() {
 		defer ln.Close()
 
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-			RemoteAddr: fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-				if wire.IsLongHeaderPacket(data[0]) {
-					hdr, _, _, err := wire.ParsePacket(data)
-					Expect(err).ToNot(HaveOccurred())
-					if hdr.Type == protocol.PacketType0RTT {
-						num0RTTPackets.Add(1)
-					}
-				}
-				return rtt / 2
-			},
+			RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
 			DropPacket: func(_ quicproxy.Direction, data []byte) bool {
 				if !wire.IsLongHeaderPacket(data[0]) {
 					return false
@@ -417,10 +415,11 @@ var _ = Describe("0-RTT", func() {
 				hdr, _, _, err := wire.ParsePacket(data)
 				Expect(err).ToNot(HaveOccurred())
 				if hdr.Type == protocol.PacketType0RTT {
+					count := num0RTTPackets.Add(1)
 					// drop 25% of the 0-RTT packets
-					drop := mrand.Intn(4) == 0
+					drop := count%4 == 0
 					if drop {
-						num0RTTDropped.Add(1)
+						numDropped.Add(1)
 					}
 					return drop
 				}
@@ -433,9 +432,8 @@ var _ = Describe("0-RTT", func() {
 		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, PRData)
 
 		num0RTT := num0RTTPackets.Load()
-		numDropped := num0RTTDropped.Load()
-		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets. Dropped %d of those.", num0RTT, numDropped)
-		Expect(numDropped).ToNot(BeZero())
+		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets. Dropped %d of those.", num0RTT, numDropped.Load())
+		Expect(numDropped.Load()).ToNot(BeZero())
 		Expect(num0RTT).ToNot(BeZero())
 		Expect(get0RTTPackets(counter.getRcvdLongHeaderPackets())).ToNot(BeEmpty())
 	})
@@ -464,14 +462,20 @@ var _ = Describe("0-RTT", func() {
 		}
 
 		counter, tracer := newPacketTracer()
-		ln, err := quic.ListenAddrEarly(
-			"localhost:0",
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		udpConn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		defer udpConn.Close()
+		tr := &quic.Transport{
+			Conn:                udpConn,
+			VerifySourceAddress: func(net.Addr) bool { return true },
+		}
+		addTracer(tr)
+		defer tr.Close()
+		ln, err := tr.ListenEarly(
 			tlsConf,
-			getQuicConfig(&quic.Config{
-				RequireAddressValidation: func(net.Addr) bool { return true },
-				Allow0RTT:                true,
-				Tracer:                   newTracer(tracer),
-			}),
+			getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()

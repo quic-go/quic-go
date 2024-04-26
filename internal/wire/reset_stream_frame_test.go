@@ -61,7 +61,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 				ErrorCode: 0xde,
 			}
 			expectedLen := 1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + 2
-			Expect(rst.Length(protocol.Version1)).To(Equal(expectedLen))
+			Expect(rst.Length(protocol.Version1)).To(BeEquivalentTo(expectedLen))
 		})
 	})
 })

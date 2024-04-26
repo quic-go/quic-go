@@ -95,7 +95,7 @@ var _ = Describe("Header Parsing", func() {
 			b := []byte{0x80, 0xde, 0xad, 0xbe, 0xef}
 			v, err := ParseVersion(b)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(v).To(Equal(protocol.VersionNumber(0xdeadbeef)))
+			Expect(v).To(Equal(protocol.Version(0xdeadbeef)))
 		})
 
 		It("errors with EOF", func() {
@@ -230,7 +230,7 @@ var _ = Describe("Header Parsing", func() {
 			}
 			hdr, _, rest, err := ParsePacket(data)
 			Expect(err).To(MatchError(ErrUnsupportedVersion))
-			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0xdeadbeef)))
+			Expect(hdr.Version).To(Equal(protocol.Version(0xdeadbeef)))
 			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})))
 			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1})))
 			Expect(rest).To(BeEmpty())

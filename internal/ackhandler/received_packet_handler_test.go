@@ -18,11 +18,7 @@ var _ = Describe("Received Packet Handler", func() {
 
 	BeforeEach(func() {
 		sentPackets = NewMockSentPacketTracker(mockCtrl)
-		handler = newReceivedPacketHandler(
-			sentPackets,
-			&utils.RTTStats{},
-			utils.DefaultLogger,
-		)
+		handler = newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 	})
 
 	It("generates ACKs for different packet number spaces", func() {

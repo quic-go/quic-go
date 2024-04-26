@@ -97,7 +97,7 @@ var _ = Describe("CRYPTO frame", func() {
 				Offset: 0x1337,
 				Data:   []byte("foobar"),
 			}
-			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(6) + 6))
+			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337) + quicvarint.Len(6) + 6))
 		})
 	})
 

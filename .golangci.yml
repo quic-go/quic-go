@@ -2,19 +2,18 @@ run:
   skip-files:
     - internal/handshake/cipher_suite.go
 linters-settings:
-  depguard:
-    rules:
-      qtls:
-        list-mode: lax
-        files:
-          - "!internal/qtls/**"
-          - "$all"
-        deny:
-          - pkg: github.com/quic-go/qtls-go1-20
-            desc: "importing qtls only allowed in internal/qtls"
   misspell:
     ignore-words:
       - ect
+  depguard:
+    rules:
+      quicvarint:
+        list-mode: strict
+        files:
+          - "**/github.com/quic-go/quic-go/quicvarint/*"
+          - "!$test"
+        allow:
+          - $gostd
 
 linters:
   disable-all: true

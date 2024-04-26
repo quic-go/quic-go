@@ -127,8 +127,8 @@ var _ = Describe("Frames", func() {
 			}
 		})
 
-		Context("H3_DATAGRAM", func() {
-			It("reads the H3_DATAGRAM value", func() {
+		Context("HTTP Datagrams", func() {
+			It("reads the SETTINGS_H3_DATAGRAM value", func() {
 				settings := quicvarint.Append(nil, settingDatagram)
 				settings = quicvarint.Append(settings, 1)
 				data := quicvarint.Append(nil, 4) // type byte
@@ -141,7 +141,7 @@ var _ = Describe("Frames", func() {
 				Expect(sf.Datagram).To(BeTrue())
 			})
 
-			It("rejects duplicate H3_DATAGRAM entries", func() {
+			It("rejects duplicate SETTINGS_H3_DATAGRAM entries", func() {
 				settings := quicvarint.Append(nil, settingDatagram)
 				settings = quicvarint.Append(settings, 1)
 				settings = quicvarint.Append(settings, settingDatagram)
@@ -153,18 +153,62 @@ var _ = Describe("Frames", func() {
 				Expect(err).To(MatchError(fmt.Sprintf("duplicate setting: %d", settingDatagram)))
 			})
 
-			It("rejects invalid values for the H3_DATAGRAM entry", func() {
+			It("rejects invalid values for the SETTINGS_H3_DATAGRAM entry", func() {
 				settings := quicvarint.Append(nil, settingDatagram)
 				settings = quicvarint.Append(settings, 1337)
 				data := quicvarint.Append(nil, 4) // type byte
 				data = quicvarint.Append(data, uint64(len(settings)))
 				data = append(data, settings...)
 				_, err := parseNextFrame(bytes.NewReader(data), nil)
-				Expect(err).To(MatchError("invalid value for H3_DATAGRAM: 1337"))
+				Expect(err).To(MatchError("invalid value for SETTINGS_H3_DATAGRAM: 1337"))
 			})
 
-			It("writes the H3_DATAGRAM setting", func() {
+			It("writes the SETTINGS_H3_DATAGRAM setting", func() {
 				sf := &settingsFrame{Datagram: true}
+				frame, err := parseNextFrame(bytes.NewReader(sf.Append(nil)), nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(Equal(sf))
+			})
+		})
+
+		Context("Extended Connect", func() {
+			It("reads the SETTINGS_ENABLE_CONNECT_PROTOCOL value", func() {
+				settings := quicvarint.Append(nil, settingExtendedConnect)
+				settings = quicvarint.Append(settings, 1)
+				data := quicvarint.Append(nil, 4) // type byte
+				data = quicvarint.Append(data, uint64(len(settings)))
+				data = append(data, settings...)
+				f, err := parseNextFrame(bytes.NewReader(data), nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f).To(BeAssignableToTypeOf(&settingsFrame{}))
+				sf := f.(*settingsFrame)
+				Expect(sf.ExtendedConnect).To(BeTrue())
+			})
+
+			It("rejects duplicate SETTINGS_ENABLE_CONNECT_PROTOCOL entries", func() {
+				settings := quicvarint.Append(nil, settingExtendedConnect)
+				settings = quicvarint.Append(settings, 1)
+				settings = quicvarint.Append(settings, settingExtendedConnect)
+				settings = quicvarint.Append(settings, 1)
+				data := quicvarint.Append(nil, 4) // type byte
+				data = quicvarint.Append(data, uint64(len(settings)))
+				data = append(data, settings...)
+				_, err := parseNextFrame(bytes.NewReader(data), nil)
+				Expect(err).To(MatchError(fmt.Sprintf("duplicate setting: %d", settingExtendedConnect)))
+			})
+
+			It("rejects invalid values for the SETTINGS_ENABLE_CONNECT_PROTOCOL entry", func() {
+				settings := quicvarint.Append(nil, settingExtendedConnect)
+				settings = quicvarint.Append(settings, 1337)
+				data := quicvarint.Append(nil, 4) // type byte
+				data = quicvarint.Append(data, uint64(len(settings)))
+				data = append(data, settings...)
+				_, err := parseNextFrame(bytes.NewReader(data), nil)
+				Expect(err).To(MatchError("invalid value for SETTINGS_ENABLE_CONNECT_PROTOCOL: 1337"))
+			})
+
+			It("writes the SETTINGS_ENABLE_CONNECT_PROTOCOL setting", func() {
+				sf := &settingsFrame{ExtendedConnect: true}
 				frame, err := parseNextFrame(bytes.NewReader(sf.Append(nil)), nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(sf))

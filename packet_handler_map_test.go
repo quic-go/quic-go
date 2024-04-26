@@ -59,18 +59,12 @@ var _ = Describe("Packet Handler Map", func() {
 
 	It("adds newly to-be-constructed handlers", func() {
 		m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
-		var called bool
 		connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 		connID2 := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
-		Expect(m.AddWithConnID(connID1, connID2, func() (packetHandler, bool) {
-			called = true
-			return NewMockPacketHandler(mockCtrl), true
-		})).To(BeTrue())
-		Expect(called).To(BeTrue())
-		Expect(m.AddWithConnID(connID1, protocol.ParseConnectionID([]byte{1, 2, 3}), func() (packetHandler, bool) {
-			Fail("didn't expect the constructor to be executed")
-			return nil, false
-		})).To(BeFalse())
+		h := NewMockPacketHandler(mockCtrl)
+		Expect(m.AddWithConnID(connID1, connID2, h)).To(BeTrue())
+		// collision of the destination connection ID, this handler should not be added
+		Expect(m.AddWithConnID(connID1, protocol.ParseConnectionID([]byte{1, 2, 3}), nil)).To(BeFalse())
 	})
 
 	It("adds, gets and removes reset tokens", func() {
@@ -124,7 +118,7 @@ var _ = Describe("Packet Handler Map", func() {
 		handler := NewMockPacketHandler(mockCtrl)
 		connID := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
 		Expect(m.Add(connID, handler)).To(BeTrue())
-		m.ReplaceWithClosed([]protocol.ConnectionID{connID}, protocol.PerspectiveClient, []byte("foobar"))
+		m.ReplaceWithClosed([]protocol.ConnectionID{connID}, []byte("foobar"))
 		h, ok := m.Get(connID)
 		Expect(ok).To(BeTrue())
 		Expect(h).ToNot(Equal(handler))
@@ -147,7 +141,7 @@ var _ = Describe("Packet Handler Map", func() {
 		handler := NewMockPacketHandler(mockCtrl)
 		connID := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
 		Expect(m.Add(connID, handler)).To(BeTrue())
-		m.ReplaceWithClosed([]protocol.ConnectionID{connID}, protocol.PerspectiveClient, nil)
+		m.ReplaceWithClosed([]protocol.ConnectionID{connID}, nil)
 		h, ok := m.Get(connID)
 		Expect(ok).To(BeTrue())
 		Expect(h).ToNot(Equal(handler))

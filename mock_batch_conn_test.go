@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -package quic -self_package github.com/quic-go/quic-go -source sys_conn_oob.go -destination mock_batch_conn_test.go -mock_names batchConn=MockBatchConn
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -48,31 +49,31 @@ func (m *MockBatchConn) ReadBatch(ms []ipv4.Message, flags int) (int, error) {
 }
 
 // ReadBatch indicates an expected call of ReadBatch.
-func (mr *MockBatchConnMockRecorder) ReadBatch(ms, flags any) *batchConnReadBatchCall {
+func (mr *MockBatchConnMockRecorder) ReadBatch(ms, flags any) *MockBatchConnReadBatchCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadBatch", reflect.TypeOf((*MockBatchConn)(nil).ReadBatch), ms, flags)
-	return &batchConnReadBatchCall{Call: call}
+	return &MockBatchConnReadBatchCall{Call: call}
 }
 
-// batchConnReadBatchCall wrap *gomock.Call
-type batchConnReadBatchCall struct {
+// MockBatchConnReadBatchCall wrap *gomock.Call
+type MockBatchConnReadBatchCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *batchConnReadBatchCall) Return(arg0 int, arg1 error) *batchConnReadBatchCall {
+func (c *MockBatchConnReadBatchCall) Return(arg0 int, arg1 error) *MockBatchConnReadBatchCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *batchConnReadBatchCall) Do(f func([]ipv4.Message, int) (int, error)) *batchConnReadBatchCall {
+func (c *MockBatchConnReadBatchCall) Do(f func([]ipv4.Message, int) (int, error)) *MockBatchConnReadBatchCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *batchConnReadBatchCall) DoAndReturn(f func([]ipv4.Message, int) (int, error)) *batchConnReadBatchCall {
+func (c *MockBatchConnReadBatchCall) DoAndReturn(f func([]ipv4.Message, int) (int, error)) *MockBatchConnReadBatchCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

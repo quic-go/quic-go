@@ -5,13 +5,13 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_packet_handler_test.go github.com/quic-go/quic-go PacketHandler
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
 import (
 	reflect "reflect"
 
-	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -46,31 +46,31 @@ func (m *MockPacketHandler) closeWithTransportError(arg0 qerr.TransportErrorCode
 }
 
 // closeWithTransportError indicates an expected call of closeWithTransportError.
-func (mr *MockPacketHandlerMockRecorder) closeWithTransportError(arg0 any) *PacketHandlercloseWithTransportErrorCall {
+func (mr *MockPacketHandlerMockRecorder) closeWithTransportError(arg0 any) *MockPacketHandlercloseWithTransportErrorCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeWithTransportError", reflect.TypeOf((*MockPacketHandler)(nil).closeWithTransportError), arg0)
-	return &PacketHandlercloseWithTransportErrorCall{Call: call}
+	return &MockPacketHandlercloseWithTransportErrorCall{Call: call}
 }
 
-// PacketHandlercloseWithTransportErrorCall wrap *gomock.Call
-type PacketHandlercloseWithTransportErrorCall struct {
+// MockPacketHandlercloseWithTransportErrorCall wrap *gomock.Call
+type MockPacketHandlercloseWithTransportErrorCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlercloseWithTransportErrorCall) Return() *PacketHandlercloseWithTransportErrorCall {
+func (c *MockPacketHandlercloseWithTransportErrorCall) Return() *MockPacketHandlercloseWithTransportErrorCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlercloseWithTransportErrorCall) Do(f func(qerr.TransportErrorCode)) *PacketHandlercloseWithTransportErrorCall {
+func (c *MockPacketHandlercloseWithTransportErrorCall) Do(f func(qerr.TransportErrorCode)) *MockPacketHandlercloseWithTransportErrorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlercloseWithTransportErrorCall) DoAndReturn(f func(qerr.TransportErrorCode)) *PacketHandlercloseWithTransportErrorCall {
+func (c *MockPacketHandlercloseWithTransportErrorCall) DoAndReturn(f func(qerr.TransportErrorCode)) *MockPacketHandlercloseWithTransportErrorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -82,69 +82,31 @@ func (m *MockPacketHandler) destroy(arg0 error) {
 }
 
 // destroy indicates an expected call of destroy.
-func (mr *MockPacketHandlerMockRecorder) destroy(arg0 any) *PacketHandlerdestroyCall {
+func (mr *MockPacketHandlerMockRecorder) destroy(arg0 any) *MockPacketHandlerdestroyCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockPacketHandler)(nil).destroy), arg0)
-	return &PacketHandlerdestroyCall{Call: call}
+	return &MockPacketHandlerdestroyCall{Call: call}
 }
 
-// PacketHandlerdestroyCall wrap *gomock.Call
-type PacketHandlerdestroyCall struct {
+// MockPacketHandlerdestroyCall wrap *gomock.Call
+type MockPacketHandlerdestroyCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerdestroyCall) Return() *PacketHandlerdestroyCall {
+func (c *MockPacketHandlerdestroyCall) Return() *MockPacketHandlerdestroyCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerdestroyCall) Do(f func(error)) *PacketHandlerdestroyCall {
+func (c *MockPacketHandlerdestroyCall) Do(f func(error)) *MockPacketHandlerdestroyCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerdestroyCall) DoAndReturn(f func(error)) *PacketHandlerdestroyCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// getPerspective mocks base method.
-func (m *MockPacketHandler) getPerspective() protocol.Perspective {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getPerspective")
-	ret0, _ := ret[0].(protocol.Perspective)
-	return ret0
-}
-
-// getPerspective indicates an expected call of getPerspective.
-func (mr *MockPacketHandlerMockRecorder) getPerspective() *PacketHandlergetPerspectiveCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockPacketHandler)(nil).getPerspective))
-	return &PacketHandlergetPerspectiveCall{Call: call}
-}
-
-// PacketHandlergetPerspectiveCall wrap *gomock.Call
-type PacketHandlergetPerspectiveCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *PacketHandlergetPerspectiveCall) Return(arg0 protocol.Perspective) *PacketHandlergetPerspectiveCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *PacketHandlergetPerspectiveCall) Do(f func() protocol.Perspective) *PacketHandlergetPerspectiveCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlergetPerspectiveCall) DoAndReturn(f func() protocol.Perspective) *PacketHandlergetPerspectiveCall {
+func (c *MockPacketHandlerdestroyCall) DoAndReturn(f func(error)) *MockPacketHandlerdestroyCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -156,31 +118,31 @@ func (m *MockPacketHandler) handlePacket(arg0 receivedPacket) {
 }
 
 // handlePacket indicates an expected call of handlePacket.
-func (mr *MockPacketHandlerMockRecorder) handlePacket(arg0 any) *PacketHandlerhandlePacketCall {
+func (mr *MockPacketHandlerMockRecorder) handlePacket(arg0 any) *MockPacketHandlerhandlePacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockPacketHandler)(nil).handlePacket), arg0)
-	return &PacketHandlerhandlePacketCall{Call: call}
+	return &MockPacketHandlerhandlePacketCall{Call: call}
 }
 
-// PacketHandlerhandlePacketCall wrap *gomock.Call
-type PacketHandlerhandlePacketCall struct {
+// MockPacketHandlerhandlePacketCall wrap *gomock.Call
+type MockPacketHandlerhandlePacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *PacketHandlerhandlePacketCall) Return() *PacketHandlerhandlePacketCall {
+func (c *MockPacketHandlerhandlePacketCall) Return() *MockPacketHandlerhandlePacketCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *PacketHandlerhandlePacketCall) Do(f func(receivedPacket)) *PacketHandlerhandlePacketCall {
+func (c *MockPacketHandlerhandlePacketCall) Do(f func(receivedPacket)) *MockPacketHandlerhandlePacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *PacketHandlerhandlePacketCall) DoAndReturn(f func(receivedPacket)) *PacketHandlerhandlePacketCall {
+func (c *MockPacketHandlerhandlePacketCall) DoAndReturn(f func(receivedPacket)) *MockPacketHandlerhandlePacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

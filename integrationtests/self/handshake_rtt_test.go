@@ -54,9 +54,19 @@ var _ = Describe("Handshake RTT tests", func() {
 
 	// 1 RTT for verifying the source address
 	// 1 RTT for the TLS handshake
-	It("is forward-secure after 2 RTTs", func() {
-		serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
-		ln, err := quic.ListenAddr("localhost:0", serverTLSConfig, serverConfig)
+	It("is forward-secure after 2 RTTs with Retry", func() {
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		udpConn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		defer udpConn.Close()
+		tr := &quic.Transport{
+			Conn:                udpConn,
+			VerifySourceAddress: func(net.Addr) bool { return true },
+		}
+		addTracer(tr)
+		defer tr.Close()
+		ln, err := tr.Listen(serverTLSConfig, serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
 
@@ -66,7 +76,10 @@ var _ = Describe("Handshake RTT tests", func() {
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			getQuicConfig(nil),
+			getQuicConfig(&quic.Config{GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				Expect(info.AddrVerified).To(BeTrue())
+				return nil, nil
+			}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")
@@ -84,7 +97,10 @@ var _ = Describe("Handshake RTT tests", func() {
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			getQuicConfig(nil),
+			getQuicConfig(&quic.Config{GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				Expect(info.AddrVerified).To(BeFalse())
+				return nil, nil
+			}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")

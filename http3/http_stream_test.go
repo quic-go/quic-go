@@ -3,9 +3,13 @@ package http3
 import (
 	"bytes"
 	"io"
+	"math"
+	"net/http"
 
-	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/quic-go/quic-go/internal/qerr"
+
+	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,15 +30,18 @@ var _ = Describe("Stream", func() {
 			errorCbCalled bool
 		)
 
-		errorCb := func() { errorCbCalled = true }
-
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			errorCbCalled = false
 			qstr = mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			str = newStream(qstr, errorCb)
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
+				errorCbCalled = true
+				return nil
+			}).AnyTimes()
+			str = newStream(qstr, conn)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -151,53 +158,54 @@ var _ = Describe("Stream", func() {
 	})
 })
 
-var _ = Describe("length-limited streams", func() {
-	var (
-		str  *stream
-		qstr *mockquic.MockStream
-		buf  *bytes.Buffer
-	)
+var _ = Describe("Request Stream", func() {
+	var str *requestStream
+	var qstr *mockquic.MockStream
 
 	BeforeEach(func() {
-		buf = &bytes.Buffer{}
 		qstr = mockquic.NewMockStream(mockCtrl)
-		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		str = newStream(qstr, func() { Fail("didn't expect error callback to be called") })
+		requestWriter := newRequestWriter()
+		conn := mockquic.NewMockEarlyConnection(mockCtrl)
+		str = newRequestStream(
+			newStream(qstr, conn),
+			requestWriter,
+			make(chan struct{}),
+			qpack.NewDecoder(func(qpack.HeaderField) {}),
+			true,
+			math.MaxUint64,
+		)
 	})
 
-	It("reads all frames", func() {
-		s := newLengthLimitedStream(str, 6)
-		buf.Write(getDataFrame([]byte("foo")))
-		buf.Write(getDataFrame([]byte("bar")))
-		data, err := io.ReadAll(s)
+	It("refuses to read before having read the response", func() {
+		_, err := str.Read(make([]byte, 100))
+		Expect(err).To(MatchError("http3: invalid use of RequestStream.Read: need to call ReadResponse first"))
+	})
+
+	It("prevents duplicate calls to SendRequestHeader", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(data).To(Equal([]byte("foobar")))
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+		Expect(str.SendRequestHeader(req)).To(MatchError("http3: invalid duplicate use of SendRequestHeader"))
 	})
 
-	It("errors if more data than the maximum length is sent, in the middle of a frame", func() {
-		s := newLengthLimitedStream(str, 4)
-		buf.Write(getDataFrame([]byte("foo")))
-		buf.Write(getDataFrame([]byte("bar")))
-		qstr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-		qstr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		data, err := io.ReadAll(s)
-		Expect(err).To(MatchError(errTooMuchData))
-		Expect(data).To(Equal([]byte("foob")))
-		// check that repeated calls to Read also return the right error
-		n, err := s.Read([]byte{0})
-		Expect(n).To(BeZero())
-		Expect(err).To(MatchError(errTooMuchData))
-	})
+	It("reads after the response", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
 
-	It("errors if more data than the maximum length is sent, as an additional frame", func() {
-		s := newLengthLimitedStream(str, 3)
-		buf.Write(getDataFrame([]byte("foo")))
-		buf.Write(getDataFrame([]byte("bar")))
-		qstr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-		qstr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		data, err := io.ReadAll(s)
-		Expect(err).To(MatchError(errTooMuchData))
-		Expect(data).To(Equal([]byte("foo")))
+		buf := bytes.NewBuffer(encodeResponse(200))
+		buf.Write((&dataFrame{Length: 6}).Append(nil))
+		buf.Write([]byte("foobar"))
+		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+		rsp, err := str.ReadResponse()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(200))
+		b := make([]byte, 10)
+		n, err := str.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(6))
+		Expect(b[:n]).To(Equal([]byte("foobar")))
 	})
 })

@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_crypto_stream_test.go github.com/quic-go/quic-go CryptoStream
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -48,31 +49,31 @@ func (m *MockCryptoStream) Finish() error {
 }
 
 // Finish indicates an expected call of Finish.
-func (mr *MockCryptoStreamMockRecorder) Finish() *CryptoStreamFinishCall {
+func (mr *MockCryptoStreamMockRecorder) Finish() *MockCryptoStreamFinishCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finish", reflect.TypeOf((*MockCryptoStream)(nil).Finish))
-	return &CryptoStreamFinishCall{Call: call}
+	return &MockCryptoStreamFinishCall{Call: call}
 }
 
-// CryptoStreamFinishCall wrap *gomock.Call
-type CryptoStreamFinishCall struct {
+// MockCryptoStreamFinishCall wrap *gomock.Call
+type MockCryptoStreamFinishCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoStreamFinishCall) Return(arg0 error) *CryptoStreamFinishCall {
+func (c *MockCryptoStreamFinishCall) Return(arg0 error) *MockCryptoStreamFinishCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoStreamFinishCall) Do(f func() error) *CryptoStreamFinishCall {
+func (c *MockCryptoStreamFinishCall) Do(f func() error) *MockCryptoStreamFinishCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoStreamFinishCall) DoAndReturn(f func() error) *CryptoStreamFinishCall {
+func (c *MockCryptoStreamFinishCall) DoAndReturn(f func() error) *MockCryptoStreamFinishCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -86,31 +87,31 @@ func (m *MockCryptoStream) GetCryptoData() []byte {
 }
 
 // GetCryptoData indicates an expected call of GetCryptoData.
-func (mr *MockCryptoStreamMockRecorder) GetCryptoData() *CryptoStreamGetCryptoDataCall {
+func (mr *MockCryptoStreamMockRecorder) GetCryptoData() *MockCryptoStreamGetCryptoDataCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCryptoData", reflect.TypeOf((*MockCryptoStream)(nil).GetCryptoData))
-	return &CryptoStreamGetCryptoDataCall{Call: call}
+	return &MockCryptoStreamGetCryptoDataCall{Call: call}
 }
 
-// CryptoStreamGetCryptoDataCall wrap *gomock.Call
-type CryptoStreamGetCryptoDataCall struct {
+// MockCryptoStreamGetCryptoDataCall wrap *gomock.Call
+type MockCryptoStreamGetCryptoDataCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoStreamGetCryptoDataCall) Return(arg0 []byte) *CryptoStreamGetCryptoDataCall {
+func (c *MockCryptoStreamGetCryptoDataCall) Return(arg0 []byte) *MockCryptoStreamGetCryptoDataCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoStreamGetCryptoDataCall) Do(f func() []byte) *CryptoStreamGetCryptoDataCall {
+func (c *MockCryptoStreamGetCryptoDataCall) Do(f func() []byte) *MockCryptoStreamGetCryptoDataCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoStreamGetCryptoDataCall) DoAndReturn(f func() []byte) *CryptoStreamGetCryptoDataCall {
+func (c *MockCryptoStreamGetCryptoDataCall) DoAndReturn(f func() []byte) *MockCryptoStreamGetCryptoDataCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -124,31 +125,31 @@ func (m *MockCryptoStream) HandleCryptoFrame(arg0 *wire.CryptoFrame) error {
 }
 
 // HandleCryptoFrame indicates an expected call of HandleCryptoFrame.
-func (mr *MockCryptoStreamMockRecorder) HandleCryptoFrame(arg0 any) *CryptoStreamHandleCryptoFrameCall {
+func (mr *MockCryptoStreamMockRecorder) HandleCryptoFrame(arg0 any) *MockCryptoStreamHandleCryptoFrameCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCryptoFrame", reflect.TypeOf((*MockCryptoStream)(nil).HandleCryptoFrame), arg0)
-	return &CryptoStreamHandleCryptoFrameCall{Call: call}
+	return &MockCryptoStreamHandleCryptoFrameCall{Call: call}
 }
 
-// CryptoStreamHandleCryptoFrameCall wrap *gomock.Call
-type CryptoStreamHandleCryptoFrameCall struct {
+// MockCryptoStreamHandleCryptoFrameCall wrap *gomock.Call
+type MockCryptoStreamHandleCryptoFrameCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoStreamHandleCryptoFrameCall) Return(arg0 error) *CryptoStreamHandleCryptoFrameCall {
+func (c *MockCryptoStreamHandleCryptoFrameCall) Return(arg0 error) *MockCryptoStreamHandleCryptoFrameCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoStreamHandleCryptoFrameCall) Do(f func(*wire.CryptoFrame) error) *CryptoStreamHandleCryptoFrameCall {
+func (c *MockCryptoStreamHandleCryptoFrameCall) Do(f func(*wire.CryptoFrame) error) *MockCryptoStreamHandleCryptoFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoStreamHandleCryptoFrameCall) DoAndReturn(f func(*wire.CryptoFrame) error) *CryptoStreamHandleCryptoFrameCall {
+func (c *MockCryptoStreamHandleCryptoFrameCall) DoAndReturn(f func(*wire.CryptoFrame) error) *MockCryptoStreamHandleCryptoFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -162,31 +163,31 @@ func (m *MockCryptoStream) HasData() bool {
 }
 
 // HasData indicates an expected call of HasData.
-func (mr *MockCryptoStreamMockRecorder) HasData() *CryptoStreamHasDataCall {
+func (mr *MockCryptoStreamMockRecorder) HasData() *MockCryptoStreamHasDataCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasData", reflect.TypeOf((*MockCryptoStream)(nil).HasData))
-	return &CryptoStreamHasDataCall{Call: call}
+	return &MockCryptoStreamHasDataCall{Call: call}
 }
 
-// CryptoStreamHasDataCall wrap *gomock.Call
-type CryptoStreamHasDataCall struct {
+// MockCryptoStreamHasDataCall wrap *gomock.Call
+type MockCryptoStreamHasDataCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoStreamHasDataCall) Return(arg0 bool) *CryptoStreamHasDataCall {
+func (c *MockCryptoStreamHasDataCall) Return(arg0 bool) *MockCryptoStreamHasDataCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoStreamHasDataCall) Do(f func() bool) *CryptoStreamHasDataCall {
+func (c *MockCryptoStreamHasDataCall) Do(f func() bool) *MockCryptoStreamHasDataCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoStreamHasDataCall) DoAndReturn(f func() bool) *CryptoStreamHasDataCall {
+func (c *MockCryptoStreamHasDataCall) DoAndReturn(f func() bool) *MockCryptoStreamHasDataCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -200,31 +201,31 @@ func (m *MockCryptoStream) PopCryptoFrame(arg0 protocol.ByteCount) *wire.CryptoF
 }
 
 // PopCryptoFrame indicates an expected call of PopCryptoFrame.
-func (mr *MockCryptoStreamMockRecorder) PopCryptoFrame(arg0 any) *CryptoStreamPopCryptoFrameCall {
+func (mr *MockCryptoStreamMockRecorder) PopCryptoFrame(arg0 any) *MockCryptoStreamPopCryptoFrameCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopCryptoFrame", reflect.TypeOf((*MockCryptoStream)(nil).PopCryptoFrame), arg0)
-	return &CryptoStreamPopCryptoFrameCall{Call: call}
+	return &MockCryptoStreamPopCryptoFrameCall{Call: call}
 }
 
-// CryptoStreamPopCryptoFrameCall wrap *gomock.Call
-type CryptoStreamPopCryptoFrameCall struct {
+// MockCryptoStreamPopCryptoFrameCall wrap *gomock.Call
+type MockCryptoStreamPopCryptoFrameCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoStreamPopCryptoFrameCall) Return(arg0 *wire.CryptoFrame) *CryptoStreamPopCryptoFrameCall {
+func (c *MockCryptoStreamPopCryptoFrameCall) Return(arg0 *wire.CryptoFrame) *MockCryptoStreamPopCryptoFrameCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoStreamPopCryptoFrameCall) Do(f func(protocol.ByteCount) *wire.CryptoFrame) *CryptoStreamPopCryptoFrameCall {
+func (c *MockCryptoStreamPopCryptoFrameCall) Do(f func(protocol.ByteCount) *wire.CryptoFrame) *MockCryptoStreamPopCryptoFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoStreamPopCryptoFrameCall) DoAndReturn(f func(protocol.ByteCount) *wire.CryptoFrame) *CryptoStreamPopCryptoFrameCall {
+func (c *MockCryptoStreamPopCryptoFrameCall) DoAndReturn(f func(protocol.ByteCount) *wire.CryptoFrame) *MockCryptoStreamPopCryptoFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -239,31 +240,31 @@ func (m *MockCryptoStream) Write(arg0 []byte) (int, error) {
 }
 
 // Write indicates an expected call of Write.
-func (mr *MockCryptoStreamMockRecorder) Write(arg0 any) *CryptoStreamWriteCall {
+func (mr *MockCryptoStreamMockRecorder) Write(arg0 any) *MockCryptoStreamWriteCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockCryptoStream)(nil).Write), arg0)
-	return &CryptoStreamWriteCall{Call: call}
+	return &MockCryptoStreamWriteCall{Call: call}
 }
 
-// CryptoStreamWriteCall wrap *gomock.Call
-type CryptoStreamWriteCall struct {
+// MockCryptoStreamWriteCall wrap *gomock.Call
+type MockCryptoStreamWriteCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *CryptoStreamWriteCall) Return(arg0 int, arg1 error) *CryptoStreamWriteCall {
+func (c *MockCryptoStreamWriteCall) Return(arg0 int, arg1 error) *MockCryptoStreamWriteCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *CryptoStreamWriteCall) Do(f func([]byte) (int, error)) *CryptoStreamWriteCall {
+func (c *MockCryptoStreamWriteCall) Do(f func([]byte) (int, error)) *MockCryptoStreamWriteCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *CryptoStreamWriteCall) DoAndReturn(f func([]byte) (int, error)) *CryptoStreamWriteCall {
+func (c *MockCryptoStreamWriteCall) DoAndReturn(f func([]byte) (int, error)) *MockCryptoStreamWriteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

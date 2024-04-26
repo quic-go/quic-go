@@ -87,11 +87,11 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 
 		server1 = &http3.Server{
 			Handler:    mux1,
-			QuicConfig: getQuicConfig(nil),
+			QUICConfig: getQuicConfig(nil),
 		}
 		server2 = &http3.Server{
 			Handler:    mux2,
-			QuicConfig: getQuicConfig(nil),
+			QUICConfig: getQuicConfig(nil),
 		}
 
 		tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
@@ -110,7 +110,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		rt = &http3.RoundTripper{
 			TLSClientConfig:    getTLSClientConfig(),
 			DisableCompression: true,
-			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
+			QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
 		client = &http.Client{Transport: rt}
 	})

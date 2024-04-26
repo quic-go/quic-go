@@ -28,14 +28,14 @@ type client struct {
 
 	initialPacketNumber  protocol.PacketNumber
 	hasNegotiatedVersion bool
-	version              protocol.VersionNumber
+	version              protocol.Version
 
 	handshakeChan chan struct{}
 
 	conn quicConn
 
 	tracer    *logging.ConnectionTracer
-	tracingID uint64
+	tracingID ConnectionTracingID
 	logger    utils.Logger
 }
 

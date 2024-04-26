@@ -24,7 +24,7 @@ var _ = Describe("Framer", func() {
 		framer           framer
 		stream1, stream2 *MockSendStreamI
 		streamGetter     *MockStreamGetter
-		version          protocol.VersionNumber
+		version          protocol.Version
 	)
 
 	BeforeEach(func() {
@@ -108,6 +108,23 @@ var _ = Describe("Framer", func() {
 			fs, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
 			Expect(fs).To(HaveLen(2))
 			Expect(length).To(Equal(ping.Length(version) + ncid.Length(version)))
+		})
+
+		It("detects when too many frames are queued", func() {
+			for i := 0; i < maxControlFrames-1; i++ {
+				framer.QueueControlFrame(&wire.PingFrame{})
+				framer.QueueControlFrame(&wire.PingFrame{})
+				Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
+				frames, _ := framer.AppendControlFrames([]ackhandler.Frame{}, 1, protocol.Version1)
+				Expect(frames).To(HaveLen(1))
+				Expect(framer.(*framerI).controlFrames).To(HaveLen(i + 1))
+			}
+			framer.QueueControlFrame(&wire.PingFrame{})
+			Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
+			Expect(framer.(*framerI).controlFrames).To(HaveLen(maxControlFrames))
+			framer.QueueControlFrame(&wire.PingFrame{})
+			Expect(framer.QueuedTooManyControlFrames()).To(BeTrue())
+			Expect(framer.(*framerI).controlFrames).To(HaveLen(maxControlFrames))
 		})
 	})
 
@@ -346,7 +363,7 @@ var _ = Describe("Framer", func() {
 		It("pops maximum size STREAM frames", func() {
 			for i := protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id1,
 						DataLenPresent: true,
@@ -368,7 +385,7 @@ var _ = Describe("Framer", func() {
 			for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 				streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
-				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+				stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
 						DataLenPresent: true,
@@ -376,7 +393,7 @@ var _ = Describe("Framer", func() {
 					f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, v))
 					return ackhandler.StreamFrame{Frame: f}, true, false
 				})
-				stream2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
+				stream2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
 						DataLenPresent: true,

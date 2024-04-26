@@ -43,7 +43,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				StreamID:          0x1337,
 				MaximumStreamData: 0xdeadbeef,
 			}
-			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.MaximumStreamData))))
+			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.MaximumStreamData))))
 		})
 
 		It("writes a sample frame", func() {

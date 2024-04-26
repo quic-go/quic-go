@@ -7,8 +7,8 @@ import (
 
 var _ = Describe("Perspective", func() {
 	It("has a string representation", func() {
-		Expect(PerspectiveClient.String()).To(Equal("Client"))
-		Expect(PerspectiveServer.String()).To(Equal("Server"))
+		Expect(PerspectiveClient.String()).To(Equal("client"))
+		Expect(PerspectiveServer.String()).To(Equal("server"))
 		Expect(Perspective(0).String()).To(Equal("invalid perspective"))
 	})
 

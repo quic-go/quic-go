@@ -5,19 +5,24 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
+	"net/textproto"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -86,7 +91,7 @@ var _ = Describe("HTTP tests", func() {
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
-			QuicConfig: getQuicConfig(nil),
+			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true}),
 		}
 
 		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
@@ -112,9 +117,11 @@ var _ = Describe("HTTP tests", func() {
 
 	BeforeEach(func() {
 		rt = &http3.RoundTripper{
-			TLSClientConfig:    getTLSClientConfigWithoutServerName(),
+			TLSClientConfig: getTLSClientConfigWithoutServerName(),
+			QUICConfig: getQuicConfig(&quic.Config{
+				MaxIdleTimeout: 10 * time.Second,
+			}),
 			DisableCompression: true,
-			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
 		client = &http.Client{Transport: rt}
 	})
@@ -131,13 +138,14 @@ var _ = Describe("HTTP tests", func() {
 	It("sets content-length for small response", func() {
 		mux.HandleFunc("/small", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
-			w.Write([]byte("foobar"))
+			w.Write([]byte("foo"))
+			w.Write([]byte("bar"))
 		})
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/small", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
-		Expect(resp.Header.Get("Content-Length")).To(Equal(strconv.Itoa(len("foobar"))))
+		Expect(resp.Header.Get("Content-Length")).To(Equal("6"))
 	})
 
 	It("detects stream errors when server panics when writing response", func() {
@@ -178,6 +186,7 @@ var _ = Describe("HTTP tests", func() {
 		group, ctx := errgroup.WithContext(context.Background())
 		for i := 0; i < 2; i++ {
 			group.Go(func() error {
+				defer GinkgoRecover()
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/hello", port), nil)
 				Expect(err).ToNot(HaveOccurred())
 				resp, err := client.Do(req)
@@ -426,11 +435,24 @@ var _ = Describe("HTTP tests", func() {
 
 		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/httpstreamer", port), nil)
 		Expect(err).ToNot(HaveOccurred())
-		rsp, err := client.Transport.(*http3.RoundTripper).RoundTripOpt(req, http3.RoundTripOpt{DontCloseRequestStream: true})
+		tlsConf := getTLSClientConfigWithoutServerName()
+		tlsConf.NextProtos = []string{http3.NextProtoH3}
+		conn, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
+		rt := http3.SingleDestinationRoundTripper{Connection: conn}
+		str, err := rt.OpenRequestStream(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+		rsp, err := str.ReadResponse()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.StatusCode).To(Equal(200))
 
-		str := rsp.Body.(http3.HTTPStreamer).HTTPStream()
 		b := make([]byte, 6)
 		_, err = io.ReadFull(str, b)
 		Expect(err).ToNot(HaveOccurred())
@@ -445,10 +467,10 @@ var _ = Describe("HTTP tests", func() {
 		Expect(repl).To(Equal(data))
 	})
 
-	It("serves other QUIC connections", func() {
+	It("serves QUIC connections", func() {
 		tlsConf := getTLSConfig()
 		tlsConf.NextProtos = []string{http3.NextProtoH3}
-		ln, err := quic.ListenAddr("localhost:0", tlsConf, nil)
+		ln, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
 		done := make(chan struct{})
@@ -457,7 +479,7 @@ var _ = Describe("HTTP tests", func() {
 			defer close(done)
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.ServeQUICConn(conn)).To(Succeed())
+			server.ServeQUICConn(conn) // returns once the client closes
 		}()
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", ln.Addr().(*net.UDPAddr).Port))
@@ -531,6 +553,7 @@ var _ = Describe("HTTP tests", func() {
 
 	It("sets conn context", func() {
 		type ctxKey int
+		var tracingID quic.ConnectionTracingID
 		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
 			serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
 			Expect(ok).To(BeTrue())
@@ -538,6 +561,7 @@ var _ = Describe("HTTP tests", func() {
 
 			ctx = context.WithValue(ctx, ctxKey(0), "Hello")
 			ctx = context.WithValue(ctx, ctxKey(1), c)
+			tracingID = c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
 			return ctx
 		}
 		mux.HandleFunc("/conn-context", func(w http.ResponseWriter, r *http.Request) {
@@ -553,10 +577,203 @@ var _ = Describe("HTTP tests", func() {
 			serv, ok := r.Context().Value(http3.ServerContextKey).(*http3.Server)
 			Expect(ok).To(BeTrue())
 			Expect(serv).To(Equal(server))
+
+			id, ok := r.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
+			Expect(ok).To(BeTrue())
+			Expect(id).To(Equal(tracingID))
 		})
 
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/conn-context", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
+	})
+
+	It("checks the server's settings", func() {
+		tlsConf := tlsClientConfigWithoutServerName.Clone()
+		tlsConf.NextProtos = []string{http3.NextProtoH3}
+		conn, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", port),
+			tlsConf,
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
+		rt := http3.SingleDestinationRoundTripper{Connection: conn}
+		hconn := rt.Start()
+		Eventually(hconn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
+		settings := hconn.Settings()
+		Expect(settings.EnableExtendedConnect).To(BeTrue())
+		Expect(settings.EnableDatagram).To(BeFalse())
+		Expect(settings.Other).To(BeEmpty())
+	})
+
+	It("receives the client's settings", func() {
+		settingsChan := make(chan *http3.Settings, 1)
+		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			conn := w.(http3.Hijacker).Connection()
+			Eventually(conn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
+			settingsChan <- conn.Settings()
+			w.WriteHeader(http.StatusOK)
+		})
+
+		rt = &http3.RoundTripper{
+			TLSClientConfig: getTLSClientConfigWithoutServerName(),
+			QUICConfig: getQuicConfig(&quic.Config{
+				MaxIdleTimeout:  10 * time.Second,
+				EnableDatagrams: true,
+			}),
+			EnableDatagrams:    true,
+			AdditionalSettings: map[uint64]uint64{1337: 42},
+		}
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/settings", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = rt.RoundTrip(req)
+		Expect(err).ToNot(HaveOccurred())
+		var settings *http3.Settings
+		Expect(settingsChan).To(Receive(&settings))
+		Expect(settings).ToNot(BeNil())
+		Expect(settings.EnableDatagram).To(BeTrue())
+		Expect(settings.EnableExtendedConnect).To(BeFalse())
+		Expect(settings.Other).To(HaveKeyWithValue(uint64(1337), uint64(42)))
+	})
+
+	It("processes 1xx response", func() {
+		header1 := "</style.css>; rel=preload; as=style"
+		header2 := "</script.js>; rel=preload; as=script"
+		data := "1xx-test-data"
+		mux.HandleFunc("/103-early-data", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Add("Link", header1)
+			w.Header().Add("Link", header2)
+			w.WriteHeader(http.StatusEarlyHints)
+			n, err := w.Write([]byte(data))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(len(data)))
+			w.WriteHeader(http.StatusOK)
+		})
+
+		var (
+			cnt    int
+			status int
+			hdr    textproto.MIMEHeader
+		)
+		ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+			Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+				hdr = header
+				status = code
+				cnt++
+				return nil
+			},
+		})
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/103-early-data", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal(data))
+		Expect(status).To(Equal(http.StatusEarlyHints))
+		Expect(hdr).To(HaveKeyWithValue("Link", []string{header1, header2}))
+		Expect(cnt).To(Equal(1))
+		Expect(resp.Header).To(HaveKeyWithValue("Link", []string{header1, header2}))
+		Expect(resp.Body.Close()).To(Succeed())
+	})
+
+	It("processes 1xx terminal response", func() {
+		mux.HandleFunc("/101-switch-protocols", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Add("Connection", "upgrade")
+			w.Header().Add("Upgrade", "proto")
+			w.WriteHeader(http.StatusSwitchingProtocols)
+		})
+
+		var (
+			cnt    int
+			status int
+		)
+		ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+			Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+				status = code
+				cnt++
+				return nil
+			},
+		})
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/101-switch-protocols", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusSwitchingProtocols))
+		Expect(resp.Header).To(HaveKeyWithValue("Connection", []string{"upgrade"}))
+		Expect(resp.Header).To(HaveKeyWithValue("Upgrade", []string{"proto"}))
+		Expect(status).To(Equal(0))
+		Expect(cnt).To(Equal(0))
+	})
+
+	Context("0-RTT", func() {
+		runCountingProxy := func(serverPort int, rtt time.Duration) (*quicproxy.QuicProxy, *atomic.Uint32) {
+			var num0RTTPackets atomic.Uint32
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+				DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
+					if contains0RTTPacket(data) {
+						num0RTTPackets.Add(1)
+					}
+					return rtt / 2
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			return proxy, &num0RTTPackets
+		}
+
+		It("sends 0-RTT GET requests", func() {
+			proxy, num0RTTPackets := runCountingProxy(port, scaleDuration(50*time.Millisecond))
+			defer proxy.Close()
+
+			tlsConf := getTLSClientConfigWithoutServerName()
+			puts := make(chan string, 10)
+			tlsConf.ClientSessionCache = newClientSessionCache(tls.NewLRUClientSessionCache(10), nil, puts)
+			rt := &http3.RoundTripper{
+				TLSClientConfig: tlsConf,
+				QUICConfig: getQuicConfig(&quic.Config{
+					MaxIdleTimeout: 10 * time.Second,
+				}),
+				DisableCompression: true,
+			}
+			defer rt.Close()
+
+			mux.HandleFunc("/0rtt", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte(strconv.FormatBool(!r.TLS.HandshakeComplete)))
+			})
+			req, err := http.NewRequest(http3.MethodGet0RTT, fmt.Sprintf("https://localhost:%d/0rtt", proxy.LocalPort()), nil)
+			Expect(err).ToNot(HaveOccurred())
+			rsp, err := rt.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.StatusCode).To(BeEquivalentTo(200))
+			data, err := io.ReadAll(rsp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(string(data)).To(Equal("false"))
+			Expect(num0RTTPackets.Load()).To(BeZero())
+			Eventually(puts).Should(Receive())
+
+			rt2 := &http3.RoundTripper{
+				TLSClientConfig:    rt.TLSClientConfig,
+				QUICConfig:         rt.QUICConfig,
+				DisableCompression: true,
+			}
+			defer rt2.Close()
+			rsp, err = rt2.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.StatusCode).To(BeEquivalentTo(200))
+			data, err = io.ReadAll(rsp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(string(data)).To(Equal("true"))
+			Expect(num0RTTPackets.Load()).To(BeNumerically(">", 0))
+		})
 	})
 })

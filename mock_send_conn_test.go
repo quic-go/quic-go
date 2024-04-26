@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package quic -self_package github.com/quic-go/quic-go -destination mock_send_conn_test.go github.com/quic-go/quic-go SendConn
 //
+
 // Package quic is a generated GoMock package.
 package quic
 
@@ -48,31 +49,31 @@ func (m *MockSendConn) Close() error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockSendConnMockRecorder) Close() *SendConnCloseCall {
+func (mr *MockSendConnMockRecorder) Close() *MockSendConnCloseCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockSendConn)(nil).Close))
-	return &SendConnCloseCall{Call: call}
+	return &MockSendConnCloseCall{Call: call}
 }
 
-// SendConnCloseCall wrap *gomock.Call
-type SendConnCloseCall struct {
+// MockSendConnCloseCall wrap *gomock.Call
+type MockSendConnCloseCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SendConnCloseCall) Return(arg0 error) *SendConnCloseCall {
+func (c *MockSendConnCloseCall) Return(arg0 error) *MockSendConnCloseCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SendConnCloseCall) Do(f func() error) *SendConnCloseCall {
+func (c *MockSendConnCloseCall) Do(f func() error) *MockSendConnCloseCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SendConnCloseCall) DoAndReturn(f func() error) *SendConnCloseCall {
+func (c *MockSendConnCloseCall) DoAndReturn(f func() error) *MockSendConnCloseCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -86,31 +87,31 @@ func (m *MockSendConn) LocalAddr() net.Addr {
 }
 
 // LocalAddr indicates an expected call of LocalAddr.
-func (mr *MockSendConnMockRecorder) LocalAddr() *SendConnLocalAddrCall {
+func (mr *MockSendConnMockRecorder) LocalAddr() *MockSendConnLocalAddrCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalAddr", reflect.TypeOf((*MockSendConn)(nil).LocalAddr))
-	return &SendConnLocalAddrCall{Call: call}
+	return &MockSendConnLocalAddrCall{Call: call}
 }
 
-// SendConnLocalAddrCall wrap *gomock.Call
-type SendConnLocalAddrCall struct {
+// MockSendConnLocalAddrCall wrap *gomock.Call
+type MockSendConnLocalAddrCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SendConnLocalAddrCall) Return(arg0 net.Addr) *SendConnLocalAddrCall {
+func (c *MockSendConnLocalAddrCall) Return(arg0 net.Addr) *MockSendConnLocalAddrCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SendConnLocalAddrCall) Do(f func() net.Addr) *SendConnLocalAddrCall {
+func (c *MockSendConnLocalAddrCall) Do(f func() net.Addr) *MockSendConnLocalAddrCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SendConnLocalAddrCall) DoAndReturn(f func() net.Addr) *SendConnLocalAddrCall {
+func (c *MockSendConnLocalAddrCall) DoAndReturn(f func() net.Addr) *MockSendConnLocalAddrCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -124,31 +125,31 @@ func (m *MockSendConn) RemoteAddr() net.Addr {
 }
 
 // RemoteAddr indicates an expected call of RemoteAddr.
-func (mr *MockSendConnMockRecorder) RemoteAddr() *SendConnRemoteAddrCall {
+func (mr *MockSendConnMockRecorder) RemoteAddr() *MockSendConnRemoteAddrCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockSendConn)(nil).RemoteAddr))
-	return &SendConnRemoteAddrCall{Call: call}
+	return &MockSendConnRemoteAddrCall{Call: call}
 }
 
-// SendConnRemoteAddrCall wrap *gomock.Call
-type SendConnRemoteAddrCall struct {
+// MockSendConnRemoteAddrCall wrap *gomock.Call
+type MockSendConnRemoteAddrCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SendConnRemoteAddrCall) Return(arg0 net.Addr) *SendConnRemoteAddrCall {
+func (c *MockSendConnRemoteAddrCall) Return(arg0 net.Addr) *MockSendConnRemoteAddrCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SendConnRemoteAddrCall) Do(f func() net.Addr) *SendConnRemoteAddrCall {
+func (c *MockSendConnRemoteAddrCall) Do(f func() net.Addr) *MockSendConnRemoteAddrCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SendConnRemoteAddrCall) DoAndReturn(f func() net.Addr) *SendConnRemoteAddrCall {
+func (c *MockSendConnRemoteAddrCall) DoAndReturn(f func() net.Addr) *MockSendConnRemoteAddrCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -162,31 +163,31 @@ func (m *MockSendConn) Write(arg0 []byte, arg1 uint16, arg2 protocol.ECN) error 
 }
 
 // Write indicates an expected call of Write.
-func (mr *MockSendConnMockRecorder) Write(arg0, arg1, arg2 any) *SendConnWriteCall {
+func (mr *MockSendConnMockRecorder) Write(arg0, arg1, arg2 any) *MockSendConnWriteCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendConn)(nil).Write), arg0, arg1, arg2)
-	return &SendConnWriteCall{Call: call}
+	return &MockSendConnWriteCall{Call: call}
 }
 
-// SendConnWriteCall wrap *gomock.Call
-type SendConnWriteCall struct {
+// MockSendConnWriteCall wrap *gomock.Call
+type MockSendConnWriteCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SendConnWriteCall) Return(arg0 error) *SendConnWriteCall {
+func (c *MockSendConnWriteCall) Return(arg0 error) *MockSendConnWriteCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SendConnWriteCall) Do(f func([]byte, uint16, protocol.ECN) error) *SendConnWriteCall {
+func (c *MockSendConnWriteCall) Do(f func([]byte, uint16, protocol.ECN) error) *MockSendConnWriteCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SendConnWriteCall) DoAndReturn(f func([]byte, uint16, protocol.ECN) error) *SendConnWriteCall {
+func (c *MockSendConnWriteCall) DoAndReturn(f func([]byte, uint16, protocol.ECN) error) *MockSendConnWriteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -200,31 +201,31 @@ func (m *MockSendConn) capabilities() connCapabilities {
 }
 
 // capabilities indicates an expected call of capabilities.
-func (mr *MockSendConnMockRecorder) capabilities() *SendConncapabilitiesCall {
+func (mr *MockSendConnMockRecorder) capabilities() *MockSendConncapabilitiesCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "capabilities", reflect.TypeOf((*MockSendConn)(nil).capabilities))
-	return &SendConncapabilitiesCall{Call: call}
+	return &MockSendConncapabilitiesCall{Call: call}
 }
 
-// SendConncapabilitiesCall wrap *gomock.Call
-type SendConncapabilitiesCall struct {
+// MockSendConncapabilitiesCall wrap *gomock.Call
+type MockSendConncapabilitiesCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *SendConncapabilitiesCall) Return(arg0 connCapabilities) *SendConncapabilitiesCall {
+func (c *MockSendConncapabilitiesCall) Return(arg0 connCapabilities) *MockSendConncapabilitiesCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *SendConncapabilitiesCall) Do(f func() connCapabilities) *SendConncapabilitiesCall {
+func (c *MockSendConncapabilitiesCall) Do(f func() connCapabilities) *MockSendConncapabilitiesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *SendConncapabilitiesCall) DoAndReturn(f func() connCapabilities) *SendConncapabilitiesCall {
+func (c *MockSendConncapabilitiesCall) DoAndReturn(f func() connCapabilities) *MockSendConncapabilitiesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

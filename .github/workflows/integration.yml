@@ -6,7 +6,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu" ]
-        go: [ "1.21.x", "1.22.0-rc.1" ]
+        go: [ "1.21.x", "1.22.x" ]
         include:
           - os: "windows"
             go: "1.21.x"
@@ -59,7 +59,7 @@ jobs:
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- ${{ env.QLOGFLAG }}
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: qlogs-${{ matrix.os }}-go${{ matrix.go }}
           path: integrationtests/self/*.qlog

@@ -5,6 +5,7 @@
 //
 //	mockgen -typed -build_flags=-tags=gomock -package mockackhandler -destination ackhandler/received_packet_handler.go github.com/quic-go/quic-go/internal/ackhandler ReceivedPacketHandler
 //
+
 // Package mockackhandler is a generated GoMock package.
 package mockackhandler
 
@@ -47,31 +48,31 @@ func (m *MockReceivedPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
 }
 
 // DropPackets indicates an expected call of DropPackets.
-func (mr *MockReceivedPacketHandlerMockRecorder) DropPackets(arg0 any) *ReceivedPacketHandlerDropPacketsCall {
+func (mr *MockReceivedPacketHandlerMockRecorder) DropPackets(arg0 any) *MockReceivedPacketHandlerDropPacketsCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockReceivedPacketHandler)(nil).DropPackets), arg0)
-	return &ReceivedPacketHandlerDropPacketsCall{Call: call}
+	return &MockReceivedPacketHandlerDropPacketsCall{Call: call}
 }
 
-// ReceivedPacketHandlerDropPacketsCall wrap *gomock.Call
-type ReceivedPacketHandlerDropPacketsCall struct {
+// MockReceivedPacketHandlerDropPacketsCall wrap *gomock.Call
+type MockReceivedPacketHandlerDropPacketsCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ReceivedPacketHandlerDropPacketsCall) Return() *ReceivedPacketHandlerDropPacketsCall {
+func (c *MockReceivedPacketHandlerDropPacketsCall) Return() *MockReceivedPacketHandlerDropPacketsCall {
 	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ReceivedPacketHandlerDropPacketsCall) Do(f func(protocol.EncryptionLevel)) *ReceivedPacketHandlerDropPacketsCall {
+func (c *MockReceivedPacketHandlerDropPacketsCall) Do(f func(protocol.EncryptionLevel)) *MockReceivedPacketHandlerDropPacketsCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ReceivedPacketHandlerDropPacketsCall) DoAndReturn(f func(protocol.EncryptionLevel)) *ReceivedPacketHandlerDropPacketsCall {
+func (c *MockReceivedPacketHandlerDropPacketsCall) DoAndReturn(f func(protocol.EncryptionLevel)) *MockReceivedPacketHandlerDropPacketsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -85,31 +86,31 @@ func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel, a
 }
 
 // GetAckFrame indicates an expected call of GetAckFrame.
-func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(arg0, arg1 any) *ReceivedPacketHandlerGetAckFrameCall {
+func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(arg0, arg1 any) *MockReceivedPacketHandlerGetAckFrameCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAckFrame), arg0, arg1)
-	return &ReceivedPacketHandlerGetAckFrameCall{Call: call}
+	return &MockReceivedPacketHandlerGetAckFrameCall{Call: call}
 }
 
-// ReceivedPacketHandlerGetAckFrameCall wrap *gomock.Call
-type ReceivedPacketHandlerGetAckFrameCall struct {
+// MockReceivedPacketHandlerGetAckFrameCall wrap *gomock.Call
+type MockReceivedPacketHandlerGetAckFrameCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ReceivedPacketHandlerGetAckFrameCall) Return(arg0 *wire.AckFrame) *ReceivedPacketHandlerGetAckFrameCall {
+func (c *MockReceivedPacketHandlerGetAckFrameCall) Return(arg0 *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ReceivedPacketHandlerGetAckFrameCall) Do(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *ReceivedPacketHandlerGetAckFrameCall {
+func (c *MockReceivedPacketHandlerGetAckFrameCall) Do(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ReceivedPacketHandlerGetAckFrameCall) DoAndReturn(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *ReceivedPacketHandlerGetAckFrameCall {
+func (c *MockReceivedPacketHandlerGetAckFrameCall) DoAndReturn(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -123,31 +124,31 @@ func (m *MockReceivedPacketHandler) GetAlarmTimeout() time.Time {
 }
 
 // GetAlarmTimeout indicates an expected call of GetAlarmTimeout.
-func (mr *MockReceivedPacketHandlerMockRecorder) GetAlarmTimeout() *ReceivedPacketHandlerGetAlarmTimeoutCall {
+func (mr *MockReceivedPacketHandlerMockRecorder) GetAlarmTimeout() *MockReceivedPacketHandlerGetAlarmTimeoutCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlarmTimeout", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAlarmTimeout))
-	return &ReceivedPacketHandlerGetAlarmTimeoutCall{Call: call}
+	return &MockReceivedPacketHandlerGetAlarmTimeoutCall{Call: call}
 }
 
-// ReceivedPacketHandlerGetAlarmTimeoutCall wrap *gomock.Call
-type ReceivedPacketHandlerGetAlarmTimeoutCall struct {
+// MockReceivedPacketHandlerGetAlarmTimeoutCall wrap *gomock.Call
+type MockReceivedPacketHandlerGetAlarmTimeoutCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ReceivedPacketHandlerGetAlarmTimeoutCall) Return(arg0 time.Time) *ReceivedPacketHandlerGetAlarmTimeoutCall {
+func (c *MockReceivedPacketHandlerGetAlarmTimeoutCall) Return(arg0 time.Time) *MockReceivedPacketHandlerGetAlarmTimeoutCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ReceivedPacketHandlerGetAlarmTimeoutCall) Do(f func() time.Time) *ReceivedPacketHandlerGetAlarmTimeoutCall {
+func (c *MockReceivedPacketHandlerGetAlarmTimeoutCall) Do(f func() time.Time) *MockReceivedPacketHandlerGetAlarmTimeoutCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ReceivedPacketHandlerGetAlarmTimeoutCall) DoAndReturn(f func() time.Time) *ReceivedPacketHandlerGetAlarmTimeoutCall {
+func (c *MockReceivedPacketHandlerGetAlarmTimeoutCall) DoAndReturn(f func() time.Time) *MockReceivedPacketHandlerGetAlarmTimeoutCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -161,31 +162,31 @@ func (m *MockReceivedPacketHandler) IsPotentiallyDuplicate(arg0 protocol.PacketN
 }
 
 // IsPotentiallyDuplicate indicates an expected call of IsPotentiallyDuplicate.
-func (mr *MockReceivedPacketHandlerMockRecorder) IsPotentiallyDuplicate(arg0, arg1 any) *ReceivedPacketHandlerIsPotentiallyDuplicateCall {
+func (mr *MockReceivedPacketHandlerMockRecorder) IsPotentiallyDuplicate(arg0, arg1 any) *MockReceivedPacketHandlerIsPotentiallyDuplicateCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPotentiallyDuplicate", reflect.TypeOf((*MockReceivedPacketHandler)(nil).IsPotentiallyDuplicate), arg0, arg1)
-	return &ReceivedPacketHandlerIsPotentiallyDuplicateCall{Call: call}
+	return &MockReceivedPacketHandlerIsPotentiallyDuplicateCall{Call: call}
 }
 
-// ReceivedPacketHandlerIsPotentiallyDuplicateCall wrap *gomock.Call
-type ReceivedPacketHandlerIsPotentiallyDuplicateCall struct {
+// MockReceivedPacketHandlerIsPotentiallyDuplicateCall wrap *gomock.Call
+type MockReceivedPacketHandlerIsPotentiallyDuplicateCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ReceivedPacketHandlerIsPotentiallyDuplicateCall) Return(arg0 bool) *ReceivedPacketHandlerIsPotentiallyDuplicateCall {
+func (c *MockReceivedPacketHandlerIsPotentiallyDuplicateCall) Return(arg0 bool) *MockReceivedPacketHandlerIsPotentiallyDuplicateCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ReceivedPacketHandlerIsPotentiallyDuplicateCall) Do(f func(protocol.PacketNumber, protocol.EncryptionLevel) bool) *ReceivedPacketHandlerIsPotentiallyDuplicateCall {
+func (c *MockReceivedPacketHandlerIsPotentiallyDuplicateCall) Do(f func(protocol.PacketNumber, protocol.EncryptionLevel) bool) *MockReceivedPacketHandlerIsPotentiallyDuplicateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ReceivedPacketHandlerIsPotentiallyDuplicateCall) DoAndReturn(f func(protocol.PacketNumber, protocol.EncryptionLevel) bool) *ReceivedPacketHandlerIsPotentiallyDuplicateCall {
+func (c *MockReceivedPacketHandlerIsPotentiallyDuplicateCall) DoAndReturn(f func(protocol.PacketNumber, protocol.EncryptionLevel) bool) *MockReceivedPacketHandlerIsPotentiallyDuplicateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -199,31 +200,31 @@ func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, a
 }
 
 // ReceivedPacket indicates an expected call of ReceivedPacket.
-func (mr *MockReceivedPacketHandlerMockRecorder) ReceivedPacket(arg0, arg1, arg2, arg3, arg4 any) *ReceivedPacketHandlerReceivedPacketCall {
+func (mr *MockReceivedPacketHandlerMockRecorder) ReceivedPacket(arg0, arg1, arg2, arg3, arg4 any) *MockReceivedPacketHandlerReceivedPacketCall {
 	mr.mock.ctrl.T.Helper()
 	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockReceivedPacketHandler)(nil).ReceivedPacket), arg0, arg1, arg2, arg3, arg4)
-	return &ReceivedPacketHandlerReceivedPacketCall{Call: call}
+	return &MockReceivedPacketHandlerReceivedPacketCall{Call: call}
 }
 
-// ReceivedPacketHandlerReceivedPacketCall wrap *gomock.Call
-type ReceivedPacketHandlerReceivedPacketCall struct {
+// MockReceivedPacketHandlerReceivedPacketCall wrap *gomock.Call
+type MockReceivedPacketHandlerReceivedPacketCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *ReceivedPacketHandlerReceivedPacketCall) Return(arg0 error) *ReceivedPacketHandlerReceivedPacketCall {
+func (c *MockReceivedPacketHandlerReceivedPacketCall) Return(arg0 error) *MockReceivedPacketHandlerReceivedPacketCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *ReceivedPacketHandlerReceivedPacketCall) Do(f func(protocol.PacketNumber, protocol.ECN, protocol.EncryptionLevel, time.Time, bool) error) *ReceivedPacketHandlerReceivedPacketCall {
+func (c *MockReceivedPacketHandlerReceivedPacketCall) Do(f func(protocol.PacketNumber, protocol.ECN, protocol.EncryptionLevel, time.Time, bool) error) *MockReceivedPacketHandlerReceivedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *ReceivedPacketHandlerReceivedPacketCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ECN, protocol.EncryptionLevel, time.Time, bool) error) *ReceivedPacketHandlerReceivedPacketCall {
+func (c *MockReceivedPacketHandlerReceivedPacketCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ECN, protocol.EncryptionLevel, time.Time, bool) error) *MockReceivedPacketHandlerReceivedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -168,7 +168,7 @@ func main() {
 				server := http3.Server{
 					Handler: handler,
 					Addr:    bCap,
-					QuicConfig: &quic.Config{
+					QUICConfig: &quic.Config{
 						Tracer: qlog.DefaultTracer,
 					},
 				}
