@@ -63,10 +63,14 @@ func newStream(str quic.Stream, conn *connection, datagrams *datagrammer) *strea
 }
 
 func (s *stream) Read(b []byte) (int, error) {
+	fp := &frameParser{
+		r:    s.Stream,
+		conn: s.conn,
+	}
 	if s.bytesRemainingInFrame == 0 {
 	parseLoop:
 		for {
-			frame, err := parseNextFrame(s.Stream, nil)
+			frame, err := fp.ParseNext()
 			if err != nil {
 				return 0, err
 			}
@@ -177,7 +181,11 @@ func (s *requestStream) SendRequestHeader(req *http.Request) error {
 }
 
 func (s *requestStream) ReadResponse() (*http.Response, error) {
-	frame, err := parseNextFrame(s.Stream, nil)
+	fp := &frameParser{
+		r:    s.Stream,
+		conn: s.conn,
+	}
+	frame, err := fp.ParseNext()
 	if err != nil {
 		s.Stream.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		s.Stream.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))

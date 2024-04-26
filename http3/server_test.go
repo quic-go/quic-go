@@ -96,7 +96,8 @@ var _ = Describe("Server", func() {
 			fields := make(map[string][]string)
 			decoder := qpack.NewDecoder(nil)
 
-			frame, err := parseNextFrame(str, nil)
+			fp := frameParser{r: str}
+			frame, err := fp.ParseNext()
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
@@ -619,7 +620,8 @@ var _ = Describe("Server", func() {
 				// The buffer is expected to contain:
 				// 1. The response header (in a HEADERS frame)
 				// 2. the "foobar" (unframed)
-				frame, err := parseNextFrame(&buf, nil)
+				fp := frameParser{r: &buf}
+				frame, err := fp.ParseNext()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
 				df := frame.(*headersFrame)

@@ -200,7 +200,8 @@ func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.Co
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
-			f, err := parseNextFrame(str, nil)
+			fp := &frameParser{conn: c.Connection, r: str}
+			f, err := fp.ParseNext()
 			if err != nil {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
 				return
