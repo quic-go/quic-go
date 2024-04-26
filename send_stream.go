@@ -363,9 +363,24 @@ func (s *sendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.By
 }
 
 func (s *sendStream) isNewlyCompleted() bool {
-	completed := (s.finSent || (s.cancelWriteErr != nil && s.cancellationFlagged)) &&
-		s.numOutstandingFrames == 0 && len(s.retransmissionQueue) == 0
-	if completed && !s.completed {
+	if s.completed {
+		return false
+	}
+	// We need to keep the stream around until all frames have been sent and acknowledged.
+	if s.numOutstandingFrames > 0 || len(s.retransmissionQueue) > 0 {
+		return false
+	}
+	// The stream is completed if we sent the FIN.
+	if s.finSent {
+		s.completed = true
+		return true
+	}
+	// The stream is also completed if:
+	// 1. the application called CancelWrite, or
+	// 2. we received a STOP_SENDING, and
+	// 		* the application consumed the error via Write, or
+	//		* the application called CLsoe
+	if s.cancelWriteErr != nil && (s.cancellationFlagged || s.finishedWriting) {
 		s.completed = true
 		return true
 	}
@@ -402,7 +417,6 @@ func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
 	s.cancelWriteImpl(errorCode, false)
 }
 
-// must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool) {
 	s.mutex.Lock()
 	if !remote {

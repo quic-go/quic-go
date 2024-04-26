@@ -964,7 +964,22 @@ var _ = Describe("Send Stream", func() {
 				str.Close()
 			})
 
-			It("handles STOP_SENDING after Close", func() {
+			It("handles STOP_SENDING after sending the FIN", func() {
+				mockSender.EXPECT().onHasStreamData(gomock.Any())
+				str.Close()
+				_, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+				Expect(ok).To(BeTrue())
+				gomock.InOrder(
+					mockSender.EXPECT().queueControlFrame(gomock.Any()),
+					mockSender.EXPECT().onStreamCompleted(gomock.Any()),
+				)
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+			})
+
+			It("handles STOP_SENDING after Close, but before sending the FIN", func() {
 				mockSender.EXPECT().onHasStreamData(gomock.Any())
 				str.Close()
 				gomock.InOrder(
