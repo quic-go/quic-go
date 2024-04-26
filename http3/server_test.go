@@ -217,9 +217,9 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(reqContext)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Close()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			s.handleRequest(conn, str, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"404"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
