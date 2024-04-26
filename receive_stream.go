@@ -41,9 +41,10 @@ type receiveStream struct {
 	// Note that for local cancellations, this doesn't necessarily mean that we know the final offset yet.
 	errorRead           bool
 	completed           bool // set once we've called streamSender.onStreamCompleted
+	cancelledRemotely   bool
+	cancelledLocally    bool
+	cancelErr           *StreamError
 	closeForShutdownErr error
-	cancelReadErr       error
-	resetRemotelyErr    *StreamError
 
 	readChan chan struct{}
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
@@ -87,41 +88,44 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 
 	s.mutex.Lock()
 	n, err := s.readImpl(p)
-	if err != nil {
-		s.errorRead = true
-	}
 	completed := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
 	if completed {
-		if err != io.EOF {
-			s.flowController.Abandon()
-		}
 		s.sender.onStreamCompleted(s.streamID)
 	}
 	return n, err
 }
 
 func (s *receiveStream) isNewlyCompleted() bool {
-	// We're done with the stream once:
-	// 1. The application has consumed the io.EOF or the cancellation error
-	// 2. We know the final offset (for flow control accounting)
-	isNewlyCompleted := !s.completed && s.errorRead && s.finalOffset != protocol.MaxByteCount
-	if isNewlyCompleted {
-		s.completed = true
+	if s.completed {
+		return false
 	}
-	return isNewlyCompleted
+	// We need to know the final offset (either via FIN or RESET_STREAM) for flow control accounting.
+	if s.finalOffset == protocol.MaxByteCount {
+		return false
+	}
+	// We're done with the stream if it was cancelled locally...
+	if s.cancelledLocally {
+		s.completed = true
+		return true
+	}
+	// ... or if the error (either io.EOF or the reset error) was read
+	if s.errorRead {
+		s.completed = true
+		return true
+	}
+	return false
 }
 
 func (s *receiveStream) readImpl(p []byte) (int, error) {
 	if s.currentFrameIsLast && s.currentFrame == nil {
+		s.errorRead = true
 		return 0, io.EOF
 	}
-	if s.cancelReadErr != nil {
-		return 0, s.cancelReadErr
-	}
-	if s.resetRemotelyErr != nil {
-		return 0, s.resetRemotelyErr
+	if s.cancelledRemotely || s.cancelledLocally {
+		s.errorRead = true
+		return 0, s.cancelErr
 	}
 	if s.closeForShutdownErr != nil {
 		return 0, s.closeForShutdownErr
@@ -142,11 +146,9 @@ func (s *receiveStream) readImpl(p []byte) (int, error) {
 			if s.closeForShutdownErr != nil {
 				return bytesRead, s.closeForShutdownErr
 			}
-			if s.cancelReadErr != nil {
-				return bytesRead, s.cancelReadErr
-			}
-			if s.resetRemotelyErr != nil {
-				return bytesRead, s.resetRemotelyErr
+			if s.cancelledRemotely || s.cancelledLocally {
+				s.errorRead = true
+				return 0, s.cancelErr
 			}
 
 			deadline := s.deadline
@@ -194,7 +196,7 @@ func (s *receiveStream) readImpl(p []byte) (int, error) {
 
 		// when a RESET_STREAM was received, the flow controller was already
 		// informed about the final byteOffset for this stream
-		if s.resetRemotelyErr == nil {
+		if !s.cancelledRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
 
@@ -203,6 +205,7 @@ func (s *receiveStream) readImpl(p []byte) (int, error) {
 			if s.currentFrameDone != nil {
 				s.currentFrameDone()
 			}
+			s.errorRead = true
 			return bytesRead, io.EOF
 		}
 	}
@@ -233,10 +236,14 @@ func (s *receiveStream) CancelRead(errorCode StreamErrorCode) {
 }
 
 func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) {
-	if s.errorRead || s.cancelReadErr != nil || s.resetRemotelyErr != nil {
+	if s.cancelledLocally { // duplicate call to CancelRead
 		return
 	}
-	s.cancelReadErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: false}
+	s.cancelledLocally = true
+	if s.errorRead || s.cancelledRemotely {
+		return
+	}
+	s.cancelErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: false}
 	s.signalRead()
 	s.sender.queueControlFrame(&wire.StopSendingFrame{
 		StreamID:  s.streamID,
@@ -246,7 +253,8 @@ func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) {
 
 func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	s.mutex.Lock()
-	completed, err := s.handleStreamFrameImpl(frame)
+	err := s.handleStreamFrameImpl(frame)
+	completed := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
 	if completed {
@@ -256,24 +264,22 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	return err
 }
 
-func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* completed */, error) {
+func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.Fin); err != nil {
-		return false, err
+		return err
 	}
-	var newlyRcvdFinalOffset bool
 	if frame.Fin {
-		newlyRcvdFinalOffset = s.finalOffset == protocol.MaxByteCount
 		s.finalOffset = maxOffset
 	}
-	if s.cancelReadErr != nil {
-		return newlyRcvdFinalOffset, nil
+	if s.cancelledLocally {
+		return nil
 	}
 	if err := s.frameQueue.Push(frame.Data, frame.Offset, frame.PutBack); err != nil {
-		return false, err
+		return err
 	}
 	s.signalRead()
-	return false, nil
+	return nil
 }
 
 func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
@@ -298,14 +304,16 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	s.finalOffset = frame.FinalSize
 
 	// ignore duplicate RESET_STREAM frames for this stream (after checking their final offset)
-	if s.resetRemotelyErr != nil {
+	if s.cancelledRemotely {
 		return nil
 	}
-	s.resetRemotelyErr = &StreamError{
-		StreamID:  s.streamID,
-		ErrorCode: frame.ErrorCode,
-		Remote:    true,
+	s.flowController.Abandon()
+	// don't save the error if the RESET_STREAM frames was received after CancelRead was called
+	if s.cancelledLocally {
+		return nil
 	}
+	s.cancelledRemotely = true
+	s.cancelErr = &StreamError{StreamID: s.streamID, ErrorCode: frame.ErrorCode, Remote: true}
 	s.signalRead()
 	return nil
 }

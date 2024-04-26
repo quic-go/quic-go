@@ -226,9 +226,7 @@ var _ = Describe("Receive Stream", func() {
 
 			It("returns an error when Read is called after the deadline", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false).AnyTimes()
-				f := &wire.StreamFrame{Data: []byte("foobar")}
-				err := str.handleStreamFrame(f)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar")})).To(Succeed())
 				str.SetReadDeadline(time.Now().Add(-time.Second))
 				b := make([]byte, 6)
 				n, err := strWithTimeout.Read(b)
@@ -542,11 +540,22 @@ var _ = Describe("Receive Stream", func() {
 
 			It("doesn't send a STOP_SENDING frame, if the stream was already reset", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
+				mockFC.EXPECT().Abandon().MinTimes(1)
 				Expect(str.handleResetStreamFrame(&wire.ResetStreamFrame{
+					ErrorCode: 1337,
 					StreamID:  streamID,
 					FinalSize: 42,
 				})).To(Succeed())
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.CancelRead(1234)
+				// check that the error indicates a remote reset
+				n, err := str.Read([]byte{0})
+				Expect(err).To(HaveOccurred())
+				Expect(n).To(BeZero())
+				var streamErr *StreamError
+				Expect(errors.As(err, &streamErr)).To(BeTrue())
+				Expect(streamErr.ErrorCode).To(BeEquivalentTo(1337))
+				Expect(streamErr.Remote).To(BeTrue())
 			})
 
 			It("sends a STOP_SENDING after receiving the final offset", func() {
@@ -557,9 +566,9 @@ var _ = Describe("Receive Stream", func() {
 				})).To(Succeed())
 				mockFC.EXPECT().Abandon()
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.CancelRead(1234)
 				// read the error
-				mockSender.EXPECT().onStreamCompleted(streamID)
 				n, err := str.Read([]byte{0})
 				Expect(err).To(HaveOccurred())
 				Expect(n).To(BeZero())
@@ -651,6 +660,7 @@ var _ = Describe("Receive Stream", func() {
 
 			It("ignores duplicate RESET_STREAM frames", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
+				mockFC.EXPECT().Abandon()
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 			})
@@ -662,20 +672,35 @@ var _ = Describe("Receive Stream", func() {
 					Offset:   rst.FinalSize,
 					Fin:      true,
 				})).To(Succeed())
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				str.CancelRead(1234)
-				mockFC.EXPECT().Abandon()
+				mockFC.EXPECT().Abandon().MinTimes(1)
+				mockSender.EXPECT().onStreamCompleted(streamID)
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 				// now read the error
-				mockSender.EXPECT().onStreamCompleted(streamID)
-				_, err := str.Read([]byte{0})
+				n, err := str.Read([]byte{0})
 				Expect(err).To(HaveOccurred())
+				Expect(n).To(BeZero())
 			})
 
 			It("doesn't do anything when it was closed for shutdown", func() {
 				str.closeForShutdown(errors.New("shutdown"))
 				err := str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("handles RESET_STREAM after CancelRead", func() {
+				mockFC.EXPECT().Abandon()
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.CancelRead(1234)
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
+				// check that the error indicates a local reset
+				n, err := str.Read([]byte{0})
+				Expect(err).To(HaveOccurred())
+				Expect(n).To(BeZero())
+				var streamErr *StreamError
+				Expect(errors.As(err, &streamErr)).To(BeTrue())
+				Expect(streamErr.Remote).To(BeFalse())
 			})
 		})
 	})
