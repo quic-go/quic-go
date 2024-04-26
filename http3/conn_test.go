@@ -47,7 +47,7 @@ var _ = Describe("Connection", func() {
 				conn.HandleUnidirectionalStreams(nil)
 			}()
 			Eventually(conn.ReceivedSettings()).Should(BeClosed())
-			Expect(conn.Settings().EnableDatagram).To(BeTrue())
+			Expect(conn.Settings().EnableDatagrams).To(BeTrue())
 			Expect(conn.Settings().EnableExtendedConnect).To(BeTrue())
 			Expect(conn.Settings().Other).To(HaveKeyWithValue(uint64(1337), uint64(42)))
 			Eventually(done).Should(BeClosed())

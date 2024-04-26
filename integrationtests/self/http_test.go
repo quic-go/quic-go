@@ -611,7 +611,7 @@ var _ = Describe("HTTP tests", func() {
 		Eventually(hconn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
 		settings := hconn.Settings()
 		Expect(settings.EnableExtendedConnect).To(BeTrue())
-		Expect(settings.EnableDatagram).To(BeFalse())
+		Expect(settings.EnableDatagrams).To(BeFalse())
 		Expect(settings.Other).To(BeEmpty())
 	})
 
@@ -642,7 +642,7 @@ var _ = Describe("HTTP tests", func() {
 		var settings *http3.Settings
 		Expect(settingsChan).To(Receive(&settings))
 		Expect(settings).ToNot(BeNil())
-		Expect(settings.EnableDatagram).To(BeTrue())
+		Expect(settings.EnableDatagrams).To(BeTrue())
 		Expect(settings.EnableExtendedConnect).To(BeFalse())
 		Expect(settings.Other).To(HaveKeyWithValue(uint64(1337), uint64(42)))
 	})
@@ -732,7 +732,7 @@ var _ = Describe("HTTP tests", func() {
 				Expect(r.Method).To(Equal(http.MethodConnect))
 				conn := w.(http3.Hijacker).Connection()
 				Eventually(conn.ReceivedSettings()).Should(BeClosed())
-				Expect(conn.Settings().EnableDatagram).To(BeTrue())
+				Expect(conn.Settings().EnableDatagrams).To(BeTrue())
 				w.WriteHeader(http.StatusOK)
 				w.(http.Flusher).Flush()
 

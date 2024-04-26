@@ -212,7 +212,7 @@ func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.Co
 				return
 			}
 			c.settings = &Settings{
-				EnableDatagram:        sf.Datagram,
+				EnableDatagrams:       sf.Datagram,
 				EnableExtendedConnect: sf.ExtendedConnect,
 				Other:                 sf.Other,
 			}
