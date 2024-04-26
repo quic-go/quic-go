@@ -167,7 +167,7 @@ type Server struct {
 	Handler http.Handler
 
 	// EnableDatagrams enables support for HTTP/3 datagrams (RFC 9297).
-	// If set to true, QUICConfig.EnableDatagram will be set.
+	// If set to true, QUICConfig.EnableDatagrams will be set.
 	EnableDatagrams bool
 
 	// MaxHeaderBytes controls the maximum number of bytes the server will

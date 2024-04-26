@@ -21,7 +21,7 @@ import (
 // Settings are HTTP/3 settings that apply to the underlying connection.
 type Settings struct {
 	// Support for HTTP/3 datagrams (RFC 9297)
-	EnableDatagram bool
+	EnableDatagrams bool
 	// Extended CONNECT, RFC 9220
 	EnableExtendedConnect bool
 	// Other settings, defined by the application
