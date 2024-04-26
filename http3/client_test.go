@@ -315,10 +315,8 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("SETTINGS handling", func() {
-		var settingsFrameWritten chan struct{}
-
-		BeforeEach(func() {
-			settingsFrameWritten = make(chan struct{})
+		sendSettings := func() {
+			settingsFrameWritten := make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			var buf bytes.Buffer
 			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
@@ -352,9 +350,10 @@ var _ = Describe("Client", func() {
 			settings, err := parseSettingsFrame(&buf, uint64(buf.Len()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(settings.Datagram).To(BeTrue())
-		})
+		}
 
 		It("receives SETTINGS", func() {
+			sendSettings()
 			done := make(chan struct{})
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
@@ -383,6 +382,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("checks the server's SETTINGS before sending an Extended CONNECT request", func() {
+			sendSettings()
 			done := make(chan struct{})
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
@@ -417,6 +417,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("rejects Extended CONNECT requests if the server doesn't enable it", func() {
+			sendSettings()
 			done := make(chan struct{})
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
