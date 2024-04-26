@@ -88,8 +88,9 @@ func (c *SingleDestinationRoundTripper) init() {
 	c.requestWriter = newRequestWriter()
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
 	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.Logger)
-	c.receivedGoawayID= quic.StreamID(-4)
-	c.runningCtx= make(map[quic.StreamID]context.CancelCauseFunc)
+	c.hconn.controlStrHandler = c.readControlStream
+	c.receivedGoawayID = quic.StreamID(-4)
+	c.runningCtx = make(map[quic.StreamID]context.CancelCauseFunc)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
 		if err := c.setupConn(c.Connection); err != nil {
@@ -102,14 +103,6 @@ func (c *SingleDestinationRoundTripper) init() {
 	if c.StreamHijacker != nil {
 		go c.handleBidirectionalStreams()
 	}
-	c.hconn = newConnection(
-		conn,
-		c.opts.EnableDatagram,
-		c.opts.UniStreamHijacker,
-		protocol.PerspectiveClient,
-		c.logger,
-	)
-	c.hconn.controlStrHandler = c.readControlStream
 	go c.hconn.HandleUnidirectionalStreams()
 }
 
@@ -120,7 +113,9 @@ func (c *SingleDestinationRoundTripper) readControlStream(str quic.ReceiveStream
 	for {
 		frame, err := parseNextFrame(str, nil)
 		if err != nil {
-			c.Logger.Errorf("Error reading control stream: %s", err)
+			if c.Logger != nil {
+				c.Logger.Debug("reading control stream", "error", err)
+			}
 			return
 		}
 		switch v := frame.(type) {
@@ -143,7 +138,9 @@ func (c *SingleDestinationRoundTripper) readControlStream(str quic.ReceiveStream
 			}
 			c.ctxLock.Unlock()
 		default:
-			c.Logger.Debugf("reading frame type: %T", v)
+			if c.Logger != nil {
+				c.Logger.Debug("reading frame type", "type", fmt.Sprintf("%T", v))
+			}
 		}
 	}
 }

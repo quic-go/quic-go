@@ -246,9 +246,6 @@ func (s *Server) Serve(conn net.PacketConn) error {
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
-	if s.logger == nil {
-		s.logger = utils.DefaultLogger.WithPrefix("server")
-	}
 	if s.connections == nil {
 		s.connections = make(map[*quic.Connection]func())
 	}
