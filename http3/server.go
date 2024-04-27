@@ -572,7 +572,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 		handler.ServeHTTP(r, req)
 	}()
 
-	if body.wasStreamHijacked() {
+	if r.wasStreamHijacked() {
 		return
 	}
 
