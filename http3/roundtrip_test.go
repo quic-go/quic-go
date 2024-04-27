@@ -181,7 +181,7 @@ var _ = Describe("RoundTripper", func() {
 		Expect(err).To(MatchError(testErr))
 	})
 
-	It("requires quic.Config.EnableDatagram if HTTP/3 datagrams are enabled", func() {
+	It("requires quic.Config.EnableDatagrams if HTTP/3 datagrams are enabled", func() {
 		rt := &RoundTripper{
 			QUICConfig:      &quic.Config{EnableDatagrams: false},
 			EnableDatagrams: true,

@@ -80,25 +80,25 @@ func (c *SingleDestinationRoundTripper) Start() Connection {
 }
 
 func (c *SingleDestinationRoundTripper) init() {
-	c.requestWriter = newRequestWriter()
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
-	c.hconn = newConnection(c.Connection, c.EnableDatagrams, c.UniStreamHijacker, protocol.PerspectiveClient, c.Logger)
+	c.requestWriter = newRequestWriter()
+	c.hconn = newConnection(c.Connection, c.EnableDatagrams, protocol.PerspectiveClient, c.Logger)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
-		if err := c.setupConn(c.Connection); err != nil {
+		if err := c.setupConn(c.hconn); err != nil {
 			if c.Logger != nil {
-				c.Logger.Debug("setting up connection failed", "error", err)
+				c.Logger.Debug("Setting up connection failed", "error", err)
 			}
-			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
+			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
 	if c.StreamHijacker != nil {
 		go c.handleBidirectionalStreams()
 	}
-	go c.hconn.HandleUnidirectionalStreams()
+	go c.hconn.HandleUnidirectionalStreams(c.UniStreamHijacker)
 }
 
-func (c *SingleDestinationRoundTripper) setupConn(conn quic.Connection) error {
+func (c *SingleDestinationRoundTripper) setupConn(conn *connection) error {
 	// open the control stream
 	str, err := conn.OpenUniStream()
 	if err != nil {
@@ -198,7 +198,8 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 		}
 	}
 
-	str, err := c.Connection.OpenStreamSync(req.Context())
+	reqDone := make(chan struct{})
+	str, err := c.hconn.openRequestStream(req.Context(), c.requestWriter, reqDone, c.DisableCompression, c.maxHeaderBytes())
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +207,6 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 	// Request Cancellation:
 	// This go routine keeps running even after RoundTripOpt() returns.
 	// It is shut down when the application is done processing the body.
-	reqDone := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -218,7 +218,7 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 		}
 	}()
 
-	rsp, err := c.doRequest(req, str, reqDone)
+	rsp, err := c.doRequest(req, str)
 	if err != nil { // if any error occurred
 		close(reqDone)
 		<-done
@@ -230,18 +230,7 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 func (c *SingleDestinationRoundTripper) OpenRequestStream(ctx context.Context) (RequestStream, error) {
 	c.initOnce.Do(func() { c.init() })
 
-	str, err := c.Connection.OpenStreamSync(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return newRequestStream(
-		newStream(str, c.hconn),
-		c.requestWriter,
-		nil,
-		c.decoder,
-		c.DisableCompression,
-		c.maxHeaderBytes(),
-	), nil
+	return c.hconn.openRequestStream(ctx, c.requestWriter, nil, c.DisableCompression, c.maxHeaderBytes())
 }
 
 // cancelingReader reads from the io.Reader.
@@ -283,20 +272,12 @@ func (c *SingleDestinationRoundTripper) sendRequestBody(str Stream, body io.Read
 	return err
 }
 
-func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.Stream, reqDone chan<- struct{}) (*http.Response, error) {
-	hstr := newRequestStream(
-		newStream(str, c.hconn),
-		c.requestWriter,
-		reqDone,
-		c.decoder,
-		c.DisableCompression,
-		c.maxHeaderBytes(),
-	)
-	if err := hstr.SendRequestHeader(req); err != nil {
+func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
+	if err := str.SendRequestHeader(req); err != nil {
 		return nil, err
 	}
 	if req.Body == nil {
-		hstr.Close()
+		str.Close()
 	} else {
 		// send the request body asynchronously
 		go func() {
@@ -306,27 +287,25 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.St
 			if req.ContentLength > 0 {
 				contentLength = req.ContentLength
 			}
-			if err := c.sendRequestBody(hstr, req.Body, contentLength); err != nil {
+			if err := c.sendRequestBody(str, req.Body, contentLength); err != nil {
 				if c.Logger != nil {
 					c.Logger.Debug("error writing request", "error", err)
 				}
 			}
-			hstr.Close()
+			str.Close()
 		}()
 	}
-
-	var (
-		res *http.Response
-		err error
-	)
 
 	// copy from net/http: support 1xx responses
 	trace := httptrace.ContextClientTrace(req.Context())
 	num1xx := 0               // number of informational 1xx headers received
 	const max1xxResponses = 5 // arbitrary bound on number of informational responses
 
+	var res *http.Response
 	for {
-		if res, err = hstr.ReadResponse(); err != nil {
+		var err error
+		res, err = str.ReadResponse()
+		if err != nil {
 			return nil, err
 		}
 		resCode := res.StatusCode
@@ -347,7 +326,7 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str quic.St
 		}
 		break
 	}
-	connState := c.Connection.ConnectionState().TLS
+	connState := c.hconn.ConnectionState().TLS
 	res.TLS = &connState
 	res.Request = req
 	return res, nil

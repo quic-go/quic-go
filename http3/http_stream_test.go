@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 
 	"github.com/quic-go/qpack"
@@ -41,7 +42,7 @@ var _ = Describe("Stream", func() {
 				errorCbCalled = true
 				return nil
 			}).AnyTimes()
-			str = newStream(qstr, conn)
+			str = newStream(qstr, newConnection(conn, false, protocol.PerspectiveClient, nil), nil)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -135,7 +136,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil)
+			str := newStream(qstr, nil, nil)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -167,7 +168,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, conn),
+			newStream(qstr, newConnection(conn, false, protocol.PerspectiveClient, nil), nil),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),

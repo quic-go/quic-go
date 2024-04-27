@@ -27,7 +27,7 @@ func encodeResponse(status int) []byte {
 	buf := &bytes.Buffer{}
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, nil)
 	if status == http.StatusEarlyHints {
 		rw.header.Add("Link", "</style.css>; rel=preload; as=style")
 		rw.header.Add("Link", "</script.js>; rel=preload; as=script")
@@ -315,10 +315,8 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("SETTINGS handling", func() {
-		var settingsFrameWritten chan struct{}
-
-		BeforeEach(func() {
-			settingsFrameWritten = make(chan struct{})
+		sendSettings := func() {
+			settingsFrameWritten := make(chan struct{})
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			var buf bytes.Buffer
 			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) (int, error) {
@@ -352,9 +350,10 @@ var _ = Describe("Client", func() {
 			settings, err := parseSettingsFrame(&buf, uint64(buf.Len()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(settings.Datagram).To(BeTrue())
-		})
+		}
 
 		It("receives SETTINGS", func() {
+			sendSettings()
 			done := make(chan struct{})
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
@@ -362,7 +361,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
 			b := quicvarint.Append(nil, streamTypeControlStream)
-			b = (&settingsFrame{Datagram: true}).Append(b)
+			b = (&settingsFrame{ExtendedConnect: true}).Append(b)
 			r := bytes.NewReader(b)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
@@ -376,13 +375,14 @@ var _ = Describe("Client", func() {
 			hconn := rt.Start()
 			Eventually(hconn.ReceivedSettings()).Should(BeClosed())
 			settings := hconn.Settings()
-			Expect(settings.EnableDatagram).To(BeTrue())
+			Expect(settings.EnableExtendedConnect).To(BeTrue())
 			// test shutdown
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 			close(done)
 		})
 
 		It("checks the server's SETTINGS before sending an Extended CONNECT request", func() {
+			sendSettings()
 			done := make(chan struct{})
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
@@ -417,6 +417,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("rejects Extended CONNECT requests if the server doesn't enable it", func() {
+			sendSettings()
 			done := make(chan struct{})
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
@@ -424,7 +425,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
 			b := quicvarint.Append(nil, streamTypeControlStream)
-			b = (&settingsFrame{Datagram: true}).Append(b)
+			b = (&settingsFrame{}).Append(b)
 			r := bytes.NewReader(b)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
@@ -492,6 +493,7 @@ var _ = Describe("Client", func() {
 				return len(b), nil
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
+			str.EXPECT().StreamID().AnyTimes()
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -728,7 +730,6 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
-
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
 
 				done := make(chan struct{})
@@ -822,8 +823,9 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rstr := mockquic.NewMockStream(mockCtrl)
+				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
+				rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, nil)
 				rw.Header().Set("Content-Encoding", "gzip")
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
@@ -848,8 +850,9 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rstr := mockquic.NewMockStream(mockCtrl)
+				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil), nil, false, nil)
+				rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, nil)
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
