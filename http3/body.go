@@ -8,15 +8,6 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented by:
-// * for the server: the http.Request.Body
-// * for the client: the http.Response.Body
-// On the client side, the stream will be closed for writing, unless the DontCloseRequestStream RoundTripOpt was set.
-// When a stream is taken over, it's the caller's responsibility to close the stream.
-type HTTPStreamer interface {
-	HTTPStream() Stream
-}
-
 // A Hijacker allows hijacking of the stream creating part of a quic.Session from a http.Response.Body.
 // It is used by WebTransport to create WebTransport streams after a session has been established.
 type Hijacker interface {
@@ -32,8 +23,6 @@ type body struct {
 	remainingContentLength int64
 	violatedContentLength  bool
 	hasContentLength       bool
-
-	wasHijacked bool // set when HTTPStream is called
 }
 
 func newBody(str *stream, contentLength int64) *body {
@@ -45,15 +34,7 @@ func newBody(str *stream, contentLength int64) *body {
 	return b
 }
 
-func (r *body) HTTPStream() Stream {
-	r.wasHijacked = true
-	return r.str
-}
-
 func (r *body) StreamID() quic.StreamID { return r.str.StreamID() }
-func (r *body) wasStreamHijacked() bool {
-	return r.wasHijacked
-}
 
 func (r *body) checkContentLengthViolation() error {
 	if !r.hasContentLength {
@@ -97,10 +78,7 @@ type requestBody struct {
 	getSettings  func() *Settings
 }
 
-var (
-	_ io.ReadCloser = &requestBody{}
-	_ HTTPStreamer  = &requestBody{}
-)
+var _ io.ReadCloser = &requestBody{}
 
 func newRequestBody(str *stream, contentLength int64, connCtx context.Context, rcvdSettings <-chan struct{}, getSettings func() *Settings) *requestBody {
 	return &requestBody{

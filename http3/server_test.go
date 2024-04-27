@@ -581,7 +581,7 @@ var _ = Describe("Server", func() {
 				handlerCalled := make(chan struct{})
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					defer close(handlerCalled)
-					r.Body.(HTTPStreamer).HTTPStream()
+					w.(HTTPStreamer).HTTPStream()
 					str.Write([]byte("foobar"))
 				})
 
@@ -590,10 +590,26 @@ var _ = Describe("Server", func() {
 				b = append(b, []byte("foobar")...)
 				setRequest(append(requestData, b...))
 				str.EXPECT().Context().Return(reqContext)
-				str.EXPECT().Write([]byte("foobar")).Return(6, nil)
+				var buf bytes.Buffer
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 
 				s.handleConn(conn)
 				Eventually(handlerCalled).Should(BeClosed())
+
+				// The buffer is expected to contain:
+				// 1. The response header (in a HEADERS frame)
+				// 2. the "foobar" (unframed)
+				frame, err := parseNextFrame(&buf, nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
+				df := frame.(*headersFrame)
+				data := make([]byte, df.Length)
+				_, err = io.ReadFull(&buf, data)
+				Expect(err).ToNot(HaveOccurred())
+				hdrs, err := qpackDecoder.DecodeFull(data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdrs).To(ContainElement(qpack.HeaderField{Name: ":status", Value: "200"}))
+				Expect(buf.Bytes()).To(Equal([]byte("foobar")))
 			})
 
 			It("errors when the client sends a too large header frame", func() {

@@ -422,9 +422,8 @@ var _ = Describe("HTTP tests", func() {
 			defer GinkgoRecover()
 			close(handlerCalled)
 			w.WriteHeader(http.StatusOK)
-			w.(http.Flusher).Flush()
 
-			str := r.Body.(http3.HTTPStreamer).HTTPStream()
+			str := w.(http3.HTTPStreamer).HTTPStream()
 			str.Write([]byte("foobar"))
 
 			// Do this in a Go routine, so that the handler returns early.
@@ -734,9 +733,8 @@ var _ = Describe("HTTP tests", func() {
 				Eventually(conn.ReceivedSettings()).Should(BeClosed())
 				Expect(conn.Settings().EnableDatagrams).To(BeTrue())
 				w.WriteHeader(http.StatusOK)
-				w.(http.Flusher).Flush()
 
-				str := r.Body.(http3.HTTPStreamer).HTTPStream()
+				str := w.(http3.HTTPStreamer).HTTPStream()
 				go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
 
 				for {
