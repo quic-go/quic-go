@@ -121,7 +121,6 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !w.headerComplete {
 		w.sniffContentType(p)
 		w.WriteHeader(http.StatusOK)
-		// 1xx status are not allowed to have a body, but they are temporary status
 		bodyAllowed = true
 	}
 	if !bodyAllowed {
