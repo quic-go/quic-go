@@ -220,7 +220,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"404"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
