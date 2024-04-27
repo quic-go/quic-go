@@ -2477,6 +2477,40 @@ var _ = Describe("Connection", func() {
 		})
 	})
 
+	Context("datagrams", func() {
+		It("doesn't allow datagrams if the peer didn't enable support", func() {
+			conn.peerParams = &wire.TransportParameters{MaxDatagramFrameSize: 0}
+			Expect(conn.SendDatagram(make([]byte, 200))).To(MatchError("datagram support disabled"))
+		})
+
+		It("sends a datagram", func() {
+			conn.peerParams = &wire.TransportParameters{MaxDatagramFrameSize: 1000}
+			Expect(conn.SendDatagram([]byte("foobar"))).To(Succeed())
+			f := conn.datagramQueue.Peek()
+			Expect(f).ToNot(BeNil())
+			Expect(f.Data).To(Equal([]byte("foobar")))
+		})
+
+		It("says when a datagram is too big", func() {
+			conn.peerParams = &wire.TransportParameters{MaxDatagramFrameSize: 1000}
+			err := conn.SendDatagram(make([]byte, 2000))
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(BeAssignableToTypeOf(&DatagramTooLargeError{}))
+			derr := err.(*DatagramTooLargeError)
+			Expect(derr.MaxDatagramPayloadSize).To(BeNumerically("<", 1000))
+			fmt.Println(derr.MaxDatagramPayloadSize)
+			Expect(conn.SendDatagram(make([]byte, derr.MaxDatagramPayloadSize))).To(Succeed())
+		})
+
+		It("receives datagrams", func() {
+			conn.config.EnableDatagrams = true
+			conn.datagramQueue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("foobar")})
+			data, err := conn.ReceiveDatagram(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(data).To(Equal([]byte("foobar")))
+		})
+	})
+
 	It("returns the local address", func() {
 		Expect(conn.LocalAddr()).To(Equal(localAddr))
 	})

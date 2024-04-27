@@ -64,7 +64,7 @@ var _ = Describe("Datagram test", func() {
 					maxDatagramMessageSize := f.MaxDataLen(maxDatagramSize, conn.ConnectionState().Version)
 					b := make([]byte, maxDatagramMessageSize+1)
 					Expect(conn.SendDatagram(b)).To(MatchError(&quic.DatagramTooLargeError{
-						PeerMaxDatagramFrameSize: int64(maxDatagramMessageSize),
+						MaxDatagramPayloadSize: int64(maxDatagramMessageSize),
 					}))
 					wg.Wait()
 				}

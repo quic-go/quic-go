@@ -2360,9 +2360,7 @@ func (s *connection) SendDatagram(p []byte) error {
 	f := &wire.DatagramFrame{DataLenPresent: true}
 	maxDataLen := f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version)
 	if protocol.ByteCount(len(p)) > maxDataLen {
-		return &DatagramTooLargeError{
-			PeerMaxDatagramFrameSize: int64(maxDataLen),
-		}
+		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
 	}
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)
