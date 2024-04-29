@@ -12,6 +12,13 @@ import (
 	"github.com/quic-go/qpack"
 )
 
+// The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented the http.Response.Body.
+// On the client side, the stream will be closed for writing, unless the DontCloseRequestStream RoundTripOpt was set.
+// When a stream is taken over, it's the caller's responsibility to close the stream.
+type HTTPStreamer interface {
+	HTTPStream() Stream
+}
+
 // The maximum length of an encoded HTTP/3 frame header is 16:
 // The frame has a type and length field, both QUIC varints (maximum 8 bytes in length)
 const frameHeaderLen = 16
@@ -36,6 +43,8 @@ type responseWriter struct {
 	headerWritten  bool  // set once the response header has been serialized to the stream
 	isHead         bool
 
+	hijacked bool // set on HTTPStream is called
+
 	logger *slog.Logger
 }
 
@@ -43,6 +52,7 @@ var (
 	_ http.ResponseWriter = &responseWriter{}
 	_ http.Flusher        = &responseWriter{}
 	_ Hijacker            = &responseWriter{}
+	_ HTTPStreamer        = &responseWriter{}
 )
 
 func newResponseWriter(str *stream, conn Connection, isHead bool, logger *slog.Logger) *responseWriter {
@@ -102,23 +112,24 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 }
 
+func (w *responseWriter) sniffContentType(p []byte) {
+	// If no content type, apply sniffing algorithm to body.
+	// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shouldn't do sniffing.
+	_, haveType := w.header["Content-Type"]
+
+	// If the Transfer-Encoding or Content-Encoding was set and is non-blank,
+	// we shouldn't sniff the body.
+	hasTE := w.header.Get("Transfer-Encoding") != ""
+	hasCE := w.header.Get("Content-Encoding") != ""
+	if !hasCE && !haveType && !hasTE && len(p) > 0 {
+		w.header.Set("Content-Type", http.DetectContentType(p))
+	}
+}
+
 func (w *responseWriter) Write(p []byte) (int, error) {
 	bodyAllowed := bodyAllowedForStatus(w.status)
 	if !w.headerComplete {
-		// If body is not allowed, we don't need to (and we can't) sniff the content type.
-		if bodyAllowed {
-			// If no content type, apply sniffing algorithm to body.
-			// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shoundn't do sniffing.
-			_, haveType := w.header["Content-Type"]
-
-			// If the Transfer-Encoding or Content-Encoding was set and is non-blank,
-			// we shouldn't sniff the body.
-			hasTE := w.header.Get("Transfer-Encoding") != ""
-			hasCE := w.header.Get("Content-Encoding") != ""
-			if !hasCE && !haveType && !hasTE && len(p) > 0 {
-				w.header.Set("Content-Type", http.DetectContentType(p))
-			}
-		}
+		w.sniffContentType(p)
 		w.WriteHeader(http.StatusOK)
 		bodyAllowed = true
 	}
@@ -148,6 +159,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 func (w *responseWriter) doWrite(p []byte) (int, error) {
 	if !w.headerWritten {
+		w.sniffContentType(w.smallResponseBuf)
 		if err := w.writeHeader(w.status); err != nil {
 			return 0, maybeReplaceError(err)
 		}
@@ -219,6 +231,14 @@ func (w *responseWriter) Flush() {
 		}
 	}
 }
+
+func (w *responseWriter) HTTPStream() Stream {
+	w.hijacked = true
+	w.Flush()
+	return w.str
+}
+
+func (w *responseWriter) wasStreamHijacked() bool { return w.hijacked }
 
 func (w *responseWriter) Connection() Connection {
 	return w.conn

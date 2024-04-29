@@ -163,7 +163,7 @@ var _ = Describe("Server", func() {
 			qconn.EXPECT().LocalAddr().AnyTimes()
 			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
-			conn = newConnection(qconn, false, nil, protocol.PerspectiveServer, nil)
+			conn = newConnection(qconn, false, protocol.PerspectiveServer, nil)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -180,7 +180,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -199,7 +199,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
@@ -216,12 +216,32 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"6"}))
 			// status, content-length, date, content-type
 			Expect(hfs).To(HaveLen(4))
+		})
+
+		It("sets Content-Type when WriteHeader is called but response is not flushed", func() {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte("<html></html>"))
+			})
+
+			responseBuf := &bytes.Buffer{}
+			setRequest(encodeRequest(exampleGetRequest))
+			str.EXPECT().Context().Return(reqContext)
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Close()
+
+			s.handleRequest(conn, str, nil, qpackDecoder)
+			hfs := decodeHeader(responseBuf)
+			Expect(hfs).To(HaveKeyWithValue(":status", []string{"404"}))
+			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
+			Expect(hfs).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
 		})
 
 		It("not sets Content-Length when the handler flushes to the client", func() {
@@ -238,7 +258,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			// status, date, content-type
@@ -259,7 +279,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(responseBuf.Bytes()).To(BeEmpty())
@@ -279,7 +299,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			Expect(hfs).To(HaveKeyWithValue("content-length", []string{"13"}))
@@ -298,7 +318,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 		})
 
@@ -316,7 +336,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
 			Expect(logBuf.String()).To(ContainSubstring("http: panic serving"))
 			Expect(logBuf.String()).To(ContainSubstring("foobar"))
@@ -376,6 +396,7 @@ var _ = Describe("Server", func() {
 
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().StreamID().AnyTimes()
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
@@ -403,6 +424,7 @@ var _ = Describe("Server", func() {
 
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().StreamID().AnyTimes()
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
@@ -421,17 +443,18 @@ var _ = Describe("Server", func() {
 			})
 
 			It("handles errors that occur when reading the stream type", func() {
+				const strID = protocol.StreamID(1234 * 4)
 				testErr := errors.New("test error")
 				done := make(chan struct{})
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				s.StreamHijacker = func(ft FrameType, _ quic.ConnectionTracingID, str quic.Stream, err error) (bool, error) {
 					defer close(done)
 					Expect(ft).To(BeZero())
-					Expect(str).To(Equal(unknownStr))
+					Expect(str.StreamID()).To(Equal(strID))
 					Expect(err).To(MatchError(testErr))
 					return true, nil
 				}
-
+				unknownStr.EXPECT().StreamID().Return(strID).AnyTimes()
 				unknownStr.EXPECT().Read(gomock.Any()).Return(0, testErr).AnyTimes()
 				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
@@ -598,7 +621,7 @@ var _ = Describe("Server", func() {
 				handlerCalled := make(chan struct{})
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					defer close(handlerCalled)
-					r.Body.(HTTPStreamer).HTTPStream()
+					w.(HTTPStreamer).HTTPStream()
 					str.Write([]byte("foobar"))
 				})
 
@@ -607,10 +630,26 @@ var _ = Describe("Server", func() {
 				b = append(b, []byte("foobar")...)
 				setRequest(append(requestData, b...))
 				str.EXPECT().Context().Return(reqContext)
-				str.EXPECT().Write([]byte("foobar")).Return(6, nil)
+				var buf bytes.Buffer
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 
 				s.handleConn(conn)
 				Eventually(handlerCalled).Should(BeClosed())
+
+				// The buffer is expected to contain:
+				// 1. The response header (in a HEADERS frame)
+				// 2. the "foobar" (unframed)
+				frame, err := parseNextFrame(&buf, nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
+				df := frame.(*headersFrame)
+				data := make([]byte, df.Length)
+				_, err = io.ReadFull(&buf, data)
+				Expect(err).ToNot(HaveOccurred())
+				hdrs, err := qpackDecoder.DecodeFull(data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdrs).To(ContainElement(qpack.HeaderField{Name: ":status", Value: "200"}))
+				Expect(buf.Bytes()).To(Equal([]byte("foobar")))
 			})
 
 			It("errors when the client sends a too large header frame", func() {
@@ -712,7 +751,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 
@@ -735,7 +774,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 			str.EXPECT().Close()
 
-			s.handleRequest(conn, str, qpackDecoder)
+			s.handleRequest(conn, str, nil, qpackDecoder)
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 	})

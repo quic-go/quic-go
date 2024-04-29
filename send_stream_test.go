@@ -908,8 +908,8 @@ var _ = Describe("Send Stream", func() {
 					StreamID:  streamID,
 					ErrorCode: 101,
 				})
-				mockSender.EXPECT().onStreamCompleted(gomock.Any())
-
+				// Don't EXPECT calls to onStreamCompleted.
+				// The application needs to learn about the cancellation first.
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 101,
@@ -919,10 +919,10 @@ var _ = Describe("Send Stream", func() {
 			It("unblocks Write", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
+					mockSender.EXPECT().onStreamCompleted(gomock.Any())
 					_, err := str.Write(getData(5000))
 					Expect(err).To(Equal(&StreamError{
 						StreamID:  streamID,
@@ -941,17 +941,55 @@ var _ = Describe("Send Stream", func() {
 
 			It("doesn't allow further calls to Write", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 123,
 				})
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				_, err := str.Write([]byte("foobar"))
 				Expect(err).To(Equal(&StreamError{
 					StreamID:  streamID,
 					ErrorCode: 123,
 					Remote:    true,
 				}))
+			})
+
+			It("handles Close after STOP_SENDING", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
+				str.Close()
+			})
+
+			It("handles STOP_SENDING after sending the FIN", func() {
+				mockSender.EXPECT().onHasStreamData(gomock.Any())
+				str.Close()
+				_, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+				Expect(ok).To(BeTrue())
+				gomock.InOrder(
+					mockSender.EXPECT().queueControlFrame(gomock.Any()),
+					mockSender.EXPECT().onStreamCompleted(gomock.Any()),
+				)
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+			})
+
+			It("handles STOP_SENDING after Close, but before sending the FIN", func() {
+				mockSender.EXPECT().onHasStreamData(gomock.Any())
+				str.Close()
+				gomock.InOrder(
+					mockSender.EXPECT().queueControlFrame(gomock.Any()),
+					mockSender.EXPECT().onStreamCompleted(gomock.Any()),
+				)
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
 			})
 		})
 	})
