@@ -106,7 +106,6 @@ func (c *SingleDestinationRoundTripper) init() {
 	go c.hconn.HandleUnidirectionalStreams(c.UniStreamHijacker)
 }
 
-func (c *SingleDestinationRoundTripper) setupConn(conn *connection) error {
 var errGoaway = errors.New("server sent goaway")
 
 func (c *SingleDestinationRoundTripper) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
