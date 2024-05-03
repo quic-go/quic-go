@@ -2,6 +2,10 @@ package quicvarint
 
 import (
 	"bytes"
+	"io"
+	"testing"
+
+	"golang.org/x/exp/rand"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -18,7 +22,7 @@ var _ = Describe("Varint encoding / decoding", func() {
 		})
 	})
 
-	Context("decoding", func() {
+	Context("reading", func() {
 		It("reads a 1 byte number", func() {
 			b := bytes.NewReader([]byte{0b00011001})
 			val, err := Read(b)
@@ -57,6 +61,59 @@ var _ = Describe("Varint encoding / decoding", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(val).To(Equal(uint64(151288809941952652)))
 			Expect(b.Len()).To(BeZero())
+		})
+	})
+
+	Context("parsing", func() {
+		It("fails on an empty slice", func() {
+			_, _, err := Parse([]byte{})
+			Expect(err).To(Equal(io.EOF))
+		})
+
+		It("parses a 1 byte number", func() {
+			b := []byte{0b00011001}
+			val, n, err := Parse(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(Equal(uint64(25)))
+			Expect(n).To(Equal(1))
+		})
+
+		It("parses a number that is encoded too long", func() {
+			b := []byte{0b01000000, 0x25}
+			val, n, err := Parse(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(Equal(uint64(37)))
+			Expect(n).To(Equal(2))
+		})
+
+		It("parses a 2 byte number", func() {
+			b := []byte{0b01111011, 0xbd}
+			val, n, err := Parse(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(Equal(uint64(15293)))
+			Expect(n).To(Equal(2))
+		})
+
+		It("parses a 4 byte number", func() {
+			b := []byte{0b10011101, 0x7f, 0x3e, 0x7d}
+			val, n, err := Parse(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(Equal(uint64(494878333)))
+			Expect(n).To(Equal(4))
+		})
+
+		It("parses an 8 byte number", func() {
+			b := []byte{0b11000010, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}
+			val, n, err := Parse(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(Equal(uint64(151288809941952652)))
+			Expect(n).To(Equal(8))
+		})
+
+		It("fails if the slice is too short", func() {
+			b := Append(nil, maxVarInt2*10)
+			_, _, err := Parse(b[:3])
+			Expect(err).To(Equal(io.ErrUnexpectedEOF))
 		})
 	})
 
@@ -192,3 +249,67 @@ var _ = Describe("Varint encoding / decoding", func() {
 		})
 	})
 })
+
+type benchmarkValue struct {
+	b []byte
+	v uint64
+}
+
+func randomValues(num int, maxValue uint64) []benchmarkValue {
+	r := rand.New(rand.NewSource(1))
+
+	bv := make([]benchmarkValue, num)
+	for i := 0; i < num; i++ {
+		v := r.Uint64() % maxValue
+		bv[i].v = v
+		bv[i].b = Append([]byte{}, v)
+	}
+	return bv
+}
+
+func BenchmarkRead(b *testing.B) {
+	b.Run("1-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt1)) })
+	b.Run("2-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt2)) })
+	b.Run("4-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt4)) })
+	b.Run("8-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt8)) })
+}
+
+func benchmarkRead(b *testing.B, inputs []benchmarkValue) {
+	r := bytes.NewReader([]byte{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		index := i % len(inputs)
+		r.Reset(inputs[index].b)
+		val, err := Read(r)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if val != inputs[index].v {
+			b.Fatalf("expected %d, got %d", inputs[index].v, val)
+		}
+	}
+}
+
+func BenchmarkParse(b *testing.B) {
+	b.Run("1-byte", func(b *testing.B) { benchmarkParse(b, randomValues(min(b.N, 1024), maxVarInt1)) })
+	b.Run("2-byte", func(b *testing.B) { benchmarkParse(b, randomValues(min(b.N, 1024), maxVarInt2)) })
+	b.Run("4-byte", func(b *testing.B) { benchmarkParse(b, randomValues(min(b.N, 1024), maxVarInt4)) })
+	b.Run("8-byte", func(b *testing.B) { benchmarkParse(b, randomValues(min(b.N, 1024), maxVarInt8)) })
+}
+
+func benchmarkParse(b *testing.B, inputs []benchmarkValue) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		index := i % 1024
+		val, n, err := Parse(inputs[index].b)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if n != len(inputs[index].b) {
+			b.Fatalf("expected to consume %d bytes, consumed %d", len(inputs[i].b), n)
+		}
+		if val != inputs[index].v {
+			b.Fatalf("expected %d, got %d", inputs[index].v, val)
+		}
+	}
+}
