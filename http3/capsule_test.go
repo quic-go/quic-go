@@ -26,7 +26,7 @@ var _ = Describe("Capsule", func() {
 
 	It("writes capsules", func() {
 		var buf bytes.Buffer
-		WriteCapsule(&buf, 1337, []byte("foobar"))
+		Expect(WriteCapsule(&buf, 1337, []byte("foobar"))).To(Succeed())
 
 		ct, r, err := ParseCapsule(&buf)
 		Expect(err).ToNot(HaveOccurred())
@@ -44,7 +44,11 @@ var _ = Describe("Capsule", func() {
 		for i := range b {
 			ct, r, err := ParseCapsule(bytes.NewReader(b[:i]))
 			if err != nil {
-				Expect(err).To(MatchError(io.ErrUnexpectedEOF))
+				if i == 0 {
+					Expect(err).To(MatchError(io.EOF))
+				} else {
+					Expect(err).To(MatchError(io.ErrUnexpectedEOF))
+				}
 				continue
 			}
 			Expect(ct).To(BeEquivalentTo(1337))
