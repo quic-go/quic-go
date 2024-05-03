@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -252,9 +251,7 @@ func (c *connection) receiveDatagrams() error {
 		if err != nil {
 			return err
 		}
-		// TODO: this is quite wasteful in terms of allocations
-		r := bytes.NewReader(b)
-		quarterStreamID, err := quicvarint.Read(r)
+		quarterStreamID, n, err := quicvarint.Parse(b)
 		if err != nil {
 			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeDatagramError), "")
 			return fmt.Errorf("could not read quarter stream id: %w", err)
@@ -271,7 +268,7 @@ func (c *connection) receiveDatagrams() error {
 			return nil
 		}
 		c.streamMx.Unlock()
-		dg.enqueue(b[len(b)-r.Len():])
+		dg.enqueue(b[n:])
 	}
 }
 
