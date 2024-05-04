@@ -23,7 +23,7 @@ func parseStreamsBlockedFrame(b []byte, typ uint64, _ protocol.Version) (*Stream
 	}
 	streamLimit, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	f.StreamLimit = protocol.StreamNum(streamLimit)
 	if f.StreamLimit > protocol.MaxStreamCount {

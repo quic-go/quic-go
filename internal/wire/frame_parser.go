@@ -3,6 +3,7 @@ package wire
 import (
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -186,4 +187,11 @@ func (p *FrameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionL
 // This value is used to scale the ACK Delay field in the ACK frame.
 func (p *FrameParser) SetAckDelayExponent(exp uint8) {
 	p.ackDelayExponent = exp
+}
+
+func replaceUnexpectedEOF(e error) error {
+	if e == io.ErrUnexpectedEOF {
+		return io.EOF
+	}
+	return e
 }

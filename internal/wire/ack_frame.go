@@ -27,13 +27,13 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 
 	la, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return 0, err
+		return 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	largestAcked := protocol.PacketNumber(la)
 	delay, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return 0, err
+		return 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 
@@ -46,14 +46,14 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 
 	numBlocks, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return 0, err
+		return 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 
 	// read the first ACK range
 	ab, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return 0, err
+		return 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	ackBlock := protocol.PacketNumber(ab)
@@ -67,7 +67,7 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 	for i := uint64(0); i < numBlocks; i++ {
 		g, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return 0, err
+			return 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		gap := protocol.PacketNumber(g)
@@ -78,7 +78,7 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 
 		ab, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return 0, err
+			return 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		ackBlock := protocol.PacketNumber(ab)
@@ -97,19 +97,19 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 	if ecn {
 		ect0, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return 0, err
+			return 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		frame.ECT0 = ect0
 		ect1, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return 0, err
+			return 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		frame.ECT1 = ect1
 		ecnce, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return 0, err
+			return 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		frame.ECNCE = ecnce

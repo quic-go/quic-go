@@ -19,18 +19,18 @@ func parseResetStreamFrame(b []byte, _ protocol.Version) (*ResetStreamFrame, int
 	var byteOffset protocol.ByteCount
 	sid, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	streamID = protocol.StreamID(sid)
 	errorCode, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	bo, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	byteOffset = protocol.ByteCount(bo)
 

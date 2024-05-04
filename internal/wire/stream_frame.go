@@ -27,14 +27,14 @@ func parseStreamFrame(b []byte, typ uint64, _ protocol.Version) (*StreamFrame, i
 
 	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	var offset uint64
 	if hasOffset {
 		offset, l, err = quicvarint.Parse(b)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 	}
@@ -45,7 +45,7 @@ func parseStreamFrame(b []byte, typ uint64, _ protocol.Version) (*StreamFrame, i
 		var l int
 		dataLen, l, err = quicvarint.Parse(b)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		if dataLen > uint64(len(b)) {

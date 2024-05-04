@@ -30,7 +30,7 @@ func parseDatagramFrame(b []byte, typ uint64, _ protocol.Version) (*DatagramFram
 		var l int
 		length, l, err = quicvarint.Parse(b)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		if length > uint64(len(b)) {

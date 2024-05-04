@@ -15,7 +15,7 @@ func parseMaxDataFrame(b []byte, _ protocol.Version) (*MaxDataFrame, int, error)
 	frame := &MaxDataFrame{}
 	byteOffset, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	frame.MaximumData = protocol.ByteCount(byteOffset)
 	return frame, l, nil

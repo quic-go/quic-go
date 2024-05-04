@@ -23,7 +23,7 @@ func parseMaxStreamsFrame(b []byte, typ uint64, _ protocol.Version) (*MaxStreams
 	}
 	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	f.MaxStreamNum = protocol.StreamNum(streamID)
 	if f.MaxStreamNum > protocol.MaxStreamCount {

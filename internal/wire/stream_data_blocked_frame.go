@@ -15,12 +15,12 @@ func parseStreamDataBlockedFrame(b []byte, _ protocol.Version) (*StreamDataBlock
 	startLen := len(b)
 	sid, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	offset, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 
 	return &StreamDataBlockedFrame{

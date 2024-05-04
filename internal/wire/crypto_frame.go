@@ -18,13 +18,13 @@ func parseCryptoFrame(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
 	frame := &CryptoFrame{}
 	offset, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	frame.Offset = protocol.ByteCount(offset)
 	dataLen, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	if dataLen > uint64(len(b)) {

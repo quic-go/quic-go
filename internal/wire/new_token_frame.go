@@ -16,7 +16,7 @@ type NewTokenFrame struct {
 func parseNewTokenFrame(b []byte, _ protocol.Version) (*NewTokenFrame, int, error) {
 	tokenLen, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	if tokenLen == 0 {

@@ -20,7 +20,7 @@ func parseConnectionCloseFrame(b []byte, typ uint64, _ protocol.Version) (*Conne
 	f := &ConnectionCloseFrame{IsApplicationError: typ == applicationCloseFrameType}
 	ec, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	f.ErrorCode = ec
@@ -28,7 +28,7 @@ func parseConnectionCloseFrame(b []byte, typ uint64, _ protocol.Version) (*Conne
 	if !f.IsApplicationError {
 		ft, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, replaceUnexpectedEOF(err)
 		}
 		b = b[l:]
 		f.FrameType = ft
@@ -36,7 +36,7 @@ func parseConnectionCloseFrame(b []byte, typ uint64, _ protocol.Version) (*Conne
 	var reasonPhraseLen uint64
 	reasonPhraseLen, l, err = quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	if int(reasonPhraseLen) > len(b) {

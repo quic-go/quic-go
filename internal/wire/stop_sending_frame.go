@@ -17,12 +17,12 @@ func parseStopSendingFrame(b []byte, _ protocol.Version) (*StopSendingFrame, int
 	startLen := len(b)
 	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 	errorCode, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
 
