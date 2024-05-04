@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
+	"testing"
 	"time"
 
 	"golang.org/x/exp/rand"
@@ -17,20 +18,20 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func getRandomValueUpTo(max int64) uint64 {
+	maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
+	m := maxVals[int(rand.Int31n(4))]
+	if m > max {
+		m = max
+	}
+	return uint64(rand.Int63n(m))
+}
+
+func getRandomValue() uint64 {
+	return getRandomValueUpTo(math.MaxInt64)
+}
+
 var _ = Describe("Transport Parameters", func() {
-	getRandomValueUpTo := func(max int64) uint64 {
-		maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
-		m := maxVals[int(rand.Int31n(4))]
-		if m > max {
-			m = max
-		}
-		return uint64(rand.Int63n(m))
-	}
-
-	getRandomValue := func() uint64 {
-		return getRandomValueUpTo(math.MaxInt64)
-	}
-
 	BeforeEach(func() {
 		rand.Seed(uint64(GinkgoRandomSeed()))
 	})
@@ -722,3 +723,66 @@ var _ = Describe("Transport Parameters", func() {
 		})
 	})
 })
+
+func BenchmarkTransportParameters(b *testing.B) {
+	b.Run("without preferred address", func(b *testing.B) { benchmarkTransportParameters(b, false) })
+	b.Run("with preferred address", func(b *testing.B) { benchmarkTransportParameters(b, true) })
+}
+
+func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
+	var token protocol.StatelessResetToken
+	rand.Read(token[:])
+	rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
+	params := &TransportParameters{
+		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(getRandomValue()),
+		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(getRandomValue()),
+		InitialMaxStreamDataUni:         protocol.ByteCount(getRandomValue()),
+		InitialMaxData:                  protocol.ByteCount(getRandomValue()),
+		MaxIdleTimeout:                  0xcafe * time.Second,
+		MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+		MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+		DisableActiveMigration:          true,
+		StatelessResetToken:             &token,
+		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
+		RetrySourceConnectionID:         &rcid,
+		AckDelayExponent:                13,
+		MaxAckDelay:                     42 * time.Millisecond,
+		ActiveConnectionIDLimit:         2 + getRandomValueUpTo(math.MaxInt64-2),
+		MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
+	}
+	var token2 protocol.StatelessResetToken
+	rand.Read(token2[:])
+	if withPreferredAddress {
+		var ip4 [4]byte
+		var ip6 [16]byte
+		rand.Read(ip4[:])
+		rand.Read(ip6[:])
+		params.PreferredAddress = &PreferredAddress{
+			IPv4:                netip.AddrPortFrom(netip.AddrFrom4(ip4), 1234),
+			IPv6:                netip.AddrPortFrom(netip.AddrFrom16(ip6), 4321),
+			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			StatelessResetToken: token2,
+		}
+	}
+	data := params.Marshal(protocol.PerspectiveServer)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	var p TransportParameters
+	for i := 0; i < b.N; i++ {
+		if err := p.Unmarshal(data, protocol.PerspectiveServer); err != nil {
+			b.Fatal(err)
+		}
+		// check a few fields
+		if p.DisableActiveMigration != params.DisableActiveMigration ||
+			p.InitialMaxStreamDataBidiLocal != params.InitialMaxStreamDataBidiLocal ||
+			*p.StatelessResetToken != *params.StatelessResetToken ||
+			p.AckDelayExponent != params.AckDelayExponent {
+			b.Fatalf("params mismatch: %v vs %v", p, params)
+		}
+		if withPreferredAddress && *p.PreferredAddress != *params.PreferredAddress {
+			b.Fatalf("preferred address mismatch: %v vs %v", p.PreferredAddress, params.PreferredAddress)
+		}
+	}
+}
