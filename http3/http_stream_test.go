@@ -140,7 +140,8 @@ var _ = Describe("Stream", func() {
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
-			f, err := parseNextFrame(buf, nil)
+			fp := frameParser{r: buf}
+			f, err := fp.ParseNext()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f).To(Equal(&dataFrame{Length: 3}))
 			b := make([]byte, 3)
@@ -148,7 +149,8 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal([]byte("foo")))
 
-			f, err = parseNextFrame(buf, nil)
+			fp = frameParser{r: buf}
+			f, err = fp.ParseNext()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f).To(Equal(&dataFrame{Length: 6}))
 			b = make([]byte, 6)
