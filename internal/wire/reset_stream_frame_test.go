@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"bytes"
-
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -17,22 +15,23 @@ var _ = Describe("RESET_STREAM frame", func() {
 			data := encodeVarInt(0xdeadbeef)                  // stream ID
 			data = append(data, encodeVarInt(0x1337)...)      // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
-			b := bytes.NewReader(data)
-			frame, err := parseResetStreamFrame(b, protocol.Version1)
+			frame, l, err := parseResetStreamFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			Expect(frame.FinalSize).To(Equal(protocol.ByteCount(0x987654321)))
 			Expect(frame.ErrorCode).To(Equal(qerr.StreamErrorCode(0x1337)))
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("errors on EOFs", func() {
 			data := encodeVarInt(0xdeadbeef)                  // stream ID
 			data = append(data, encodeVarInt(0x1337)...)      // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
-			_, err := parseResetStreamFrame(bytes.NewReader(data), protocol.Version1)
+			_, l, err := parseResetStreamFrame(data, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parseResetStreamFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, _, err := parseResetStreamFrame(data[:i], protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})

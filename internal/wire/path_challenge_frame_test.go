@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -13,20 +12,20 @@ import (
 var _ = Describe("PATH_CHALLENGE frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{1, 2, 3, 4, 5, 6, 7, 8})
-			f, err := parsePathChallengeFrame(b, protocol.Version1)
+			b := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+			f, l, err := parsePathChallengeFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Len()).To(BeZero())
 			Expect(f.Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
+			Expect(l).To(Equal(len(b)))
 		})
 
 		It("errors on EOFs", func() {
 			data := []byte{1, 2, 3, 4, 5, 6, 7, 8}
-			b := bytes.NewReader(data)
-			_, err := parsePathChallengeFrame(b, protocol.Version1)
+			_, l, err := parsePathChallengeFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parsePathChallengeFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, _, err := parsePathChallengeFrame(data[:i], protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

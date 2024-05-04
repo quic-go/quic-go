@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 
@@ -15,32 +14,30 @@ import (
 var _ = Describe("STREAMS_BLOCKED frame", func() {
 	Context("parsing", func() {
 		It("accepts a frame for bidirectional streams", func() {
-			expected := encodeVarInt(0x1337)
-			b := bytes.NewReader(expected)
-			f, err := parseStreamsBlockedFrame(b, bidiStreamBlockedFrameType, protocol.Version1)
+			data := encodeVarInt(0x1337)
+			f, l, err := parseStreamsBlockedFrame(data, bidiStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeBidi))
 			Expect(f.StreamLimit).To(BeEquivalentTo(0x1337))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("accepts a frame for unidirectional streams", func() {
-			expected := encodeVarInt(0x7331)
-			b := bytes.NewReader(expected)
-			f, err := parseStreamsBlockedFrame(b, uniStreamBlockedFrameType, protocol.Version1)
+			data := encodeVarInt(0x7331)
+			f, l, err := parseStreamsBlockedFrame(data, uniStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeUni))
 			Expect(f.StreamLimit).To(BeEquivalentTo(0x7331))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("errors on EOFs", func() {
 			data := encodeVarInt(0x12345678)
-			b := bytes.NewReader(data)
-			_, err := parseStreamsBlockedFrame(b, bidiStreamBlockedFrameType, protocol.Version1)
+			_, l, err := parseStreamsBlockedFrame(data, bidiStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), bidiStreamBlockedFrameType, protocol.Version1)
+				_, _, err := parseStreamsBlockedFrame(data[:i], bidiStreamBlockedFrameType, protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -55,12 +52,13 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				}
 				b, err := f.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(b)
-				typ, err := quicvarint.Read(r)
+				typ, l, err := quicvarint.Parse(b)
 				Expect(err).ToNot(HaveOccurred())
-				frame, err := parseStreamsBlockedFrame(r, typ, protocol.Version1)
+				b = b[l:]
+				frame, l, err := parseStreamsBlockedFrame(b, typ, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(f))
+				Expect(l).To(Equal(len(b)))
 			})
 
 			It("errors when receiving a too large stream count", func() {
@@ -70,10 +68,10 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				}
 				b, err := f.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(b)
-				typ, err := quicvarint.Read(r)
+				typ, l, err := quicvarint.Parse(b)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = parseStreamsBlockedFrame(r, typ, protocol.Version1)
+				b = b[l:]
+				_, _, err = parseStreamsBlockedFrame(b, typ, protocol.Version1)
 				Expect(err).To(MatchError(fmt.Sprintf("%d exceeds the maximum stream count", protocol.MaxStreamCount+1)))
 			})
 		}
