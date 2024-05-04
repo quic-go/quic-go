@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -98,7 +98,7 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 
 func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, fromSessionTicket bool) error {
 	// needed to check that every parameter is only sent at most once
-	var parameterIDs []transportParameterID
+	parameterIDs := make([]transportParameterID, 0, 32)
 
 	var (
 		readOriginalDestinationConnectionID bool
@@ -220,7 +220,12 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 	}
 
 	// check that every transport parameter was sent at most once
-	sort.Slice(parameterIDs, func(i, j int) bool { return parameterIDs[i] < parameterIDs[j] })
+	slices.SortFunc(parameterIDs, func(a, b transportParameterID) int {
+		if a < b {
+			return -1
+		}
+		return 1
+	})
 	for i := 0; i < len(parameterIDs)-1; i++ {
 		if parameterIDs[i] == parameterIDs[i+1] {
 			return fmt.Errorf("received duplicate transport parameter %#x", parameterIDs[i])
