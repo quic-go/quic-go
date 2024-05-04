@@ -505,7 +505,7 @@ var _ = Describe("Transport Parameters", func() {
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
 			b := params.MarshalForSessionTicket(nil)
 			var tp TransportParameters
-			Expect(tp.UnmarshalFromSessionTicket(bytes.NewReader(b))).To(Succeed())
+			Expect(tp.UnmarshalFromSessionTicket(b)).To(Succeed())
 			Expect(tp.InitialMaxStreamDataBidiLocal).To(Equal(params.InitialMaxStreamDataBidiLocal))
 			Expect(tp.InitialMaxStreamDataBidiRemote).To(Equal(params.InitialMaxStreamDataBidiRemote))
 			Expect(tp.InitialMaxStreamDataUni).To(Equal(params.InitialMaxStreamDataUni))
@@ -518,7 +518,7 @@ var _ = Describe("Transport Parameters", func() {
 
 		It("rejects the parameters if it can't parse them", func() {
 			var p TransportParameters
-			Expect(p.UnmarshalFromSessionTicket(bytes.NewReader([]byte("foobar")))).ToNot(Succeed())
+			Expect(p.UnmarshalFromSessionTicket([]byte("foobar"))).ToNot(Succeed())
 		})
 
 		It("rejects the parameters if the version changed", func() {
@@ -526,7 +526,7 @@ var _ = Describe("Transport Parameters", func() {
 			data := p.MarshalForSessionTicket(nil)
 			b := quicvarint.Append(nil, transportParameterMarshalingVersion+1)
 			b = append(b, data[quicvarint.Len(transportParameterMarshalingVersion):]...)
-			Expect(p.UnmarshalFromSessionTicket(bytes.NewReader(b))).To(MatchError(fmt.Sprintf("unknown transport parameter marshaling version: %d", transportParameterMarshalingVersion+1)))
+			Expect(p.UnmarshalFromSessionTicket(b)).To(MatchError(fmt.Sprintf("unknown transport parameter marshaling version: %d", transportParameterMarshalingVersion+1)))
 		})
 
 		Context("rejects the parameters if they changed", func() {
