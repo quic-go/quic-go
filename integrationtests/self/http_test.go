@@ -722,6 +722,39 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	Context("HTTP datagrams", func() {
+		openDatagramStream := func(h string) (_ http3.RequestStream, closeFn func()) {
+			tlsConf := getTLSClientConfigWithoutServerName()
+			tlsConf.NextProtos = []string{http3.NextProtoH3}
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", port),
+				tlsConf,
+				getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			rt := &http3.SingleDestinationRoundTripper{
+				Connection:      conn,
+				EnableDatagrams: true,
+			}
+			str, err := rt.OpenRequestStream(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			u, err := url.Parse(h)
+			Expect(err).ToNot(HaveOccurred())
+			req := &http.Request{
+				Method: http.MethodConnect,
+				Proto:  "datagrams",
+				Host:   u.Host,
+				URL:    u,
+			}
+			Expect(str.SendRequestHeader(req)).To(Succeed())
+
+			rsp, err := str.ReadResponse()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+			return str, func() { conn.CloseWithError(0, "") }
+		}
+
 		It("sends an receives HTTP datagrams", func() {
 			errChan := make(chan error, 1)
 			const num = 5
@@ -746,35 +779,8 @@ var _ = Describe("HTTP tests", func() {
 				}
 			})
 
-			tlsConf := getTLSClientConfigWithoutServerName()
-			tlsConf.NextProtos = []string{http3.NextProtoH3}
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", port),
-				tlsConf,
-				getQuicConfig(&quic.Config{EnableDatagrams: true}),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.CloseWithError(0, "")
-			rt := &http3.SingleDestinationRoundTripper{
-				Connection:      conn,
-				EnableDatagrams: true,
-			}
-			str, err := rt.OpenRequestStream(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			u, err := url.Parse(fmt.Sprintf("https://localhost:%d/datagrams", port))
-			Expect(err).ToNot(HaveOccurred())
-			req := &http.Request{
-				Method: http.MethodConnect,
-				Proto:  "datagrams",
-				Host:   u.Host,
-				URL:    u,
-			}
-			Expect(str.SendRequestHeader(req)).To(Succeed())
-
-			rsp, err := str.ReadResponse()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+			str, closeFn := openDatagramStream(fmt.Sprintf("https://localhost:%d/datagrams", port))
+			defer closeFn()
 
 			for i := 0; i < num; i++ {
 				b := make([]byte, 8)
@@ -799,6 +805,46 @@ var _ = Describe("HTTP tests", func() {
 			var resetErr error
 			Eventually(errChan).Should(Receive(&resetErr))
 			Expect(resetErr.(*quic.StreamError).ErrorCode).To(BeEquivalentTo(42))
+		})
+
+		It("closes the send direction", func() {
+			errChan := make(chan error, 1)
+			datagramChan := make(chan []byte, 1)
+			mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				conn := w.(http3.Hijacker).Connection()
+				Eventually(conn.ReceivedSettings()).Should(BeClosed())
+				Expect(conn.Settings().EnableDatagrams).To(BeTrue())
+				w.WriteHeader(http.StatusOK)
+
+				str := w.(http3.HTTPStreamer).HTTPStream()
+				go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
+
+				for {
+					data, err := str.ReceiveDatagram(context.Background())
+					if err != nil {
+						errChan <- err
+						return
+					}
+					datagramChan <- data
+				}
+			})
+
+			str, closeFn := openDatagramStream(fmt.Sprintf("https://localhost:%d/datagrams", port))
+			defer closeFn()
+			go str.Read([]byte{0})
+
+			Expect(str.SendDatagram([]byte("foo"))).To(Succeed())
+			Eventually(datagramChan).Should(Receive(Equal([]byte("foo"))))
+			// signal that we're done sending
+			str.Close()
+
+			var resetErr error
+			Eventually(errChan).Should(Receive(&resetErr))
+			Expect(resetErr).To(Equal(io.EOF))
+
+			// make sure we can't send anymore
+			Expect(str.SendDatagram([]byte("foo"))).ToNot(Succeed())
 		})
 	})
 

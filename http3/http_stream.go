@@ -258,7 +258,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 
 func (s *stream) SendDatagram(b []byte) error {
 	// TODO: reject if datagrams are not negotiated (yet)
-	return s.conn.sendDatagram(s.Stream.StreamID(), b)
+	return s.datagrams.Send(b)
 }
 
 func (s *stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
