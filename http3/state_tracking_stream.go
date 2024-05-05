@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -26,6 +27,9 @@ type stateTrackingStream struct {
 }
 
 func newStateTrackingStream(s quic.Stream, onStateChange func(streamState, error)) *stateTrackingStream {
+	context.AfterFunc(s.Context(), func() {
+		onStateChange(streamStateSendClosed, context.Cause(s.Context()))
+	})
 	return &stateTrackingStream{
 		Stream:        s,
 		state:         streamStateOpen,

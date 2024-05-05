@@ -85,9 +85,9 @@ start:
 		d.mx.Unlock()
 		return data, nil
 	}
-	if d.receiveErr != nil {
+	if receiveErr := d.receiveErr; receiveErr != nil {
 		d.mx.Unlock()
-		return nil, d.receiveErr
+		return nil, receiveErr
 	}
 	d.mx.Unlock()
 

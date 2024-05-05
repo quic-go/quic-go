@@ -846,6 +846,46 @@ var _ = Describe("HTTP tests", func() {
 			// make sure we can't send anymore
 			Expect(str.SendDatagram([]byte("foo"))).ToNot(Succeed())
 		})
+
+		It("detecting a stream reset from the server", func() {
+			errChan := make(chan error, 1)
+			datagramChan := make(chan []byte, 1)
+			mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				conn := w.(http3.Hijacker).Connection()
+				Eventually(conn.ReceivedSettings()).Should(BeClosed())
+				Expect(conn.Settings().EnableDatagrams).To(BeTrue())
+				w.WriteHeader(http.StatusOK)
+
+				str := w.(http3.HTTPStreamer).HTTPStream()
+				go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
+
+				for {
+					data, err := str.ReceiveDatagram(context.Background())
+					if err != nil {
+						errChan <- err
+						return
+					}
+					str.CancelRead(42)
+					datagramChan <- data
+				}
+			})
+
+			str, closeFn := openDatagramStream(fmt.Sprintf("https://localhost:%d/datagrams", port))
+			defer closeFn()
+			go str.Read([]byte{0})
+
+			Expect(str.SendDatagram([]byte("foo"))).To(Succeed())
+			Eventually(datagramChan).Should(Receive(Equal([]byte("foo"))))
+			// signal that we're done sending
+
+			var resetErr error
+			Eventually(errChan).Should(Receive(&resetErr))
+			Expect(resetErr).To(Equal(&quic.StreamError{ErrorCode: 42, Remote: false}))
+
+			// make sure we can't send anymore
+			Expect(str.SendDatagram([]byte("foo"))).To(Equal(&quic.StreamError{ErrorCode: 42, Remote: true}))
+		})
 	})
 
 	Context("0-RTT", func() {
