@@ -180,8 +180,8 @@ type Server struct {
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
-	SignalValues  map[uint64]func(quic.Stream)
-	UniStreamType map[uint64]func(quic.ReceiveStream)
+	SignalValues  map[uint64]func(context.Context, quic.Stream)
+	UniStreamType map[uint64]func(context.Context, quic.ReceiveStream)
 
 	// ConnContext optionally specifies a function that modifies
 	// the context used for a new connection c. The provided ctx
@@ -455,7 +455,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) {
-	var hijack func(quic.Stream)
+	var hijack func(context.Context, quic.Stream)
 	fp := &frameParser{
 		conn: conn,
 		r:    str,
@@ -474,7 +474,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 		return
 	}
 	if hijack != nil {
-		hijack(str)
+		hijack(conn.Connection.Context(), str)
 		return
 	}
 	hf, ok := frame.(*headersFrame)

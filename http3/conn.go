@@ -128,7 +128,7 @@ func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagramme
 	return str, datagrams, nil
 }
 
-func (c *connection) HandleUnidirectionalStreams(hijackers map[uint64]func(quic.ReceiveStream)) {
+func (c *connection) HandleUnidirectionalStreams(hijackers map[uint64]func(context.Context, quic.ReceiveStream)) {
 	var (
 		rcvdControlStr      atomic.Bool
 		rcvdQPACKEncoderStr atomic.Bool
@@ -149,7 +149,7 @@ func (c *connection) HandleUnidirectionalStreams(hijackers map[uint64]func(quic.
 			if err != nil {
 				if hijackers != nil {
 					if f, ok := hijackers[streamType]; ok {
-						f(str)
+						f(c.Connection.Context(), str)
 						return
 					}
 				}

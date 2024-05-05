@@ -50,8 +50,8 @@ type SingleDestinationRoundTripper struct {
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
-	SignalValues  map[uint64]func(quic.Stream)
-	UniStreamType map[uint64]func(quic.ReceiveStream)
+	SignalValues  map[uint64]func(context.Context, quic.Stream)
+	UniStreamType map[uint64]func(context.Context, quic.ReceiveStream)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
@@ -122,7 +122,7 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 			}
 			return
 		}
-		var hijack func(quic.Stream)
+		var hijack func(context.Context, quic.Stream)
 		fp := &frameParser{
 			r:    str,
 			conn: c.hconn,
@@ -141,7 +141,7 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 				}
 			}
 			if hijack != nil {
-				hijack(str)
+				hijack(c.Connection.Context(), str)
 				return
 			}
 			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
