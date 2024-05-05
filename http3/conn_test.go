@@ -382,6 +382,7 @@ var _ = Describe("Connection", func() {
 			// ... then open the stream
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
+			qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 			qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
 			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 			Expect(err).ToNot(HaveOccurred())
@@ -397,6 +398,7 @@ var _ = Describe("Connection", func() {
 			// first open the stream...
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
+			qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 			qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
 			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 			Expect(err).ToNot(HaveOccurred())

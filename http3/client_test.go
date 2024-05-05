@@ -494,6 +494,7 @@ var _ = Describe("Client", func() {
 				return len(b), nil
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
+			str.EXPECT().Context().Return(context.Background()).AnyTimes()
 			str.EXPECT().StreamID().AnyTimes()
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
