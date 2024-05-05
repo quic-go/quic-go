@@ -505,3 +505,78 @@ func BenchmarkIs0RTTPacket(b *testing.B) {
 		Is0RTTPacket(packets[i%len(packets)])
 	}
 }
+
+func BenchmarkParseInitial(b *testing.B) {
+	b.Run("without token", func(b *testing.B) {
+		benchmarkInitialPacketParsing(b, nil)
+	})
+	b.Run("with token", func(b *testing.B) {
+		token := make([]byte, 32)
+		rand.Read(token)
+		benchmarkInitialPacketParsing(b, token)
+	})
+}
+
+func benchmarkInitialPacketParsing(b *testing.B, token []byte) {
+	hdr := Header{
+		Type:             protocol.PacketTypeInitial,
+		DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+		SrcConnectionID:  protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
+		Length:           1000,
+		Token:            token,
+		Version:          protocol.Version1,
+	}
+	data, err := (&ExtendedHeader{
+		Header:          hdr,
+		PacketNumber:    0x1337,
+		PacketNumberLen: 4,
+	}).Append(nil, protocol.Version1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	data = append(data, make([]byte, 1000)...)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		h, _, _, err := ParsePacket(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if h.Type != hdr.Type || h.DestConnectionID != hdr.DestConnectionID || h.SrcConnectionID != hdr.SrcConnectionID ||
+			!bytes.Equal(h.Token, hdr.Token) {
+			b.Fatalf("headers don't match: %v vs %v", h, hdr)
+		}
+	}
+}
+
+func BenchmarkParseRetry(b *testing.B) {
+	token := make([]byte, 64)
+	rand.Read(token)
+	hdr := &ExtendedHeader{
+		Header: Header{
+			Type:             protocol.PacketTypeRetry,
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
+			Token:            token,
+			Version:          protocol.Version1,
+		},
+	}
+	data, err := hdr.Append(nil, hdr.Version)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		h, _, _, err := ParsePacket(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if h.Type != hdr.Type || h.DestConnectionID != hdr.DestConnectionID || h.SrcConnectionID != hdr.SrcConnectionID ||
+			!bytes.Equal(h.Token, hdr.Token[:len(hdr.Token)-16]) {
+			b.Fatalf("headers don't match: %#v vs %#v", h, hdr)
+		}
+	}
+}
