@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -15,19 +14,19 @@ var _ = Describe("MAX_DATA frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			data := encodeVarInt(0xdecafbad123456) // byte offset
-			b := bytes.NewReader(data)
-			frame, err := parseMaxDataFrame(b, protocol.Version1)
+			frame, l, err := parseMaxDataFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.MaximumData).To(Equal(protocol.ByteCount(0xdecafbad123456)))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("errors on EOFs", func() {
 			data := encodeVarInt(0xdecafbad1234567) // byte offset
-			_, err := parseMaxDataFrame(bytes.NewReader(data), protocol.Version1)
+			_, l, err := parseMaxDataFrame(data, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parseMaxDataFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, _, err := parseMaxDataFrame(data[:i], protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

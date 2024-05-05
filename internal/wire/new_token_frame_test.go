@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -17,17 +16,15 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
 			data := encodeVarInt(uint64(len(token)))
 			data = append(data, token...)
-			b := bytes.NewReader(data)
-			f, err := parseNewTokenFrame(b, protocol.Version1)
+			f, l, err := parseNewTokenFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(string(f.Token)).To(Equal(token))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("rejects empty tokens", func() {
 			data := encodeVarInt(0)
-			b := bytes.NewReader(data)
-			_, err := parseNewTokenFrame(b, protocol.Version1)
+			_, _, err := parseNewTokenFrame(data, protocol.Version1)
 			Expect(err).To(MatchError("token must not be empty"))
 		})
 
@@ -35,11 +32,11 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit"
 			data := encodeVarInt(uint64(len(token)))
 			data = append(data, token...)
-			r := bytes.NewReader(data)
-			_, err := parseNewTokenFrame(r, protocol.Version1)
+			_, l, err := parseNewTokenFrame(data, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parseNewTokenFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, _, err := parseNewTokenFrame(data[:i], protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

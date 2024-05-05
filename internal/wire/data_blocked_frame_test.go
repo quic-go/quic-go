@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -15,19 +14,19 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			data := encodeVarInt(0x12345678)
-			b := bytes.NewReader(data)
-			frame, err := parseDataBlockedFrame(b, protocol.Version1)
+			frame, l, err := parseDataBlockedFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.MaximumData).To(Equal(protocol.ByteCount(0x12345678)))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("errors on EOFs", func() {
 			data := encodeVarInt(0x12345678)
-			_, err := parseDataBlockedFrame(bytes.NewReader(data), protocol.Version1)
+			_, l, err := parseDataBlockedFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parseDataBlockedFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, _, err := parseDataBlockedFrame(data[:i], protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
