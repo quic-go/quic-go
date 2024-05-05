@@ -41,6 +41,8 @@ jobs:
         env:
           TIMESCALE_FACTOR: 20
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -race -randomize-all -randomize-suites -trace -skip-package integrationtests
+      - name: Run benchmark tests
+        run: go test -v -run=^$ -benchtime 0.5s -bench=. $(go list ./... | grep -v integrationtests/self)
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:

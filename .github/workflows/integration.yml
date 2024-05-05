@@ -57,6 +57,8 @@ jobs:
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation -- ${{ env.QLOGFLAG }}
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- ${{ env.QLOGFLAG }}
+      - name: Run benchmarks
+        run: go test -v -run=^$ -bench=. ./integrationtests/self
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
         uses: actions/upload-artifact@v4
