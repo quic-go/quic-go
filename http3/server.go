@@ -180,19 +180,8 @@ type Server struct {
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
-	// StreamHijacker, when set, is called for the first unknown frame parsed on a bidirectional stream.
-	// It is called right after parsing the frame type.
-	// If parsing the frame type fails, the error is passed to the callback.
-	// In that case, the frame type will not be set.
-	// Callers can either ignore the frame and return control of the stream back to HTTP/3
-	// (by returning hijacked false).
-	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
-	StreamHijacker func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
-
-	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
-	// If parsing the stream type fails, the error is passed to the callback.
-	// In that case, the stream type will not be set.
-	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
+	SignalValues  map[uint64]func(quic.Stream)
+	UniStreamType map[uint64]func(quic.ReceiveStream)
 
 	// ConnContext optionally specifies a function that modifies
 	// the context used for a new connection c. The provided ctx
@@ -442,7 +431,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		protocol.PerspectiveServer,
 		s.Logger,
 	)
-	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
+	go hconn.HandleUnidirectionalStreams(s.UniStreamType)
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
@@ -466,24 +455,26 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) {
-	var ufh unknownFrameHandlerFunc
-	if s.StreamHijacker != nil {
-		ufh = func(ft FrameType, e error) (processed bool, err error) {
-			return s.StreamHijacker(
-				ft,
-				conn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
-				str,
-				e,
-			)
-		}
+	var hijack func(quic.Stream)
+	fp := &frameParser{
+		conn: conn,
+		r:    str,
+		hijack: func(v uint64) bool {
+			f, ok := s.SignalValues[v]
+			if ok {
+				hijack = f
+			}
+			return ok
+		},
 	}
-	fp := &frameParser{conn: conn, r: str, unknownFrameHandler: ufh}
 	frame, err := fp.ParseNext()
 	if err != nil {
-		if !errors.Is(err, errHijacked) {
-			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		}
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		return
+	}
+	if hijack != nil {
+		hijack(str)
 		return
 	}
 	hf, ok := frame.(*headersFrame)

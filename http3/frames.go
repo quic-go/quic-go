@@ -2,7 +2,6 @@ package http3
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 
@@ -13,16 +12,12 @@ import (
 // FrameType is the frame type of a HTTP/3 frame
 type FrameType uint64
 
-type unknownFrameHandlerFunc func(FrameType, error) (processed bool, err error)
-
 type frame interface{}
 
-var errHijacked = errors.New("hijacked")
-
 type frameParser struct {
-	r                   io.Reader
-	conn                quic.Connection
-	unknownFrameHandler unknownFrameHandlerFunc
+	r      io.Reader
+	conn   quic.Connection
+	hijack func(uint64) bool
 }
 
 func (p *frameParser) ParseNext() (frame, error) {
@@ -30,27 +25,10 @@ func (p *frameParser) ParseNext() (frame, error) {
 	for {
 		t, err := quicvarint.Read(qr)
 		if err != nil {
-			if p.unknownFrameHandler != nil {
-				hijacked, err := p.unknownFrameHandler(0, err)
-				if err != nil {
-					return nil, err
-				}
-				if hijacked {
-					return nil, errHijacked
-				}
-			}
 			return nil, err
 		}
-		// Call the unknownFrameHandler for frames not defined in the HTTP/3 spec
-		if t > 0xd && p.unknownFrameHandler != nil {
-			hijacked, err := p.unknownFrameHandler(FrameType(t), nil)
-			if err != nil {
-				return nil, err
-			}
-			if hijacked {
-				return nil, errHijacked
-			}
-			// If the unknownFrameHandler didn't process the frame, it is our responsibility to skip it.
+		if p.hijack(t) {
+			return nil, nil
 		}
 		l, err := quicvarint.Read(qr)
 		if err != nil {
