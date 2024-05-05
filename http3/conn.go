@@ -120,10 +120,11 @@ func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagramme
 	}
 	datagrams := newDatagrammer(func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
 	if c.perspective == protocol.PerspectiveServer {
+		strID := str.StreamID()
 		c.streamMx.Lock()
-		c.streams[str.StreamID()] = datagrams
+		c.streams[strID] = datagrams
 		c.streamMx.Unlock()
-		str = newStateTrackingStream(str, func(s streamState, e error) { c.onStreamStateChange(str.StreamID(), s, e) })
+		str = newStateTrackingStream(str, func(s streamState, e error) { c.onStreamStateChange(strID, s, e) })
 	}
 	return str, datagrams, nil
 }
