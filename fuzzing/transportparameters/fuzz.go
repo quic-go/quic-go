@@ -1,7 +1,6 @@
 package transportparameters
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
@@ -55,12 +54,12 @@ func fuzzTransportParameters(data []byte, sentByServer bool) int {
 
 func fuzzTransportParametersForSessionTicket(data []byte) int {
 	tp := &wire.TransportParameters{}
-	if err := tp.UnmarshalFromSessionTicket(bytes.NewReader(data)); err != nil {
+	if err := tp.UnmarshalFromSessionTicket(data); err != nil {
 		return 0
 	}
 	b := tp.MarshalForSessionTicket(nil)
 	tp2 := &wire.TransportParameters{}
-	if err := tp2.UnmarshalFromSessionTicket(bytes.NewReader(b)); err != nil {
+	if err := tp2.UnmarshalFromSessionTicket(b); err != nil {
 		panic(err)
 	}
 	return 1
