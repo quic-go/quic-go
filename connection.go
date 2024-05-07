@@ -155,6 +155,8 @@ type connection struct {
 	packer        packer
 	mtuDiscoverer mtuDiscoverer // initialized when the handshake completes
 
+	maxPayloadSizeEstimate atomic.Uint32
+
 	initialStream       cryptoStream
 	handshakeStream     cryptoStream
 	oneRTTStream        cryptoStream // only set for the server
@@ -274,9 +276,10 @@ var newConnection = func(
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
 	s.preSetup()
+	initialPacketSize := getMaxPacketSize(s.conn.RemoteAddr())
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
-		getMaxPacketSize(s.conn.RemoteAddr()),
+		initialPacketSize,
 		s.rttStats,
 		clientAddressValidated,
 		s.conn.capabilities().ECN,
@@ -284,7 +287,8 @@ var newConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, getMaxPacketSize(s.conn.RemoteAddr()), s.sentPacketHandler.SetMaxDatagramSize)
+	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, initialPacketSize, s.onMTUIncreased)
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -383,9 +387,10 @@ var newClientConnection = func(
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
 	s.preSetup()
+	initialPacketSize := getMaxPacketSize(s.conn.RemoteAddr())
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
-		getMaxPacketSize(s.conn.RemoteAddr()),
+		initialPacketSize,
 		s.rttStats,
 		false, // has no effect
 		s.conn.capabilities().ECN,
@@ -393,7 +398,8 @@ var newClientConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, getMaxPacketSize(s.conn.RemoteAddr()), s.sentPacketHandler.SetMaxDatagramSize)
+	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, initialPacketSize, s.onMTUIncreased)
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -2352,13 +2358,23 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 	}
 }
 
+func (s *connection) onMTUIncreased(mtu protocol.ByteCount) {
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(mtu)))
+	s.sentPacketHandler.SetMaxDatagramSize(mtu)
+}
+
 func (s *connection) SendDatagram(p []byte) error {
 	if !s.supportsDatagrams() {
 		return errors.New("datagram support disabled")
 	}
 
 	f := &wire.DatagramFrame{DataLenPresent: true}
-	maxDataLen := f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version)
+	// The payload size estimate is conservative.
+	// Under many circumstances we could send a few more bytes.
+	maxDataLen := min(
+		f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version),
+		protocol.ByteCount(s.maxPayloadSizeEstimate.Load()),
+	)
 	if protocol.ByteCount(len(p)) > maxDataLen {
 		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
 	}
@@ -2390,4 +2406,11 @@ func (s *connection) NextConnection() Connection {
 	<-s.HandshakeComplete()
 	s.streamsMap.UseResetMaps()
 	return s
+}
+
+// estimateMaxPayloadSize estimates the maximum payload size for short header packets.
+// It is not very sophisticated: it just subtracts the size of header (assuming the maximum
+// connection ID length), and the size of the encryption tag.
+func estimateMaxPayloadSize(mtu protocol.ByteCount) protocol.ByteCount {
+	return mtu - 1 /* type byte */ - 20 /* maximum connection ID length */ - 16 /* tag size */
 }
