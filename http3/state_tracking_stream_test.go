@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
@@ -43,7 +44,7 @@ var _ = Describe("State Tracking Stream", func() {
 		Expect(states[0].err).To(Equal(io.EOF))
 	})
 
-	It("recognizes read cancellations", func() {
+	It("recognizes local read cancellations", func() {
 		qstr := mockquic.NewMockStream(mockCtrl)
 		qstr.EXPECT().StreamID().AnyTimes()
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
@@ -62,6 +63,39 @@ var _ = Describe("State Tracking Stream", func() {
 		Expect(states).To(HaveLen(1))
 		Expect(states[0].state).To(Equal(streamStateReceiveClosed))
 		Expect(states[0].err).To(Equal(&quic.StreamError{ErrorCode: 1337}))
+	})
+
+	It("recognizes remote cancellations", func() {
+		qstr := mockquic.NewMockStream(mockCtrl)
+		qstr.EXPECT().StreamID().AnyTimes()
+		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+		var states []stateTransition
+		str := newStateTrackingStream(qstr, func(state streamState, err error) {
+			states = append(states, stateTransition{state, err})
+		})
+
+		testErr := errors.New("test error")
+		qstr.EXPECT().Read(gomock.Any()).Return(0, testErr)
+		_, err := str.Read(make([]byte, 3))
+		Expect(err).To(MatchError(testErr))
+		Expect(states).To(HaveLen(1))
+		Expect(states[0].state).To(Equal(streamStateReceiveClosed))
+		Expect(states[0].err).To(MatchError(testErr))
+	})
+
+	It("doesn't misinterpret read deadline errors", func() {
+		qstr := mockquic.NewMockStream(mockCtrl)
+		qstr.EXPECT().StreamID().AnyTimes()
+		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+		var states []stateTransition
+		str := newStateTrackingStream(qstr, func(state streamState, err error) {
+			states = append(states, stateTransition{state, err})
+		})
+
+		qstr.EXPECT().Read(gomock.Any()).Return(0, os.ErrDeadlineExceeded)
+		_, err := str.Read(make([]byte, 3))
+		Expect(err).To(MatchError(os.ErrDeadlineExceeded))
+		Expect(states).To(BeEmpty())
 	})
 
 	It("recognizes when the send side is closed, when write errors", func() {
@@ -84,6 +118,22 @@ var _ = Describe("State Tracking Stream", func() {
 		Expect(states).To(HaveLen(1))
 		Expect(states[0].state).To(Equal(streamStateSendClosed))
 		Expect(states[0].err).To(Equal(testErr))
+	})
+
+	It("recognizes when the send side is closed, when write errors", func() {
+		qstr := mockquic.NewMockStream(mockCtrl)
+		qstr.EXPECT().StreamID().AnyTimes()
+		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+		var states []stateTransition
+		str := newStateTrackingStream(qstr, func(state streamState, err error) {
+			states = append(states, stateTransition{state, err})
+		})
+
+		qstr.EXPECT().Write([]byte("foo")).Return(0, os.ErrDeadlineExceeded)
+		Expect(states).To(BeEmpty())
+		_, err := str.Write([]byte("foo"))
+		Expect(err).To(MatchError(os.ErrDeadlineExceeded))
+		Expect(states).To(BeEmpty())
 	})
 
 	It("recognizes when the send side is closed, when CancelWrite is called", func() {
