@@ -198,7 +198,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			clientLoop:
 				for {
 					ev := client.NextEvent()
-					//nolint:exhaustive // only need to process a few events
 					switch ev.Kind {
 					case EventNoEvent:
 						break clientLoop
@@ -222,7 +221,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			serverLoop:
 				for {
 					ev := server.NextEvent()
-					//nolint:exhaustive // only need to process a few events
 					switch ev.Kind {
 					case EventNoEvent:
 						break serverLoop
@@ -549,7 +547,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				var tp *wire.TransportParameters
 				var clientReceived0RTTKeys bool
 				for _, ev := range clientEvents {
-					//nolint:exhaustive // only need to process a few events
 					switch ev.Kind {
 					case EventRestoredTransportParameters:
 						tp = ev.TransportParameters
@@ -563,7 +560,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 				var serverReceived0RTTKeys bool
 				for _, ev := range serverEvents {
-					//nolint:exhaustive // only need to process a few events
 					switch ev.Kind {
 					case EventReceivedReadKeys:
 						serverReceived0RTTKeys = true
@@ -621,7 +617,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				var tp *wire.TransportParameters
 				var clientReceived0RTTKeys bool
 				for _, ev := range clientEvents {
-					//nolint:exhaustive // only need to process a few events
 					switch ev.Kind {
 					case EventRestoredTransportParameters:
 						tp = ev.TransportParameters

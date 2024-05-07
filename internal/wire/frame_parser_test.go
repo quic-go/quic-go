@@ -1,7 +1,11 @@
 package wire
 
 import (
+	"bytes"
+	"testing"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -433,3 +437,133 @@ var _ = Describe("Frame parsing", func() {
 		})
 	})
 })
+
+// STREAM and ACK are the most relevant frames for high-throughput transfers.
+func BenchmarkParseStreamAndACK(b *testing.B) {
+	ack := &AckFrame{
+		AckRanges: []AckRange{
+			{Smallest: 5000, Largest: 5200},
+			{Smallest: 1, Largest: 4200},
+		},
+		DelayTime: 42 * time.Millisecond,
+		ECT0:      5000,
+		ECT1:      0,
+		ECNCE:     10,
+	}
+	sf := &StreamFrame{
+		StreamID:       1337,
+		Offset:         1e7,
+		Data:           make([]byte, 200),
+		DataLenPresent: true,
+	}
+	rand.Read(sf.Data)
+
+	data, err := ack.Append([]byte{}, protocol.Version1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	data, err = sf.Append(data, protocol.Version1)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	parser := NewFrameParser(false)
+	parser.SetAckDelayExponent(3)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		l, f, err := parser.ParseNext(data, protocol.Encryption1RTT, protocol.Version1)
+		if err != nil {
+			b.Fatal(err)
+		}
+		ackParsed := f.(*AckFrame)
+		if ackParsed.DelayTime != ack.DelayTime || ackParsed.ECNCE != ack.ECNCE {
+			b.Fatalf("incorrect ACK frame: %v vs %v", ack, ackParsed)
+		}
+		l2, f, err := parser.ParseNext(data[l:], protocol.Encryption1RTT, protocol.Version1)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(data[l:]) != l2 {
+			b.Fatal("didn't parse the entire packet")
+		}
+		sfParsed := f.(*StreamFrame)
+		if sfParsed.StreamID != sf.StreamID || !bytes.Equal(sfParsed.Data, sf.Data) {
+			b.Fatalf("incorrect STREAM frame: %v vs %v", sf, sfParsed)
+		}
+	}
+}
+
+func BenchmarkParseOtherFrames(b *testing.B) {
+	maxDataFrame := &MaxDataFrame{MaximumData: 123456}
+	maxStreamsFrame := &MaxStreamsFrame{MaxStreamNum: 10}
+	maxStreamDataFrame := &MaxStreamDataFrame{StreamID: 1337, MaximumStreamData: 1e6}
+	cryptoFrame := &CryptoFrame{Offset: 1000, Data: make([]byte, 128)}
+	resetStreamFrame := &ResetStreamFrame{StreamID: 87654, ErrorCode: 1234, FinalSize: 1e8}
+	rand.Read(cryptoFrame.Data)
+	frames := []Frame{
+		maxDataFrame,
+		maxStreamsFrame,
+		maxStreamDataFrame,
+		cryptoFrame,
+		&PingFrame{},
+		resetStreamFrame,
+	}
+	var buf []byte
+	for i, frame := range frames {
+		var err error
+		buf, err = frame.Append(buf, protocol.Version1)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if i == len(frames)/2 {
+			// add 3 PADDING frames
+			buf = append(buf, 0)
+			buf = append(buf, 0)
+			buf = append(buf, 0)
+		}
+	}
+
+	parser := NewFrameParser(false)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		data := buf
+		for j := 0; j < len(frames); j++ {
+			l, f, err := parser.ParseNext(data, protocol.Encryption1RTT, protocol.Version1)
+			if err != nil {
+				b.Fatal(err)
+			}
+			data = data[l:]
+			switch j {
+			case 0:
+				if f.(*MaxDataFrame).MaximumData != maxDataFrame.MaximumData {
+					b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
+				}
+			case 1:
+				if f.(*MaxStreamsFrame).MaxStreamNum != maxStreamsFrame.MaxStreamNum {
+					b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
+				}
+			case 2:
+				if f.(*MaxStreamDataFrame).StreamID != maxStreamDataFrame.StreamID ||
+					f.(*MaxStreamDataFrame).MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
+					b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
+				}
+			case 3:
+				if f.(*CryptoFrame).Offset != cryptoFrame.Offset || !bytes.Equal(f.(*CryptoFrame).Data, cryptoFrame.Data) {
+					b.Fatalf("CRYPTO frame does not match: %v vs %v", f, cryptoFrame)
+				}
+			case 4:
+				_ = f.(*PingFrame)
+			case 5:
+				rst := f.(*ResetStreamFrame)
+				if rst.StreamID != resetStreamFrame.StreamID || rst.ErrorCode != resetStreamFrame.ErrorCode ||
+					rst.FinalSize != resetStreamFrame.FinalSize {
+					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", rst, resetStreamFrame)
+				}
+			}
+		}
+	}
+}

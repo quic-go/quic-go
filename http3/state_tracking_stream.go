@@ -1,7 +1,9 @@
 package http3
 
 import (
+	"context"
 	"errors"
+	"os"
 	"sync"
 
 	"github.com/quic-go/quic-go"
@@ -26,6 +28,9 @@ type stateTrackingStream struct {
 }
 
 func newStateTrackingStream(s quic.Stream, onStateChange func(streamState, error)) *stateTrackingStream {
+	context.AfterFunc(s.Context(), func() {
+		onStateChange(streamStateSendClosed, context.Cause(s.Context()))
+	})
 	return &stateTrackingStream{
 		Stream:        s,
 		state:         streamStateOpen,
@@ -71,7 +76,7 @@ func (s *stateTrackingStream) CancelWrite(e quic.StreamErrorCode) {
 
 func (s *stateTrackingStream) Write(b []byte) (int, error) {
 	n, err := s.Stream.Write(b)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		s.closeSend(err)
 	}
 	return n, err
@@ -84,7 +89,7 @@ func (s *stateTrackingStream) CancelRead(e quic.StreamErrorCode) {
 
 func (s *stateTrackingStream) Read(b []byte) (int, error) {
 	n, err := s.Stream.Read(b)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		s.closeReceive(err)
 	}
 	return n, err

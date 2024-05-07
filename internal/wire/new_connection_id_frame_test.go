@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -18,14 +17,13 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, 10)                                       // connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
-			b := bytes.NewReader(data)
-			frame, err := parseNewConnectionIDFrame(b, protocol.Version1)
+			frame, l, err := parseNewConnectionIDFrame(data, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.SequenceNumber).To(Equal(uint64(0xdeadbeef)))
 			Expect(frame.RetirePriorTo).To(Equal(uint64(0xcafe)))
 			Expect(frame.ConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
 			Expect(string(frame.StatelessResetToken[:])).To(Equal("deadbeefdecafbad"))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("errors when the Retire Prior To value is larger than the Sequence Number", func() {
@@ -34,7 +32,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, 3)
 			data = append(data, []byte{1, 2, 3}...)
 			data = append(data, []byte("deadbeefdecafbad")...) // stateless reset token
-			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
+			_, _, err := parseNewConnectionIDFrame(data, protocol.Version1)
 			Expect(err).To(MatchError("Retire Prior To value (1001) larger than Sequence Number (1000)"))
 		})
 
@@ -42,7 +40,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data := encodeVarInt(42)                 // sequence number
 			data = append(data, encodeVarInt(12)...) // retire prior to
 			data = append(data, 0)                   // connection ID length
-			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
+			_, _, err := parseNewConnectionIDFrame(data, protocol.Version1)
 			Expect(err).To(MatchError("invalid zero-length connection ID"))
 		})
 
@@ -52,7 +50,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, 21)                                                                                   // connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)                                                        // stateless reset token
-			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
+			_, _, err := parseNewConnectionIDFrame(data, protocol.Version1)
 			Expect(err).To(MatchError(protocol.ErrInvalidConnectionIDLen))
 		})
 
@@ -62,10 +60,11 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, 10)                                       // connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
-			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
+			_, l, err := parseNewConnectionIDFrame(data, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(l).To(Equal(len(data)))
 			for i := range data {
-				_, err := parseNewConnectionIDFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, _, err := parseNewConnectionIDFrame(data[:i], protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

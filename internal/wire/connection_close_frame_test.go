@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -18,14 +17,13 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
-			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
+			frame, l, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeFalse())
 			Expect(frame.ErrorCode).To(BeEquivalentTo(0x19))
 			Expect(frame.FrameType).To(BeEquivalentTo(0x1337))
 			Expect(frame.ReasonPhrase).To(Equal(reason))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("accepts sample frame containing an application error code", func() {
@@ -33,20 +31,19 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data := encodeVarInt(0xcafe)
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, reason...)
-			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, applicationCloseFrameType, protocol.Version1)
+			frame, l, err := parseConnectionCloseFrame(data, applicationCloseFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeTrue())
 			Expect(frame.ErrorCode).To(BeEquivalentTo(0xcafe))
 			Expect(frame.ReasonPhrase).To(Equal(reason))
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 
 		It("rejects long reason phrases", func() {
 			data := encodeVarInt(0xcafe)
 			data = append(data, encodeVarInt(0x42)...)   // frame type
 			data = append(data, encodeVarInt(0xffff)...) // reason phrase length
-			_, err := parseConnectionCloseFrame(bytes.NewReader(data), connectionCloseFrameType, protocol.Version1)
+			_, _, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
@@ -56,12 +53,11 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
-			b := bytes.NewReader(data)
-			_, err := parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
+			_, l, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
+			Expect(l).To(Equal(len(data)))
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				b := bytes.NewReader(data[:i])
-				_, err = parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
+				_, _, err = parseConnectionCloseFrame(data[:i], connectionCloseFrameType, protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -70,11 +66,10 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data := encodeVarInt(0xcafe)
 			data = append(data, encodeVarInt(0x42)...) // frame type
 			data = append(data, encodeVarInt(0)...)
-			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
+			frame, l, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.ReasonPhrase).To(BeEmpty())
-			Expect(b.Len()).To(BeZero())
+			Expect(l).To(Equal(len(data)))
 		})
 	})
 

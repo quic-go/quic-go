@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -123,10 +122,11 @@ func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagramme
 	}
 	datagrams := newDatagrammer(func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
 	if c.perspective == protocol.PerspectiveServer {
+		strID := str.StreamID()
 		c.streamMx.Lock()
-		c.streams[str.StreamID()] = datagrams
+		c.streams[strID] = datagrams
 		c.streamMx.Unlock()
-		str = newStateTrackingStream(str, func(s streamState, e error) { c.onStreamStateChange(str.StreamID(), s, e) })
+		str = newStateTrackingStream(str, func(s streamState, e error) { c.onStreamStateChange(strID, s, e) })
 	}
 	return str, datagrams, nil
 }
@@ -203,7 +203,8 @@ func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.Co
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
-			f, err := parseNextFrame(str, nil)
+			fp := &frameParser{conn: c.Connection, r: str}
+			f, err := fp.ParseNext()
 			if err != nil {
 				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
 				return
@@ -257,9 +258,7 @@ func (c *connection) receiveDatagrams() error {
 		if err != nil {
 			return err
 		}
-		// TODO: this is quite wasteful in terms of allocations
-		r := bytes.NewReader(b)
-		quarterStreamID, err := quicvarint.Read(r)
+		quarterStreamID, n, err := quicvarint.Parse(b)
 		if err != nil {
 			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeDatagramError), "")
 			return fmt.Errorf("could not read quarter stream id: %w", err)
@@ -276,7 +275,7 @@ func (c *connection) receiveDatagrams() error {
 			return nil
 		}
 		c.streamMx.Unlock()
-		dg.enqueue(b[len(b)-r.Len():])
+		dg.enqueue(b[n:])
 	}
 }
 

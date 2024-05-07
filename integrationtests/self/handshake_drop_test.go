@@ -199,7 +199,6 @@ var _ = Describe("Handshake drop tests", func() {
 									var incoming, outgoing atomic.Int32
 									ln, proxyPort, closeFn := startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										var p int32
-										//nolint:exhaustive
 										switch d {
 										case quicproxy.DirectionIncoming:
 											p = incoming.Add(1)
@@ -216,7 +215,6 @@ var _ = Describe("Handshake drop tests", func() {
 									var incoming, outgoing atomic.Int32
 									ln, proxyPort, closeFn := startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 										var p int32
-										//nolint:exhaustive
 										switch d {
 										case quicproxy.DirectionIncoming:
 											p = incoming.Add(1)

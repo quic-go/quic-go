@@ -33,10 +33,13 @@ func BenchmarkHandshake(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer conn.Close()
+	tr := &quic.Transport{Conn: conn}
+	defer tr.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c, err := quic.Dial(context.Background(), conn, ln.Addr(), tlsClientConfig, nil)
+		c, err := tr.Dial(context.Background(), ln.Addr(), tlsClientConfig, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
