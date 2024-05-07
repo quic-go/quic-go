@@ -40,7 +40,7 @@ jobs:
       matrix:
         go: [  "1.21.x", "1.22.x" ]
     env:
-      GOLANGCI_LINT_VERSION: v1.56.1
+      GOLANGCI_LINT_VERSION: v1.58.0
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
@@ -48,44 +48,39 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint (Linux)
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         with:
-          skip-pkg-cache: true
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (Windows)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         env:
           GOOS: "windows"
         with:
-          skip-pkg-cache: true
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (OSX)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         env:
           GOOS: "darwin"
         with:
-          skip-pkg-cache: true
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (FreeBSD)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         env:
           GOOS: "freebsd"
         with:
-          skip-pkg-cache: true
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (others)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         env:
           GOOS: "solaris" # some OS that we don't have any build tags for
         with:
-          skip-pkg-cache: true
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
