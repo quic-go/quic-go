@@ -67,7 +67,7 @@ func (p *frameParser) ParseNext() (frame, error) {
 		case 0x3: // CANCEL_PUSH
 		case 0x5: // PUSH_PROMISE
 		case 0x7:
-			return parseGoawayFrame(r, l)
+			return parseGoawayFrame(p.r, l)
 		case 0xd: // MAX_PUSH_ID
 		case 0x2, 0x6, 0x8, 0x9:
 			p.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")

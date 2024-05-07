@@ -110,8 +110,9 @@ var errGoaway = errors.New("server sent goaway")
 
 func (c *SingleDestinationRoundTripper) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
 	lastID := quic.StreamID(-4)
+	fp := &frameParser{conn: c.Connection, r: str}
 	for {
-		frame, err := parseNextFrame(str, nil)
+		frame, err := fp.ParseNext()
 		if err != nil {
 			if c.Logger != nil {
 				c.Logger.Debug("reading control stream", "error", err)
