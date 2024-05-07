@@ -60,7 +60,6 @@ var _ = Describe("Connection", func() {
 		packet := &coalescedPacket{buffer: buffer}
 		if encLevel != protocol.Encryption1RTT {
 			var typ protocol.PacketType
-			//nolint:exhaustive
 			switch encLevel {
 			case protocol.EncryptionInitial:
 				typ = protocol.PacketTypeInitial
@@ -1313,7 +1312,6 @@ var _ = Describe("Connection", func() {
 				var getFrame func(protocol.ByteCount, protocol.Version) wire.Frame
 
 				BeforeEach(func() {
-					//nolint:exhaustive
 					switch encLevel {
 					case protocol.EncryptionInitial:
 						sendMode = ackhandler.SendPTOInitial
