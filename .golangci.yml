@@ -23,6 +23,7 @@ linters:
     - gofmt # redundant, since gofmt *should* be a no-op after gofumpt
     - gofumpt
     - gosimple
+    - govet
     - ineffassign
     - misspell
     - prealloc
@@ -31,7 +32,6 @@ linters:
     - unconvert
     - unparam
     - unused
-    - vet
 
 issues:
   exclude-files:
