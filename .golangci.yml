@@ -40,3 +40,6 @@ issues:
     - path: internal/qtls
       linters:
         - depguard
+    - path: _test\.go
+      linters:
+        - exhaustive
