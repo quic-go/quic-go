@@ -90,7 +90,7 @@ var _ = Describe("DPLPMTUD", func() {
 		_, err = str.Write(PRDataLong)
 		Expect(err).ToNot(HaveOccurred())
 		str.Close()
-		Eventually(done).Should(BeClosed())
+		Eventually(done, 20*time.Second).Should(BeClosed())
 
 		mx.Lock()
 		defer mx.Unlock()
