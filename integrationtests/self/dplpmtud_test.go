@@ -1,6 +1,3 @@
-// We can't reliably set the DF bit on macOS, so we can't do Path MTU discovery.
-//go:build !darwin
-
 package self_test
 
 import (
@@ -65,9 +62,16 @@ var _ = Describe("DPLPMTUD", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		conn, err := quic.DialAddr(
+		// Make sure to use v4-only socket here.
+		// We can't reliably set the DF bit on dual-stack sockets on macOS.
+		udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		defer udpConn.Close()
+		tr := &quic.Transport{Conn: udpConn}
+		defer tr.Close()
+		conn, err := tr.Dial(
 			context.Background(),
-			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+			proxy.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)
