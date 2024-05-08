@@ -325,6 +325,12 @@ type Config struct {
 	// If set to 0, then no keep alive is sent. Otherwise, the keep alive is sent on that period (or at most
 	// every half of MaxIdleTimeout, whichever is smaller).
 	KeepAlivePeriod time.Duration
+	// InitialPacketSize is the initial size of packets sent.
+	// It is usually not necessary to manually set this value,
+	// since Path MTU discovery very quickly finds the path's MTU.
+	// If set too high, the path might not support packets that large, leading to a timeout of the QUIC handshake.
+	// Values below 1200 are invalid.
+	InitialPacketSize uint16
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.

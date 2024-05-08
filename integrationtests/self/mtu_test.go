@@ -24,7 +24,11 @@ var _ = Describe("DPLPMTUD", func() {
 		ln, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, EnableDatagrams: true}),
+			getQuicConfig(&quic.Config{
+				InitialPacketSize:       1234,
+				DisablePathMTUDiscovery: true,
+				EnableDatagrams:         true,
+			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
@@ -78,7 +82,10 @@ var _ = Describe("DPLPMTUD", func() {
 			context.Background(),
 			proxy.LocalAddr(),
 			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			getQuicConfig(&quic.Config{
+				InitialPacketSize: protocol.MinInitialPacketSize,
+				EnableDatagrams:   true,
+			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")
@@ -110,9 +117,33 @@ var _ = Describe("DPLPMTUD", func() {
 		fmt.Fprintf(GinkgoWriter, "max server packet size: %d, MTU: %d\n", maxPacketSizeServer, mtu)
 		Expect(maxPacketSizeClient).To(BeNumerically(">=", mtu-25))
 		const maxDiff = 40 // this includes the 21 bytes for the short header, 16 bytes for the encryption tag, and framing overhead
-		Expect(initialMaxDatagramSize).To(BeNumerically(">=", protocol.InitialPacketSize-maxDiff))
+		Expect(initialMaxDatagramSize).To(BeNumerically(">=", protocol.MinInitialPacketSize-maxDiff))
 		Expect(finalMaxDatagramSize).To(BeNumerically(">=", maxPacketSizeClient-maxDiff))
 		// MTU discovery was disabled on the server side
-		Expect(maxPacketSizeServer).To(BeEquivalentTo(protocol.InitialPacketSize))
+		Expect(maxPacketSizeServer).To(Equal(1234))
+	})
+
+	It("uses the initial packet size", func() {
+		c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		defer c.Close()
+
+		cconn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		defer cconn.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			quic.Dial(ctx, cconn, c.LocalAddr(), getTLSClientConfig(), getQuicConfig(&quic.Config{InitialPacketSize: 1337}))
+		}()
+
+		b := make([]byte, 2000)
+		n, _, err := c.ReadFrom(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(1337))
+		cancel()
+		Eventually(done).Should(BeClosed())
 	})
 })
