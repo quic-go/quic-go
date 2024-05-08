@@ -28,7 +28,7 @@ func getRandomValueUpTo(max int64) uint64 {
 }
 
 func getRandomValue() uint64 {
-	return getRandomValueUpTo(math.MaxInt64)
+	return getRandomValueUpTo(quicvarint.Max)
 }
 
 var _ = Describe("Transport Parameters", func() {
@@ -102,7 +102,8 @@ var _ = Describe("Transport Parameters", func() {
 			RetrySourceConnectionID:         &rcid,
 			AckDelayExponent:                13,
 			MaxAckDelay:                     42 * time.Millisecond,
-			ActiveConnectionIDLimit:         2 + getRandomValueUpTo(math.MaxInt64-2),
+			ActiveConnectionIDLimit:         2 + getRandomValueUpTo(quicvarint.Max-2),
+			MaxUDPPayloadSize:               1200 + protocol.ByteCount(getRandomValueUpTo(quicvarint.Max-1200)),
 			MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
 		}
 		data := params.Marshal(protocol.PerspectiveServer)
@@ -124,6 +125,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.AckDelayExponent).To(Equal(uint8(13)))
 		Expect(p.MaxAckDelay).To(Equal(42 * time.Millisecond))
 		Expect(p.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
+		Expect(p.MaxUDPPayloadSize).To(Equal(params.MaxUDPPayloadSize))
 		Expect(p.MaxDatagramFrameSize).To(Equal(params.MaxDatagramFrameSize))
 	})
 
@@ -176,13 +178,13 @@ var _ = Describe("Transport Parameters", func() {
 		}))
 	})
 
-	It("errors when the max_packet_size is too small", func() {
+	It("errors when the max_udp_payload_size is too small", func() {
 		b := quicvarint.Append(nil, uint64(maxUDPPayloadSizeParameterID))
 		b = quicvarint.Append(b, uint64(quicvarint.Len(1199)))
 		b = quicvarint.Append(b, 1199)
 		Expect((&TransportParameters{}).Unmarshal(b, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
 			ErrorCode:    qerr.TransportParameterError,
-			ErrorMessage: "invalid value for max_packet_size: 1199 (minimum 1200)",
+			ErrorMessage: "invalid value for max_udp_payload_size: 1199 (minimum 1200)",
 		}))
 	})
 
@@ -499,7 +501,7 @@ var _ = Describe("Transport Parameters", func() {
 				InitialMaxData:                 protocol.ByteCount(getRandomValue()),
 				MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
-				ActiveConnectionIDLimit:        2 + getRandomValueUpTo(math.MaxInt64-2),
+				ActiveConnectionIDLimit:        2 + getRandomValueUpTo(quicvarint.Max-2),
 				MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(int64(MaxDatagramSize))),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
@@ -748,7 +750,7 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 		RetrySourceConnectionID:         &rcid,
 		AckDelayExponent:                13,
 		MaxAckDelay:                     42 * time.Millisecond,
-		ActiveConnectionIDLimit:         2 + getRandomValueUpTo(math.MaxInt64-2),
+		ActiveConnectionIDLimit:         2 + getRandomValueUpTo(quicvarint.Max-2),
 		MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
 	}
 	var token2 protocol.StatelessResetToken
