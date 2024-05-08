@@ -302,7 +302,7 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 		p.MaxIdleTimeout = max(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxUDPPayloadSizeParameterID:
 		if val < 1200 {
-			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
+			return fmt.Errorf("invalid value for max_udp_payload_size: %d (minimum 1200)", val)
 		}
 		p.MaxUDPPayloadSize = protocol.ByteCount(val)
 	case ackDelayExponentParameterID:
@@ -357,8 +357,10 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 	// idle_timeout
 	b = p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
-	// max_packet_size
-	b = p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxPacketBufferSize))
+	// max_udp_payload_size
+	if p.MaxUDPPayloadSize > 0 {
+		b = p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(p.MaxUDPPayloadSize))
+	}
 	// max_ack_delay
 	// Only send it if is different from the default value.
 	if p.MaxAckDelay != protocol.DefaultMaxAckDelay {
