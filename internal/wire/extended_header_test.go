@@ -25,7 +25,7 @@ var _ = Describe("Header", func() {
 						DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}),
 						SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37}),
 						Version:          0x1020304,
-						Length:           protocol.InitialPacketSizeIPv4,
+						Length:           1234,
 					},
 					PacketNumber:    0xdecaf,
 					PacketNumberLen: protocol.PacketNumberLen3,
@@ -39,8 +39,8 @@ var _ = Describe("Header", func() {
 					0x8,                                          // src connection ID length
 					0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37, // source connection ID
 				}
-				expected = append(expected, encodeVarInt(protocol.InitialPacketSizeIPv4)...) // length
-				expected = append(expected, []byte{0xd, 0xec, 0xaf}...)                      // packet number
+				expected = append(expected, encodeVarInt(1234)...)      // length
+				expected = append(expected, []byte{0xd, 0xec, 0xaf}...) // packet number
 				Expect(b).To(Equal(expected))
 			})
 
