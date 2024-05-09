@@ -278,7 +278,7 @@ var newConnection = func(
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
-		protocol.InitialPacketSize,
+		protocol.ByteCount(s.config.InitialPacketSize),
 		s.rttStats,
 		clientAddressValidated,
 		s.conn.capabilities().ECN,
@@ -286,8 +286,8 @@ var newConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, protocol.InitialPacketSize, s.onMTUIncreased)
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.InitialPacketSize)))
+	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, protocol.ByteCount(s.config.InitialPacketSize), s.onMTUIncreased)
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -389,7 +389,7 @@ var newClientConnection = func(
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
-		protocol.InitialPacketSize,
+		protocol.ByteCount(s.config.InitialPacketSize),
 		s.rttStats,
 		false, // has no effect
 		s.conn.capabilities().ECN,
@@ -397,8 +397,8 @@ var newClientConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, protocol.InitialPacketSize, s.onMTUIncreased)
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.InitialPacketSize)))
+	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, protocol.ByteCount(s.config.InitialPacketSize), s.onMTUIncreased)
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
