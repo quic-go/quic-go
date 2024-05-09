@@ -10,6 +10,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -109,9 +110,9 @@ var _ = Describe("DPLPMTUD", func() {
 		fmt.Fprintf(GinkgoWriter, "max server packet size: %d, MTU: %d\n", maxPacketSizeServer, mtu)
 		Expect(maxPacketSizeClient).To(BeNumerically(">=", mtu-25))
 		const maxDiff = 40 // this includes the 21 bytes for the short header, 16 bytes for the encryption tag, and framing overhead
-		Expect(initialMaxDatagramSize).To(BeNumerically(">=", 1252-maxDiff))
+		Expect(initialMaxDatagramSize).To(BeNumerically(">=", protocol.InitialPacketSize-maxDiff))
 		Expect(finalMaxDatagramSize).To(BeNumerically(">=", maxPacketSizeClient-maxDiff))
 		// MTU discovery was disabled on the server side
-		Expect(maxPacketSizeServer).To(Equal(1252))
+		Expect(maxPacketSizeServer).To(BeEquivalentTo(protocol.InitialPacketSize))
 	})
 })
