@@ -7,14 +7,14 @@ import (
 
 // A Timer wrapper that behaves correctly when resetting
 type Timer struct {
-	t        *time.Timer
+	t        time.Timer
 	read     bool
 	deadline time.Time
 }
 
 // NewTimer creates a new timer that is not set
 func NewTimer() *Timer {
-	return &Timer{t: time.NewTimer(time.Duration(math.MaxInt64))}
+	return &Timer{t: *time.NewTimer(time.Duration(math.MaxInt64))}
 }
 
 // Chan returns the channel of the wrapped timer

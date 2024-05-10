@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -93,3 +94,14 @@ var _ = Describe("Timer", func() {
 		Consistently(t.Chan()).ShouldNot(Receive())
 	})
 })
+
+func BenchmarkTimer(b *testing.B) {
+	t := NewTimer()
+	defer t.Stop()
+	for i := 0; i < b.N; i++ {
+		t.Reset(time.Now().Add(50 * time.Millisecond))
+		if i%2 == 0 {
+			t.SetRead()
+		}
+	}
+}
