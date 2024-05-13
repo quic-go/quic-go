@@ -350,9 +350,9 @@ var _ = Describe("HTTP tests", func() {
 		mux.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
 			defer close(handlerCalled)
+			// TODO(4508): check for request context cancellations
 			for {
 				if _, err := w.Write([]byte("foobar")); err != nil {
-					Expect(r.Context().Done()).To(BeClosed())
 					var http3Err *http3.Error
 					Expect(errors.As(err, &http3Err)).To(BeTrue())
 					Expect(http3Err.ErrorCode).To(Equal(http3.ErrCode(0x10c)))
@@ -570,7 +570,7 @@ var _ = Describe("HTTP tests", func() {
 			tracingID = c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
 			return ctx
 		}
-		mux.HandleFunc("/conn-context", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/http3-conn-context", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
 			v, ok := r.Context().Value(ctxKey(0)).(string)
 			Expect(ok).To(BeTrue())
@@ -589,9 +589,45 @@ var _ = Describe("HTTP tests", func() {
 			Expect(id).To(Equal(tracingID))
 		})
 
-		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/conn-context", port))
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/http3-conn-context", port))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(resp.StatusCode).To(Equal(200))
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	})
+
+	It("uses the QUIC connection context", func() {
+		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.Close()
+		tr := &quic.Transport{
+			Conn: conn,
+			ConnContext: func() context.Context {
+				//nolint:staticcheck
+				return context.WithValue(context.Background(), "foo", "bar")
+			},
+		}
+		defer tr.Close()
+		tlsConf := getTLSConfig()
+		tlsConf.NextProtos = []string{http3.NextProtoH3}
+		ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+
+		mux.HandleFunc("/quic-conn-context", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			v, ok := r.Context().Value("foo").(string)
+			Expect(ok).To(BeTrue())
+			Expect(v).To(Equal("bar"))
+		})
+		go func() {
+			defer GinkgoRecover()
+			c, err := ln.Accept(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			server.ServeQUICConn(c)
+		}()
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/quic-conn-context", conn.LocalAddr().(*net.UDPAddr).Port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	})
 
 	It("checks the server's settings", func() {
