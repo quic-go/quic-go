@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -286,7 +287,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
 	)
-	if err := client.StartHandshake(); err != nil {
+	if err := client.StartHandshake(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
@@ -303,7 +304,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
 	)
-	if err := server.StartHandshake(); err != nil {
+	if err := server.StartHandshake(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 	defer server.Close()

@@ -287,6 +287,7 @@ var _ = Describe("Server", func() {
 				var newConnID protocol.ConnectionID
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -301,7 +302,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -489,6 +489,7 @@ var _ = Describe("Server", func() {
 				var newConnID protocol.ConnectionID
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -503,7 +504,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -557,6 +557,7 @@ var _ = Describe("Server", func() {
 				acceptConn := make(chan struct{})
 				var counter atomic.Uint32
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -571,7 +572,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -612,6 +612,7 @@ var _ = Describe("Server", func() {
 			It("only creates a single connection for a duplicate Initial", func() {
 				done := make(chan struct{})
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -626,7 +627,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -661,6 +661,7 @@ var _ = Describe("Server", func() {
 				wg.Add(limit)
 				done := make(chan struct{})
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -675,7 +676,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -722,6 +722,7 @@ var _ = Describe("Server", func() {
 		Context("token validation", func() {
 			It("decodes the token from the token field", func() {
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					_ connRunner,
 					_ protocol.ConnectionID,
@@ -736,7 +737,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -955,6 +955,7 @@ var _ = Describe("Server", func() {
 
 				destroyed := make(chan struct{})
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					_ connRunner,
 					_ protocol.ConnectionID,
@@ -969,7 +970,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -1022,6 +1022,7 @@ var _ = Describe("Server", func() {
 
 				handshakeChan := make(chan struct{})
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					_ connRunner,
 					_ protocol.ConnectionID,
@@ -1036,7 +1037,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -1092,6 +1092,7 @@ var _ = Describe("Server", func() {
 
 				handshakeChan := make(chan struct{})
 				serv.newConn = func(
+					_ context.Context,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -1106,7 +1107,6 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ *logging.ConnectionTracer,
-					_ ConnectionTracingID,
 					_ utils.Logger,
 					_ protocol.Version,
 				) quicConn {
@@ -1162,6 +1162,7 @@ var _ = Describe("Server", func() {
 
 			ready := make(chan struct{})
 			serv.baseServer.newConn = func(
+				_ context.Context,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1176,7 +1177,6 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -1203,6 +1203,7 @@ var _ = Describe("Server", func() {
 			var wg sync.WaitGroup // to make sure the test fully completes
 			wg.Add(protocol.MaxAcceptQueueSize)
 			serv.baseServer.newConn = func(
+				_ context.Context,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1217,7 +1218,6 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -1262,6 +1262,7 @@ var _ = Describe("Server", func() {
 			connCreated := make(chan struct{})
 			conn := NewMockQUICConn(mockCtrl)
 			serv.baseServer.newConn = func(
+				_ context.Context,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1276,7 +1277,6 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {
@@ -1384,6 +1384,7 @@ var _ = Describe("Server", func() {
 			}, make([]byte, protocol.MinInitialPacketSize))
 			called := make(chan struct{})
 			serv.newConn = func(
+				_ context.Context,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -1398,7 +1399,6 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ *logging.ConnectionTracer,
-				_ ConnectionTracingID,
 				_ utils.Logger,
 				_ protocol.Version,
 			) quicConn {

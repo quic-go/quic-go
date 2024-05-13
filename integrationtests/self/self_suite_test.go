@@ -186,10 +186,12 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	}
 	origTracer := conf.Tracer
 	conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-		return logging.NewMultiplexedConnectionTracer(
-			tools.NewQlogConnectionTracer(GinkgoWriter)(ctx, p, connID),
-			origTracer(ctx, p, connID),
-		)
+		tr := origTracer(ctx, p, connID)
+		qlogger := tools.NewQlogConnectionTracer(GinkgoWriter)(ctx, p, connID)
+		if tr == nil {
+			return qlogger
+		}
+		return logging.NewMultiplexedConnectionTracer(qlogger, tr)
 	}
 	return conf
 }

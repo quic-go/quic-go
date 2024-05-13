@@ -52,7 +52,7 @@ type streamManager interface {
 }
 
 type cryptoStreamHandler interface {
-	StartHandshake() error
+	StartHandshake(context.Context) error
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber) error
 	SetHandshakeConfirmed()
@@ -222,6 +222,7 @@ var (
 )
 
 var newConnection = func(
+	ctx context.Context,
 	conn sendConn,
 	runner connRunner,
 	origDestConnID protocol.ConnectionID,
@@ -236,7 +237,6 @@ var newConnection = func(
 	tokenGenerator *handshake.TokenGenerator,
 	clientAddressValidated bool,
 	tracer *logging.ConnectionTracer,
-	tracingID ConnectionTracingID,
 	logger utils.Logger,
 	v protocol.Version,
 ) quicConn {
@@ -274,7 +274,7 @@ var newConnection = func(
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
+	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
@@ -339,6 +339,7 @@ var newConnection = func(
 
 // declare this as a variable, such that we can it mock it in the tests
 var newClientConnection = func(
+	ctx context.Context,
 	conn sendConn,
 	runner connRunner,
 	destConnID protocol.ConnectionID,
@@ -350,7 +351,6 @@ var newClientConnection = func(
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
 	tracer *logging.ConnectionTracer,
-	tracingID ConnectionTracingID,
 	logger utils.Logger,
 	v protocol.Version,
 ) quicConn {
@@ -384,7 +384,7 @@ var newClientConnection = func(
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
+	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
@@ -506,7 +506,7 @@ func (s *connection) run() error {
 
 	s.timer = *newTimer()
 
-	if err := s.cryptoStreamHandler.StartHandshake(); err != nil {
+	if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
 		return err
 	}
 	if err := s.handleHandshakeEvents(); err != nil {
