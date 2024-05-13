@@ -638,6 +638,9 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	var ctx context.Context
 	if s.connContext != nil {
 		ctx = s.connContext()
+		if ctx == nil {
+			panic("quic: ConnContext returned nil")
+		}
 	} else {
 		ctx = context.Background()
 	}
