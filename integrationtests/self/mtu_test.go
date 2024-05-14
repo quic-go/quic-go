@@ -47,7 +47,8 @@ var _ = Describe("DPLPMTUD", func() {
 		}()
 
 		var mx sync.Mutex
-		var maxPacketSizeClient, maxPacketSizeServer int
+		var maxPacketSizeServer int
+		var clientPacketSizes []int
 		serverPort := ln.Addr().(*net.UDPAddr).Port
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
@@ -60,9 +61,7 @@ var _ = Describe("DPLPMTUD", func() {
 				defer mx.Unlock()
 				switch dir {
 				case quicproxy.DirectionIncoming:
-					if len(packet) > maxPacketSizeClient {
-						maxPacketSizeClient = len(packet)
-					}
+					clientPacketSizes = append(clientPacketSizes, len(packet))
 				case quicproxy.DirectionOutgoing:
 					if len(packet) > maxPacketSizeServer {
 						maxPacketSizeServer = len(packet)
@@ -124,17 +123,27 @@ var _ = Describe("DPLPMTUD", func() {
 
 		mx.Lock()
 		defer mx.Unlock()
+		Expect(mtus).ToNot(BeEmpty())
+		maxPacketSizeClient := int(mtus[len(mtus)-1])
 		fmt.Fprintf(GinkgoWriter, "max client packet size: %d, MTU: %d\n", maxPacketSizeClient, mtu)
 		fmt.Fprintf(GinkgoWriter, "max datagram size: initial: %d, final: %d\n", initialMaxDatagramSize, finalMaxDatagramSize)
 		fmt.Fprintf(GinkgoWriter, "max server packet size: %d, MTU: %d\n", maxPacketSizeServer, mtu)
-		Expect(maxPacketSizeClient).To(BeEquivalentTo(mtus[len(mtus)-1]))
 		Expect(maxPacketSizeClient).To(BeNumerically(">=", mtu-25))
 		const maxDiff = 40 // this includes the 21 bytes for the short header, 16 bytes for the encryption tag, and framing overhead
 		Expect(initialMaxDatagramSize).To(BeNumerically(">=", protocol.MinInitialPacketSize-maxDiff))
 		Expect(finalMaxDatagramSize).To(BeNumerically(">=", maxPacketSizeClient-maxDiff))
-		Expect(mtus).ToNot(BeEmpty())
 		// MTU discovery was disabled on the server side
 		Expect(maxPacketSizeServer).To(Equal(1234))
+
+		var numPacketsLargerThanDiscoveredMTU int
+		for _, s := range clientPacketSizes {
+			if s > maxPacketSizeClient {
+				numPacketsLargerThanDiscoveredMTU++
+			}
+		}
+		// The client shouldn't have sent any packets larger than the MTU it discovered,
+		// except for at most one MTU probe packet.
+		Expect(numPacketsLargerThanDiscoveredMTU).To(BeNumerically("<=", 1))
 	})
 
 	It("uses the initial packet size", func() {
