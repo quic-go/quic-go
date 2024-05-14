@@ -666,11 +666,16 @@ func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) er
 	return server.ListenAndServeTLS(certFile, keyFile)
 }
 
-// ListenAndServe listens on the given network address for both TLS/TCP and QUIC
+// Deprecated: use ListenAndServeTLS instead.
+func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error {
+	return ListenAndServeTLS(addr, certFile, keyFile, handler)
+}
+
+// ListenAndServeTLS listens on the given network address for both TLS/TCP and QUIC
 // connections in parallel. It returns if one of the two returns an error.
 // http.DefaultServeMux is used when handler is nil.
 // The correct Alt-Svc headers for QUIC are set.
-func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error {
+func ListenAndServeTLS(addr, certFile, keyFile string, handler http.Handler) error {
 	// Load certs
 	var err error
 	certs := make([]tls.Certificate, 1)
