@@ -17,8 +17,10 @@ import (
 )
 
 var _ = Describe("DPLPMTUD", func() {
-	It("discovers the MTU", func() {
-		rtt := scaleDuration(10 * time.Millisecond)
+	// This test is very sensitive to packet loss, as the loss of a single Path MTU probe packet makes DPLPMTUD
+	// clip the assumed MTU at that value.
+	It("discovers the MTU", FlakeAttempts(3), func() {
+		rtt := scaleDuration(5 * time.Millisecond)
 		const mtu = 1400
 
 		ln, err := quic.ListenAddr(
