@@ -85,6 +85,8 @@ func (c *connection) onStreamStateChange(id quic.StreamID, state streamState, e 
 		isDone = d.SetReceiveError(e)
 	case streamStateSendClosed:
 		isDone = d.SetSendError(e)
+	case streamStateSendAndReceiveClosed:
+		isDone = true
 	default:
 		return
 	}
