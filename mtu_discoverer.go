@@ -12,7 +12,7 @@ import (
 type mtuDiscoverer interface {
 	// Start starts the MTU discovery process.
 	// It's unnecessary to call ShouldSendProbe before that.
-	Start(maxPacketSize protocol.ByteCount)
+	Start()
 	ShouldSendProbe(now time.Time) bool
 	CurrentSize() protocol.ByteCount
 	GetPing() (ping ackhandler.Frame, datagramSize protocol.ByteCount)
@@ -38,10 +38,11 @@ type mtuFinder struct {
 
 var _ mtuDiscoverer = &mtuFinder{}
 
-func newMTUDiscoverer(rttStats *utils.RTTStats, start protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) *mtuFinder {
+func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) *mtuFinder {
 	return &mtuFinder{
 		inFlight:     protocol.InvalidByteCount,
 		current:      start,
+		max:          max,
 		rttStats:     rttStats,
 		mtuIncreased: mtuIncreased,
 	}
@@ -51,9 +52,15 @@ func (f *mtuFinder) done() bool {
 	return f.max-f.current <= maxMTUDiff+1
 }
 
-func (f *mtuFinder) Start(maxPacketSize protocol.ByteCount) {
+func (f *mtuFinder) SetMax(max protocol.ByteCount) {
+	f.max = max
+}
+
+func (f *mtuFinder) Start() {
+	if f.max == protocol.InvalidByteCount {
+		panic("invalid")
+	}
 	f.lastProbeTime = time.Now() // makes sure the first probe packet is not sent immediately
-	f.max = maxPacketSize
 }
 
 func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {

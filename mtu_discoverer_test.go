@@ -29,8 +29,8 @@ var _ = Describe("MTU Discoverer", func() {
 		rttStats = &utils.RTTStats{}
 		rttStats.SetInitialRTT(rtt)
 		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
-		d = newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) { discoveredMTU = s })
-		d.Start(maxMTU)
+		d = newMTUDiscoverer(rttStats, startMTU, maxMTU, func(s protocol.ByteCount) { discoveredMTU = s })
+		d.Start()
 		now = time.Now()
 	})
 
@@ -78,7 +78,7 @@ var _ = Describe("MTU Discoverer", func() {
 	})
 
 	It("doesn't do discovery before being started", func() {
-		d := newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) {})
+		d := newMTUDiscoverer(rttStats, startMTU, protocol.MaxByteCount, func(s protocol.ByteCount) {})
 		for i := 0; i < 5; i++ {
 			Expect(d.ShouldSendProbe(time.Now())).To(BeFalse())
 		}
@@ -90,8 +90,8 @@ var _ = Describe("MTU Discoverer", func() {
 		for i := 0; i < rep; i++ {
 			maxMTU := protocol.ByteCount(rand.Intn(int(3000-startMTU))) + startMTU + 1
 			currentMTU := startMTU
-			d := newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) { currentMTU = s })
-			d.Start(maxMTU)
+			d := newMTUDiscoverer(rttStats, startMTU, maxMTU, func(s protocol.ByteCount) { currentMTU = s })
+			d.Start()
 			now := time.Now()
 			realMTU := protocol.ByteCount(rand.Intn(int(maxMTU-startMTU))) + startMTU
 			t := now.Add(mtuProbeDelay * rtt)
