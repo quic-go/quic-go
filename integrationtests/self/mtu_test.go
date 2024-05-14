@@ -11,6 +11,7 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -80,6 +81,12 @@ var _ = Describe("DPLPMTUD", func() {
 		defer udpConn.Close()
 		tr := &quic.Transport{Conn: udpConn}
 		defer tr.Close()
+		var mtus []logging.ByteCount
+		mtuTracer := &logging.ConnectionTracer{
+			UpdatedMTU: func(mtu logging.ByteCount, _ bool) {
+				mtus = append(mtus, mtu)
+			},
+		}
 		conn, err := tr.Dial(
 			context.Background(),
 			proxy.LocalAddr(),
@@ -87,6 +94,9 @@ var _ = Describe("DPLPMTUD", func() {
 			getQuicConfig(&quic.Config{
 				InitialPacketSize: protocol.MinInitialPacketSize,
 				EnableDatagrams:   true,
+				Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+					return mtuTracer
+				},
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -117,10 +127,12 @@ var _ = Describe("DPLPMTUD", func() {
 		fmt.Fprintf(GinkgoWriter, "max client packet size: %d, MTU: %d\n", maxPacketSizeClient, mtu)
 		fmt.Fprintf(GinkgoWriter, "max datagram size: initial: %d, final: %d\n", initialMaxDatagramSize, finalMaxDatagramSize)
 		fmt.Fprintf(GinkgoWriter, "max server packet size: %d, MTU: %d\n", maxPacketSizeServer, mtu)
+		Expect(maxPacketSizeClient).To(BeEquivalentTo(mtus[len(mtus)-1]))
 		Expect(maxPacketSizeClient).To(BeNumerically(">=", mtu-25))
 		const maxDiff = 40 // this includes the 21 bytes for the short header, 16 bytes for the encryption tag, and framing overhead
 		Expect(initialMaxDatagramSize).To(BeNumerically(">=", protocol.MinInitialPacketSize-maxDiff))
 		Expect(finalMaxDatagramSize).To(BeNumerically(">=", maxPacketSizeClient-maxDiff))
+		Expect(mtus).ToNot(BeEmpty())
 		// MTU discovery was disabled on the server side
 		Expect(maxPacketSizeServer).To(Equal(1234))
 	})

@@ -34,6 +34,7 @@ type ConnectionTracer interface {
 	ReceivedShortHeaderPacket(*logging.ShortHeader, logging.ByteCount, logging.ECN, []logging.Frame)
 	BufferedPacket(logging.PacketType, logging.ByteCount)
 	DroppedPacket(logging.PacketType, logging.PacketNumber, logging.ByteCount, logging.PacketDropReason)
+	UpdatedMTU(mtu logging.ByteCount, done bool)
 	UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int)
 	AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber)
 	LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason)

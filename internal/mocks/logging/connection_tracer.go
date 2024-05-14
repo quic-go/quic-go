@@ -68,6 +68,9 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		LostPacket: func(encLevel logging.EncryptionLevel, pn logging.PacketNumber, reason logging.PacketLossReason) {
 			t.LostPacket(encLevel, pn, reason)
 		},
+		UpdatedMTU: func(mtu logging.ByteCount, done bool) {
+			t.UpdatedMTU(mtu, done)
+		},
 		UpdatedCongestionState: func(state logging.CongestionState) {
 			t.UpdatedCongestionState(state)
 		},
