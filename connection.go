@@ -1783,6 +1783,7 @@ func (s *connection) applyTransportParameters() {
 		protocol.ByteCount(s.config.InitialPacketSize),
 		maxPacketSize,
 		s.onMTUIncreased,
+		s.tracer,
 	)
 }
 

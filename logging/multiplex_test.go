@@ -201,6 +201,12 @@ var _ = Describe("Tracing", func() {
 			tracer.DroppedPacket(PacketTypeInitial, 42, 1337, PacketDropHeaderParseError)
 		})
 
+		It("traces the UpdatedMTU event", func() {
+			tr1.EXPECT().UpdatedMTU(ByteCount(1337), true)
+			tr2.EXPECT().UpdatedMTU(ByteCount(1337), true)
+			tracer.UpdatedMTU(1337, true)
+		})
+
 		It("traces the UpdatedCongestionState event", func() {
 			tr1.EXPECT().UpdatedCongestionState(CongestionStateRecovery)
 			tr2.EXPECT().UpdatedCongestionState(CongestionStateRecovery)

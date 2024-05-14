@@ -76,6 +76,9 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 		LostPacket: func(encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason logging.PacketLossReason) {
 			t.LostPacket(encLevel, pn, lossReason)
 		},
+		UpdatedMTU: func(mtu logging.ByteCount, done bool) {
+			t.UpdatedMTU(mtu, done)
+		},
 		UpdatedCongestionState: func(state logging.CongestionState) {
 			t.UpdatedCongestionState(state)
 		},
@@ -365,6 +368,10 @@ func (t *connectionTracer) LostPacket(encLevel protocol.EncryptionLevel, pn prot
 		PacketNumber: pn,
 		Trigger:      packetLossReason(lossReason),
 	})
+}
+
+func (t *connectionTracer) UpdatedMTU(mtu protocol.ByteCount, done bool) {
+	t.recordEvent(time.Now(), &eventMTUUpdated{mtu: mtu, done: done})
 }
 
 func (t *connectionTracer) UpdatedCongestionState(state logging.CongestionState) {

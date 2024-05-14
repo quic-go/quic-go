@@ -11,6 +11,7 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -46,7 +47,8 @@ var _ = Describe("DPLPMTUD", func() {
 		}()
 
 		var mx sync.Mutex
-		var maxPacketSizeClient, maxPacketSizeServer int
+		var maxPacketSizeServer int
+		var clientPacketSizes []int
 		serverPort := ln.Addr().(*net.UDPAddr).Port
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
@@ -59,9 +61,7 @@ var _ = Describe("DPLPMTUD", func() {
 				defer mx.Unlock()
 				switch dir {
 				case quicproxy.DirectionIncoming:
-					if len(packet) > maxPacketSizeClient {
-						maxPacketSizeClient = len(packet)
-					}
+					clientPacketSizes = append(clientPacketSizes, len(packet))
 				case quicproxy.DirectionOutgoing:
 					if len(packet) > maxPacketSizeServer {
 						maxPacketSizeServer = len(packet)
@@ -80,6 +80,12 @@ var _ = Describe("DPLPMTUD", func() {
 		defer udpConn.Close()
 		tr := &quic.Transport{Conn: udpConn}
 		defer tr.Close()
+		var mtus []logging.ByteCount
+		mtuTracer := &logging.ConnectionTracer{
+			UpdatedMTU: func(mtu logging.ByteCount, _ bool) {
+				mtus = append(mtus, mtu)
+			},
+		}
 		conn, err := tr.Dial(
 			context.Background(),
 			proxy.LocalAddr(),
@@ -87,6 +93,9 @@ var _ = Describe("DPLPMTUD", func() {
 			getQuicConfig(&quic.Config{
 				InitialPacketSize: protocol.MinInitialPacketSize,
 				EnableDatagrams:   true,
+				Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+					return mtuTracer
+				},
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -114,6 +123,8 @@ var _ = Describe("DPLPMTUD", func() {
 
 		mx.Lock()
 		defer mx.Unlock()
+		Expect(mtus).ToNot(BeEmpty())
+		maxPacketSizeClient := int(mtus[len(mtus)-1])
 		fmt.Fprintf(GinkgoWriter, "max client packet size: %d, MTU: %d\n", maxPacketSizeClient, mtu)
 		fmt.Fprintf(GinkgoWriter, "max datagram size: initial: %d, final: %d\n", initialMaxDatagramSize, finalMaxDatagramSize)
 		fmt.Fprintf(GinkgoWriter, "max server packet size: %d, MTU: %d\n", maxPacketSizeServer, mtu)
@@ -123,6 +134,16 @@ var _ = Describe("DPLPMTUD", func() {
 		Expect(finalMaxDatagramSize).To(BeNumerically(">=", maxPacketSizeClient-maxDiff))
 		// MTU discovery was disabled on the server side
 		Expect(maxPacketSizeServer).To(Equal(1234))
+
+		var numPacketsLargerThanDiscoveredMTU int
+		for _, s := range clientPacketSizes {
+			if s > maxPacketSizeClient {
+				numPacketsLargerThanDiscoveredMTU++
+			}
+		}
+		// The client shouldn't have sent any packets larger than the MTU it discovered,
+		// except for at most one MTU probe packet.
+		Expect(numPacketsLargerThanDiscoveredMTU).To(BeNumerically("<=", 1))
 	})
 
 	It("uses the initial packet size", func() {

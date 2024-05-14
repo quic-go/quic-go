@@ -7,6 +7,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/logging"
 )
 
 type mtuDiscoverer interface {
@@ -34,17 +35,25 @@ type mtuFinder struct {
 	inFlight protocol.ByteCount // the size of the probe packet currently in flight. InvalidByteCount if none is in flight
 	current  protocol.ByteCount
 	max      protocol.ByteCount // the maximum value, as advertised by the peer (or our maximum size buffer)
+
+	tracer *logging.ConnectionTracer
 }
 
 var _ mtuDiscoverer = &mtuFinder{}
 
-func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) *mtuFinder {
+func newMTUDiscoverer(
+	rttStats *utils.RTTStats,
+	start, max protocol.ByteCount,
+	mtuIncreased func(protocol.ByteCount),
+	tracer *logging.ConnectionTracer,
+) *mtuFinder {
 	return &mtuFinder{
 		inFlight:     protocol.InvalidByteCount,
 		current:      start,
 		max:          max,
 		rttStats:     rttStats,
 		mtuIncreased: mtuIncreased,
+		tracer:       tracer,
 	}
 }
 
@@ -79,7 +88,7 @@ func (f *mtuFinder) GetPing() (ackhandler.Frame, protocol.ByteCount) {
 	f.inFlight = size
 	return ackhandler.Frame{
 		Frame:   &wire.PingFrame{},
-		Handler: (*mtuFinderAckHandler)(f),
+		Handler: &mtuFinderAckHandler{f},
 	}, size
 }
 
@@ -87,7 +96,9 @@ func (f *mtuFinder) CurrentSize() protocol.ByteCount {
 	return f.current
 }
 
-type mtuFinderAckHandler mtuFinder
+type mtuFinderAckHandler struct {
+	*mtuFinder
+}
 
 var _ ackhandler.FrameHandler = &mtuFinderAckHandler{}
 
@@ -98,6 +109,9 @@ func (h *mtuFinderAckHandler) OnAcked(wire.Frame) {
 	}
 	h.inFlight = protocol.InvalidByteCount
 	h.current = size
+	if h.tracer != nil && h.tracer.UpdatedMTU != nil {
+		h.tracer.UpdatedMTU(size, h.done())
+	}
 	h.mtuIncreased(size)
 }
 
