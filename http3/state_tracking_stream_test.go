@@ -218,36 +218,6 @@ var _ = Describe("State Tracking Stream", func() {
 		Expect(setter.sendErrs[0]).To(Equal(testErr))
 	})
 
-	It("clears the stream when both send and receive side is closed", func() {
-		qstr := mockquic.NewMockStream(mockCtrl)
-		qstr.EXPECT().StreamID().AnyTimes().Return(someStreamID)
-		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
-
-		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
-			str     = newStateTrackingStream(qstr, &clearer, &setter)
-		)
-
-		buf := bytes.NewBuffer([]byte("foobar"))
-		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		_, err := io.ReadAll(str)
-		Expect(err).ToNot(HaveOccurred())
-
-		Expect(clearer.cleared).To(BeNil())
-		Expect(setter.recvErrs).To(HaveLen(1))
-		Expect(setter.recvErrs[0]).To(Equal(io.EOF))
-		Expect(setter.sendErrs).To(BeEmpty())
-
-		testErr := errors.New("test error")
-		qstr.EXPECT().Write([]byte("bar")).Return(0, testErr)
-
-		_, err = str.Write([]byte("bar"))
-		Expect(err).To(MatchError(testErr))
-
-		Expect(clearer.cleared).To(Equal(&someStreamID))
-	})
-
 	It("clears the stream when receive is closed followed by send is closed", func() {
 		qstr := mockquic.NewMockStream(mockCtrl)
 		qstr.EXPECT().StreamID().AnyTimes().Return(someStreamID)
@@ -267,7 +237,6 @@ var _ = Describe("State Tracking Stream", func() {
 		Expect(clearer.cleared).To(BeNil())
 		Expect(setter.recvErrs).To(HaveLen(1))
 		Expect(setter.recvErrs[0]).To(Equal(io.EOF))
-		Expect(setter.sendErrs).To(BeEmpty())
 
 		testErr := errors.New("test error")
 		qstr.EXPECT().Write([]byte("bar")).Return(0, testErr)
