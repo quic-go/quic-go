@@ -9,59 +9,79 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type streamState uint8
+var _ quic.Stream = &stateTrackingStream{}
 
-const (
-	streamStateOpen streamState = iota
-	streamStateReceiveClosed
-	streamStateSendClosed
-	streamStateSendAndReceiveClosed
-)
-
+// stateTrackingStream is an implementation of quic.Stream that delegates
+// to an underlying stream
+// it takes care of proxying send and receive errors onto an implementation of
+// the errorSetter interface (intended to be occupied by a datagrammer)
+// it is also responsible for clearing the stream based on its ID from its
+// parent connection, this is done through the streamClearer interface when
+// both the send and receive sides are closed
 type stateTrackingStream struct {
 	quic.Stream
 
-	mx    sync.Mutex
-	state streamState
+	mx      sync.Mutex
+	sendErr error
+	recvErr error
 
-	onStateChange func(streamState, error)
+	clearer streamClearer
+	setter  errorSetter
 }
 
-func newStateTrackingStream(s quic.Stream, onStateChange func(streamState, error)) *stateTrackingStream {
-	context.AfterFunc(s.Context(), func() {
-		onStateChange(streamStateSendClosed, context.Cause(s.Context()))
-	})
-	return &stateTrackingStream{
-		Stream:        s,
-		state:         streamStateOpen,
-		onStateChange: onStateChange,
+type streamClearer interface {
+	clearStream(quic.StreamID)
+}
+
+type errorSetter interface {
+	SetSendError(error)
+	SetReceiveError(error)
+}
+
+func newStateTrackingStream(s quic.Stream, clearer streamClearer, setter errorSetter) *stateTrackingStream {
+	t := &stateTrackingStream{
+		Stream:  s,
+		clearer: clearer,
+		setter:  setter,
 	}
-}
 
-var _ quic.Stream = &stateTrackingStream{}
+	context.AfterFunc(s.Context(), func() {
+		t.closeSend(context.Cause(s.Context()))
+	})
+
+	return t
+}
 
 func (s *stateTrackingStream) closeSend(e error) {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	if s.state == streamStateReceiveClosed || s.state == streamStateSendAndReceiveClosed {
-		s.state = streamStateSendAndReceiveClosed
-	} else {
-		s.state = streamStateSendClosed
+	// clear the stream the first time both the send
+	// and receive are finished
+	if s.sendErr == nil {
+		if s.recvErr != nil {
+			s.clearer.clearStream(s.StreamID())
+		}
+
+		s.setter.SetSendError(e)
+		s.sendErr = e
 	}
-	s.onStateChange(s.state, e)
 }
 
 func (s *stateTrackingStream) closeReceive(e error) {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	if s.state == streamStateSendClosed || s.state == streamStateSendAndReceiveClosed {
-		s.state = streamStateSendAndReceiveClosed
-	} else {
-		s.state = streamStateReceiveClosed
+	// clear the stream the first time both the send
+	// and receive are finished
+	if s.recvErr == nil {
+		if s.sendErr != nil {
+			s.clearer.clearStream(s.StreamID())
+		}
+
+		s.setter.SetReceiveError(e)
+		s.recvErr = e
 	}
-	s.onStateChange(s.state, e)
 }
 
 func (s *stateTrackingStream) Close() error {
