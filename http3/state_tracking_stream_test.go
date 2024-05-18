@@ -24,8 +24,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -52,8 +52,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -79,8 +79,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -100,8 +100,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -119,8 +119,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -148,8 +148,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -171,8 +171,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -198,8 +198,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(ctx).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  = errorSetterSpy{
+			clearer mockStreamClearer
+			setter  = mockErrorSetter{
 				sendSent: make(chan struct{}),
 			}
 		)
@@ -224,8 +224,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -255,8 +255,8 @@ var _ = Describe("State Tracking Stream", func() {
 		qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
 		var (
-			clearer streamClearerSpy
-			setter  errorSetterSpy
+			clearer mockStreamClearer
+			setter  mockErrorSetter
 			str     = newStateTrackingStream(qstr, &clearer, &setter)
 		)
 
@@ -281,22 +281,22 @@ var _ = Describe("State Tracking Stream", func() {
 	})
 })
 
-type streamClearerSpy struct {
+type mockStreamClearer struct {
 	cleared *quic.StreamID
 }
 
-func (s *streamClearerSpy) clearStream(id quic.StreamID) {
+func (s *mockStreamClearer) clearStream(id quic.StreamID) {
 	s.cleared = &id
 }
 
-type errorSetterSpy struct {
+type mockErrorSetter struct {
 	sendErrs []error
 	recvErrs []error
 
 	sendSent chan struct{}
 }
 
-func (e *errorSetterSpy) SetSendError(err error) {
+func (e *mockErrorSetter) SetSendError(err error) {
 	e.sendErrs = append(e.sendErrs, err)
 
 	if e.sendSent != nil {
@@ -304,6 +304,6 @@ func (e *errorSetterSpy) SetSendError(err error) {
 	}
 }
 
-func (e *errorSetterSpy) SetReceiveError(err error) {
+func (e *mockErrorSetter) SetReceiveError(err error) {
 	e.recvErrs = append(e.recvErrs, err)
 }
