@@ -70,27 +70,11 @@ func newConnection(
 	return c
 }
 
-func (c *connection) onStreamStateChange(id quic.StreamID, state streamState, e error) {
+func (c *connection) clearStream(id quic.StreamID) {
 	c.streamMx.Lock()
 	defer c.streamMx.Unlock()
 
-	d, ok := c.streams[id]
-	if !ok { // should never happen
-		return
-	}
-	var isDone bool
-	//nolint:exhaustive // These are all the cases we care about.
-	switch state {
-	case streamStateReceiveClosed:
-		isDone = d.SetReceiveError(e)
-	case streamStateSendClosed:
-		isDone = d.SetSendError(e)
-	default:
-		return
-	}
-	if isDone {
-		delete(c.streams, id)
-	}
+	delete(c.streams, id)
 }
 
 func (c *connection) openRequestStream(
@@ -108,7 +92,7 @@ func (c *connection) openRequestStream(
 	c.streamMx.Lock()
 	c.streams[str.StreamID()] = datagrams
 	c.streamMx.Unlock()
-	qstr := newStateTrackingStream(str, func(s streamState, e error) { c.onStreamStateChange(str.StreamID(), s, e) })
+	qstr := newStateTrackingStream(str, c, datagrams)
 	hstr := newStream(qstr, c, datagrams)
 	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes), nil
 }
@@ -124,7 +108,7 @@ func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagramme
 		c.streamMx.Lock()
 		c.streams[strID] = datagrams
 		c.streamMx.Unlock()
-		str = newStateTrackingStream(str, func(s streamState, e error) { c.onStreamStateChange(strID, s, e) })
+		str = newStateTrackingStream(str, c, datagrams)
 	}
 	return str, datagrams, nil
 }
