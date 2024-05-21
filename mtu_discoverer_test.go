@@ -6,6 +6,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,8 +30,14 @@ var _ = Describe("MTU Discoverer", func() {
 		rttStats = &utils.RTTStats{}
 		rttStats.SetInitialRTT(rtt)
 		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
-		d = newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) { discoveredMTU = s })
-		d.Start(maxMTU)
+		d = newMTUDiscoverer(
+			rttStats,
+			startMTU,
+			maxMTU,
+			func(s protocol.ByteCount) { discoveredMTU = s },
+			nil,
+		)
+		d.Start()
 		now = time.Now()
 	})
 
@@ -78,7 +85,7 @@ var _ = Describe("MTU Discoverer", func() {
 	})
 
 	It("doesn't do discovery before being started", func() {
-		d := newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) {})
+		d := newMTUDiscoverer(rttStats, startMTU, protocol.MaxByteCount, func(s protocol.ByteCount) {}, nil)
 		for i := 0; i < 5; i++ {
 			Expect(d.ShouldSendProbe(time.Now())).To(BeFalse())
 		}
@@ -90,8 +97,21 @@ var _ = Describe("MTU Discoverer", func() {
 		for i := 0; i < rep; i++ {
 			maxMTU := protocol.ByteCount(rand.Intn(int(3000-startMTU))) + startMTU + 1
 			currentMTU := startMTU
-			d := newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) { currentMTU = s })
-			d.Start(maxMTU)
+			var tracedMTU protocol.ByteCount
+			var tracerDone bool
+			d := newMTUDiscoverer(
+				rttStats,
+				startMTU,
+				maxMTU,
+				func(s protocol.ByteCount) { currentMTU = s },
+				&logging.ConnectionTracer{
+					UpdatedMTU: func(mtu logging.ByteCount, done bool) {
+						tracedMTU = mtu
+						tracerDone = done
+					},
+				},
+			)
+			d.Start()
 			now := time.Now()
 			realMTU := protocol.ByteCount(rand.Intn(int(maxMTU-startMTU))) + startMTU
 			t := now.Add(mtuProbeDelay * rtt)
@@ -113,6 +133,10 @@ var _ = Describe("MTU Discoverer", func() {
 			diff := realMTU - currentMTU
 			Expect(diff).To(BeNumerically(">=", 0))
 			maxDiff = max(maxDiff, diff)
+			if maxMTU > currentMTU+maxMTU {
+				Expect(tracedMTU).To(Equal(currentMTU))
+				Expect(tracerDone).To(BeTrue())
+			}
 		}
 		Expect(maxDiff).To(BeEquivalentTo(maxMTUDiff))
 	})

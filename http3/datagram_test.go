@@ -54,7 +54,7 @@ var _ = Describe("Datagrams", func() {
 		dg := newDatagrammer(nil)
 		dg.enqueue([]byte("foo"))
 		testErr := errors.New("test error")
-		Expect(dg.SetReceiveError(testErr)).To(BeFalse())
+		dg.SetReceiveError(testErr)
 		dg.enqueue([]byte("bar"))
 		data, err := dg.Receive(context.Background())
 		Expect(err).ToNot(HaveOccurred())

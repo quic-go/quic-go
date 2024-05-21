@@ -50,6 +50,24 @@ var _ = Describe("Config", func() {
 			Expect(conf.MaxStreamReceiveWindow).To(BeEquivalentTo(uint64(quicvarint.Max)))
 			Expect(conf.MaxConnectionReceiveWindow).To(BeEquivalentTo(uint64(quicvarint.Max)))
 		})
+
+		It("increases too small packet sizes", func() {
+			conf := &Config{InitialPacketSize: 10}
+			Expect(validateConfig(conf)).To(Succeed())
+			Expect(conf.InitialPacketSize).To(BeEquivalentTo(1200))
+		})
+
+		It("clips too large packet sizes", func() {
+			conf := &Config{InitialPacketSize: protocol.MaxPacketBufferSize + 1}
+			Expect(validateConfig(conf)).To(Succeed())
+			Expect(conf.InitialPacketSize).To(BeEquivalentTo(protocol.MaxPacketBufferSize))
+		})
+
+		It("doesn't modify the InitialPacketSize if it is unset", func() {
+			conf := &Config{InitialPacketSize: 0}
+			Expect(validateConfig(conf)).To(Succeed())
+			Expect(conf.InitialPacketSize).To(BeZero())
+		})
 	})
 
 	configWithNonZeroNonFunctionFields := func() *Config {
@@ -99,6 +117,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "DisableVersionNegotiationPackets":
 				f.Set(reflect.ValueOf(true))
+			case "InitialPacketSize":
+				f.Set(reflect.ValueOf(uint16(1350)))
 			case "DisablePathMTUDiscovery":
 				f.Set(reflect.ValueOf(true))
 			case "Allow0RTT":

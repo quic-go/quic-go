@@ -94,7 +94,7 @@ var _ = Describe("Tracing", func() {
 		Expect(m).To(HaveKey("title"))
 		Expect(m).To(HaveKey("trace"))
 		trace := m["trace"].(map[string]interface{})
-		Expect(trace).To(HaveKey(("common_fields")))
+		Expect(trace).To(HaveKey("common_fields"))
 		commonFields := trace["common_fields"].(map[string]interface{})
 		Expect(commonFields).To(HaveKeyWithValue("ODCID", "deadbeef"))
 		Expect(commonFields).To(HaveKeyWithValue("group_id", "deadbeef"))
@@ -721,6 +721,17 @@ var _ = Describe("Tracing", func() {
 			Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
 			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(42)))
 			Expect(ev).To(HaveKeyWithValue("trigger", "reordering_threshold"))
+		})
+
+		It("records MTU discovery updates", func() {
+			tracer.UpdatedMTU(1337, true)
+			tracer.Close()
+			entry := exportAndParseSingle(buf)
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(entry.Name).To(Equal("recovery:mtu_updated"))
+			ev := entry.Event
+			Expect(ev).To(HaveKeyWithValue("mtu", float64(1337)))
+			Expect(ev).To(HaveKeyWithValue("done", true))
 		})
 
 		It("records congestion state updates", func() {

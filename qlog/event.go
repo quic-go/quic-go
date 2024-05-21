@@ -294,6 +294,20 @@ type metrics struct {
 	PacketsInFlight  int
 }
 
+type eventMTUUpdated struct {
+	mtu  protocol.ByteCount
+	done bool
+}
+
+func (e eventMTUUpdated) Category() category { return categoryRecovery }
+func (e eventMTUUpdated) Name() string       { return "mtu_updated" }
+func (e eventMTUUpdated) IsNil() bool        { return false }
+
+func (e eventMTUUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.Uint64Key("mtu", uint64(e.mtu))
+	enc.BoolKey("done", e.done)
+}
+
 type eventMetricsUpdated struct {
 	Last    *metrics
 	Current *metrics

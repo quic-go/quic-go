@@ -1052,6 +1052,42 @@ func (c *MockConnectionTracerUpdatedKeyFromTLSCall) DoAndReturn(f func(protocol.
 	return c
 }
 
+// UpdatedMTU mocks base method.
+func (m *MockConnectionTracer) UpdatedMTU(arg0 protocol.ByteCount, arg1 bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdatedMTU", arg0, arg1)
+}
+
+// UpdatedMTU indicates an expected call of UpdatedMTU.
+func (mr *MockConnectionTracerMockRecorder) UpdatedMTU(arg0, arg1 any) *MockConnectionTracerUpdatedMTUCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedMTU", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedMTU), arg0, arg1)
+	return &MockConnectionTracerUpdatedMTUCall{Call: call}
+}
+
+// MockConnectionTracerUpdatedMTUCall wrap *gomock.Call
+type MockConnectionTracerUpdatedMTUCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockConnectionTracerUpdatedMTUCall) Return() *MockConnectionTracerUpdatedMTUCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockConnectionTracerUpdatedMTUCall) Do(f func(protocol.ByteCount, bool)) *MockConnectionTracerUpdatedMTUCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockConnectionTracerUpdatedMTUCall) DoAndReturn(f func(protocol.ByteCount, bool)) *MockConnectionTracerUpdatedMTUCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // UpdatedMetrics mocks base method.
 func (m *MockConnectionTracer) UpdatedMetrics(arg0 *utils.RTTStats, arg1, arg2 protocol.ByteCount, arg3 int) {
 	m.ctrl.T.Helper()
