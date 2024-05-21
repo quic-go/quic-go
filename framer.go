@@ -35,13 +35,39 @@ const (
 	maxControlFrames = 16 << 10
 )
 
+type activeStreamTracker struct {
+	set   map[protocol.StreamID]struct{}
+	queue ringbuffer.RingBuffer[protocol.StreamID]
+}
+
+func newActiveStreamTracker() *activeStreamTracker {
+	return &activeStreamTracker{set: make(map[protocol.StreamID]struct{})}
+}
+
+func (t *activeStreamTracker) Empty() bool                   { return t.queue.Empty() }
+func (t *activeStreamTracker) Len() int                      { return t.queue.Len() }
+func (t *activeStreamTracker) PushBack(id protocol.StreamID) { t.queue.PushBack(id) }
+func (t *activeStreamTracker) PopFront() protocol.StreamID   { return t.queue.PopFront() }
+func (t *activeStreamTracker) Remove(id protocol.StreamID)   { delete(t.set, id) }
+
+func (t *activeStreamTracker) Clear() {
+	t.queue.Clear()
+	clear(t.set)
+}
+
+func (t *activeStreamTracker) Add(id protocol.StreamID) {
+	if _, ok := t.set[id]; !ok {
+		t.queue.PushBack(id)
+		t.set[id] = struct{}{}
+	}
+}
+
 type framerI struct {
 	mutex sync.Mutex
 
 	streamGetter streamGetter
 
-	activeStreams map[protocol.StreamID]struct{}
-	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
+	activeStreams activeStreamTracker
 
 	controlFrameMutex          sync.Mutex
 	controlFrames              []wire.Frame
@@ -54,13 +80,13 @@ var _ framer = &framerI{}
 func newFramer(streamGetter streamGetter) framer {
 	return &framerI{
 		streamGetter:  streamGetter,
-		activeStreams: make(map[protocol.StreamID]struct{}),
+		activeStreams: *newActiveStreamTracker(),
 	}
 }
 
 func (f *framerI) HasData() bool {
 	f.mutex.Lock()
-	hasData := !f.streamQueue.Empty()
+	hasData := !f.activeStreams.Empty()
 	f.mutex.Unlock()
 	if hasData {
 		return true
@@ -127,10 +153,7 @@ func (f *framerI) QueuedTooManyControlFrames() bool {
 
 func (f *framerI) AddActiveStream(id protocol.StreamID) {
 	f.mutex.Lock()
-	if _, ok := f.activeStreams[id]; !ok {
-		f.streamQueue.PushBack(id)
-		f.activeStreams[id] = struct{}{}
-	}
+	f.activeStreams.Add(id)
 	f.mutex.Unlock()
 }
 
@@ -139,18 +162,18 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen pro
 	var length protocol.ByteCount
 	f.mutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
-	numActiveStreams := f.streamQueue.Len()
+	numActiveStreams := f.activeStreams.Len()
 	for i := 0; i < numActiveStreams; i++ {
 		if protocol.MinStreamFrameSize+length > maxLen {
 			break
 		}
-		id := f.streamQueue.PopFront()
+		id := f.activeStreams.PopFront()
 		// This should never return an error. Better check it anyway.
 		// The stream will only be in the streamQueue, if it enqueued itself there.
 		str, err := f.streamGetter.GetOrOpenSendStream(id)
 		// The stream can be nil if it completed after it said it had data.
 		if str == nil || err != nil {
-			delete(f.activeStreams, id)
+			f.activeStreams.Remove(id)
 			continue
 		}
 		remainingLen := maxLen - length
@@ -160,9 +183,9 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen pro
 		remainingLen += protocol.ByteCount(quicvarint.Len(uint64(remainingLen)))
 		frame, ok, hasMoreData := str.popStreamFrame(remainingLen, v)
 		if hasMoreData { // put the stream back in the queue (at the end)
-			f.streamQueue.PushBack(id)
+			f.activeStreams.PushBack(id)
 		} else { // no more data to send. Stream is not active
-			delete(f.activeStreams, id)
+			f.activeStreams.Remove(id)
 		}
 		// The frame can be "nil"
 		// * if the receiveStream was canceled after it said it had data
@@ -188,10 +211,9 @@ func (f *framerI) Handle0RTTRejection() error {
 	defer f.mutex.Unlock()
 
 	f.controlFrameMutex.Lock()
-	f.streamQueue.Clear()
-	for id := range f.activeStreams {
-		delete(f.activeStreams, id)
-	}
+	defer f.controlFrameMutex.Unlock()
+
+	f.activeStreams.Clear()
 	var j int
 	for i, frame := range f.controlFrames {
 		switch frame.(type) {
@@ -205,6 +227,5 @@ func (f *framerI) Handle0RTTRejection() error {
 		}
 	}
 	f.controlFrames = f.controlFrames[:j]
-	f.controlFrameMutex.Unlock()
 	return nil
 }
