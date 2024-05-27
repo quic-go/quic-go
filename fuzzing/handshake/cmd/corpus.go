@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"log"
 	"net"
@@ -49,11 +50,11 @@ func main() {
 		protocol.Version1,
 	)
 
-	if err := client.StartHandshake(); err != nil {
+	if err := client.StartHandshake(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := server.StartHandshake(); err != nil {
+	if err := server.StartHandshake(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 

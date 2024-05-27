@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -75,7 +76,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.Version1,
 		)
 
-		Expect(cl.StartHandshake()).To(MatchError(&qerr.TransportError{
+		Expect(cl.StartHandshake(context.Background())).To(MatchError(&qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
 			ErrorMessage: "tls: invalid NextProtos value",
 		}))
@@ -96,7 +97,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.Version1,
 		)
 
-		Expect(server.StartHandshake()).To(Succeed())
+		Expect(server.StartHandshake(context.Background())).To(Succeed())
 
 		fakeCH := append([]byte{typeClientHello, 0, 0, 6}, []byte("foobar")...)
 		// wrong encryption level
@@ -189,8 +190,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 		// The clientEvents and serverEvents contain all events that were not processed by the function,
 		// i.e. not EventWriteInitialData, EventWriteHandshakeData, EventHandshakeComplete.
 		handshake := func(client, server CryptoSetup) (clientEvents []Event, clientErr error, serverEvents []Event, serverErr error) {
-			Expect(client.StartHandshake()).To(Succeed())
-			Expect(server.StartHandshake()).To(Succeed())
+			Expect(client.StartHandshake(context.Background())).To(Succeed())
+			Expect(server.StartHandshake(context.Background())).To(Succeed())
 
 			var clientHandshakeComplete, serverHandshakeComplete bool
 
