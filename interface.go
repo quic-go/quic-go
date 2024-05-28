@@ -57,9 +57,11 @@ var Err0RTTRejected = errors.New("0-RTT rejected")
 // ConnectionTracingKey can be used to associate a ConnectionTracer with a Connection.
 // It is set on the Connection.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
+// Deprecated: Applications can set their own tracing key using Transport.ConnContext.
 var ConnectionTracingKey = connTracingCtxKey{}
 
 // ConnectionTracingID is the type of the context value saved under the ConnectionTracingKey.
+// Deprecated: Applications can set their own tracing key using Transport.ConnContext.
 type ConnectionTracingID uint64
 
 type connTracingCtxKey struct{}
