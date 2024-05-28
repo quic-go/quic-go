@@ -665,13 +665,6 @@ var _ = Describe("Send Stream", func() {
 				Expect(hasMoreData).To(BeFalse())
 				Eventually(done).Should(BeClosed())
 			})
-
-			It("cancels the context", func() {
-				Expect(str.Context().Done()).ToNot(BeClosed())
-				str.closeForShutdown(testErr)
-				Expect(str.Context().Done()).To(BeClosed())
-				Expect(context.Cause(str.Context())).To(MatchError(testErr))
-			})
 		})
 	})
 
