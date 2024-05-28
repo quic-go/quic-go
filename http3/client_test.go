@@ -419,9 +419,12 @@ var _ = Describe("Client", func() {
 		It("rejects Extended CONNECT requests if the server doesn't enable it", func() {
 			sendSettings()
 			done := make(chan struct{})
+			var wg sync.WaitGroup
+			wg.Add(2)
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().DoAndReturn(func() (quic.SendStream, error) {
 				<-done
+				wg.Done()
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
 			b := quicvarint.Append(nil, streamTypeControlStream)
@@ -432,6 +435,7 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				<-done
+				wg.Done()
 				return nil, errors.New("test done")
 			})
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
@@ -448,6 +452,7 @@ var _ = Describe("Client", func() {
 			// test shutdown
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 			close(done)
+			wg.Wait()
 		})
 	})
 
