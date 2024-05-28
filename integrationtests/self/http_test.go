@@ -600,9 +600,9 @@ var _ = Describe("HTTP tests", func() {
 		defer conn.Close()
 		tr := &quic.Transport{
 			Conn: conn,
-			ConnContext: func() context.Context {
+			ConnContext: func(ctx context.Context) context.Context {
 				//nolint:staticcheck
-				return context.WithValue(context.Background(), "foo", "bar")
+				return context.WithValue(ctx, "foo", "bar")
 			},
 		}
 		defer tr.Close()

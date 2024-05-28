@@ -76,11 +76,12 @@ type baseServer struct {
 	nextZeroRTTCleanup time.Time
 	zeroRTTQueues      map[protocol.ConnectionID]*zeroRTTQueue // only initialized if acceptEarlyConns == true
 
-	connContext func() context.Context
+	connContext func(context.Context) context.Context
 
 	// set as a member, so they can be set in the tests
 	newConn func(
 		context.Context,
+		context.CancelCauseFunc,
 		sendConn,
 		connRunner,
 		protocol.ConnectionID, /* original dest connection ID */
@@ -233,7 +234,7 @@ func newServer(
 	conn rawConn,
 	connHandler packetHandlerManager,
 	connIDGenerator ConnectionIDGenerator,
-	connContext func() context.Context,
+	connContext func(context.Context) context.Context,
 	tlsConf *tls.Config,
 	config *Config,
 	tracer *logging.Tracer,
@@ -635,14 +636,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	}
 
 	var conn quicConn
-	var ctx context.Context
+	ctx, cancel := context.WithCancelCause(context.Background())
 	if s.connContext != nil {
-		ctx = s.connContext()
+		ctx = s.connContext(ctx)
 		if ctx == nil {
 			panic("quic: ConnContext returned nil")
 		}
-	} else {
-		ctx = context.Background()
 	}
 	ctx = context.WithValue(ctx, ConnectionTracingKey, nextConnTracingID())
 	var tracer *logging.ConnectionTracer
@@ -661,6 +660,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	conn = s.newConn(
 		ctx,
+		cancel,
 		newSendConn(s.conn, p.remoteAddr, p.info, s.logger),
 		s.connHandler,
 		origDestConnID,

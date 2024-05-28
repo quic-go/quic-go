@@ -222,6 +222,7 @@ var (
 
 var newConnection = func(
 	ctx context.Context,
+	ctxCancel context.CancelCauseFunc,
 	conn sendConn,
 	runner connRunner,
 	origDestConnID protocol.ConnectionID,
@@ -240,6 +241,8 @@ var newConnection = func(
 	v protocol.Version,
 ) quicConn {
 	s := &connection{
+		ctx:                 ctx,
+		ctxCancel:           ctxCancel,
 		conn:                conn,
 		config:              conf,
 		handshakeDestConnID: destConnID,
@@ -273,7 +276,6 @@ var newConnection = func(
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
@@ -499,9 +501,7 @@ func (s *connection) preSetup() {
 // run the connection main loop
 func (s *connection) run() error {
 	var closeErr closeError
-	defer func() {
-		s.ctxCancel(closeErr.err)
-	}()
+	defer func() { s.ctxCancel(closeErr.err) }()
 
 	s.timer = *newTimer()
 
