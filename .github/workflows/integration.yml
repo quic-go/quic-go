@@ -13,6 +13,7 @@ jobs:
           - os: "macos"
             go: "1.21.x"
     runs-on: ${{ fromJSON(vars[format('INTEGRATION_RUNNER_{0}', matrix.os)] || format('"{0}-latest"', matrix.os)) }}
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash # by default Windows uses PowerShell, which uses a different syntax for setting environment variables

@@ -10,6 +10,7 @@ jobs:
         go: [ "1.21.x", "1.22.x" ]
     runs-on: ${{ fromJSON(vars[format('UNIT_RUNNER_{0}', matrix.os)] || format('"{0}-latest"', matrix.os)) }}
     name: Unit tests (${{ matrix.os}}, Go ${{ matrix.go }})
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
