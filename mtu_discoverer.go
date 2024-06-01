@@ -61,10 +61,6 @@ func (f *mtuFinder) done() bool {
 	return f.max-f.current <= maxMTUDiff+1
 }
 
-func (f *mtuFinder) SetMax(max protocol.ByteCount) {
-	f.max = max
-}
-
 func (f *mtuFinder) Start() {
 	if f.max == protocol.InvalidByteCount {
 		panic("invalid")
