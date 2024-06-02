@@ -50,6 +50,8 @@ type connection struct {
 
 	settings         *Settings
 	receivedSettings chan struct{}
+
+	controlStrHandler func(quic.ReceiveStream, quic.Connection)
 }
 
 func newConnection(
@@ -219,6 +221,9 @@ func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.Co
 					}
 				}
 			}()
+			if c.controlStrHandler != nil {
+				c.controlStrHandler(str, c.Connection)
+			}
 		}(str)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
@@ -204,7 +205,8 @@ type Server struct {
 	mutex     sync.RWMutex
 	listeners map[*QUICEarlyListener]listenerInfo
 
-	closed bool
+	closed      bool
+	connections map[*quic.Connection]func()
 
 	altSvcHeader string
 }
@@ -243,6 +245,12 @@ func (s *Server) Serve(conn net.PacketConn) error {
 
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
+	s.mutex.Lock()
+	if s.connections == nil {
+		s.connections = make(map[*quic.Connection]func())
+	}
+	s.mutex.Unlock()
+
 	return s.handleConn(conn)
 }
 
@@ -281,9 +289,9 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 		return errServerWithoutTLSConfig
 	}
 
-	s.mutex.Lock()
+	s.mutex.RLock()
 	closed := s.closed
-	s.mutex.Unlock()
+	s.mutex.RUnlock()
 	if closed {
 		return http.ErrServerClosed
 	}
@@ -398,6 +406,9 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.listeners == nil {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
+	if s.connections == nil {
+		s.connections = make(map[*quic.Connection]func())
+	}
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
@@ -436,6 +447,33 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}).Append(b)
 	str.Write(b)
 
+	var (
+		once   sync.Once
+		mutex  sync.Mutex
+		closed bool
+		// client opened bidirectional stream ID starts at 0 and increase by 4
+		lastID = quic.StreamID(-4)
+	)
+	s.mutex.Lock()
+	s.connections[&conn] = func() {
+		once.Do(func() {
+			mutex.Lock()
+			closed = true
+			b = (&goawayFrame{
+				ID: lastID + 4,
+			}).Append(b[:0])
+			str.Write(b)
+			mutex.Unlock()
+		})
+	}
+	s.mutex.Unlock()
+
+	defer func() {
+		s.mutex.Lock()
+		delete(s.connections, &conn)
+		s.mutex.Unlock()
+	}()
+
 	hconn := newConnection(
 		conn,
 		s.EnableDatagrams,
@@ -453,6 +491,20 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				return nil
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
+		}
+
+		var reject bool
+		mutex.Lock()
+		reject = closed
+		if !reject {
+			lastID = str.StreamID()
+		}
+		mutex.Unlock()
+
+		if reject {
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
+			continue
 		}
 		go s.handleRequest(hconn, str, datagrams, hconn.decoder)
 	}
@@ -610,6 +662,12 @@ func (s *Server) Close() error {
 	s.closed = true
 
 	var err error
+	for conn := range s.connections {
+		if cerr := (*conn).CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), ""); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+
 	for ln := range s.listeners {
 		if cerr := (*ln).Close(); cerr != nil && err == nil {
 			err = cerr
@@ -618,11 +676,73 @@ func (s *Server) Close() error {
 	return err
 }
 
+func (s *Server) closeListeners() error {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	var err error
+	for conn := range s.connections {
+		if cerr := (*conn).CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), ""); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+
+	for ln := range s.listeners {
+		if cerr := (*ln).Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+	return err
+}
+
+func (s *Server) connectionsCount() int {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	for _, f := range s.connections {
+		f()
+	}
+
+	return len(s.connections)
+}
+
+const shutdownPollIntervalMax = 500 * time.Millisecond
+
 // CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
 // CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
-func (s *Server) CloseGracefully(timeout time.Duration) error {
-	// TODO: implement
-	return nil
+func (s *Server) CloseGracefully(ctx context.Context) error {
+	s.mutex.Lock()
+	s.closed = true
+	s.mutex.Unlock()
+
+	// copied from http.Server Shutdown
+	pollIntervalBase := time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > shutdownPollIntervalMax {
+			pollIntervalBase = shutdownPollIntervalMax
+		}
+		return interval
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+
+	for {
+		if s.connectionsCount() == 0 {
+			return s.closeListeners()
+		}
+		select {
+		case <-ctx.Done():
+			s.closeListeners()
+			return ctx.Err()
+		case <-timer.C:
+			timer.Reset(nextPollInterval())
+		}
+	}
 }
 
 // ErrNoAltSvcPort is the error returned by SetQUICHeaders when no port was found

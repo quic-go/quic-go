@@ -38,7 +38,24 @@ func encodeResponse(status int) []byte {
 }
 
 var _ = Describe("Client", func() {
-	var handshakeChan <-chan struct{} // a closed chan
+	var (
+		handshakeChan <-chan struct{} // a closed chan
+
+		newStreamID = func() func() quic.StreamID {
+			var (
+				id   = quic.StreamID(-4)
+				lock sync.Mutex
+			)
+			return func() quic.StreamID {
+				var nextID quic.StreamID
+				lock.Lock()
+				id += 4
+				nextID = id
+				lock.Unlock()
+				return nextID
+			}
+		}
+	)
 
 	BeforeEach(func() {
 		ch := make(chan struct{})
@@ -505,7 +522,7 @@ var _ = Describe("Client", func() {
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Context().Return(context.Background()).AnyTimes()
-			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {

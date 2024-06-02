@@ -70,6 +70,11 @@ type SingleDestinationRoundTripper struct {
 	hconn         *connection
 	requestWriter *requestWriter
 	decoder       *qpack.Decoder
+
+	idLock           sync.RWMutex
+	receivedGoawayID quic.StreamID
+	runningCtx       map[quic.StreamID]context.CancelCauseFunc
+	ctxLock          sync.Mutex
 }
 
 var _ http.RoundTripper = &SingleDestinationRoundTripper{}
@@ -83,6 +88,9 @@ func (c *SingleDestinationRoundTripper) init() {
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
 	c.requestWriter = newRequestWriter()
 	c.hconn = newConnection(c.Connection, c.EnableDatagrams, protocol.PerspectiveClient, c.Logger)
+	c.hconn.controlStrHandler = c.readControlStream
+	c.receivedGoawayID = quic.StreamID(-4)
+	c.runningCtx = make(map[quic.StreamID]context.CancelCauseFunc)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
 		if err := c.setupConn(c.hconn); err != nil {
@@ -98,7 +106,47 @@ func (c *SingleDestinationRoundTripper) init() {
 	go c.hconn.HandleUnidirectionalStreams(c.UniStreamHijacker)
 }
 
-func (c *SingleDestinationRoundTripper) setupConn(conn *connection) error {
+var errGoaway = errors.New("server sent goaway")
+
+func (c *SingleDestinationRoundTripper) readControlStream(str quic.ReceiveStream, conn quic.Connection) {
+	lastID := quic.StreamID(-4)
+	fp := &frameParser{conn: c.Connection, r: str}
+	for {
+		frame, err := fp.ParseNext()
+		if err != nil {
+			if c.Logger != nil {
+				c.Logger.Debug("reading control stream", "error", err)
+			}
+			return
+		}
+		switch v := frame.(type) {
+		case *goawayFrame:
+			// invalid stream ID, rfc 9114
+			if v.ID < 0 || v.ID%4 != 0 || (lastID >= 0 && v.ID > lastID) {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+				return
+			}
+			lastID = v.ID
+			c.idLock.Lock()
+			c.receivedGoawayID = v.ID
+			c.idLock.Unlock()
+
+			c.ctxLock.Lock()
+			for id, cancel := range c.runningCtx {
+				if id >= v.ID {
+					cancel(errGoaway)
+				}
+			}
+			c.ctxLock.Unlock()
+		default:
+			if c.Logger != nil {
+				c.Logger.Debug("reading frame type", "type", fmt.Sprintf("%T", v))
+			}
+		}
+	}
+}
+
+func (c *SingleDestinationRoundTripper) setupConn(conn quic.Connection) error {
 	// open the control stream
 	str, err := conn.OpenUniStream()
 	if err != nil {
@@ -162,6 +210,14 @@ func (c *SingleDestinationRoundTripper) RoundTrip(req *http.Request) (*http.Resp
 	return rsp, err
 }
 
+func (c *SingleDestinationRoundTripper) goawayReceived() (quic.StreamID, bool) {
+	var id quic.StreamID
+	c.idLock.RLock()
+	id = c.receivedGoawayID
+	c.idLock.RUnlock()
+	return id, id >= 0
+}
+
 func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Response, error) {
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
@@ -208,6 +264,36 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 		return nil, err
 	}
 
+	id := str.StreamID()
+	ctx, cancel := context.WithCancelCause(req.Context())
+	c.ctxLock.Lock()
+	c.runningCtx[id] = cancel
+	c.ctxLock.Unlock()
+
+	defer func() {
+		cancel(nil)
+		c.ctxLock.Lock()
+		delete(c.runningCtx, id)
+		c.ctxLock.Unlock()
+	}()
+
+	// the context may not be canceled if it's added after goaway frame is processed
+	if goawayID, ok := c.goawayReceived(); ok && goawayID <= id {
+		cancel(errGoaway)
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		return nil, errGoaway
+	}
+
+	// Separate goroutine to prevent interference with request cancellation
+	go func() {
+		<-ctx.Done()
+		if context.Cause(ctx) == errGoaway {
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		}
+	}()
+
 	// Request Cancellation:
 	// This go routine keeps running even after RoundTripOpt() returns.
 	// It is shut down when the application is done processing the body.
@@ -226,6 +312,10 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 	if err != nil { // if any error occurred
 		close(reqDone)
 		<-done
+		// check if goaway interrupted this request
+		if context.Cause(ctx) == errGoaway {
+			return nil, errGoaway
+		}
 		return nil, maybeReplaceError(err)
 	}
 	return rsp, maybeReplaceError(err)

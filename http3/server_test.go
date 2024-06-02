@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -65,12 +66,28 @@ var _ = Describe("Server", func() {
 	var (
 		s                  *Server
 		origQuicListenAddr = quicListenAddr
+
+		newStreamID = func() func() quic.StreamID {
+			var (
+				id   = quic.StreamID(-4)
+				lock sync.Mutex
+			)
+			return func() quic.StreamID {
+				var nextID quic.StreamID
+				lock.Lock()
+				id += 4
+				nextID = id
+				lock.Unlock()
+				return nextID
+			}
+		}
 	)
 	type testConnContextKey string
 
 	BeforeEach(func() {
 		s = &Server{
-			TLSConfig: testdata.GetTLSConfig(),
+			TLSConfig:   testdata.GetTLSConfig(),
+			connections: make(map[*quic.Connection]func()),
 			ConnContext: func(ctx context.Context, c quic.Connection) context.Context {
 				return context.WithValue(ctx, testConnContextKey("test"), c)
 			},
@@ -141,7 +158,7 @@ var _ = Describe("Server", func() {
 			qpackDecoder = qpack.NewDecoder(nil)
 			str = mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Context().Return(reqContext).AnyTimes()
-			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			qconn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
@@ -349,7 +366,7 @@ var _ = Describe("Server", func() {
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Context().Return(context.Background()).AnyTimes()
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().StreamID().AnyTimes()
+				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -378,6 +395,7 @@ var _ = Describe("Server", func() {
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -406,6 +424,7 @@ var _ = Describe("Server", func() {
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -434,6 +453,7 @@ var _ = Describe("Server", func() {
 				unknownStr.EXPECT().Context().Return(context.Background()).AnyTimes()
 				unknownStr.EXPECT().StreamID().Return(strID).AnyTimes()
 				unknownStr.EXPECT().Read(gomock.Any()).Return(0, testErr).AnyTimes()
+				unknownStr.EXPECT().StreamID().DoAndReturn(newStreamID()).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -1194,7 +1214,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("closes gracefully", func() {
-		Expect(s.CloseGracefully(0)).To(Succeed())
+		Expect(s.CloseGracefully(context.Background())).To(Succeed())
 	})
 
 	It("errors when listening fails", func() {
