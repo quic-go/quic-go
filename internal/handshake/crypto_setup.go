@@ -124,7 +124,7 @@ func NewCryptoSetupServer(
 	cs.allow0RTT = allow0RTT
 
 	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
+	qtls.SetupConfigForServer(quicConf, cs.getDataForSessionTicket, cs.handleSessionTicket)
 	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
 
 	cs.tlsConf = quicConf.TLSConfig

@@ -44,7 +44,7 @@ var _ = Describe("interface go crypto/tls", func() {
 		It("sets the minimum TLS version to TLS 1.3", func() {
 			orig := &tls.Config{MinVersion: tls.VersionTLS12}
 			conf := &tls.QUICConfig{TLSConfig: orig}
-			SetupConfigForServer(conf, false, nil, nil)
+			SetupConfigForServer(conf, nil, nil)
 			Expect(conf.TLSConfig.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
 			// check that the original config wasn't modified
 			Expect(orig.MinVersion).To(BeEquivalentTo(tls.VersionTLS12))
