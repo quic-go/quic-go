@@ -94,6 +94,10 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 			if config == nil {
 				return nil, nil
 			}
+			// Workaround for https://github.com/golang/go/issues/60506.
+			// This initializes the session tickets _before_ cloning the config.
+			_, _ = config.DecryptTicket(nil, tls.ConnectionState{})
+
 			config = config.Clone()
 			config.NextProtos = []string{proto}
 			return config, nil

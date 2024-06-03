@@ -9,7 +9,6 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
-	"reflect"
 	"time"
 
 	mocktls "github.com/quic-go/quic-go/internal/mocks/tls"
@@ -104,79 +103,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 		err := server.HandleMessage(fakeCH, protocol.EncryptionHandshake)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("tls: handshake data received at wrong level"))
-	})
-
-	Context("filling in a net.Conn in tls.ClientHelloInfo", func() {
-		var (
-			local  = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
-			remote = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		)
-
-		It("wraps GetCertificate", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{
-				GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					localAddr = info.Conn.LocalAddr()
-					remoteAddr = info.Conn.RemoteAddr()
-					cert := generateCert()
-					return &cert, nil
-				},
-			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
-			_, err := tlsConf.GetCertificate(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-		})
-
-		It("wraps GetConfigForClient", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{
-				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-					localAddr = info.Conn.LocalAddr()
-					remoteAddr = info.Conn.RemoteAddr()
-					return &tls.Config{}, nil
-				},
-			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-			Expect(conf).ToNot(BeNil())
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-		})
-
-		It("wraps GetConfigForClient, recursively", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{}
-			var innerConf *tls.Config
-			getCert := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) { //nolint:unparam
-				localAddr = info.Conn.LocalAddr()
-				remoteAddr = info.Conn.RemoteAddr()
-				cert := generateCert()
-				return &cert, nil
-			}
-			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-				innerConf = tlsConf.Clone()
-				// set the MaxVersion, so we can check that quic-go doesn't overwrite the user's config
-				innerConf.MaxVersion = tls.VersionTLS12
-				innerConf.GetCertificate = getCert
-				return innerConf, nil
-			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf).ToNot(BeNil())
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-			_, err = conf.GetCertificate(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-			// make sure that the tls.Config returned by GetConfigForClient isn't modified
-			Expect(reflect.ValueOf(innerConf.GetCertificate).Pointer() == reflect.ValueOf(getCert).Pointer()).To(BeTrue())
-			Expect(innerConf.MaxVersion).To(BeEquivalentTo(tls.VersionTLS12))
-		})
 	})
 
 	Context("doing the handshake", func() {
