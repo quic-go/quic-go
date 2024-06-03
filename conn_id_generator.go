@@ -49,6 +49,20 @@ func newConnIDGenerator(
 	return m
 }
 
+func (m *connIDGenerator) GenerateForPreferredAddress() (protocol.ConnectionID, protocol.StatelessResetToken, error) {
+	if m.highestSeq != 0 {
+		panic("invalid")
+	}
+	connID, err := m.generator.GenerateConnectionID()
+	if err != nil {
+		return protocol.ConnectionID{}, protocol.StatelessResetToken{}, err
+	}
+	m.activeSrcConnIDs[1] = connID
+	m.addConnectionID(connID)
+	m.highestSeq = 1
+	return connID, m.getStatelessResetToken(connID), nil
+}
+
 func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	if m.generator.ConnectionIDLen() == 0 {
 		return nil

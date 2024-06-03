@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -309,6 +310,15 @@ var newConnection = func(
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
 		RetrySourceConnectionID:   retrySrcConnID,
+	}
+	if true {
+		connID, statelessResetToken, _ := s.connIDGenerator.GenerateForPreferredAddress()
+		ip4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1337)
+		params.PreferredAddress = &wire.PreferredAddress{
+			IPv4:                ip4,
+			ConnectionID:        connID,
+			StatelessResetToken: statelessResetToken,
+		}
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
