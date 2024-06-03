@@ -169,10 +169,9 @@ type connection struct {
 	// closeChan is used to notify the run loop that it should terminate
 	closeChan chan closeError
 
-	ctx                context.Context
-	ctxCancel          context.CancelCauseFunc
-	handshakeCtx       context.Context
-	handshakeCtxCancel context.CancelFunc
+	ctx                   context.Context
+	ctxCancel             context.CancelCauseFunc
+	handshakeCompleteChan chan struct{}
 
 	undecryptablePackets          []receivedPacket // undecryptable packets, waiting for a change in encryption level
 	undecryptablePacketsToProcess []receivedPacket
@@ -486,7 +485,7 @@ func (s *connection) preSetup() {
 	s.receivedPackets = make(chan receivedPacket, protocol.MaxConnUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
-	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
+	s.handshakeCompleteChan = make(chan struct{})
 
 	now := time.Now()
 	s.lastPacketReceivedTime = now
@@ -667,7 +666,7 @@ func (s *connection) earlyConnReady() <-chan struct{} {
 }
 
 func (s *connection) HandshakeComplete() <-chan struct{} {
-	return s.handshakeCtx.Done()
+	return s.handshakeCompleteChan
 }
 
 func (s *connection) Context() context.Context {
@@ -732,7 +731,7 @@ func (s *connection) idleTimeoutStartTime() time.Time {
 }
 
 func (s *connection) handleHandshakeComplete() error {
-	defer s.handshakeCtxCancel()
+	defer close(s.handshakeCompleteChan)
 	// Once the handshake completes, we have derived 1-RTT keys.
 	// There's no point in queueing undecryptable packets for later decryption anymore.
 	s.undecryptablePackets = nil
