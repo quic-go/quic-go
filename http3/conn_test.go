@@ -24,6 +24,7 @@ var _ = Describe("Connection", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("no datagrams"))
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
@@ -56,6 +57,7 @@ var _ = Describe("Connection", func() {
 		It("rejects duplicate control streams", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
@@ -97,6 +99,7 @@ var _ = Describe("Connection", func() {
 			It(fmt.Sprintf("ignores the QPACK %s streams", name), func() {
 				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn := newConnection(
+					context.Background(),
 					qconn,
 					false,
 					protocol.PerspectiveClient,
@@ -125,6 +128,7 @@ var _ = Describe("Connection", func() {
 			It(fmt.Sprintf("rejects duplicate QPACK %s streams", name), func() {
 				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn := newConnection(
+					context.Background(),
 					qconn,
 					false,
 					protocol.PerspectiveClient,
@@ -160,6 +164,7 @@ var _ = Describe("Connection", func() {
 		It("resets streams other than the control stream and the QPACK streams", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
@@ -185,6 +190,7 @@ var _ = Describe("Connection", func() {
 		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
@@ -215,6 +221,7 @@ var _ = Describe("Connection", func() {
 		It("errors when parsing the frame on the control stream fails", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
@@ -252,6 +259,7 @@ var _ = Describe("Connection", func() {
 			It(fmt.Sprintf("errors when parsing the %s opens a push stream", pers), func() {
 				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn := newConnection(
+					context.Background(),
 					qconn,
 					false,
 					pers.Opposite(),
@@ -281,6 +289,7 @@ var _ = Describe("Connection", func() {
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				true,
 				protocol.PerspectiveClient,
@@ -319,6 +328,7 @@ var _ = Describe("Connection", func() {
 		BeforeEach(func() {
 			qconn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn = newConnection(
+				context.Background(),
 				qconn,
 				true,
 				protocol.PerspectiveClient,

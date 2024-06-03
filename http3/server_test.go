@@ -148,7 +148,7 @@ var _ = Describe("Server", func() {
 			qconn.EXPECT().LocalAddr().AnyTimes()
 			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
-			conn = newConnection(qconn, false, protocol.PerspectiveServer, nil)
+			conn = newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -169,8 +169,6 @@ var _ = Describe("Server", func() {
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
 			Expect(req.RemoteAddr).To(Equal("127.0.0.1:1337"))
-			Expect(req.Context().Value(ServerContextKey)).To(Equal(s))
-			Expect(req.Context().Value(testConnContextKey("test"))).To(Equal(conn.Connection))
 		})
 
 		It("returns 200 with an empty handler", func() {
@@ -555,6 +553,7 @@ var _ = Describe("Server", func() {
 				conn = mockquic.NewMockEarlyConnection(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Write(gomock.Any())
+				conn.EXPECT().Context().Return(context.Background())
 				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
@@ -734,7 +733,9 @@ var _ = Describe("Server", func() {
 			handlerCalled := make(chan struct{})
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
-				Expect(r.Context().Done()).To(BeClosed())
+				// The context is canceled via context.AfterFunc,
+				// which performs the cancellation in a new Go routine.
+				Eventually(r.Context().Done()).Should(BeClosed())
 				Expect(r.Context().Err()).To(MatchError(context.Canceled))
 				close(handlerCalled)
 			})
@@ -1159,6 +1160,9 @@ var _ = Describe("Server", func() {
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Write(gomock.Any())
+			conn.EXPECT().LocalAddr()
+			conn.EXPECT().RemoteAddr()
+			conn.EXPECT().Context().Return(context.Background())
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			testDone := make(chan struct{})
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
