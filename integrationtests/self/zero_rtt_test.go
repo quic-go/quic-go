@@ -871,7 +871,8 @@ var _ = Describe("0-RTT", func() {
 		_, err = conn.AcceptStream(ctx)
 		Expect(err).To(Equal(quic.Err0RTTRejected))
 
-		newConn := conn.NextConnection()
+		newConn, err := conn.NextConnection(context.Background())
+		Expect(err).ToNot(HaveOccurred())
 		str, err := newConn.OpenUniStream()
 		Expect(err).ToNot(HaveOccurred())
 		_, err = newConn.OpenUniStream()

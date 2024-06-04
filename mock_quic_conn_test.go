@@ -310,17 +310,18 @@ func (c *MockQUICConnLocalAddrCall) DoAndReturn(f func() net.Addr) *MockQUICConn
 }
 
 // NextConnection mocks base method.
-func (m *MockQUICConn) NextConnection() Connection {
+func (m *MockQUICConn) NextConnection(arg0 context.Context) (Connection, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NextConnection")
+	ret := m.ctrl.Call(m, "NextConnection", arg0)
 	ret0, _ := ret[0].(Connection)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NextConnection indicates an expected call of NextConnection.
-func (mr *MockQUICConnMockRecorder) NextConnection() *MockQUICConnNextConnectionCall {
+func (mr *MockQUICConnMockRecorder) NextConnection(arg0 any) *MockQUICConnNextConnectionCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextConnection", reflect.TypeOf((*MockQUICConn)(nil).NextConnection))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextConnection", reflect.TypeOf((*MockQUICConn)(nil).NextConnection), arg0)
 	return &MockQUICConnNextConnectionCall{Call: call}
 }
 
@@ -330,19 +331,19 @@ type MockQUICConnNextConnectionCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockQUICConnNextConnectionCall) Return(arg0 Connection) *MockQUICConnNextConnectionCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockQUICConnNextConnectionCall) Return(arg0 Connection, arg1 error) *MockQUICConnNextConnectionCall {
+	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICConnNextConnectionCall) Do(f func() Connection) *MockQUICConnNextConnectionCall {
+func (c *MockQUICConnNextConnectionCall) Do(f func(context.Context) (Connection, error)) *MockQUICConnNextConnectionCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICConnNextConnectionCall) DoAndReturn(f func() Connection) *MockQUICConnNextConnectionCall {
+func (c *MockQUICConnNextConnectionCall) DoAndReturn(f func(context.Context) (Connection, error)) *MockQUICConnNextConnectionCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

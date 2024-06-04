@@ -224,7 +224,7 @@ type EarlyConnection interface {
 	// however the client's identity is only verified once the handshake completes.
 	HandshakeComplete() <-chan struct{}
 
-	NextConnection() Connection
+	NextConnection(context.Context) (Connection, error)
 }
 
 // StatelessResetKey is a key used to derive stateless reset tokens.

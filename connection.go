@@ -2424,10 +2424,17 @@ func (s *connection) GetVersion() protocol.Version {
 	return s.version
 }
 
-func (s *connection) NextConnection() Connection {
-	<-s.HandshakeComplete()
-	s.streamsMap.UseResetMaps()
-	return s
+func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
+	// The handshake might fail after the server rejected 0-RTT.
+	// This could happen if the Finished message is malformed or never received.
+	select {
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	case <-s.Context().Done():
+	case <-s.HandshakeComplete():
+		s.streamsMap.UseResetMaps()
+	}
+	return s, nil
 }
 
 // estimateMaxPayloadSize estimates the maximum payload size for short header packets.
