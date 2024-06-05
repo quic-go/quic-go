@@ -22,14 +22,10 @@ When using multiple `Transport`s, it is recommended to use the metrics tracer st
 
 Set a metrics connection tracer on the `Config`:
 ```go
-tracer := metrics.DefaultTracer()
 quic.Config{
-	Tracer: tracer,
+	Tracer: metrics.DefaultConnectionTracer,
 }
 ```
-
-It is recommended to use the same connection tracer returned by `DefaultTracer` on the `Config`s for all connections.
-
 
 Running:
 ```shell

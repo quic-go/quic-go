@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -51,25 +52,27 @@ var (
 	)
 )
 
-// DefaultTracer returns a callback that creates a metrics ConnectionTracer.
-// The ConnectionTracer returned can be set on the quic.Config for a new connection.
-// It should be reused across QUIC connections.
-func DefaultTracer() func(_ context.Context, p logging.Perspective, _ logging.ConnectionID) *logging.ConnectionTracer {
-	return DefaultTracerWithRegisterer(prometheus.DefaultRegisterer)
-}
+var (
+	defaultServerConnectionTracerOnce, defaultClientConnectionTracerOnce sync.Once
+	defaultServerConnectionTracer, defaultClientConnectionTracer         *logging.ConnectionTracer
+)
 
-// DefaultTracerWithRegisterer returns a callback that creates a metrics ConnectionTracer
-// using a given Prometheus registerer.
-func DefaultTracerWithRegisterer(registerer prometheus.Registerer) func(_ context.Context, p logging.Perspective, _ logging.ConnectionID) *logging.ConnectionTracer {
-	return func(_ context.Context, p logging.Perspective, _ logging.ConnectionID) *logging.ConnectionTracer {
-		switch p {
-		case logging.PerspectiveClient:
-			return NewClientConnectionTracerWithRegisterer(registerer)
-		case logging.PerspectiveServer:
-			return NewServerConnectionTracerWithRegisterer(registerer)
-		default:
-			panic("invalid perspective")
-		}
+// DefaultConnectionTracer returns a callback that creates a metrics ConnectionTracer.
+// The ConnectionTracer returned can be set on the quic.Config for a new connection.
+func DefaultConnectionTracer(_ context.Context, p logging.Perspective, _ logging.ConnectionID) *logging.ConnectionTracer {
+	switch p {
+	case logging.PerspectiveClient:
+		defaultClientConnectionTracerOnce.Do(func() {
+			defaultClientConnectionTracer = NewClientConnectionTracerWithRegisterer(prometheus.DefaultRegisterer)
+		})
+		return defaultClientConnectionTracer
+	case logging.PerspectiveServer:
+		defaultServerConnectionTracerOnce.Do(func() {
+			defaultServerConnectionTracer = NewServerConnectionTracerWithRegisterer(prometheus.DefaultRegisterer)
+		})
+		return defaultServerConnectionTracer
+	default:
+		panic("invalid perspective")
 	}
 }
 
