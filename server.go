@@ -636,12 +636,24 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	}
 
 	var conn quicConn
-	ctx, cancel := context.WithCancelCause(context.Background())
+	var cancel context.CancelCauseFunc
+	ctx, cancel1 := context.WithCancelCause(context.Background())
 	if s.connContext != nil {
 		ctx = s.connContext(ctx)
 		if ctx == nil {
 			panic("quic: ConnContext returned nil")
 		}
+		// There's no guarantee that the application returns a context
+		// that's derived from the context we passed into ConnContext.
+		// We need to make sure that both contexts are cancelled.
+		var cancel2 context.CancelCauseFunc
+		ctx, cancel2 = context.WithCancelCause(ctx)
+		cancel = func(cause error) {
+			cancel1(cause)
+			cancel2(cause)
+		}
+	} else {
+		cancel = cancel1
 	}
 	ctx = context.WithValue(ctx, ConnectionTracingKey, nextConnTracingID())
 	var tracer *logging.ConnectionTracer

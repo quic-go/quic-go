@@ -213,6 +213,37 @@ var _ = Describe("Handshake tests", func() {
 		checkContext(tlsGetCertificateContextChan, false)
 	})
 
+	It("correctly handles a fresh context returned from ConnContext", func() {
+		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.Close()
+		tr := &quic.Transport{
+			Conn:        conn,
+			ConnContext: func(ctx context.Context) context.Context { return context.Background() },
+		}
+		server, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
+		Expect(err).ToNot(HaveOccurred())
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done)
+			conn, err := server.Accept(context.Background())
+			if err != nil {
+				return
+			}
+			Eventually(conn.Context().Done).Should(BeClosed())
+		}()
+
+		c, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
+			getQuicConfig(nil),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		c.CloseWithError(1337, "bye")
+	})
+
 	It("uses the context everywhere, on the client side", func() {
 		tlsServerConf := getTLSConfig()
 		tlsServerConf.ClientAuth = tls.RequestClientCert
