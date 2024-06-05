@@ -36,7 +36,7 @@ var _ = Describe("qlog dir tests", Serial, func() {
 			"localhost:0",
 			getTLSConfig(),
 			&quic.Config{
-				Tracer: qlog.DefaultTracer,
+				Tracer: qlog.DefaultConnectionTracer,
 			},
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -56,7 +56,7 @@ var _ = Describe("qlog dir tests", Serial, func() {
 			server.Addr().String(),
 			getTLSClientConfig(),
 			&quic.Config{
-				Tracer: qlog.DefaultTracer,
+				Tracer: qlog.DefaultConnectionTracer,
 			},
 		)
 		Expect(err).ToNot(HaveOccurred())
