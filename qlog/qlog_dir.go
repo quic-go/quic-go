@@ -13,9 +13,15 @@ import (
 )
 
 // DefaultTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
+// Deprecated: use DefaultConnectionTracer instead.
+func DefaultTracer(ctx context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
+	return DefaultConnectionTracer(ctx, p, connID)
+}
+
+// DefaultConnectionTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
 // File names are <odcid>_<perspective>.qlog.
 // Returns nil if QLOGDIR is not set.
-func DefaultTracer(_ context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
+func DefaultConnectionTracer(_ context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
 	var label string
 	switch p {
 	case logging.PerspectiveClient:

@@ -47,7 +47,7 @@ func main() {
 			KeyLogWriter:       keyLog,
 		},
 		QUICConfig: &quic.Config{
-			Tracer: qlog.DefaultTracer,
+			Tracer: qlog.DefaultConnectionTracer,
 		},
 	}
 	defer roundTripper.Close()
