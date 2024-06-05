@@ -115,8 +115,10 @@ var _ = Describe("Connection", func() {
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		tracer.EXPECT().UpdatedCongestionState(gomock.Any())
+		ctx, cancel := context.WithCancelCause(context.Background())
 		conn = newConnection(
-			context.Background(),
+			ctx,
+			cancel,
 			mconn,
 			connRunner,
 			protocol.ConnectionID{},

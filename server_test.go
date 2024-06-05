@@ -288,6 +288,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -490,6 +491,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -558,6 +560,7 @@ var _ = Describe("Server", func() {
 				var counter atomic.Uint32
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -613,6 +616,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -662,6 +666,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -723,6 +728,7 @@ var _ = Describe("Server", func() {
 			It("decodes the token from the token field", func() {
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					_ connRunner,
 					_ protocol.ConnectionID,
@@ -956,6 +962,7 @@ var _ = Describe("Server", func() {
 				destroyed := make(chan struct{})
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					_ connRunner,
 					_ protocol.ConnectionID,
@@ -1023,6 +1030,7 @@ var _ = Describe("Server", func() {
 				handshakeChan := make(chan struct{})
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					_ connRunner,
 					_ protocol.ConnectionID,
@@ -1093,6 +1101,7 @@ var _ = Describe("Server", func() {
 				handshakeChan := make(chan struct{})
 				serv.newConn = func(
 					_ context.Context,
+					_ context.CancelCauseFunc,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -1163,6 +1172,7 @@ var _ = Describe("Server", func() {
 			ready := make(chan struct{})
 			serv.baseServer.newConn = func(
 				_ context.Context,
+				_ context.CancelCauseFunc,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1204,6 +1214,7 @@ var _ = Describe("Server", func() {
 			wg.Add(protocol.MaxAcceptQueueSize)
 			serv.baseServer.newConn = func(
 				_ context.Context,
+				_ context.CancelCauseFunc,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1263,6 +1274,7 @@ var _ = Describe("Server", func() {
 			conn := NewMockQUICConn(mockCtrl)
 			serv.baseServer.newConn = func(
 				_ context.Context,
+				_ context.CancelCauseFunc,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1385,6 +1397,7 @@ var _ = Describe("Server", func() {
 			called := make(chan struct{})
 			serv.newConn = func(
 				_ context.Context,
+				_ context.CancelCauseFunc,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,

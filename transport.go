@@ -90,6 +90,7 @@ type Transport struct {
 	VerifySourceAddress func(net.Addr) bool
 
 	// ConnContext is called when the server accepts a new connection.
+	// The context is closed when the connection is closed, or when the handshake fails for any reason.
 	// The context returned from the callback is used to derive every other context used during the
 	// lifetime of the connection:
 	// * the context passed to crypto/tls (and used on the tls.ClientHelloInfo)
@@ -97,7 +98,7 @@ type Transport struct {
 	// * the context returned from Connection.Context
 	// * the context returned from SendStream.Context
 	// It is not used for dialed connections.
-	ConnContext func() context.Context
+	ConnContext func(context.Context) context.Context
 
 	// A Tracer traces events that don't belong to a single QUIC connection.
 	// Tracer.Close is called when the transport is closed.
