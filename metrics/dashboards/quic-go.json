@@ -463,7 +463,7 @@
           "refId": "C"
         }
       ],
-      "title": "Handshake Duration",
+      "title": "Handshake Latency",
       "type": "timeseries"
     },
     {
