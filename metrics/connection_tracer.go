@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -52,25 +51,14 @@ var (
 	)
 )
 
-var (
-	defaultServerConnectionTracerOnce, defaultClientConnectionTracerOnce sync.Once
-	defaultServerConnectionTracer, defaultClientConnectionTracer         *logging.ConnectionTracer
-)
-
 // DefaultConnectionTracer returns a callback that creates a metrics ConnectionTracer.
 // The ConnectionTracer returned can be set on the quic.Config for a new connection.
 func DefaultConnectionTracer(_ context.Context, p logging.Perspective, _ logging.ConnectionID) *logging.ConnectionTracer {
 	switch p {
 	case logging.PerspectiveClient:
-		defaultClientConnectionTracerOnce.Do(func() {
-			defaultClientConnectionTracer = NewClientConnectionTracerWithRegisterer(prometheus.DefaultRegisterer)
-		})
-		return defaultClientConnectionTracer
+		return NewClientConnectionTracerWithRegisterer(prometheus.DefaultRegisterer)
 	case logging.PerspectiveServer:
-		defaultServerConnectionTracerOnce.Do(func() {
-			defaultServerConnectionTracer = NewServerConnectionTracerWithRegisterer(prometheus.DefaultRegisterer)
-		})
-		return defaultServerConnectionTracer
+		return NewServerConnectionTracerWithRegisterer(prometheus.DefaultRegisterer)
 	default:
 		panic("invalid perspective")
 	}
