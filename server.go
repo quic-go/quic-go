@@ -18,7 +18,12 @@ import (
 )
 
 // ErrServerClosed is returned by the Listener or EarlyListener's Accept method after a call to Close.
-var ErrServerClosed = errors.New("quic: server closed")
+var ErrServerClosed = errServerClosed{}
+
+type errServerClosed struct{}
+
+func (errServerClosed) Error() string { return "quic: server closed" }
+func (errServerClosed) Unwrap() error { return net.ErrClosed }
 
 // packetHandler handles packets
 type packetHandler interface {
