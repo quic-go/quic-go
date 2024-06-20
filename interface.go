@@ -333,6 +333,10 @@ type Config struct {
 	// If set too high, the path might not support packets that large, leading to a timeout of the QUIC handshake.
 	// Values below 1200 are invalid.
 	InitialPacketSize uint16
+	// MaxUDPPayloadSize configures the max_udp_payload_size transport parameter. This is the the limit on much data this
+	// endpoint is willing to receive.
+	// This is an experimental config option, it might be removed once PMTU can account for the path changing to lower values
+	MaxUDPPayloadSize uint16
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.
