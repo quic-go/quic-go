@@ -265,6 +265,37 @@ var _ = Describe("RoundTripper", func() {
 			Expect(count).To(Equal(1))
 		})
 
+		It("redials a connection if dialing failed", func() {
+			cl1 := NewMockSingleRoundTripper(mockCtrl)
+			clientChan <- cl1
+
+			req1, err := http.NewRequest("GET", "https://quic-go.net/foo.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			req2, err := http.NewRequest("GET", "https://quic-go.net/bar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			testErr := errors.New("handshake error")
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			var count int
+			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+				count++
+				if count == 1 {
+					return nil, testErr
+				}
+				return conn, nil
+			}
+			handshakeChan := make(chan struct{})
+			close(handshakeChan)
+			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
+			_, err = rt.RoundTrip(req1)
+			Expect(err).To(MatchError(testErr))
+			rsp, err := rt.RoundTrip(req2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Request).To(Equal(req2))
+			Expect(count).To(Equal(2))
+		})
+
 		It("immediately removes a clients when a request errored", func() {
 			cl1 := NewMockSingleRoundTripper(mockCtrl)
 			clientChan <- cl1

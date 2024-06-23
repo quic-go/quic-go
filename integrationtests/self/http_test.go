@@ -150,6 +150,29 @@ var _ = Describe("HTTP tests", func() {
 		Expect(resp.Header.Get("Content-Length")).To(Equal("6"))
 	})
 
+	It("re-establishes a QUIC connection after a dial error", func() {
+		var dialCounter int
+		testErr := errors.New("test error")
+		cl := http.Client{
+			Transport: &http3.RoundTripper{
+				TLSClientConfig: getTLSClientConfig(),
+				Dial: func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+					dialCounter++
+					if dialCounter == 1 { // make the first dial fail
+						return nil, testErr
+					}
+					return quic.DialAddrEarly(ctx, addr, tlsConf, conf)
+				},
+			},
+		}
+		defer cl.Transport.(io.Closer).Close()
+		_, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+		Expect(err).To(MatchError(testErr))
+		resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	})
+
 	It("detects stream errors when server panics when writing response", func() {
 		respChan := make(chan struct{})
 		mux.HandleFunc("/writing_and_panicking", func(w http.ResponseWriter, r *http.Request) {
