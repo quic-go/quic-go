@@ -941,6 +941,7 @@ var _ = Describe("Server", func() {
 					defer GinkgoRecover()
 					_, err := serv.Accept(context.Background())
 					Expect(err).To(MatchError(ErrServerClosed))
+					Expect(err).To(MatchError(net.ErrClosed))
 					close(done)
 				}()
 
