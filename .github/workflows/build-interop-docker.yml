@@ -34,7 +34,7 @@ jobs:
             echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
             echo 'gitref=${{ github.sha }}' | tee -a $GITHUB_OUTPUT;
           fi
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:interop"
           platforms: linux/amd64,linux/arm64
