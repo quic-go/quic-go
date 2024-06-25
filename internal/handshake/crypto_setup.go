@@ -253,7 +253,10 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 		h.handshakeComplete()
 		return false, nil
 	default:
-		return false, fmt.Errorf("unexpected event: %d", ev.Kind)
+		// Unknown events should be ignored.
+		// crypto/tls will ensure that this is safe to do.
+		// See the discussion following https://github.com/golang/go/issues/68124#issuecomment-2187042510 for details.
+		return false, nil
 	}
 }
 
