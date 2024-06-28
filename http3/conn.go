@@ -115,7 +115,7 @@ func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagramme
 	return str, datagrams, nil
 }
 
-func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)) {
+func (c *connection) HandleUnidirectionalStreams(hijackers map[uint64]func(context.Context, quic.ReceiveStream)) {
 	var (
 		rcvdControlStr      atomic.Bool
 		rcvdQPACKEncoderStr atomic.Bool
@@ -134,9 +134,11 @@ func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.Co
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
-				id := c.Connection.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				if hijack != nil && hijack(StreamType(streamType), id, str, err) {
-					return
+				if hijackers != nil {
+					if f, ok := hijackers[streamType]; ok {
+						f(c.Connection.Context(), str)
+						return
+					}
 				}
 				if c.logger != nil {
 					c.logger.Debug("reading stream type on stream failed", "stream ID", str.StreamID(), "error", err)
@@ -167,19 +169,6 @@ func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.Co
 					// only the server can push
 					c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "")
 				}
-				return
-			default:
-				if hijack != nil {
-					if hijack(
-						StreamType(streamType),
-						c.Connection.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
-						str,
-						nil,
-					) {
-						return
-					}
-				}
-				str.CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
 				return
 			}
 			// Only a single control stream is allowed.
