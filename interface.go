@@ -13,6 +13,10 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
+func init() {
+	panic("nope")
+}
+
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
