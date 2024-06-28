@@ -38,11 +38,21 @@ type streamOpenErr struct{ error }
 
 var _ net.Error = &streamOpenErr{}
 
-func (e streamOpenErr) Temporary() bool { return e.error == errTooManyOpenStreams }
-func (streamOpenErr) Timeout() bool     { return false }
+func (streamOpenErr) Timeout() bool   { return false }
+func (e streamOpenErr) Unwrap() error { return e.error }
 
-// errTooManyOpenStreams is used internally by the outgoing streams maps.
-var errTooManyOpenStreams = errors.New("too many open streams")
+func (e streamOpenErr) Temporary() bool {
+	// In older versions of quic-go, the stream limit error was documented to be a net.Error.Temporary.
+	// This function was since deprecated, but we keep the existing behavior.
+	return errors.Is(e, &StreamLimitReachedError{})
+}
+
+// StreamLimitReachedError is returned from Connection.OpenStream and Connection.OpenUniStream
+// when it is not possible to open a new stream because the number of opens streams reached
+// the peer's stream limit.
+type StreamLimitReachedError struct{}
+
+func (e StreamLimitReachedError) Error() string { return "too many open streams" }
 
 type streamsMap struct {
 	ctx         context.Context // not used for cancellations, but carries the values associated with the connection
