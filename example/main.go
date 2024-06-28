@@ -140,6 +140,7 @@ func main() {
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	key := flag.String("key", "", "TLS key (requires -cert option)")
 	cert := flag.String("cert", "", "TLS certificate (requires -key option)")
+	bbr := flag.Bool("b", false, "use bbr as congestion control algorithm")
 	flag.Parse()
 
 	if len(bs) == 0 {
@@ -147,6 +148,13 @@ func main() {
 	}
 
 	handler := setupHandler(*www)
+
+	quicConf := &quic.Config{
+		Tracer: qlog.DefaultConnectionTracer,
+	}
+	if *bbr {
+		quicConf.CC = quic.CcBbr
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(bs))
@@ -166,11 +174,9 @@ func main() {
 				err = http3.ListenAndServeTLS(bCap, certFile, keyFile, handler)
 			} else {
 				server := http3.Server{
-					Handler: handler,
-					Addr:    bCap,
-					QUICConfig: &quic.Config{
-						Tracer: qlog.DefaultConnectionTracer,
-					},
+					Handler:    handler,
+					Addr:       bCap,
+					QUICConfig: quicConf,
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)
 			}

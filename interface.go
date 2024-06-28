@@ -30,6 +30,18 @@ const (
 	Version2 = protocol.Version2
 )
 
+// A CongestionControlAlgorithm is a congestion control algorithm.
+type CongestionControlAlgorithm = protocol.CC
+
+const (
+	// Default
+	CcDefault = protocol.CcDefault
+	// CUBIC
+	CcCubic = protocol.CcCubic
+	// BBR
+	CcBbr = protocol.CcBbr
+)
+
 // A ClientToken is a token received by the client.
 // It can be used to skip address validation on future connection attempts.
 type ClientToken struct {
@@ -344,6 +356,9 @@ type Config struct {
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
 	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
+
+	// Congestion Control Algorithm
+	CC CongestionControlAlgorithm
 }
 
 // ClientHelloInfo contains information about an incoming connection attempt.

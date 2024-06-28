@@ -91,6 +91,15 @@ const (
 	CongestionStateRecovery
 	// CongestionStateApplicationLimited means that the congestion controller is application limited
 	CongestionStateApplicationLimited
+
+	// CongestionStateStartup is the startup phase of BBR
+	CongestionStateStartup
+	// CongestionStateDrain is the drain phase of BBR
+	CongestionStateDrain
+	// CongestionStateProbeBw is the probe bandwidth phase of BBR
+	CongestionStateProbeBw
+	// CongestionStateRecovery is the probe RTT phase of BBR
+	CongestionStateProbRtt
 )
 
 // ECNState is the state of the ECN state machine (see Appendix A.4 of RFC 9000)

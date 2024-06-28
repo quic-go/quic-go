@@ -21,6 +21,7 @@ func main() {
 	quiet := flag.Bool("q", false, "don't print the data")
 	keyLogFile := flag.String("keylog", "", "key log file")
 	insecure := flag.Bool("insecure", false, "skip certificate verification")
+	bbr := flag.Bool("b", false, "use bbr as congestion control algorithm")
 	flag.Parse()
 	urls := flag.Args()
 
@@ -40,15 +41,20 @@ func main() {
 	}
 	testdata.AddRootCA(pool)
 
+	qconf := &quic.Config{
+		Tracer: qlog.DefaultConnectionTracer,
+	}
+	if *bbr {
+		qconf.CC = quic.CcBbr
+	}
+
 	roundTripper := &http3.RoundTripper{
 		TLSClientConfig: &tls.Config{
 			RootCAs:            pool,
 			InsecureSkipVerify: *insecure,
 			KeyLogWriter:       keyLog,
 		},
-		QUICConfig: &quic.Config{
-			Tracer: qlog.DefaultConnectionTracer,
-		},
+		QUICConfig: qconf,
 	}
 	defer roundTripper.Close()
 	hclient := &http.Client{
