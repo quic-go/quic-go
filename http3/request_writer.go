@@ -98,9 +98,9 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 			if !validPseudoPath(path) {
 				if req.URL.Opaque != "" {
 					return fmt.Errorf("invalid request :path %q from URL.Opaque = %q", orig, req.URL.Opaque)
-				} else {
-					return fmt.Errorf("invalid request :path %q", orig)
 				}
+
+				return fmt.Errorf("invalid request :path %q", orig)
 			}
 		}
 	}
