@@ -49,16 +49,25 @@ type stream struct {
 	bytesRemainingInFrame uint64
 
 	datagrams *datagrammer
+
+	resp *http.Response
+
+	decoder *qpack.Decoder
+
+	maxHeaderBytes uint64
 }
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer) *stream {
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, resp *http.Response, decoder *qpack.Decoder, maxHeaderBytes uint64) *stream {
 	return &stream{
-		Stream:    str,
-		conn:      conn,
-		buf:       make([]byte, 16),
-		datagrams: datagrams,
+		Stream:         str,
+		conn:           conn,
+		buf:            make([]byte, 16),
+		datagrams:      datagrams,
+		resp:           resp,
+		decoder:        decoder,
+		maxHeaderBytes: maxHeaderBytes,
 	}
 }
 
@@ -75,12 +84,33 @@ func (s *stream) Read(b []byte) (int, error) {
 				return 0, err
 			}
 			switch f := frame.(type) {
-			case *headersFrame:
-				// skip HEADERS frames
-				continue
 			case *dataFrame:
 				s.bytesRemainingInFrame = f.Length
 				break parseLoop
+			case *headersFrame:
+				if s.conn.perspective == protocol.PerspectiveServer {
+					continue
+				}
+				if f.Length > s.maxHeaderBytes {
+					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
+				}
+				p := make([]byte, f.Length)
+				s.Stream.Read(p)
+				trailers, err := s.decoder.DecodeFull(p)
+				if err != nil {
+					// Ignoring invalid frame
+					continue
+				}
+
+				for _, trailer := range trailers {
+					if s.resp.Trailer == nil {
+						s.resp.Trailer = http.Header{}
+					}
+					s.resp.Trailer.Add(trailer.Name, trailer.Value)
+				}
+
+				// Trailer Frame is the last frame.
+				return 0, nil
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -213,9 +243,8 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
-
-	res, err := responseFromHeaders(hfs)
-	if err != nil {
+	res := s.resp
+	if err := responseFromHeaders(res, hfs); err != nil {
 		s.Stream.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 		s.Stream.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 		return nil, fmt.Errorf("http3: invalid response: %w", err)

@@ -30,6 +30,7 @@ var _ = Describe("Stream", func() {
 			qstr          *mockquic.MockStream
 			buf           *bytes.Buffer
 			errorCbCalled bool
+			resp          *http.Response
 		)
 
 		BeforeEach(func() {
@@ -43,7 +44,14 @@ var _ = Describe("Stream", func() {
 				errorCbCalled = true
 				return nil
 			}).AnyTimes()
-			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil)
+			resp = &http.Response{}
+			str = newStream(
+				qstr,
+				newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil),
+				newDatagrammer(nil),
+				resp,
+				qpack.NewDecoder(func(hf qpack.HeaderField) {}),
+				1000)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -117,6 +125,23 @@ var _ = Describe("Stream", func() {
 			Expect(r).To(Equal([]byte("foobar")))
 		})
 
+		It("reads HEADERS frame as trailers", func() {
+			b := getDataFrame([]byte("foo"))
+			headerBuf := &bytes.Buffer{}
+			enc := qpack.NewEncoder(headerBuf)
+			Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+			Expect(enc.Close()).To(Succeed())
+			b = (&headersFrame{Length: uint64(headerBuf.Len())}).Append(b)
+			b = append(b, headerBuf.Bytes()...)
+			buf.Write(b)
+
+			_, err := io.ReadAll(str)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.Trailer).To(Equal(http.Header(map[string][]string{
+				"Grpc-Status": {"0"},
+			})))
+		})
+
 		It("errors when it can't parse the frame", func() {
 			buf.Write([]byte("invalid"))
 			_, err := str.Read([]byte{0})
@@ -137,7 +162,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil, nil)
+			str := newStream(qstr, nil, nil, nil, nil, 0)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -171,7 +196,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil, &http.Response{}, nil, 0),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),

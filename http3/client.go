@@ -208,8 +208,9 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 		}
 	}
 
+	resp := &http.Response{}
 	reqDone := make(chan struct{})
-	str, err := c.hconn.openRequestStream(req.Context(), c.requestWriter, reqDone, c.DisableCompression, c.maxHeaderBytes())
+	str, err := c.hconn.openRequestStream(req.Context(), c.requestWriter, reqDone, c.DisableCompression, c.maxHeaderBytes(), resp)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +229,7 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 		}
 	}()
 
-	rsp, err := c.doRequest(req, str)
+	rsp, err := c.doRequest(req, str, resp)
 	if err != nil { // if any error occurred
 		close(reqDone)
 		<-done
@@ -240,7 +241,7 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 func (c *SingleDestinationRoundTripper) OpenRequestStream(ctx context.Context) (RequestStream, error) {
 	c.initOnce.Do(func() { c.init() })
 
-	return c.hconn.openRequestStream(ctx, c.requestWriter, nil, c.DisableCompression, c.maxHeaderBytes())
+	return c.hconn.openRequestStream(ctx, c.requestWriter, nil, c.DisableCompression, c.maxHeaderBytes(), &http.Response{})
 }
 
 // cancelingReader reads from the io.Reader.
@@ -282,7 +283,7 @@ func (c *SingleDestinationRoundTripper) sendRequestBody(str Stream, body io.Read
 	return err
 }
 
-func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
+func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str *requestStream, res *http.Response) (*http.Response, error) {
 	if err := str.SendRequestHeader(req); err != nil {
 		return nil, err
 	}
@@ -311,10 +312,8 @@ func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str *reques
 	num1xx := 0               // number of informational 1xx headers received
 	const max1xxResponses = 5 // arbitrary bound on number of informational responses
 
-	var res *http.Response
 	for {
-		var err error
-		res, err = str.ReadResponse()
+		res, err := str.ReadResponse()
 		if err != nil {
 			return nil, err
 		}
