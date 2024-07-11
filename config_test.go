@@ -68,24 +68,6 @@ var _ = Describe("Config", func() {
 			Expect(validateConfig(conf)).To(Succeed())
 			Expect(conf.InitialPacketSize).To(BeZero())
 		})
-
-		It("increases too small UDP payload sizes", func() {
-			conf := &Config{MaxUDPPayloadSize: 10}
-			Expect(validateConfig(conf)).To(Succeed())
-			Expect(conf.MaxUDPPayloadSize).To(BeEquivalentTo(1200))
-		})
-
-		It("clips too large UDP payload sizes", func() {
-			conf := &Config{MaxUDPPayloadSize: protocol.MaxPacketBufferSize + 1}
-			Expect(validateConfig(conf)).To(Succeed())
-			Expect(conf.MaxUDPPayloadSize).To(BeEquivalentTo(protocol.MaxPacketBufferSize))
-		})
-
-		It("doesn't modify the MaxUDPPayloadSize if it is unset", func() {
-			conf := &Config{MaxUDPPayloadSize: 0}
-			Expect(validateConfig(conf)).To(Succeed())
-			Expect(conf.MaxUDPPayloadSize).To(BeZero())
-		})
 	})
 
 	configWithNonZeroNonFunctionFields := func() *Config {
@@ -137,8 +119,6 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "InitialPacketSize":
 				f.Set(reflect.ValueOf(uint16(1350)))
-			case "MaxUDPPayloadSize":
-				f.Set(reflect.ValueOf(uint16(1400)))
 			case "DisablePathMTUDiscovery":
 				f.Set(reflect.ValueOf(true))
 			case "Allow0RTT":

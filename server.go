@@ -59,8 +59,9 @@ type baseServer struct {
 	disableVersionNegotiation bool
 	acceptEarlyConns          bool
 
-	tlsConf *tls.Config
-	config  *Config
+	tlsConf           *tls.Config
+	config            *Config
+	maxUDPPayloadSize protocol.ByteCount
 
 	conn rawConn
 
@@ -98,6 +99,7 @@ type baseServer struct {
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
+		protocol.ByteCount, /* max UDP payload size */
 	) quicConn
 
 	closeMx   sync.Mutex
@@ -244,12 +246,14 @@ func newServer(
 	verifySourceAddress func(net.Addr) bool,
 	disableVersionNegotiation bool,
 	acceptEarly bool,
+	maxUDPPayloadSize protocol.ByteCount,
 ) *baseServer {
 	s := &baseServer{
 		conn:                      conn,
 		connContext:               connContext,
 		tlsConf:                   tlsConf,
 		config:                    config,
+		maxUDPPayloadSize:         maxUDPPayloadSize,
 		tokenGenerator:            handshake.NewTokenGenerator(tokenGeneratorKey),
 		maxTokenAge:               maxTokenAge,
 		verifySourceAddress:       verifySourceAddress,
@@ -689,6 +693,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		tracer,
 		s.logger,
 		hdr.Version,
+		s.maxUDPPayloadSize,
 	)
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.

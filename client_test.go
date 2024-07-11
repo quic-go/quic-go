@@ -47,6 +47,7 @@ var _ = Describe("Client", func() {
 			tracer *logging.ConnectionTracer,
 			logger utils.Logger,
 			v protocol.Version,
+			maxUDPPayloadSize protocol.ByteCount,
 		) quicConn
 	)
 
@@ -126,6 +127,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				Expect(enable0RTT).To(BeFalse())
 				conn := NewMockQUICConn(mockCtrl)
@@ -135,7 +137,7 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().HandshakeComplete().Return(c)
 				return conn
 			}
-			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, false)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, false, protocol.DefaultMaxUDPPayloadSize)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -163,6 +165,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
 				conn := NewMockQUICConn(mockCtrl)
@@ -172,7 +175,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, true)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, true, protocol.DefaultMaxUDPPayloadSize)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -200,6 +203,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().run().Return(testErr)
@@ -208,7 +212,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 			var closed bool
-			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, func() { closed = true }, true)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, func() { closed = true }, true, protocol.DefaultMaxUDPPayloadSize)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -285,6 +289,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				versionP protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				version = versionP
 				conf = configP
@@ -328,6 +333,7 @@ var _ = Describe("Client", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				versionP protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))

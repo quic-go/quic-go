@@ -239,6 +239,7 @@ var newConnection = func(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
+	maxUDPPayloadSize protocol.ByteCount,
 ) quicConn {
 	s := &connection{
 		ctx:                 ctx,
@@ -298,7 +299,7 @@ var newConnection = func(
 		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
 		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:                protocol.AckDelayExponent,
-		MaxUDPPayloadSize:               protocol.ByteCount(s.config.MaxUDPPayloadSize),
+		MaxUDPPayloadSize:               maxUDPPayloadSize,
 		DisableActiveMigration:          true,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
@@ -354,6 +355,7 @@ var newClientConnection = func(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
+	maxUDPPayloadSize protocol.ByteCount,
 ) quicConn {
 	s := &connection{
 		conn:                conn,
@@ -408,7 +410,7 @@ var newClientConnection = func(
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-		MaxUDPPayloadSize:              protocol.ByteCount(s.config.MaxUDPPayloadSize),
+		MaxUDPPayloadSize:              maxUDPPayloadSize,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableActiveMigration:         true,
 		// For interoperability with quic-go versions before May 2023, this value must be set to a value
