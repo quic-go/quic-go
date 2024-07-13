@@ -562,6 +562,24 @@ var _ = Describe("Client", func() {
 			Entry("HEAD", MethodHead0RTT, http.MethodHead),
 		)
 
+		It("returns a response", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.Request).ToNot(BeNil())
+		})
+
 		It("returns a response with trailers", func() {
 			rspBuf := bytes.NewBuffer(encodeResponse(418))
 
