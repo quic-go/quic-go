@@ -562,8 +562,18 @@ var _ = Describe("Client", func() {
 			Entry("HEAD", MethodHead0RTT, http.MethodHead),
 		)
 
-		It("returns a response", func() {
+		It("returns a response with trailers", func() {
 			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			headerBuf := &bytes.Buffer{}
+			enc := qpack.NewEncoder(headerBuf)
+			Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+			Expect(enc.Close()).To(Succeed())
+
+			b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+			b = append(b, headerBuf.Bytes()...)
+			rspBuf.Write(b)
+
 			gomock.InOrder(
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -574,6 +584,91 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			rsp, err := cl.RoundTrip(req)
 			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.Request).ToNot(BeNil())
+		})
+
+		It("returns an error if trailers are sent twice", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			{
+				headerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(headerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+				b = append(b, headerBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			{
+				headerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(headerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "1"})).To(Succeed())
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+				b = append(b, headerBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).To(MatchError(errors.New("HEADERS frame received after trailers")))
+			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.Request).ToNot(BeNil())
+		})
+
+		It("returns an error if body frame is received after trailers", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			{
+				headerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(headerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+				b = append(b, headerBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			{
+				dataBuf := &bytes.Buffer{}
+				dataBuf.Write([]byte("test body please ignore"))
+				b := (&dataFrame{Length: uint64(dataBuf.Len())}).Append(nil)
+				b = append(b, dataBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).To(MatchError(errors.New("DATA frame received after trailers")))
+			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
 			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))

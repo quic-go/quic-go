@@ -77,6 +77,7 @@ func (s *stream) Read(b []byte) (int, error) {
 		conn: s.conn,
 	}
 	if s.bytesRemainingInFrame == 0 {
+		var seenTrailerFrame bool
 	parseLoop:
 		for {
 			frame, err := fp.ParseNext()
@@ -85,6 +86,9 @@ func (s *stream) Read(b []byte) (int, error) {
 			}
 			switch f := frame.(type) {
 			case *dataFrame:
+				if seenTrailerFrame {
+					return 0, errors.New("DATA frame received after trailers")
+				}
 				s.bytesRemainingInFrame = f.Length
 				break parseLoop
 			case *headersFrame:
@@ -93,6 +97,9 @@ func (s *stream) Read(b []byte) (int, error) {
 				}
 				if f.Length > s.maxHeaderBytes {
 					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
+				}
+				if seenTrailerFrame {
+					return 0, errors.New("HEADERS frame received after trailers")
 				}
 				p := make([]byte, f.Length)
 				s.Stream.Read(p)
@@ -108,9 +115,7 @@ func (s *stream) Read(b []byte) (int, error) {
 					}
 					s.resp.Trailer.Add(trailer.Name, trailer.Value)
 				}
-
-				// Trailer Frame is the last frame.
-				return 0, nil
+				seenTrailerFrame = true
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
