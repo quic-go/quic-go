@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -357,3 +358,55 @@ var _ = Describe("receivedPacketHistory", func() {
 		})
 	})
 })
+
+func BenchmarkHistoryReceiveSequentialPackets(b *testing.B) {
+	hist := newReceivedPacketHistory()
+	for i := 0; i < b.N; i++ {
+		hist.ReceivedPacket(protocol.PacketNumber(i))
+	}
+}
+
+// Packets are received sequentially, with occasional gaps
+func BenchmarkHistoryReceiveCommonCase(b *testing.B) {
+	hist := newReceivedPacketHistory()
+	var pn protocol.PacketNumber
+	for i := 0; i < b.N; i++ {
+		hist.ReceivedPacket(pn)
+		pn++
+		if i%2000 == 0 {
+			pn += 4
+		}
+	}
+}
+
+func BenchmarkHistoryReceiveSequentialPacketsWithGaps(b *testing.B) {
+	hist := newReceivedPacketHistory()
+	for i := 0; i < b.N; i++ {
+		hist.ReceivedPacket(protocol.PacketNumber(2 * i))
+	}
+}
+
+func BenchmarkHistoryReceiveReversePacketsWithGaps(b *testing.B) {
+	hist := newReceivedPacketHistory()
+	for i := 0; i < b.N; i++ {
+		hist.ReceivedPacket(protocol.PacketNumber(2 * (b.N - i)))
+	}
+}
+
+func BenchmarkHistoryIsDuplicate(b *testing.B) {
+	b.ReportAllocs()
+	hist := newReceivedPacketHistory()
+	var pn protocol.PacketNumber
+	for i := 0; i < protocol.MaxNumAckRanges; i++ {
+		for j := 0; j < 5; j++ {
+			hist.ReceivedPacket(pn)
+			pn++
+		}
+		pn += 5 // create a gap
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hist.IsPotentiallyDuplicate(protocol.PacketNumber(i) % pn)
+	}
+}
