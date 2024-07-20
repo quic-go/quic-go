@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"runtime"
@@ -197,6 +198,12 @@ type Server struct {
 	// If parsing the stream type fails, the error is passed to the callback.
 	// In that case, the stream type will not be set.
 	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
+
+	// IdleTimeout specifies how long until idle clients connection should be
+	// closed. Quic PING frames are not considered activity for the purposes of
+	// IdleTimeout.
+	// If zero or negative, there is no timeout.
+	IdleTimeout time.Duration
 
 	// ConnContext optionally specifies a function that modifies the context used for a new connection c.
 	// The provided ctx has a ServerContextKey value.
@@ -481,6 +488,35 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.Logger,
 	)
 	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
+
+	// Handle idle timeout
+	streamActivity := make(chan int, 1)
+	if s.IdleTimeout > 0 {
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			streams := 0
+			const never = time.Duration(math.MaxInt64)
+			idleTimer := time.NewTimer(never)
+			for {
+				select {
+				case add := <-streamActivity:
+					streams += add
+					if streams == 0 {
+						idleTimer.Reset(s.IdleTimeout)
+					} else {
+						idleTimer.Reset(never)
+					}
+				case <-idleTimer.C:
+					hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "idle timeout")
+					return
+				case <-done:
+					return
+				}
+			}
+		}()
+	}
+
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
@@ -492,7 +528,15 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
-		go s.handleRequest(hconn, str, datagrams, hconn.decoder)
+		streamActivity <- 1
+		go func() {
+			if hijacked := s.handleRequest(hconn, str, datagrams, hconn.decoder); hijacked {
+				// TODO: handle idle timeout for hijacked streams, currently a
+				// connection with an hijacked stream will never timeout.
+			} else {
+				streamActivity <- -1
+			}
+		}()
 	}
 }
 
@@ -503,7 +547,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) (hijacked bool) {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -522,17 +566,17 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		}
-		return
+		return false
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
 		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
-		return
+		return false
 	}
 	if hf.Length > s.maxHeaderBytes() {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
-		return
+		return false
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
@@ -544,13 +588,13 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if err != nil {
 		// TODO: use the right error code
 		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "expected first frame to be a HEADERS frame")
-		return
+		return false
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		return
+		return false
 	}
 
 	connState := conn.ConnectionState().TLS
@@ -605,7 +649,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	}()
 
 	if r.wasStreamHijacked() {
-		return
+		return true
 	}
 
 	// only write response when there is no panic
@@ -623,13 +667,14 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if panicked {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
-		return
+		return false
 	}
 
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 	str.Close()
+	return false
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
