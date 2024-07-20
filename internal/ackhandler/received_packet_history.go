@@ -1,6 +1,8 @@
 package ackhandler
 
 import (
+	"slices"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -30,8 +32,13 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) bool /* 
 	if p < h.deletedBelow {
 		return false
 	}
+
 	isNew := h.addToRanges(p)
-	h.maybeDeleteOldRanges()
+	// Delete old ranges, if we're tracking too many of them.
+	// This is a DoS defense against a peer that sends us too many gaps.
+	if len(h.ranges) > protocol.MaxNumAckRanges {
+		h.ranges = slices.Delete(h.ranges, 0, len(h.ranges)-protocol.MaxNumAckRanges)
+	}
 	return isNew
 }
 
@@ -56,36 +63,21 @@ func (h *receivedPacketHistory) addToRanges(p protocol.PacketNumber) bool /* is 
 
 			if i > 0 && h.ranges[i-1].End+1 == h.ranges[i].Start { // merge two ranges
 				h.ranges[i-1].End = h.ranges[i].End
-				// delete range i from slice
-				copy(h.ranges[i:], h.ranges[i+1:])
-				h.ranges = h.ranges[:len(h.ranges)-1]
+				h.ranges = slices.Delete(h.ranges, i, i+1)
 			}
 			return true
 		}
 
 		// create a new range after the current one
 		if p > h.ranges[i].End {
-			h.ranges = append(h.ranges, interval{})
-			copy(h.ranges[i+2:], h.ranges[i+1:])
-			h.ranges[i+1] = interval{Start: p, End: p}
+			h.ranges = slices.Insert(h.ranges, i+1, interval{Start: p, End: p})
 			return true
 		}
 	}
 
 	// create a new range at the beginning
-	h.ranges = append(h.ranges, interval{})
-	copy(h.ranges[1:], h.ranges)
-	h.ranges[0] = interval{Start: p, End: p}
+	h.ranges = slices.Insert(h.ranges, 0, interval{Start: p, End: p})
 	return true
-}
-
-// Delete old ranges, if we're tracking more than 500 of them.
-// This is a DoS defense against a peer that sends us too many gaps.
-func (h *receivedPacketHistory) maybeDeleteOldRanges() {
-	for len(h.ranges) > protocol.MaxNumAckRanges {
-		copy(h.ranges, h.ranges[1:])
-		h.ranges = h.ranges[:protocol.MaxNumAckRanges]
-	}
 }
 
 // DeleteBelow deletes all entries below (but not including) p
@@ -111,8 +103,7 @@ func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
 		}
 	}
 	if idx >= 0 {
-		copy(h.ranges, h.ranges[idx+1:])
-		h.ranges = h.ranges[:len(h.ranges)-idx-1]
+		h.ranges = slices.Delete(h.ranges, 0, idx+1)
 	}
 }
 
