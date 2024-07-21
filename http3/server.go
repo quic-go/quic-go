@@ -535,7 +535,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			if hijacked := s.handleRequest(hconn, str, datagrams, hconn.decoder); hijacked {
 				// TODO: handle idle timeout for hijacked streams, currently a
 				// connection with an hijacked stream will never timeout.
-			} else s.IdleTimeout > 0 {
+			} else if s.IdleTimeout > 0 {
 				streamActivity <- -1
 			}
 		}()
