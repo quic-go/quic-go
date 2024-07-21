@@ -8,7 +8,6 @@ import (
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -302,11 +301,11 @@ func readPacketNumber(data []byte, pnLen protocol.PacketNumberLen) (protocol.Pac
 	case protocol.PacketNumberLen1:
 		pn = protocol.PacketNumber(data[0])
 	case protocol.PacketNumberLen2:
-		pn = protocol.PacketNumber(utils.BigEndian.Uint16(data[:2]))
+		pn = protocol.PacketNumber(binary.BigEndian.Uint16(data[:2]))
 	case protocol.PacketNumberLen3:
-		pn = protocol.PacketNumber(utils.BigEndian.Uint24(data[:3]))
+		pn = protocol.PacketNumber(uint32(data[2]) + uint32(data[1])<<8 + uint32(data[0])<<16)
 	case protocol.PacketNumberLen4:
-		pn = protocol.PacketNumber(utils.BigEndian.Uint32(data[:4]))
+		pn = protocol.PacketNumber(binary.BigEndian.Uint32(data[:4]))
 	default:
 		return 0, fmt.Errorf("invalid packet number length: %d", pnLen)
 	}
