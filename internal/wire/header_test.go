@@ -197,12 +197,10 @@ var _ = Describe("Header Parsing", func() {
 			Expect(hdr.Length).To(Equal(protocol.ByteCount(10)))
 			Expect(hdr.Version).To(Equal(protocol.Version1))
 			Expect(rest).To(BeEmpty())
-			b := bytes.NewReader(data)
-			extHdr, err := hdr.ParseExtended(b, protocol.Version1)
+			extHdr, err := hdr.ParseExtended(data)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
-			Expect(b.Len()).To(Equal(6)) // foobar
+			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
 			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 4))
 		})
@@ -287,12 +285,11 @@ var _ = Describe("Header Parsing", func() {
 
 			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
-			b := bytes.NewReader(data)
-			extHdr, err := hdr.ParseExtended(b, protocol.Version1)
+			extHdr, err := hdr.ParseExtended(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x123)))
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
-			Expect(b.Len()).To(BeZero())
+			Expect(extHdr.ParsedLen()).To(BeEquivalentTo(len(data)))
 		})
 
 		It("parses a Retry packet, for QUIC v1", func() {
@@ -367,7 +364,7 @@ var _ = Describe("Header Parsing", func() {
 			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
-			extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.Version1)
+			extHdr, err := hdr.ParseExtended(data)
 			Expect(err).To(MatchError(ErrInvalidReservedBits))
 			Expect(extHdr).ToNot(BeNil())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1234)))
@@ -394,11 +391,10 @@ var _ = Describe("Header Parsing", func() {
 			hdrLen := len(data)
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // packet number
 			for i := hdrLen; i < len(data); i++ {
-				data = data[:i]
-				hdr, _, _, err := ParsePacket(data)
+				b := data[:i]
+				hdr, _, _, err := ParsePacket(b)
 				Expect(err).ToNot(HaveOccurred())
-				b := bytes.NewReader(data)
-				_, err = hdr.ParseExtended(b, protocol.Version1)
+				_, err = hdr.ParseExtended(b)
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
@@ -414,8 +410,7 @@ var _ = Describe("Header Parsing", func() {
 				data = data[:i]
 				hdr, _, _, err := ParsePacket(data)
 				Expect(err).ToNot(HaveOccurred())
-				b := bytes.NewReader(data)
-				_, err = hdr.ParseExtended(b, protocol.Version1)
+				_, err = hdr.ParseExtended(data)
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
