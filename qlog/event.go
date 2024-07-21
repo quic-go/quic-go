@@ -9,7 +9,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/francoispqt/gojay"
@@ -72,7 +71,7 @@ func (e eventConnectionStarted) Name() string       { return "connection_started
 func (e eventConnectionStarted) IsNil() bool        { return false }
 
 func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
-	if utils.IsIPv4(e.SrcAddr.IP) {
+	if e.SrcAddr.IP.To4() != nil {
 		enc.StringKey("ip_version", "ipv4")
 	} else {
 		enc.StringKey("ip_version", "ipv6")
