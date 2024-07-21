@@ -528,12 +528,14 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
-		streamActivity <- 1
+		if s.IdleTimeout > 0 {
+			streamActivity <- 1
+		}
 		go func() {
 			if hijacked := s.handleRequest(hconn, str, datagrams, hconn.decoder); hijacked {
 				// TODO: handle idle timeout for hijacked streams, currently a
 				// connection with an hijacked stream will never timeout.
-			} else {
+			} else s.IdleTimeout > 0 {
 				streamActivity <- -1
 			}
 		}()
