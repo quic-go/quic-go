@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net"
 	"net/http"
 	"runtime"
@@ -486,36 +485,9 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.EnableDatagrams,
 		protocol.PerspectiveServer,
 		s.Logger,
+		s.IdleTimeout,
 	)
 	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
-
-	// Handle idle timeout
-	streamActivity := make(chan int, 1)
-	if s.IdleTimeout > 0 {
-		done := make(chan struct{})
-		defer close(done)
-		go func() {
-			streams := 0
-			const never = time.Duration(math.MaxInt64)
-			idleTimer := time.NewTimer(never)
-			for {
-				select {
-				case add := <-streamActivity:
-					streams += add
-					if streams == 0 {
-						idleTimer.Reset(s.IdleTimeout)
-					} else {
-						idleTimer.Reset(never)
-					}
-				case <-idleTimer.C:
-					hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "idle timeout")
-					return
-				case <-done:
-					return
-				}
-			}
-		}()
-	}
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -528,17 +500,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
-		if s.IdleTimeout > 0 {
-			streamActivity <- 1
-		}
-		go func() {
-			if hijacked := s.handleRequest(hconn, str, datagrams, hconn.decoder); hijacked {
-				// TODO: handle idle timeout for hijacked streams, currently a
-				// connection with an hijacked stream will never timeout.
-			} else if s.IdleTimeout > 0 {
-				streamActivity <- -1
-			}
-		}()
+		go s.handleRequest(hconn, str, datagrams, hconn.decoder)
 	}
 }
 
@@ -549,7 +511,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) (hijacked bool) {
+func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -568,17 +530,17 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		}
-		return false
+		return
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
 		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
-		return false
+		return
 	}
 	if hf.Length > s.maxHeaderBytes() {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
-		return false
+		return
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
@@ -590,13 +552,13 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if err != nil {
 		// TODO: use the right error code
 		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "expected first frame to be a HEADERS frame")
-		return false
+		return
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		return false
+		return
 	}
 
 	connState := conn.ConnectionState().TLS
@@ -651,7 +613,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	}()
 
 	if r.wasStreamHijacked() {
-		return true
+		return
 	}
 
 	// only write response when there is no panic
@@ -669,14 +631,13 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if panicked {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
-		return false
+		return
 	}
 
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 	str.Close()
-	return false
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
