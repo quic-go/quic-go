@@ -308,6 +308,14 @@ func (s congestionState) String() string {
 		return "recovery"
 	case logging.CongestionStateApplicationLimited:
 		return "application_limited"
+	case logging.CongestionStateStartup:
+		return "startup"
+	case logging.CongestionStateDrain:
+		return "drain"
+	case logging.CongestionStateProbeBw:
+		return "probe_bw"
+	case logging.CongestionStateProbRtt:
+		return "probe_rtt"
 	default:
 		return "unknown congestion state"
 	}

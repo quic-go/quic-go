@@ -36,6 +36,15 @@ func NewRTTStats() *RTTStats {
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) MinRTT() time.Duration { return r.minRTT }
 
+// MinOrInitialRtt Returns the minRTT for the entire connection.
+// May return default initial RTT if no valid updates have occurred.
+func (r *RTTStats) MinOrInitialRtt() time.Duration {
+	if r.minRTT == 0 {
+		return defaultInitialRTT
+	}
+	return r.minRTT
+}
+
 // LatestRTT returns the most recent rtt measurement.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) LatestRTT() time.Duration { return r.latestRTT }
@@ -55,7 +64,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 	if r.SmoothedRTT() == 0 {
 		return 2 * defaultInitialRTT
 	}
-	pto := r.SmoothedRTT() + max(4*r.MeanDeviation(), protocol.TimerGranularity)
+	pto := r.SmoothedRTT() + Max(4*r.MeanDeviation(), protocol.TimerGranularity)
 	if includeMaxAckDelay {
 		pto += r.MaxAckDelay()
 	}
@@ -126,6 +135,6 @@ func (r *RTTStats) OnConnectionMigration() {
 // is larger. The mean deviation is increased to the most recent deviation if
 // it's larger.
 func (r *RTTStats) ExpireSmoothedMetrics() {
-	r.meanDeviation = max(r.meanDeviation, (r.smoothedRTT - r.latestRTT).Abs())
-	r.smoothedRTT = max(r.smoothedRTT, r.latestRTT)
+	r.meanDeviation = Max(r.meanDeviation, (r.smoothedRTT - r.latestRTT).Abs())
+	r.smoothedRTT = Max(r.smoothedRTT, r.latestRTT)
 }

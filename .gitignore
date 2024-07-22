@@ -1,6 +1,7 @@
 debug
 debug.test
 main
+client
 mockgen_tmp.go
 *.qtr
 *.qlog
