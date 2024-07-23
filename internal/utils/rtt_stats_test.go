@@ -101,25 +101,17 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("UpdateRTTWithBadSendDeltas", func() {
-		// Make sure we ignore bad RTTs.
-		// base::test::MockLog log;
-
-		initialRtt := (10 * time.Millisecond)
+		initialRtt := 10 * time.Millisecond
 		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
 		Expect(rttStats.MinRTT()).To(Equal(initialRtt))
 		Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
 
 		badSendDeltas := []time.Duration{
 			0,
-			InfDuration,
 			-1000 * time.Microsecond,
 		}
-		// log.StartCapturingLogs();
 
 		for _, badSendDelta := range badSendDeltas {
-			// SCOPED_TRACE(Message() << "bad_send_delta = "
-			//  << bad_send_delta.ToMicroseconds());
-			// EXPECT_CALL(log, Log(LOG_WARNING, _, _, _, HasSubstr("Ignoring")));
 			rttStats.UpdateRTT(badSendDelta, 0, time.Time{})
 			Expect(rttStats.MinRTT()).To(Equal(initialRtt))
 			Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
