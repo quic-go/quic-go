@@ -706,10 +706,10 @@ func (s *connection) nextKeepAliveTime() time.Time {
 func (s *connection) maybeResetTimer() {
 	var deadline time.Time
 	if !s.handshakeComplete {
-		deadline = utils.MinTime(
-			s.creationTime.Add(s.config.handshakeTimeout()),
-			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
-		)
+		deadline = s.creationTime.Add(s.config.handshakeTimeout())
+		if t := s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout); t.Before(deadline) {
+			deadline = t
+		}
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
@@ -727,7 +727,11 @@ func (s *connection) maybeResetTimer() {
 }
 
 func (s *connection) idleTimeoutStartTime() time.Time {
-	return utils.MaxTime(s.lastPacketReceivedTime, s.firstAckElicitingPacketAfterIdleSentTime)
+	startTime := s.lastPacketReceivedTime
+	if t := s.firstAckElicitingPacketAfterIdleSentTime; t.After(startTime) {
+		startTime = t
+	}
+	return startTime
 }
 
 func (s *connection) handleHandshakeComplete() error {
@@ -1767,7 +1771,10 @@ func (s *connection) checkTransportParameters(params *wire.TransportParameters) 
 func (s *connection) applyTransportParameters() {
 	params := s.peerParams
 	// Our local idle timeout will always be > 0.
-	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
+	s.idleTimeout = s.config.MaxIdleTimeout
+	if s.idleTimeout > 0 && params.MaxIdleTimeout < s.idleTimeout {
+		s.idleTimeout = params.MaxIdleTimeout
+	}
 	s.keepAliveInterval = min(s.config.KeepAlivePeriod, min(s.idleTimeout/2, protocol.MaxKeepAliveInterval))
 	s.streamsMap.UpdateLimits(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
