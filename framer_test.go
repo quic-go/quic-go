@@ -21,7 +21,7 @@ var _ = Describe("Framer", func() {
 	)
 
 	var (
-		framer           framer
+		framer           *framer
 		stream1, stream2 *MockSendStreamI
 		streamGetter     *MockStreamGetter
 		version          protocol.Version
@@ -117,14 +117,14 @@ var _ = Describe("Framer", func() {
 				Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
 				frames, _ := framer.AppendControlFrames([]ackhandler.Frame{}, 1, protocol.Version1)
 				Expect(frames).To(HaveLen(1))
-				Expect(framer.(*framerI).controlFrames).To(HaveLen(i + 1))
+				Expect(framer.controlFrames).To(HaveLen(i + 1))
 			}
 			framer.QueueControlFrame(&wire.PingFrame{})
 			Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
-			Expect(framer.(*framerI).controlFrames).To(HaveLen(maxControlFrames))
+			Expect(framer.controlFrames).To(HaveLen(maxControlFrames))
 			framer.QueueControlFrame(&wire.PingFrame{})
 			Expect(framer.QueuedTooManyControlFrames()).To(BeTrue())
-			Expect(framer.(*framerI).controlFrames).To(HaveLen(maxControlFrames))
+			Expect(framer.controlFrames).To(HaveLen(maxControlFrames))
 		})
 	})
 
