@@ -11,10 +11,7 @@ import (
 )
 
 var _ = Describe("Connection Flow controller", func() {
-	var (
-		controller         *connectionFlowController
-		queuedWindowUpdate bool
-	)
+	var controller *connectionFlowController
 
 	// update the congestion such that it returns a given value for the smoothed RTT
 	setRtt := func(t time.Duration) {
@@ -23,11 +20,9 @@ var _ = Describe("Connection Flow controller", func() {
 	}
 
 	BeforeEach(func() {
-		queuedWindowUpdate = false
 		controller = &connectionFlowController{}
 		controller.rttStats = &utils.RTTStats{}
 		controller.logger = utils.DefaultLogger
-		controller.queueWindowUpdate = func() { queuedWindowUpdate = true }
 		controller.allowWindowIncrease = func(protocol.ByteCount) bool { return true }
 	})
 
@@ -41,7 +36,6 @@ var _ = Describe("Connection Flow controller", func() {
 			fc := NewConnectionFlowController(
 				receiveWindow,
 				maxReceiveWindow,
-				nil,
 				func(protocol.ByteCount) bool { return true },
 				rttStats,
 				utils.DefaultLogger).(*connectionFlowController)
@@ -67,13 +61,11 @@ var _ = Describe("Connection Flow controller", func() {
 
 			It("queues window updates", func() {
 				controller.AddBytesRead(1)
-				Expect(queuedWindowUpdate).To(BeFalse())
+				Expect(controller.GetWindowUpdate()).To(BeZero())
 				controller.AddBytesRead(29)
-				Expect(queuedWindowUpdate).To(BeTrue())
 				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
-				queuedWindowUpdate = false
 				controller.AddBytesRead(1)
-				Expect(queuedWindowUpdate).To(BeFalse())
+				Expect(controller.GetWindowUpdate()).To(BeZero())
 			})
 
 			It("gets a window update", func() {

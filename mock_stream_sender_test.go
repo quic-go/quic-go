@@ -76,6 +76,42 @@ func (c *MockStreamSenderonHasStreamDataCall) DoAndReturn(f func(protocol.Stream
 	return c
 }
 
+// onHasStreamWindowUpdate mocks base method.
+func (m *MockStreamSender) onHasStreamWindowUpdate(arg0 protocol.StreamID, arg1 receiveStreamI) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "onHasStreamWindowUpdate", arg0, arg1)
+}
+
+// onHasStreamWindowUpdate indicates an expected call of onHasStreamWindowUpdate.
+func (mr *MockStreamSenderMockRecorder) onHasStreamWindowUpdate(arg0, arg1 any) *MockStreamSenderonHasStreamWindowUpdateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasStreamWindowUpdate", reflect.TypeOf((*MockStreamSender)(nil).onHasStreamWindowUpdate), arg0, arg1)
+	return &MockStreamSenderonHasStreamWindowUpdateCall{Call: call}
+}
+
+// MockStreamSenderonHasStreamWindowUpdateCall wrap *gomock.Call
+type MockStreamSenderonHasStreamWindowUpdateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamSenderonHasStreamWindowUpdateCall) Return() *MockStreamSenderonHasStreamWindowUpdateCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamSenderonHasStreamWindowUpdateCall) Do(f func(protocol.StreamID, receiveStreamI)) *MockStreamSenderonHasStreamWindowUpdateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamSenderonHasStreamWindowUpdateCall) DoAndReturn(f func(protocol.StreamID, receiveStreamI)) *MockStreamSenderonHasStreamWindowUpdateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // onStreamCompleted mocks base method.
 func (m *MockStreamSender) onStreamCompleted(arg0 protocol.StreamID) {
 	m.ctrl.T.Helper()

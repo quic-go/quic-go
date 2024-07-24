@@ -414,7 +414,10 @@ var _ = Describe("Receive Stream", func() {
 				It("handles concurrent reads", func() {
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), gomock.Any()).AnyTimes()
 					var bytesRead protocol.ByteCount
-					mockFC.EXPECT().AddBytesRead(gomock.Any()).Do(func(n protocol.ByteCount) { bytesRead += n }).AnyTimes()
+					mockFC.EXPECT().AddBytesRead(gomock.Any()).Do(func(n protocol.ByteCount) bool {
+						bytesRead += n
+						return false
+					}).AnyTimes()
 
 					var numCompleted int32
 					mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) {

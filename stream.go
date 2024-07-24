@@ -26,6 +26,7 @@ var errDeadline net.Error = &deadlineError{}
 type streamSender interface {
 	queueControlFrame(wire.Frame)
 	onHasStreamData(protocol.StreamID, sendStreamI)
+	onHasStreamWindowUpdate(protocol.StreamID, receiveStreamI)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
 }

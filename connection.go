@@ -464,7 +464,6 @@ func (s *connection) preSetup() {
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(s.config.MaxConnectionReceiveWindow),
-		s.onHasConnectionWindowUpdate,
 		func(size protocol.ByteCount) bool {
 			if s.config.AllowConnectionWindowIncrease == nil {
 				return true
@@ -493,7 +492,7 @@ func (s *connection) preSetup() {
 	s.lastPacketReceivedTime = now
 	s.creationTime = now
 
-	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
+	s.windowUpdateQueue = newWindowUpdateQueue(s.connFlowController, s.framer.QueueControlFrame)
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
 	s.connState.Version = s.version
 }
@@ -2214,7 +2213,6 @@ func (s *connection) newFlowController(id protocol.StreamID) flowcontrol.StreamF
 		protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		protocol.ByteCount(s.config.MaxStreamReceiveWindow),
 		initialSendWindow,
-		s.onHasStreamWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -2253,13 +2251,8 @@ func (s *connection) queueControlFrame(f wire.Frame) {
 	s.scheduleSending()
 }
 
-func (s *connection) onHasStreamWindowUpdate(id protocol.StreamID) {
-	s.windowUpdateQueue.AddStream(id)
-	s.scheduleSending()
-}
-
-func (s *connection) onHasConnectionWindowUpdate() {
-	s.windowUpdateQueue.AddConnection()
+func (s *connection) onHasStreamWindowUpdate(id protocol.StreamID, str receiveStreamI) {
+	s.windowUpdateQueue.AddStream(id, str)
 	s.scheduleSending()
 }
 
@@ -2273,6 +2266,7 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 		s.closeLocal(err)
 	}
 	s.framer.RemoveActiveStream(id)
+	s.windowUpdateQueue.RemoveStream(id)
 }
 
 func (s *connection) onMTUIncreased(mtu protocol.ByteCount) {
