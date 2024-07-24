@@ -483,7 +483,7 @@ func (s *connection) preSetup() {
 		uint64(s.config.MaxIncomingUniStreams),
 		s.perspective,
 	)
-	s.framer = newFramer(s.streamsMap)
+	s.framer = newFramer()
 	s.receivedPackets = make(chan receivedPacket, protocol.MaxConnUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -2263,8 +2263,8 @@ func (s *connection) onHasConnectionWindowUpdate() {
 	s.scheduleSending()
 }
 
-func (s *connection) onHasStreamData(id protocol.StreamID) {
-	s.framer.AddActiveStream(id)
+func (s *connection) onHasStreamData(id protocol.StreamID, str sendStreamI) {
+	s.framer.AddActiveStream(id, str)
 	s.scheduleSending()
 }
 
@@ -2272,6 +2272,7 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
 		s.closeLocal(err)
 	}
+	s.framer.RemoveActiveStream(id)
 }
 
 func (s *connection) onMTUIncreased(mtu protocol.ByteCount) {

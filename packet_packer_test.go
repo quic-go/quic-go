@@ -85,7 +85,7 @@ var _ = Describe("Packet packer", func() {
 		rand.Seed(uint64(GinkgoRandomSeed()))
 		retransmissionQueue = newRetransmissionQueue()
 		mockSender := NewMockStreamSender(mockCtrl)
-		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
+		mockSender.EXPECT().onHasStreamData(gomock.Any(), gomock.Any()).AnyTimes()
 		initialStream = NewMockCryptoStream(mockCtrl)
 		handshakeStream = NewMockCryptoStream(mockCtrl)
 		framer = NewMockFrameSource(mockCtrl)

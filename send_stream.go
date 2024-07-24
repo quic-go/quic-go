@@ -172,7 +172,7 @@ func (s *sendStream) write(p []byte) (bool /* is newly completed */, int, error)
 
 		s.mutex.Unlock()
 		if !notifiedSender {
-			s.sender.onHasStreamData(s.streamID) // must be called without holding the mutex
+			s.sender.onHasStreamData(s.streamID, s) // must be called without holding the mutex
 			notifiedSender = true
 		}
 		if copied {
@@ -407,7 +407,7 @@ func (s *sendStream) Close() error {
 	if cancelWriteErr != nil {
 		return fmt.Errorf("close called for canceled stream %d", s.streamID)
 	}
-	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
+	s.sender.onHasStreamData(s.streamID, s) // need to send the FIN, must be called without holding the mutex
 
 	s.ctxCancel(nil)
 	return nil
@@ -453,7 +453,7 @@ func (s *sendStream) updateSendWindow(limit protocol.ByteCount) {
 	hasStreamData := s.dataForWriting != nil || s.nextFrame != nil
 	s.mutex.Unlock()
 	if hasStreamData {
-		s.sender.onHasStreamData(s.streamID)
+		s.sender.onHasStreamData(s.streamID, s)
 	}
 }
 
@@ -530,5 +530,5 @@ func (s *sendStreamAckHandler) OnLost(f wire.Frame) {
 	}
 	s.mutex.Unlock()
 
-	s.sender.onHasStreamData(s.streamID)
+	s.sender.onHasStreamData(s.streamID, (*sendStream)(s))
 }
