@@ -28,11 +28,6 @@ type unpacker interface {
 	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
-type streamGetter interface {
-	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
-	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
-}
-
 type streamManager interface {
 	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
