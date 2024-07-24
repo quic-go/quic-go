@@ -2718,19 +2718,17 @@ var _ = Describe("Client Connection", func() {
 	})
 
 	Context("handling tokens", func() {
-		var mockTokenStore *MockTokenStore
+		var tokenStore TokenStore
 
 		BeforeEach(func() {
-			mockTokenStore = NewMockTokenStore(mockCtrl)
 			tlsConf = &tls.Config{ServerName: "server"}
-			quicConf.TokenStore = mockTokenStore
-			mockTokenStore.EXPECT().Pop(gomock.Any())
-			quicConf.TokenStore = mockTokenStore
+			tokenStore = NewLRUTokenStore(10, 10)
+			quicConf.TokenStore = tokenStore
 		})
 
 		It("handles NEW_TOKEN frames", func() {
-			mockTokenStore.EXPECT().Put("server", &ClientToken{data: []byte("foobar")})
 			Expect(conn.handleNewTokenFrame(&wire.NewTokenFrame{Token: []byte("foobar")})).To(Succeed())
+			Expect(tokenStore.Pop("server")).To(Equal(&ClientToken{data: []byte("foobar")}))
 		})
 	})
 
