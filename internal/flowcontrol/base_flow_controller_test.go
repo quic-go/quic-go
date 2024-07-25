@@ -112,7 +112,8 @@ var _ = Describe("Base Flow controller", func() {
 			bytesRemaining := receiveWindowSize - protocol.ByteCount(bytesConsumed)
 			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
-			offset := controller.getWindowUpdate()
+			offset, ok := controller.getWindowUpdate()
+			Expect(ok).To(BeTrue())
 			Expect(offset).To(Equal(readPosition + receiveWindowSize))
 			Expect(controller.receiveWindow).To(Equal(readPosition + receiveWindowSize))
 		})
@@ -122,8 +123,8 @@ var _ = Describe("Base Flow controller", func() {
 			bytesRemaining := receiveWindowSize - protocol.ByteCount(bytesConsumed)
 			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
-			offset := controller.getWindowUpdate()
-			Expect(offset).To(BeZero())
+			_, ok := controller.getWindowUpdate()
+			Expect(ok).To(BeFalse())
 		})
 
 		Context("receive window size auto-tuning", func() {
@@ -149,8 +150,9 @@ var _ = Describe("Base Flow controller", func() {
 				setRtt(0)
 				controller.startNewAutoTuningEpoch(time.Now())
 				controller.addBytesRead(400)
-				offset := controller.getWindowUpdate()
-				Expect(offset).ToNot(BeZero()) // make sure a window update is sent
+				offset, ok := controller.getWindowUpdate()
+				Expect(ok).To(BeTrue())
+				Expect(offset).ToNot(BeZero())
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 			})
 
@@ -164,8 +166,8 @@ var _ = Describe("Base Flow controller", func() {
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
 				controller.addBytesRead(dataRead)
-				offset := controller.getWindowUpdate()
-				Expect(offset).ToNot(BeZero())
+				offset, ok := controller.getWindowUpdate()
+				Expect(ok).To(BeTrue())
 				// check that the window size was increased
 				newWindowSize := controller.receiveWindowSize
 				Expect(newWindowSize).To(Equal(2 * oldWindowSize))
@@ -183,8 +185,8 @@ var _ = Describe("Base Flow controller", func() {
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 1 / 3)
 				controller.addBytesRead(dataRead)
-				offset := controller.getWindowUpdate()
-				Expect(offset).ToNot(BeZero())
+				offset, ok := controller.getWindowUpdate()
+				Expect(ok).To(BeTrue())
 				// check that the window size was not increased
 				newWindowSize := controller.receiveWindowSize
 				Expect(newWindowSize).To(Equal(oldWindowSize))
@@ -202,8 +204,8 @@ var _ = Describe("Base Flow controller", func() {
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
 				controller.addBytesRead(dataRead)
-				offset := controller.getWindowUpdate()
-				Expect(offset).ToNot(BeZero())
+				offset, ok := controller.getWindowUpdate()
+				Expect(ok).To(BeTrue())
 				// check that the window size was not increased
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 				// check that the new window size was used to increase the offset

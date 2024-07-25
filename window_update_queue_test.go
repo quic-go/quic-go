@@ -25,11 +25,11 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("adds stream offsets and gets MAX_STREAM_DATA frames", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).AnyTimes()
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false).AnyTimes()
 		stream1 := NewMockStreamI(mockCtrl)
-		stream1.EXPECT().getWindowUpdate().Return(protocol.ByteCount(10))
+		stream1.EXPECT().getWindowUpdate().Return(protocol.ByteCount(10), true)
 		stream3 := NewMockStreamI(mockCtrl)
-		stream3.EXPECT().getWindowUpdate().Return(protocol.ByteCount(30))
+		stream3.EXPECT().getWindowUpdate().Return(protocol.ByteCount(30), true)
 		q.AddStream(3, stream3)
 		q.AddStream(1, stream1)
 		q.QueueAll()
@@ -38,9 +38,9 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("deletes the entry after getting the MAX_STREAM_DATA frame", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).AnyTimes()
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false).AnyTimes()
 		stream10 := NewMockStreamI(mockCtrl)
-		stream10.EXPECT().getWindowUpdate().Return(protocol.ByteCount(100))
+		stream10.EXPECT().getWindowUpdate().Return(protocol.ByteCount(100), true)
 		q.AddStream(10, stream10)
 		q.QueueAll()
 		Expect(queuedFrames).To(HaveLen(1))
@@ -49,7 +49,7 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("doesn't queue a MAX_STREAM_DATA for a closed stream", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).AnyTimes()
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false).AnyTimes()
 		stream12 := NewMockStreamI(mockCtrl)
 		q.AddStream(12, stream12)
 		q.RemoveStream(12)
@@ -58,7 +58,7 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("removes closed streams from the queue", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).AnyTimes()
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false).AnyTimes()
 		stream12 := NewMockStreamI(mockCtrl)
 		q.AddStream(12, stream12)
 		q.RemoveStream(12)
@@ -67,18 +67,18 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("doesn't queue a MAX_STREAM_DATA if the flow controller returns an offset of 0", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0))
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false)
 		stream5 := NewMockStreamI(mockCtrl)
-		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0))
+		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0), false)
 		q.AddStream(5, stream5)
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
 	})
 
 	It("removes streams for which the flow controller returns an offset of 0 from the queue", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).AnyTimes()
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false).AnyTimes()
 		stream5 := NewMockStreamI(mockCtrl)
-		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0))
+		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0), false)
 		q.AddStream(5, stream5)
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
@@ -88,15 +88,15 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("queues MAX_DATA frames", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1337))
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1337), true)
 		q.QueueAll()
 		Expect(queuedFrames).To(Equal([]wire.Frame{&wire.MaxDataFrame{MaximumData: 0x1337}}))
 	})
 
 	It("deduplicates", func() {
-		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0))
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0), false)
 		stream10 := NewMockStreamI(mockCtrl)
-		stream10.EXPECT().getWindowUpdate().Return(protocol.ByteCount(200))
+		stream10.EXPECT().getWindowUpdate().Return(protocol.ByteCount(200), true)
 		q.AddStream(10, stream10)
 		q.AddStream(10, stream10)
 		q.QueueAll()

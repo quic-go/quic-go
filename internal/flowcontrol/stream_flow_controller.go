@@ -125,20 +125,23 @@ func (c *streamFlowController) shouldQueueWindowUpdate() bool {
 	return !c.receivedFinalOffset && c.hasWindowUpdate()
 }
 
-func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
+func (c *streamFlowController) GetWindowUpdate() (protocol.ByteCount, bool) {
 	// If we already received the final offset for this stream, the peer won't need any additional flow control credit.
 	if c.receivedFinalOffset {
-		return 0
+		return 0, false
 	}
 
-	// Don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	oldWindowSize := c.receiveWindowSize
-	offset := c.baseFlowController.getWindowUpdate()
+	offset, ok := c.baseFlowController.getWindowUpdate()
+	if !ok {
+		return 0, false
+	}
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
 		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
 		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
 	}
-	c.mutex.Unlock()
-	return offset
+	return offset, true
 }

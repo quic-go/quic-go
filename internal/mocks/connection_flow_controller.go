@@ -112,11 +112,12 @@ func (c *MockConnectionFlowControllerAddBytesSentCall) DoAndReturn(f func(protoc
 }
 
 // GetWindowUpdate mocks base method.
-func (m *MockConnectionFlowController) GetWindowUpdate() protocol.ByteCount {
+func (m *MockConnectionFlowController) GetWindowUpdate() (protocol.ByteCount, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWindowUpdate")
 	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // GetWindowUpdate indicates an expected call of GetWindowUpdate.
@@ -132,19 +133,19 @@ type MockConnectionFlowControllerGetWindowUpdateCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockConnectionFlowControllerGetWindowUpdateCall) Return(arg0 protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) Return(arg0 protocol.ByteCount, arg1 bool) *MockConnectionFlowControllerGetWindowUpdateCall {
+	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockConnectionFlowControllerGetWindowUpdateCall) Do(f func() protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) Do(f func() (protocol.ByteCount, bool)) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockConnectionFlowControllerGetWindowUpdateCall) DoAndReturn(f func() protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) DoAndReturn(f func() (protocol.ByteCount, bool)) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

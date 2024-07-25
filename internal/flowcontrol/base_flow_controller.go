@@ -82,14 +82,14 @@ func (c *baseFlowController) hasWindowUpdate() bool {
 
 // getWindowUpdate updates the receive window, if necessary
 // it returns the new offset
-func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
+func (c *baseFlowController) getWindowUpdate() (protocol.ByteCount, bool) {
 	if !c.hasWindowUpdate() {
-		return 0
+		return 0, false
 	}
 
 	c.maybeAdjustWindowSize()
 	c.receiveWindow = c.bytesRead + c.receiveWindowSize
-	return c.receiveWindow
+	return c.receiveWindow, true
 }
 
 // maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.

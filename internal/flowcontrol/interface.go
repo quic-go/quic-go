@@ -8,7 +8,7 @@ type flowController interface {
 	UpdateSendWindow(protocol.ByteCount) (updated bool)
 	AddBytesSent(protocol.ByteCount)
 	// for receiving
-	GetWindowUpdate() protocol.ByteCount // returns 0 if no update is necessary
+	GetWindowUpdate() (protocol.ByteCount, bool)
 	IsNewlyBlocked() (bool, protocol.ByteCount)
 }
 

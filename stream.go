@@ -52,7 +52,7 @@ type streamI interface {
 	// for receiving
 	handleStreamFrame(*wire.StreamFrame) error
 	handleResetStreamFrame(*wire.ResetStreamFrame) error
-	getWindowUpdate() protocol.ByteCount
+	getWindowUpdate() (protocol.ByteCount, bool)
 	// for sending
 	hasData() bool
 	handleStopSendingFrame(*wire.StopSendingFrame)

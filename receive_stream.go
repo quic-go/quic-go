@@ -19,7 +19,7 @@ type receiveStreamI interface {
 	handleStreamFrame(*wire.StreamFrame) error
 	handleResetStreamFrame(*wire.ResetStreamFrame) error
 	closeForShutdown(error)
-	getWindowUpdate() protocol.ByteCount
+	getWindowUpdate() (protocol.ByteCount, bool)
 }
 
 type receiveStream struct {
@@ -338,7 +338,7 @@ func (s *receiveStream) closeForShutdown(err error) {
 	s.signalRead()
 }
 
-func (s *receiveStream) getWindowUpdate() protocol.ByteCount {
+func (s *receiveStream) getWindowUpdate() (protocol.ByteCount, bool) {
 	return s.flowController.GetWindowUpdate()
 }
 

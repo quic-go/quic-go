@@ -42,15 +42,17 @@ func (q *windowUpdateQueue) RemoveStream(id protocol.StreamID) {
 
 func (q *windowUpdateQueue) QueueAll() {
 	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
 	// queue a connection-level window update
-	if offset := q.connFlowController.GetWindowUpdate(); offset > 0 {
+	if offset, ok := q.connFlowController.GetWindowUpdate(); ok {
 		q.callback(&wire.MaxDataFrame{MaximumData: offset})
 	}
 	// queue all stream-level window updates
 	for id, str := range q.queue {
 		delete(q.queue, id)
-		offset := str.getWindowUpdate()
-		if offset == 0 { // can happen if we received a final offset, right after queueing the window update
+		offset, ok := str.getWindowUpdate()
+		if !ok { // can happen if we received a final offset, right after queueing the window update
 			continue
 		}
 		q.callback(&wire.MaxStreamDataFrame{
@@ -58,5 +60,4 @@ func (q *windowUpdateQueue) QueueAll() {
 			MaximumStreamData: offset,
 		})
 	}
-	q.mutex.Unlock()
 }

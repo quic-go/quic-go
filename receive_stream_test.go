@@ -721,8 +721,10 @@ var _ = Describe("Receive Stream", func() {
 		})
 
 		It("gets a window update", func() {
-			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x100))
-			Expect(str.getWindowUpdate()).To(Equal(protocol.ByteCount(0x100)))
+			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x100), true)
+			offset, ok := str.getWindowUpdate()
+			Expect(ok).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(0x100)))
 		})
 	})
 })

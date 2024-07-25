@@ -230,11 +230,12 @@ func (c *MockReceiveStreamIcloseForShutdownCall) DoAndReturn(f func(error)) *Moc
 }
 
 // getWindowUpdate mocks base method.
-func (m *MockReceiveStreamI) getWindowUpdate() protocol.ByteCount {
+func (m *MockReceiveStreamI) getWindowUpdate() (protocol.ByteCount, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getWindowUpdate")
 	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // getWindowUpdate indicates an expected call of getWindowUpdate.
@@ -250,19 +251,19 @@ type MockReceiveStreamIgetWindowUpdateCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockReceiveStreamIgetWindowUpdateCall) Return(arg0 protocol.ByteCount) *MockReceiveStreamIgetWindowUpdateCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockReceiveStreamIgetWindowUpdateCall) Return(arg0 protocol.ByteCount, arg1 bool) *MockReceiveStreamIgetWindowUpdateCall {
+	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockReceiveStreamIgetWindowUpdateCall) Do(f func() protocol.ByteCount) *MockReceiveStreamIgetWindowUpdateCall {
+func (c *MockReceiveStreamIgetWindowUpdateCall) Do(f func() (protocol.ByteCount, bool)) *MockReceiveStreamIgetWindowUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockReceiveStreamIgetWindowUpdateCall) DoAndReturn(f func() protocol.ByteCount) *MockReceiveStreamIgetWindowUpdateCall {
+func (c *MockReceiveStreamIgetWindowUpdateCall) DoAndReturn(f func() (protocol.ByteCount, bool)) *MockReceiveStreamIgetWindowUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

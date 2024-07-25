@@ -184,7 +184,8 @@ var _ = Describe("Stream Flow controller", func() {
 			It("queues window updates", func() {
 				Expect(controller.AddBytesRead(1)).To(BeFalse())
 				Expect(controller.AddBytesRead(29)).To(BeTrue())
-				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
+				_, ok := controller.GetWindowUpdate()
+				Expect(ok).To(BeTrue())
 				Expect(controller.AddBytesRead(1)).To(BeFalse())
 			})
 
@@ -199,7 +200,8 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate()
+				offset, ok := controller.GetWindowUpdate()
+				Expect(ok).To(BeTrue())
 				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(allowed).To(Equal(oldWindowSize))
@@ -214,7 +216,8 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate()
+				offset, ok := controller.GetWindowUpdate()
+				Expect(ok).To(BeTrue())
 				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(oldConnectionSize))
@@ -224,7 +227,8 @@ var _ = Describe("Stream Flow controller", func() {
 				Expect(controller.UpdateHighestReceived(90, true)).To(Succeed())
 				Expect(controller.connection.GetWindowUpdate()).To(BeZero())
 				controller.Abandon()
-				Expect(controller.connection.GetWindowUpdate()).ToNot(BeZero())
+				_, ok := controller.connection.GetWindowUpdate()
+				Expect(ok).To(BeTrue())
 			})
 
 			It("doesn't increase the window after a final offset was already received", func() {
