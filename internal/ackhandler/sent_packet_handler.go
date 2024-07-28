@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/congestion"
@@ -318,9 +319,10 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 
-	for _, p := range h.getPacketNumberSpace(encLevel).lost {
+	for i, p := range pnSpace.lost {
 		if ack.AcksPacket(p) {
-			fmt.Printf("received delayed ACK for %d, largest acked: %d\n", p, largestAcked)
+			fmt.Printf("received delayed ACK for %d, largest acked: %d, diff: %d\n", p, largestAcked, largestAcked-p)
+			pnSpace.lost = slices.Delete(pnSpace.lost, i, i+1)
 		}
 	}
 
