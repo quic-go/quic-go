@@ -36,6 +36,8 @@ type packetNumberSpace struct {
 
 	largestAcked protocol.PacketNumber
 	largestSent  protocol.PacketNumber
+
+	lost []protocol.PacketNumber
 }
 
 func newPacketNumberSpace(initialPN protocol.PacketNumber, isAppData bool) *packetNumberSpace {
@@ -313,6 +315,12 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		return false, &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "received ACK for an unsent packet",
+		}
+	}
+
+	for _, p := range h.getPacketNumberSpace(encLevel).lost {
+		if ack.AcksPacket(p) {
+			fmt.Printf("received delayed ACK for %d, largest acked: %d\n", p, largestAcked)
 		}
 	}
 
@@ -653,6 +661,10 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		}
 		if packetLost {
 			pnSpace.history.DeclareLost(p.PacketNumber)
+			if encLevel == protocol.Encryption1RTT {
+				pnSpace.lost = append(pnSpace.lost, p.PacketNumber)
+				fmt.Printf("lost packet %d\n", p.PacketNumber)
+			}
 			if !p.skippedPacket {
 				// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
 				h.removeFromBytesInFlight(p)
