@@ -197,7 +197,9 @@ func (s *receiveStream) readImpl(p []byte) (int, error) {
 		// when a RESET_STREAM was received, the flow controller was already
 		// informed about the final byteOffset for this stream
 		if !s.cancelledRemotely {
-			s.flowController.AddBytesRead(protocol.ByteCount(m))
+			if queueWindowUpdate := s.flowController.AddBytesRead(protocol.ByteCount(m)); queueWindowUpdate {
+				s.sender.onHasStreamWindowUpdate(s.streamID, s)
+			}
 		}
 
 		if s.readPosInFrame >= len(s.currentFrame) && s.currentFrameIsLast {

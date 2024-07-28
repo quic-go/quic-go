@@ -11,53 +11,44 @@ import (
 type windowUpdateQueue struct {
 	mutex sync.Mutex
 
-	queue      map[protocol.StreamID]struct{} // used as a set
-	queuedConn bool                           // connection-level window update
+	queue map[protocol.StreamID]receiveStreamI
 
-	streamGetter       streamGetter
 	connFlowController flowcontrol.ConnectionFlowController
 	callback           func(wire.Frame)
 }
 
 func newWindowUpdateQueue(
-	streamGetter streamGetter,
 	connFC flowcontrol.ConnectionFlowController,
 	cb func(wire.Frame),
 ) *windowUpdateQueue {
 	return &windowUpdateQueue{
-		queue:              make(map[protocol.StreamID]struct{}),
-		streamGetter:       streamGetter,
+		queue:              make(map[protocol.StreamID]receiveStreamI),
 		connFlowController: connFC,
 		callback:           cb,
 	}
 }
 
-func (q *windowUpdateQueue) AddStream(id protocol.StreamID) {
+func (q *windowUpdateQueue) AddStream(id protocol.StreamID, str receiveStreamI) {
 	q.mutex.Lock()
-	q.queue[id] = struct{}{}
+	q.queue[id] = str
 	q.mutex.Unlock()
 }
 
-func (q *windowUpdateQueue) AddConnection() {
+func (q *windowUpdateQueue) RemoveStream(id protocol.StreamID) {
 	q.mutex.Lock()
-	q.queuedConn = true
+	delete(q.queue, id)
 	q.mutex.Unlock()
 }
 
 func (q *windowUpdateQueue) QueueAll() {
 	q.mutex.Lock()
 	// queue a connection-level window update
-	if q.queuedConn {
-		q.callback(&wire.MaxDataFrame{MaximumData: q.connFlowController.GetWindowUpdate()})
-		q.queuedConn = false
+	if offset := q.connFlowController.GetWindowUpdate(); offset > 0 {
+		q.callback(&wire.MaxDataFrame{MaximumData: offset})
 	}
 	// queue all stream-level window updates
-	for id := range q.queue {
+	for id, str := range q.queue {
 		delete(q.queue, id)
-		str, err := q.streamGetter.GetOrOpenReceiveStream(id)
-		if err != nil || str == nil { // the stream can be nil if it was completed before dequeing the window update
-			continue
-		}
 		offset := str.getWindowUpdate()
 		if offset == 0 { // can happen if we received a final offset, right after queueing the window update
 			continue

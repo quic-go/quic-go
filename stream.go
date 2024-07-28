@@ -25,7 +25,8 @@ var errDeadline net.Error = &deadlineError{}
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
 	queueControlFrame(wire.Frame)
-	onHasStreamData(protocol.StreamID)
+	onHasStreamData(protocol.StreamID, sendStreamI)
+	onHasStreamWindowUpdate(protocol.StreamID, receiveStreamI)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
 }
@@ -37,17 +38,11 @@ type uniStreamSender struct {
 	onStreamCompletedImpl func()
 }
 
-func (s *uniStreamSender) queueControlFrame(f wire.Frame) {
-	s.streamSender.queueControlFrame(f)
+func (s *uniStreamSender) queueControlFrame(f wire.Frame) { s.streamSender.queueControlFrame(f) }
+func (s *uniStreamSender) onHasStreamData(id protocol.StreamID, str sendStreamI) {
+	s.streamSender.onHasStreamData(id, str)
 }
-
-func (s *uniStreamSender) onHasStreamData(id protocol.StreamID) {
-	s.streamSender.onHasStreamData(id)
-}
-
-func (s *uniStreamSender) onStreamCompleted(protocol.StreamID) {
-	s.onStreamCompletedImpl()
-}
+func (s *uniStreamSender) onStreamCompleted(protocol.StreamID) { s.onStreamCompletedImpl() }
 
 var _ streamSender = &uniStreamSender{}
 

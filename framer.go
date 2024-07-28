@@ -19,9 +19,7 @@ const (
 type framer struct {
 	mutex sync.Mutex
 
-	streamGetter streamGetter
-
-	activeStreams map[protocol.StreamID]struct{}
+	activeStreams map[protocol.StreamID]sendStreamI
 	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
 
 	controlFrameMutex          sync.Mutex
@@ -30,11 +28,8 @@ type framer struct {
 	queuedTooManyControlFrames bool
 }
 
-func newFramer(streamGetter streamGetter) *framer {
-	return &framer{
-		streamGetter:  streamGetter,
-		activeStreams: make(map[protocol.StreamID]struct{}),
-	}
+func newFramer() *framer {
+	return &framer{activeStreams: make(map[protocol.StreamID]sendStreamI)}
 }
 
 func (f *framer) HasData() bool {
@@ -109,12 +104,22 @@ func (f *framer) QueuedTooManyControlFrames() bool {
 	return f.queuedTooManyControlFrames
 }
 
-func (f *framer) AddActiveStream(id protocol.StreamID) {
+func (f *framer) AddActiveStream(id protocol.StreamID, str sendStreamI) {
 	f.mutex.Lock()
 	if _, ok := f.activeStreams[id]; !ok {
 		f.streamQueue.PushBack(id)
-		f.activeStreams[id] = struct{}{}
+		f.activeStreams[id] = str
 	}
+	f.mutex.Unlock()
+}
+
+// RemoveActiveStream is called when a stream completes.
+func (f *framer) RemoveActiveStream(id protocol.StreamID) {
+	f.mutex.Lock()
+	delete(f.activeStreams, id)
+	// We don't delete the stream from the streamQueue,
+	// since we'd have to iterate over the ringbuffer.
+	// Instead, we check if the stream is still in activeStreams in AppendStreamFrames.
 	f.mutex.Unlock()
 }
 
@@ -131,10 +136,9 @@ func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen prot
 		id := f.streamQueue.PopFront()
 		// This should never return an error. Better check it anyway.
 		// The stream will only be in the streamQueue, if it enqueued itself there.
-		str, err := f.streamGetter.GetOrOpenSendStream(id)
-		// The stream can be nil if it completed after it said it had data.
-		if str == nil || err != nil {
-			delete(f.activeStreams, id)
+		str, ok := f.activeStreams[id]
+		// The stream might have been removed after being enqueued.
+		if !ok {
 			continue
 		}
 		remainingLen := maxLen - length
