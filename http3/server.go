@@ -199,8 +199,8 @@ type Server struct {
 	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
 	// IdleTimeout specifies how long until idle clients connection should be
-	// closed. Quic PING frames are not considered activity for the purposes of
-	// IdleTimeout.
+	// closed. Idle refers only to the HTTP/3 layer, activity at the QUIC layer
+	// like PING frames are not considered.
 	// If zero or negative, there is no timeout.
 	IdleTimeout time.Duration
 
