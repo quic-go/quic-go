@@ -137,6 +137,7 @@ var _ = Describe("HTTP tests", func() {
 
 		_, err = client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 		Expect(err).ToNot(MatchError("idle timeout"))
+		server.IdleTimeout = 0
 	})
 
 	It("downloads a hello", func() {
