@@ -319,11 +319,15 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 
+	var reordered []protocol.PacketNumber
 	for i, p := range pnSpace.lost {
 		if ack.AcksPacket(p) {
-			fmt.Printf("received delayed ACK for %d, largest acked: %d, diff: %d\n", p, largestAcked, largestAcked-p)
+			reordered = append(reordered, p)
 			pnSpace.lost = slices.Delete(pnSpace.lost, i, i+1)
 		}
+	}
+	if len(reordered) > 0 {
+		fmt.Printf("received delayed ACK for %+v, largest acked: %d, diff: %d\n", reordered, largestAcked, largestAcked-reordered[0])
 	}
 
 	// Servers complete address validation when a protected packet is received.
