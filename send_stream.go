@@ -423,6 +423,12 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 		s.cancellationFlagged = true
 	}
 	if s.cancelWriteErr != nil {
+		// The stream was reset already. Check if the stream can be garbage collected now.
+		// this happens when we call CancelWrite after receiving a STOP_SENDING
+		//
+		if s.isNewlyCompleted() {
+			s.sender.onStreamCompleted(s.streamID)
+		}
 		s.mutex.Unlock()
 		return
 	}

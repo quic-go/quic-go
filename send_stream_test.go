@@ -909,6 +909,19 @@ var _ = Describe("Send Stream", func() {
 				})
 			})
 
+			It("discards the stream when CancelWrite is called after receiving STOP_SENDING", func() {
+				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
+					StreamID:  streamID,
+					ErrorCode: 101,
+				})
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 101,
+				})
+				str.CancelWrite(101)
+			})
+
 			It("unblocks Write", func() {
 				mockSender.EXPECT().onHasStreamData(streamID, str)
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
