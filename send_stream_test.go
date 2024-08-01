@@ -914,11 +914,12 @@ var _ = Describe("Send Stream", func() {
 					StreamID:  streamID,
 					ErrorCode: 101,
 				})
-				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 101,
 				})
+
+				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.CancelWrite(101)
 			})
 
