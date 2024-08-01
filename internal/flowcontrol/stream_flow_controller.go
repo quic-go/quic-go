@@ -121,6 +121,11 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return min(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
 }
 
+func (c *streamFlowController) IsNewlyBlocked() bool {
+	blocked, _ := c.baseFlowController.IsNewlyBlocked()
+	return blocked
+}
+
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {
 	return !c.receivedFinalOffset && c.hasWindowUpdate()
 }
