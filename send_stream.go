@@ -422,11 +422,12 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 	if !remote {
 		s.cancellationFlagged = true
 		if s.cancelWriteErr != nil {
+			completed := s.isNewlyCompleted()
 			s.mutex.Unlock()
 			// The user has called CancelWrite. If the previous cancellation was
 			// because of a STOP_SENDING, we don't need to flag the error to the
 			// user any more.
-			if s.isNewlyCompleted() {
+			if completed {
 				s.sender.onStreamCompleted(s.streamID)
 			}
 			return
