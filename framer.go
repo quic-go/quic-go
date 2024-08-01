@@ -1,7 +1,7 @@
 package quic
 
 import (
-	"errors"
+	"slices"
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
@@ -171,11 +171,12 @@ func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen prot
 	return frames, length
 }
 
-func (f *framer) Handle0RTTRejection() error {
+func (f *framer) Handle0RTTRejection() {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
 	f.streamQueue.Clear()
 	for id := range f.activeStreams {
 		delete(f.activeStreams, id)
@@ -183,16 +184,13 @@ func (f *framer) Handle0RTTRejection() error {
 	var j int
 	for i, frame := range f.controlFrames {
 		switch frame.(type) {
-		case *wire.MaxDataFrame, *wire.MaxStreamDataFrame, *wire.MaxStreamsFrame:
-			return errors.New("didn't expect MAX_DATA / MAX_STREAM_DATA / MAX_STREAMS frame to be sent in 0-RTT")
-		case *wire.DataBlockedFrame, *wire.StreamDataBlockedFrame, *wire.StreamsBlockedFrame:
+		case *wire.MaxDataFrame, *wire.MaxStreamDataFrame, *wire.MaxStreamsFrame,
+			*wire.DataBlockedFrame, *wire.StreamDataBlockedFrame, *wire.StreamsBlockedFrame:
 			continue
 		default:
 			f.controlFrames[j] = f.controlFrames[i]
 			j++
 		}
 	}
-	f.controlFrames = f.controlFrames[:j]
-	f.controlFrameMutex.Unlock()
-	return nil
+	f.controlFrames = slices.Delete(f.controlFrames, j, len(f.controlFrames))
 }

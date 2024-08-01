@@ -1675,10 +1675,8 @@ func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel) erro
 		s.cryptoStreamHandler.DiscardInitialKeys()
 	case protocol.Encryption0RTT:
 		s.streamsMap.ResetFor0RTT()
-		if err := s.connFlowController.Reset(); err != nil {
-			return err
-		}
-		return s.framer.Handle0RTTRejection()
+		s.framer.Handle0RTTRejection()
+		return s.connFlowController.Reset()
 	}
 	return s.cryptoStreamManager.Drop(encLevel)
 }
