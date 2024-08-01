@@ -2,7 +2,6 @@ package qlog
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net"
 	"net/netip"
@@ -36,7 +35,7 @@ func exportAndParse(buf *bytes.Buffer) []entry {
 	m := make(map[string]interface{})
 	line, err := buf.ReadBytes('\n')
 	Expect(err).ToNot(HaveOccurred())
-	Expect(json.Unmarshal(line, &m)).To(Succeed())
+	Expect(unmarshal(line, &m)).To(Succeed())
 	Expect(m).To(HaveKey("trace"))
 	var entries []entry
 	trace := m["trace"].(map[string]interface{})
@@ -50,7 +49,7 @@ func exportAndParse(buf *bytes.Buffer) []entry {
 		line, err := buf.ReadBytes('\n')
 		Expect(err).ToNot(HaveOccurred())
 		ev := make(map[string]interface{})
-		Expect(json.Unmarshal(line, &ev)).To(Succeed())
+		Expect(unmarshal(line, &ev)).To(Succeed())
 		Expect(ev).To(HaveLen(3))
 		Expect(ev).To(HaveKey("time"))
 		Expect(ev).To(HaveKey("name"))
@@ -89,8 +88,8 @@ var _ = Describe("Tracing", func() {
 		tracer.Close()
 
 		m := make(map[string]interface{})
-		Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
-		Expect(m).To(HaveKeyWithValue("qlog_version", "draft-02"))
+		Expect(unmarshal(buf.Bytes(), &m)).To(Succeed())
+		Expect(m).To(HaveKeyWithValue("qlog_version", "0.3"))
 		Expect(m).To(HaveKey("title"))
 		Expect(m).To(HaveKey("trace"))
 		trace := m["trace"].(map[string]interface{})

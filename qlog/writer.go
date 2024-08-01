@@ -12,6 +12,13 @@ import (
 
 const eventChanSize = 50
 
+const recordSeparator = 0x1e
+
+func writeRecordSeparator(w io.Writer) error {
+	_, err := w.Write([]byte{recordSeparator})
+	return err
+}
+
 type writer struct {
 	w io.WriteCloser
 
@@ -44,6 +51,9 @@ func (w *writer) Run() {
 	defer close(w.runStopped)
 	buf := &bytes.Buffer{}
 	enc := gojay.NewEncoder(buf)
+	if err := writeRecordSeparator(buf); err != nil {
+		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
+	}
 	if err := enc.Encode(&topLevel{trace: *w.tr}); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
@@ -56,6 +66,10 @@ func (w *writer) Run() {
 	enc = gojay.NewEncoder(w.w)
 	for ev := range w.events {
 		if w.encodeErr != nil { // if encoding failed, just continue draining the event channel
+			continue
+		}
+		if err := writeRecordSeparator(w.w); err != nil {
+			w.encodeErr = err
 			continue
 		}
 		if err := enc.Encode(ev); err != nil {
