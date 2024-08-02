@@ -645,6 +645,9 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 		pl.length += lengthAdded
 		// add handlers for the control frames that were added
 		for i := startLen; i < len(pl.frames); i++ {
+			if pl.frames[i].Handler != nil {
+				continue
+			}
 			switch pl.frames[i].Frame.(type) {
 			case *wire.PathChallengeFrame, *wire.PathResponseFrame:
 				// Path probing is currently not supported, therefore we don't need to set the OnAcked callback yet.
