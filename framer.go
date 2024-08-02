@@ -16,11 +16,20 @@ const (
 	maxControlFrames = 16 << 10
 )
 
+// This is the largest possible size of a stream-related control frame
+// (which is the RESET_STREAM frame).
+const maxStreamControlFrameSize = 25
+
+type streamControlFrameGetter interface {
+	getControlFrame() (_ ackhandler.Frame, ok, hasMore bool)
+}
+
 type framer struct {
 	mutex sync.Mutex
 
-	activeStreams map[protocol.StreamID]sendStreamI
-	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
+	activeStreams            map[protocol.StreamID]sendStreamI
+	streamQueue              ringbuffer.RingBuffer[protocol.StreamID]
+	streamsWithControlFrames map[protocol.StreamID]streamControlFrameGetter
 
 	controlFrameMutex          sync.Mutex
 	controlFrames              []wire.Frame
@@ -29,7 +38,10 @@ type framer struct {
 }
 
 func newFramer() *framer {
-	return &framer{activeStreams: make(map[protocol.StreamID]sendStreamI)}
+	return &framer{
+		activeStreams:            make(map[protocol.StreamID]sendStreamI),
+		streamsWithControlFrames: make(map[protocol.StreamID]streamControlFrameGetter),
+	}
 }
 
 func (f *framer) HasData() bool {
@@ -41,7 +53,7 @@ func (f *framer) HasData() bool {
 	}
 	f.controlFrameMutex.Lock()
 	defer f.controlFrameMutex.Unlock()
-	return len(f.controlFrames) > 0 || len(f.pathResponses) > 0
+	return len(f.streamsWithControlFrames) > 0 || len(f.controlFrames) > 0 || len(f.pathResponses) > 0
 }
 
 func (f *framer) QueueControlFrame(frame wire.Frame) {
@@ -82,6 +94,29 @@ func (f *framer) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.
 		}
 	}
 
+	// add stream-related control frames
+	for id, str := range f.streamsWithControlFrames {
+	start:
+		remainingLen := maxLen - length
+		if remainingLen <= maxStreamControlFrameSize {
+			break
+		}
+		fr, ok, hasMore := str.getControlFrame()
+		if !hasMore {
+			delete(f.streamsWithControlFrames, id)
+		}
+		if !ok {
+			continue
+		}
+		frames = append(frames, fr)
+		length += fr.Frame.Length(v)
+		if hasMore {
+			// It is rare that a stream has more than one control frame to queue.
+			// We don't want to spawn another loop for just to cover that case.
+			goto start
+		}
+	}
+
 	for len(f.controlFrames) > 0 {
 		frame := f.controlFrames[len(f.controlFrames)-1]
 		frameLen := frame.Length(v)
@@ -92,6 +127,7 @@ func (f *framer) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
+
 	return frames, length
 }
 
@@ -113,6 +149,14 @@ func (f *framer) AddActiveStream(id protocol.StreamID, str sendStreamI) {
 	f.mutex.Unlock()
 }
 
+func (f *framer) AddStreamWithControlFrames(id protocol.StreamID, str streamControlFrameGetter) {
+	f.controlFrameMutex.Lock()
+	if _, ok := f.streamsWithControlFrames[id]; !ok {
+		f.streamsWithControlFrames[id] = str
+	}
+	f.controlFrameMutex.Unlock()
+}
+
 // RemoveActiveStream is called when a stream completes.
 func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	f.mutex.Lock()
@@ -127,7 +171,7 @@ func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen prot
 	startLen := len(frames)
 	var length protocol.ByteCount
 	f.mutex.Lock()
-	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
+	// pop STREAM frames, until less than 128 bytes are left in the packet
 	numActiveStreams := f.streamQueue.Len()
 	for i := 0; i < numActiveStreams; i++ {
 		if protocol.MinStreamFrameSize+length > maxLen {
@@ -153,7 +197,7 @@ func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen prot
 			delete(f.activeStreams, id)
 		}
 		// The frame can be "nil"
-		// * if the receiveStream was canceled after it said it had data
+		// * if the stream was canceled after it said it had data
 		// * the remaining size doesn't allow us to add another STREAM frame
 		if !ok {
 			continue

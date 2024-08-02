@@ -36,16 +36,16 @@ var _ = Describe("Framer", func() {
 
 	Context("handling control frames", func() {
 		It("adds control frames", func() {
-			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
+			pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
 			msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
-			framer.QueueControlFrame(mdf)
+			framer.QueueControlFrame(pc)
 			framer.QueueControlFrame(msf)
 			frames, length := framer.AppendControlFrames(nil, 1000, protocol.Version1)
 			Expect(frames).To(HaveLen(2))
 			fs := []wire.Frame{frames[0].Frame, frames[1].Frame}
-			Expect(fs).To(ContainElement(mdf))
+			Expect(fs).To(ContainElement(pc))
 			Expect(fs).To(ContainElement(msf))
-			Expect(length).To(Equal(mdf.Length(version) + msf.Length(version)))
+			Expect(length).To(Equal(pc.Length(version) + msf.Length(version)))
 		})
 
 		It("says if it has data", func() {
@@ -60,13 +60,43 @@ var _ = Describe("Framer", func() {
 
 		It("appends to the slice given", func() {
 			ping := &wire.PingFrame{}
-			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
-			framer.QueueControlFrame(mdf)
+			pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
+			framer.QueueControlFrame(pc)
 			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000, protocol.Version1)
 			Expect(frames).To(HaveLen(2))
 			Expect(frames[0].Frame).To(Equal(ping))
-			Expect(frames[1].Frame).To(Equal(mdf))
-			Expect(length).To(Equal(mdf.Length(version)))
+			Expect(frames[1].Frame).To(Equal(pc))
+			Expect(length).To(Equal(pc.Length(version)))
+		})
+
+		It("adds stream-related control frames", func() {
+			ping := &wire.PingFrame{}
+			framer.QueueControlFrame(ping)
+			str := NewMockStreamControlFrameGetter(mockCtrl)
+			framer.AddStreamWithControlFrames(10, str)
+			mdf1 := &wire.MaxStreamDataFrame{MaximumStreamData: 1337}
+			mdf2 := &wire.MaxStreamDataFrame{MaximumStreamData: 1338}
+			str.EXPECT().getControlFrame().Return(ackhandler.Frame{Frame: mdf1}, true, true)
+			str.EXPECT().getControlFrame().Return(ackhandler.Frame{Frame: mdf2}, true, false)
+			frames, l := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			Expect(frames).To(HaveLen(3))
+			Expect(frames[0].Frame).To(Equal(mdf1))
+			Expect(frames[1].Frame).To(Equal(mdf2))
+			Expect(frames[2].Frame).To(Equal(ping))
+			Expect(l).To(Equal(ping.Length(protocol.Version1) + mdf1.Length(protocol.Version1) + mdf2.Length(protocol.Version1)))
+		})
+
+		It("doesn't enqueue more stream-related control frames if there are less than 25 bytes left", func() {
+			str := NewMockStreamControlFrameGetter(mockCtrl)
+			framer.AddStreamWithControlFrames(10, str)
+			mdf1 := &wire.MaxStreamDataFrame{MaximumStreamData: 1337}
+			str.EXPECT().getControlFrame().Return(ackhandler.Frame{Frame: mdf1}, true, true).AnyTimes()
+			frames, l := framer.AppendControlFrames(nil, 100, protocol.Version1)
+			Expect(l).To(Equal(protocol.ByteCount(len(frames)) * mdf1.Length(protocol.Version1)))
+			Expect(l).To(And(
+				BeNumerically(">", 100-maxStreamControlFrameSize),
+				BeNumerically("<=", 100),
+			))
 		})
 
 		It("adds the right number of frames", func() {
@@ -211,6 +241,8 @@ var _ = Describe("Framer", func() {
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].Frame).To(Equal(f2))
 			Expect(framer.HasData()).To(BeFalse())
+			framer.AddStreamWithControlFrames(id1, nil)
+			Expect(framer.HasData()).To(BeTrue())
 		})
 
 		It("appends to a frame slice", func() {

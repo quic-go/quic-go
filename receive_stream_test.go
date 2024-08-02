@@ -49,8 +49,7 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.handleStreamFrame(&frame)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(str.handleStreamFrame(&frame)).To(Succeed())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
 			Expect(err).ToNot(HaveOccurred())
@@ -66,8 +65,7 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.handleStreamFrame(&frame)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(str.handleStreamFrame(&frame)).To(Succeed())
 			b := make([]byte, 2)
 			n, err := strWithTimeout.Read(b)
 			Expect(err).ToNot(HaveOccurred())
@@ -77,6 +75,25 @@ var _ = Describe("Receive Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(2))
 			Expect(b).To(Equal([]byte{0xBE, 0xEF}))
+		})
+
+		It("queues a flow control update", func() {
+			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false)
+			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(3)).Return(true)
+			frame := wire.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xde, 0xad, 0xbe, 0xef},
+			}
+			Expect(str.handleStreamFrame(&frame)).To(Succeed())
+			mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+			n, err := strWithTimeout.Read(make([]byte, 3))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(3))
+			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(1337))
+			f, ok, hasMore := str.getControlFrame()
+			Expect(ok).To(BeTrue())
+			Expect(f.Frame).To(Equal(&wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1337}))
+			Expect(hasMore).To(BeFalse())
 		})
 
 		It("reads all data available", func() {
@@ -477,7 +494,7 @@ var _ = Describe("Receive Stream", func() {
 	Context("stream cancellations", func() {
 		Context("canceling read", func() {
 			It("unblocks Read", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -495,7 +512,7 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("doesn't allow further calls to Read", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.CancelRead(1234)
 				_, err := strWithTimeout.Read([]byte{0})
 				Expect(err).To(Equal(&StreamError{
@@ -506,7 +523,7 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("does nothing when CancelRead is called twice", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.CancelRead(1234)
 				str.CancelRead(1234)
 				_, err := strWithTimeout.Read([]byte{0})
@@ -518,11 +535,15 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("queues a STOP_SENDING frame", func() {
-				mockSender.EXPECT().queueControlFrame(&wire.StopSendingFrame{
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
+				str.CancelRead(1234)
+				f, ok, hasMore := str.getControlFrame()
+				Expect(ok).To(BeTrue())
+				Expect(f.Frame).To(Equal(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 1234,
-				})
-				str.CancelRead(1234)
+				}))
+				Expect(hasMore).To(BeFalse())
 			})
 
 			It("doesn't send a STOP_SENDING frame, if the FIN was already read", func() {
@@ -568,7 +589,7 @@ var _ = Describe("Receive Stream", func() {
 					Fin:  true,
 				})).To(Succeed())
 				mockFC.EXPECT().Abandon()
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.CancelRead(1234)
 				// read the error
@@ -578,7 +599,7 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("completes the stream when receiving the Fin after the stream was canceled", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.CancelRead(1234)
 				gomock.InOrder(
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1000), true),
@@ -592,7 +613,7 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("handles duplicate FinBits after the stream was canceled", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.CancelRead(1234)
 				gomock.InOrder(
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1000), true),
@@ -692,7 +713,7 @@ var _ = Describe("Receive Stream", func() {
 
 			It("handles RESET_STREAM after CancelRead", func() {
 				mockFC.EXPECT().Abandon()
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.CancelRead(1234)
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
 				mockSender.EXPECT().onStreamCompleted(streamID)
@@ -708,21 +729,14 @@ var _ = Describe("Receive Stream", func() {
 		})
 	})
 
-	Context("flow control", func() {
-		It("errors when a STREAM frame causes a flow control violation", func() {
-			testErr := errors.New("flow control violation")
-			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(8), false).Return(testErr)
-			frame := wire.StreamFrame{
-				Offset: 2,
-				Data:   []byte("foobar"),
-			}
-			err := str.handleStreamFrame(&frame)
-			Expect(err).To(MatchError(testErr))
-		})
-
-		It("gets a window update", func() {
-			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x100))
-			Expect(str.getWindowUpdate()).To(Equal(protocol.ByteCount(0x100)))
-		})
+	It("errors when a STREAM frame causes a flow control violation", func() {
+		testErr := errors.New("flow control violation")
+		mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(8), false).Return(testErr)
+		frame := wire.StreamFrame{
+			Offset: 2,
+			Data:   []byte("foobar"),
+		}
+		err := str.handleStreamFrame(&frame)
+		Expect(err).To(MatchError(testErr))
 	})
 })
