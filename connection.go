@@ -472,6 +472,7 @@ func (s *connection) preSetup() {
 	s.streamsMap = newStreamsMap(
 		s.ctx,
 		s,
+		s.queueControlFrame,
 		s.newFlowController,
 		uint64(s.config.MaxIncomingStreams),
 		uint64(s.config.MaxIncomingUniStreams),
