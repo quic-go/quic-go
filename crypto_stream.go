@@ -76,7 +76,7 @@ func (s *cryptoStreamImpl) GetCryptoData() []byte {
 }
 
 func (s *cryptoStreamImpl) Finish() error {
-	if s.queue.HasMoreData() {
+	if s.queue.HasMoreData() || len(s.msgBuf) > 0 {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "encryption level changed, but crypto stream has more data to read",
