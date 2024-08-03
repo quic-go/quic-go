@@ -21,8 +21,7 @@ type cryptoStream interface {
 }
 
 type cryptoStreamImpl struct {
-	queue  *frameSorter
-	msgBuf []byte
+	queue frameSorter
 
 	highestOffset protocol.ByteCount
 	finished      bool
@@ -32,7 +31,7 @@ type cryptoStreamImpl struct {
 }
 
 func newCryptoStream() cryptoStream {
-	return &cryptoStreamImpl{queue: newFrameSorter()}
+	return &cryptoStreamImpl{queue: *newFrameSorter()}
 }
 
 func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
@@ -56,23 +55,13 @@ func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 		return nil
 	}
 	s.highestOffset = max(s.highestOffset, highestOffset)
-	if err := s.queue.Push(f.Data, f.Offset, nil); err != nil {
-		return err
-	}
-	for {
-		_, data, _ := s.queue.Pop()
-		if data == nil {
-			return nil
-		}
-		s.msgBuf = append(s.msgBuf, data...)
-	}
+	return s.queue.Push(f.Data, f.Offset, nil)
 }
 
 // GetCryptoData retrieves data that was received in CRYPTO frames
 func (s *cryptoStreamImpl) GetCryptoData() []byte {
-	b := s.msgBuf
-	s.msgBuf = nil
-	return b
+	_, data, _ := s.queue.Pop()
+	return data
 }
 
 func (s *cryptoStreamImpl) Finish() error {
