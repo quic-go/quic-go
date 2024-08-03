@@ -64,11 +64,15 @@ var _ = Describe("Crypto Stream Manager", func() {
 
 	It("drops Initial", func() {
 		Expect(initialStream.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
-		Expect(csm.Drop(protocol.EncryptionInitial)).To(Succeed())
+		err := csm.Drop(protocol.EncryptionInitial)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("encryption level changed, but crypto stream has more data to read"))
 	})
 
 	It("drops Handshake", func() {
 		Expect(handshakeStream.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
-		Expect(csm.Drop(protocol.EncryptionHandshake)).To(Succeed())
+		err := csm.Drop(protocol.EncryptionHandshake)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("encryption level changed, but crypto stream has more data to read"))
 	})
 })
