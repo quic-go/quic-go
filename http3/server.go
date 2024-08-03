@@ -563,7 +563,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, datagrams, req.Response, decoder, uint64(s.MaxHeaderBytes))
+	hstr := newStream(str, conn, datagrams, decoder, uint64(s.MaxHeaderBytes))
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 

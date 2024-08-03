@@ -59,16 +59,19 @@ type stream struct {
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, resp *http.Response, decoder *qpack.Decoder, maxHeaderBytes uint64) *stream {
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, decoder *qpack.Decoder, maxHeaderBytes uint64) *stream {
 	return &stream{
 		Stream:         str,
 		conn:           conn,
 		buf:            make([]byte, 16),
 		datagrams:      datagrams,
-		resp:           resp,
 		decoder:        decoder,
 		maxHeaderBytes: maxHeaderBytes,
 	}
+}
+
+func (s *stream) setResponse(resp *http.Response) {
+	s.resp = resp
 }
 
 func (s *stream) Read(b []byte) (int, error) {
@@ -95,6 +98,9 @@ func (s *stream) Read(b []byte) (int, error) {
 				if s.conn.perspective == protocol.PerspectiveServer {
 					continue
 				}
+				if s.resp == nil {
+					continue
+				}
 				if f.Length > s.maxHeaderBytes {
 					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
 				}
@@ -102,11 +108,12 @@ func (s *stream) Read(b []byte) (int, error) {
 					return 0, errors.New("HEADERS frame received after trailers")
 				}
 				p := make([]byte, f.Length)
-				s.Stream.Read(p)
+				if n, err := io.ReadFull(s.Stream, p); err != nil {
+					return n, err
+				}
 				trailers, err := s.decoder.DecodeFull(p)
 				if err != nil {
-					// Ignoring invalid frame
-					continue
+					return 0, errors.New("HEADERS frame invalid frame")
 				}
 
 				for _, trailer := range trailers {
@@ -248,12 +255,14 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
-	res := s.resp
-	if err := responseFromHeaders(res, hfs); err != nil {
+	res, err := responseFromHeaders(hfs)
+	if err != nil {
 		s.Stream.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 		s.Stream.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 		return nil, fmt.Errorf("http3: invalid response: %w", err)
 	}
+
+	s.setResponse(res)
 
 	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.

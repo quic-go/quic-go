@@ -27,7 +27,7 @@ func encodeResponse(status int) []byte {
 	buf := &bytes.Buffer{}
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil, nil, nil, nil, 0), nil, false, nil)
+	rw := newResponseWriter(newStream(rstr, nil, nil, nil, 0), nil, false, nil)
 	if status == http.StatusEarlyHints {
 		rw.header.Add("Link", "</style.css>; rel=preload; as=style")
 		rw.header.Add("Link", "</script.js>; rel=preload; as=script")
@@ -955,7 +955,7 @@ var _ = Describe("Client", func() {
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil, nil, nil, nil, 0), nil, false, nil)
+				rw := newResponseWriter(newStream(rstr, nil, nil, nil, 0), nil, false, nil)
 				rw.Header().Set("Content-Encoding", "gzip")
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
@@ -982,7 +982,7 @@ var _ = Describe("Client", func() {
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil, nil, nil, nil, 0), nil, false, nil)
+				rw := newResponseWriter(newStream(rstr, nil, nil, nil, 0), nil, false, nil)
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })

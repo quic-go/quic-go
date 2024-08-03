@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"sync"
 	"sync/atomic"
 
@@ -86,7 +85,6 @@ func (c *connection) openRequestStream(
 	reqDone chan<- struct{},
 	disableCompression bool,
 	maxHeaderBytes uint64,
-	resp *http.Response,
 ) (*requestStream, error) {
 	str, err := c.Connection.OpenStreamSync(ctx)
 	if err != nil {
@@ -97,7 +95,7 @@ func (c *connection) openRequestStream(
 	c.streams[str.StreamID()] = datagrams
 	c.streamMx.Unlock()
 	qstr := newStateTrackingStream(str, c, datagrams)
-	hstr := newStream(qstr, c, datagrams, resp, c.decoder, maxHeaderBytes)
+	hstr := newStream(qstr, c, datagrams, c.decoder, maxHeaderBytes)
 	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes), nil
 }
 

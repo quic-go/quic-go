@@ -394,7 +394,7 @@ var _ = Describe("Connection", func() {
 			qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
 			qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 			qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
-			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000, nil)
+			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 			Expect(err).ToNot(HaveOccurred())
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
@@ -410,7 +410,7 @@ var _ = Describe("Connection", func() {
 			qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
 			qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 			qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
-			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000, nil)
+			str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 			Expect(err).ToNot(HaveOccurred())
 
 			// ... then deliver the datagram
