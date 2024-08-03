@@ -575,3 +575,39 @@ func BenchmarkParseRetry(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkArbitraryHeaderParsing(b *testing.B) {
+	b.Run("dest 8/ src 10", func(b *testing.B) { benchmarkArbitraryHeaderParsing(b, 8, 10) })
+	b.Run("dest 20 / src 20", func(b *testing.B) { benchmarkArbitraryHeaderParsing(b, 20, 20) })
+	b.Run("dest 100 / src 150", func(b *testing.B) { benchmarkArbitraryHeaderParsing(b, 100, 150) })
+}
+
+func benchmarkArbitraryHeaderParsing(b *testing.B, destLen, srcLen int) {
+	destConnID := make([]byte, destLen)
+	rand.Read(destConnID)
+	srcConnID := make([]byte, srcLen)
+	rand.Read(srcConnID)
+	buf := []byte{0x80, 1, 2, 3, 4}
+	buf = append(buf, uint8(destLen))
+	buf = append(buf, destConnID...)
+	buf = append(buf, uint8(srcLen))
+	buf = append(buf, srcConnID...)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		parsed, d, s, err := ParseArbitraryLenConnectionIDs(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if parsed != len(buf) {
+			b.Fatal("expected to parse entire slice")
+		}
+		if !bytes.Equal(destConnID, d.Bytes()) {
+			b.Fatalf("destination connection IDs don't match: %v vs %v", destConnID, d.Bytes())
+		}
+		if !bytes.Equal(srcConnID, s.Bytes()) {
+			b.Fatalf("source connection IDs don't match: %v vs %v", srcConnID, s.Bytes())
+		}
+	}
+}
