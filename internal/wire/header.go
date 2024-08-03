@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -40,37 +39,27 @@ func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.Connecti
 // https://datatracker.ietf.org/doc/html/rfc8999#section-5.1.
 // This function should only be called on Long Header packets for which we don't support the version.
 func ParseArbitraryLenConnectionIDs(data []byte) (bytesParsed int, dest, src protocol.ArbitraryLenConnectionID, _ error) {
-	r := bytes.NewReader(data)
-	remaining := r.Len()
-	src, dest, err := parseArbitraryLenConnectionIDs(r)
-	return remaining - r.Len(), src, dest, err
-}
-
-func parseArbitraryLenConnectionIDs(r *bytes.Reader) (dest, src protocol.ArbitraryLenConnectionID, _ error) {
-	r.Seek(5, io.SeekStart) // skip first byte and version field
-	destConnIDLen, err := r.ReadByte()
-	if err != nil {
-		return nil, nil, err
+	startLen := len(data)
+	if len(data) < 6 {
+		return 0, nil, nil, io.EOF
 	}
+	data = data[5:] // skip first byte and version field
+	destConnIDLen := data[0]
+	data = data[1:]
 	destConnID := make(protocol.ArbitraryLenConnectionID, destConnIDLen)
-	if _, err := io.ReadFull(r, destConnID); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			err = io.EOF
-		}
-		return nil, nil, err
+	if len(data) < int(destConnIDLen)+1 {
+		return 0, nil, nil, io.EOF
 	}
-	srcConnIDLen, err := r.ReadByte()
-	if err != nil {
-		return nil, nil, err
+	copy(destConnID, data)
+	data = data[destConnIDLen:]
+	srcConnIDLen := data[0]
+	data = data[1:]
+	if len(data) < int(srcConnIDLen) {
+		return 0, nil, nil, io.EOF
 	}
 	srcConnID := make(protocol.ArbitraryLenConnectionID, srcConnIDLen)
-	if _, err := io.ReadFull(r, srcConnID); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			err = io.EOF
-		}
-		return nil, nil, err
-	}
-	return destConnID, srcConnID, nil
+	copy(srcConnID, data)
+	return startLen - len(data) + int(srcConnIDLen), destConnID, srcConnID, nil
 }
 
 func IsPotentialQUICPacket(firstByte byte) bool {
