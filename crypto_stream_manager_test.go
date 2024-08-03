@@ -12,49 +12,39 @@ var _ = Describe("Crypto Stream Manager", func() {
 	var (
 		csm *cryptoStreamManager
 
-		initialStream   *MockCryptoStream
-		handshakeStream *MockCryptoStream
-		oneRTTStream    *MockCryptoStream
+		initialStream   cryptoStream
+		handshakeStream cryptoStream
+		oneRTTStream    cryptoStream
 	)
 
 	BeforeEach(func() {
-		initialStream = NewMockCryptoStream(mockCtrl)
-		handshakeStream = NewMockCryptoStream(mockCtrl)
-		oneRTTStream = NewMockCryptoStream(mockCtrl)
+		initialStream = newCryptoStream()
+		handshakeStream = newCryptoStream()
+		oneRTTStream = newCryptoStream()
 		csm = newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
 	})
 
 	It("passes messages to the initial stream", func() {
 		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		initialStream.EXPECT().HandleCryptoFrame(cf)
-		initialStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
 		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionInitial)).To(Succeed())
 		Expect(csm.GetCryptoData(protocol.EncryptionInitial)).To(Equal([]byte("foobar")))
 	})
 
 	It("passes messages to the handshake stream", func() {
 		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		handshakeStream.EXPECT().HandleCryptoFrame(cf)
-		handshakeStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
 		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
 		Expect(csm.GetCryptoData(protocol.EncryptionHandshake)).To(Equal([]byte("foobar")))
 	})
 
 	It("passes messages to the 1-RTT stream", func() {
 		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		oneRTTStream.EXPECT().HandleCryptoFrame(cf)
-		oneRTTStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
 		Expect(csm.HandleCryptoFrame(cf, protocol.Encryption1RTT)).To(Succeed())
 		Expect(csm.GetCryptoData(protocol.Encryption1RTT)).To(Equal([]byte("foobar")))
 	})
 
 	It("processes all messages", func() {
-		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		handshakeStream.EXPECT().HandleCryptoFrame(cf)
-		handshakeStream.EXPECT().GetCryptoData().Return([]byte("foo"))
-		handshakeStream.EXPECT().GetCryptoData().Return([]byte("bar"))
-		handshakeStream.EXPECT().GetCryptoData()
-		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
+		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}, protocol.EncryptionHandshake)).To(Succeed())
+		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")}, protocol.EncryptionHandshake)).To(Succeed())
 		var data []byte
 		for {
 			b := csm.GetCryptoData(protocol.EncryptionHandshake)
@@ -73,12 +63,16 @@ var _ = Describe("Crypto Stream Manager", func() {
 	})
 
 	It("drops Initial", func() {
-		initialStream.EXPECT().Finish()
-		Expect(csm.Drop(protocol.EncryptionInitial)).To(Succeed())
+		Expect(initialStream.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
+		err := csm.Drop(protocol.EncryptionInitial)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("encryption level changed, but crypto stream has more data to read"))
 	})
 
 	It("drops Handshake", func() {
-		handshakeStream.EXPECT().Finish()
-		Expect(csm.Drop(protocol.EncryptionHandshake)).To(Succeed())
+		Expect(handshakeStream.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
+		err := csm.Drop(protocol.EncryptionHandshake)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("encryption level changed, but crypto stream has more data to read"))
 	})
 })
