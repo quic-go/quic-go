@@ -12,11 +12,9 @@ import (
 )
 
 var _ = Describe("Crypto Stream", func() {
-	var str cryptoStream
+	var str *cryptoStream
 
-	BeforeEach(func() {
-		str = newCryptoStream()
-	})
+	BeforeEach(func() { str = newCryptoStream() })
 
 	Context("handling incoming data", func() {
 		It("handles in-order CRYPTO frames", func() {

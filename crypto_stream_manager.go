@@ -8,15 +8,15 @@ import (
 )
 
 type cryptoStreamManager struct {
-	initialStream   cryptoStream
-	handshakeStream cryptoStream
-	oneRTTStream    cryptoStream
+	initialStream   *cryptoStream
+	handshakeStream *cryptoStream
+	oneRTTStream    *cryptoStream
 }
 
 func newCryptoStreamManager(
-	initialStream cryptoStream,
-	handshakeStream cryptoStream,
-	oneRTTStream cryptoStream,
+	initialStream *cryptoStream,
+	handshakeStream *cryptoStream,
+	oneRTTStream *cryptoStream,
 ) *cryptoStreamManager {
 	return &cryptoStreamManager{
 		initialStream:   initialStream,
@@ -26,7 +26,7 @@ func newCryptoStreamManager(
 }
 
 func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
-	var str cryptoStream
+	var str *cryptoStream
 	//nolint:exhaustive // CRYPTO frames cannot be sent in 0-RTT packets.
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -42,7 +42,7 @@ func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLeve
 }
 
 func (m *cryptoStreamManager) GetCryptoData(encLevel protocol.EncryptionLevel) []byte {
-	var str cryptoStream
+	var str *cryptoStream
 	//nolint:exhaustive // CRYPTO frames cannot be sent in 0-RTT packets.
 	switch encLevel {
 	case protocol.EncryptionInitial:

@@ -31,8 +31,8 @@ var _ = Describe("Packet packer", func() {
 		datagramQueue       *datagramQueue
 		framer              *MockFrameSource
 		ackFramer           *MockAckFrameSource
-		initialStream       cryptoStream
-		handshakeStream     cryptoStream
+		initialStream       *cryptoStream
+		handshakeStream     *cryptoStream
 		sealingManager      *MockSealingManager
 		pnManager           *mockackhandler.MockSentPacketHandler
 	)
