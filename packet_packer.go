@@ -25,6 +25,7 @@ type packer interface {
 	PackConnectionClose(*qerr.TransportError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
 	PackApplicationClose(*qerr.ApplicationError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
 	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *packetBuffer, error)
+	MaxPayloadSize(maxPacketSize protocol.ByteCount) protocol.ByteCount
 
 	SetToken([]byte)
 }
@@ -323,6 +324,18 @@ func (p *packetPacker) initialPaddingLen(frames []ackhandler.Frame, currentSize,
 		return 0
 	}
 	return maxPacketSize - currentSize
+}
+
+func (p *packetPacker) MaxPayloadSize(maxPacketSize protocol.ByteCount) protocol.ByteCount {
+	oneRTTSealer, err := p.cryptoSetup.Get1RTTSealer()
+	if err == nil {
+		connID := p.getDestConnID()
+		_, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+		hdrLen := wire.ShortHeaderLen(connID, pnLen)
+		return maxPacketSize - hdrLen - protocol.ByteCount(oneRTTSealer.Overhead())
+	}
+
+	return 0
 }
 
 // PackCoalescedPacket packs a new packet.
