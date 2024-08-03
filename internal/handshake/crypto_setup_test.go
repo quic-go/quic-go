@@ -11,7 +11,6 @@ import (
 	"net"
 	"time"
 
-	mocktls "github.com/quic-go/quic-go/internal/mocks/tls"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/testdata"
@@ -20,13 +19,35 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/mock/gomock"
 )
 
 const (
 	typeClientHello      = 1
 	typeNewSessionTicket = 4
 )
+
+type mockClientSessionCache struct {
+	cache tls.ClientSessionCache
+	puts  chan *tls.ClientSessionState
+}
+
+var _ tls.ClientSessionCache = &mockClientSessionCache{}
+
+func newMockClientSessionCache() *mockClientSessionCache {
+	return &mockClientSessionCache{
+		puts:  make(chan *tls.ClientSessionState, 1),
+		cache: tls.NewLRUClientSessionCache(1),
+	}
+}
+
+func (m *mockClientSessionCache) Get(sessionKey string) (session *tls.ClientSessionState, ok bool) {
+	return m.cache.Get(sessionKey)
+}
+
+func (m *mockClientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
+	m.puts <- cs
+	m.cache.Put(sessionKey, cs)
+}
 
 var _ = Describe("Crypto Setup TLS", func() {
 	generateCert := func() tls.Certificate {
@@ -345,14 +366,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("uses session resumption", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
@@ -366,12 +380,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 				clientRTTStats := &utils.RTTStats{}
 				serverRTTStats := &utils.RTTStats{}
 				client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
@@ -382,7 +394,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
 				Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
@@ -390,14 +402,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("doesn't use session resumption if the server disabled it", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
@@ -407,12 +412,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 
 				serverConf.SessionTicketsDisabled = true
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					&utils.RTTStats{}, &utils.RTTStats{},
@@ -421,20 +425,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Consistently(csc.puts, 25*time.Millisecond).ShouldNot(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 			})
 
 			It("uses 0-RTT", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
@@ -450,12 +447,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
-
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
 				clientRTTStats := &utils.RTTStats{}
 				serverRTTStats := &utils.RTTStats{}
@@ -501,14 +495,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("rejects 0-RTT, when the transport parameters changed", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
 				clientOrigRTTStats := newRTTStatsWithRTT(clientRTT)
@@ -522,12 +509,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
-
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
 				clientRTTStats := &utils.RTTStats{}
 				client, clientEvents, clientErr, server, _, serverErr := handshakeWithTLSConf(
