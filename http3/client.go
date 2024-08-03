@@ -49,8 +49,9 @@ type SingleDestinationRoundTripper struct {
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
-	StreamHijacker     func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
-	UniStreamHijacker  func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
+
+	SignalValues  map[uint64]func(context.Context, quic.Stream)
+	UniStreamType map[uint64]func(context.Context, quic.ReceiveStream)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
@@ -98,10 +99,10 @@ func (c *SingleDestinationRoundTripper) init() {
 			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
-	if c.StreamHijacker != nil {
+	if c.SignalValues != nil {
 		go c.handleBidirectionalStreams()
 	}
-	go c.hconn.HandleUnidirectionalStreams(c.UniStreamHijacker)
+	go c.hconn.HandleUnidirectionalStreams(c.UniStreamType)
 }
 
 func (c *SingleDestinationRoundTripper) setupConn(conn *connection) error {
@@ -127,22 +128,27 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 			}
 			return
 		}
+		var hijack func(context.Context, quic.Stream)
 		fp := &frameParser{
 			r:    str,
 			conn: c.hconn,
-			unknownFrameHandler: func(ft FrameType, e error) (processed bool, err error) {
-				id := c.hconn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				return c.StreamHijacker(ft, id, str, e)
+			hijack: func(v uint64) bool {
+				f, ok := c.SignalValues[v]
+				if ok {
+					hijack = f
+				}
+				return ok
 			},
 		}
 		go func() {
-			if _, err := fp.ParseNext(); err == errHijacked {
-				return
-			}
-			if err != nil {
+			if _, err := fp.ParseNext(); err != nil {
 				if c.Logger != nil {
 					c.Logger.Debug("error handling stream", "error", err)
 				}
+			}
+			if hijack != nil {
+				hijack(c.Connection.Context(), str)
+				return
 			}
 			c.hconn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
 		}()
