@@ -30,7 +30,6 @@ var _ = Describe("Stream", func() {
 			qstr          *mockquic.MockStream
 			buf           *bytes.Buffer
 			errorCbCalled bool
-			resp          *http.Response
 		)
 
 		BeforeEach(func() {
@@ -44,14 +43,10 @@ var _ = Describe("Stream", func() {
 				errorCbCalled = true
 				return nil
 			}).AnyTimes()
-			resp = &http.Response{}
 			str = newStream(
 				qstr,
 				newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil),
-				newDatagrammer(nil),
-				qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-				1000)
-			str.setResponse(resp)
+				newDatagrammer(nil))
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -112,34 +107,6 @@ var _ = Describe("Stream", func() {
 			Expect(b[:n]).To(Equal([]byte("bar")))
 		})
 
-		It("errors on invalid HEADERS frames", func() {
-			b := getDataFrame([]byte("foo"))
-			b = (&headersFrame{Length: 10}).Append(b)
-			b = append(b, make([]byte, 10)...)
-			b = append(b, getDataFrame([]byte("bar"))...)
-			buf.Write(b)
-			r := make([]byte, 6)
-			_, err := io.ReadFull(str, r)
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("reads HEADERS frame as trailers", func() {
-			b := getDataFrame([]byte("foo"))
-			headerBuf := &bytes.Buffer{}
-			enc := qpack.NewEncoder(headerBuf)
-			Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
-			Expect(enc.Close()).To(Succeed())
-			b = (&headersFrame{Length: uint64(headerBuf.Len())}).Append(b)
-			b = append(b, headerBuf.Bytes()...)
-			buf.Write(b)
-
-			_, err := io.ReadAll(str)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.Trailer).To(Equal(http.Header(map[string][]string{
-				"Grpc-Status": {"0"},
-			})))
-		})
-
 		It("errors when it can't parse the frame", func() {
 			buf.Write([]byte("invalid"))
 			_, err := str.Read([]byte{0})
@@ -160,7 +127,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil, nil, nil, 0)
+			str := newStream(qstr, nil, nil)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -194,7 +161,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil, nil, 0),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),
@@ -234,5 +201,55 @@ var _ = Describe("Request Stream", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(n).To(Equal(6))
 		Expect(b[:n]).To(Equal([]byte("foobar")))
+	})
+
+	It("errors on invalid HEADERS frames", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+
+		buf := bytes.NewBuffer(encodeResponse(200))
+		buf.Write((&dataFrame{Length: 6}).Append(nil))
+		buf.Write([]byte("foobar"))
+		buf.Write((&headersFrame{Length: 100}).Append(nil))
+		buf.Write([]byte("foobar"))
+
+		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+		rsp, err := str.ReadResponse()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(200))
+
+		_, err = io.ReadAll(rsp.Body)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("reads HEADERS frame as trailers", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+
+		buf := bytes.NewBuffer(encodeResponse(200))
+		buf.Write((&dataFrame{Length: 6}).Append(nil))
+		buf.Write([]byte("foobar"))
+		headerBuf := &bytes.Buffer{}
+		enc := qpack.NewEncoder(headerBuf)
+		Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+		Expect(enc.Close()).To(Succeed())
+		buf.Write((&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil))
+		headerBuf.WriteTo(buf)
+
+		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+		rsp, err := str.ReadResponse()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(200))
+
+		body, err := io.ReadAll(rsp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal([]byte("foobar")))
+		Expect(rsp.Trailer).To(Equal(http.Header(map[string][]string{
+			"Grpc-Status": {"0"},
+		})))
 	})
 })
