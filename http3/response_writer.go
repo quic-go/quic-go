@@ -205,9 +205,6 @@ func (w *responseWriter) writeHeader(status int) error {
 
 	for k, v := range w.header {
 		for index := range v {
-			if k == "Trailer" {
-				w.declareTrailer(v[index])
-			}
 			if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]}); err != nil {
 				return err
 			}
@@ -240,6 +237,11 @@ func (w *responseWriter) Flush() {
 
 func (w *responseWriter) promoteTrailer() {
 	for k, vv := range w.header {
+		if k == "Trailer" {
+			for _, val := range vv {
+				w.declareTrailer(val)
+			}
+		}
 		if !strings.HasPrefix(k, http2.TrailerPrefix) {
 			continue
 		}
@@ -286,6 +288,7 @@ func (w *responseWriter) writeTrailers() error {
 		return nil
 	}
 
+	w.Flush()
 	var b bytes.Buffer
 	enc := qpack.NewEncoder(&b)
 	for _, trailer := range w.trailers {

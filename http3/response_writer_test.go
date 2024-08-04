@@ -195,7 +195,6 @@ var _ = Describe("Response Writer", func() {
 		rw.Header().Set("Key", "Value")
 
 		// writeTrailers needs to be called after writing the full body
-		rw.Flush()
 		Expect(rw.writeTrailers()).ToNot(HaveOccurred())
 
 		fields := decodeHeader(strBuf)
@@ -216,7 +215,6 @@ var _ = Describe("Response Writer", func() {
 		rw.Header().Set("Key", "Value")
 
 		// Needs to call writeTrailers to simulate the end of the handler
-		rw.Flush()
 		Expect(rw.writeTrailers()).ToNot(HaveOccurred())
 		headers := decodeHeader(strBuf)
 		Expect(headers).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -238,7 +236,6 @@ var _ = Describe("Response Writer", func() {
 		rw.Header().Set(http2.TrailerPrefix+"Key2", "Value")
 
 		// Needs to call writeTrailers to simulate the end of the handler
-		rw.Flush()
 		Expect(rw.writeTrailers()).ToNot(HaveOccurred())
 		headers := decodeHeader(strBuf)
 		Expect(headers).To(HaveKeyWithValue(":status", []string{"200"}))
