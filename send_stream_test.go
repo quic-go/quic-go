@@ -328,10 +328,6 @@ var _ = Describe("Send Stream", func() {
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(0))
 				mockFC.EXPECT().IsNewlyBlocked().Return(true)
-				mockSender.EXPECT().queueControlFrame(&wire.StreamDataBlockedFrame{
-					StreamID:          streamID,
-					MaximumStreamData: 3,
-				})
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -345,9 +341,17 @@ var _ = Describe("Send Stream", func() {
 				Expect(ok).To(BeTrue())
 				Expect(hasMoreData).To(BeTrue())
 				Expect(f.Frame.Data).To(HaveLen(3))
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				_, ok, hasMoreData = str.popStreamFrame(1000, protocol.Version1)
 				Expect(ok).To(BeFalse())
 				Expect(hasMoreData).To(BeFalse())
+				cf, ok, hasMore := str.getControlFrame()
+				Expect(ok).To(BeTrue())
+				Expect(cf.Frame).To(Equal(&wire.StreamDataBlockedFrame{
+					StreamID:          streamID,
+					MaximumStreamData: 3,
+				}))
+				Expect(hasMore).To(BeFalse())
 				// make the Write go routine return
 				str.closeForShutdown(nil)
 				Eventually(done).Should(BeClosed())
@@ -686,22 +690,26 @@ var _ = Describe("Send Stream", func() {
 		Context("canceling writing", func() {
 			It("queues a RESET_STREAM frame", func() {
 				gomock.InOrder(
-					mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
-						StreamID:  streamID,
-						FinalSize: 1234,
-						ErrorCode: 9876,
-					}),
+					mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any()),
 					mockSender.EXPECT().onStreamCompleted(streamID),
 				)
 				str.writeOffset = 1234
 				str.CancelWrite(9876)
+				cf, ok, hasMore := str.getControlFrame()
+				Expect(ok).To(BeTrue())
+				Expect(cf.Frame).To(Equal(&wire.ResetStreamFrame{
+					StreamID:  streamID,
+					FinalSize: 1234,
+					ErrorCode: 9876,
+				}))
+				Expect(hasMore).To(BeFalse())
 			})
 
 			// This test is inherently racy, as it tests a concurrent call to Write() and CancelRead().
 			// A single successful run of this test therefore doesn't mean a lot,
 			// for reliable results it has to be run many times.
 			It("returns a nil error when the whole slice has been sent out", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any()).MaxTimes(1)
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()).MaxTimes(1)
 				mockSender.EXPECT().onHasStreamData(streamID, str).MaxTimes(1)
 				mockSender.EXPECT().onStreamCompleted(streamID).MaxTimes(1)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).MaxTimes(1)
@@ -724,7 +732,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("unblocks Write", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onHasStreamData(streamID, str)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
@@ -752,7 +760,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't pop STREAM frames after being canceled", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onHasStreamData(streamID, str)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
@@ -776,7 +784,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't pop STREAM frames after being canceled, for large writes", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onHasStreamData(streamID, str)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
@@ -805,7 +813,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("ignores acknowledgements for STREAM frames after it was cancelled", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onHasStreamData(streamID, str)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
@@ -826,7 +834,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("cancels the context", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				Expect(str.Context().Done()).ToNot(BeClosed())
 				str.CancelWrite(1234)
@@ -836,7 +844,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't allow further calls to Write", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.CancelWrite(1234)
 				_, err := strWithTimeout.Write([]byte("foobar"))
@@ -848,43 +856,54 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("only cancels once", func() {
-				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{StreamID: streamID, ErrorCode: 1234})
+				mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any())
 				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.CancelWrite(1234)
 				str.CancelWrite(4321)
+				cf, ok, hasMore := str.getControlFrame()
+				Expect(ok).To(BeTrue())
+				Expect(cf.Frame).To(Equal(&wire.ResetStreamFrame{StreamID: streamID, ErrorCode: 1234}))
+				Expect(hasMore).To(BeFalse())
+				cf, ok, hasMore = str.getControlFrame()
+				Expect(ok).To(BeFalse())
+				Expect(cf.Frame).To(BeNil())
+				Expect(hasMore).To(BeFalse())
 			})
 
 			It("queues a RESET_STREAM frame, even if the stream was already closed", func() {
 				mockSender.EXPECT().onHasStreamData(streamID, str)
-				mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-					Expect(f).To(BeAssignableToTypeOf(&wire.ResetStreamFrame{}))
-				})
+				mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				Expect(str.Close()).To(Succeed())
 				// don't EXPECT any calls to queueControlFrame
 				str.CancelWrite(123)
+				f, ok, hasMore := str.getControlFrame()
+				Expect(ok).To(BeTrue())
+				Expect(f.Frame).To(BeAssignableToTypeOf(&wire.ResetStreamFrame{}))
+				Expect(hasMore).To(BeFalse())
 			})
 		})
 
 		Context("receiving STOP_SENDING frames", func() {
 			It("queues a RESET_STREAM frames, and copies the error code from the STOP_SENDING frame", func() {
-				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
-					StreamID:  streamID,
-					ErrorCode: 101,
-				})
+				mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 				// Don't EXPECT calls to onStreamCompleted.
 				// The application needs to learn about the cancellation first.
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 101,
 				})
+				f, ok, hasMore := str.getControlFrame()
+				Expect(ok).To(BeTrue())
+				Expect(f.Frame).To(Equal(&wire.ResetStreamFrame{
+					StreamID:  streamID,
+					ErrorCode: 101,
+				}))
+				Expect(hasMore).To(BeFalse())
 			})
 
 			It("discards the stream when CancelWrite is called after receiving STOP_SENDING", func() {
-				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
-					StreamID:  streamID,
-					ErrorCode: 101,
-				})
+				mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 101,
@@ -896,7 +915,7 @@ var _ = Describe("Send Stream", func() {
 
 			It("unblocks Write", func() {
 				mockSender.EXPECT().onHasStreamData(streamID, str)
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -918,7 +937,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't allow further calls to Write", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 123,
@@ -933,7 +952,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("handles Close after STOP_SENDING", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 123,
@@ -948,7 +967,7 @@ var _ = Describe("Send Stream", func() {
 				_, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 				Expect(ok).To(BeTrue())
 				gomock.InOrder(
-					mockSender.EXPECT().queueControlFrame(gomock.Any()),
+					mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()),
 					mockSender.EXPECT().onStreamCompleted(gomock.Any()),
 				)
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
@@ -961,7 +980,7 @@ var _ = Describe("Send Stream", func() {
 				mockSender.EXPECT().onHasStreamData(gomock.Any(), gomock.Any())
 				str.Close()
 				gomock.InOrder(
-					mockSender.EXPECT().queueControlFrame(gomock.Any()),
+					mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()),
 					mockSender.EXPECT().onStreamCompleted(gomock.Any()),
 				)
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
@@ -1075,7 +1094,7 @@ var _ = Describe("Send Stream", func() {
 			Eventually(done).Should(BeClosed())
 			Expect(f).ToNot(BeNil())
 			gomock.InOrder(
-				mockSender.EXPECT().queueControlFrame(gomock.Any()),
+				mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()),
 				mockSender.EXPECT().onStreamCompleted(streamID),
 			)
 			str.CancelWrite(9876)

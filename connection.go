@@ -140,7 +140,6 @@ type connection struct {
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	retransmissionQueue   *retransmissionQueue
 	framer                *framer
-	windowUpdateQueue     *windowUpdateQueue
 	connFlowController    flowcontrol.ConnectionFlowController
 	tokenStoreKey         string                    // only set for the client
 	tokenGenerator        *handshake.TokenGenerator // only set for the server
@@ -472,6 +471,7 @@ func (s *connection) preSetup() {
 	s.streamsMap = newStreamsMap(
 		s.ctx,
 		s,
+		s.queueControlFrame,
 		s.newFlowController,
 		uint64(s.config.MaxIncomingStreams),
 		uint64(s.config.MaxIncomingUniStreams),
@@ -487,7 +487,6 @@ func (s *connection) preSetup() {
 	s.lastPacketReceivedTime = now
 	s.creationTime = now
 
-	s.windowUpdateQueue = newWindowUpdateQueue(s.connFlowController, s.framer.QueueControlFrame)
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
 	s.connState.Version = s.version
 }
@@ -1874,7 +1873,9 @@ func (s *connection) sendPackets(now time.Time) error {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
 		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
 	}
-	s.windowUpdateQueue.QueueAll()
+	if offset := s.connFlowController.GetWindowUpdate(); offset > 0 {
+		s.framer.QueueControlFrame(&wire.MaxDataFrame{MaximumData: offset})
+	}
 	if cf := s.cryptoStreamManager.GetPostHandshakeData(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
 		s.queueControlFrame(cf)
 	}
@@ -2244,13 +2245,13 @@ func (s *connection) queueControlFrame(f wire.Frame) {
 	s.scheduleSending()
 }
 
-func (s *connection) onHasStreamWindowUpdate(id protocol.StreamID, str receiveStreamI) {
-	s.windowUpdateQueue.AddStream(id, str)
+func (s *connection) onHasStreamData(id protocol.StreamID, str sendStreamI) {
+	s.framer.AddActiveStream(id, str)
 	s.scheduleSending()
 }
 
-func (s *connection) onHasStreamData(id protocol.StreamID, str sendStreamI) {
-	s.framer.AddActiveStream(id, str)
+func (s *connection) onHasStreamControlFrame(id protocol.StreamID, str streamControlFrameGetter) {
+	s.framer.AddStreamWithControlFrames(id, str)
 	s.scheduleSending()
 }
 
@@ -2259,7 +2260,6 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 		s.closeLocal(err)
 	}
 	s.framer.RemoveActiveStream(id)
-	s.windowUpdateQueue.RemoveStream(id)
 }
 
 func (s *connection) onMTUIncreased(mtu protocol.ByteCount) {

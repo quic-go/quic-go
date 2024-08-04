@@ -1284,6 +1284,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
+			fc.EXPECT().GetWindowUpdate()
 			expectAppendPacket(packer, shortHeaderPacket{PacketNumber: 13}, []byte("foobar"))
 			packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, errNothingToPack).AnyTimes()
 			conn.connFlowController = fc
