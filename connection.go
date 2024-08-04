@@ -152,9 +152,9 @@ type connection struct {
 
 	maxPayloadSizeEstimate atomic.Uint32
 
-	initialStream       cryptoStream
-	handshakeStream     cryptoStream
-	oneRTTStream        cryptoStream // only set for the server
+	initialStream       *cryptoStream
+	handshakeStream     *cryptoStream
+	oneRTTStream        *cryptoStream // only set for the server
 	cryptoStreamHandler cryptoStreamHandler
 
 	receivedPackets  chan receivedPacket

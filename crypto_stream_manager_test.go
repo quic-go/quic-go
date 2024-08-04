@@ -12,9 +12,9 @@ var _ = Describe("Crypto Stream Manager", func() {
 	var (
 		csm *cryptoStreamManager
 
-		initialStream   cryptoStream
-		handshakeStream cryptoStream
-		oneRTTStream    cryptoStream
+		initialStream   *cryptoStream
+		handshakeStream *cryptoStream
+		oneRTTStream    *cryptoStream
 	)
 
 	BeforeEach(func() {
