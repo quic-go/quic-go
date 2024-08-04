@@ -36,7 +36,7 @@ func (e event) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("data", e.eventDetails)
 }
 
-type versions []versionNumber
+type versions []version
 
 func (v versions) IsNil() bool { return false }
 func (v versions) MarshalJSONArray(enc *gojay.Encoder) {
@@ -85,8 +85,8 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventVersionNegotiated struct {
-	clientVersions, serverVersions []versionNumber
-	chosenVersion                  versionNumber
+	clientVersions, serverVersions []version
+	chosenVersion                  version
 }
 
 func (e eventVersionNegotiated) Category() category { return categoryTransport }
@@ -220,7 +220,7 @@ func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 
 type eventVersionNegotiationReceived struct {
 	Header            packetHeaderVersionNegotiation
-	SupportedVersions []versionNumber
+	SupportedVersions []version
 }
 
 func (e eventVersionNegotiationReceived) Category() category { return categoryTransport }
@@ -234,7 +234,7 @@ func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 
 type eventVersionNegotiationSent struct {
 	Header            packetHeaderVersionNegotiation
-	SupportedVersions []versionNumber
+	SupportedVersions []version
 }
 
 func (e eventVersionNegotiationSent) Category() category { return categoryTransport }
