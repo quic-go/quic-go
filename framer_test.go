@@ -102,7 +102,7 @@ var _ = Describe("Framer", func() {
 			for _, f := range frames {
 				framer.QueueControlFrame(f)
 			}
-			Expect(framer.Handle0RTTRejection()).To(Succeed())
+			framer.Handle0RTTRejection()
 			fs, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
 			Expect(fs).To(HaveLen(2))
 			Expect(length).To(Equal(ping.Length(version) + ncid.Length(version)))
@@ -424,7 +424,7 @@ var _ = Describe("Framer", func() {
 
 		It("drops all STREAM frames when 0-RTT is rejected", func() {
 			framer.AddActiveStream(id1, stream1)
-			Expect(framer.Handle0RTTRejection()).To(Succeed())
+			framer.Handle0RTTRejection()
 			fs, length := framer.AppendStreamFrames(nil, protocol.MaxByteCount, protocol.Version1)
 			Expect(fs).To(BeEmpty())
 			Expect(length).To(BeZero())
