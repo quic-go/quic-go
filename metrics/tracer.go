@@ -108,7 +108,7 @@ func NewTracerWithRegisterer(registerer prometheus.Registerer) *logging.Tracer {
 			*tags = append(*tags, reason)
 			connsRejected.WithLabelValues(*tags...).Inc()
 		},
-		SentVersionNegotiationPacket: func(addr net.Addr, _, _ logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
+		SentVersionNegotiationPacket: func(addr net.Addr, _, _ logging.ArbitraryLenConnectionID, _ []logging.Version) {
 			tags := getStringSlice()
 			defer putStringSlice(tags)
 

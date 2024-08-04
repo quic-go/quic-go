@@ -141,7 +141,7 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("records the version, if version negotiation happened", func() {
-			tracer.NegotiatedVersion(0x1337, []logging.VersionNumber{1, 2, 3}, []logging.VersionNumber{4, 5, 6})
+			tracer.NegotiatedVersion(0x1337, []logging.Version{1, 2, 3}, []logging.Version{4, 5, 6})
 			tracer.Close()
 			entry := exportAndParseSingle(buf)
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
