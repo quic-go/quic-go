@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"net"
 	"time"
@@ -96,10 +97,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.Version1,
 		)
 
-		Expect(cl.StartHandshake(context.Background())).To(MatchError(&qerr.TransportError{
-			ErrorCode:    qerr.InternalError,
-			ErrorMessage: "tls: invalid NextProtos value",
-		}))
+		var terr *qerr.TransportError
+		err := cl.StartHandshake(context.Background())
+		Expect(errors.As(err, &terr)).To(BeTrue())
+		Expect(terr.ErrorCode).To(BeEquivalentTo(0x100 + 0x50))
+		Expect(err.Error()).To(ContainSubstring("tls: invalid NextProtos value"))
 	})
 
 	It("errors when a message is received at the wrong encryption level", func() {
