@@ -26,6 +26,13 @@ func scaleDuration(t time.Duration) time.Duration {
 	return time.Duration(scaleFactor) * t
 }
 
+func unmarshal(data []byte, v interface{}) error {
+	if data[0] == recordSeparator {
+		data = data[1:]
+	}
+	return json.Unmarshal(data, v)
+}
+
 func checkEncoding(data []byte, expected map[string]interface{}) {
 	// unmarshal the data
 	m := make(map[string]interface{})
