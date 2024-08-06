@@ -26,7 +26,7 @@ type sendStreamI interface {
 type sendStream struct {
 	mutex sync.Mutex
 
-	numOutstandingFrames int64
+	numOutstandingFrames int64 // outstanding STREAM and RESET_STREAM frames
 	retransmissionQueue  []*wire.StreamFrame
 
 	ctx       context.Context
@@ -371,7 +371,7 @@ func (s *sendStream) isNewlyCompleted() bool {
 		return false
 	}
 	// We need to keep the stream around until all frames have been sent and acknowledged.
-	if s.numOutstandingFrames > 0 || len(s.retransmissionQueue) > 0 {
+	if s.numOutstandingFrames > 0 || len(s.retransmissionQueue) > 0 || s.queuedResetStreamFrame {
 		return false
 	}
 	// The stream is completed if we sent the FIN.
@@ -430,7 +430,7 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 			s.mutex.Unlock()
 			// The user has called CancelWrite. If the previous cancellation was
 			// because of a STOP_SENDING, we don't need to flag the error to the
-			// user any more.
+			// user anymore.
 			if completed {
 				s.sender.onStreamCompleted(s.streamID)
 			}
@@ -445,15 +445,11 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool
 	s.ctxCancel(s.cancelWriteErr)
 	s.numOutstandingFrames = 0
 	s.retransmissionQueue = nil
-	newlyCompleted := s.isNewlyCompleted()
 	s.queuedResetStreamFrame = true
 	s.mutex.Unlock()
 
 	s.signalWrite()
 	s.sender.onHasStreamControlFrame(s.streamID, s)
-	if newlyCompleted {
-		s.sender.onStreamCompleted(s.streamID)
-	}
 }
 
 func (s *sendStream) updateSendWindow(limit protocol.ByteCount) {
@@ -488,8 +484,14 @@ func (s *sendStream) getControlFrame() (_ ackhandler.Frame, ok, hasMore bool) {
 	}
 	// RESET_STREAM frame
 	s.queuedResetStreamFrame = false
+	s.numOutstandingFrames++
 	return ackhandler.Frame{
-		Frame: &wire.ResetStreamFrame{StreamID: s.streamID, FinalSize: s.writeOffset, ErrorCode: s.cancelWriteErr.ErrorCode},
+		Frame: &wire.ResetStreamFrame{
+			StreamID:  s.streamID,
+			FinalSize: s.writeOffset,
+			ErrorCode: s.cancelWriteErr.ErrorCode,
+		},
+		Handler: (*sendStreamResetStreamHandler)(s),
 	}, true, false
 }
 
@@ -539,10 +541,10 @@ func (s *sendStreamAckHandler) OnAcked(f wire.Frame) {
 	if s.numOutstandingFrames < 0 {
 		panic("numOutStandingFrames negative")
 	}
-	newlyCompleted := (*sendStream)(s).isNewlyCompleted()
+	completed := (*sendStream)(s).isNewlyCompleted()
 	s.mutex.Unlock()
 
-	if newlyCompleted {
+	if completed {
 		s.sender.onStreamCompleted(s.streamID)
 	}
 }
@@ -563,4 +565,29 @@ func (s *sendStreamAckHandler) OnLost(f wire.Frame) {
 	s.mutex.Unlock()
 
 	s.sender.onHasStreamData(s.streamID, (*sendStream)(s))
+}
+
+type sendStreamResetStreamHandler sendStream
+
+var _ ackhandler.FrameHandler = &sendStreamResetStreamHandler{}
+
+func (s *sendStreamResetStreamHandler) OnAcked(wire.Frame) {
+	s.mutex.Lock()
+	s.numOutstandingFrames--
+	if s.numOutstandingFrames < 0 {
+		panic("numOutStandingFrames negative")
+	}
+	completed := (*sendStream)(s).isNewlyCompleted()
+	s.mutex.Unlock()
+
+	if completed {
+		s.sender.onStreamCompleted(s.streamID)
+	}
+}
+
+func (s *sendStreamResetStreamHandler) OnLost(wire.Frame) {
+	s.mutex.Lock()
+	s.queuedResetStreamFrame = true
+	s.mutex.Unlock()
+	s.sender.onHasStreamControlFrame(s.streamID, (*sendStream)(s))
 }

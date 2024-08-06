@@ -279,10 +279,7 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42))
 				cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
 				framer.EXPECT().HasData().Return(true)
-				framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount, v protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
-					Expect(frames).To(BeEmpty())
-					return append(frames, cf), cf.Frame.Length(v)
-				})
+				expectAppendControlFrames(cf)
 				// TODO: check sizes
 				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(func(frames []ackhandler.StreamFrame, _ protocol.ByteCount, _ protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount) {
 					return frames, 0
@@ -515,14 +512,14 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.Ack).To(Equal(ack))
 			})
 
-			It("packs control frames", func() {
+			It("packs control frames, and sets OnLost / OnAcked handlers", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
 				framer.EXPECT().HasData().Return(true)
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 				frames := []ackhandler.Frame{
-					{Frame: &wire.ResetStreamFrame{}},
+					{Frame: &wire.ResetStreamFrame{}, Handler: &mtuFinderAckHandler{}}, // set any non-nil ackhandler.FrameHandler
 					{Frame: &wire.MaxDataFrame{}},
 				}
 				expectAppendControlFrames(frames...)
@@ -531,9 +528,20 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.AppendPacket(buffer, maxPacketSize, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.Frames).To(HaveLen(2))
-				for i, f := range p.Frames {
-					Expect(f).To(BeAssignableToTypeOf(frames[i]))
+				var sawResetStream, sawMaxData bool
+				for _, frame := range p.Frames {
+					switch frame.Frame.(type) {
+					case *wire.ResetStreamFrame:
+						sawResetStream = true
+						Expect(frame.Handler).To(Equal(&mtuFinderAckHandler{}))
+					case *wire.MaxDataFrame:
+						sawMaxData = true
+						Expect(frame.Handler).ToNot(BeNil())
+						Expect(frame.Handler).ToNot(Equal(&mtuFinderAckHandler{}))
+					}
 				}
+				Expect(sawResetStream).To(BeTrue())
+				Expect(sawMaxData).To(BeTrue())
 				Expect(buffer.Len()).ToNot(BeZero())
 			})
 
