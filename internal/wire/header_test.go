@@ -197,12 +197,10 @@ var _ = Describe("Header Parsing", func() {
 			Expect(hdr.Length).To(Equal(protocol.ByteCount(10)))
 			Expect(hdr.Version).To(Equal(protocol.Version1))
 			Expect(rest).To(BeEmpty())
-			b := bytes.NewReader(data)
-			extHdr, err := hdr.ParseExtended(b, protocol.Version1)
+			extHdr, err := hdr.ParseExtended(data)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
-			Expect(b.Len()).To(Equal(6)) // foobar
+			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
 			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 4))
 		})
@@ -287,12 +285,11 @@ var _ = Describe("Header Parsing", func() {
 
 			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
-			b := bytes.NewReader(data)
-			extHdr, err := hdr.ParseExtended(b, protocol.Version1)
+			extHdr, err := hdr.ParseExtended(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x123)))
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
-			Expect(b.Len()).To(BeZero())
+			Expect(extHdr.ParsedLen()).To(BeEquivalentTo(len(data)))
 		})
 
 		It("parses a Retry packet, for QUIC v1", func() {
@@ -367,7 +364,7 @@ var _ = Describe("Header Parsing", func() {
 			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
-			extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.Version1)
+			extHdr, err := hdr.ParseExtended(data)
 			Expect(err).To(MatchError(ErrInvalidReservedBits))
 			Expect(extHdr).ToNot(BeNil())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1234)))
@@ -394,11 +391,10 @@ var _ = Describe("Header Parsing", func() {
 			hdrLen := len(data)
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // packet number
 			for i := hdrLen; i < len(data); i++ {
-				data = data[:i]
-				hdr, _, _, err := ParsePacket(data)
+				b := data[:i]
+				hdr, _, _, err := ParsePacket(b)
 				Expect(err).ToNot(HaveOccurred())
-				b := bytes.NewReader(data)
-				_, err = hdr.ParseExtended(b, protocol.Version1)
+				_, err = hdr.ParseExtended(b)
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
@@ -414,8 +410,7 @@ var _ = Describe("Header Parsing", func() {
 				data = data[:i]
 				hdr, _, _, err := ParsePacket(data)
 				Expect(err).ToNot(HaveOccurred())
-				b := bytes.NewReader(data)
-				_, err = hdr.ParseExtended(b, protocol.Version1)
+				_, err = hdr.ParseExtended(data)
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
@@ -577,6 +572,42 @@ func BenchmarkParseRetry(b *testing.B) {
 		if h.Type != hdr.Type || h.DestConnectionID != hdr.DestConnectionID || h.SrcConnectionID != hdr.SrcConnectionID ||
 			!bytes.Equal(h.Token, hdr.Token[:len(hdr.Token)-16]) {
 			b.Fatalf("headers don't match: %#v vs %#v", h, hdr)
+		}
+	}
+}
+
+func BenchmarkArbitraryHeaderParsing(b *testing.B) {
+	b.Run("dest 8/ src 10", func(b *testing.B) { benchmarkArbitraryHeaderParsing(b, 8, 10) })
+	b.Run("dest 20 / src 20", func(b *testing.B) { benchmarkArbitraryHeaderParsing(b, 20, 20) })
+	b.Run("dest 100 / src 150", func(b *testing.B) { benchmarkArbitraryHeaderParsing(b, 100, 150) })
+}
+
+func benchmarkArbitraryHeaderParsing(b *testing.B, destLen, srcLen int) {
+	destConnID := make([]byte, destLen)
+	rand.Read(destConnID)
+	srcConnID := make([]byte, srcLen)
+	rand.Read(srcConnID)
+	buf := []byte{0x80, 1, 2, 3, 4}
+	buf = append(buf, uint8(destLen))
+	buf = append(buf, destConnID...)
+	buf = append(buf, uint8(srcLen))
+	buf = append(buf, srcConnID...)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		parsed, d, s, err := ParseArbitraryLenConnectionIDs(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if parsed != len(buf) {
+			b.Fatal("expected to parse entire slice")
+		}
+		if !bytes.Equal(destConnID, d.Bytes()) {
+			b.Fatalf("destination connection IDs don't match: %v vs %v", destConnID, d.Bytes())
+		}
+		if !bytes.Equal(srcConnID, s.Bytes()) {
+			b.Fatalf("source connection IDs don't match: %v vs %v", srcConnID, s.Bytes())
 		}
 	}
 }

@@ -1,4 +1,4 @@
-package logutils
+package quic
 
 import (
 	"github.com/quic-go/quic-go/internal/wire"
@@ -10,7 +10,7 @@ import (
 
 var _ = Describe("CRYPTO frame", func() {
 	It("converts CRYPTO frames", func() {
-		f := ConvertFrame(&wire.CryptoFrame{
+		f := toLoggingFrame(&wire.CryptoFrame{
 			Offset: 1234,
 			Data:   []byte("foobar"),
 		})
@@ -21,7 +21,7 @@ var _ = Describe("CRYPTO frame", func() {
 	})
 
 	It("converts STREAM frames", func() {
-		f := ConvertFrame(&wire.StreamFrame{
+		f := toLoggingFrame(&wire.StreamFrame{
 			StreamID: 42,
 			Offset:   1234,
 			Data:     []byte("foo"),
@@ -36,14 +36,14 @@ var _ = Describe("CRYPTO frame", func() {
 	})
 
 	It("converts DATAGRAM frames", func() {
-		f := ConvertFrame(&wire.DatagramFrame{Data: []byte("foobar")})
+		f := toLoggingFrame(&wire.DatagramFrame{Data: []byte("foobar")})
 		Expect(f).To(BeAssignableToTypeOf(&logging.DatagramFrame{}))
 		df := f.(*logging.DatagramFrame)
 		Expect(df.Length).To(Equal(logging.ByteCount(6)))
 	})
 
 	It("converts other frames", func() {
-		f := ConvertFrame(&wire.MaxDataFrame{MaximumData: 1234})
+		f := toLoggingFrame(&wire.MaxDataFrame{MaximumData: 1234})
 		Expect(f).To(BeAssignableToTypeOf(&logging.MaxDataFrame{}))
 		Expect(f).ToNot(BeAssignableToTypeOf(&logging.MaxStreamDataFrame{}))
 		mdf := f.(*logging.MaxDataFrame)

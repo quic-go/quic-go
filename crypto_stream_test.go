@@ -12,11 +12,9 @@ import (
 )
 
 var _ = Describe("Crypto Stream", func() {
-	var str cryptoStream
+	var str *cryptoStream
 
-	BeforeEach(func() {
-		str = newCryptoStream()
-	})
+	BeforeEach(func() { str = newCryptoStream() })
 
 	Context("handling incoming data", func() {
 		It("handles in-order CRYPTO frames", func() {
@@ -41,12 +39,30 @@ var _ = Describe("Crypto Stream", func() {
 		It("handles out-of-order CRYPTO frames", func() {
 			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{Offset: 3, Data: []byte("bar")})).To(Succeed())
 			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
-			Expect(str.GetCryptoData()).To(Equal([]byte("foobar")))
+			var data []byte
+			for {
+				b := str.GetCryptoData()
+				if b == nil {
+					break
+				}
+				data = append(data, b...)
+			}
+			Expect(data).To(Equal([]byte("foobar")))
 			Expect(str.GetCryptoData()).To(BeNil())
 		})
 
 		Context("finishing", func() {
-			It("errors if there's still data to read after finishing", func() {
+			It("errors if there's still data to read at the current offset after finishing", func() {
+				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
+					Data: []byte("foo"),
+				})).To(Succeed())
+				Expect(str.Finish()).To(MatchError(&qerr.TransportError{
+					ErrorCode:    qerr.ProtocolViolation,
+					ErrorMessage: "encryption level changed, but crypto stream has more data to read",
+				}))
+			})
+
+			It("errors if there's still data to read at a higher offset after finishing", func() {
 				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
 					Data:   []byte("foobar"),
 					Offset: 10,
@@ -67,6 +83,8 @@ var _ = Describe("Crypto Stream", func() {
 				}
 				Expect(str.HandleCryptoFrame(f2)).To(Succeed())
 				Expect(str.HandleCryptoFrame(f1)).To(Succeed())
+				Expect(str.GetCryptoData()).To(HaveLen(3))
+				Expect(str.GetCryptoData()).To(HaveLen(3))
 				Expect(str.Finish()).To(Succeed())
 				Expect(str.HandleCryptoFrame(f2)).To(Succeed())
 			})
