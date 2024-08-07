@@ -784,7 +784,7 @@ var _ = Describe("Connection", func() {
 			conn.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			tracer.EXPECT().ReceivedShortHeaderPacket(
-				&logging.ShortHeader{PacketNumber: 0x1337, PacketNumberLen: 2, KeyPhase: protocol.KeyPhaseZero},
+				&logging.ShortHeader{DestConnectionID: srcConnID, PacketNumber: 0x1337, PacketNumberLen: 2, KeyPhase: protocol.KeyPhaseZero},
 				protocol.ByteCount(len(packet.data)),
 				logging.ECT1,
 				[]logging.Frame{&logging.PingFrame{}},
