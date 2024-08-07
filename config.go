@@ -53,6 +53,9 @@ func validateConfig(config *Config) error {
 	}
 	return nil
 }
+func PopulateConfigWithDefaults(config *Config) *Config {
+	return populateConfig(config)
+}
 
 // populateConfig populates fields in the quic.Config with their default values, if none are set
 // it may be called with nil

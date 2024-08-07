@@ -113,6 +113,8 @@ func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTr
 
 // A Connection is a QUIC connection
 type connection struct {
+	isQuicOnStream bool
+	quicOnStream   *qosRunner
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
@@ -453,7 +455,11 @@ func (s *connection) preSetup() {
 	s.handshakeStream = newCryptoStream()
 	s.sendQueue = newSendQueue(s.conn)
 	s.retransmissionQueue = newRetransmissionQueue()
-	s.frameParser = *wire.NewFrameParser(s.config.EnableDatagrams)
+	if s.isQuicOnStream {
+		s.frameParser = *wire.NewFrameParserWithMaxSize(s.config.EnableDatagrams, 16<<10)
+	} else {
+		s.frameParser = *wire.NewFrameParser(s.config.EnableDatagrams)
+	}
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
@@ -498,12 +504,17 @@ func (s *connection) run() error {
 
 	s.timer = *newTimer()
 
-	if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
-		return err
+	if !s.isQuicOnStream {
+		if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
+			return err
+		}
+		if err := s.handleHandshakeEvents(); err != nil {
+			return err
+		}
+	} else {
+		s.handshakeComplete = true
 	}
-	if err := s.handleHandshakeEvents(); err != nil {
-		return err
-	}
+
 	go func() {
 		if err := s.sendQueue.Run(); err != nil {
 			s.destroyImpl(err)
@@ -1208,7 +1219,7 @@ func (s *connection) handleUnpackedLongHeaderPacket(
 			s.tracer.ReceivedLongHeaderPacket(packet.hdr, packetSize, ecn, frames)
 		}
 	}
-	isAckEliciting, err := s.handleFrames(packet.data, packet.hdr.DestConnectionID, packet.encryptionLevel, log)
+	isAckEliciting, _, err := s.handleFrames(packet.data, packet.hdr.DestConnectionID, packet.encryptionLevel, log)
 	if err != nil {
 		return err
 	}
@@ -1227,7 +1238,7 @@ func (s *connection) handleUnpackedShortHeaderPacket(
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
 
-	isAckEliciting, err := s.handleFrames(data, destConnID, protocol.Encryption1RTT, log)
+	isAckEliciting, _, err := s.handleFrames(data, destConnID, protocol.Encryption1RTT, log)
 	if err != nil {
 		return err
 	}
@@ -1239,7 +1250,7 @@ func (s *connection) handleFrames(
 	destConnID protocol.ConnectionID,
 	encLevel protocol.EncryptionLevel,
 	log func([]logging.Frame),
-) (isAckEliciting bool, _ error) {
+) (isAckEliciting bool, restData []byte, _ error) {
 	// Only used for tracing.
 	// If we're not tracing, this slice will always remain empty.
 	var frames []logging.Frame
@@ -1251,7 +1262,7 @@ func (s *connection) handleFrames(
 	for len(data) > 0 {
 		l, frame, err := s.frameParser.ParseNext(data, encLevel, s.version)
 		if err != nil {
-			return false, err
+			return false, data, err
 		}
 		data = data[l:]
 		if frame == nil {
@@ -1270,7 +1281,7 @@ func (s *connection) handleFrames(
 		}
 		if err := s.handleFrame(frame, encLevel, destConnID); err != nil {
 			if log == nil {
-				return false, err
+				return false, data, err
 			}
 			// If we're logging, we need to keep parsing (but not handling) all frames.
 			handleErr = err
@@ -1280,7 +1291,7 @@ func (s *connection) handleFrames(
 	if log != nil {
 		log(frames)
 		if handleErr != nil {
-			return false, handleErr
+			return false, data, handleErr
 		}
 	}
 
@@ -1290,7 +1301,7 @@ func (s *connection) handleFrames(
 	// and an ACK serialized after that CRYPTO frame. In this case, we still want to process the ACK frame.
 	if !handshakeWasComplete && s.handshakeComplete {
 		if err := s.handleHandshakeComplete(); err != nil {
-			return false, err
+			return false, data, err
 		}
 	}
 
@@ -1633,7 +1644,9 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	}
 
 	s.streamsMap.CloseWithError(e)
-	s.connIDManager.Close()
+	if !s.isQuicOnStream {
+		s.connIDManager.Close()
+	}
 	if s.datagramQueue != nil {
 		s.datagramQueue.CloseWithError(e)
 	}
@@ -1647,13 +1660,13 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 		s.connIDGenerator.ReplaceWithClosed(nil)
 		return
 	}
-	if closeErr.immediate {
+	if closeErr.immediate && !s.isQuicOnStream {
 		s.connIDGenerator.RemoveAll()
 		return
 	}
 	// Don't send out any CONNECTION_CLOSE if this is an error that occurred
 	// before we even sent out the first packet.
-	if s.perspective == protocol.PerspectiveClient && !s.sentFirstPacket {
+	if s.perspective == protocol.PerspectiveClient && !s.sentFirstPacket && !s.isQuicOnStream {
 		s.connIDGenerator.RemoveAll()
 		return
 	}
@@ -1661,7 +1674,10 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	if err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
-	s.connIDGenerator.ReplaceWithClosed(connClosePacket)
+	if !s.isQuicOnStream {
+
+		s.connIDGenerator.ReplaceWithClosed(connClosePacket)
+	}
 }
 
 func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel) error {
@@ -1774,14 +1790,16 @@ func (s *connection) applyTransportParameters() {
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	s.rttStats.SetMaxAckDelay(params.MaxAckDelay)
-	s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
-	if params.StatelessResetToken != nil {
-		s.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
-	}
-	// We don't support connection migration yet, so we don't have any use for the preferred_address.
-	if params.PreferredAddress != nil {
-		// Retire the connection ID.
-		s.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, params.PreferredAddress.StatelessResetToken)
+	if !s.isQuicOnStream {
+		s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
+		if params.StatelessResetToken != nil {
+			s.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
+		}
+		// We don't support connection migration yet, so we don't have any use for the preferred_address.
+		if params.PreferredAddress != nil {
+			// Retire the connection ID.
+			s.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, params.PreferredAddress.StatelessResetToken)
+		}
 	}
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
 	if params.MaxUDPPayloadSize > 0 && params.MaxUDPPayloadSize < maxPacketSize {
@@ -1854,6 +1872,9 @@ func (s *connection) triggerSending(now time.Time) error {
 }
 
 func (s *connection) sendPackets(now time.Time) error {
+	if s.isQuicOnStream {
+		return s.quicOnStream.send(s.framer)
+	}
 	// Path MTU Discovery
 	// Can't use GSO, since we need to send a single packet that's larger than our current maximum size.
 	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
@@ -2129,6 +2150,9 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, ecn prot
 }
 
 func (s *connection) sendConnectionClose(e error) ([]byte, error) {
+	if s.isQuicOnStream {
+		return nil, nil
+	}
 	var packet *coalescedPacket
 	var err error
 	var transportErr *qerr.TransportError
