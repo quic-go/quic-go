@@ -305,6 +305,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					Expect(origDestConnID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})))
 					Expect(*retrySrcConnID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
@@ -508,6 +509,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					Expect(origDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(retrySrcConnID).To(BeNil())
@@ -577,6 +579,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					<-acceptConn
 					counter.Add(1)
@@ -633,6 +636,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					conn := NewMockQUICConn(mockCtrl)
 					conn.EXPECT().handlePacket(gomock.Any())
@@ -683,6 +687,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					conn := <-connChan
 					conn.EXPECT().handlePacket(gomock.Any())
@@ -745,6 +750,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					c := NewMockQUICConn(mockCtrl)
 					c.EXPECT().handlePacket(gomock.Any())
@@ -980,6 +986,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					conn := NewMockQUICConn(mockCtrl)
 					conn.EXPECT().handlePacket(gomock.Any())
@@ -1048,6 +1055,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					Expect(conf.MaxIncomingStreams).To(BeEquivalentTo(1234))
 					conn.EXPECT().handlePacket(gomock.Any())
@@ -1119,6 +1127,7 @@ var _ = Describe("Server", func() {
 					_ *logging.ConnectionTracer,
 					_ utils.Logger,
 					_ protocol.Version,
+					_ protocol.ByteCount,
 				) quicConn {
 					conn.EXPECT().handlePacket(gomock.Any())
 					conn.EXPECT().HandshakeComplete().Return(handshakeChan)
@@ -1190,6 +1199,7 @@ var _ = Describe("Server", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				conn.EXPECT().handlePacket(gomock.Any())
 				conn.EXPECT().run()
@@ -1232,6 +1242,7 @@ var _ = Describe("Server", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				ready := make(chan struct{})
 				close(ready)
@@ -1292,6 +1303,7 @@ var _ = Describe("Server", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				conn.EXPECT().handlePacket(p)
 				conn.EXPECT().run()
@@ -1415,6 +1427,7 @@ var _ = Describe("Server", func() {
 				_ *logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.Version,
+				_ protocol.ByteCount,
 			) quicConn {
 				conn := NewMockQUICConn(mockCtrl)
 				var calls []any

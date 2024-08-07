@@ -135,6 +135,7 @@ var _ = Describe("Connection", func() {
 			tr,
 			utils.DefaultLogger,
 			protocol.Version1,
+			protocol.DefaultMaxUDPPayloadSize,
 		).(*connection)
 		streamManager = NewMockStreamManager(mockCtrl)
 		conn.streamsMap = streamManager
@@ -2590,6 +2591,7 @@ var _ = Describe("Client Connection", func() {
 			tr,
 			utils.DefaultLogger,
 			protocol.Version1,
+			protocol.DefaultMaxUDPPayloadSize,
 		).(*connection)
 		packer = NewMockPacker(mockCtrl)
 		conn.packer = packer

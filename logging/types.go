@@ -56,6 +56,8 @@ const (
 	PacketDropUnexpectedVersion
 	// PacketDropDuplicate is used when a duplicate packet is received
 	PacketDropDuplicate
+	// PacketTooLarge is used when packet size > max UDP payload
+	PacketTooLarge
 )
 
 // TimerType is the type of the loss detection timer

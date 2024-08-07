@@ -104,6 +104,11 @@ type Transport struct {
 	// Tracer.Close is called when the transport is closed.
 	Tracer *logging.Tracer
 
+	// MaxUDPPayloadSize configures the max_udp_payload_size transport parameter. This is the the limit on much data this
+	// endpoint is willing to receive.
+	// This is an experimental config option, it might be removed once PMTU can account for the path changing to lower values
+	MaxUDPPayloadSize uint16
+
 	handlerMap packetHandlerManager
 
 	mutex    sync.Mutex
@@ -189,6 +194,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.VerifySourceAddress,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
+		protocol.ByteCount(t.MaxUDPPayloadSize),
 	)
 	t.server = s
 	return s, nil
@@ -218,7 +224,7 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	}
 	tlsConf = tlsConf.Clone()
 	setTLSConfigServerName(tlsConf, addr, host)
-	return dial(ctx, newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
+	return dial(ctx, newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT, protocol.ByteCount(t.MaxUDPPayloadSize))
 }
 
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
@@ -261,6 +267,10 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 			}
 			t.connIDLen = connIDLen
 			t.connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: t.connIDLen}
+		}
+
+		if t.MaxUDPPayloadSize == 0 {
+			t.MaxUDPPayloadSize = protocol.DefaultMaxUDPPayloadSize
 		}
 
 		getMultiplexer().AddConn(t.Conn)
@@ -396,6 +406,15 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	}
 	if !wire.IsPotentialQUICPacket(p.data[0]) && !wire.IsLongHeaderPacket(p.data[0]) {
 		t.handleNonQUICPacket(p)
+		return
+	}
+	if len(p.data) > int(t.MaxUDPPayloadSize) {
+		// Peer didn't respect our max_udp_payload_size transport parameter. Drop the packet
+		t.logger.Debugf("received packet size %s great than the max UDP payload %s", len(p.data), t.MaxUDPPayloadSize)
+		if t.Tracer != nil && t.Tracer.DroppedPacket != nil {
+			t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketTooLarge)
+		}
+		p.buffer.MaybeRelease()
 		return
 	}
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
