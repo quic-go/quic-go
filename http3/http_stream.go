@@ -49,16 +49,20 @@ type stream struct {
 	bytesRemainingInFrame uint64
 
 	datagrams *datagrammer
+
+	maxHeaderBytes uint64
+	trailersFrame  []byte
 }
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer) *stream {
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, maxHeaderBytes uint64) *stream {
 	return &stream{
-		Stream:    str,
-		conn:      conn,
-		buf:       make([]byte, 16),
-		datagrams: datagrams,
+		Stream:         str,
+		conn:           conn,
+		buf:            make([]byte, 16),
+		datagrams:      datagrams,
+		maxHeaderBytes: maxHeaderBytes,
 	}
 }
 
@@ -75,12 +79,30 @@ func (s *stream) Read(b []byte) (int, error) {
 				return 0, err
 			}
 			switch f := frame.(type) {
-			case *headersFrame:
-				// skip HEADERS frames
-				continue
 			case *dataFrame:
+				if s.trailersFrame != nil {
+					return 0, errors.New("DATA frame received after trailers")
+				}
 				s.bytesRemainingInFrame = f.Length
 				break parseLoop
+			case *headersFrame:
+				if s.conn.perspective == protocol.PerspectiveServer {
+					continue
+				}
+				if s.trailersFrame != nil {
+					return 0, errors.New("additional HEADERS frame received after trailers")
+				}
+				if f.Length > s.maxHeaderBytes {
+					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
+				}
+
+				p := make([]byte, f.Length)
+				n, err := io.ReadFull(s.Stream, p)
+				if err != nil {
+					return n, err
+				}
+				s.trailersFrame = p
+				return 0, nil
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -213,7 +235,6 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
-
 	res, err := responseFromHeaders(hfs)
 	if err != nil {
 		s.Stream.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
@@ -227,7 +248,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	if _, ok := res.Header["Content-Length"]; ok && res.ContentLength >= 0 {
 		contentLength = res.ContentLength
 	}
-	respBody := newResponseBody(s.stream, contentLength, s.reqDone)
+	respBody := newResponseBody(s.stream, contentLength, s.reqDone, s.decoder, res)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]

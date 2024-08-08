@@ -112,7 +112,7 @@ func (c *connection) openRequestStream(
 	c.streams[str.StreamID()] = datagrams
 	c.streamMx.Unlock()
 	qstr := newStateTrackingStream(str, c, datagrams)
-	hstr := newStream(qstr, c, datagrams)
+	hstr := newStream(qstr, c, datagrams, maxHeaderBytes)
 	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes), nil
 }
 

@@ -571,7 +571,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, datagrams)
+	hstr := newStream(str, conn, datagrams, 1024*1024)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
@@ -610,6 +610,10 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 			}
 		}()
 		handler.ServeHTTP(r, req)
+		if err := r.writeTrailers(); err != nil {
+			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "unexpected error writing headers")
+			return
+		}
 	}()
 
 	if r.wasStreamHijacked() {

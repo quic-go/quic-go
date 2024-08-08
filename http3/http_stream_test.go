@@ -26,7 +26,7 @@ func getDataFrame(data []byte) []byte {
 var _ = Describe("Stream", func() {
 	Context("reading", func() {
 		var (
-			str           Stream
+			str           *stream
 			qstr          *mockquic.MockStream
 			buf           *bytes.Buffer
 			errorCbCalled bool
@@ -43,7 +43,7 @@ var _ = Describe("Stream", func() {
 				errorCbCalled = true
 				return nil
 			}).AnyTimes()
-			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil)
+			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, 1024*1024)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -104,19 +104,6 @@ var _ = Describe("Stream", func() {
 			Expect(b[:n]).To(Equal([]byte("bar")))
 		})
 
-		It("skips HEADERS frames", func() {
-			b := getDataFrame([]byte("foo"))
-			b = (&headersFrame{Length: 10}).Append(b)
-			b = append(b, make([]byte, 10)...)
-			b = append(b, getDataFrame([]byte("bar"))...)
-			buf.Write(b)
-			r := make([]byte, 6)
-			n, err := io.ReadFull(str, r)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(6))
-			Expect(r).To(Equal([]byte("foobar")))
-		})
-
 		It("errors when it can't parse the frame", func() {
 			buf.Write([]byte("invalid"))
 			_, err := str.Read([]byte{0})
@@ -137,7 +124,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil, nil)
+			str := newStream(qstr, nil, nil, 1024*1024)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -171,7 +158,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, 1024*1024),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),
@@ -211,5 +198,57 @@ var _ = Describe("Request Stream", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(n).To(Equal(6))
 		Expect(b[:n]).To(Equal([]byte("foobar")))
+	})
+
+	It("errors on invalid HEADERS frames", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+
+		buf := bytes.NewBuffer(encodeResponse(200))
+		buf.Write((&dataFrame{Length: 6}).Append(nil))
+		buf.Write([]byte("foobar"))
+		buf.Write((&headersFrame{Length: 100}).Append(nil))
+		buf.Write([]byte("foobar"))
+
+		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+		rsp, err := str.ReadResponse()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(200))
+
+		_, err = io.ReadAll(rsp.Body)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("reads HEADERS frame as trailers", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+		Expect(err).ToNot(HaveOccurred())
+		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+		Expect(str.SendRequestHeader(req)).To(Succeed())
+
+		buf := bytes.NewBuffer(encodeResponse(200))
+		buf.Write((&dataFrame{Length: 6}).Append(nil))
+		buf.Write([]byte("foobar"))
+
+		trailerBuf := &bytes.Buffer{}
+		enc := qpack.NewEncoder(trailerBuf)
+		Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "10"})).To(Succeed())
+		Expect(enc.Close()).To(Succeed())
+		b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
+		b = append(b, trailerBuf.Bytes()...)
+		buf.Write(b)
+
+		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+		rsp, err := str.ReadResponse()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(200))
+
+		body, err := io.ReadAll(rsp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal([]byte("foobar")))
+		Expect(rsp.Trailer).To(Equal(http.Header(map[string][]string{
+			"Grpc-Status": {"10"},
+		})))
 	})
 })
