@@ -42,6 +42,7 @@ var _ = Describe("Stream", func() {
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
 				errorCbCalled = true
 				return nil
+			}).AnyTimes()
 			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, 1024*1024)
 		})
 
