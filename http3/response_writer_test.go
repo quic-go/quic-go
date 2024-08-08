@@ -225,7 +225,6 @@ var _ = Describe("Response Writer", func() {
 		trailers := decodeHeader(strBuf)
 		Expect(trailers).To(HaveKeyWithValue("key", []string{"Value"}))
 		Expect(trailers).To(Not(HaveKeyWithValue("unknownkey", []string{"Value"})))
-
 	})
 
 	It("write non-announced trailer (with trailer prefix)", func() {

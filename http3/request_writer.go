@@ -165,7 +165,6 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 				if vv[0] == "" {
 					continue
 				}
-
 			}
 
 			for _, v := range vv {

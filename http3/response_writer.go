@@ -204,6 +204,9 @@ func (w *responseWriter) writeHeader(status int) error {
 	}
 
 	for k, v := range w.header {
+		if strings.HasPrefix(k, http.TrailerPrefix) {
+			continue
+		}
 		for index := range v {
 			if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]}); err != nil {
 				return err
@@ -248,6 +251,7 @@ func (w *responseWriter) promoteTrailer() {
 		trailerKey := strings.TrimPrefix(k, http2.TrailerPrefix)
 		w.declareTrailer(trailerKey)
 		w.header[http.CanonicalHeaderKey(trailerKey)] = vv
+
 	}
 }
 

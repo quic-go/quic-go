@@ -96,6 +96,7 @@ var _ = Describe("HTTP tests", func() {
 			w.WriteHeader(200)
 			io.WriteString(w, "Hello, World!\n") // don't check the error here. Stream may be reset.
 			defer w.Header().Set("Grpc-Status", "10")
+			defer w.Header().Set(http.TrailerPrefix+"grpc-message", "message here")
 		})
 
 		server = &http3.Server{
@@ -1037,5 +1038,6 @@ var _ = Describe("HTTP tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 		Expect(resp.Trailer.Get("grpc-status")).To(Equal("10"))
+		Expect(resp.Trailer.Get("grpc-message")).To(Equal("message here"))
 	})
 })
