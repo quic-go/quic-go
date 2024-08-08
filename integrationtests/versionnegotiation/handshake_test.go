@@ -24,14 +24,14 @@ type versioner interface {
 type result struct {
 	loggedVersions                 bool
 	receivedVersionNegotiation     bool
-	chosen                         logging.VersionNumber
-	clientVersions, serverVersions []logging.VersionNumber
+	chosen                         logging.Version
+	clientVersions, serverVersions []logging.Version
 }
 
 func newVersionNegotiationTracer() (*result, *logging.ConnectionTracer) {
 	r := &result{}
 	return r, &logging.ConnectionTracer{
-		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+		NegotiatedVersion: func(chosen logging.Version, clientVersions, serverVersions []logging.Version) {
 			if r.loggedVersions {
 				Fail("only expected one call to NegotiatedVersions")
 			}
@@ -40,7 +40,7 @@ func newVersionNegotiationTracer() (*result, *logging.ConnectionTracer) {
 			r.clientVersions = clientVersions
 			r.serverVersions = serverVersions
 		},
-		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, _ []logging.Version) {
 			r.receivedVersionNegotiation = true
 		},
 	}

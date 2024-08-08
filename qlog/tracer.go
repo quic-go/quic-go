@@ -28,10 +28,10 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 				Frames: fs,
 			})
 		},
-		SentVersionNegotiationPacket: func(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
-			ver := make([]versionNumber, len(versions))
+		SentVersionNegotiationPacket: func(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, versions []logging.Version) {
+			ver := make([]version, len(versions))
 			for i, v := range versions {
-				ver[i] = versionNumber(v)
+				ver[i] = version(v)
 			}
 			wr.RecordEvent(time.Now(), &eventVersionNegotiationSent{
 				Header: packetHeaderVersionNegotiation{

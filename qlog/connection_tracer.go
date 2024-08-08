@@ -39,7 +39,7 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 		StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 			t.StartedConnection(local, remote, srcConnID, destConnID)
 		},
-		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+		NegotiatedVersion: func(chosen logging.Version, clientVersions, serverVersions []logging.Version) {
 			t.NegotiatedVersion(chosen, clientVersions, serverVersions)
 		},
 		ClosedConnection:            func(e error) { t.ClosedConnection(e) },
@@ -61,7 +61,7 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 		ReceivedRetry: func(hdr *wire.Header) {
 			t.ReceivedRetry(hdr)
 		},
-		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, versions []logging.Version) {
 			t.ReceivedVersionNegotiationPacket(dest, src, versions)
 		},
 		BufferedPacket: func(pt logging.PacketType, size protocol.ByteCount) {
@@ -147,24 +147,24 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, srcConnID, 
 	})
 }
 
-func (t *connectionTracer) NegotiatedVersion(chosen logging.VersionNumber, client, server []logging.VersionNumber) {
-	var clientVersions, serverVersions []versionNumber
+func (t *connectionTracer) NegotiatedVersion(chosen logging.Version, client, server []logging.Version) {
+	var clientVersions, serverVersions []version
 	if len(client) > 0 {
-		clientVersions = make([]versionNumber, len(client))
+		clientVersions = make([]version, len(client))
 		for i, v := range client {
-			clientVersions[i] = versionNumber(v)
+			clientVersions[i] = version(v)
 		}
 	}
 	if len(server) > 0 {
-		serverVersions = make([]versionNumber, len(server))
+		serverVersions = make([]version, len(server))
 		for i, v := range server {
-			serverVersions[i] = versionNumber(v)
+			serverVersions[i] = version(v)
 		}
 	}
 	t.recordEvent(time.Now(), &eventVersionNegotiated{
 		clientVersions: clientVersions,
 		serverVersions: serverVersions,
-		chosenVersion:  versionNumber(chosen),
+		chosenVersion:  version(chosen),
 	})
 }
 
@@ -313,10 +313,10 @@ func (t *connectionTracer) ReceivedRetry(hdr *wire.Header) {
 	})
 }
 
-func (t *connectionTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
-	ver := make([]versionNumber, len(versions))
+func (t *connectionTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, versions []logging.Version) {
+	ver := make([]version, len(versions))
 	for i, v := range versions {
-		ver[i] = versionNumber(v)
+		ver[i] = version(v)
 	}
 	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
 		Header: packetHeaderVersionNegotiation{

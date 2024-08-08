@@ -2,7 +2,6 @@ package qlog
 
 import (
 	"bytes"
-	"encoding/json"
 	"net"
 	"time"
 
@@ -28,12 +27,12 @@ var _ = Describe("Tracing", func() {
 		tracer.Close()
 
 		m := make(map[string]interface{})
-		Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
-		Expect(m).To(HaveKeyWithValue("qlog_version", "draft-02"))
+		Expect(unmarshal(buf.Bytes(), &m)).To(Succeed())
+		Expect(m).To(HaveKeyWithValue("qlog_version", "0.3"))
 		Expect(m).To(HaveKey("title"))
 		Expect(m).To(HaveKey("trace"))
 		trace := m["trace"].(map[string]interface{})
-		Expect(trace).To(HaveKey(("common_fields")))
+		Expect(trace).To(HaveKey("common_fields"))
 		commonFields := trace["common_fields"].(map[string]interface{})
 		Expect(commonFields).ToNot(HaveKey("ODCID"))
 		Expect(commonFields).ToNot(HaveKey("group_id"))

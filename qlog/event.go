@@ -9,7 +9,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/francoispqt/gojay"
@@ -37,7 +36,7 @@ func (e event) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("data", e.eventDetails)
 }
 
-type versions []versionNumber
+type versions []version
 
 func (v versions) IsNil() bool { return false }
 func (v versions) MarshalJSONArray(enc *gojay.Encoder) {
@@ -72,7 +71,7 @@ func (e eventConnectionStarted) Name() string       { return "connection_started
 func (e eventConnectionStarted) IsNil() bool        { return false }
 
 func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
-	if utils.IsIPv4(e.SrcAddr.IP) {
+	if e.SrcAddr.IP.To4() != nil {
 		enc.StringKey("ip_version", "ipv4")
 	} else {
 		enc.StringKey("ip_version", "ipv6")
@@ -86,8 +85,8 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventVersionNegotiated struct {
-	clientVersions, serverVersions []versionNumber
-	chosenVersion                  versionNumber
+	clientVersions, serverVersions []version
+	chosenVersion                  version
 }
 
 func (e eventVersionNegotiated) Category() category { return categoryTransport }
@@ -221,7 +220,7 @@ func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 
 type eventVersionNegotiationReceived struct {
 	Header            packetHeaderVersionNegotiation
-	SupportedVersions []versionNumber
+	SupportedVersions []version
 }
 
 func (e eventVersionNegotiationReceived) Category() category { return categoryTransport }
@@ -235,7 +234,7 @@ func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 
 type eventVersionNegotiationSent struct {
 	Header            packetHeaderVersionNegotiation
-	SupportedVersions []versionNumber
+	SupportedVersions []version
 }
 
 func (e eventVersionNegotiationSent) Category() category { return categoryTransport }

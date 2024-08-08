@@ -54,7 +54,7 @@ func Fuzz(data []byte) int {
 		extHdr = &wire.ExtendedHeader{Header: *hdr}
 	} else {
 		var err error
-		extHdr, err = hdr.ParseExtended(bytes.NewReader(data), version)
+		extHdr, err = hdr.ParseExtended(data)
 		if err != nil {
 			return 0
 		}

@@ -64,9 +64,9 @@ func (c category) String() string {
 	}
 }
 
-type versionNumber protocol.Version
+type version protocol.Version
 
-func (v versionNumber) String() string {
+func (v version) String() string {
 	return fmt.Sprintf("%x", uint32(v))
 }
 

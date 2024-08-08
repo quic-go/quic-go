@@ -458,44 +458,6 @@ func (c *MockStreamIcloseForShutdownCall) DoAndReturn(f func(error)) *MockStream
 	return c
 }
 
-// getWindowUpdate mocks base method.
-func (m *MockStreamI) getWindowUpdate() protocol.ByteCount {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getWindowUpdate")
-	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
-}
-
-// getWindowUpdate indicates an expected call of getWindowUpdate.
-func (mr *MockStreamIMockRecorder) getWindowUpdate() *MockStreamIgetWindowUpdateCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getWindowUpdate", reflect.TypeOf((*MockStreamI)(nil).getWindowUpdate))
-	return &MockStreamIgetWindowUpdateCall{Call: call}
-}
-
-// MockStreamIgetWindowUpdateCall wrap *gomock.Call
-type MockStreamIgetWindowUpdateCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockStreamIgetWindowUpdateCall) Return(arg0 protocol.ByteCount) *MockStreamIgetWindowUpdateCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockStreamIgetWindowUpdateCall) Do(f func() protocol.ByteCount) *MockStreamIgetWindowUpdateCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamIgetWindowUpdateCall) DoAndReturn(f func() protocol.ByteCount) *MockStreamIgetWindowUpdateCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // handleResetStreamFrame mocks base method.
 func (m *MockStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
 	m.ctrl.T.Helper()

@@ -61,7 +61,7 @@ var _ = Describe("Packet Unpacker", func() {
 		data := append(hdrRaw, make([]byte, 2 /* fill up packet number */ +15 /* need 16 bytes */)...)
 		opener := mocks.NewMockLongHeaderOpener(mockCtrl)
 		cs.EXPECT().GetHandshakeOpener().Return(opener, nil)
-		_, err := unpacker.UnpackLongHeader(hdr, time.Now(), data, protocol.Version1)
+		_, err := unpacker.UnpackLongHeader(hdr, data)
 		Expect(err).To(BeAssignableToTypeOf(&headerParseError{}))
 		var headerErr *headerParseError
 		Expect(errors.As(err, &headerErr)).To(BeTrue())
@@ -98,7 +98,7 @@ var _ = Describe("Packet Unpacker", func() {
 			opener.EXPECT().DecodePacketNumber(protocol.PacketNumber(2), protocol.PacketNumberLen3).Return(protocol.PacketNumber(1234)),
 			opener.EXPECT().Open(gomock.Any(), payload, protocol.PacketNumber(1234), hdrRaw).Return([]byte("decrypted"), nil),
 		)
-		packet, err := unpacker.UnpackLongHeader(hdr, time.Now(), append(hdrRaw, payload...), protocol.Version1)
+		packet, err := unpacker.UnpackLongHeader(hdr, append(hdrRaw, payload...))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionInitial))
 		Expect(packet.data).To(Equal([]byte("decrypted")))
@@ -123,7 +123,7 @@ var _ = Describe("Packet Unpacker", func() {
 			opener.EXPECT().DecodePacketNumber(protocol.PacketNumber(20), protocol.PacketNumberLen2).Return(protocol.PacketNumber(321)),
 			opener.EXPECT().Open(gomock.Any(), payload, protocol.PacketNumber(321), hdrRaw).Return([]byte("decrypted"), nil),
 		)
-		packet, err := unpacker.UnpackLongHeader(hdr, time.Now(), append(hdrRaw, payload...), protocol.Version1)
+		packet, err := unpacker.UnpackLongHeader(hdr, append(hdrRaw, payload...))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.encryptionLevel).To(Equal(protocol.Encryption0RTT))
 		Expect(packet.data).To(Equal([]byte("decrypted")))
@@ -172,7 +172,7 @@ var _ = Describe("Packet Unpacker", func() {
 			opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(321)),
 			opener.EXPECT().Open(gomock.Any(), payload, protocol.PacketNumber(321), hdrRaw).Return([]byte(""), nil),
 		)
-		_, err := unpacker.UnpackLongHeader(hdr, time.Now(), append(hdrRaw, payload...), protocol.Version1)
+		_, err := unpacker.UnpackLongHeader(hdr, append(hdrRaw, payload...))
 		Expect(err).To(MatchError(&qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "empty packet",
@@ -214,7 +214,7 @@ var _ = Describe("Packet Unpacker", func() {
 		opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any())
 		unpackErr := &qerr.TransportError{ErrorCode: qerr.CryptoBufferExceeded}
 		opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, unpackErr)
-		_, err := unpacker.UnpackLongHeader(hdr, time.Now(), append(hdrRaw, payload...), protocol.Version1)
+		_, err := unpacker.UnpackLongHeader(hdr, append(hdrRaw, payload...))
 		Expect(err).To(MatchError(unpackErr))
 	})
 
@@ -235,7 +235,7 @@ var _ = Describe("Packet Unpacker", func() {
 		cs.EXPECT().GetHandshakeOpener().Return(opener, nil)
 		opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any())
 		opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("payload"), nil)
-		_, err := unpacker.UnpackLongHeader(hdr, time.Now(), append(hdrRaw, payload...), protocol.Version1)
+		_, err := unpacker.UnpackLongHeader(hdr, append(hdrRaw, payload...))
 		Expect(err).To(MatchError(wire.ErrInvalidReservedBits))
 	})
 
@@ -268,7 +268,7 @@ var _ = Describe("Packet Unpacker", func() {
 		cs.EXPECT().GetHandshakeOpener().Return(opener, nil)
 		opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any())
 		opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, handshake.ErrDecryptionFailed)
-		_, err := unpacker.UnpackLongHeader(hdr, time.Now(), append(hdrRaw, payload...), protocol.Version1)
+		_, err := unpacker.UnpackLongHeader(hdr, append(hdrRaw, payload...))
 		Expect(err).To(MatchError(handshake.ErrDecryptionFailed))
 	})
 
@@ -322,7 +322,7 @@ var _ = Describe("Packet Unpacker", func() {
 		for i := 1; i <= 100; i++ {
 			data = append(data, uint8(i))
 		}
-		packet, err := unpacker.UnpackLongHeader(hdr, time.Now(), data, protocol.Version1)
+		packet, err := unpacker.UnpackLongHeader(hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x7331)))
 	})

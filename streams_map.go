@@ -62,6 +62,7 @@ type streamsMap struct {
 	maxIncomingUniStreams  uint64
 
 	sender            streamSender
+	queueControlFrame func(wire.Frame)
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController
 
 	mutex               sync.Mutex
@@ -77,14 +78,16 @@ var _ streamManager = &streamsMap{}
 func newStreamsMap(
 	ctx context.Context,
 	sender streamSender,
+	queueControlFrame func(wire.Frame),
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
-) streamManager {
+) *streamsMap {
 	m := &streamsMap{
 		ctx:                    ctx,
 		perspective:            perspective,
+		queueControlFrame:      queueControlFrame,
 		newFlowController:      newFlowController,
 		maxIncomingBidiStreams: maxIncomingBidiStreams,
 		maxIncomingUniStreams:  maxIncomingUniStreams,
@@ -101,7 +104,7 @@ func (m *streamsMap) initMaps() {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective)
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
@@ -110,7 +113,7 @@ func (m *streamsMap) initMaps() {
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingBidiStreams,
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
@@ -118,7 +121,7 @@ func (m *streamsMap) initMaps() {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective)
 			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 	m.incomingUniStreams = newIncomingStreamsMap(
 		protocol.StreamTypeUni,
@@ -127,7 +130,7 @@ func (m *streamsMap) initMaps() {
 			return newReceiveStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingUniStreams,
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 }
 

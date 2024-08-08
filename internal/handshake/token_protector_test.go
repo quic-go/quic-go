@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Describe("Token Protector", func() {
-	var tp tokenProtector
+	var tp *tokenProtector
 
 	BeforeEach(func() {
 		var key TokenProtectorKey

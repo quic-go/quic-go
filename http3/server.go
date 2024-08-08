@@ -198,6 +198,12 @@ type Server struct {
 	// In that case, the stream type will not be set.
 	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
+	// IdleTimeout specifies how long until idle clients connection should be
+	// closed. Idle refers only to the HTTP/3 layer, activity at the QUIC layer
+	// like PING frames are not considered.
+	// If zero or negative, there is no timeout.
+	IdleTimeout time.Duration
+
 	// ConnContext optionally specifies a function that modifies the context used for a new connection c.
 	// The provided ctx has a ServerContextKey value.
 	ConnContext func(ctx context.Context, c quic.Connection) context.Context
@@ -479,8 +485,10 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.EnableDatagrams,
 		protocol.PerspectiveServer,
 		s.Logger,
+		s.IdleTimeout,
 	)
 	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
+
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {

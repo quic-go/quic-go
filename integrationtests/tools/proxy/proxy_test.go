@@ -50,7 +50,7 @@ var _ = Describe("QUIC Proxy", func() {
 		hdr, data, _, err := wire.ParsePacket(b)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
-		extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.Version1)
+		extHdr, err := hdr.ParseExtended(data)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		return extHdr.PacketNumber
 	}

@@ -39,7 +39,7 @@ func NewQLOGConnectionTracer(_ context.Context, p logging.Perspective, connID qu
 			log.Fatalf("failed to create qlog dir %s: %v", qlogDir, err)
 		}
 	}
-	path := fmt.Sprintf("%s/%s.qlog", strings.TrimRight(qlogDir, "/"), connID)
+	path := fmt.Sprintf("%s/%s.sqlog", strings.TrimRight(qlogDir, "/"), connID)
 	f, err := os.Create(path)
 	if err != nil {
 		log.Printf("Failed to create qlog file %s: %s", path, err.Error())

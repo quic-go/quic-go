@@ -42,7 +42,7 @@ var _ = Describe("SentPacketHistory", func() {
 	}
 
 	BeforeEach(func() {
-		hist = newSentPacketHistory()
+		hist = newSentPacketHistory(true)
 	})
 
 	It("saves sent packets", func() {

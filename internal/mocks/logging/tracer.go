@@ -19,7 +19,7 @@ func NewMockTracer(ctrl *gomock.Controller) (*logging.Tracer, *MockTracer) {
 		SentPacket: func(remote net.Addr, hdr *logging.Header, size logging.ByteCount, frames []logging.Frame) {
 			t.SentPacket(remote, hdr, size, frames)
 		},
-		SentVersionNegotiationPacket: func(remote net.Addr, dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
+		SentVersionNegotiationPacket: func(remote net.Addr, dest, src logging.ArbitraryLenConnectionID, versions []logging.Version) {
 			t.SentVersionNegotiationPacket(remote, dest, src, versions)
 		},
 		DroppedPacket: func(remote net.Addr, typ logging.PacketType, size logging.ByteCount, reason logging.PacketDropReason) {

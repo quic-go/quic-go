@@ -42,12 +42,7 @@ var _ = Describe("Stream", func() {
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
 				errorCbCalled = true
 				return nil
-			}).AnyTimes()
-			str = newStream(
-				qstr,
-				newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil),
-				newDatagrammer(nil),
-				1024*1024)
+			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, 1024*1024)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -162,7 +157,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil, 1024*1024),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, 1024*1024),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),

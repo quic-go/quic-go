@@ -148,7 +148,7 @@ var _ = Describe("Server", func() {
 			qconn.EXPECT().LocalAddr().AnyTimes()
 			qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
-			conn = newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil)
+			conn = newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 		})
 
 		It("calls the HTTP handler function", func() {

@@ -20,7 +20,7 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 			t.StartedConnection(local, remote, srcConnID, destConnID)
 		},
-		NegotiatedVersion: func(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+		NegotiatedVersion: func(chosen logging.Version, clientVersions, serverVersions []logging.Version) {
 			t.NegotiatedVersion(chosen, clientVersions, serverVersions)
 		},
 		ClosedConnection: func(e error) {
@@ -41,7 +41,7 @@ func NewMockConnectionTracer(ctrl *gomock.Controller) (*logging.ConnectionTracer
 		SentShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
 			t.SentShortHeaderPacket(hdr, size, ecn, ack, frames)
 		},
-		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
+		ReceivedVersionNegotiationPacket: func(dest, src logging.ArbitraryLenConnectionID, versions []logging.Version) {
 			t.ReceivedVersionNegotiationPacket(dest, src, versions)
 		},
 		ReceivedRetry: func(hdr *logging.Header) {

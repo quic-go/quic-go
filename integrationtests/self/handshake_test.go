@@ -305,6 +305,28 @@ var _ = Describe("Handshake tests", func() {
 		checkContextFromChan(tracerContextChan, false)
 	})
 
+	It("fails the handshake when tls.Config.GetConfigForClient errors", func() {
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		udpConn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+		tr := &quic.Transport{Conn: udpConn}
+		addTracer(tr)
+		defer tr.Close()
+		tlsConf := &tls.Config{}
+		tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			return nil, errors.New("nope")
+		}
+		ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+
+		_, err = quic.DialAddr(context.Background(), ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+		var transportErr *quic.TransportError
+		Expect(errors.As(err, &transportErr)).To(BeTrue())
+		Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+	})
+
 	Context("using different cipher suites", func() {
 		for n, id := range map[string]uint16{
 			"TLS_AES_128_GCM_SHA256":       tls.TLS_AES_128_GCM_SHA256,
@@ -881,10 +903,10 @@ var _ = Describe("Handshake tests", func() {
 			tlsConf,
 			nil,
 		)
-		Expect(err).To(MatchError(&qerr.TransportError{
-			ErrorCode:    qerr.InternalError,
-			ErrorMessage: "tls: invalid NextProtos value",
-		}))
+		var transportErr *quic.TransportError
+		Expect(errors.As(err, &transportErr)).To(BeTrue())
+		Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("tls: invalid NextProtos value"))
 		Consistently(packetChan).ShouldNot(Receive())
 		ln.Close()
 		Eventually(done).Should(BeClosed())
