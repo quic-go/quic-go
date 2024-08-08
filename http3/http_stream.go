@@ -47,27 +47,23 @@ type stream struct {
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
 
 	bytesRemainingInFrame uint64
-	seenTrailerFrame      bool
 
 	datagrams *datagrammer
 
-	onTrailersFrame func(*headersFrame) (int, error)
+	maxHeaderBytes uint64
+	trailersFrame  []byte
 }
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer) *stream {
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, maxHeaderBytes uint64) *stream {
 	return &stream{
-		Stream:          str,
-		conn:            conn,
-		buf:             make([]byte, 16),
-		datagrams:       datagrams,
-		onTrailersFrame: func(*headersFrame) (int, error) { return 0, nil },
+		Stream:         str,
+		conn:           conn,
+		buf:            make([]byte, 16),
+		datagrams:      datagrams,
+		maxHeaderBytes: maxHeaderBytes,
 	}
-}
-
-func (s *stream) setOnTrailersFrame(onTrailersFrame func(*headersFrame) (int, error)) {
-	s.onTrailersFrame = onTrailersFrame
 }
 
 func (s *stream) Read(b []byte) (int, error) {
@@ -84,7 +80,7 @@ func (s *stream) Read(b []byte) (int, error) {
 			}
 			switch f := frame.(type) {
 			case *dataFrame:
-				if s.seenTrailerFrame {
+				if s.trailersFrame != nil {
 					return 0, errors.New("DATA frame received after trailers")
 				}
 				s.bytesRemainingInFrame = f.Length
@@ -93,14 +89,20 @@ func (s *stream) Read(b []byte) (int, error) {
 				if s.conn.perspective == protocol.PerspectiveServer {
 					continue
 				}
-				if s.seenTrailerFrame {
+				if s.trailersFrame != nil {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
-				s.seenTrailerFrame = true
-				if s.onTrailersFrame != nil {
-					return s.onTrailersFrame(f)
+				if f.Length > s.maxHeaderBytes {
+					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
 				}
 
+				p := make([]byte, f.Length)
+				n, err := io.ReadFull(s.Stream, p)
+				if err != nil {
+					return n, err
+				}
+				s.trailersFrame = p
+				return 0, nil
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -240,34 +242,13 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 		return nil, fmt.Errorf("http3: invalid response: %w", err)
 	}
 
-	s.setOnTrailersFrame(func(f *headersFrame) (int, error) {
-		if f.Length > s.maxHeaderBytes {
-			return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
-		}
-		p := make([]byte, f.Length)
-		if n, err := io.ReadFull(s.Stream, p); err != nil {
-			return n, err
-		}
-		trailers, err := s.decoder.DecodeFull(p)
-		if err != nil {
-			return 0, errors.New("HEADERS frame invalid frame")
-		}
-		if res.Trailer == nil {
-			res.Trailer = http.Header{}
-		}
-		for _, trailer := range trailers {
-			res.Trailer.Add(trailer.Name, trailer.Value)
-		}
-		return 0, nil
-	})
-
 	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.
 	contentLength := int64(-1)
 	if _, ok := res.Header["Content-Length"]; ok && res.ContentLength >= 0 {
 		contentLength = res.ContentLength
 	}
-	respBody := newResponseBody(s.stream, contentLength, s.reqDone)
+	respBody := newResponseBody(s.stream, contentLength, s.reqDone, s.decoder, res)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]

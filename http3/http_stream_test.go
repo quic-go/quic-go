@@ -46,7 +46,8 @@ var _ = Describe("Stream", func() {
 			str = newStream(
 				qstr,
 				newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil),
-				newDatagrammer(nil))
+				newDatagrammer(nil),
+				1024*1024)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -127,7 +128,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil, nil)
+			str := newStream(qstr, nil, nil, 1024*1024)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -161,7 +162,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil, 1024*1024),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),
@@ -233,12 +234,14 @@ var _ = Describe("Request Stream", func() {
 		buf := bytes.NewBuffer(encodeResponse(200))
 		buf.Write((&dataFrame{Length: 6}).Append(nil))
 		buf.Write([]byte("foobar"))
-		headerBuf := &bytes.Buffer{}
-		enc := qpack.NewEncoder(headerBuf)
-		Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+
+		trailerBuf := &bytes.Buffer{}
+		enc := qpack.NewEncoder(trailerBuf)
+		Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "10"})).To(Succeed())
 		Expect(enc.Close()).To(Succeed())
-		buf.Write((&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil))
-		headerBuf.WriteTo(buf)
+		b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
+		b = append(b, trailerBuf.Bytes()...)
+		buf.Write(b)
 
 		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 		rsp, err := str.ReadResponse()
@@ -249,7 +252,7 @@ var _ = Describe("Request Stream", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(body).To(Equal([]byte("foobar")))
 		Expect(rsp.Trailer).To(Equal(http.Header(map[string][]string{
-			"Grpc-Status": {"0"},
+			"Grpc-Status": {"10"},
 		})))
 	})
 })
