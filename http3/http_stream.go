@@ -50,19 +50,19 @@ type stream struct {
 
 	datagrams *datagrammer
 
-	maxHeaderBytes uint64
-	trailersFrame  []byte
+	parseTrailer  func(io.Reader, uint64) error
+	parsedTrailer bool
 }
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, maxHeaderBytes uint64) *stream {
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, parseTrailer func(io.Reader, uint64) error) *stream {
 	return &stream{
-		Stream:         str,
-		conn:           conn,
-		buf:            make([]byte, 16),
-		datagrams:      datagrams,
-		maxHeaderBytes: maxHeaderBytes,
+		Stream:       str,
+		conn:         conn,
+		buf:          make([]byte, 16),
+		datagrams:    datagrams,
+		parseTrailer: parseTrailer,
 	}
 }
 
@@ -80,7 +80,7 @@ func (s *stream) Read(b []byte) (int, error) {
 			}
 			switch f := frame.(type) {
 			case *dataFrame:
-				if s.trailersFrame != nil {
+				if s.parsedTrailer {
 					return 0, errors.New("DATA frame received after trailers")
 				}
 				s.bytesRemainingInFrame = f.Length
@@ -89,20 +89,10 @@ func (s *stream) Read(b []byte) (int, error) {
 				if s.conn.perspective == protocol.PerspectiveServer {
 					continue
 				}
-				if s.trailersFrame != nil {
+				if s.parsedTrailer {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
-				if f.Length > s.maxHeaderBytes {
-					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, s.maxHeaderBytes)
-				}
-
-				p := make([]byte, f.Length)
-				n, err := io.ReadFull(s.Stream, p)
-				if err != nil {
-					return n, err
-				}
-				s.trailersFrame = p
-				return 0, nil
+				return 0, s.parseTrailer(s.Stream, f.Length)
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -248,7 +238,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	if _, ok := res.Header["Content-Length"]; ok && res.ContentLength >= 0 {
 		contentLength = res.ContentLength
 	}
-	respBody := newResponseBody(s.stream, contentLength, s.reqDone, s.decoder, res)
+	respBody := newResponseBody(s.stream, contentLength, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
