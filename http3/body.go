@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net/http"
 
-	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 )
 
@@ -99,22 +97,14 @@ type hijackableBody struct {
 	// either when Read() errors, or when Close() is called.
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
-
-	// used for parsing trailers
-	str     *stream
-	decoder *qpack.Decoder
-	res     *http.Response
 }
 
 var _ io.ReadCloser = &hijackableBody{}
 
-func newResponseBody(str *stream, contentLength int64, done chan<- struct{}, decoder *qpack.Decoder, res *http.Response) *hijackableBody {
+func newResponseBody(str *stream, contentLength int64, done chan<- struct{}) *hijackableBody {
 	return &hijackableBody{
 		body:    *newBody(str, contentLength),
-		str:     str,
 		reqDone: done,
-		decoder: decoder,
-		res:     res,
 	}
 }
 
@@ -122,9 +112,6 @@ func (r *hijackableBody) Read(b []byte) (int, error) {
 	n, err := r.body.Read(b)
 	if err != nil {
 		r.requestDone()
-	}
-	if err == io.EOF {
-		r.decodeTrailers()
 	}
 	return n, maybeReplaceError(err)
 }
@@ -137,21 +124,6 @@ func (r *hijackableBody) requestDone() {
 		close(r.reqDone)
 	}
 	r.reqDoneClosed = true
-}
-
-func (r *hijackableBody) decodeTrailers() error {
-	if r.str.trailersFrame == nil {
-		return nil
-	}
-	fields, err := r.decoder.DecodeFull(r.str.trailersFrame)
-	if err != nil {
-		return err
-	}
-	r.res.Trailer = http.Header{}
-	for _, field := range fields {
-		r.res.Trailer.Add(field.Name, field.Value)
-	}
-	return nil
 }
 
 func (r *hijackableBody) Close() error {
