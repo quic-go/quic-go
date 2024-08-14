@@ -97,7 +97,7 @@ func (c *connection) openRequestStream(
 	c.streams[str.StreamID()] = datagrams
 	c.streamMx.Unlock()
 	qstr := newStateTrackingStream(str, c, datagrams)
-	var rsp http.Response
+	var rsp = new(http.Response)
 	hstr := newStream(qstr, c, datagrams, func(r io.Reader, l uint64) error {
 		hdr, err := c.parseTrailer(r, l, maxHeaderBytes)
 		if err != nil {
@@ -107,7 +107,7 @@ func (c *connection) openRequestStream(
 		return nil
 	})
 	// TODO: pass this http.Response to newRequestStream and use it there
-	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes), nil
+	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp), nil
 }
 
 func (c *connection) parseTrailer(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {

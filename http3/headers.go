@@ -178,25 +178,24 @@ func hostnameFromURL(url *url.URL) string {
 	return ""
 }
 
-func responseFromHeaders(headerFields []qpack.HeaderField) (*http.Response, error) {
+func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderField) error {
 	hdr, err := parseHeaders(headerFields, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if hdr.Status == "" {
-		return nil, errors.New("missing status field")
+		return errors.New("missing status field")
 	}
-	rsp := &http.Response{
-		Proto:         "HTTP/3.0",
-		ProtoMajor:    3,
-		Header:        hdr.Headers,
-		ContentLength: hdr.ContentLength,
-	}
+	rsp.Proto = "HTTP/3.0"
+	rsp.ProtoMajor = 3
+	rsp.Header = hdr.Headers
+	rsp.ContentLength = hdr.ContentLength
+
 	status, err := strconv.Atoi(hdr.Status)
 	if err != nil {
-		return nil, fmt.Errorf("invalid status code: %w", err)
+		return fmt.Errorf("invalid status code: %w", err)
 	}
 	rsp.StatusCode = status
 	rsp.Status = hdr.Status + " " + http.StatusText(status)
-	return rsp, nil
+	return nil
 }

@@ -309,7 +309,8 @@ var _ = Describe("Response", func() {
 			{Name: ":status", Value: "200"},
 			{Name: "content-length", Value: "42"},
 		}
-		rsp, err := responseFromHeaders(headers)
+		rsp := &http.Response{}
+		err := updateResponseFromHeaders(rsp, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 		Expect(rsp.ProtoMajor).To(Equal(3))
@@ -327,7 +328,7 @@ var _ = Describe("Response", func() {
 			{Name: "content-length", Value: "42"},
 			{Name: ":status", Value: "200"},
 		}
-		_, err := responseFromHeaders(headers)
+		err := updateResponseFromHeaders(&http.Response{}, headers)
 		Expect(err).To(MatchError("received pseudo header :status after a regular header field"))
 	})
 
@@ -335,7 +336,7 @@ var _ = Describe("Response", func() {
 		headers := []qpack.HeaderField{
 			{Name: "content-length", Value: "42"},
 		}
-		_, err := responseFromHeaders(headers)
+		err := updateResponseFromHeaders(&http.Response{}, headers)
 		Expect(err).To(MatchError("missing status field"))
 	})
 
@@ -344,7 +345,7 @@ var _ = Describe("Response", func() {
 			{Name: ":status", Value: "foobar"},
 			{Name: "content-length", Value: "42"},
 		}
-		_, err := responseFromHeaders(headers)
+		err := updateResponseFromHeaders(&http.Response{}, headers)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("invalid status code"))
 	})
@@ -354,7 +355,7 @@ var _ = Describe("Response", func() {
 			{Name: ":status", Value: "404"},
 			{Name: ":method", Value: "GET"},
 		}
-		_, err := responseFromHeaders(headers)
+		err := updateResponseFromHeaders(&http.Response{}, headers)
 		Expect(err).To(MatchError("invalid response pseudo header: :method"))
 	})
 })

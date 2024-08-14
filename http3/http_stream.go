@@ -92,6 +92,7 @@ func (s *stream) Read(b []byte) (int, error) {
 				if s.parsedTrailer {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
+				s.parsedTrailer = true
 				return 0, s.parseTrailer(s.Stream, f.Length)
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
@@ -146,6 +147,7 @@ type requestStream struct {
 	maxHeaderBytes     uint64
 	reqDone            chan<- struct{}
 	disableCompression bool
+	response           *http.Response
 
 	sentRequest   bool
 	requestedGzip bool
@@ -161,6 +163,7 @@ func newRequestStream(
 	decoder *qpack.Decoder,
 	disableCompression bool,
 	maxHeaderBytes uint64,
+	rsp *http.Response,
 ) *requestStream {
 	return &requestStream{
 		stream:             str,
@@ -169,6 +172,7 @@ func newRequestStream(
 		decoder:            decoder,
 		disableCompression: disableCompression,
 		maxHeaderBytes:     maxHeaderBytes,
+		response:           rsp,
 	}
 }
 
@@ -225,8 +229,8 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
-	res, err := responseFromHeaders(hfs)
-	if err != nil {
+	res := s.response
+	if err := updateResponseFromHeaders(res, hfs); err != nil {
 		s.Stream.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 		s.Stream.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 		return nil, fmt.Errorf("http3: invalid response: %w", err)
