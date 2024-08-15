@@ -116,7 +116,7 @@ var _ = Describe("Cubic Sender", func() {
 		AckNPackets(1)
 		delay := sender.TimeUntilSend(bytesInFlight)
 		Expect(delay).ToNot(BeZero())
-		Expect(delay).ToNot(Equal(utils.InfDuration))
+		Expect(delay.Sub(clock.Now())).To(BeNumerically("<", time.Hour))
 	})
 
 	It("application limited slow start", func() {

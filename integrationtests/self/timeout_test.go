@@ -11,7 +11,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -235,7 +234,7 @@ var _ = Describe("Timeout tests", func() {
 			// We're ignoring here that only the first ack-eliciting packet sent resets the idle timeout.
 			// This is ok since we're dealing with a lossless connection here,
 			// and we'd expect to receive an ACK for additional other ack-eliciting packet sent.
-			Expect(time.Since(utils.MaxTime(lastAckElicitingPacketSentAt, lastPacketRcvdAt))).To(And(
+			Expect(max(time.Since(lastAckElicitingPacketSentAt), time.Since(lastPacketRcvdAt))).To(And(
 				BeNumerically(">=", idleTimeout),
 				BeNumerically("<", idleTimeout*6/5),
 			))

@@ -43,8 +43,8 @@ type topLevel struct {
 
 func (topLevel) IsNil() bool { return false }
 func (l topLevel) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("qlog_format", "NDJSON")
-	enc.StringKey("qlog_version", "draft-02")
+	enc.StringKey("qlog_format", "JSON-SEQ")
+	enc.StringKey("qlog_version", "0.3")
 	enc.StringKeyOmitEmpty("title", "quic-go qlog")
 	enc.ObjectKey("configuration", configuration{Version: quicGoVersion})
 	enc.ObjectKey("trace", l.trace)

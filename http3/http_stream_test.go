@@ -43,11 +43,7 @@ var _ = Describe("Stream", func() {
 				errorCbCalled = true
 				return nil
 			}).AnyTimes()
-			str = newStream(
-				qstr,
-				newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil),
-				newDatagrammer(nil),
-				func(r io.Reader, u uint64) error { return nil })
+			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil })
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -162,7 +158,7 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil), nil, func(r io.Reader, u uint64) error { return nil }),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil }),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),

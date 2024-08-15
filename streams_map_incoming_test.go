@@ -12,7 +12,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/mock/gomock"
 )
 
 type mockGenericStream struct {
@@ -34,10 +33,10 @@ func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) {
 
 var _ = Describe("Streams Map (incoming)", func() {
 	var (
-		m              *incomingStreamsMap[*mockGenericStream]
-		newItemCounter int
-		mockSender     *MockStreamSender
-		maxNumStreams  uint64
+		m                   *incomingStreamsMap[*mockGenericStream]
+		newItemCounter      int
+		maxNumStreams       uint64
+		queuedControlFrames []wire.Frame
 	)
 	streamType := []protocol.StreamType{protocol.StreamTypeUni, protocol.StreamTypeUni}[rand.Intn(2)]
 
@@ -53,8 +52,8 @@ var _ = Describe("Streams Map (incoming)", func() {
 	BeforeEach(func() { maxNumStreams = 5 })
 
 	JustBeforeEach(func() {
+		queuedControlFrames = []wire.Frame{}
 		newItemCounter = 0
-		mockSender = NewMockStreamSender(mockCtrl)
 		m = newIncomingStreamsMap(
 			streamType,
 			func(num protocol.StreamNum) *mockGenericStream {
@@ -62,7 +61,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 				return &mockGenericStream{num: num}
 			},
 			maxNumStreams,
-			mockSender.queueControlFrame,
+			func(f wire.Frame) { queuedControlFrames = append(queuedControlFrames, f) },
 		)
 	})
 
@@ -171,7 +170,6 @@ var _ = Describe("Streams Map (incoming)", func() {
 	})
 
 	It("deletes streams", func() {
-		mockSender.EXPECT().queueControlFrame(gomock.Any())
 		_, err := m.GetOrOpenStream(1)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := m.AcceptStream(context.Background())
@@ -191,7 +189,6 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.num).To(Equal(protocol.StreamNum(1)))
 		// when accepting this stream, it will get deleted, and a MAX_STREAMS frame is queued
-		mockSender.EXPECT().queueControlFrame(gomock.Any())
 		str, err = m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.num).To(Equal(protocol.StreamNum(2)))
@@ -206,7 +203,6 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).To(BeNil())
 		// when accepting this stream, it will get deleted, and a MAX_STREAMS frame is queued
-		mockSender.EXPECT().queueControlFrame(gomock.Any())
 		str, err = m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).ToNot(BeNil())
@@ -227,18 +223,17 @@ var _ = Describe("Streams Map (incoming)", func() {
 			_, err := m.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 		}
-		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-			msf := f.(*wire.MaxStreamsFrame)
-			Expect(msf.Type).To(BeEquivalentTo(streamType))
-			Expect(msf.MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 1)))
-			checkFrameSerialization(f)
-		})
+		Expect(queuedControlFrames).To(BeEmpty())
 		Expect(m.DeleteStream(3)).To(Succeed())
-		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-			Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 2)))
-			checkFrameSerialization(f)
-		})
+		Expect(queuedControlFrames).To(HaveLen(1))
+		msf := queuedControlFrames[0].(*wire.MaxStreamsFrame)
+		Expect(msf.Type).To(BeEquivalentTo(streamType))
+		Expect(msf.MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 1)))
+		checkFrameSerialization(msf)
 		Expect(m.DeleteStream(4)).To(Succeed())
+		Expect(queuedControlFrames).To(HaveLen(2))
+		Expect(queuedControlFrames[1].(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 2)))
+		checkFrameSerialization(queuedControlFrames[1])
 	})
 
 	Context("using high stream limits", func() {
@@ -253,19 +248,19 @@ var _ = Describe("Streams Map (incoming)", func() {
 				_, err := m.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 			}
-			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-				Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.MaxStreamCount - 1))
-				checkFrameSerialization(f)
-			})
+			Expect(queuedControlFrames).To(BeEmpty())
 			Expect(m.DeleteStream(4)).To(Succeed())
-			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-				Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.MaxStreamCount))
-				checkFrameSerialization(f)
-			})
+			Expect(queuedControlFrames).To(HaveLen(1))
+			Expect(queuedControlFrames[0].(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.MaxStreamCount - 1))
+			checkFrameSerialization(queuedControlFrames[0])
 			Expect(m.DeleteStream(3)).To(Succeed())
+			Expect(queuedControlFrames).To(HaveLen(2))
+			Expect(queuedControlFrames[1].(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.MaxStreamCount))
+			checkFrameSerialization(queuedControlFrames[1])
 			// at this point, we can't increase the stream limit any further, so no more MAX_STREAMS frames will be sent
 			Expect(m.DeleteStream(2)).To(Succeed())
 			Expect(m.DeleteStream(1)).To(Succeed())
+			Expect(queuedControlFrames).To(HaveLen(2))
 		})
 	})
 

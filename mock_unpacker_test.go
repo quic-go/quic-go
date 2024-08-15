@@ -42,18 +42,18 @@ func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 }
 
 // UnpackLongHeader mocks base method.
-func (m *MockUnpacker) UnpackLongHeader(arg0 *wire.Header, arg1 time.Time, arg2 []byte, arg3 protocol.Version) (*unpackedPacket, error) {
+func (m *MockUnpacker) UnpackLongHeader(arg0 *wire.Header, arg1 []byte) (*unpackedPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnpackLongHeader", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "UnpackLongHeader", arg0, arg1)
 	ret0, _ := ret[0].(*unpackedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UnpackLongHeader indicates an expected call of UnpackLongHeader.
-func (mr *MockUnpackerMockRecorder) UnpackLongHeader(arg0, arg1, arg2, arg3 any) *MockUnpackerUnpackLongHeaderCall {
+func (mr *MockUnpackerMockRecorder) UnpackLongHeader(arg0, arg1 any) *MockUnpackerUnpackLongHeaderCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackLongHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackLongHeader), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackLongHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackLongHeader), arg0, arg1)
 	return &MockUnpackerUnpackLongHeaderCall{Call: call}
 }
 
@@ -69,13 +69,13 @@ func (c *MockUnpackerUnpackLongHeaderCall) Return(arg0 *unpackedPacket, arg1 err
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockUnpackerUnpackLongHeaderCall) Do(f func(*wire.Header, time.Time, []byte, protocol.Version) (*unpackedPacket, error)) *MockUnpackerUnpackLongHeaderCall {
+func (c *MockUnpackerUnpackLongHeaderCall) Do(f func(*wire.Header, []byte) (*unpackedPacket, error)) *MockUnpackerUnpackLongHeaderCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockUnpackerUnpackLongHeaderCall) DoAndReturn(f func(*wire.Header, time.Time, []byte, protocol.Version) (*unpackedPacket, error)) *MockUnpackerUnpackLongHeaderCall {
+func (c *MockUnpackerUnpackLongHeaderCall) DoAndReturn(f func(*wire.Header, []byte) (*unpackedPacket, error)) *MockUnpackerUnpackLongHeaderCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -128,6 +128,18 @@ var _ = Describe("HTTP tests", func() {
 		client = &http.Client{Transport: rt}
 	})
 
+	It("closes the connection after idle timeout", func() {
+		server.IdleTimeout = 100 * time.Millisecond
+		_, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+		Expect(err).ToNot(HaveOccurred())
+
+		time.Sleep(150 * time.Millisecond)
+
+		_, err = client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+		Expect(err).ToNot(MatchError("idle timeout"))
+		server.IdleTimeout = 0
+	})
+
 	It("downloads a hello", func() {
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 		Expect(err).ToNot(HaveOccurred())

@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/tls"
 	"testing"
-	_ "unsafe"
+	"unsafe"
 
 	"golang.org/x/exp/rand"
 
@@ -20,8 +20,18 @@ type cipherSuiteTLS13 struct {
 	Hash   crypto.Hash
 }
 
-//go:linkname cipherSuiteTLS13ByID crypto/tls.cipherSuiteTLS13ByID
-func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
+//go:linkname cipherSuitesTLS13 crypto/tls.cipherSuitesTLS13
+var cipherSuitesTLS13 []unsafe.Pointer
+
+func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13 {
+	for _, v := range cipherSuitesTLS13 {
+		cs := (*cipherSuiteTLS13)(v)
+		if cs.ID == id {
+			return cs
+		}
+	}
+	return nil
+}
 
 //go:linkname expandLabel crypto/tls.(*cipherSuiteTLS13).expandLabel
 func expandLabel(cs *cipherSuiteTLS13, secret []byte, label string, context []byte, length int) []byte

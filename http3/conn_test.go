@@ -29,6 +29,7 @@ var _ = Describe("Connection", func() {
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{
@@ -62,6 +63,7 @@ var _ = Describe("Connection", func() {
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{}).Append(b)
@@ -104,6 +106,7 @@ var _ = Describe("Connection", func() {
 					false,
 					protocol.PerspectiveClient,
 					nil,
+					0,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 				str := mockquic.NewMockStream(mockCtrl)
@@ -133,6 +136,7 @@ var _ = Describe("Connection", func() {
 					false,
 					protocol.PerspectiveClient,
 					nil,
+					0,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 				str1 := mockquic.NewMockStream(mockCtrl)
@@ -169,6 +173,7 @@ var _ = Describe("Connection", func() {
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x1337))
 			str := mockquic.NewMockStream(mockCtrl)
@@ -195,6 +200,7 @@ var _ = Describe("Connection", func() {
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&dataFrame{}).Append(b)
@@ -226,6 +232,7 @@ var _ = Describe("Connection", func() {
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{}).Append(b)
@@ -264,6 +271,7 @@ var _ = Describe("Connection", func() {
 					false,
 					pers.Opposite(),
 					nil,
+					0,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamTypePushStream))
 				controlStr := mockquic.NewMockStream(mockCtrl)
@@ -294,6 +302,7 @@ var _ = Describe("Connection", func() {
 				true,
 				protocol.PerspectiveClient,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{Datagram: true}).Append(b)
@@ -333,6 +342,7 @@ var _ = Describe("Connection", func() {
 				true,
 				protocol.PerspectiveClient,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{Datagram: true}).Append(b)
