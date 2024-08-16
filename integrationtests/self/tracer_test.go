@@ -8,11 +8,13 @@ import (
 	"io"
 	mrand "math/rand"
 	"net"
+	"sync"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/metrics"
 	"github.com/quic-go/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -21,10 +23,11 @@ import (
 
 var _ = Describe("Tracer tests", func() {
 	addTracers := func(pers protocol.Perspective, conf *quic.Config) *quic.Config {
-		enableQlog := mrand.Int()%3 != 0
-		enableCustomTracer := mrand.Int()%3 != 0
+		enableQlog := mrand.Int()%2 != 0
+		enableMetrcis := mrand.Int()%2 != 0
+		enableCustomTracer := mrand.Int()%2 != 0
 
-		fmt.Fprintf(GinkgoWriter, "%s using qlog: %t, custom: %t\n", pers, enableQlog, enableCustomTracer)
+		fmt.Fprintf(GinkgoWriter, "%s using qlog: %t, metrics: %t, custom: %t\n", pers, enableQlog, enableMetrcis, enableCustomTracer)
 
 		var tracerConstructors []func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer
 		if enableQlog {
@@ -36,6 +39,9 @@ var _ = Describe("Tracer tests", func() {
 				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %s\n", p, connID)
 				return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil)), p, connID)
 			})
+		}
+		if enableMetrcis {
+			tracerConstructors = append(tracerConstructors, metrics.DefaultConnectionTracer)
 		}
 		if enableCustomTracer {
 			tracerConstructors = append(tracerConstructors, func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
@@ -64,36 +70,51 @@ var _ = Describe("Tracer tests", func() {
 			quicServerConf := addTracers(protocol.PerspectiveServer, getQuicConfig(nil))
 
 			serverChan := make(chan *quic.Listener)
+			serverDone := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
+				defer close(serverDone)
 				ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), quicServerConf)
 				Expect(err).ToNot(HaveOccurred())
 				serverChan <- ln
-				conn, err := ln.Accept(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				str, err := conn.OpenUniStream()
-				Expect(err).ToNot(HaveOccurred())
-				_, err = str.Write(PRData)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.Close()).To(Succeed())
+				for {
+					conn, err := ln.Accept(context.Background())
+					if err != nil {
+						return
+					}
+					str, err := conn.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					_, err = str.Write(PRData)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.Close()).To(Succeed())
+				}
 			}()
 
 			ln := <-serverChan
-			defer ln.Close()
 
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				quicClientConf,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.CloseWithError(0, "")
-			str, err := conn.AcceptUniStream(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			data, err := io.ReadAll(str)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(data).To(Equal(PRData))
+			var wg sync.WaitGroup
+			wg.Add(3)
+			for i := 0; i < 3; i++ {
+				go func() {
+					defer wg.Done()
+					conn, err := quic.DialAddr(
+						context.Background(),
+						fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+						getTLSClientConfig(),
+						quicClientConf,
+					)
+					Expect(err).ToNot(HaveOccurred())
+					defer conn.CloseWithError(0, "")
+					str, err := conn.AcceptUniStream(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					data, err := io.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(data).To(Equal(PRData))
+				}()
+			}
+			wg.Wait()
+			ln.Close()
+			Eventually(serverDone).Should(BeClosed())
 		})
 	}
 })

@@ -13,9 +13,15 @@ import (
 )
 
 // DefaultTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
-// File names are <odcid>_<perspective>.qlog.
+// Deprecated: use DefaultConnectionTracer instead.
+func DefaultTracer(ctx context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
+	return DefaultConnectionTracer(ctx, p, connID)
+}
+
+// DefaultConnectionTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
+// File names are <odcid>_<perspective>.sqlog.
 // Returns nil if QLOGDIR is not set.
-func DefaultTracer(_ context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
+func DefaultConnectionTracer(_ context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
 	var label string
 	switch p {
 	case logging.PerspectiveClient:
@@ -27,7 +33,7 @@ func DefaultTracer(_ context.Context, p logging.Perspective, connID logging.Conn
 }
 
 // qlogDirTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
-// File names are <odcid>_<label>.qlog.
+// File names are <odcid>_<label>.sqlog.
 // Returns nil if QLOGDIR is not set.
 func qlogDirTracer(p logging.Perspective, connID logging.ConnectionID, label string) *logging.ConnectionTracer {
 	qlogDir := os.Getenv("QLOGDIR")
@@ -39,7 +45,7 @@ func qlogDirTracer(p logging.Perspective, connID logging.ConnectionID, label str
 			log.Fatalf("failed to create qlog dir %s: %v", qlogDir, err)
 		}
 	}
-	path := fmt.Sprintf("%s/%s_%s.qlog", strings.TrimRight(qlogDir, "/"), connID, label)
+	path := fmt.Sprintf("%s/%s_%s.sqlog", strings.TrimRight(qlogDir, "/"), connID, label)
 	f, err := os.Create(path)
 	if err != nil {
 		log.Printf("Failed to create qlog file %s: %s", path, err.Error())

@@ -87,7 +87,14 @@ func (c *SingleDestinationRoundTripper) Start() Connection {
 func (c *SingleDestinationRoundTripper) init() {
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
 	c.requestWriter = newRequestWriter()
-	c.hconn = newConnection(c.Connection, c.EnableDatagrams, protocol.PerspectiveClient, c.Logger)
+	c.hconn = newConnection(
+		c.Connection.Context(),
+		c.Connection,
+		c.EnableDatagrams,
+		protocol.PerspectiveClient,
+		c.Logger,
+		0,
+	)
 	c.hconn.controlStrHandler = c.readControlStream
 	c.receivedGoawayID = quic.StreamID(-4)
 	c.runningCtx = make(map[quic.StreamID]context.CancelCauseFunc)

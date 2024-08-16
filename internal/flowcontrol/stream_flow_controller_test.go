@@ -12,20 +12,15 @@ import (
 )
 
 var _ = Describe("Stream Flow controller", func() {
-	var (
-		controller         *streamFlowController
-		queuedWindowUpdate bool
-	)
+	var controller *streamFlowController
 
 	BeforeEach(func() {
-		queuedWindowUpdate = false
 		rttStats := &utils.RTTStats{}
 		controller = &streamFlowController{
 			streamID: 10,
 			connection: NewConnectionFlowController(
 				1000,
 				1000,
-				func() {},
 				func(protocol.ByteCount) bool { return true },
 				rttStats,
 				utils.DefaultLogger,
@@ -34,7 +29,6 @@ var _ = Describe("Stream Flow controller", func() {
 		controller.maxReceiveWindowSize = 10000
 		controller.rttStats = rttStats
 		controller.logger = utils.DefaultLogger
-		controller.queueWindowUpdate = func() { queuedWindowUpdate = true }
 	})
 
 	Context("Constructor", func() {
@@ -44,25 +38,18 @@ var _ = Describe("Stream Flow controller", func() {
 		const sendWindow protocol.ByteCount = 4000
 
 		It("sets the send and receive windows", func() {
-			cc := NewConnectionFlowController(0, 0, nil, func(protocol.ByteCount) bool { return true }, nil, utils.DefaultLogger)
-			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, nil, rttStats, utils.DefaultLogger).(*streamFlowController)
+			cc := NewConnectionFlowController(0, 0, func(protocol.ByteCount) bool { return true }, nil, utils.DefaultLogger)
+			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats, utils.DefaultLogger).(*streamFlowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
 			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))
 			Expect(fc.sendWindow).To(Equal(sendWindow))
 		})
 
-		It("queues window updates with the correct stream ID", func() {
-			var queued bool
-			queueWindowUpdate := func(id protocol.StreamID) {
-				Expect(id).To(Equal(protocol.StreamID(5)))
-				queued = true
-			}
-
-			cc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, func() {}, func(protocol.ByteCount) bool { return true }, nil, utils.DefaultLogger)
-			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, queueWindowUpdate, rttStats, utils.DefaultLogger).(*streamFlowController)
-			fc.AddBytesRead(receiveWindow)
-			Expect(queued).To(BeTrue())
+		It("queues window updates", func() {
+			cc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, func(protocol.ByteCount) bool { return true }, nil, utils.DefaultLogger)
+			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats, utils.DefaultLogger).(*streamFlowController)
+			Expect(fc.AddBytesRead(receiveWindow)).To(BeTrue())
 		})
 	})
 
@@ -195,14 +182,10 @@ var _ = Describe("Stream Flow controller", func() {
 			})
 
 			It("queues window updates", func() {
-				controller.AddBytesRead(1)
-				Expect(queuedWindowUpdate).To(BeFalse())
-				controller.AddBytesRead(29)
-				Expect(queuedWindowUpdate).To(BeTrue())
+				Expect(controller.AddBytesRead(1)).To(BeFalse())
+				Expect(controller.AddBytesRead(29)).To(BeTrue())
 				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
-				queuedWindowUpdate = false
-				controller.AddBytesRead(1)
-				Expect(queuedWindowUpdate).To(BeFalse())
+				Expect(controller.AddBytesRead(1)).To(BeFalse())
 			})
 
 			It("tells the connection flow controller when the window was auto-tuned", func() {
@@ -246,10 +229,8 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("doesn't increase the window after a final offset was already received", func() {
 				Expect(controller.UpdateHighestReceived(90, true)).To(Succeed())
-				controller.AddBytesRead(30)
-				Expect(queuedWindowUpdate).To(BeFalse())
-				offset := controller.GetWindowUpdate()
-				Expect(offset).To(BeZero())
+				Expect(controller.AddBytesRead(30)).To(BeFalse())
+				Expect(controller.GetWindowUpdate()).To(BeZero())
 			})
 		})
 	})

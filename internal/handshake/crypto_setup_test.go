@@ -1,17 +1,17 @@
 package handshake
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"net"
-	"reflect"
 	"time"
 
-	mocktls "github.com/quic-go/quic-go/internal/mocks/tls"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/testdata"
@@ -20,13 +20,35 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/mock/gomock"
 )
 
 const (
 	typeClientHello      = 1
 	typeNewSessionTicket = 4
 )
+
+type mockClientSessionCache struct {
+	cache tls.ClientSessionCache
+	puts  chan *tls.ClientSessionState
+}
+
+var _ tls.ClientSessionCache = &mockClientSessionCache{}
+
+func newMockClientSessionCache() *mockClientSessionCache {
+	return &mockClientSessionCache{
+		puts:  make(chan *tls.ClientSessionState, 1),
+		cache: tls.NewLRUClientSessionCache(1),
+	}
+}
+
+func (m *mockClientSessionCache) Get(sessionKey string) (session *tls.ClientSessionState, ok bool) {
+	return m.cache.Get(sessionKey)
+}
+
+func (m *mockClientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
+	m.puts <- cs
+	m.cache.Put(sessionKey, cs)
+}
 
 var _ = Describe("Crypto Setup TLS", func() {
 	generateCert := func() tls.Certificate {
@@ -75,10 +97,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.Version1,
 		)
 
-		Expect(cl.StartHandshake()).To(MatchError(&qerr.TransportError{
-			ErrorCode:    qerr.InternalError,
-			ErrorMessage: "tls: invalid NextProtos value",
-		}))
+		var terr *qerr.TransportError
+		err := cl.StartHandshake(context.Background())
+		Expect(errors.As(err, &terr)).To(BeTrue())
+		Expect(terr.ErrorCode).To(BeEquivalentTo(0x100 + 0x50))
+		Expect(err.Error()).To(ContainSubstring("tls: invalid NextProtos value"))
 	})
 
 	It("errors when a message is received at the wrong encryption level", func() {
@@ -96,86 +119,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.Version1,
 		)
 
-		Expect(server.StartHandshake()).To(Succeed())
+		Expect(server.StartHandshake(context.Background())).To(Succeed())
 
 		fakeCH := append([]byte{typeClientHello, 0, 0, 6}, []byte("foobar")...)
 		// wrong encryption level
 		err := server.HandleMessage(fakeCH, protocol.EncryptionHandshake)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("tls: handshake data received at wrong level"))
-	})
-
-	Context("filling in a net.Conn in tls.ClientHelloInfo", func() {
-		var (
-			local  = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
-			remote = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		)
-
-		It("wraps GetCertificate", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{
-				GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					localAddr = info.Conn.LocalAddr()
-					remoteAddr = info.Conn.RemoteAddr()
-					cert := generateCert()
-					return &cert, nil
-				},
-			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
-			_, err := tlsConf.GetCertificate(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-		})
-
-		It("wraps GetConfigForClient", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{
-				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-					localAddr = info.Conn.LocalAddr()
-					remoteAddr = info.Conn.RemoteAddr()
-					return &tls.Config{}, nil
-				},
-			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-			Expect(conf).ToNot(BeNil())
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-		})
-
-		It("wraps GetConfigForClient, recursively", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{}
-			var innerConf *tls.Config
-			getCert := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) { //nolint:unparam
-				localAddr = info.Conn.LocalAddr()
-				remoteAddr = info.Conn.RemoteAddr()
-				cert := generateCert()
-				return &cert, nil
-			}
-			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-				innerConf = tlsConf.Clone()
-				// set the MaxVersion, so we can check that quic-go doesn't overwrite the user's config
-				innerConf.MaxVersion = tls.VersionTLS12
-				innerConf.GetCertificate = getCert
-				return innerConf, nil
-			}
-			addConnToClientHelloInfo(tlsConf, local, remote)
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf).ToNot(BeNil())
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-			_, err = conf.GetCertificate(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-			// make sure that the tls.Config returned by GetConfigForClient isn't modified
-			Expect(reflect.ValueOf(innerConf.GetCertificate).Pointer() == reflect.ValueOf(getCert).Pointer()).To(BeTrue())
-			Expect(innerConf.MaxVersion).To(BeEquivalentTo(tls.VersionTLS12))
-		})
 	})
 
 	Context("doing the handshake", func() {
@@ -189,8 +139,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 		// The clientEvents and serverEvents contain all events that were not processed by the function,
 		// i.e. not EventWriteInitialData, EventWriteHandshakeData, EventHandshakeComplete.
 		handshake := func(client, server CryptoSetup) (clientEvents []Event, clientErr error, serverEvents []Event, serverErr error) {
-			Expect(client.StartHandshake()).To(Succeed())
-			Expect(server.StartHandshake()).To(Succeed())
+			Expect(client.StartHandshake(context.Background())).To(Succeed())
+			Expect(server.StartHandshake(context.Background())).To(Succeed())
 
 			var clientHandshakeComplete, serverHandshakeComplete bool
 
@@ -418,14 +368,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("uses session resumption", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
@@ -439,12 +382,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 				clientRTTStats := &utils.RTTStats{}
 				serverRTTStats := &utils.RTTStats{}
 				client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
@@ -455,7 +396,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
 				Expect(clientRTTStats.SmoothedRTT()).To(Equal(clientRTT))
@@ -463,14 +404,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("doesn't use session resumption if the server disabled it", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
@@ -480,12 +414,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 
 				serverConf.SessionTicketsDisabled = true
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					&utils.RTTStats{}, &utils.RTTStats{},
@@ -494,20 +427,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Consistently(csc.puts, 25*time.Millisecond).ShouldNot(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 			})
 
 			It("uses 0-RTT", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
@@ -523,12 +449,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
-
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
 				clientRTTStats := &utils.RTTStats{}
 				serverRTTStats := &utils.RTTStats{}
@@ -574,14 +497,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("rejects 0-RTT, when the transport parameters changed", func() {
-				csc := mocktls.NewMockClientSessionCache(mockCtrl)
-				var state *tls.ClientSessionState
-				receivedSessionTicket := make(chan struct{})
-				csc.EXPECT().Get(gomock.Any())
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-					state = css
-					close(receivedSessionTicket)
-				})
+				csc := newMockClientSessionCache()
 				clientConf.ClientSessionCache = csc
 				const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
 				clientOrigRTTStats := newRTTStatsWithRTT(clientRTT)
@@ -595,12 +511,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+				Eventually(csc.puts).Should(Receive())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
-
-				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
 				clientRTTStats := &utils.RTTStats{}
 				client, clientEvents, clientErr, server, _, serverErr := handshakeWithTLSConf(

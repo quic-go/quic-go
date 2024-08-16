@@ -36,7 +36,7 @@ var _ = Describe("qlog dir tests", Serial, func() {
 		qlogDir := path.Join(tempTestDirPath, "qlogs")
 		err := os.Setenv("QLOGDIR", qlogDir)
 		Expect(err).ToNot(HaveOccurred())
-		tracer := DefaultTracer(ctx, perspective, connID)
+		tracer := DefaultConnectionTracer(ctx, perspective, connID)
 		Expect(tracer).ToNot(BeNil())
 		tracer.Close()
 		_, err = os.Stat(qlogDir)
@@ -50,7 +50,7 @@ var _ = Describe("qlog dir tests", Serial, func() {
 	It("environment variable is not set", func() {
 		err := os.Setenv("QLOGDIR", "")
 		Expect(err).ToNot(HaveOccurred())
-		tracer := DefaultTracer(ctx, perspective, connID)
+		tracer := DefaultConnectionTracer(ctx, perspective, connID)
 		Expect(tracer).To(BeNil())
 	})
 })

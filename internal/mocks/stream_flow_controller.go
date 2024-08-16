@@ -76,9 +76,11 @@ func (c *MockStreamFlowControllerAbandonCall) DoAndReturn(f func()) *MockStreamF
 }
 
 // AddBytesRead mocks base method.
-func (m *MockStreamFlowController) AddBytesRead(arg0 protocol.ByteCount) {
+func (m *MockStreamFlowController) AddBytesRead(arg0 protocol.ByteCount) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddBytesRead", arg0)
+	ret := m.ctrl.Call(m, "AddBytesRead", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // AddBytesRead indicates an expected call of AddBytesRead.
@@ -94,19 +96,19 @@ type MockStreamFlowControllerAddBytesReadCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFlowControllerAddBytesReadCall) Return() *MockStreamFlowControllerAddBytesReadCall {
-	c.Call = c.Call.Return()
+func (c *MockStreamFlowControllerAddBytesReadCall) Return(arg0 bool) *MockStreamFlowControllerAddBytesReadCall {
+	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamFlowControllerAddBytesReadCall) Do(f func(protocol.ByteCount)) *MockStreamFlowControllerAddBytesReadCall {
+func (c *MockStreamFlowControllerAddBytesReadCall) Do(f func(protocol.ByteCount) bool) *MockStreamFlowControllerAddBytesReadCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamFlowControllerAddBytesReadCall) DoAndReturn(f func(protocol.ByteCount)) *MockStreamFlowControllerAddBytesReadCall {
+func (c *MockStreamFlowControllerAddBytesReadCall) DoAndReturn(f func(protocol.ByteCount) bool) *MockStreamFlowControllerAddBytesReadCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -186,12 +188,11 @@ func (c *MockStreamFlowControllerGetWindowUpdateCall) DoAndReturn(f func() proto
 }
 
 // IsNewlyBlocked mocks base method.
-func (m *MockStreamFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
+func (m *MockStreamFlowController) IsNewlyBlocked() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsNewlyBlocked")
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(protocol.ByteCount)
-	return ret0, ret1
+	return ret0
 }
 
 // IsNewlyBlocked indicates an expected call of IsNewlyBlocked.
@@ -207,19 +208,19 @@ type MockStreamFlowControllerIsNewlyBlockedCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFlowControllerIsNewlyBlockedCall) Return(arg0 bool, arg1 protocol.ByteCount) *MockStreamFlowControllerIsNewlyBlockedCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockStreamFlowControllerIsNewlyBlockedCall) Return(arg0 bool) *MockStreamFlowControllerIsNewlyBlockedCall {
+	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamFlowControllerIsNewlyBlockedCall) Do(f func() (bool, protocol.ByteCount)) *MockStreamFlowControllerIsNewlyBlockedCall {
+func (c *MockStreamFlowControllerIsNewlyBlockedCall) Do(f func() bool) *MockStreamFlowControllerIsNewlyBlockedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamFlowControllerIsNewlyBlockedCall) DoAndReturn(f func() (bool, protocol.ByteCount)) *MockStreamFlowControllerIsNewlyBlockedCall {
+func (c *MockStreamFlowControllerIsNewlyBlockedCall) DoAndReturn(f func() bool) *MockStreamFlowControllerIsNewlyBlockedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

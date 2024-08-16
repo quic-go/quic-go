@@ -24,10 +24,12 @@ var _ = Describe("Connection", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("no datagrams"))
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{
@@ -56,10 +58,12 @@ var _ = Describe("Connection", func() {
 		It("rejects duplicate control streams", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{}).Append(b)
@@ -97,10 +101,12 @@ var _ = Describe("Connection", func() {
 			It(fmt.Sprintf("ignores the QPACK %s streams", name), func() {
 				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn := newConnection(
+					context.Background(),
 					qconn,
 					false,
 					protocol.PerspectiveClient,
 					nil,
+					0,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 				str := mockquic.NewMockStream(mockCtrl)
@@ -125,10 +131,12 @@ var _ = Describe("Connection", func() {
 			It(fmt.Sprintf("rejects duplicate QPACK %s streams", name), func() {
 				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn := newConnection(
+					context.Background(),
 					qconn,
 					false,
 					protocol.PerspectiveClient,
 					nil,
+					0,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 				str1 := mockquic.NewMockStream(mockCtrl)
@@ -160,10 +168,12 @@ var _ = Describe("Connection", func() {
 		It("resets streams other than the control stream and the QPACK streams", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			buf := bytes.NewBuffer(quicvarint.Append(nil, 0x1337))
 			str := mockquic.NewMockStream(mockCtrl)
@@ -185,10 +195,12 @@ var _ = Describe("Connection", func() {
 		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&dataFrame{}).Append(b)
@@ -215,10 +227,12 @@ var _ = Describe("Connection", func() {
 		It("errors when parsing the frame on the control stream fails", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				false,
 				protocol.PerspectiveServer,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{}).Append(b)
@@ -252,10 +266,12 @@ var _ = Describe("Connection", func() {
 			It(fmt.Sprintf("errors when parsing the %s opens a push stream", pers), func() {
 				qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn := newConnection(
+					context.Background(),
 					qconn,
 					false,
 					pers.Opposite(),
 					nil,
+					0,
 				)
 				buf := bytes.NewBuffer(quicvarint.Append(nil, streamTypePushStream))
 				controlStr := mockquic.NewMockStream(mockCtrl)
@@ -281,10 +297,12 @@ var _ = Describe("Connection", func() {
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
 			qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn := newConnection(
+				context.Background(),
 				qconn,
 				true,
 				protocol.PerspectiveClient,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{Datagram: true}).Append(b)
@@ -319,10 +337,12 @@ var _ = Describe("Connection", func() {
 		BeforeEach(func() {
 			qconn = mockquic.NewMockEarlyConnection(mockCtrl)
 			conn = newConnection(
+				context.Background(),
 				qconn,
 				true,
 				protocol.PerspectiveClient,
 				nil,
+				0,
 			)
 			b := quicvarint.Append(nil, streamTypeControlStream)
 			b = (&settingsFrame{Datagram: true}).Append(b)

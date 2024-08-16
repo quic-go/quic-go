@@ -123,42 +123,10 @@ func NewCryptoSetupServer(
 	)
 	cs.allow0RTT = allow0RTT
 
-	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
-	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
-
-	cs.tlsConf = quicConf.TLSConfig
-	cs.conn = tls.QUICServer(quicConf)
-
+	tlsConf = qtls.SetupConfigForServer(tlsConf, localAddr, remoteAddr, cs.getDataForSessionTicket, cs.handleSessionTicket)
+	cs.tlsConf = tlsConf
+	cs.conn = tls.QUICServer(&tls.QUICConfig{TLSConfig: tlsConf})
 	return cs
-}
-
-// The tls.Config contains two callbacks that pass in a tls.ClientHelloInfo.
-// Since crypto/tls doesn't do it, we need to make sure to set the Conn field with a fake net.Conn
-// that allows the caller to get the local and the remote address.
-func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) {
-	if conf.GetConfigForClient != nil {
-		gcfc := conf.GetConfigForClient
-		conf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			c, err := gcfc(info)
-			if c != nil {
-				c = c.Clone()
-				// This won't be necessary anymore once https://github.com/golang/go/issues/63722 is accepted.
-				c.MinVersion = tls.VersionTLS13
-				// We're returning a tls.Config here, so we need to apply this recursively.
-				addConnToClientHelloInfo(c, localAddr, remoteAddr)
-			}
-			return c, err
-		}
-	}
-	if conf.GetCertificate != nil {
-		gc := conf.GetCertificate
-		conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			return gc(info)
-		}
-	}
 }
 
 func newCryptoSetup(
@@ -203,8 +171,8 @@ func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
 	return h.aead.SetLargestAcked(pn)
 }
 
-func (h *cryptoSetup) StartHandshake() error {
-	err := h.conn.Start(context.WithValue(context.Background(), QUICVersionContextKey, h.version))
+func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
+	err := h.conn.Start(context.WithValue(ctx, QUICVersionContextKey, h.version))
 	if err != nil {
 		return wrapError(err)
 	}
@@ -285,7 +253,10 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 		h.handshakeComplete()
 		return false, nil
 	default:
-		return false, fmt.Errorf("unexpected event: %d", ev.Kind)
+		// Unknown events should be ignored.
+		// crypto/tls will ensure that this is safe to do.
+		// See the discussion following https://github.com/golang/go/issues/68124#issuecomment-2187042510 for details.
+		return false, nil
 	}
 }
 
@@ -376,9 +347,7 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 // Due to limitations in crypto/tls, it's only possible to generate a single session ticket per connection.
 // It is only valid for the server.
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
-	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{
-		EarlyData: h.allow0RTT,
-	}); err != nil {
+	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{EarlyData: h.allow0RTT}); err != nil {
 		// Session tickets might be disabled by tls.Config.SessionTicketsDisabled.
 		// We can't check h.tlsConfig here, since the actual config might have been obtained from
 		// the GetConfigForClient callback.
@@ -655,8 +624,7 @@ func (h *cryptoSetup) ConnectionState() ConnectionState {
 }
 
 func wrapError(err error) error {
-	// alert 80 is an internal error
-	if alertErr := tls.AlertError(0); errors.As(err, &alertErr) && alertErr != 80 {
+	if alertErr := tls.AlertError(0); errors.As(err, &alertErr) {
 		return qerr.NewLocalCryptoError(uint8(alertErr), err)
 	}
 	return &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: err.Error()}

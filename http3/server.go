@@ -95,6 +95,10 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 			if config == nil {
 				return nil, nil
 			}
+			// Workaround for https://github.com/golang/go/issues/60506.
+			// This initializes the session tickets _before_ cloning the config.
+			_, _ = config.DecryptTicket(nil, tls.ConnectionState{})
+
 			config = config.Clone()
 			config.NextProtos = []string{proto}
 			return config, nil
@@ -195,9 +199,14 @@ type Server struct {
 	// In that case, the stream type will not be set.
 	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
-	// ConnContext optionally specifies a function that modifies
-	// the context used for a new connection c. The provided ctx
-	// has a ServerContextKey value.
+	// IdleTimeout specifies how long until idle clients connection should be
+	// closed. Idle refers only to the HTTP/3 layer, activity at the QUIC layer
+	// like PING frames are not considered.
+	// If zero or negative, there is no timeout.
+	IdleTimeout time.Duration
+
+	// ConnContext optionally specifies a function that modifies the context used for a new connection c.
+	// The provided ctx has a ServerContextKey value.
 	ConnContext func(ctx context.Context, c quic.Connection) context.Context
 
 	Logger *slog.Logger
@@ -215,7 +224,13 @@ type Server struct {
 //
 // If s.Addr is blank, ":https" is used.
 func (s *Server) ListenAndServe() error {
-	return s.serveConn(s.TLSConfig, nil)
+	ln, err := s.setupListenerForConn(s.TLSConfig, nil)
+	if err != nil {
+		return err
+	}
+	defer s.removeListener(&ln)
+
+	return s.serveListener(ln)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -230,17 +245,26 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	}
 	// We currently only use the cert-related stuff from tls.Config,
 	// so we don't need to make a full copy.
-	config := &tls.Config{
-		Certificates: certs,
+	ln, err := s.setupListenerForConn(&tls.Config{Certificates: certs}, nil)
+	if err != nil {
+		return err
 	}
-	return s.serveConn(config, nil)
+	defer s.removeListener(&ln)
+
+	return s.serveListener(ln)
 }
 
 // Serve an existing UDP connection.
 // It is possible to reuse the same connection for outgoing connections.
 // Closing the server does not close the connection.
 func (s *Server) Serve(conn net.PacketConn) error {
-	return s.serveConn(s.TLSConfig, conn)
+	ln, err := s.setupListenerForConn(s.TLSConfig, conn)
+	if err != nil {
+		return err
+	}
+	defer s.removeListener(&ln)
+
+	return s.serveListener(ln)
 }
 
 // ServeQUICConn serves a single QUIC connection.
@@ -260,10 +284,18 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 // Closing the server does close the listener.
 // ServeListener always returns a non-nil error. After Shutdown or Close, the returned error is http.ErrServerClosed.
 func (s *Server) ServeListener(ln QUICEarlyListener) error {
+	s.mutex.Lock()
 	if err := s.addListener(&ln); err != nil {
+		s.mutex.Unlock()
 		return err
 	}
+	s.mutex.Unlock()
 	defer s.removeListener(&ln)
+
+	return s.serveListener(ln)
+}
+
+func (s *Server) serveListener(ln QUICEarlyListener) error {
 	for {
 		conn, err := ln.Accept(context.Background())
 		if err == quic.ErrServerClosed {
@@ -284,16 +316,9 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 
 var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
 
-func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
+func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (QUICEarlyListener, error) {
 	if tlsConf == nil {
-		return errServerWithoutTLSConfig
-	}
-
-	s.mutex.RLock()
-	closed := s.closed
-	s.mutex.RUnlock()
-	if closed {
-		return http.ErrServerClosed
+		return nil, errServerWithoutTLSConfig
 	}
 
 	baseConf := ConfigureTLSConfig(tlsConf)
@@ -305,6 +330,13 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	}
 	if s.EnableDatagrams {
 		quicConf.EnableDatagrams = true
+	}
+
+	s.mutex.RLock()
+	closed := s.closed
+	s.mutex.RUnlock()
+	if closed {
+		return nil, http.ErrServerClosed
 	}
 
 	var ln QUICEarlyListener
@@ -319,9 +351,12 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 		ln, err = quicListen(conn, baseConf, quicConf)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return s.ServeListener(ln)
+	if err := s.addListener(&ln); err != nil {
+		return nil, err
+	}
+	return ln, nil
 }
 
 func extractPort(addr string) (int, error) {
@@ -397,9 +432,6 @@ func (s *Server) generateAltSvcHeader() {
 // call trackListener via Serve and can track+defer untrack the same pointer to
 // local variable there. We never need to compare a Listener from another caller.
 func (s *Server) addListener(l *QUICEarlyListener) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.closed {
 		return http.ErrServerClosed
 	}
@@ -474,13 +506,27 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.mutex.Unlock()
 	}()
 
+	ctx := conn.Context()
+	ctx = context.WithValue(ctx, ServerContextKey, s)
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
+	ctx = context.WithValue(ctx, RemoteAddrContextKey, conn.RemoteAddr())
+	if s.ConnContext != nil {
+		ctx = s.ConnContext(ctx, conn)
+		if ctx == nil {
+			panic("http3: ConnContext returned nil")
+		}
+	}
+
 	hconn := newConnection(
+		ctx,
 		conn,
 		s.EnableDatagrams,
 		protocol.PerspectiveServer,
 		s.Logger,
+		s.IdleTimeout,
 	)
 	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
+
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
@@ -585,17 +631,10 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 		s.Logger.Debug("handling request", "method", req.Method, "host", req.Host, "uri", req.RequestURI)
 	}
 
-	ctx := str.Context()
-	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
-	ctx = context.WithValue(ctx, RemoteAddrContextKey, conn.RemoteAddr())
-	if s.ConnContext != nil {
-		ctx = s.ConnContext(ctx, conn.Connection)
-		if ctx == nil {
-			panic("http3: ConnContext returned nil")
-		}
-	}
+	ctx, cancel := context.WithCancel(conn.Context())
 	req = req.WithContext(ctx)
+	context.AfterFunc(str.Context(), cancel)
+
 	r := newResponseWriter(hstr, conn, req.Method == http.MethodHead, s.Logger)
 	handler := s.Handler
 	if handler == nil {

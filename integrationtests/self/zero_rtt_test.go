@@ -813,86 +813,93 @@ var _ = Describe("0-RTT", func() {
 		Entry("doesn't reject 0-RTT when the server's transport connection flow control limit increased", func(c *quic.Config, limit uint64) { c.InitialConnectionReceiveWindow = limit }),
 	)
 
-	for _, l := range []int{0, 15} {
-		connIDLen := l
+	test0RTTRejection := func(tlsConf *tls.Config) {
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
+		// now dial new connection with different transport parameters
+		counter, tracer := newPacketTracer()
+		ln, err := quic.ListenAddrEarly(
+			"localhost:0",
+			tlsConf,
+			getQuicConfig(&quic.Config{
+				MaxIncomingUniStreams: 1,
+				Tracer:                newTracer(tracer),
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+		proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+		defer proxy.Close()
 
-		It(fmt.Sprintf("correctly deals with 0-RTT rejections, for %d byte connection IDs", connIDLen), func() {
-			tlsConf := getTLSConfig()
-			clientConf := getTLSClientConfig()
-			dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
-			// now dial new connection with different transport parameters
-			counter, tracer := newPacketTracer()
-			ln, err := quic.ListenAddrEarly(
-				"localhost:0",
-				tlsConf,
-				getQuicConfig(&quic.Config{
-					MaxIncomingUniStreams: 1,
-					Tracer:                newTracer(tracer),
-				}),
-			)
+		conn, err := quic.DialAddrEarly(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+			clientConf,
+			getQuicConfig(&quic.Config{}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		// The client remembers that it was allowed to open 2 uni-directional streams.
+		firstStr, err := conn.OpenUniStream()
+		Expect(err).ToNot(HaveOccurred())
+		written := make(chan struct{}, 2)
+		go func() {
+			defer GinkgoRecover()
+			defer func() { written <- struct{}{} }()
+			_, err := firstStr.Write([]byte("first flight"))
 			Expect(err).ToNot(HaveOccurred())
-			defer ln.Close()
-			proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
-			defer proxy.Close()
+		}()
+		secondStr, err := conn.OpenUniStream()
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			defer GinkgoRecover()
+			defer func() { written <- struct{}{} }()
+			_, err := secondStr.Write([]byte("first flight"))
+			Expect(err).ToNot(HaveOccurred())
+		}()
 
-			conn, err := quic.DialAddrEarly(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				clientConf,
-				getQuicConfig(nil),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			// The client remembers that it was allowed to open 2 uni-directional streams.
-			firstStr, err := conn.OpenUniStream()
-			Expect(err).ToNot(HaveOccurred())
-			written := make(chan struct{}, 2)
-			go func() {
-				defer GinkgoRecover()
-				defer func() { written <- struct{}{} }()
-				_, err := firstStr.Write([]byte("first flight"))
-				Expect(err).ToNot(HaveOccurred())
-			}()
-			secondStr, err := conn.OpenUniStream()
-			Expect(err).ToNot(HaveOccurred())
-			go func() {
-				defer GinkgoRecover()
-				defer func() { written <- struct{}{} }()
-				_, err := secondStr.Write([]byte("first flight"))
-				Expect(err).ToNot(HaveOccurred())
-			}()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_, err = conn.AcceptStream(ctx)
+		Expect(err).To(MatchError(quic.Err0RTTRejected))
+		Eventually(written).Should(Receive())
+		Eventually(written).Should(Receive())
+		_, err = firstStr.Write([]byte("foobar"))
+		Expect(err).To(MatchError(quic.Err0RTTRejected))
+		_, err = conn.OpenUniStream()
+		Expect(err).To(MatchError(quic.Err0RTTRejected))
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			_, err = conn.AcceptStream(ctx)
-			Expect(err).To(MatchError(quic.Err0RTTRejected))
-			Eventually(written).Should(Receive())
-			Eventually(written).Should(Receive())
-			_, err = firstStr.Write([]byte("foobar"))
-			Expect(err).To(MatchError(quic.Err0RTTRejected))
-			_, err = conn.OpenUniStream()
-			Expect(err).To(MatchError(quic.Err0RTTRejected))
+		_, err = conn.AcceptStream(ctx)
+		Expect(err).To(Equal(quic.Err0RTTRejected))
 
-			_, err = conn.AcceptStream(ctx)
-			Expect(err).To(Equal(quic.Err0RTTRejected))
+		newConn, err := conn.NextConnection(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		str, err := newConn.OpenUniStream()
+		Expect(err).ToNot(HaveOccurred())
+		_, err = newConn.OpenUniStream()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("too many open streams"))
+		_, err = str.Write([]byte("second flight"))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str.Close()).To(Succeed())
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
 
-			newConn := conn.NextConnection()
-			str, err := newConn.OpenUniStream()
-			Expect(err).ToNot(HaveOccurred())
-			_, err = newConn.OpenUniStream()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("too many open streams"))
-			_, err = str.Write([]byte("second flight"))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.Close()).To(Succeed())
-			Expect(conn.CloseWithError(0, "")).To(Succeed())
-
-			// The client should send 0-RTT packets, but the server doesn't process them.
-			num0RTT := num0RTTPackets.Load()
-			fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
-			Expect(num0RTT).ToNot(BeZero())
-			Expect(get0RTTPackets(counter.getRcvdLongHeaderPackets())).To(BeEmpty())
-		})
+		// The client should send 0-RTT packets, but the server doesn't process them.
+		num0RTT := num0RTTPackets.Load()
+		fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+		Expect(num0RTT).ToNot(BeZero())
+		Expect(get0RTTPackets(counter.getRcvdLongHeaderPackets())).To(BeEmpty())
 	}
+
+	It("correctly deals with 0-RTT rejections", func() {
+		test0RTTRejection(getTLSConfig())
+	})
+
+	It("correctly deals with 0-RTT rejections, when the server uses GetConfigForClient", func() {
+		tlsConf := getTLSConfig()
+		test0RTTRejection(&tls.Config{
+			GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) { return tlsConf, nil },
+		})
+	})
 
 	It("queues 0-RTT packets, if the Initial is delayed", func() {
 		tlsConf := getTLSConfig()

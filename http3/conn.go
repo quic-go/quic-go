@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -37,6 +38,7 @@ type Connection interface {
 
 type connection struct {
 	quic.Connection
+	ctx context.Context
 
 	perspective protocol.Perspective
 	logger      *slog.Logger
@@ -51,25 +53,39 @@ type connection struct {
 	settings         *Settings
 	receivedSettings chan struct{}
 
+	idleTimeout time.Duration
+	idleTimer   *time.Timer
+
 	controlStrHandler func(quic.ReceiveStream, quic.Connection)
 }
 
 func newConnection(
+	ctx context.Context,
 	quicConn quic.Connection,
 	enableDatagrams bool,
 	perspective protocol.Perspective,
 	logger *slog.Logger,
+	idleTimeout time.Duration,
 ) *connection {
 	c := &connection{
+		ctx:              ctx,
 		Connection:       quicConn,
 		perspective:      perspective,
 		logger:           logger,
+		idleTimeout:      idleTimeout,
 		enableDatagrams:  enableDatagrams,
 		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
 		receivedSettings: make(chan struct{}),
 		streams:          make(map[protocol.StreamID]*datagrammer),
 	}
+	if idleTimeout > 0 {
+		c.idleTimer = time.AfterFunc(idleTimeout, c.onIdleTimer)
+	}
 	return c
+}
+
+func (c *connection) onIdleTimer() {
+	c.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "idle timeout")
 }
 
 func (c *connection) clearStream(id quic.StreamID) {
@@ -77,6 +93,9 @@ func (c *connection) clearStream(id quic.StreamID) {
 	defer c.streamMx.Unlock()
 
 	delete(c.streams, id)
+	if c.idleTimeout > 0 && len(c.streams) == 0 {
+		c.idleTimer.Reset(c.idleTimeout)
+	}
 }
 
 func (c *connection) openRequestStream(
@@ -109,10 +128,22 @@ func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagramme
 		strID := str.StreamID()
 		c.streamMx.Lock()
 		c.streams[strID] = datagrams
+		if c.idleTimeout > 0 {
+			if len(c.streams) == 1 {
+				c.idleTimer.Stop()
+			}
+		}
 		c.streamMx.Unlock()
 		str = newStateTrackingStream(str, c, datagrams)
 	}
 	return str, datagrams, nil
+}
+
+func (c *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
+	if c.idleTimer != nil {
+		c.idleTimer.Stop()
+	}
+	return c.Connection.CloseWithError(code, msg)
 }
 
 func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)) {
@@ -269,3 +300,5 @@ func (c *connection) ReceivedSettings() <-chan struct{} { return c.receivedSetti
 // Settings returns the settings received on this connection.
 // It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *connection) Settings() *Settings { return c.settings }
+
+func (c *connection) Context() context.Context { return c.ctx }
