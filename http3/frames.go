@@ -197,7 +197,7 @@ func (f *settingsFrame) Append(b []byte) []byte {
 }
 
 type goawayFrame struct {
-	ID quic.StreamID
+	StreamID quic.StreamID
 }
 
 // max length of an encoded quic varint: quicvarint.Len(quicvarint.Max)
@@ -223,13 +223,12 @@ func parseGoawayFrame(r io.Reader, l uint64) (*goawayFrame, error) {
 	if b.Len() > 0 {
 		return nil, fmt.Errorf("GOAWAY frame: stream ID %d and its encoded length don't match", id)
 	}
-	frame.ID = quic.StreamID(id)
+	frame.StreamID = quic.StreamID(id)
 	return frame, nil
 }
 
 func (f *goawayFrame) Append(b []byte) []byte {
 	b = quicvarint.Append(b, 0x7)
-	b = quicvarint.Append(b, uint64(quicvarint.Len(uint64(f.ID))))
-	b = quicvarint.Append(b, uint64(f.ID))
-	return b
+	b = quicvarint.Append(b, uint64(quicvarint.Len(uint64(f.StreamID))))
+	return quicvarint.Append(b, uint64(f.StreamID))
 }

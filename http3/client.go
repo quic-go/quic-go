@@ -129,18 +129,18 @@ func (c *SingleDestinationRoundTripper) readControlStream(str quic.ReceiveStream
 		switch v := frame.(type) {
 		case *goawayFrame:
 			// invalid stream ID, rfc 9114
-			if v.ID < 0 || v.ID%4 != 0 || (lastID >= 0 && v.ID > lastID) {
+			if v.StreamID < 0 || v.StreamID%4 != 0 || (lastID >= 0 && v.StreamID > lastID) {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
-			lastID = v.ID
+			lastID = v.StreamID
 			c.idLock.Lock()
-			c.receivedGoawayID = v.ID
+			c.receivedGoawayID = v.StreamID
 			c.idLock.Unlock()
 
 			c.ctxLock.Lock()
 			for id, cancel := range c.runningCtx {
-				if id >= v.ID {
+				if id >= v.StreamID {
 					cancel(errGoaway)
 				}
 			}

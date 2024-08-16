@@ -492,7 +492,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			mutex.Lock()
 			closed = true
 			b = (&goawayFrame{
-				ID: lastID + 4,
+				StreamID: lastID + 4,
 			}).Append(b[:0])
 			str.Write(b)
 			mutex.Unlock()
