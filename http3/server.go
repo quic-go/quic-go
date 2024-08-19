@@ -258,7 +258,9 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 // It is possible to reuse the same connection for outgoing connections.
 // Closing the server does not close the connection.
 func (s *Server) Serve(conn net.PacketConn) error {
+	s.mutex.Lock()
 	ln, err := s.setupListenerForConn(s.TLSConfig, conn)
+	s.mutex.Unlock()
 	if err != nil {
 		return err
 	}
