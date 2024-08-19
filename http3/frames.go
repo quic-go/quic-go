@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -204,23 +205,14 @@ type goawayFrame struct {
 const maxQuicVarintLen = 8
 
 func parseGoawayFrame(r io.Reader, l uint64) (*goawayFrame, error) {
-	if l > maxQuicVarintLen {
-		return nil, fmt.Errorf("unexpected size for GOAWAY frame: %d", l)
-	}
-	buf := make([]byte, l)
-	if _, err := io.ReadFull(r, buf); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, io.EOF
-		}
-		return nil, err
-	}
+	lr := &io.LimitedReader{R: r, N: int64(l)}
+	br := bufio.NewReaderSize(lr, maxQuicVarintLen)
 	frame := &goawayFrame{}
-	b := bytes.NewReader(buf)
-	id, err := quicvarint.Read(b)
+	id, err := quicvarint.Read(br)
 	if err != nil {
 		return nil, err
 	}
-	if b.Len() > 0 {
+	if lr.N > 0 || br.Buffered() > 0 {
 		return nil, fmt.Errorf("GOAWAY frame: stream ID %d and its encoded length don't match", id)
 	}
 	frame.StreamID = quic.StreamID(id)
