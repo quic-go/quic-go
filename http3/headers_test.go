@@ -358,4 +358,21 @@ var _ = Describe("Response", func() {
 		err := updateResponseFromHeaders(&http.Response{}, headers)
 		Expect(err).To(MatchError("invalid response pseudo header: :method"))
 	})
+
+	It("parses trailers", func() {
+		headers := []qpack.HeaderField{
+			{Name: "content-length", Value: "42"},
+		}
+		hdr, err := parseTrailers(headers)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.Get("Content-Length")).To(Equal("42"))
+	})
+
+	It("parses trailers", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "200"},
+		}
+		_, err := parseTrailers(headers)
+		Expect(err).To(MatchError("http3: received pseudo header in trailer: :status"))
+	})
 })

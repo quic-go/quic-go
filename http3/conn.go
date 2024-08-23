@@ -139,11 +139,7 @@ func (c *connection) parseTrailer(r io.Reader, l, maxHeaderBytes uint64) (http.H
 	if err != nil {
 		return nil, err
 	}
-	h := http.Header{}
-	for _, field := range fields {
-		h.Add(field.Name, field.Value)
-	}
-	return h, nil
+	return parseTrailers(fields)
 }
 
 func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagrammer, error) {
