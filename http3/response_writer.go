@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/quic-go/qpack"
+	"golang.org/x/net/http/httpguts"
+	"golang.org/x/net/http2"
 )
 
 // The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented the http.Response.Body.
@@ -28,10 +30,11 @@ const maxSmallResponseSize = 4096
 type responseWriter struct {
 	str *stream
 
-	conn   Connection
-	header http.Header
-	buf    []byte
-	status int // status code passed to WriteHeader
+	conn     Connection
+	header   http.Header
+	trailers []string
+	buf      []byte
+	status   int // status code passed to WriteHeader
 
 	// for responses smaller than maxSmallResponseSize, we buffer calls to Write,
 	// and automatically add the Content-Length header
@@ -230,6 +233,79 @@ func (w *responseWriter) Flush() {
 			w.logger.Debug("could not flush to stream", "error", err)
 		}
 	}
+}
+
+func (w *responseWriter) promoteTrailer() {
+	for k, vv := range w.header {
+		if k == "Trailer" {
+			for _, val := range vv {
+				w.declareTrailer(val)
+			}
+		}
+		if !strings.HasPrefix(k, http2.TrailerPrefix) {
+			continue
+		}
+		trailerKey := strings.TrimPrefix(k, http2.TrailerPrefix)
+		w.declareTrailer(trailerKey)
+		w.header[http.CanonicalHeaderKey(trailerKey)] = vv
+	}
+}
+
+func strSliceContains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *responseWriter) declareTrailer(k string) {
+	k = http.CanonicalHeaderKey(k)
+	if !httpguts.ValidTrailerHeader(k) {
+		// Forbidden by RFC 7230, section 4.1.2.
+		w.logger.Debug("ignoring invalid trailer", slog.String("header", k))
+		return
+	}
+	if !strSliceContains(w.trailers, k) {
+		w.trailers = append(w.trailers, k)
+	}
+}
+
+func (w *responseWriter) hasNonEmptyTrailers() bool {
+	for _, trailer := range w.trailers {
+		if _, ok := w.header[trailer]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *responseWriter) writeTrailers() error {
+	w.promoteTrailer()
+
+	if !w.hasNonEmptyTrailers() {
+		return nil
+	}
+
+	w.Flush()
+	var b bytes.Buffer
+	enc := qpack.NewEncoder(&b)
+	for _, trailer := range w.trailers {
+		if v, ok := w.header[trailer]; ok {
+			for _, s := range v {
+				if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(trailer), Value: s}); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	buf := make([]byte, 0, frameHeaderLen+b.Len())
+	buf = (&headersFrame{Length: uint64(b.Len())}).Append(buf)
+	buf = append(buf, b.Bytes()...)
+	_, err := w.str.writeUnframed(buf)
+	return err
 }
 
 func (w *responseWriter) HTTPStream() Stream {

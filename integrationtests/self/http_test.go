@@ -89,6 +89,13 @@ var _ = Describe("HTTP tests", func() {
 			w.Header().Set("X-RemoteAddr", r.RemoteAddr)
 			w.WriteHeader(http.StatusOK)
 		})
+		mux.HandleFunc("/trailers", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Set("Trailer", "Grpc-Status")
+			w.WriteHeader(200)
+			io.WriteString(w, "Hello, World!\n") // don't check the error here. Stream may be reset.
+			defer w.Header().Set("Grpc-Status", "10")
+		})
 
 		server = &http3.Server{
 			Handler:    mux,
@@ -1019,5 +1026,15 @@ var _ = Describe("HTTP tests", func() {
 			Expect(string(data)).To(Equal("true"))
 			Expect(num0RTTPackets.Load()).To(BeNumerically(">", 0))
 		})
+	})
+
+	It("sends and receives trailers", func() {
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/trailers", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal("Hello, World!\n"))
+		Expect(resp.Trailer.Get("grpc-status")).To(Equal("10"))
 	})
 })

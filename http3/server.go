@@ -610,6 +610,10 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 			}
 		}()
 		handler.ServeHTTP(r, req)
+		if err := r.writeTrailers(); err != nil {
+			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "unexpected error writing headers")
+			return
+		}
 	}()
 
 	if r.wasStreamHijacked() {
