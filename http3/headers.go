@@ -102,7 +102,7 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 }
 
 func parseTrailers(headers []qpack.HeaderField) (http.Header, error) {
-	h := http.Header{}
+	h := make(http.Header, len(headers))
 	for _, field := range headers {
 		if field.IsPseudo() {
 			return nil, fmt.Errorf("http3: received pseudo header in trailer: %s", field.Name)
