@@ -116,7 +116,7 @@ func (c *connection) openRequestStream(
 	qstr := newStateTrackingStream(str, c, datagrams)
 	rsp := &http.Response{}
 	hstr := newStream(qstr, c, datagrams, func(r io.Reader, l uint64) error {
-		hdr, err := c.parseTrailer(r, l, maxHeaderBytes)
+		hdr, err := c.decodeTrailers(r, l, maxHeaderBytes)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func (c *connection) openRequestStream(
 	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp), nil
 }
 
-func (c *connection) parseTrailer(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {
+func (c *connection) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {
 	if l > maxHeaderBytes {
 		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, maxHeaderBytes)
 	}
