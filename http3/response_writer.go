@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -251,15 +252,6 @@ func (w *responseWriter) promoteTrailer() {
 	}
 }
 
-func strSliceContains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
 func (w *responseWriter) declareTrailer(k string) {
 	k = http.CanonicalHeaderKey(k)
 	if !httpguts.ValidTrailerHeader(k) {
@@ -267,7 +259,8 @@ func (w *responseWriter) declareTrailer(k string) {
 		w.logger.Debug("ignoring invalid trailer", slog.String("header", k))
 		return
 	}
-	if !strSliceContains(w.trailers, k) {
+
+	if !slices.Contains(w.trailers, k) {
 		w.trailers = append(w.trailers, k)
 	}
 }
