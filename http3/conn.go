@@ -123,7 +123,6 @@ func (c *connection) openRequestStream(
 		rsp.Trailer = hdr
 		return nil
 	})
-	// TODO: pass this http.Response to newRequestStream and use it there
 	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp), nil
 }
 
