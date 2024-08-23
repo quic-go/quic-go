@@ -178,6 +178,10 @@ func hostnameFromURL(url *url.URL) string {
 	return ""
 }
 
+// updateResponseFromHeaders sets up http.Response as an HTTP/3 response,
+// using the decoded qpack header filed.
+// It is only called for the HTTP header (and not the HTTP trailer).
+// It takes an http.Response as an argument to allow the caller to set the trailer later on.
 func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderField) error {
 	hdr, err := parseHeaders(headerFields, false)
 	if err != nil {
