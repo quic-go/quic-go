@@ -92,9 +92,12 @@ var _ = Describe("HTTP tests", func() {
 		mux.HandleFunc("/trailers", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
 			w.Header().Set("Trailer", "Grpc-Status")
+			w.Header().Add("trailer", "Grpc-Message")
 			w.WriteHeader(200)
 			io.WriteString(w, "Hello, World!\n") // don't check the error here. Stream may be reset.
 			defer w.Header().Set("Grpc-Status", "10")
+			defer w.Header().Set("Grpc-Message", "Message here")
+			defer w.Header().Set(http.TrailerPrefix+"Grpc-Details", "details")
 		})
 
 		server = &http3.Server{
@@ -1035,6 +1038,11 @@ var _ = Describe("HTTP tests", func() {
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(body)).To(Equal("Hello, World!\n"))
+		Expect(resp.Header).To(Not(HaveKey("Grpc-Status")))
+		Expect(resp.Header).To(Not(HaveKey("Grpc-Message")))
+		Expect(resp.Header).To(Not(HaveKey("Grpc-Details")))
+		Expect(resp.Header).To(Not(HaveKey("Trailer:Grpc-Details")))
 		Expect(resp.Trailer.Get("grpc-status")).To(Equal("10"))
+		Expect(resp.Trailer.Get("grpc-message")).To(Equal("Message here"))
 	})
 })

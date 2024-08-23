@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/quic-go/qpack"
 	"golang.org/x/net/http/httpguts"
-	"golang.org/x/net/http2"
 )
 
 // The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented the http.Response.Body.
@@ -33,7 +31,7 @@ type responseWriter struct {
 
 	conn     Connection
 	header   http.Header
-	trailers []string
+	trailers map[string]struct{}
 	buf      []byte
 	status   int // status code passed to WriteHeader
 
@@ -204,7 +202,18 @@ func (w *responseWriter) writeHeader(status int) error {
 		return err
 	}
 
+	// Handle trailer fields
+	if vals, ok := w.header["Trailer"]; ok {
+		for _, val := range vals {
+			w.declareTrailer(val)
+		}
+	}
+	w.promoteTrailers()
+
 	for k, v := range w.header {
+		if _, excluded := w.trailers[k]; excluded {
+			continue
+		}
 		for index := range v {
 			if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]}); err != nil {
 				return err
@@ -236,37 +245,39 @@ func (w *responseWriter) Flush() {
 	}
 }
 
-func (w *responseWriter) promoteTrailer() {
-	for k, vv := range w.header {
-		if k == "Trailer" {
-			for _, val := range vv {
-				w.declareTrailer(val)
-			}
+// promoteTrailers will discover trailers prefixed with "Trailer:" and "promote" them to the list of
+// trailers. This should be called before writing headers (to avoid writing trailers in the headers list)
+// and before sending trailers, to ensure that we capture all of the trailers added between sending the
+// header and finally sending the trailers.
+func (w *responseWriter) promoteTrailers() {
+	for k := range w.header {
+		// Handle "Trailer:" prefix
+		if strings.HasPrefix(k, http.TrailerPrefix) {
+			w.declareTrailer(k)
 		}
-		if !strings.HasPrefix(k, http2.TrailerPrefix) {
-			continue
-		}
-		trailerKey := strings.TrimPrefix(k, http2.TrailerPrefix)
-		w.declareTrailer(trailerKey)
-		w.header[http.CanonicalHeaderKey(trailerKey)] = vv
 	}
 }
 
+// declareTrailer will add the given to the trailer list, while also validating that the trailer has a
+// valid name.
 func (w *responseWriter) declareTrailer(k string) {
-	k = http.CanonicalHeaderKey(k)
 	if !httpguts.ValidTrailerHeader(k) {
 		// Forbidden by RFC 7230, section 4.1.2.
 		w.logger.Debug("ignoring invalid trailer", slog.String("header", k))
 		return
 	}
-
-	if !slices.Contains(w.trailers, k) {
-		w.trailers = append(w.trailers, k)
+	if w.trailers == nil {
+		w.trailers = make(map[string]struct{})
 	}
+	w.trailers[k] = struct{}{}
 }
 
+// hasNonEmptyTrailers checks to see if there are any trailers with an actual
+// value set. This is possible by adding trailers to the "Trailers" header
+// but never actually setting those names as trailers in the course of handling
+// the request. In that case, this check may save us some allocations.
 func (w *responseWriter) hasNonEmptyTrailers() bool {
-	for _, trailer := range w.trailers {
+	for trailer := range w.trailers {
 		if _, ok := w.header[trailer]; ok {
 			return true
 		}
@@ -274,20 +285,22 @@ func (w *responseWriter) hasNonEmptyTrailers() bool {
 	return false
 }
 
+// writeTrailers will write trailers to the stream if there are any.
 func (w *responseWriter) writeTrailers() error {
-	w.promoteTrailer()
+	w.Flush()
+	w.promoteTrailers() // promote headers added via "Trailer:" convention as trailers
 
 	if !w.hasNonEmptyTrailers() {
 		return nil
 	}
 
-	w.Flush()
 	var b bytes.Buffer
 	enc := qpack.NewEncoder(&b)
-	for _, trailer := range w.trailers {
-		if v, ok := w.header[trailer]; ok {
-			for _, s := range v {
-				if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(trailer), Value: s}); err != nil {
+	for trailer := range w.trailers {
+		if vals, ok := w.header[trailer]; ok {
+			name := strings.TrimPrefix(trailer, http.TrailerPrefix)
+			for _, val := range vals {
+				if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(name), Value: val}); err != nil {
 					return err
 				}
 			}
