@@ -3,8 +3,10 @@ package http3
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -112,8 +114,36 @@ func (c *connection) openRequestStream(
 	c.streams[str.StreamID()] = datagrams
 	c.streamMx.Unlock()
 	qstr := newStateTrackingStream(str, c, datagrams)
-	hstr := newStream(qstr, c, datagrams)
-	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes), nil
+	rsp := &http.Response{}
+	hstr := newStream(qstr, c, datagrams, func(r io.Reader, l uint64) error {
+		hdr, err := c.parseTrailer(r, l, maxHeaderBytes)
+		if err != nil {
+			return err
+		}
+		rsp.Trailer = hdr
+		return nil
+	})
+	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp), nil
+}
+
+func (c *connection) parseTrailer(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {
+	if l > maxHeaderBytes {
+		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, maxHeaderBytes)
+	}
+
+	b := make([]byte, l)
+	if _, err := io.ReadFull(r, b); err != nil {
+		return nil, err
+	}
+	fields, err := c.decoder.DecodeFull(b)
+	if err != nil {
+		return nil, err
+	}
+	h := http.Header{}
+	for _, field := range fields {
+		h.Add(field.Name, field.Value)
+	}
+	return h, nil
 }
 
 func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagrammer, error) {

@@ -26,7 +26,7 @@ func getDataFrame(data []byte) []byte {
 var _ = Describe("Stream", func() {
 	Context("reading", func() {
 		var (
-			str           Stream
+			str           *stream
 			qstr          *mockquic.MockStream
 			buf           *bytes.Buffer
 			errorCbCalled bool
@@ -43,7 +43,7 @@ var _ = Describe("Stream", func() {
 				errorCbCalled = true
 				return nil
 			}).AnyTimes()
-			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil)
+			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil })
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -104,19 +104,6 @@ var _ = Describe("Stream", func() {
 			Expect(b[:n]).To(Equal([]byte("bar")))
 		})
 
-		It("skips HEADERS frames", func() {
-			b := getDataFrame([]byte("foo"))
-			b = (&headersFrame{Length: 10}).Append(b)
-			b = append(b, make([]byte, 10)...)
-			b = append(b, getDataFrame([]byte("bar"))...)
-			buf.Write(b)
-			r := make([]byte, 6)
-			n, err := io.ReadFull(str, r)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(6))
-			Expect(r).To(Equal([]byte("foobar")))
-		})
-
 		It("errors when it can't parse the frame", func() {
 			buf.Write([]byte("invalid"))
 			_, err := str.Read([]byte{0})
@@ -137,7 +124,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil, nil)
+			str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
@@ -171,12 +158,13 @@ var _ = Describe("Request Stream", func() {
 		requestWriter := newRequestWriter()
 		conn := mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil),
+			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil }),
 			requestWriter,
 			make(chan struct{}),
 			qpack.NewDecoder(func(qpack.HeaderField) {}),
 			true,
 			math.MaxUint64,
+			&http.Response{},
 		)
 	})
 

@@ -27,7 +27,7 @@ func encodeResponse(status int) []byte {
 	buf := &bytes.Buffer{}
 	rstr := mockquic.NewMockStream(mockCtrl)
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
 	if status == http.StatusEarlyHints {
 		rw.header.Add("Link", "</style.css>; rel=preload; as=style")
 		rw.header.Add("Link", "</script.js>; rel=preload; as=script")
@@ -580,6 +580,139 @@ var _ = Describe("Client", func() {
 			Expect(rsp.Request).ToNot(BeNil())
 		})
 
+		It("returns a response with trailers", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			trailerBuf := &bytes.Buffer{}
+			enc := qpack.NewEncoder(trailerBuf)
+			Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+			Expect(enc.Close()).To(Succeed())
+			b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
+			b = append(b, trailerBuf.Bytes()...)
+			rspBuf.Write(b)
+
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.Request).ToNot(BeNil())
+		})
+
+		It("errors on invalid HEADERS frames", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			b := (&headersFrame{Length: 10}).Append(nil)
+			b = append(b, []byte("invalid headers frame")...)
+			rspBuf.Write(b)
+
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("returns an error if trailers are sent twice", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			{
+				trailerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(trailerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
+				b = append(b, trailerBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			{
+				trailerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(trailerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "1"})).To(Succeed())
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
+				b = append(b, trailerBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).To(MatchError(errors.New("additional HEADERS frame received after trailers")))
+			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.Request).ToNot(BeNil())
+		})
+
+		It("returns an error if body frame is received after trailers", func() {
+			rspBuf := bytes.NewBuffer(encodeResponse(418))
+
+			{
+				trailerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(trailerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
+				b = append(b, trailerBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			{
+				dataBuf := &bytes.Buffer{}
+				dataBuf.Write([]byte("test body please ignore"))
+				b := (&dataFrame{Length: uint64(dataBuf.Len())}).Append(nil)
+				b = append(b, dataBuf.Bytes()...)
+				rspBuf.Write(b)
+			}
+
+			gomock.InOrder(
+				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := cl.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = io.ReadAll(rsp.Body)
+			Expect(err).To(MatchError(errors.New("DATA frame received after trailers")))
+			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.Request).ToNot(BeNil())
+		})
+
 		Context("requests containing a Body", func() {
 			var strBuf *bytes.Buffer
 
@@ -842,7 +975,7 @@ var _ = Describe("Client", func() {
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, nil)
+				rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
 				rw.Header().Set("Content-Encoding", "gzip")
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
@@ -869,7 +1002,7 @@ var _ = Describe("Client", func() {
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().StreamID().AnyTimes()
 				rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-				rw := newResponseWriter(newStream(rstr, nil, nil), nil, false, nil)
+				rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
