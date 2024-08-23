@@ -114,7 +114,7 @@ func (c *connection) openRequestStream(
 	c.streams[str.StreamID()] = datagrams
 	c.streamMx.Unlock()
 	qstr := newStateTrackingStream(str, c, datagrams)
-	var rsp = new(http.Response)
+	rsp := &http.Response{}
 	hstr := newStream(qstr, c, datagrams, func(r io.Reader, l uint64) error {
 		hdr, err := c.parseTrailer(r, l, maxHeaderBytes)
 		if err != nil {
