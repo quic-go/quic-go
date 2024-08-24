@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -13,8 +14,7 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 type nopWriteCloserImpl struct{ io.Writer }
@@ -25,903 +25,884 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 	return &nopWriteCloserImpl{Writer: w}
 }
 
-type entry struct {
-	Time  time.Time
-	Name  string
-	Event map[string]interface{}
-}
-
-func exportAndParse(buf *bytes.Buffer) []entry {
-	m := make(map[string]interface{})
-	line, err := buf.ReadBytes('\n')
-	Expect(err).ToNot(HaveOccurred())
-	Expect(unmarshal(line, &m)).To(Succeed())
-	Expect(m).To(HaveKey("trace"))
-	var entries []entry
-	trace := m["trace"].(map[string]interface{})
-	Expect(trace).To(HaveKey("common_fields"))
-	commonFields := trace["common_fields"].(map[string]interface{})
-	Expect(commonFields).To(HaveKey("reference_time"))
-	referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-	Expect(trace).ToNot(HaveKey("events"))
-
-	for buf.Len() > 0 {
-		line, err := buf.ReadBytes('\n')
-		Expect(err).ToNot(HaveOccurred())
-		ev := make(map[string]interface{})
-		Expect(unmarshal(line, &ev)).To(Succeed())
-		Expect(ev).To(HaveLen(3))
-		Expect(ev).To(HaveKey("time"))
-		Expect(ev).To(HaveKey("name"))
-		Expect(ev).To(HaveKey("data"))
-		entries = append(entries, entry{
-			Time:  referenceTime.Add(time.Duration(ev["time"].(float64)*1e6) * time.Nanosecond),
-			Name:  ev["name"].(string),
-			Event: ev["data"].(map[string]interface{}),
-		})
-	}
-	return entries
-}
-
-func exportAndParseSingle(buf *bytes.Buffer) entry {
-	entries := exportAndParse(buf)
-	Expect(entries).To(HaveLen(1))
-	return entries[0]
-}
-
-var _ = Describe("Tracing", func() {
-	var (
-		tracer *logging.ConnectionTracer
-		buf    *bytes.Buffer
+func newConnectionTracer() (*logging.ConnectionTracer, *bytes.Buffer) {
+	buf := &bytes.Buffer{}
+	tracer := NewConnectionTracer(
+		nopWriteCloser(buf),
+		logging.PerspectiveServer,
+		protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 	)
+	return tracer, buf
+}
 
-	BeforeEach(func() {
-		buf = &bytes.Buffer{}
-		tracer = NewConnectionTracer(
-			nopWriteCloser(buf),
-			logging.PerspectiveServer,
-			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-		)
+func TestConnectionTraceMetadata(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.Close()
+
+	m := make(map[string]interface{})
+	require.NoError(t, unmarshal(buf.Bytes(), &m))
+	require.Equal(t, "0.3", m["qlog_version"])
+	require.Contains(t, m, "title")
+	require.Contains(t, m, "trace")
+	trace := m["trace"].(map[string]interface{})
+	require.Contains(t, trace, "common_fields")
+	commonFields := trace["common_fields"].(map[string]interface{})
+	require.Equal(t, "deadbeef", commonFields["ODCID"])
+	require.Equal(t, "deadbeef", commonFields["group_id"])
+	require.Contains(t, commonFields, "reference_time")
+	referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
+	require.WithinDuration(t, time.Now(), referenceTime, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "relative", commonFields["time_format"])
+	require.Contains(t, trace, "vantage_point")
+	vantagePoint := trace["vantage_point"].(map[string]interface{})
+	require.Equal(t, "server", vantagePoint["type"])
+}
+
+func TestConnectionStarts(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.StartedConnection(
+		&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
+		&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		protocol.ParseConnectionID([]byte{5, 6, 7, 8}),
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_started", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "ipv4", ev["ip_version"])
+	require.Equal(t, "192.168.13.37", ev["src_ip"])
+	require.Equal(t, float64(42), ev["src_port"])
+	require.Equal(t, "192.168.12.34", ev["dst_ip"])
+	require.Equal(t, float64(24), ev["dst_port"])
+	require.Equal(t, "01020304", ev["src_cid"])
+	require.Equal(t, "05060708", ev["dst_cid"])
+}
+
+func TestVersionNegotiation(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.NegotiatedVersion(0x1337, nil, nil)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:version_information", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 1)
+	require.Equal(t, "1337", ev["chosen_version"])
+}
+
+func TestVersionNegotiationWithPriorAttempts(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.NegotiatedVersion(0x1337, []logging.Version{1, 2, 3}, []logging.Version{4, 5, 6})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:version_information", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 3)
+	require.Equal(t, "1337", ev["chosen_version"])
+	require.Equal(t, []interface{}{"1", "2", "3"}, ev["client_versions"])
+	require.Equal(t, []interface{}{"4", "5", "6"}, ev["server_versions"])
+}
+
+func TestIdleTimeouts(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ClosedConnection(&quic.IdleTimeoutError{})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_closed", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 2)
+	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "idle_timeout", ev["trigger"])
+}
+
+func TestHandshakeTimeouts(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ClosedConnection(&quic.HandshakeTimeoutError{})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_closed", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 2)
+	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "handshake_timeout", ev["trigger"])
+}
+
+func TestReceivedStatelessResetPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ClosedConnection(&quic.StatelessResetError{
+		Token: protocol.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
 	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_closed", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 3)
+	require.Equal(t, "remote", ev["owner"])
+	require.Equal(t, "stateless_reset", ev["trigger"])
+	require.Equal(t, "00112233445566778899aabbccddeeff", ev["stateless_reset_token"])
+}
 
-	It("exports a trace that has the right metadata", func() {
-		tracer.Close()
+func TestVersionNegotiationFailure(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ClosedConnection(&quic.VersionNegotiationError{})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_closed", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 1)
+	require.Equal(t, "version_mismatch", ev["trigger"])
+}
 
-		m := make(map[string]interface{})
-		Expect(unmarshal(buf.Bytes(), &m)).To(Succeed())
-		Expect(m).To(HaveKeyWithValue("qlog_version", "0.3"))
-		Expect(m).To(HaveKey("title"))
-		Expect(m).To(HaveKey("trace"))
-		trace := m["trace"].(map[string]interface{})
-		Expect(trace).To(HaveKey("common_fields"))
-		commonFields := trace["common_fields"].(map[string]interface{})
-		Expect(commonFields).To(HaveKeyWithValue("ODCID", "deadbeef"))
-		Expect(commonFields).To(HaveKeyWithValue("group_id", "deadbeef"))
-		Expect(commonFields).To(HaveKey("reference_time"))
-		referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-		Expect(referenceTime).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-		Expect(commonFields).To(HaveKeyWithValue("time_format", "relative"))
-		Expect(trace).To(HaveKey("vantage_point"))
-		vantagePoint := trace["vantage_point"].(map[string]interface{})
-		Expect(vantagePoint).To(HaveKeyWithValue("type", "server"))
+func TestApplicationErrors(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ClosedConnection(&quic.ApplicationError{
+		Remote:       true,
+		ErrorCode:    1337,
+		ErrorMessage: "foobar",
 	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_closed", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 3)
+	require.Equal(t, "remote", ev["owner"])
+	require.Equal(t, float64(1337), ev["application_code"])
+	require.Equal(t, "foobar", ev["reason"])
+}
 
-	Context("Events", func() {
-		It("records connection starts", func() {
-			tracer.StartedConnection(
-				&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
-				&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
-				protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-				protocol.ParseConnectionID([]byte{5, 6, 7, 8}),
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_started"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("ip_version", "ipv4"))
-			Expect(ev).To(HaveKeyWithValue("src_ip", "192.168.13.37"))
-			Expect(ev).To(HaveKeyWithValue("src_port", float64(42)))
-			Expect(ev).To(HaveKeyWithValue("dst_ip", "192.168.12.34"))
-			Expect(ev).To(HaveKeyWithValue("dst_port", float64(24)))
-			Expect(ev).To(HaveKeyWithValue("src_cid", "01020304"))
-			Expect(ev).To(HaveKeyWithValue("dst_cid", "05060708"))
-		})
+func TestTransportErrors(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ClosedConnection(&quic.TransportError{
+		ErrorCode:    qerr.AEADLimitReached,
+		ErrorMessage: "foobar",
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:connection_closed", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 3)
+	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "aead_limit_reached", ev["connection_code"])
+	require.Equal(t, "foobar", ev["reason"])
+}
 
-		It("records the version, if no version negotiation happened", func() {
-			tracer.NegotiatedVersion(0x1337, nil, nil)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:version_information"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(1))
-			Expect(ev).To(HaveKeyWithValue("chosen_version", "1337"))
-		})
+func TestSentTransportParameters(t *testing.T) {
+	rcid := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
+	tracer, buf := newConnectionTracer()
+	tracer.SentTransportParameters(&logging.TransportParameters{
+		InitialMaxStreamDataBidiLocal:   1000,
+		InitialMaxStreamDataBidiRemote:  2000,
+		InitialMaxStreamDataUni:         3000,
+		InitialMaxData:                  4000,
+		MaxBidiStreamNum:                10,
+		MaxUniStreamNum:                 20,
+		MaxAckDelay:                     123 * time.Millisecond,
+		AckDelayExponent:                12,
+		DisableActiveMigration:          true,
+		MaxUDPPayloadSize:               1234,
+		MaxIdleTimeout:                  321 * time.Millisecond,
+		StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
+		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
+		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+		RetrySourceConnectionID:         &rcid,
+		ActiveConnectionIDLimit:         7,
+		MaxDatagramFrameSize:            protocol.InvalidByteCount,
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_set", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "deadc0de", ev["original_destination_connection_id"])
+	require.Equal(t, "deadbeef", ev["initial_source_connection_id"])
+	require.Equal(t, "decafbad", ev["retry_source_connection_id"])
+	require.Equal(t, "112233445566778899aabbccddeeff00", ev["stateless_reset_token"])
+	require.Equal(t, float64(321), ev["max_idle_timeout"])
+	require.Equal(t, float64(1234), ev["max_udp_payload_size"])
+	require.Equal(t, float64(12), ev["ack_delay_exponent"])
+	require.Equal(t, float64(7), ev["active_connection_id_limit"])
+	require.Equal(t, float64(4000), ev["initial_max_data"])
+	require.Equal(t, float64(1000), ev["initial_max_stream_data_bidi_local"])
+	require.Equal(t, float64(2000), ev["initial_max_stream_data_bidi_remote"])
+	require.Equal(t, float64(3000), ev["initial_max_stream_data_uni"])
+	require.Equal(t, float64(10), ev["initial_max_streams_bidi"])
+	require.Equal(t, float64(20), ev["initial_max_streams_uni"])
+	require.NotContains(t, ev, "preferred_address")
+	require.NotContains(t, ev, "max_datagram_frame_size")
+}
 
-		It("records the version, if version negotiation happened", func() {
-			tracer.NegotiatedVersion(0x1337, []logging.Version{1, 2, 3}, []logging.Version{4, 5, 6})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:version_information"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(3))
-			Expect(ev).To(HaveKeyWithValue("chosen_version", "1337"))
-			Expect(ev).To(HaveKey("client_versions"))
-			Expect(ev["client_versions"].([]interface{})).To(Equal([]interface{}{"1", "2", "3"}))
-			Expect(ev).To(HaveKey("server_versions"))
-			Expect(ev["server_versions"].([]interface{})).To(Equal([]interface{}{"4", "5", "6"}))
-		})
+func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.SentTransportParameters(&logging.TransportParameters{
+		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
+		ActiveConnectionIDLimit:         7,
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_set", entry.Name)
+	ev := entry.Event
+	require.NotContains(t, ev, "stateless_reset_token")
+}
 
-		It("records idle timeouts", func() {
-			tracer.ClosedConnection(&quic.IdleTimeoutError{})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_closed"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(2))
-			Expect(ev).To(HaveKeyWithValue("owner", "local"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "idle_timeout"))
-		})
+func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.SentTransportParameters(&logging.TransportParameters{
+		StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_set", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "local", ev["owner"])
+	require.NotContains(t, ev, "retry_source_connection_id")
+}
 
-		It("records handshake timeouts", func() {
-			tracer.ClosedConnection(&quic.HandshakeTimeoutError{})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_closed"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(2))
-			Expect(ev).To(HaveKeyWithValue("owner", "local"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "handshake_timeout"))
-		})
+func TestTransportParametersWithPreferredAddress(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.SentTransportParameters(&logging.TransportParameters{
+		PreferredAddress: &logging.PreferredAddress{
+			IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{12, 34, 56, 78}), 123),
+			IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 456),
+			ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
+			StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+		},
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_set", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "local", ev["owner"])
+	require.Contains(t, ev, "preferred_address")
+	pa := ev["preferred_address"].(map[string]interface{})
+	require.Equal(t, "12.34.56.78", pa["ip_v4"])
+	require.Equal(t, float64(123), pa["port_v4"])
+	require.Equal(t, "102:304:506:708:90a:b0c:d0e:f10", pa["ip_v6"])
+	require.Equal(t, float64(456), pa["port_v6"])
+	require.Equal(t, "0807060504030201", pa["connection_id"])
+	require.Equal(t, "0f0e0d0c0b0a09080706050403020100", pa["stateless_reset_token"])
+}
 
-		It("records a received stateless reset packet", func() {
-			tracer.ClosedConnection(&quic.StatelessResetError{
-				Token: protocol.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_closed"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(3))
-			Expect(ev).To(HaveKeyWithValue("owner", "remote"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "stateless_reset"))
-			Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "00112233445566778899aabbccddeeff"))
-		})
+func TestTransportParametersWithDatagramExtension(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.SentTransportParameters(&logging.TransportParameters{
+		MaxDatagramFrameSize: 1337,
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_set", entry.Name)
+	ev := entry.Event
+	require.Equal(t, float64(1337), ev["max_datagram_frame_size"])
+}
 
-		It("records connection closing due to version negotiation failure", func() {
-			tracer.ClosedConnection(&quic.VersionNegotiationError{})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_closed"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(1))
-			Expect(ev).To(HaveKeyWithValue("trigger", "version_mismatch"))
-		})
+func TestReceivedTransportParameters(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ReceivedTransportParameters(&logging.TransportParameters{})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_set", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "remote", ev["owner"])
+	require.NotContains(t, ev, "original_destination_connection_id")
+}
 
-		It("records application errors", func() {
-			tracer.ClosedConnection(&quic.ApplicationError{
-				Remote:       true,
-				ErrorCode:    1337,
-				ErrorMessage: "foobar",
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_closed"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(3))
-			Expect(ev).To(HaveKeyWithValue("owner", "remote"))
-			Expect(ev).To(HaveKeyWithValue("application_code", float64(1337)))
-			Expect(ev).To(HaveKeyWithValue("reason", "foobar"))
-		})
+func TestRestoredTransportParameters(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.RestoredTransportParameters(&logging.TransportParameters{
+		InitialMaxStreamDataBidiLocal:  100,
+		InitialMaxStreamDataBidiRemote: 200,
+		InitialMaxStreamDataUni:        300,
+		InitialMaxData:                 400,
+		MaxIdleTimeout:                 123 * time.Millisecond,
+	})
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:parameters_restored", entry.Name)
+	ev := entry.Event
+	require.NotContains(t, ev, "owner")
+	require.NotContains(t, ev, "original_destination_connection_id")
+	require.NotContains(t, ev, "stateless_reset_token")
+	require.NotContains(t, ev, "retry_source_connection_id")
+	require.NotContains(t, ev, "initial_source_connection_id")
+	require.Equal(t, float64(123), ev["max_idle_timeout"])
+	require.Equal(t, float64(400), ev["initial_max_data"])
+	require.Equal(t, float64(100), ev["initial_max_stream_data_bidi_local"])
+	require.Equal(t, float64(200), ev["initial_max_stream_data_bidi_remote"])
+	require.Equal(t, float64(300), ev["initial_max_stream_data_uni"])
+}
 
-		It("records transport errors", func() {
-			tracer.ClosedConnection(&quic.TransportError{
-				ErrorCode:    qerr.AEADLimitReached,
-				ErrorMessage: "foobar",
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:connection_closed"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(3))
-			Expect(ev).To(HaveKeyWithValue("owner", "local"))
-			Expect(ev).To(HaveKeyWithValue("connection_code", "aead_limit_reached"))
-			Expect(ev).To(HaveKeyWithValue("reason", "foobar"))
-		})
-
-		It("records sent transport parameters", func() {
-			rcid := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
-			tracer.SentTransportParameters(&logging.TransportParameters{
-				InitialMaxStreamDataBidiLocal:   1000,
-				InitialMaxStreamDataBidiRemote:  2000,
-				InitialMaxStreamDataUni:         3000,
-				InitialMaxData:                  4000,
-				MaxBidiStreamNum:                10,
-				MaxUniStreamNum:                 20,
-				MaxAckDelay:                     123 * time.Millisecond,
-				AckDelayExponent:                12,
-				DisableActiveMigration:          true,
-				MaxUDPPayloadSize:               1234,
-				MaxIdleTimeout:                  321 * time.Millisecond,
-				StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
-				OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
-				InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-				RetrySourceConnectionID:         &rcid,
-				ActiveConnectionIDLimit:         7,
-				MaxDatagramFrameSize:            protocol.InvalidByteCount,
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_set"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("owner", "local"))
-			Expect(ev).To(HaveKeyWithValue("original_destination_connection_id", "deadc0de"))
-			Expect(ev).To(HaveKeyWithValue("initial_source_connection_id", "deadbeef"))
-			Expect(ev).To(HaveKeyWithValue("retry_source_connection_id", "decafbad"))
-			Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "112233445566778899aabbccddeeff00"))
-			Expect(ev).To(HaveKeyWithValue("max_idle_timeout", float64(321)))
-			Expect(ev).To(HaveKeyWithValue("max_udp_payload_size", float64(1234)))
-			Expect(ev).To(HaveKeyWithValue("ack_delay_exponent", float64(12)))
-			Expect(ev).To(HaveKeyWithValue("active_connection_id_limit", float64(7)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_data", float64(4000)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_bidi_local", float64(1000)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_bidi_remote", float64(2000)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_uni", float64(3000)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_streams_bidi", float64(10)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_streams_uni", float64(20)))
-			Expect(ev).ToNot(HaveKey("preferred_address"))
-			Expect(ev).ToNot(HaveKey("max_datagram_frame_size"))
-		})
-
-		It("records the server's transport parameters, without a stateless reset token", func() {
-			tracer.SentTransportParameters(&logging.TransportParameters{
-				OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
-				ActiveConnectionIDLimit:         7,
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_set"))
-			ev := entry.Event
-			Expect(ev).ToNot(HaveKey("stateless_reset_token"))
-		})
-
-		It("records transport parameters without retry_source_connection_id", func() {
-			tracer.SentTransportParameters(&logging.TransportParameters{
-				StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_set"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("owner", "local"))
-			Expect(ev).ToNot(HaveKey("retry_source_connection_id"))
-		})
-
-		It("records transport parameters with a preferred address", func() {
-			tracer.SentTransportParameters(&logging.TransportParameters{
-				PreferredAddress: &logging.PreferredAddress{
-					IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{12, 34, 56, 78}), 123),
-					IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 456),
-					ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
-					StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
-				},
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_set"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("owner", "local"))
-			Expect(ev).To(HaveKey("preferred_address"))
-			pa := ev["preferred_address"].(map[string]interface{})
-			Expect(pa).To(HaveKeyWithValue("ip_v4", "12.34.56.78"))
-			Expect(pa).To(HaveKeyWithValue("port_v4", float64(123)))
-			Expect(pa).To(HaveKeyWithValue("ip_v6", "102:304:506:708:90a:b0c:d0e:f10"))
-			Expect(pa).To(HaveKeyWithValue("port_v6", float64(456)))
-			Expect(pa).To(HaveKeyWithValue("connection_id", "0807060504030201"))
-			Expect(pa).To(HaveKeyWithValue("stateless_reset_token", "0f0e0d0c0b0a09080706050403020100"))
-		})
-
-		It("records transport parameters that enable the datagram extension", func() {
-			tracer.SentTransportParameters(&logging.TransportParameters{
-				MaxDatagramFrameSize: 1337,
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_set"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("max_datagram_frame_size", float64(1337)))
-		})
-
-		It("records received transport parameters", func() {
-			tracer.ReceivedTransportParameters(&logging.TransportParameters{})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_set"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("owner", "remote"))
-			Expect(ev).ToNot(HaveKey("original_destination_connection_id"))
-		})
-
-		It("records restored transport parameters", func() {
-			tracer.RestoredTransportParameters(&logging.TransportParameters{
-				InitialMaxStreamDataBidiLocal:  100,
-				InitialMaxStreamDataBidiRemote: 200,
-				InitialMaxStreamDataUni:        300,
-				InitialMaxData:                 400,
-				MaxIdleTimeout:                 123 * time.Millisecond,
-			})
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:parameters_restored"))
-			ev := entry.Event
-			Expect(ev).ToNot(HaveKey("owner"))
-			Expect(ev).ToNot(HaveKey("original_destination_connection_id"))
-			Expect(ev).ToNot(HaveKey("stateless_reset_token"))
-			Expect(ev).ToNot(HaveKey("retry_source_connection_id"))
-			Expect(ev).ToNot(HaveKey("initial_source_connection_id"))
-			Expect(ev).To(HaveKeyWithValue("max_idle_timeout", float64(123)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_data", float64(400)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_bidi_local", float64(100)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_bidi_remote", float64(200)))
-			Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_uni", float64(300)))
-		})
-
-		It("records a sent long header packet, without an ACK", func() {
-			tracer.SentLongHeaderPacket(
-				&logging.ExtendedHeader{
-					Header: logging.Header{
-						Type:             protocol.PacketTypeHandshake,
-						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
-						Length:           1337,
-						Version:          protocol.Version1,
-					},
-					PacketNumber: 1337,
-				},
-				987,
-				logging.ECNCE,
-				nil,
-				[]logging.Frame{
-					&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
-				},
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_sent"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("raw"))
-			raw := ev["raw"].(map[string]interface{})
-			Expect(raw).To(HaveKeyWithValue("length", float64(987)))
-			Expect(raw).To(HaveKeyWithValue("payload_length", float64(1337)))
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
-			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
-			Expect(ev).To(HaveKey("frames"))
-			Expect(ev).To(HaveKeyWithValue("ecn", "CE"))
-			frames := ev["frames"].([]interface{})
-			Expect(frames).To(HaveLen(2))
-			Expect(frames[0].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_stream_data"))
-			Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "stream"))
-		})
-
-		It("records a sent short header packet, without an ACK", func() {
-			tracer.SentShortHeaderPacket(
-				&logging.ShortHeader{
-					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-					PacketNumber:     1337,
-				},
-				123,
-				logging.ECNUnsupported,
-				&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 1, Largest: 10}}},
-				[]logging.Frame{&logging.MaxDataFrame{MaximumData: 987}},
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			ev := entry.Event
-			raw := ev["raw"].(map[string]interface{})
-			Expect(raw).To(HaveKeyWithValue("length", float64(123)))
-			Expect(raw).ToNot(HaveKey("payload_length"))
-			Expect(ev).To(HaveKey("header"))
-			Expect(ev).ToNot(HaveKey("ecn"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
-			Expect(ev).To(HaveKey("frames"))
-			frames := ev["frames"].([]interface{})
-			Expect(frames).To(HaveLen(2))
-			Expect(frames[0].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "ack"))
-			Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_data"))
-		})
-
-		It("records a received Long Header packet", func() {
-			tracer.ReceivedLongHeaderPacket(
-				&logging.ExtendedHeader{
-					Header: logging.Header{
-						Type:             protocol.PacketTypeInitial,
-						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
-						Token:            []byte{0xde, 0xad, 0xbe, 0xef},
-						Length:           1234,
-						Version:          protocol.Version1,
-					},
-					PacketNumber: 1337,
-				},
-				789,
-				logging.ECT0,
-				[]logging.Frame{
-					&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
-				},
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_received"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("raw"))
-			raw := ev["raw"].(map[string]interface{})
-			Expect(raw).To(HaveKeyWithValue("length", float64(789)))
-			Expect(raw).To(HaveKeyWithValue("payload_length", float64(1234)))
-			Expect(ev).To(HaveKeyWithValue("ecn", "ECT(0)"))
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "initial"))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
-			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
-			Expect(hdr).To(HaveKey("token"))
-			token := hdr["token"].(map[string]interface{})
-			Expect(token).To(HaveKeyWithValue("data", "deadbeef"))
-			Expect(ev).To(HaveKey("frames"))
-			Expect(ev["frames"].([]interface{})).To(HaveLen(2))
-		})
-
-		It("records a received Short Header packet", func() {
-			shdr := &logging.ShortHeader{
+func TestSentLongHeaderPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.SentLongHeaderPacket(
+		&logging.ExtendedHeader{
+			Header: logging.Header{
+				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-				PacketNumber:     1337,
-				PacketNumberLen:  protocol.PacketNumberLen3,
-				KeyPhase:         protocol.KeyPhaseZero,
-			}
-			tracer.ReceivedShortHeaderPacket(
-				shdr,
-				789,
-				logging.ECT1,
-				[]logging.Frame{
-					&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
-				},
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_received"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("raw"))
-			raw := ev["raw"].(map[string]interface{})
-			Expect(raw).To(HaveKeyWithValue("length", float64(789)))
-			Expect(raw).To(HaveKeyWithValue("payload_length", float64(789-(1+8+3))))
-			Expect(ev).To(HaveKeyWithValue("ecn", "ECT(1)"))
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
-			Expect(hdr).To(HaveKeyWithValue("key_phase_bit", "0"))
-			Expect(ev).To(HaveKey("frames"))
-			Expect(ev["frames"].([]interface{})).To(HaveLen(2))
-		})
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
+				Length:           1337,
+				Version:          protocol.Version1,
+			},
+			PacketNumber: 1337,
+		},
+		987,
+		logging.ECNCE,
+		nil,
+		[]logging.Frame{
+			&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+			&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
+		},
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_sent", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "raw")
+	raw := ev["raw"].(map[string]interface{})
+	require.Equal(t, float64(987), raw["length"])
+	require.Equal(t, float64(1337), raw["payload_length"])
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Equal(t, "handshake", hdr["packet_type"])
+	require.Equal(t, float64(1337), hdr["packet_number"])
+	require.Equal(t, "04030201", hdr["scid"])
+	require.Contains(t, ev, "frames")
+	require.Equal(t, "CE", ev["ecn"])
+	frames := ev["frames"].([]interface{})
+	require.Len(t, frames, 2)
+	require.Equal(t, "max_stream_data", frames[0].(map[string]interface{})["frame_type"])
+	require.Equal(t, "stream", frames[1].(map[string]interface{})["frame_type"])
+}
 
-		It("records a received Retry packet", func() {
-			tracer.ReceivedRetry(
-				&logging.Header{
-					Type:             protocol.PacketTypeRetry,
-					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-					SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
-					Token:            []byte{0xde, 0xad, 0xbe, 0xef},
-					Version:          protocol.Version1,
-				},
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_received"))
-			ev := entry.Event
-			Expect(ev).ToNot(HaveKey("raw"))
-			Expect(ev).To(HaveKey("header"))
-			header := ev["header"].(map[string]interface{})
-			Expect(header).To(HaveKeyWithValue("packet_type", "retry"))
-			Expect(header).ToNot(HaveKey("packet_number"))
-			Expect(header).To(HaveKey("version"))
-			Expect(header).To(HaveKey("dcid"))
-			Expect(header).To(HaveKey("scid"))
-			Expect(header).To(HaveKey("token"))
-			token := header["token"].(map[string]interface{})
-			Expect(token).To(HaveKeyWithValue("data", "deadbeef"))
-			Expect(ev).ToNot(HaveKey("frames"))
-		})
+func TestSentShortHeaderPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.SentShortHeaderPacket(
+		&logging.ShortHeader{
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+			PacketNumber:     1337,
+		},
+		123,
+		logging.ECNUnsupported,
+		&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 1, Largest: 10}}},
+		[]logging.Frame{&logging.MaxDataFrame{MaximumData: 987}},
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	ev := entry.Event
+	raw := ev["raw"].(map[string]interface{})
+	require.Equal(t, float64(123), raw["length"])
+	require.NotContains(t, raw, "payload_length")
+	require.Contains(t, ev, "header")
+	require.NotContains(t, ev, "ecn")
+	hdr := ev["header"].(map[string]interface{})
+	require.Equal(t, "1RTT", hdr["packet_type"])
+	require.Equal(t, float64(1337), hdr["packet_number"])
+	require.Contains(t, ev, "frames")
+	frames := ev["frames"].([]interface{})
+	require.Len(t, frames, 2)
+	require.Equal(t, "ack", frames[0].(map[string]interface{})["frame_type"])
+	require.Equal(t, "max_data", frames[1].(map[string]interface{})["frame_type"])
+}
 
-		It("records a received Version Negotiation packet", func() {
-			tracer.ReceivedVersionNegotiationPacket(
-				protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
-				[]protocol.Version{0xdeadbeef, 0xdecafbad},
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_received"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("header"))
-			Expect(ev).ToNot(HaveKey("frames"))
-			Expect(ev).To(HaveKey("supported_versions"))
-			Expect(ev["supported_versions"].([]interface{})).To(Equal([]interface{}{"deadbeef", "decafbad"}))
-			header := ev["header"]
-			Expect(header).To(HaveKeyWithValue("packet_type", "version_negotiation"))
-			Expect(header).ToNot(HaveKey("packet_number"))
-			Expect(header).ToNot(HaveKey("version"))
-			Expect(header).To(HaveKeyWithValue("dcid", "0102030405060708"))
-			Expect(header).To(HaveKeyWithValue("scid", "04030201"))
-		})
+func TestReceivedLongHeaderPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ReceivedLongHeaderPacket(
+		&logging.ExtendedHeader{
+			Header: logging.Header{
+				Type:             protocol.PacketTypeInitial,
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
+				Token:            []byte{0xde, 0xad, 0xbe, 0xef},
+				Length:           1234,
+				Version:          protocol.Version1,
+			},
+			PacketNumber: 1337,
+		},
+		789,
+		logging.ECT0,
+		[]logging.Frame{
+			&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+			&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
+		},
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_received", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "raw")
+	raw := ev["raw"].(map[string]interface{})
+	require.Equal(t, float64(789), raw["length"])
+	require.Equal(t, float64(1234), raw["payload_length"])
+	require.Equal(t, "ECT(0)", ev["ecn"])
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Equal(t, "initial", hdr["packet_type"])
+	require.Equal(t, float64(1337), hdr["packet_number"])
+	require.Equal(t, "04030201", hdr["scid"])
+	require.Contains(t, hdr, "token")
+	token := hdr["token"].(map[string]interface{})
+	require.Equal(t, "deadbeef", token["data"])
+	require.Contains(t, ev, "frames")
+	require.Len(t, ev["frames"].([]interface{}), 2)
+}
 
-		It("records buffered packets", func() {
-			tracer.BufferedPacket(logging.PacketTypeHandshake, 1337)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_buffered"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveLen(1))
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
-			Expect(ev).To(HaveKey("raw"))
-			Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
-			Expect(ev).To(HaveKeyWithValue("trigger", "keys_unavailable"))
-		})
+func TestReceivedShortHeaderPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	shdr := &logging.ShortHeader{
+		DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+		PacketNumber:     1337,
+		PacketNumberLen:  protocol.PacketNumberLen3,
+		KeyPhase:         protocol.KeyPhaseZero,
+	}
+	tracer.ReceivedShortHeaderPacket(
+		shdr,
+		789,
+		logging.ECT1,
+		[]logging.Frame{
+			&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+			&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
+		},
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_received", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "raw")
+	raw := ev["raw"].(map[string]interface{})
+	require.Equal(t, float64(789), raw["length"])
+	require.Equal(t, float64(789-(1+8+3)), raw["payload_length"])
+	require.Equal(t, "ECT(1)", ev["ecn"])
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Equal(t, "1RTT", hdr["packet_type"])
+	require.Equal(t, float64(1337), hdr["packet_number"])
+	require.Equal(t, "0", hdr["key_phase_bit"])
+	require.Contains(t, ev, "frames")
+	require.Len(t, ev["frames"].([]interface{}), 2)
+}
 
-		It("records dropped packets", func() {
-			tracer.DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, 1337, logging.PacketDropPayloadDecryptError)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_dropped"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("raw"))
-			Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveLen(1))
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "retry"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "payload_decrypt_error"))
-		})
+func TestReceivedRetryPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ReceivedRetry(
+		&logging.Header{
+			Type:             protocol.PacketTypeRetry,
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
+			Token:            []byte{0xde, 0xad, 0xbe, 0xef},
+			Version:          protocol.Version1,
+		},
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_received", entry.Name)
+	ev := entry.Event
+	require.NotContains(t, ev, "raw")
+	require.Contains(t, ev, "header")
+	header := ev["header"].(map[string]interface{})
+	require.Equal(t, "retry", header["packet_type"])
+	require.NotContains(t, header, "packet_number")
+	require.Contains(t, header, "version")
+	require.Contains(t, header, "dcid")
+	require.Contains(t, header, "scid")
+	require.Contains(t, header, "token")
+	token := header["token"].(map[string]interface{})
+	require.Equal(t, "deadbeef", token["data"])
+	require.NotContains(t, ev, "frames")
+}
 
-		It("records dropped packets with a packet number", func() {
-			tracer.DroppedPacket(logging.PacketTypeHandshake, 42, 1337, logging.PacketDropDuplicate)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:packet_dropped"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("raw"))
-			Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveLen(2))
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(42)))
-			Expect(ev).To(HaveKeyWithValue("trigger", "duplicate"))
-		})
+func TestReceivedVersionNegotiationPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ReceivedVersionNegotiationPacket(
+		protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+		protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
+		[]protocol.Version{0xdeadbeef, 0xdecafbad},
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_received", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "header")
+	require.NotContains(t, ev, "frames")
+	require.Contains(t, ev, "supported_versions")
+	require.Equal(t, []interface{}{"deadbeef", "decafbad"}, ev["supported_versions"])
+	header := ev["header"].(map[string]interface{})
+	require.Equal(t, "version_negotiation", header["packet_type"])
+	require.NotContains(t, header, "packet_number")
+	require.NotContains(t, header, "version")
+	require.Equal(t, "0102030405060708", header["dcid"])
+	require.Equal(t, "04030201", header["scid"])
+}
 
-		It("records metrics updates", func() {
-			now := time.Now()
-			rttStats := utils.NewRTTStats()
-			rttStats.UpdateRTT(15*time.Millisecond, 0, now)
-			rttStats.UpdateRTT(20*time.Millisecond, 0, now)
-			rttStats.UpdateRTT(25*time.Millisecond, 0, now)
-			Expect(rttStats.MinRTT()).To(Equal(15 * time.Millisecond))
-			Expect(rttStats.SmoothedRTT()).To(And(
-				BeNumerically(">", 15*time.Millisecond),
-				BeNumerically("<", 25*time.Millisecond),
-			))
-			Expect(rttStats.LatestRTT()).To(Equal(25 * time.Millisecond))
-			tracer.UpdatedMetrics(
-				rttStats,
-				4321,
-				1234,
-				42,
-			)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:metrics_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("min_rtt", float64(15)))
-			Expect(ev).To(HaveKeyWithValue("latest_rtt", float64(25)))
-			Expect(ev).To(HaveKey("smoothed_rtt"))
-			Expect(time.Duration(ev["smoothed_rtt"].(float64)) * time.Millisecond).To(BeNumerically("~", rttStats.SmoothedRTT(), time.Millisecond))
-			Expect(ev).To(HaveKey("rtt_variance"))
-			Expect(time.Duration(ev["rtt_variance"].(float64)) * time.Millisecond).To(BeNumerically("~", rttStats.MeanDeviation(), time.Millisecond))
-			Expect(ev).To(HaveKeyWithValue("congestion_window", float64(4321)))
-			Expect(ev).To(HaveKeyWithValue("bytes_in_flight", float64(1234)))
-			Expect(ev).To(HaveKeyWithValue("packets_in_flight", float64(42)))
-		})
+func TestBufferedPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.BufferedPacket(logging.PacketTypeHandshake, 1337)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_buffered", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Len(t, hdr, 1)
+	require.Equal(t, "handshake", hdr["packet_type"])
+	require.Contains(t, ev, "raw")
+	require.Equal(t, float64(1337), ev["raw"].(map[string]interface{})["length"])
+	require.Equal(t, "keys_unavailable", ev["trigger"])
+}
 
-		It("only logs the diff between two metrics updates", func() {
-			now := time.Now()
-			rttStats := utils.NewRTTStats()
-			rttStats.UpdateRTT(15*time.Millisecond, 0, now)
-			rttStats.UpdateRTT(20*time.Millisecond, 0, now)
-			rttStats.UpdateRTT(25*time.Millisecond, 0, now)
-			Expect(rttStats.MinRTT()).To(Equal(15 * time.Millisecond))
+func TestDroppedPacket(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, 1337, logging.PacketDropPayloadDecryptError)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_dropped", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "raw")
+	require.Equal(t, float64(1337), ev["raw"].(map[string]interface{})["length"])
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Len(t, hdr, 1)
+	require.Equal(t, "retry", hdr["packet_type"])
+	require.Equal(t, "payload_decrypt_error", ev["trigger"])
+}
 
-			rttStats2 := utils.NewRTTStats()
-			rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
-			rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
-			rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
-			Expect(rttStats2.MinRTT()).To(Equal(15 * time.Millisecond))
+func TestDroppedPacketWithPacketNumber(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.DroppedPacket(logging.PacketTypeHandshake, 42, 1337, logging.PacketDropDuplicate)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:packet_dropped", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "raw")
+	require.Equal(t, float64(1337), ev["raw"].(map[string]interface{})["length"])
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Len(t, hdr, 2)
+	require.Equal(t, "handshake", hdr["packet_type"])
+	require.Equal(t, float64(42), hdr["packet_number"])
+	require.Equal(t, "duplicate", ev["trigger"])
+}
 
-			Expect(rttStats.LatestRTT()).To(Equal(25 * time.Millisecond))
-			tracer.UpdatedMetrics(
-				rttStats,
-				4321,
-				1234,
-				42,
-			)
-			tracer.UpdatedMetrics(
-				rttStats2,
-				4321,
-				12345, // changed
-				42,
-			)
-			tracer.Close()
-			entries := exportAndParse(buf)
-			Expect(entries).To(HaveLen(2))
-			Expect(entries[0].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entries[0].Name).To(Equal("recovery:metrics_updated"))
-			Expect(entries[0].Event).To(HaveLen(7))
-			Expect(entries[1].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entries[1].Name).To(Equal("recovery:metrics_updated"))
-			ev := entries[1].Event
-			Expect(ev).ToNot(HaveKey("min_rtt"))
-			Expect(ev).ToNot(HaveKey("congestion_window"))
-			Expect(ev).ToNot(HaveKey("packets_in_flight"))
-			Expect(ev).To(HaveKeyWithValue("bytes_in_flight", float64(12345)))
-			Expect(ev).To(HaveKeyWithValue("smoothed_rtt", float64(15)))
-		})
+func TestUpdatedMetrics(t *testing.T) {
+	now := time.Now()
+	rttStats := utils.NewRTTStats()
+	rttStats.UpdateRTT(15*time.Millisecond, 0, now)
+	rttStats.UpdateRTT(20*time.Millisecond, 0, now)
+	rttStats.UpdateRTT(25*time.Millisecond, 0, now)
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedMetrics(
+		rttStats,
+		4321,
+		1234,
+		42,
+	)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:metrics_updated", entry.Name)
+	ev := entry.Event
+	require.Equal(t, float64(15), ev["min_rtt"])
+	require.Equal(t, float64(25), ev["latest_rtt"])
+	require.Contains(t, ev, "smoothed_rtt")
+	require.InDelta(t, rttStats.SmoothedRTT().Milliseconds(), ev["smoothed_rtt"], float64(1))
+	require.Contains(t, ev, "rtt_variance")
+	require.InDelta(t, rttStats.MeanDeviation().Milliseconds(), ev["rtt_variance"], float64(1))
+	require.Equal(t, float64(4321), ev["congestion_window"])
+	require.Equal(t, float64(1234), ev["bytes_in_flight"])
+	require.Equal(t, float64(42), ev["packets_in_flight"])
+}
 
-		It("records lost packets", func() {
-			tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:packet_lost"))
-			ev := entry.Event
-			Expect(ev).To(HaveKey("header"))
-			hdr := ev["header"].(map[string]interface{})
-			Expect(hdr).To(HaveLen(2))
-			Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(42)))
-			Expect(ev).To(HaveKeyWithValue("trigger", "reordering_threshold"))
-		})
+func TestDiffForOnlyChangedMetrics(t *testing.T) {
+	now := time.Now()
+	rttStats := utils.NewRTTStats()
+	rttStats.UpdateRTT(15*time.Millisecond, 0, now)
+	rttStats.UpdateRTT(20*time.Millisecond, 0, now)
+	rttStats.UpdateRTT(25*time.Millisecond, 0, now)
 
-		It("records MTU discovery updates", func() {
-			tracer.UpdatedMTU(1337, true)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:mtu_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("mtu", float64(1337)))
-			Expect(ev).To(HaveKeyWithValue("done", true))
-		})
+	rttStats2 := utils.NewRTTStats()
+	rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
+	rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
+	rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
 
-		It("records congestion state updates", func() {
-			tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:congestion_state_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("new", "congestion_avoidance"))
-		})
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedMetrics(
+		rttStats,
+		4321,
+		1234,
+		42,
+	)
+	tracer.UpdatedMetrics(
+		rttStats2,
+		4321,
+		12345, // changed
+		42,
+	)
+	tracer.Close()
+	entries := exportAndParse(t, buf)
+	require.Len(t, entries, 2)
+	require.WithinDuration(t, time.Now(), entries[0].Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:metrics_updated", entries[0].Name)
+	require.Len(t, entries[0].Event, 7)
+	require.WithinDuration(t, time.Now(), entries[1].Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:metrics_updated", entries[1].Name)
+	ev := entries[1].Event
+	require.NotContains(t, ev, "min_rtt")
+	require.NotContains(t, ev, "congestion_window")
+	require.NotContains(t, ev, "packets_in_flight")
+	require.Equal(t, float64(12345), ev["bytes_in_flight"])
+	require.Equal(t, float64(15), ev["smoothed_rtt"])
+}
 
-		It("records PTO changes", func() {
-			tracer.UpdatedPTOCount(42)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:metrics_updated"))
-			Expect(entry.Event).To(HaveKeyWithValue("pto_count", float64(42)))
-		})
+func TestLostPackets(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:packet_lost", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "header")
+	hdr := ev["header"].(map[string]interface{})
+	require.Len(t, hdr, 2)
+	require.Equal(t, "handshake", hdr["packet_type"])
+	require.Equal(t, float64(42), hdr["packet_number"])
+	require.Equal(t, "reordering_threshold", ev["trigger"])
+}
 
-		It("records TLS key updates", func() {
-			tracer.UpdatedKeyFromTLS(protocol.EncryptionHandshake, protocol.PerspectiveClient)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("security:key_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("key_type", "client_handshake_secret"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
-			Expect(ev).ToNot(HaveKey("key_phase"))
-			Expect(ev).ToNot(HaveKey("old"))
-			Expect(ev).ToNot(HaveKey("new"))
-		})
+func TestMTUUpdates(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedMTU(1337, true)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:mtu_updated", entry.Name)
+	ev := entry.Event
+	require.Equal(t, float64(1337), ev["mtu"])
+	require.Equal(t, true, ev["done"])
+}
 
-		It("records TLS key updates, for 1-RTT keys", func() {
-			tracer.UpdatedKeyFromTLS(protocol.Encryption1RTT, protocol.PerspectiveServer)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("security:key_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("key_type", "server_1rtt_secret"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
-			Expect(ev).To(HaveKeyWithValue("key_phase", float64(0)))
-			Expect(ev).ToNot(HaveKey("old"))
-			Expect(ev).ToNot(HaveKey("new"))
-		})
+func TestCongestionStateUpdates(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:congestion_state_updated", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "congestion_avoidance", ev["new"])
+}
 
-		It("records QUIC key updates", func() {
-			tracer.UpdatedKey(1337, true)
-			tracer.Close()
-			entries := exportAndParse(buf)
-			Expect(entries).To(HaveLen(2))
-			var keyTypes []string
-			for _, entry := range entries {
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Name).To(Equal("security:key_updated"))
-				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("key_phase", float64(1337)))
-				Expect(ev).To(HaveKeyWithValue("trigger", "remote_update"))
-				Expect(ev).To(HaveKey("key_type"))
-				keyTypes = append(keyTypes, ev["key_type"].(string))
-			}
-			Expect(keyTypes).To(ContainElement("server_1rtt_secret"))
-			Expect(keyTypes).To(ContainElement("client_1rtt_secret"))
-		})
+func TestPTOChanges(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedPTOCount(42)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:metrics_updated", entry.Name)
+	require.Equal(t, float64(42), entry.Event["pto_count"])
+}
 
-		It("records dropped encryption levels", func() {
-			tracer.DroppedEncryptionLevel(protocol.EncryptionInitial)
-			tracer.Close()
-			entries := exportAndParse(buf)
-			Expect(entries).To(HaveLen(2))
-			var keyTypes []string
-			for _, entry := range entries {
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Name).To(Equal("security:key_discarded"))
-				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
-				Expect(ev).To(HaveKey("key_type"))
-				keyTypes = append(keyTypes, ev["key_type"].(string))
-			}
-			Expect(keyTypes).To(ContainElement("server_initial_secret"))
-			Expect(keyTypes).To(ContainElement("client_initial_secret"))
-		})
+func TestTLSKeyUpdates(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedKeyFromTLS(protocol.EncryptionHandshake, protocol.PerspectiveClient)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "security:key_updated", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "client_handshake_secret", ev["key_type"])
+	require.Equal(t, "tls", ev["trigger"])
+	require.NotContains(t, ev, "key_phase")
+	require.NotContains(t, ev, "old")
+	require.NotContains(t, ev, "new")
+}
 
-		It("records dropped 0-RTT keys", func() {
-			tracer.DroppedEncryptionLevel(protocol.Encryption0RTT)
-			tracer.Close()
-			entries := exportAndParse(buf)
-			Expect(entries).To(HaveLen(1))
-			entry := entries[0]
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("security:key_discarded"))
-			ev := entry.Event
-			Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
-			Expect(ev).To(HaveKeyWithValue("key_type", "server_0rtt_secret"))
-		})
+func TestTLSKeyUpdatesFor1RTTKeys(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedKeyFromTLS(protocol.Encryption1RTT, protocol.PerspectiveServer)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "security:key_updated", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "server_1rtt_secret", ev["key_type"])
+	require.Equal(t, "tls", ev["trigger"])
+	require.Equal(t, float64(0), ev["key_phase"])
+	require.NotContains(t, ev, "old")
+	require.NotContains(t, ev, "new")
+}
 
-		It("records dropped keys", func() {
-			tracer.DroppedKey(42)
-			tracer.Close()
-			entries := exportAndParse(buf)
-			Expect(entries).To(HaveLen(2))
-			var keyTypes []string
-			for _, entry := range entries {
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Name).To(Equal("security:key_discarded"))
-				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("key_phase", float64(42)))
-				Expect(ev).ToNot(HaveKey("trigger"))
-				Expect(ev).To(HaveKey("key_type"))
-				keyTypes = append(keyTypes, ev["key_type"].(string))
-			}
-			Expect(keyTypes).To(ContainElement("server_1rtt_secret"))
-			Expect(keyTypes).To(ContainElement("client_1rtt_secret"))
-		})
+func TestQUICKeyUpdates(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.UpdatedKey(1337, true)
+	tracer.Close()
+	entries := exportAndParse(t, buf)
+	require.Len(t, entries, 2)
+	var keyTypes []string
+	for _, entry := range entries {
+		require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+		require.Equal(t, "security:key_updated", entry.Name)
+		ev := entry.Event
+		require.Equal(t, float64(1337), ev["key_phase"])
+		require.Equal(t, "remote_update", ev["trigger"])
+		require.Contains(t, ev, "key_type")
+		keyTypes = append(keyTypes, ev["key_type"].(string))
+	}
+	require.Contains(t, keyTypes, "server_1rtt_secret")
+	require.Contains(t, keyTypes, "client_1rtt_secret")
+}
 
-		It("records when the timer is set", func() {
-			timeout := time.Now().Add(137 * time.Millisecond)
-			tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:loss_timer_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(4))
-			Expect(ev).To(HaveKeyWithValue("event_type", "set"))
-			Expect(ev).To(HaveKeyWithValue("timer_type", "pto"))
-			Expect(ev).To(HaveKeyWithValue("packet_number_space", "handshake"))
-			Expect(ev).To(HaveKey("delta"))
-			delta := time.Duration(ev["delta"].(float64)*1e6) * time.Nanosecond
-			Expect(entry.Time.Add(delta)).To(BeTemporally("~", timeout, scaleDuration(10*time.Microsecond)))
-		})
+func TestDroppedEncryptionLevels(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.DroppedEncryptionLevel(protocol.EncryptionInitial)
+	tracer.Close()
+	entries := exportAndParse(t, buf)
+	require.Len(t, entries, 2)
+	var keyTypes []string
+	for _, entry := range entries {
+		require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+		require.Equal(t, "security:key_discarded", entry.Name)
+		ev := entry.Event
+		require.Equal(t, "tls", ev["trigger"])
+		require.Contains(t, ev, "key_type")
+		keyTypes = append(keyTypes, ev["key_type"].(string))
+	}
+	require.Contains(t, keyTypes, "server_initial_secret")
+	require.Contains(t, keyTypes, "client_initial_secret")
+}
 
-		It("records when the loss timer expires", func() {
-			tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:loss_timer_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(3))
-			Expect(ev).To(HaveKeyWithValue("event_type", "expired"))
-			Expect(ev).To(HaveKeyWithValue("timer_type", "ack"))
-			Expect(ev).To(HaveKeyWithValue("packet_number_space", "application_data"))
-		})
+func TestDropped0RTTKeys(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.DroppedEncryptionLevel(protocol.Encryption0RTT)
+	tracer.Close()
+	entries := exportAndParse(t, buf)
+	require.Len(t, entries, 1)
+	entry := entries[0]
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "security:key_discarded", entry.Name)
+	ev := entry.Event
+	require.Equal(t, "tls", ev["trigger"])
+	require.Equal(t, "server_0rtt_secret", ev["key_type"])
+}
 
-		It("records when the timer is canceled", func() {
-			tracer.LossTimerCanceled()
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:loss_timer_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(1))
-			Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
-		})
+func TestDroppedKeys(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.DroppedKey(42)
+	tracer.Close()
+	entries := exportAndParse(t, buf)
+	require.Len(t, entries, 2)
+	var keyTypes []string
+	for _, entry := range entries {
+		require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+		require.Equal(t, "security:key_discarded", entry.Name)
+		ev := entry.Event
+		require.Equal(t, float64(42), ev["key_phase"])
+		require.NotContains(t, ev, "trigger")
+		require.Contains(t, ev, "key_type")
+		keyTypes = append(keyTypes, ev["key_type"].(string))
+	}
+	require.Contains(t, keyTypes, "server_1rtt_secret")
+	require.Contains(t, keyTypes, "client_1rtt_secret")
+}
 
-		It("records an ECN state transition, without a trigger", func() {
-			tracer.ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:ecn_state_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(1))
-			Expect(ev).To(HaveKeyWithValue("new", "unknown"))
-		})
+func TestSetLossTimer(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	timeout := time.Now().Add(137 * time.Millisecond)
+	tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:loss_timer_updated", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 4)
+	require.Equal(t, "set", ev["event_type"])
+	require.Equal(t, "pto", ev["timer_type"])
+	require.Equal(t, "handshake", ev["packet_number_space"])
+	require.Contains(t, ev, "delta")
+	delta := time.Duration(ev["delta"].(float64)*1e6) * time.Nanosecond
+	require.WithinDuration(t, timeout, entry.Time.Add(delta), scaleDuration(10*time.Microsecond))
+}
 
-		It("records an ECN state transition, with a trigger", func() {
-			tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedNoECNCounts)
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("recovery:ecn_state_updated"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(2))
-			Expect(ev).To(HaveKeyWithValue("new", "failed"))
-			Expect(ev).To(HaveKeyWithValue("trigger", "ACK doesn't contain ECN marks"))
-		})
+func TestExpiredLossTimer(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:loss_timer_updated", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 3)
+	require.Equal(t, "expired", ev["event_type"])
+	require.Equal(t, "ack", ev["timer_type"])
+	require.Equal(t, "application_data", ev["packet_number_space"])
+}
 
-		It("records a generic event", func() {
-			tracer.Debug("foo", "bar")
-			tracer.Close()
-			entry := exportAndParseSingle(buf)
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(entry.Name).To(Equal("transport:foo"))
-			ev := entry.Event
-			Expect(ev).To(HaveLen(1))
-			Expect(ev).To(HaveKeyWithValue("details", "bar"))
-		})
-	})
-})
+func TestCanceledLossTimer(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.LossTimerCanceled()
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:loss_timer_updated", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 1)
+	require.Equal(t, "cancelled", ev["event_type"])
+}
+
+func TestECNStateTransitionWithoutTrigger(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:ecn_state_updated", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 1)
+	require.Equal(t, "unknown", ev["new"])
+}
+
+func TestECNStateTransitionWithTrigger(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedNoECNCounts)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:ecn_state_updated", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 2)
+	require.Equal(t, "failed", ev["new"])
+	require.Equal(t, "ACK doesn't contain ECN marks", ev["trigger"])
+}
+
+func TestGenericConnectionTracerEvent(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.Debug("foo", "bar")
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "transport:foo", entry.Name)
+	ev := entry.Event
+	require.Len(t, ev, 1)
+	require.Equal(t, "bar", ev["details"])
+}
