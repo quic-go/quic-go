@@ -8,7 +8,6 @@ import (
 
 	"github.com/quic-go/qpack"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"golang.org/x/net/http2"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -231,7 +230,8 @@ var _ = Describe("Response Writer", func() {
 		rw.WriteHeader(200)
 		rw.Write([]byte("foobar"))
 		rw.Header().Set("Key", "Value")
-		rw.Header().Set(http2.TrailerPrefix+"Key2", "Value")
+		rw.Header().Set(http.TrailerPrefix+"Key2", "Value")
+		rw.Flush()
 
 		// Needs to call writeTrailers to simulate the end of the handler
 		Expect(rw.writeTrailers()).ToNot(HaveOccurred())

@@ -44,6 +44,7 @@ type responseWriter struct {
 	headerComplete bool  // set once WriteHeader is called with a status code >= 200
 	headerWritten  bool  // set once the response header has been serialized to the stream
 	isHead         bool
+	trailerWritten bool // set once the response trailers has been serialized to the stream
 
 	hijacked bool // set on HTTPStream is called
 
@@ -233,8 +234,13 @@ func (w *responseWriter) FlushError() error {
 	if !w.headerComplete {
 		w.WriteHeader(http.StatusOK)
 	}
-	_, err := w.doWrite(nil)
-	return err
+	if _, err := w.doWrite(nil); err != nil {
+		return err
+	}
+	if !w.trailerWritten {
+		return w.writeTrailers()
+	}
+	return nil
 }
 
 func (w *responseWriter) Flush() {
@@ -287,7 +293,6 @@ func (w *responseWriter) hasNonEmptyTrailers() bool {
 
 // writeTrailers will write trailers to the stream if there are any.
 func (w *responseWriter) writeTrailers() error {
-	w.Flush()
 	w.promoteTrailers() // promote headers added via "Trailer:" convention as trailers
 
 	if !w.hasNonEmptyTrailers() {
@@ -311,6 +316,7 @@ func (w *responseWriter) writeTrailers() error {
 	buf = (&headersFrame{Length: uint64(b.Len())}).Append(buf)
 	buf = append(buf, b.Bytes()...)
 	_, err := w.str.writeUnframed(buf)
+	w.trailerWritten = true
 	return err
 }
 
