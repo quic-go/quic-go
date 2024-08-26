@@ -1,137 +1,114 @@
 package handshake
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Long Header AEAD", func() {
-	for _, ver := range []protocol.Version{protocol.Version1, protocol.Version2} {
-		v := ver
+func getSealerAndOpener(t *testing.T, cs *cipherSuite, v protocol.Version) (LongHeaderSealer, LongHeaderOpener) {
+	t.Helper()
+	key := make([]byte, 16)
+	hpKey := make([]byte, 16)
+	rand.Read(key)
+	rand.Read(hpKey)
+	block, err := aes.NewCipher(key)
+	require.NoError(t, err)
+	aead, err := cipher.NewGCM(block)
+	require.NoError(t, err)
 
-		Context(fmt.Sprintf("using version %s", v), func() {
-			for i := range cipherSuites {
-				cs := cipherSuites[i]
+	return newLongHeaderSealer(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v)),
+		newLongHeaderOpener(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v))
+}
 
-				Context(fmt.Sprintf("using %s", tls.CipherSuiteName(cs.ID)), func() {
-					getSealerAndOpener := func() (LongHeaderSealer, LongHeaderOpener) {
-						key := make([]byte, 16)
-						hpKey := make([]byte, 16)
-						rand.Read(key)
-						rand.Read(hpKey)
-						block, err := aes.NewCipher(key)
-						Expect(err).ToNot(HaveOccurred())
-						aead, err := cipher.NewGCM(block)
-						Expect(err).ToNot(HaveOccurred())
+func TestEncryptAndDecryptMessage(t *testing.T) {
+	for _, v := range []protocol.Version{protocol.Version1, protocol.Version2} {
+		for _, cs := range cipherSuites {
+			t.Run(fmt.Sprintf("QUIC %s/%s", v, tls.CipherSuiteName(cs.ID)), func(t *testing.T) {
+				sealer, opener := getSealerAndOpener(t, cs, v)
+				msg := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.")
+				ad := []byte("Donec in velit neque.")
 
-						return newLongHeaderSealer(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v)),
-							newLongHeaderOpener(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v))
-					}
+				encrypted := sealer.Seal(nil, msg, 0x1337, ad)
 
-					Context("message encryption", func() {
-						msg := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.")
-						ad := []byte("Donec in velit neque.")
+				opened, err := opener.Open(nil, encrypted, 0x1337, ad)
+				require.NoError(t, err)
+				require.Equal(t, msg, opened)
 
-						It("encrypts and decrypts a message", func() {
-							sealer, opener := getSealerAndOpener()
-							encrypted := sealer.Seal(nil, msg, 0x1337, ad)
-							opened, err := opener.Open(nil, encrypted, 0x1337, ad)
-							Expect(err).ToNot(HaveOccurred())
-							Expect(opened).To(Equal(msg))
-						})
+				// incorrect associated data
+				_, err = opener.Open(nil, encrypted, 0x1337, []byte("wrong ad"))
+				require.Equal(t, ErrDecryptionFailed, err)
 
-						It("fails to open a message if the associated data is not the same", func() {
-							sealer, opener := getSealerAndOpener()
-							encrypted := sealer.Seal(nil, msg, 0x1337, ad)
-							_, err := opener.Open(nil, encrypted, 0x1337, []byte("wrong ad"))
-							Expect(err).To(MatchError(ErrDecryptionFailed))
-						})
+				// incorrect packet number
+				_, err = opener.Open(nil, encrypted, 0x42, ad)
+				require.Equal(t, ErrDecryptionFailed, err)
+			})
+		}
+	}
+}
 
-						It("fails to open a message if the packet number is not the same", func() {
-							sealer, opener := getSealerAndOpener()
-							encrypted := sealer.Seal(nil, msg, 0x1337, ad)
-							_, err := opener.Open(nil, encrypted, 0x42, ad)
-							Expect(err).To(MatchError(ErrDecryptionFailed))
-						})
+func TestDecodePacketNumber(t *testing.T) {
+	msg := []byte("Lorem ipsum dolor sit amet")
+	ad := []byte("Donec in velit neque.")
 
-						It("decodes the packet number", func() {
-							sealer, opener := getSealerAndOpener()
-							encrypted := sealer.Seal(nil, msg, 0x1337, ad)
-							_, err := opener.Open(nil, encrypted, 0x1337, ad)
-							Expect(err).ToNot(HaveOccurred())
-							Expect(opener.DecodePacketNumber(0x38, protocol.PacketNumberLen1)).To(BeEquivalentTo(0x1338))
-						})
+	sealer, opener := getSealerAndOpener(t, getCipherSuite(tls.TLS_AES_128_GCM_SHA256), protocol.Version1)
+	encrypted := sealer.Seal(nil, msg, 0x1337, ad)
 
-						It("ignores packets it can't decrypt for packet number derivation", func() {
-							sealer, opener := getSealerAndOpener()
-							encrypted := sealer.Seal(nil, msg, 0x1337, ad)
-							_, err := opener.Open(nil, encrypted[:len(encrypted)-1], 0x1337, ad)
-							Expect(err).To(HaveOccurred())
-							Expect(opener.DecodePacketNumber(0x38, protocol.PacketNumberLen1)).To(BeEquivalentTo(0x38))
-						})
-					})
+	// can't decode the packet number if encryption failed
+	_, err := opener.Open(nil, encrypted[:len(encrypted)-1], 0x1337, ad)
+	require.Error(t, err)
+	require.Equal(t, protocol.PacketNumber(0x38), opener.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
 
-					Context("header encryption", func() {
-						It("encrypts and encrypts the header", func() {
-							sealer, opener := getSealerAndOpener()
-							var lastFourBitsDifferent int
-							for i := 0; i < 100; i++ {
-								sample := make([]byte, 16)
-								rand.Read(sample)
-								header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
-								sealer.EncryptHeader(sample, &header[0], header[9:13])
-								if header[0]&0xf != 0xb5&0xf {
-									lastFourBitsDifferent++
-								}
-								Expect(header[0] & 0xf0).To(Equal(byte(0xb5 & 0xf0)))
-								Expect(header[1:9]).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
-								Expect(header[9:13]).ToNot(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
-								opener.DecryptHeader(sample, &header[0], header[9:13])
-								Expect(header).To(Equal([]byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}))
-							}
-							Expect(lastFourBitsDifferent).To(BeNumerically(">", 75))
-						})
+	_, err = opener.Open(nil, encrypted, 0x1337, ad)
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(0x1338), opener.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
+}
 
-						It("encrypts and encrypts the header, for a 0xfff..fff sample", func() {
-							sealer, opener := getSealerAndOpener()
-							var lastFourBitsDifferent int
-							for i := 0; i < 100; i++ {
-								sample := bytes.Repeat([]byte{0xff}, 16)
-								header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
-								sealer.EncryptHeader(sample, &header[0], header[9:13])
-								if header[0]&0xf != 0xb5&0xf {
-									lastFourBitsDifferent++
-								}
-								Expect(header[0] & 0xf0).To(Equal(byte(0xb5 & 0xf0)))
-								Expect(header[1:9]).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
-								Expect(header[9:13]).ToNot(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
-								opener.DecryptHeader(sample, &header[0], header[9:13])
-								Expect(header).To(Equal([]byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}))
-							}
-						})
-
-						It("fails to decrypt the header when using a different sample", func() {
-							sealer, opener := getSealerAndOpener()
-							header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
-							sample := make([]byte, 16)
-							rand.Read(sample)
-							sealer.EncryptHeader(sample, &header[0], header[9:13])
-							rand.Read(sample) // use a different sample
-							opener.DecryptHeader(sample, &header[0], header[9:13])
-							Expect(header).ToNot(Equal([]byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}))
-						})
-					})
+func TestEncryptAndDecryptHeader(t *testing.T) {
+	for _, v := range []protocol.Version{protocol.Version1, protocol.Version2} {
+		t.Run("QUIC "+v.String(), func(t *testing.T) {
+			for _, cs := range cipherSuites {
+				t.Run(tls.CipherSuiteName(cs.ID), func(t *testing.T) {
+					testEncryptAndDecryptHeader(t, cs, v)
 				})
 			}
 		})
 	}
-})
+}
+
+func testEncryptAndDecryptHeader(t *testing.T, cs *cipherSuite, v protocol.Version) {
+	sealer, opener := getSealerAndOpener(t, cs, v)
+	var lastFourBitsDifferent int
+
+	for i := 0; i < 100; i++ {
+		sample := make([]byte, 16)
+		rand.Read(sample)
+		header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
+		sealer.EncryptHeader(sample, &header[0], header[9:13])
+		if header[0]&0xf != 0xb5&0xf {
+			lastFourBitsDifferent++
+		}
+		require.Equal(t, byte(0xb5&0xf0), header[0]&0xf0)
+		require.Equal(t, []byte{1, 2, 3, 4, 5, 6, 7, 8}, header[1:9])
+		require.NotEqual(t, []byte{0xde, 0xad, 0xbe, 0xef}, header[9:13])
+		opener.DecryptHeader(sample, &header[0], header[9:13])
+		require.Equal(t, []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}, header)
+	}
+	require.Greater(t, lastFourBitsDifferent, 75)
+
+	// decryption failure with different sample
+	header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
+	sample := make([]byte, 16)
+	rand.Read(sample)
+	sealer.EncryptHeader(sample, &header[0], header[9:13])
+	rand.Read(sample) // use a different sample
+	opener.DecryptHeader(sample, &header[0], header[9:13])
+	require.NotEqual(t, []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}, header)
+}
