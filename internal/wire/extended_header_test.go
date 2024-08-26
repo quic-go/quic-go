@@ -2,11 +2,9 @@ package wire
 
 import (
 	"bytes"
-	"log"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
@@ -167,15 +165,6 @@ func TestWritesRetryPacket(t *testing.T) {
 			require.Equal(t, expected, b)
 		})
 	}
-}
-
-func setupLogTest(t *testing.T, buf *bytes.Buffer) utils.Logger {
-	logger := utils.DefaultLogger
-	logger.SetLogLevel(utils.LogLevelDebug)
-	originalOutput := log.Writer()
-	log.SetOutput(buf)
-	t.Cleanup(func() { log.SetOutput(originalOutput) })
-	return logger
 }
 
 func TestLogsLongHeaders(t *testing.T) {
