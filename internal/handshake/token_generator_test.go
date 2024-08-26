@@ -4,120 +4,117 @@ import (
 	"crypto/rand"
 	"encoding/asn1"
 	"net"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Token Generator", func() {
-	var tokenGen *TokenGenerator
+func newTokenGenerator(t *testing.T) *TokenGenerator {
+	var key TokenProtectorKey
+	_, err := rand.Read(key[:])
+	require.NoError(t, err)
+	return NewTokenGenerator(key)
+}
 
-	BeforeEach(func() {
-		var key TokenProtectorKey
-		rand.Read(key[:])
-		tokenGen = NewTokenGenerator(key)
-	})
+func TestTokenGeneratorNilTokens(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
+	nilToken, err := tokenGen.DecodeToken(nil)
+	require.NoError(t, err)
+	require.Nil(t, nilToken)
+}
 
-	It("generates a token", func() {
-		ip := net.IPv4(127, 0, 0, 1)
-		token, err := tokenGen.NewRetryToken(&net.UDPAddr{IP: ip, Port: 1337}, protocol.ConnectionID{}, protocol.ConnectionID{})
-		Expect(err).ToNot(HaveOccurred())
-		Expect(token).ToNot(BeEmpty())
-	})
+func TestTokenGeneratorValidToken(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
 
-	It("works with nil tokens", func() {
-		token, err := tokenGen.DecodeToken(nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(token).To(BeNil())
-	})
+	addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+	connID1 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+	connID2 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
+	tokenEnc, err := tokenGen.NewRetryToken(addr, connID1, connID2)
+	require.NoError(t, err)
+	decodedToken, err := tokenGen.DecodeToken(tokenEnc)
+	require.NoError(t, err)
+	require.True(t, decodedToken.ValidateRemoteAddr(addr))
+	require.False(t, decodedToken.ValidateRemoteAddr(&net.UDPAddr{IP: net.IPv4(192, 168, 0, 2), Port: 1337}))
+	require.WithinDuration(t, time.Now(), decodedToken.SentTime, 100*time.Millisecond)
+	require.Equal(t, connID1, decodedToken.OriginalDestConnectionID)
+	require.Equal(t, connID2, decodedToken.RetrySrcConnectionID)
+}
 
-	It("accepts a valid token", func() {
-		addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		tokenEnc, err := tokenGen.NewRetryToken(addr, protocol.ConnectionID{}, protocol.ConnectionID{})
-		Expect(err).ToNot(HaveOccurred())
-		token, err := tokenGen.DecodeToken(tokenEnc)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(token.ValidateRemoteAddr(addr)).To(BeTrue())
-		Expect(token.ValidateRemoteAddr(&net.UDPAddr{IP: net.IPv4(192, 168, 0, 2), Port: 1337})).To(BeFalse())
-		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
-		Expect(token.OriginalDestConnectionID.Len()).To(BeZero())
-		Expect(token.RetrySrcConnectionID.Len()).To(BeZero())
-	})
+func TestTokenGeneratorRejectsInvalidTokens(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
 
-	It("saves the connection ID", func() {
-		connID1 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
-		connID2 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
-		tokenEnc, err := tokenGen.NewRetryToken(&net.UDPAddr{}, connID1, connID2)
-		Expect(err).ToNot(HaveOccurred())
-		token, err := tokenGen.DecodeToken(tokenEnc)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(token.OriginalDestConnectionID).To(Equal(connID1))
-		Expect(token.RetrySrcConnectionID).To(Equal(connID2))
-	})
+	_, err := tokenGen.DecodeToken([]byte("invalid token"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "too short")
+}
 
-	It("rejects invalid tokens", func() {
-		_, err := tokenGen.DecodeToken([]byte("invalid token"))
-		Expect(err).To(HaveOccurred())
-	})
+func TestTokenGeneratorDecodingFailed(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
 
-	It("rejects tokens that cannot be decoded", func() {
-		token, err := tokenGen.tokenProtector.NewToken([]byte("foobar"))
-		Expect(err).ToNot(HaveOccurred())
-		_, err = tokenGen.DecodeToken(token)
-		Expect(err).To(HaveOccurred())
-	})
+	invalidToken, err := tokenGen.tokenProtector.NewToken([]byte("foobar"))
+	require.NoError(t, err)
+	_, err = tokenGen.DecodeToken(invalidToken)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "asn1")
+}
 
-	It("rejects tokens that can be decoded, but have additional payload", func() {
-		t, err := asn1.Marshal(token{RemoteAddr: []byte("foobar")})
-		Expect(err).ToNot(HaveOccurred())
-		t = append(t, []byte("rest")...)
-		enc, err := tokenGen.tokenProtector.NewToken(t)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = tokenGen.DecodeToken(enc)
-		Expect(err).To(MatchError("rest when unpacking token: 4"))
-	})
+func TestTokenGeneratorAdditionalPayload(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
 
-	// we don't generate tokens that have no data, but we should be able to handle them if we receive one for whatever reason
-	It("doesn't panic if a tokens has no data", func() {
-		t, err := asn1.Marshal(token{RemoteAddr: []byte("")})
-		Expect(err).ToNot(HaveOccurred())
-		enc, err := tokenGen.tokenProtector.NewToken(t)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = tokenGen.DecodeToken(enc)
-		Expect(err).ToNot(HaveOccurred())
-	})
+	tok, err := asn1.Marshal(token{RemoteAddr: []byte("foobar")})
+	require.NoError(t, err)
+	tok = append(tok, []byte("rest")...)
+	enc, err := tokenGen.tokenProtector.NewToken(tok)
+	require.NoError(t, err)
+	_, err = tokenGen.DecodeToken(enc)
+	require.EqualError(t, err, "rest when unpacking token: 4")
+}
 
-	It("works with an IPv6 addresses ", func() {
-		addresses := []string{
-			"2001:db8::68",
-			"2001:0000:4136:e378:8000:63bf:3fff:fdd2",
-			"2001::1",
-			"ff01:0:0:0:0:0:0:2",
-		}
-		for _, addr := range addresses {
-			ip := net.ParseIP(addr)
-			Expect(ip).ToNot(BeNil())
-			raddr := &net.UDPAddr{IP: ip, Port: 1337}
-			tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
-			Expect(err).ToNot(HaveOccurred())
-			token, err := tokenGen.DecodeToken(tokenEnc)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(token.ValidateRemoteAddr(raddr)).To(BeTrue())
-			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
-		}
-	})
+func TestTokenGeneratorEmptyTokens(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
 
-	It("uses the string representation an address that is not a UDP address", func() {
-		raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
+	emptyTok, err := asn1.Marshal(token{RemoteAddr: []byte("")})
+	require.NoError(t, err)
+	emptyEnc, err := tokenGen.tokenProtector.NewToken(emptyTok)
+	require.NoError(t, err)
+	_, err = tokenGen.DecodeToken(emptyEnc)
+	require.NoError(t, err)
+}
+
+func TestTokenGeneratorIPv6(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
+
+	addresses := []string{
+		"2001:db8::68",
+		"2001:0000:4136:e378:8000:63bf:3fff:fdd2",
+		"2001::1",
+		"ff01:0:0:0:0:0:0:2",
+	}
+	for _, addr := range addresses {
+		ip := net.ParseIP(addr)
+		require.NotNil(t, ip)
+		raddr := &net.UDPAddr{IP: ip, Port: 1337}
 		tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
-		Expect(err).ToNot(HaveOccurred())
+		require.NoError(t, err)
 		token, err := tokenGen.DecodeToken(tokenEnc)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(token.ValidateRemoteAddr(raddr)).To(BeTrue())
-		Expect(token.ValidateRemoteAddr(&net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1338})).To(BeFalse())
-		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
-	})
-})
+		require.NoError(t, err)
+		require.True(t, token.ValidateRemoteAddr(raddr))
+		require.WithinDuration(t, time.Now(), token.SentTime, 100*time.Millisecond)
+	}
+}
+
+func TestTokenGeneratorNonUDPAddr(t *testing.T) {
+	tokenGen := newTokenGenerator(t)
+
+	raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
+	tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
+	require.NoError(t, err)
+	token, err := tokenGen.DecodeToken(tokenEnc)
+	require.NoError(t, err)
+	require.True(t, token.ValidateRemoteAddr(raddr))
+	require.False(t, token.ValidateRemoteAddr(&net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1338}))
+	require.WithinDuration(t, time.Now(), token.SentTime, 100*time.Millisecond)
+}

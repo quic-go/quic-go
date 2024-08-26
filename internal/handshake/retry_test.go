@@ -2,45 +2,55 @@ package handshake
 
 import (
 	"encoding/binary"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Retry Integrity Check", func() {
-	It("calculates retry integrity tags", func() {
-		connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-		fooTag := GetRetryIntegrityTag([]byte("foo"), connID, protocol.Version1)
-		barTag := GetRetryIntegrityTag([]byte("bar"), connID, protocol.Version1)
-		Expect(fooTag).ToNot(BeNil())
-		Expect(barTag).ToNot(BeNil())
-		Expect(*fooTag).ToNot(Equal(*barTag))
-	})
+func TestRetryIntegrityTagCalculation(t *testing.T) {
+	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+	fooTag := GetRetryIntegrityTag([]byte("foo"), connID, protocol.Version1)
+	barTag := GetRetryIntegrityTag([]byte("bar"), connID, protocol.Version1)
+	require.NotNil(t, fooTag)
+	require.NotNil(t, barTag)
+	require.NotEqual(t, *fooTag, *barTag)
+}
 
-	It("includes the original connection ID in the tag calculation", func() {
-		connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-		connID2 := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
-		t1 := GetRetryIntegrityTag([]byte("foobar"), connID1, protocol.Version1)
-		t2 := GetRetryIntegrityTag([]byte("foobar"), connID2, protocol.Version1)
-		Expect(*t1).ToNot(Equal(*t2))
-	})
+func TestRetryIntegrityTagWithDifferentConnectionIDs(t *testing.T) {
+	connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+	connID2 := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
+	t1 := GetRetryIntegrityTag([]byte("foobar"), connID1, protocol.Version1)
+	t2 := GetRetryIntegrityTag([]byte("foobar"), connID2, protocol.Version1)
+	require.NotEqual(t, *t1, *t2)
+}
 
-	DescribeTable("using the test vectors",
-		func(version protocol.Version, data []byte) {
-			v := binary.BigEndian.Uint32(data[1:5])
-			Expect(protocol.Version(v)).To(Equal(version))
-			connID := protocol.ParseConnectionID(splitHexString("0x8394c8f03e515708"))
-			Expect(GetRetryIntegrityTag(data[:len(data)-16], connID, version)[:]).To(Equal(data[len(data)-16:]))
+func TestRetryIntegrityTagWithTestVectors(t *testing.T) {
+	tests := []struct {
+		name    string
+		version protocol.Version
+		data    []byte
+	}{
+		{
+			name:    "v1",
+			version: protocol.Version1,
+			data:    splitHexString(t, "ff000000010008f067a5502a4262b574 6f6b656e04a265ba2eff4d829058fb3f 0f2496ba"),
 		},
-		Entry("v1",
-			protocol.Version1,
-			splitHexString("ff000000010008f067a5502a4262b574 6f6b656e04a265ba2eff4d829058fb3f 0f2496ba"),
-		),
-		Entry("v2",
-			protocol.Version2,
-			splitHexString("cf6b3343cf0008f067a5502a4262b574 6f6b656ec8646ce8bfe33952d9555436 65dcc7b6"),
-		),
-	)
-})
+		{
+			name:    "v2",
+			version: protocol.Version2,
+			data:    splitHexString(t, "cf6b3343cf0008f067a5502a4262b574 6f6b656ec8646ce8bfe33952d9555436 65dcc7b6"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := binary.BigEndian.Uint32(tt.data[1:5])
+			require.Equal(t, tt.version, protocol.Version(v))
+			connID := protocol.ParseConnectionID(splitHexString(t, "0x8394c8f03e515708"))
+			tag := GetRetryIntegrityTag(tt.data[:len(tt.data)-16], connID, tt.version)
+			require.Equal(t, tt.data[len(tt.data)-16:], tag[:])
+		})
+	}
+}
