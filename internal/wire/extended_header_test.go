@@ -169,19 +169,18 @@ func TestWritesRetryPacket(t *testing.T) {
 	}
 }
 
-func setupLogTest(buf *bytes.Buffer) (utils.Logger, func()) {
+func setupLogTest(t *testing.T, buf *bytes.Buffer) utils.Logger {
 	logger := utils.DefaultLogger
 	logger.SetLogLevel(utils.LogLevelDebug)
 	originalOutput := log.Writer()
 	log.SetOutput(buf)
-
-	return logger, func() { log.SetOutput(originalOutput) }
+	t.Cleanup(func() { log.SetOutput(originalOutput) })
+	return logger
 }
 
 func TestLogsLongHeaders(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger, reset := setupLogTest(buf)
-	defer reset()
+	logger := setupLogTest(t, buf)
 
 	(&ExtendedHeader{
 		Header: Header{
@@ -199,8 +198,7 @@ func TestLogsLongHeaders(t *testing.T) {
 
 func TestLogsInitialPacketsWithToken(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger, reset := setupLogTest(buf)
-	defer reset()
+	logger := setupLogTest(t, buf)
 
 	(&ExtendedHeader{
 		Header: Header{
@@ -219,8 +217,7 @@ func TestLogsInitialPacketsWithToken(t *testing.T) {
 
 func TestLogsInitialPacketsWithoutToken(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger, reset := setupLogTest(buf)
-	defer reset()
+	logger := setupLogTest(t, buf)
 
 	(&ExtendedHeader{
 		Header: Header{
@@ -238,8 +235,7 @@ func TestLogsInitialPacketsWithoutToken(t *testing.T) {
 
 func TestLogsRetryPacketsWithToken(t *testing.T) {
 	buf := &bytes.Buffer{}
-	logger, reset := setupLogTest(buf)
-	defer reset()
+	logger := setupLogTest(t, buf)
 
 	(&ExtendedHeader{
 		Header: Header{
