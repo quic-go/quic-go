@@ -1,24 +1,24 @@
 package wire
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Pool", func() {
-	It("gets and puts STREAM frames", func() {
-		f := GetStreamFrame()
-		putStreamFrame(f)
-	})
+func TestGetAndPutStreamFrames(t *testing.T) {
+	f := GetStreamFrame()
+	putStreamFrame(f)
+}
 
-	It("panics when putting a STREAM frame with a wrong capacity", func() {
-		f := GetStreamFrame()
-		f.Data = []byte("foobar")
-		Expect(func() { putStreamFrame(f) }).To(Panic())
-	})
+func TestPanicOnPuttingStreamFrameWithWrongCapacity(t *testing.T) {
+	f := GetStreamFrame()
+	f.Data = []byte("foobar")
+	require.Panics(t, func() { putStreamFrame(f) })
+}
 
-	It("accepts STREAM frames not from the buffer, but ignores them", func() {
-		f := &StreamFrame{Data: []byte("foobar")}
-		putStreamFrame(f)
-	})
-})
+func TestAcceptStreamFramesNotFromBuffer(t *testing.T) {
+	f := &StreamFrame{Data: []byte("foobar")}
+	putStreamFrame(f)
+	// No assertion needed as we're just checking it doesn't panic
+}
