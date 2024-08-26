@@ -1,50 +1,70 @@
 package logging_test
 
 import (
+	"testing"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
-	. "github.com/quic-go/quic-go/logging"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/quic-go/quic-go/logging"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Packet Header", func() {
-	Context("determining the packet type from the header", func() {
-		It("recognizes Initial packets", func() {
-			Expect(PacketTypeFromHeader(&wire.Header{
+func TestPacketTypeFromHeader(t *testing.T) {
+	testCases := []struct {
+		name         string
+		header       *wire.Header
+		expectedType logging.PacketType
+	}{
+		{
+			name: "Initial packet",
+			header: &wire.Header{
 				Type:    protocol.PacketTypeInitial,
 				Version: protocol.Version1,
-			})).To(Equal(PacketTypeInitial))
-		})
-
-		It("recognizes Handshake packets", func() {
-			Expect(PacketTypeFromHeader(&wire.Header{
+			},
+			expectedType: logging.PacketTypeInitial,
+		},
+		{
+			name: "Handshake packet",
+			header: &wire.Header{
 				Type:    protocol.PacketTypeHandshake,
 				Version: protocol.Version1,
-			})).To(Equal(PacketTypeHandshake))
-		})
-
-		It("recognizes Retry packets", func() {
-			Expect(PacketTypeFromHeader(&wire.Header{
+			},
+			expectedType: logging.PacketTypeHandshake,
+		},
+		{
+			name: "Retry packet",
+			header: &wire.Header{
 				Type:    protocol.PacketTypeRetry,
 				Version: protocol.Version1,
-			})).To(Equal(PacketTypeRetry))
-		})
-
-		It("recognizes 0-RTT packets", func() {
-			Expect(PacketTypeFromHeader(&wire.Header{
+			},
+			expectedType: logging.PacketTypeRetry,
+		},
+		{
+			name: "0-RTT packet",
+			header: &wire.Header{
 				Type:    protocol.PacketType0RTT,
 				Version: protocol.Version1,
-			})).To(Equal(PacketType0RTT))
-		})
+			},
+			expectedType: logging.PacketType0RTT,
+		},
+		{
+			name:         "Version Negotiation packet",
+			header:       &wire.Header{},
+			expectedType: logging.PacketTypeVersionNegotiation,
+		},
+		{
+			name: "Unrecognized packet type",
+			header: &wire.Header{
+				Version: protocol.Version1,
+			},
+			expectedType: logging.PacketTypeNotDetermined,
+		},
+	}
 
-		It("recognizes Version Negotiation packets", func() {
-			Expect(PacketTypeFromHeader(&wire.Header{})).To(Equal(PacketTypeVersionNegotiation))
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			packetType := logging.PacketTypeFromHeader(tc.header)
+			require.Equal(t, tc.expectedType, packetType)
 		})
-
-		It("handles unrecognized packet types", func() {
-			Expect(PacketTypeFromHeader(&wire.Header{Version: protocol.Version1})).To(Equal(PacketTypeNotDetermined))
-		})
-	})
-})
+	}
+}
