@@ -117,11 +117,9 @@ func (w *responseWriter) sniffContentType(p []byte) {
 	// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shouldn't do sniffing.
 	_, haveType := w.header["Content-Type"]
 
-	// If the Transfer-Encoding or Content-Encoding was set and is non-blank,
-	// we shouldn't sniff the body.
-	hasTE := w.header.Get("Transfer-Encoding") != ""
+	// If the Content-Encoding was set and is non-blank, we shouldn't sniff the body.
 	hasCE := w.header.Get("Content-Encoding") != ""
-	if !hasCE && !haveType && !hasTE && len(p) > 0 {
+	if !hasCE && !haveType && len(p) > 0 {
 		w.header.Set("Content-Type", http.DetectContentType(p))
 	}
 }
