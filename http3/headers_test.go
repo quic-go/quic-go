@@ -359,6 +359,15 @@ var _ = Describe("Response", func() {
 		Expect(err).To(MatchError("invalid response pseudo header: :method"))
 	})
 
+	It("rejects the Transfer-Encoding header field", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "404"},
+			{Name: "transfer-encoding", Value: "chunked"},
+		}
+		err := updateResponseFromHeaders(&http.Response{}, headers)
+		Expect(err).To(MatchError("invalid header field: Transfer-Encoding"))
+	})
+
 	It("parses trailers", func() {
 		headers := []qpack.HeaderField{
 			{Name: "content-length", Value: "42"},

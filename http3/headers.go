@@ -75,6 +75,8 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 			}
 			readFirstRegularHeader = true
 			switch h.Name {
+			case "transfer-encoding":
+				return header{}, errors.New("invalid header field: Transfer-Encoding")
 			case "content-length":
 				// Ignore duplicate Content-Length headers.
 				// Fail if the duplicates differ.

@@ -245,11 +245,10 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	respBody := newResponseBody(s.stream, contentLength, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
-	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
 	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := s.isConnect && res.StatusCode >= 200 && res.StatusCode < 300
-	if !hasTransferEncoding && !isInformational && !isNoContent && !isSuccessfulConnect {
+	if !isInformational && !isNoContent && !isSuccessfulConnect {
 		res.ContentLength = -1
 		if clens, ok := res.Header["Content-Length"]; ok && len(clens) == 1 {
 			if clen64, err := strconv.ParseInt(clens[0], 10, 64); err == nil {
