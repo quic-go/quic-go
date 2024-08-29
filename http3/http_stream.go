@@ -239,6 +239,13 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	// See section 4.1.2 of RFC 9114.
 	respBody := newResponseBody(s.stream, res.ContentLength, s.reqDone)
 
+	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
+	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
+	isNoContent := res.StatusCode == http.StatusNoContent
+	isSuccessfulConnect := s.isConnect && res.StatusCode >= 200 && res.StatusCode < 300
+	if (isInformational || isNoContent || isSuccessfulConnect) && res.ContentLength == -1 {
+		res.ContentLength = 0
+	}
 	if s.requestedGzip && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")
