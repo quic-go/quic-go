@@ -33,6 +33,17 @@ var _ = Describe("Request", func() {
 		Expect(req.RequestURI).To(Equal("/foo"))
 	})
 
+	It("sets the ContentLength to -1", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(req.ContentLength).To(BeEquivalentTo(-1))
+	})
+
 	It("rejects upper-case fields", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
@@ -343,7 +354,6 @@ var _ = Describe("Response", func() {
 	It("rejects invalid status codes", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":status", Value: "foobar"},
-			{Name: "content-length", Value: "42"},
 		}
 		err := updateResponseFromHeaders(&http.Response{}, headers)
 		Expect(err).To(HaveOccurred())

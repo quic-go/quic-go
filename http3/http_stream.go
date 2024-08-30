@@ -238,11 +238,7 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 
 	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.
-	contentLength := int64(-1)
-	if _, ok := res.Header["Content-Length"]; ok && res.ContentLength >= 0 {
-		contentLength = res.ContentLength
-	}
-	respBody := newResponseBody(s.stream, contentLength, s.reqDone)
+	respBody := newResponseBody(s.stream, res.ContentLength, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200

@@ -289,6 +289,7 @@ var _ = Describe("HTTP tests", func() {
 		Expect(resp.StatusCode).To(Equal(200))
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
 		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.ContentLength).To(BeEquivalentTo(-1))
 		Expect(body).To(Equal(PRDataLong))
 	})
 

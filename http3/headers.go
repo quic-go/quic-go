@@ -22,7 +22,7 @@ type header struct {
 	Status    string
 	// for Extended connect
 	Protocol string
-	// parsed and deduplicated
+	// parsed and deduplicated. -1 if no Content-Length header is sent
 	ContentLength int64
 	// all non-pseudo headers
 	Headers http.Header
@@ -91,6 +91,7 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 			}
 		}
 	}
+	hdr.ContentLength = -1
 	if len(contentLengthStr) > 0 {
 		// use ParseUint instead of ParseInt, so that parsing fails on negative values
 		cl, err := strconv.ParseUint(contentLengthStr, 10, 63)
