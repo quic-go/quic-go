@@ -5,6 +5,7 @@ package quic
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/netip"
@@ -31,7 +32,7 @@ const (
 // Contrary to what the naming suggests, the ipv{4,6}.Message is not dependent on the IP version.
 // They're both just aliases for x/net/internal/socket.Message.
 // This means we can use this struct to read from a socket that receives both IPv4 and IPv6 messages.
-var _ ipv4.Message = ipv6.Message{}
+var _ = ipv6.Message{}
 
 type batchConn interface {
 	ReadBatch(ms []ipv4.Message, flags int) (int, error)
@@ -233,6 +234,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		}
 		data = remainder
 	}
+	fmt.Printf("receivedPacket from %s (%d bytes), packet info: %+v\n", p.remoteAddr, len(p.data), p.info)
 	return p, nil
 }
 
