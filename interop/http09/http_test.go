@@ -7,81 +7,71 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"testing"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/testdata"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("HTTP 0.9 integration tests", func() {
-	var (
-		ln    *quic.EarlyListener
-		saddr net.Addr
-		done  chan struct{}
-	)
+func startServer(t *testing.T) net.Addr {
+	t.Helper()
+	server := &Server{}
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	tr := &quic.Transport{Conn: conn}
+	tlsConf := testdata.GetTLSConfig()
+	tlsConf.NextProtos = []string{NextProto}
+	ln, err := tr.ListenEarly(tlsConf, &quic.Config{})
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = server.ServeListener(ln)
+	}()
+	t.Cleanup(func() {
+		require.NoError(t, ln.Close())
+		<-done
+	})
+	return ln.Addr()
+}
 
+func TestHTTPRequest(t *testing.T) {
 	http.HandleFunc("/helloworld", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("Hello World!"))
 	})
 
-	BeforeEach(func() {
-		server := &Server{}
-		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-		Expect(err).ToNot(HaveOccurred())
-		tr := &quic.Transport{Conn: conn}
-		tlsConf := testdata.GetTLSConfig()
-		tlsConf.NextProtos = []string{NextProto}
-		ln, err = tr.ListenEarly(tlsConf, &quic.Config{})
-		Expect(err).ToNot(HaveOccurred())
-		done = make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			defer close(done)
-			_ = server.ServeListener(ln)
-		}()
-		saddr = ln.Addr()
+	addr := startServer(t)
+
+	rt := &RoundTripper{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	t.Cleanup(func() { rt.Close() })
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/helloworld", addr), nil)
+	rsp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	data, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, []byte("Hello World!"), data)
+}
+
+func TestHTTPHeaders(t *testing.T) {
+	http.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("foo", "bar")
+		w.WriteHeader(1337)
+		_, _ = w.Write([]byte("done"))
 	})
 
-	AfterEach(func() {
-		Expect(ln.Close()).To(Succeed())
-		Eventually(done).Should(BeClosed())
-	})
+	addr := startServer(t)
 
-	It("performs request", func() {
-		rt := &RoundTripper{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-		defer rt.Close()
-		req := httptest.NewRequest(
-			http.MethodGet,
-			fmt.Sprintf("https://%s/helloworld", saddr),
-			nil,
-		)
-		rsp, err := rt.RoundTrip(req)
-		Expect(err).ToNot(HaveOccurred())
-		data, err := io.ReadAll(rsp.Body)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(data).To(Equal([]byte("Hello World!")))
-	})
+	rt := &RoundTripper{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	t.Cleanup(func() { rt.Close() })
 
-	It("allows setting of headers", func() {
-		http.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Add("foo", "bar")
-			w.WriteHeader(1337)
-			_, _ = w.Write([]byte("done"))
-		})
-
-		rt := &RoundTripper{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-		defer rt.Close()
-		req := httptest.NewRequest(
-			http.MethodGet,
-			fmt.Sprintf("https://%s/headers", saddr),
-			nil,
-		)
-		rsp, err := rt.RoundTrip(req)
-		Expect(err).ToNot(HaveOccurred())
-		data, err := io.ReadAll(rsp.Body)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(data).To(Equal([]byte("done")))
-	})
-})
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/headers", addr), nil)
+	rsp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	data, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, []byte("done"), data)
+	// HTTP/0.9 doesn't support HTTP headers
+}
