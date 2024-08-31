@@ -89,16 +89,6 @@ var _ = Describe("HTTP tests", func() {
 			w.Header().Set("X-RemoteAddr", r.RemoteAddr)
 			w.WriteHeader(http.StatusOK)
 		})
-		mux.HandleFunc("/trailers", func(w http.ResponseWriter, r *http.Request) {
-			defer GinkgoRecover()
-			w.Header().Set("Trailer", "Grpc-Status")
-			w.Header().Add("trailer", "Grpc-Message")
-			w.WriteHeader(200)
-			io.WriteString(w, "Hello, World!\n") // don't check the error here. Stream may be reset.
-			defer w.Header().Set("Grpc-Status", "10")
-			defer w.Header().Set("Grpc-Message", "Message here")
-			defer w.Header().Set(http.TrailerPrefix+"Grpc-Details", "details")
-		})
 
 		server = &http3.Server{
 			Handler:    mux,
@@ -1032,17 +1022,42 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	It("sends and receives trailers", func() {
+		mux.HandleFunc("/trailers", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Set("Trailer", "AtEnd1, AtEnd2")
+			w.Header().Add("Trailer", "LAST")
+
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("AtEnd1", "value 1")
+			io.WriteString(w, "This HTTP response has both headers before this text and trailers at the end.\n")
+			w.(http.Flusher).Flush()
+			w.Header().Set("AtEnd2", "value 2")
+			w.Header().Set("LAST", "value 3")
+			w.Header().Set(http.TrailerPrefix+"Unannounced", "Surprise!")
+			w.Header().Set("Late-Header", "No surprise!")
+		})
+
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/trailers", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(string(body)).To(Equal("Hello, World!\n"))
-		Expect(resp.Header).To(Not(HaveKey("Grpc-Status")))
-		Expect(resp.Header).To(Not(HaveKey("Grpc-Message")))
-		Expect(resp.Header).To(Not(HaveKey("Grpc-Details")))
-		Expect(resp.Header).To(Not(HaveKey("Trailer:Grpc-Details")))
-		Expect(resp.Trailer.Get("grpc-status")).To(Equal("10"))
-		Expect(resp.Trailer.Get("grpc-message")).To(Equal("Message here"))
+		Expect(string(body)).To(Equal("This HTTP response has both headers before this text and trailers at the end.\n"))
+		// note: canonical header casing is applied to the trailer names, so "LAST" is now "Last"
+		Expect(resp.Header.Values("Trailer")).To(Equal([]string{"Atend1", "Atend2", "Last"}))
+		Expect(resp.Header).To(Not(HaveKey("Atend1")))
+		Expect(resp.Header).To(Not(HaveKey("Atend2")))
+		Expect(resp.Header).To(Not(HaveKey("Last")))
+		Expect(resp.Header).To(Not(HaveKey("Late-Header")))
+		for k := range resp.Header {
+			Expect(k).To(Not(HavePrefix(http.TrailerPrefix)))
+		}
+		Expect(resp.Trailer).To(Equal(http.Header(map[string][]string{
+			"Atend1":      {"value 1"},
+			"Atend2":      {"value 2"},
+			"Last":        {"value 3"},
+			"Unannounced": {"Surprise!"},
+		})))
 	})
 })

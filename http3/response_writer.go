@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/textproto"
 	"strconv"
 	"strings"
 	"time"
@@ -205,14 +206,25 @@ func (w *responseWriter) writeHeader(status int) error {
 
 	// Handle trailer fields
 	if vals, ok := w.header["Trailer"]; ok {
+		trailers := make([]string, 0, len(vals))
 		for _, val := range vals {
-			w.declareTrailer(val)
+			for _, trailer := range strings.Split(val, ",") {
+				// We need to convert to the canonical header key value here because this will be called when using
+				// headers.Add or headers.Set.
+				trailer = textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(trailer))
+				w.declareTrailer(trailer)
+				trailers = append(trailers, trailer)
+			}
 		}
+		w.header["Trailer"] = trailers
 	}
-	w.promoteTrailers()
 
 	for k, v := range w.header {
 		if _, excluded := w.trailers[k]; excluded {
+			continue
+		}
+		// Ignore "Trailer:" prefixed headers
+		if strings.HasPrefix(k, http.TrailerPrefix) {
 			continue
 		}
 		for index := range v {
@@ -237,29 +249,22 @@ func (w *responseWriter) FlushError() error {
 	if _, err := w.doWrite(nil); err != nil {
 		return err
 	}
-	if !w.trailerWritten {
-		return w.writeTrailers()
-	}
 	return nil
+}
+
+func (w *responseWriter) flushFinal() {
+	w.Flush()
+	if !w.trailerWritten {
+		if err := w.writeTrailers(); err != nil {
+			w.logger.Debug("could not write trailers", "error", err)
+		}
+	}
 }
 
 func (w *responseWriter) Flush() {
 	if err := w.FlushError(); err != nil {
 		if w.logger != nil {
 			w.logger.Debug("could not flush to stream", "error", err)
-		}
-	}
-}
-
-// promoteTrailers will discover trailers prefixed with "Trailer:" and "promote" them to the list of
-// trailers. This should be called before writing headers (to avoid writing trailers in the headers list)
-// and before sending trailers, to ensure that we capture all of the trailers added between sending the
-// header and finally sending the trailers.
-func (w *responseWriter) promoteTrailers() {
-	for k := range w.header {
-		// Handle "Trailer:" prefix
-		if strings.HasPrefix(k, http.TrailerPrefix) {
-			w.declareTrailer(k)
 		}
 	}
 }
@@ -293,7 +298,14 @@ func (w *responseWriter) hasNonEmptyTrailers() bool {
 
 // writeTrailers will write trailers to the stream if there are any.
 func (w *responseWriter) writeTrailers() error {
-	w.promoteTrailers() // promote headers added via "Trailer:" convention as trailers
+	// promote headers added via "Trailer:" convention as trailers, these can be added after
+	// streaming the status/headers have been written.
+	for k := range w.header {
+		// Handle "Trailer:" prefix
+		if strings.HasPrefix(k, http.TrailerPrefix) {
+			w.declareTrailer(k)
+		}
+	}
 
 	if !w.hasNonEmptyTrailers() {
 		return nil
