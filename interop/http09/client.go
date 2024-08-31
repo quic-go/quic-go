@@ -52,7 +52,7 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		if r.TLSClientConfig != nil {
 			tlsConf = r.TLSClientConfig.Clone()
 		}
-		tlsConf.NextProtos = []string{h09alpn}
+		tlsConf.NextProtos = []string{NextProto}
 		c = &client{
 			hostname: hostname,
 			tlsConf:  tlsConf,
