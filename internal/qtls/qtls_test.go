@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConversionToTLSEncryptionLevel(t *testing.T) {
+func TestEncryptionLevelConversion(t *testing.T) {
 	testCases := []struct {
 		quicLevel protocol.EncryptionLevel
 		tlsLevel  tls.QUICEncryptionLevel
@@ -23,23 +23,12 @@ func TestConversionToTLSEncryptionLevel(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		require.Equal(t, tc.tlsLevel, ToTLSEncryptionLevel(tc.quicLevel))
-	}
-}
-
-func TestConversionFromTLSEncryptionLevel(t *testing.T) {
-	testCases := []struct {
-		tlsLevel  tls.QUICEncryptionLevel
-		quicLevel protocol.EncryptionLevel
-	}{
-		{tls.QUICEncryptionLevelInitial, protocol.EncryptionInitial},
-		{tls.QUICEncryptionLevelHandshake, protocol.EncryptionHandshake},
-		{tls.QUICEncryptionLevelApplication, protocol.Encryption1RTT},
-		{tls.QUICEncryptionLevelEarly, protocol.Encryption0RTT},
-	}
-
-	for _, tc := range testCases {
-		require.Equal(t, tc.quicLevel, FromTLSEncryptionLevel(tc.tlsLevel))
+		t.Run(tc.quicLevel.String(), func(t *testing.T) {
+			// conversion from QUIC to TLS encryption level
+			require.Equal(t, tc.tlsLevel, ToTLSEncryptionLevel(tc.quicLevel))
+			// conversion from TLS to QUIC encryption level
+			require.Equal(t, tc.quicLevel, FromTLSEncryptionLevel(tc.tlsLevel))
+		})
 	}
 }
 
