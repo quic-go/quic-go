@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClientSessionCacheAddsAndRestoresData(t *testing.T) {
+func TestClientSessionCacheAddAndRestoreData(t *testing.T) {
 	ln, err := tls.Listen("tcp4", "localhost:0", testdata.GetTLSConfig())
 	require.NoError(t, err)
 

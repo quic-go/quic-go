@@ -32,7 +32,7 @@ func TestEncryptionLevelConversion(t *testing.T) {
 	}
 }
 
-func TestHandlesSessionCacheSetupCorrectly(t *testing.T) {
+func TestSetupSessionCache(t *testing.T) {
 	// Test with a session cache present
 	csc := tls.NewLRUClientSessionCache(1)
 	confWithCache := &tls.QUICConfig{TLSConfig: &tls.Config{ClientSessionCache: csc}}
@@ -57,7 +57,7 @@ func TestMinimumTLSVersion(t *testing.T) {
 	require.EqualValues(t, tls.VersionTLS12, orig.MinVersion)
 }
 
-func TestServerConfigWrapsGetCertificate(t *testing.T) {
+func TestServerConfigGetCertificate(t *testing.T) {
 	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
 	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 
@@ -76,7 +76,7 @@ func TestServerConfigWrapsGetCertificate(t *testing.T) {
 	require.Equal(t, remote, remoteAddr)
 }
 
-func TestServerConfigWrapsGetConfigForClient(t *testing.T) {
+func TestServerConfigGetConfigForClient(t *testing.T) {
 	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
 	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 
@@ -102,7 +102,7 @@ func TestServerConfigWrapsGetConfigForClient(t *testing.T) {
 	require.EqualValues(t, tls.VersionTLS13, conf.MinVersion)
 }
 
-func TestServerConfigWrapsGetConfigForClientRecursively(t *testing.T) {
+func TestServerConfigGetConfigForClientRecursively(t *testing.T) {
 	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
 	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 

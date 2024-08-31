@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelectCipherSuite(t *testing.T) {
-	t.Run("TLS_AES_128_GCM_SHA256", func(t *testing.T) { testSelectCipherSuite(t, tls.TLS_AES_128_GCM_SHA256) })
-	t.Run("TLS_CHACHA20_POLY1305_SHA256", func(t *testing.T) { testSelectCipherSuite(t, tls.TLS_CHACHA20_POLY1305_SHA256) })
-	t.Run("TLS_AES_256_GCM_SHA384", func(t *testing.T) { testSelectCipherSuite(t, tls.TLS_AES_256_GCM_SHA384) })
+func TestCipherSuiteSelection(t *testing.T) {
+	t.Run("TLS_AES_128_GCM_SHA256", func(t *testing.T) { testCipherSuiteSelection(t, tls.TLS_AES_128_GCM_SHA256) })
+	t.Run("TLS_CHACHA20_POLY1305_SHA256", func(t *testing.T) { testCipherSuiteSelection(t, tls.TLS_CHACHA20_POLY1305_SHA256) })
+	t.Run("TLS_AES_256_GCM_SHA384", func(t *testing.T) { testCipherSuiteSelection(t, tls.TLS_AES_256_GCM_SHA384) })
 }
 
-func testSelectCipherSuite(t *testing.T, cs uint16) {
+func testCipherSuiteSelection(t *testing.T, cs uint16) {
 	reset := SetCipherSuite(cs)
 	defer reset()
 
