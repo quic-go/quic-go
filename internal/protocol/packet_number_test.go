@@ -1,48 +1,47 @@
 package protocol
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Packet Number", func() {
-	It("InvalidPacketNumber is smaller than all valid packet numbers", func() {
-		Expect(InvalidPacketNumber).To(BeNumerically("<", 0))
-	})
+func TestInvalidPacketNumberIsSmallerThanAllValidPacketNumbers(t *testing.T) {
+	require.Less(t, InvalidPacketNumber, PacketNumber(0))
+}
 
-	It("PacketNumberLen has the correct value", func() {
-		Expect(PacketNumberLen1).To(BeEquivalentTo(1))
-		Expect(PacketNumberLen2).To(BeEquivalentTo(2))
-		Expect(PacketNumberLen3).To(BeEquivalentTo(3))
-		Expect(PacketNumberLen4).To(BeEquivalentTo(4))
-	})
+func TestPacketNumberLenHasCorrectValue(t *testing.T) {
+	require.EqualValues(t, 1, PacketNumberLen1)
+	require.EqualValues(t, 2, PacketNumberLen2)
+	require.EqualValues(t, 3, PacketNumberLen3)
+	require.EqualValues(t, 4, PacketNumberLen4)
+}
 
-	It("decodes the packet number", func() {
-		Expect(DecodePacketNumber(PacketNumberLen1, 10, 255)).To(Equal(PacketNumber(255)))
-		Expect(DecodePacketNumber(PacketNumberLen1, 10, 0)).To(Equal(PacketNumber(0)))
-		Expect(DecodePacketNumber(PacketNumberLen1, 127, 0)).To(Equal(PacketNumber(256)))
-		Expect(DecodePacketNumber(PacketNumberLen1, 128, 0)).To(Equal(PacketNumber(256)))
-		Expect(DecodePacketNumber(PacketNumberLen1, 256+126, 0)).To(Equal(PacketNumber(256)))
-		Expect(DecodePacketNumber(PacketNumberLen1, 256+127, 0)).To(Equal(PacketNumber(512)))
-		Expect(DecodePacketNumber(PacketNumberLen2, 0xffff, 0xffff)).To(Equal(PacketNumber(0xffff)))
-		Expect(DecodePacketNumber(PacketNumberLen2, 0xffff+1, 0xffff)).To(Equal(PacketNumber(0xffff)))
+func TestDecodePacketNumber(t *testing.T) {
+	require.Equal(t, PacketNumber(255), DecodePacketNumber(PacketNumberLen1, 10, 255))
+	require.Equal(t, PacketNumber(0), DecodePacketNumber(PacketNumberLen1, 10, 0))
+	require.Equal(t, PacketNumber(256), DecodePacketNumber(PacketNumberLen1, 127, 0))
+	require.Equal(t, PacketNumber(256), DecodePacketNumber(PacketNumberLen1, 128, 0))
+	require.Equal(t, PacketNumber(256), DecodePacketNumber(PacketNumberLen1, 256+126, 0))
+	require.Equal(t, PacketNumber(512), DecodePacketNumber(PacketNumberLen1, 256+127, 0))
+	require.Equal(t, PacketNumber(0xffff), DecodePacketNumber(PacketNumberLen2, 0xffff, 0xffff))
+	require.Equal(t, PacketNumber(0xffff), DecodePacketNumber(PacketNumberLen2, 0xffff+1, 0xffff))
 
-		// example from https://www.rfc-editor.org/rfc/rfc9000.html#section-a.3
-		Expect(DecodePacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa82f9b32)))
-	})
+	// example from https://www.rfc-editor.org/rfc/rfc9000.html#section-a.3
+	require.Equal(t, PacketNumber(0xa82f9b32), DecodePacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32))
+}
 
-	It("encodes the packet number, with the examples from the RFC", func() {
-		Expect(PacketNumberLengthForHeader(1, InvalidPacketNumber)).To(Equal(PacketNumberLen2))
-		Expect(PacketNumberLengthForHeader(1<<15-2, InvalidPacketNumber)).To(Equal(PacketNumberLen2))
-		Expect(PacketNumberLengthForHeader(1<<15-1, InvalidPacketNumber)).To(Equal(PacketNumberLen3))
-		Expect(PacketNumberLengthForHeader(1<<23-2, InvalidPacketNumber)).To(Equal(PacketNumberLen3))
-		Expect(PacketNumberLengthForHeader(1<<23-1, InvalidPacketNumber)).To(Equal(PacketNumberLen4))
-		Expect(PacketNumberLengthForHeader(1<<15+9, 10)).To(Equal(PacketNumberLen2))
-		Expect(PacketNumberLengthForHeader(1<<15+10, 10)).To(Equal(PacketNumberLen3))
-		Expect(PacketNumberLengthForHeader(1<<23+99, 100)).To(Equal(PacketNumberLen3))
-		Expect(PacketNumberLengthForHeader(1<<23+100, 100)).To(Equal(PacketNumberLen4))
-		// examples from https://www.rfc-editor.org/rfc/rfc9000.html#section-a.2
-		Expect(PacketNumberLengthForHeader(0xac5c02, 0xabe8b3)).To(Equal(PacketNumberLen2))
-		Expect(PacketNumberLengthForHeader(0xace8fe, 0xabe8b3)).To(Equal(PacketNumberLen3))
-	})
-})
+func TestPacketNumberLengthForHeader(t *testing.T) {
+	require.Equal(t, PacketNumberLen2, PacketNumberLengthForHeader(1, InvalidPacketNumber))
+	require.Equal(t, PacketNumberLen2, PacketNumberLengthForHeader(1<<15-2, InvalidPacketNumber))
+	require.Equal(t, PacketNumberLen3, PacketNumberLengthForHeader(1<<15-1, InvalidPacketNumber))
+	require.Equal(t, PacketNumberLen3, PacketNumberLengthForHeader(1<<23-2, InvalidPacketNumber))
+	require.Equal(t, PacketNumberLen4, PacketNumberLengthForHeader(1<<23-1, InvalidPacketNumber))
+	require.Equal(t, PacketNumberLen2, PacketNumberLengthForHeader(1<<15+9, 10))
+	require.Equal(t, PacketNumberLen3, PacketNumberLengthForHeader(1<<15+10, 10))
+	require.Equal(t, PacketNumberLen3, PacketNumberLengthForHeader(1<<23+99, 100))
+	require.Equal(t, PacketNumberLen4, PacketNumberLengthForHeader(1<<23+100, 100))
+	// examples from https://www.rfc-editor.org/rfc/rfc9000.html#section-a.2
+	require.Equal(t, PacketNumberLen2, PacketNumberLengthForHeader(0xac5c02, 0xabe8b3))
+	require.Equal(t, PacketNumberLen3, PacketNumberLengthForHeader(0xace8fe, 0xabe8b3))
+}

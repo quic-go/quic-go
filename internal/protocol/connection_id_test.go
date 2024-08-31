@@ -4,127 +4,80 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Connection ID generation", func() {
-	It("generates random connection IDs", func() {
-		c1, err := GenerateConnectionID(8)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(c1).ToNot(BeZero())
-		c2, err := GenerateConnectionID(8)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(c1).ToNot(Equal(c2))
-	})
+func TestGenerateRandomConnectionIDs(t *testing.T) {
+	c1, err := GenerateConnectionID(8)
+	require.NoError(t, err)
+	require.NotZero(t, c1)
+	require.Equal(t, 8, c1.Len())
+	c2, err := GenerateConnectionID(8)
+	require.NoError(t, err)
+	require.NotEqual(t, c1, c2)
+	require.Equal(t, 8, c2.Len())
+}
 
-	It("generates connection IDs with the requested length", func() {
-		c, err := GenerateConnectionID(5)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(c.Len()).To(Equal(5))
-	})
-
-	It("generates random length destination connection IDs", func() {
-		var has8ByteConnID, has20ByteConnID bool
-		for i := 0; i < 1000; i++ {
-			c, err := GenerateConnectionIDForInitial()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(c.Len()).To(BeNumerically(">=", 8))
-			Expect(c.Len()).To(BeNumerically("<=", 20))
-			if c.Len() == 8 {
-				has8ByteConnID = true
-			}
-			if c.Len() == 20 {
-				has20ByteConnID = true
-			}
+func TestGenerateRandomLengthDestinationConnectionIDs(t *testing.T) {
+	var has8ByteConnID, has20ByteConnID bool
+	for i := 0; i < 1000; i++ {
+		c, err := GenerateConnectionIDForInitial()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, c.Len(), 8)
+		require.LessOrEqual(t, c.Len(), 20)
+		if c.Len() == 8 {
+			has8ByteConnID = true
 		}
-		Expect(has8ByteConnID).To(BeTrue())
-		Expect(has20ByteConnID).To(BeTrue())
-	})
+		if c.Len() == 20 {
+			has20ByteConnID = true
+		}
+	}
+	require.True(t, has8ByteConnID)
+	require.True(t, has20ByteConnID)
+}
 
-	It("reads the connection ID", func() {
-		buf := bytes.NewBuffer([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})
-		c, err := ReadConnectionID(buf, 9)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(c.Bytes()).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}))
-	})
+func TestConnectionID(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
+	c, err := ReadConnectionID(buf, 5)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef, 0x42}, c.Bytes())
+	require.Equal(t, 5, c.Len())
+	require.Equal(t, "deadbeef42", c.String())
 
-	It("returns io.EOF if there's not enough data to read", func() {
-		buf := bytes.NewBuffer([]byte{1, 2, 3, 4})
-		_, err := ReadConnectionID(buf, 5)
-		Expect(err).To(MatchError(io.EOF))
-	})
+	// too few bytes
+	_, err = ReadConnectionID(buf, 10)
+	require.Equal(t, io.EOF, err)
 
-	It("returns a 0 length connection ID", func() {
-		buf := bytes.NewBuffer([]byte{1, 2, 3, 4})
-		c, err := ReadConnectionID(buf, 0)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(c.Len()).To(BeZero())
-	})
+	// zero length
+	c2, err := ReadConnectionID(buf, 0)
+	require.NoError(t, err)
+	require.Zero(t, c2.Len())
 
-	It("errors when trying to read a too long connection ID", func() {
-		buf := bytes.NewBuffer(make([]byte, 21))
-		_, err := ReadConnectionID(buf, 21)
-		Expect(err).To(MatchError(ErrInvalidConnectionIDLen))
-	})
+	// connection ID can have a length of a maximum of 20 bytes
+	buf2 := bytes.NewBuffer(make([]byte, 21))
+	_, err = ReadConnectionID(buf2, 21)
+	require.Equal(t, ErrInvalidConnectionIDLen, err)
+}
 
-	It("returns the length", func() {
-		c := ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
-		Expect(c.Len()).To(Equal(7))
-	})
+func TestConnectionIDZeroValue(t *testing.T) {
+	var c ConnectionID
+	require.Zero(t, c.Len())
+	require.Empty(t, c.Bytes())
+	require.Equal(t, "(empty)", (ConnectionID{}).String())
+}
 
-	It("has 0 length for the default value", func() {
-		var c ConnectionID
-		Expect(c.Len()).To(BeZero())
-	})
+func TestArbitraryLenConnectionID(t *testing.T) {
+	b := make([]byte, 42)
+	rand.Read(b)
+	c := ArbitraryLenConnectionID(b)
+	require.Equal(t, b, c.Bytes())
+	require.Equal(t, 42, c.Len())
+}
 
-	It("returns the bytes", func() {
-		c := ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
-		Expect(c.Bytes()).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7}))
-	})
-
-	It("returns a nil byte slice for the default value", func() {
-		var c ConnectionID
-		Expect(c.Bytes()).To(HaveLen(0))
-	})
-
-	It("has a string representation", func() {
-		c := ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
-		Expect(c.String()).To(Equal("deadbeef42"))
-	})
-
-	It("has a long string representation", func() {
-		c := ParseConnectionID([]byte{0x13, 0x37, 0, 0, 0xde, 0xca, 0xfb, 0xad})
-		Expect(c.String()).To(Equal("13370000decafbad"))
-	})
-
-	It("has a string representation for the default value", func() {
-		var c ConnectionID
-		Expect(c.String()).To(Equal("(empty)"))
-	})
-
-	Context("arbitrary length connection IDs", func() {
-		It("returns the bytes", func() {
-			b := make([]byte, 30)
-			rand.Read(b)
-			c := ArbitraryLenConnectionID(b)
-			Expect(c.Bytes()).To(Equal(b))
-		})
-
-		It("returns the length", func() {
-			c := ArbitraryLenConnectionID(make([]byte, 156))
-			Expect(c.Len()).To(Equal(156))
-		})
-
-		It("has a string representation", func() {
-			c := ArbitraryLenConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
-			Expect(c.String()).To(Equal("deadbeef42"))
-		})
-
-		It("has a string representation for the default value", func() {
-			var c ArbitraryLenConnectionID
-			Expect(c.String()).To(Equal("(empty)"))
-		})
-	})
-})
+func TestArbitraryLenConnectionIDStringer(t *testing.T) {
+	require.Equal(t, "(empty)", (ArbitraryLenConnectionID{}).String())
+	c := ArbitraryLenConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
+	require.Equal(t, "deadbeef42", c.String())
+}

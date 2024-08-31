@@ -1,42 +1,39 @@
 package protocol
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Protocol", func() {
-	Context("Long Header Packet Types", func() {
-		It("has the correct string representation", func() {
-			Expect(PacketTypeInitial.String()).To(Equal("Initial"))
-			Expect(PacketTypeRetry.String()).To(Equal("Retry"))
-			Expect(PacketTypeHandshake.String()).To(Equal("Handshake"))
-			Expect(PacketType0RTT.String()).To(Equal("0-RTT Protected"))
-			Expect(PacketType(10).String()).To(Equal("unknown packet type: 10"))
-		})
-	})
+func TestLongHeaderPacketTypeStringer(t *testing.T) {
+	require.Equal(t, "Initial", PacketTypeInitial.String())
+	require.Equal(t, "Retry", PacketTypeRetry.String())
+	require.Equal(t, "Handshake", PacketTypeHandshake.String())
+	require.Equal(t, "0-RTT Protected", PacketType0RTT.String())
+	require.Equal(t, "unknown packet type: 10", PacketType(10).String())
+}
 
-	It("converts ECN bits from the IP header wire to the correct types", func() {
-		Expect(ParseECNHeaderBits(0)).To(Equal(ECNNon))
-		Expect(ParseECNHeaderBits(0b00000010)).To(Equal(ECT0))
-		Expect(ParseECNHeaderBits(0b00000001)).To(Equal(ECT1))
-		Expect(ParseECNHeaderBits(0b00000011)).To(Equal(ECNCE))
-		Expect(func() { ParseECNHeaderBits(0b1010101) }).To(Panic())
-	})
+func TestECNFromIPHeader(t *testing.T) {
+	require.Equal(t, ECNNon, ParseECNHeaderBits(0))
+	require.Equal(t, ECT0, ParseECNHeaderBits(0b00000010))
+	require.Equal(t, ECT1, ParseECNHeaderBits(0b00000001))
+	require.Equal(t, ECNCE, ParseECNHeaderBits(0b00000011))
+	require.Panics(t, func() { ParseECNHeaderBits(0b1010101) })
+}
 
-	It("converts to IP header bits", func() {
-		for _, v := range [...]ECN{ECNNon, ECT0, ECT1, ECNCE} {
-			Expect(ParseECNHeaderBits(v.ToHeaderBits())).To(Equal(v))
-		}
-		Expect(func() { ECN(42).ToHeaderBits() }).To(Panic())
-	})
+func TestECNConversionToIPHeaderBits(t *testing.T) {
+	for _, v := range [...]ECN{ECNNon, ECT0, ECT1, ECNCE} {
+		require.Equal(t, v, ParseECNHeaderBits(v.ToHeaderBits()))
+	}
+	require.Panics(t, func() { ECN(42).ToHeaderBits() })
+}
 
-	It("has a string representation for ECN", func() {
-		Expect(ECNUnsupported.String()).To(Equal("ECN unsupported"))
-		Expect(ECNNon.String()).To(Equal("Not-ECT"))
-		Expect(ECT0.String()).To(Equal("ECT(0)"))
-		Expect(ECT1.String()).To(Equal("ECT(1)"))
-		Expect(ECNCE.String()).To(Equal("CE"))
-		Expect(ECN(42).String()).To(Equal("invalid ECN value: 42"))
-	})
-})
+func TestECNStringer(t *testing.T) {
+	require.Equal(t, "ECN unsupported", ECNUnsupported.String())
+	require.Equal(t, "Not-ECT", ECNNon.String())
+	require.Equal(t, "ECT(0)", ECT0.String())
+	require.Equal(t, "ECT(1)", ECT1.String())
+	require.Equal(t, "CE", ECNCE.String())
+	require.Equal(t, "invalid ECN value: 42", ECN(42).String())
+}
