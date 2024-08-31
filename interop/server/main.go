@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
@@ -71,16 +72,26 @@ func main() {
 }
 
 func runHTTP09Server(quicConf *quic.Config, forceRetry bool) error {
-	server := http09.Server{
-		Server: &http.Server{
-			Addr:      ":443",
-			TLSConfig: tlsConf,
-		},
-		ForceRetry: forceRetry,
-		QuicConfig: quicConf,
-	}
 	http.DefaultServeMux.Handle("/", http.FileServer(http.Dir("/www")))
-	return server.ListenAndServe()
+	server := http09.Server{}
+
+	udpAddr, err := net.ResolveUDPAddr("udp", ":443")
+	if err != nil {
+		return err
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+	tr := &quic.Transport{
+		Conn:                conn,
+		VerifySourceAddress: func(net.Addr) bool { return forceRetry },
+	}
+	ln, err := tr.ListenEarly(tlsConf, quicConf)
+	if err != nil {
+		return err
+	}
+	return server.ServeListener(ln)
 }
 
 func runHTTP3Server(quicConf *quic.Config) error {

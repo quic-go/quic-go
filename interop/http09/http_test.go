@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/testdata"
@@ -18,9 +17,9 @@ import (
 
 var _ = Describe("HTTP 0.9 integration tests", func() {
 	var (
-		server *Server
-		saddr  net.Addr
-		done   chan struct{}
+		ln    *quic.EarlyListener
+		saddr net.Addr
+		done  chan struct{}
 	)
 
 	http.HandleFunc("/helloworld", func(w http.ResponseWriter, r *http.Request) {
@@ -28,28 +27,27 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 	})
 
 	BeforeEach(func() {
-		server = &Server{
-			Server: &http.Server{TLSConfig: testdata.GetTLSConfig()},
+		server := &Server{
+			Server: &http.Server{},
 		}
+		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		tr := &quic.Transport{Conn: conn}
+		tlsConf := testdata.GetTLSConfig()
+		tlsConf.NextProtos = []string{NextProto}
+		ln, err = tr.ListenEarly(tlsConf, &quic.Config{})
+		Expect(err).ToNot(HaveOccurred())
 		done = make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
 			defer close(done)
-			_ = server.ListenAndServe()
+			_ = server.ServeListener(ln)
 		}()
-		var ln *quic.EarlyListener
-		Eventually(func() *quic.EarlyListener {
-			server.mutex.Lock()
-			defer server.mutex.Unlock()
-			ln = server.listener
-			return server.listener
-		}, 5*time.Second).ShouldNot(BeNil())
 		saddr = ln.Addr()
-		saddr.(*net.UDPAddr).IP = net.IP{127, 0, 0, 1}
 	})
 
 	AfterEach(func() {
-		Expect(server.Close()).To(Succeed())
+		Expect(ln.Close()).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 
