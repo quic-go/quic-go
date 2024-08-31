@@ -1033,6 +1033,8 @@ var _ = Describe("HTTP tests", func() {
 			io.WriteString(w, "This HTTP response has both headers before this text and trailers at the end.\n")
 			w.(http.Flusher).Flush()
 			w.Header().Set("AtEnd2", "value 2")
+			io.WriteString(w, "More text\n")
+			w.(http.Flusher).Flush()
 			w.Header().Set("LAST", "value 3")
 			w.Header().Set(http.TrailerPrefix+"Unannounced", "Surprise!")
 			w.Header().Set("Late-Header", "No surprise!")
@@ -1043,7 +1045,7 @@ var _ = Describe("HTTP tests", func() {
 		Expect(resp.StatusCode).To(Equal(200))
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(string(body)).To(Equal("This HTTP response has both headers before this text and trailers at the end.\n"))
+		Expect(string(body)).To(Equal("This HTTP response has both headers before this text and trailers at the end.\nMore text\n"))
 		// note: canonical header casing is applied to the trailer names, so "LAST" is now "Last"
 		Expect(resp.Header.Values("Trailer")).To(Equal([]string{"Atend1", "Atend2", "Last"}))
 		Expect(resp.Header).To(Not(HaveKey("Atend1")))
