@@ -273,7 +273,7 @@ func (w *responseWriter) Flush() {
 // valid name.
 func (w *responseWriter) declareTrailer(k string) {
 	if !httpguts.ValidTrailerHeader(k) {
-		// Forbidden by RFC 7230, section 4.1.2.
+		// Forbidden by RFC 9110, section 6.5.1.
 		w.logger.Debug("ignoring invalid trailer", slog.String("header", k))
 		return
 	}
