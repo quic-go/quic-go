@@ -1024,6 +1024,7 @@ var _ = Describe("HTTP tests", func() {
 		mux.HandleFunc("/trailers", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
 			w.Header().Set("Trailer", "AtEnd1, AtEnd2")
+			w.Header().Add("Trailer", "Never")
 			w.Header().Add("Trailer", "LAST")
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 			w.WriteHeader(http.StatusOK)
@@ -1041,11 +1042,18 @@ var _ = Describe("HTTP tests", func() {
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/trailers", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
-		Expect(resp.Header.Values("Trailer")).To(Equal([]string{"AtEnd1, AtEnd2", "LAST"}))
+		Expect(resp.Header.Get("Trailer")).To(Equal(""))
 		Expect(resp.Header).To(Not(HaveKey("Atend1")))
 		Expect(resp.Header).To(Not(HaveKey("Atend2")))
+		Expect(resp.Header).To(Not(HaveKey("Never")))
 		Expect(resp.Header).To(Not(HaveKey("Last")))
 		Expect(resp.Header).To(Not(HaveKey("Late-Header")))
+		Expect(resp.Trailer).To(Equal(http.Header(map[string][]string{
+			"Atend1": nil,
+			"Atend2": nil,
+			"Never":  nil,
+			"Last":   nil,
+		})))
 
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 		Expect(err).ToNot(HaveOccurred())

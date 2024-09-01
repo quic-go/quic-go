@@ -307,10 +307,10 @@ func (w *responseWriter) writeTrailers() error {
 	var b bytes.Buffer
 	enc := qpack.NewEncoder(&b)
 	for trailer := range w.trailers {
+		trailerName := strings.ToLower(strings.TrimPrefix(trailer, http.TrailerPrefix))
 		if vals, ok := w.header[trailer]; ok {
-			name := strings.TrimPrefix(trailer, http.TrailerPrefix)
 			for _, val := range vals {
-				if err := enc.WriteField(qpack.HeaderField{Name: strings.ToLower(name), Value: val}); err != nil {
+				if err := enc.WriteField(qpack.HeaderField{Name: trailerName, Value: val}); err != nil {
 					return err
 				}
 			}

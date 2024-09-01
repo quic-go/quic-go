@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -222,6 +223,7 @@ func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderFi
 	rsp.Proto = "HTTP/3.0"
 	rsp.ProtoMajor = 3
 	rsp.Header = hdr.Headers
+	formatTrailers(rsp)
 	rsp.ContentLength = hdr.ContentLength
 
 	status, err := strconv.Atoi(hdr.Status)
@@ -231,4 +233,22 @@ func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderFi
 	rsp.StatusCode = status
 	rsp.Status = hdr.Status + " " + http.StatusText(status)
 	return nil
+}
+
+// formatTrailers parses trailers header.
+// For example: {"Trailer": {"Trailer1, Trailer2", "Trailer3"}}
+// Should be converted to: {"Trailer": {"Trailer1", "Trailer2", "Trailer3"}}
+func formatTrailers(rsp *http.Response) {
+	rawTrailers, ok := rsp.Header["Trailer"]
+	if !ok {
+		return
+	}
+
+	rsp.Trailer = make(http.Header)
+	for _, rawVal := range rawTrailers {
+		for _, val := range strings.Split(rawVal, ",") {
+			rsp.Trailer[http.CanonicalHeaderKey(textproto.TrimString(val))] = nil
+		}
+	}
+	delete(rsp.Header, "Trailer")
 }

@@ -585,7 +585,7 @@ var _ = Describe("Client", func() {
 
 			trailerBuf := &bytes.Buffer{}
 			enc := qpack.NewEncoder(trailerBuf)
-			Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+			Expect(enc.WriteField(qpack.HeaderField{Name: "This-Is-A-Trailer", Value: "0"})).To(Succeed())
 			Expect(enc.Close()).To(Succeed())
 			b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
 			b = append(b, trailerBuf.Bytes()...)
@@ -603,7 +603,7 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 			_, err = io.ReadAll(rsp.Body)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Trailer).To(Equal(http.Header{"This-Is-A-Trailer": []string{"0"}}))
 			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))
@@ -637,7 +637,7 @@ var _ = Describe("Client", func() {
 			{
 				trailerBuf := &bytes.Buffer{}
 				enc := qpack.NewEncoder(trailerBuf)
-				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+				Expect(enc.WriteField(qpack.HeaderField{Name: "This-Is-A-Trailer", Value: "0"})).To(Succeed())
 				Expect(enc.Close()).To(Succeed())
 				b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
 				b = append(b, trailerBuf.Bytes()...)
@@ -647,7 +647,7 @@ var _ = Describe("Client", func() {
 			{
 				trailerBuf := &bytes.Buffer{}
 				enc := qpack.NewEncoder(trailerBuf)
-				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "1"})).To(Succeed())
+				Expect(enc.WriteField(qpack.HeaderField{Name: "This-Is-A-Trailer", Value: "1"})).To(Succeed())
 				Expect(enc.Close()).To(Succeed())
 				b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
 				b = append(b, trailerBuf.Bytes()...)
@@ -666,7 +666,7 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 			_, err = io.ReadAll(rsp.Body)
 			Expect(err).To(MatchError(errors.New("additional HEADERS frame received after trailers")))
-			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Trailer).To(Equal(http.Header{"This-Is-A-Trailer": []string{"0"}}))
 			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))
@@ -679,7 +679,7 @@ var _ = Describe("Client", func() {
 			{
 				trailerBuf := &bytes.Buffer{}
 				enc := qpack.NewEncoder(trailerBuf)
-				Expect(enc.WriteField(qpack.HeaderField{Name: "Grpc-Status", Value: "0"})).To(Succeed())
+				Expect(enc.WriteField(qpack.HeaderField{Name: "This-Is-A-Trailer", Value: "0"})).To(Succeed())
 				Expect(enc.Close()).To(Succeed())
 				b := (&headersFrame{Length: uint64(trailerBuf.Len())}).Append(nil)
 				b = append(b, trailerBuf.Bytes()...)
@@ -706,7 +706,7 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 			_, err = io.ReadAll(rsp.Body)
 			Expect(err).To(MatchError(errors.New("DATA frame received after trailers")))
-			Expect(rsp.Trailer).To(Equal(http.Header{"Grpc-Status": []string{"0"}}))
+			Expect(rsp.Trailer).To(Equal(http.Header{"This-Is-A-Trailer": []string{"0"}}))
 			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))
