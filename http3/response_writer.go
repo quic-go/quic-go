@@ -206,17 +206,14 @@ func (w *responseWriter) writeHeader(status int) error {
 
 	// Handle trailer fields
 	if vals, ok := w.header["Trailer"]; ok {
-		trailers := make([]string, 0, len(vals))
 		for _, val := range vals {
 			for _, trailer := range strings.Split(val, ",") {
 				// We need to convert to the canonical header key value here because this will be called when using
 				// headers.Add or headers.Set.
 				trailer = textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(trailer))
 				w.declareTrailer(trailer)
-				trailers = append(trailers, trailer)
 			}
 		}
-		w.header["Trailer"] = trailers
 	}
 
 	for k, v := range w.header {
@@ -250,12 +247,12 @@ func (w *responseWriter) FlushError() error {
 	return err
 }
 
-func (w *responseWriter) flushFinal() {
-	w.Flush()
-	if !w.trailerWritten {
-		if err := w.writeTrailers(); err != nil {
-			w.logger.Debug("could not write trailers", "error", err)
-		}
+func (w *responseWriter) flushTrailers() {
+	if w.trailerWritten {
+		return
+	}
+	if err := w.writeTrailers(); err != nil {
+		w.logger.Debug("could not write trailers", "error", err)
 	}
 }
 

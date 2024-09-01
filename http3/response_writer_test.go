@@ -30,7 +30,8 @@ var _ = Describe("Response Writer", func() {
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
-		rw.flushFinal()
+		rw.Flush()
+		rw.flushTrailers()
 		fields := make(map[string][]string)
 		decoder := qpack.NewDecoder(nil)
 

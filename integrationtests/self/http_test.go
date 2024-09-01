@@ -1026,7 +1026,6 @@ var _ = Describe("HTTP tests", func() {
 			defer GinkgoRecover()
 			w.Header().Set("Trailer", "AtEnd1, AtEnd2")
 			w.Header().Add("Trailer", "LAST")
-
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 			w.WriteHeader(http.StatusOK)
 			w.Header().Set("AtEnd1", "value 1")
@@ -1043,15 +1042,15 @@ var _ = Describe("HTTP tests", func() {
 		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/trailers", port))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
-		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(string(body)).To(Equal("This HTTP response has both headers before this text and trailers at the end.\nMore text\n"))
-		// note: canonical header casing is applied to the trailer names, so "LAST" is now "Last"
-		Expect(resp.Header.Values("Trailer")).To(Equal([]string{"Atend1", "Atend2", "Last"}))
+		Expect(resp.Header.Values("Trailer")).To(Equal([]string{"AtEnd1, AtEnd2", "LAST"}))
 		Expect(resp.Header).To(Not(HaveKey("Atend1")))
 		Expect(resp.Header).To(Not(HaveKey("Atend2")))
 		Expect(resp.Header).To(Not(HaveKey("Last")))
 		Expect(resp.Header).To(Not(HaveKey("Late-Header")))
+
+		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal("This HTTP response has both headers before this text and trailers at the end.\nMore text\n"))
 		for k := range resp.Header {
 			Expect(k).To(Not(HavePrefix(http.TrailerPrefix)))
 		}
