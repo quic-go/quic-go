@@ -269,7 +269,7 @@ func (w *responseWriter) Flush() {
 	}
 }
 
-// declareTrailer will add the given to the trailer list, while also validating that the trailer has a
+// declareTrailer adds a trailer to the trailer list, while also validating that the trailer has a
 // valid name.
 func (w *responseWriter) declareTrailer(k string) {
 	if !httpguts.ValidTrailerHeader(k) {
