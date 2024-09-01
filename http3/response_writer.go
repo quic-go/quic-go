@@ -246,10 +246,8 @@ func (w *responseWriter) FlushError() error {
 	if !w.headerComplete {
 		w.WriteHeader(http.StatusOK)
 	}
-	if _, err := w.doWrite(nil); err != nil {
-		return err
-	}
-	return nil
+	_, err := w.doWrite(nil)
+	return err
 }
 
 func (w *responseWriter) flushFinal() {
