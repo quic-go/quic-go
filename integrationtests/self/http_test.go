@@ -765,8 +765,7 @@ var _ = Describe("HTTP tests", func() {
 	It("processes 1xx terminal response", func() {
 		mux.HandleFunc("/101-switch-protocols", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
-			w.Header().Add("Connection", "upgrade")
-			w.Header().Add("Upgrade", "proto")
+			w.Header().Add("foo", "bar")
 			w.WriteHeader(http.StatusSwitchingProtocols)
 		})
 
@@ -787,8 +786,7 @@ var _ = Describe("HTTP tests", func() {
 		resp, err := client.Do(req)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(http.StatusSwitchingProtocols))
-		Expect(resp.Header).To(HaveKeyWithValue("Connection", []string{"upgrade"}))
-		Expect(resp.Header).To(HaveKeyWithValue("Upgrade", []string{"proto"}))
+		Expect(resp.Header).To(HaveKeyWithValue("Foo", []string{"bar"}))
 		Expect(status).To(Equal(0))
 		Expect(cnt).To(Equal(0))
 	})

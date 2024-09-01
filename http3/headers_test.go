@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -369,13 +370,33 @@ var _ = Describe("Response", func() {
 		Expect(err).To(MatchError("invalid response pseudo header: :method"))
 	})
 
-	It("rejects the Transfer-Encoding header field", func() {
+	DescribeTable("rejecting invalid header fields",
+		func(invalidField string) {
+			headers := []qpack.HeaderField{
+				{Name: ":status", Value: "404"},
+				{Name: invalidField, Value: "some-value"},
+			}
+			err := updateResponseFromHeaders(&http.Response{}, headers)
+			Expect(err).To(MatchError(fmt.Sprintf("invalid header field name: %q", invalidField)))
+		},
+		Entry("connection", "connection"),
+		Entry("keep-alive", "keep-alive"),
+		Entry("proxy-connection", "proxy-connection"),
+		Entry("transfer-encoding", "transfer-encoding"),
+		Entry("upgrade", "upgrade"),
+	)
+
+	It("rejects the TE header field, unless it is set to trailers", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":status", Value: "404"},
-			{Name: "transfer-encoding", Value: "chunked"},
+			{Name: "te", Value: "trailers"},
 		}
-		err := updateResponseFromHeaders(&http.Response{}, headers)
-		Expect(err).To(MatchError("invalid header field: Transfer-Encoding"))
+		Expect(updateResponseFromHeaders(&http.Response{}, headers)).To(Succeed())
+		headers = []qpack.HeaderField{
+			{Name: ":status", Value: "404"},
+			{Name: "te", Value: "not-trailers"},
+		}
+		Expect(updateResponseFromHeaders(&http.Response{}, headers)).To(MatchError("invalid TE header field value: \"not-trailers\""))
 	})
 
 	It("parses trailers", func() {

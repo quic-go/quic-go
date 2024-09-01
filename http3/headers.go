@@ -28,6 +28,15 @@ type header struct {
 	Headers http.Header
 }
 
+// connection-specific header fields must not be sent on HTTP/3
+var invalidHeaderFields = [...]string{
+	"connection",
+	"keep-alive",
+	"proxy-connection",
+	"transfer-encoding",
+	"upgrade",
+}
+
 func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 	hdr := header{Headers: make(http.Header, len(headers))}
 	var readFirstRegularHeader, readContentLength bool
@@ -73,10 +82,16 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 			if !httpguts.ValidHeaderFieldName(h.Name) {
 				return header{}, fmt.Errorf("invalid header field name: %q", h.Name)
 			}
+			for _, invalidField := range invalidHeaderFields {
+				if h.Name == invalidField {
+					return header{}, fmt.Errorf("invalid header field name: %q", h.Name)
+				}
+			}
+			if h.Name == "te" && h.Value != "trailers" {
+				return header{}, fmt.Errorf("invalid TE header field value: %q", h.Value)
+			}
 			readFirstRegularHeader = true
 			switch h.Name {
-			case "transfer-encoding":
-				return header{}, errors.New("invalid header field: Transfer-Encoding")
 			case "content-length":
 				// Ignore duplicate Content-Length headers.
 				// Fail if the duplicates differ.
