@@ -223,7 +223,7 @@ func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderFi
 	rsp.Proto = "HTTP/3.0"
 	rsp.ProtoMajor = 3
 	rsp.Header = hdr.Headers
-	formatTrailers(rsp)
+	processTrailers(rsp)
 	rsp.ContentLength = hdr.ContentLength
 
 	status, err := strconv.Atoi(hdr.Status)
@@ -235,10 +235,16 @@ func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderFi
 	return nil
 }
 
-// formatTrailers parses trailers header.
-// For example: {"Trailer": {"Trailer1, Trailer2", "Trailer3"}}
-// Should be converted to: {"Trailer": {"Trailer1", "Trailer2", "Trailer3"}}
-func formatTrailers(rsp *http.Response) {
+// processTrailers initializes the rsp.Trailer map, and adds keys for every announced header value.
+// The Trailer header is removed from the http.Response.Header map.
+// It handles both duplicate as well as comma-separated values for the Trailer header.
+// For example:
+//
+//	Trailer: Trailer1, Trailer2
+//	Trailer: Trailer3
+//
+// Will result in a http.Response.Trailer map containing the keys "Trailer1", "Trailer2", "Trailer3".
+func processTrailers(rsp *http.Response) {
 	rawTrailers, ok := rsp.Header["Trailer"]
 	if !ok {
 		return
