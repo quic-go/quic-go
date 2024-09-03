@@ -29,13 +29,17 @@ func (t *Timer) Reset(deadline time.Time) {
 		return
 	}
 
-	// We need to drain the timer if the value from its channel was not read yet.
-	// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
-	if !t.t.Stop() && !t.read {
-		select {
-		case <-t.t.C:
-		default:
+	// check if asynctimerchan behavior is enabled
+	// cap(t.t.C) == 1 implies old go1.22 timers
+	if cap(t.t.C) == 1 {
+		// We need to drain the timer if the value from its channel was not read yet.
+		// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
+		if !t.t.Stop() && !t.read {
+			<-t.t.C
 		}
+	} else {
+		// for new go1.23 unbuffered timers no value will be present in the channel after Stop returns
+		t.Stop()
 	}
 	if !deadline.IsZero() {
 		t.t.Reset(time.Until(deadline))
