@@ -2,7 +2,6 @@ package http09
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -33,15 +32,11 @@ func (w *responseWriter) WriteHeader(int) {}
 
 // Server is a HTTP/0.9 server listening for QUIC connections.
 type Server struct {
-	*http.Server
+	Handler *http.ServeMux
 }
 
-// ListenAndServe listens and serves HTTP/0.9 over QUIC.
+// ServeListener serves HTTP/0.9 on all connections accepted from a QUIC listener.
 func (s *Server) ServeListener(ln *quic.EarlyListener) error {
-	if s.Server == nil {
-		return errors.New("use of http3.Server without http.Server")
-	}
-
 	for {
 		conn, err := ln.Accept(context.Background())
 		if err != nil {
