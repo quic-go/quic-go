@@ -27,9 +27,7 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 	})
 
 	BeforeEach(func() {
-		server := &Server{
-			Server: &http.Server{},
-		}
+		server := &Server{}
 		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 		Expect(err).ToNot(HaveOccurred())
 		tr := &quic.Transport{Conn: conn}
