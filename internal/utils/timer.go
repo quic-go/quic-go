@@ -32,7 +32,10 @@ func (t *Timer) Reset(deadline time.Time) {
 	// We need to drain the timer if the value from its channel was not read yet.
 	// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
 	if !t.t.Stop() && !t.read {
-		<-t.t.C
+		select {
+		case <-t.t.C:
+		default:
+		}
 	}
 	if !deadline.IsZero() {
 		t.t.Reset(time.Until(deadline))
