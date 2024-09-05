@@ -7,248 +7,171 @@ import (
 
 	"golang.org/x/exp/rand"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Varint encoding / decoding", func() {
-	Context("limits", func() {
-		Specify("Min == 0", func() {
-			Expect(Min).To(Equal(0))
-		})
+func TestLimits(t *testing.T) {
+	require.Equal(t, 0, Min)
+	require.Equal(t, uint64(1<<62-1), uint64(Max))
+}
 
-		Specify("Max == 2^62-1", func() {
-			Expect(uint64(Max)).To(Equal(uint64(1<<62 - 1)))
-		})
-	})
+func TestParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected uint64
+	}{
+		{"1 byte", []byte{0b00011001}, 25},
+		{"2 byte", []byte{0b01111011, 0xbd}, 15293},
+		{"4 byte", []byte{0b10011101, 0x7f, 0x3e, 0x7d}, 494878333},
+		{"8 byte", []byte{0b11000010, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}, 151288809941952652},
+		{"too long", []byte{0b01000000, 0x25}, 37},
+	}
 
-	Context("reading", func() {
-		It("reads a 1 byte number", func() {
-			b := bytes.NewReader([]byte{0b00011001})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := bytes.NewReader(tt.input)
 			val, err := Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(25)))
-			Expect(b.Len()).To(BeZero())
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, val)
+			require.Zero(t, b.Len())
 		})
+	}
+}
 
-		It("reads a number that is encoded too long", func() {
-			b := bytes.NewReader([]byte{0b01000000, 0x25})
-			val, err := Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(37)))
-			Expect(b.Len()).To(BeZero())
-		})
+func TestParsingFailures(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []byte
+		expectedErr error
+	}{
+		{
+			name:        "empty slice",
+			input:       []byte{},
+			expectedErr: io.EOF,
+		},
+		{
+			name:        "slice too short",
+			input:       Append(nil, maxVarInt2*10)[:3],
+			expectedErr: io.ErrUnexpectedEOF,
+		},
+	}
 
-		It("reads a 2 byte number", func() {
-			b := bytes.NewReader([]byte{0b01111011, 0xbd})
-			val, err := Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(15293)))
-			Expect(b.Len()).To(BeZero())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := Parse(tt.input)
+			require.Equal(t, tt.expectedErr, err)
 		})
+	}
+}
 
-		It("reads a 4 byte number", func() {
-			b := bytes.NewReader([]byte{0b10011101, 0x7f, 0x3e, 0x7d})
-			val, err := Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(494878333)))
-			Expect(b.Len()).To(BeZero())
-		})
+func TestVarintEncoding(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    uint64
+		expected []byte
+	}{
+		{"1 byte number", 37, []byte{0x25}},
+		{"maximum 1 byte number", maxVarInt1, []byte{0b00111111}},
+		{"minimum 2 byte number", maxVarInt1 + 1, []byte{0x40, maxVarInt1 + 1}},
+		{"2 byte number", 15293, []byte{0b01000000 ^ 0x3b, 0xbd}},
+		{"maximum 2 byte number", maxVarInt2, []byte{0b01111111, 0xff}},
+		{"minimum 4 byte number", maxVarInt2 + 1, []byte{0b10000000, 0, 0x40, 0}},
+		{"4 byte number", 494878333, []byte{0b10000000 ^ 0x1d, 0x7f, 0x3e, 0x7d}},
+		{"maximum 4 byte number", maxVarInt4, []byte{0b10111111, 0xff, 0xff, 0xff}},
+		{"minimum 8 byte number", maxVarInt4 + 1, []byte{0b11000000, 0, 0, 0, 0x40, 0, 0, 0}},
+		{"8 byte number", 151288809941952652, []byte{0xc2, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}},
+		{"maximum 8 byte number", maxVarInt8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+	}
 
-		It("reads an 8 byte number", func() {
-			b := bytes.NewReader([]byte{0b11000010, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c})
-			val, err := Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(151288809941952652)))
-			Expect(b.Len()).To(BeZero())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, Append(nil, tt.value))
 		})
+	}
+
+	t.Run("panics when given a too large number (> 62 bit)", func(t *testing.T) {
+		require.Panics(t, func() { Append(nil, maxVarInt8+1) })
 	})
+}
 
-	Context("parsing", func() {
-		It("fails on an empty slice", func() {
-			_, _, err := Parse([]byte{})
-			Expect(err).To(Equal(io.EOF))
-		})
+func TestAppendWithLen(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    uint64
+		length   int
+		expected []byte
+	}{
+		{"1-byte number in minimal encoding", 37, 1, []byte{0x25}},
+		{"1-byte number in 2 bytes", 37, 2, []byte{0b01000000, 0x25}},
+		{"1-byte number in 4 bytes", 37, 4, []byte{0b10000000, 0, 0, 0x25}},
+		{"1-byte number in 8 bytes", 37, 8, []byte{0b11000000, 0, 0, 0, 0, 0, 0, 0x25}},
+		{"2-byte number in 4 bytes", 15293, 4, []byte{0b10000000, 0, 0x3b, 0xbd}},
+		{"4-byte number in 8 bytes", 494878333, 8, []byte{0b11000000, 0, 0, 0, 0x1d, 0x7f, 0x3e, 0x7d}},
+	}
 
-		It("parses a 1 byte number", func() {
-			b := []byte{0b00011001}
-			val, n, err := Parse(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(25)))
-			Expect(n).To(Equal(1))
-		})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := AppendWithLen(nil, tt.value, tt.length)
+			require.Equal(t, tt.expected, b)
 
-		It("parses a number that is encoded too long", func() {
-			b := []byte{0b01000000, 0x25}
-			val, n, err := Parse(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(37)))
-			Expect(n).To(Equal(2))
+			if tt.length > 1 {
+				v, n, err := Parse(b)
+				require.NoError(t, err)
+				require.Equal(t, tt.length, n)
+				require.Equal(t, tt.value, v)
+			}
 		})
+	}
+}
 
-		It("parses a 2 byte number", func() {
-			b := []byte{0b01111011, 0xbd}
-			val, n, err := Parse(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(15293)))
-			Expect(n).To(Equal(2))
-		})
+func TestAppendWithLenFailures(t *testing.T) {
+	tests := []struct {
+		name   string
+		value  uint64
+		length int
+	}{
+		{"invalid length", 25, 3},
+		{"too short for 2 bytes", maxVarInt1 + 1, 1},
+		{"too short for 4 bytes", maxVarInt2 + 1, 2},
+		{"too short for 8 bytes", maxVarInt4 + 1, 4},
+	}
 
-		It("parses a 4 byte number", func() {
-			b := []byte{0b10011101, 0x7f, 0x3e, 0x7d}
-			val, n, err := Parse(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(494878333)))
-			Expect(n).To(Equal(4))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Panics(t, func() {
+				AppendWithLen(nil, tt.value, tt.length)
+			})
 		})
+	}
+}
 
-		It("parses an 8 byte number", func() {
-			b := []byte{0b11000010, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}
-			val, n, err := Parse(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(151288809941952652)))
-			Expect(n).To(Equal(8))
-		})
+func TestLen(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    uint64
+		expected int
+	}{
+		{"zero", 0, 1},
+		{"max 1 byte", maxVarInt1, 1},
+		{"min 2 bytes", maxVarInt1 + 1, 2},
+		{"max 2 bytes", maxVarInt2, 2},
+		{"min 4 bytes", maxVarInt2 + 1, 4},
+		{"max 4 bytes", maxVarInt4, 4},
+		{"min 8 bytes", maxVarInt4 + 1, 8},
+		{"max 8 bytes", maxVarInt8, 8},
+	}
 
-		It("fails if the slice is too short", func() {
-			b := Append(nil, maxVarInt2*10)
-			_, _, err := Parse(b[:3])
-			Expect(err).To(Equal(io.ErrUnexpectedEOF))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, Len(tt.input))
 		})
+	}
+
+	t.Run("panics on too large number", func(t *testing.T) {
+		require.Panics(t, func() { Len(maxVarInt8 + 1) })
 	})
-
-	Context("encoding", func() {
-		Context("with minimal length", func() {
-			It("writes a 1 byte number", func() {
-				Expect(Append(nil, 37)).To(Equal([]byte{0x25}))
-			})
-
-			It("writes the maximum 1 byte number in 1 byte", func() {
-				Expect(Append(nil, maxVarInt1)).To(Equal([]byte{0b00111111}))
-			})
-
-			It("writes the minimum 2 byte number in 2 bytes", func() {
-				Expect(Append(nil, maxVarInt1+1)).To(Equal([]byte{0x40, maxVarInt1 + 1}))
-			})
-
-			It("writes a 2 byte number", func() {
-				Expect(Append(nil, 15293)).To(Equal([]byte{0b01000000 ^ 0x3b, 0xbd}))
-			})
-
-			It("writes the maximum 2 byte number in 2 bytes", func() {
-				Expect(Append(nil, maxVarInt2)).To(Equal([]byte{0b01111111, 0xff}))
-			})
-
-			It("writes the minimum 4 byte number in 4 bytes", func() {
-				b := Append(nil, maxVarInt2+1)
-				Expect(b).To(HaveLen(4))
-				num, err := Read(bytes.NewReader(b))
-				Expect(err).ToNot(HaveOccurred())
-				Expect(num).To(Equal(uint64(maxVarInt2 + 1)))
-			})
-
-			It("writes a 4 byte number", func() {
-				Expect(Append(nil, 494878333)).To(Equal([]byte{0b10000000 ^ 0x1d, 0x7f, 0x3e, 0x7d}))
-			})
-
-			It("writes the maximum 4 byte number in 4 bytes", func() {
-				Expect(Append(nil, maxVarInt4)).To(Equal([]byte{0b10111111, 0xff, 0xff, 0xff}))
-			})
-
-			It("writes the minimum 8 byte number in 8 bytes", func() {
-				b := Append(nil, maxVarInt4+1)
-				Expect(b).To(HaveLen(8))
-				num, err := Read(bytes.NewReader(b))
-				Expect(err).ToNot(HaveOccurred())
-				Expect(num).To(Equal(uint64(maxVarInt4 + 1)))
-			})
-
-			It("writes an 8 byte number", func() {
-				Expect(Append(nil, 151288809941952652)).To(Equal([]byte{0xc2, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}))
-			})
-
-			It("writes the maximum 8 byte number in 8 bytes", func() {
-				Expect(Append(nil, maxVarInt8)).To(Equal([]byte{0xff /* 11111111 */, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
-			})
-
-			It("panics when given a too large number (> 62 bit)", func() {
-				Expect(func() { Append(nil, maxVarInt8+1) }).Should(Panic())
-			})
-		})
-
-		Context("with fixed length", func() {
-			It("panics when given an invalid length", func() {
-				Expect(func() { AppendWithLen(nil, 25, 3) }).Should(Panic())
-			})
-
-			It("panics when given a too short length", func() {
-				Expect(func() { AppendWithLen(nil, maxVarInt1+1, 1) }).Should(Panic())
-				Expect(func() { AppendWithLen(nil, maxVarInt2+1, 2) }).Should(Panic())
-				Expect(func() { AppendWithLen(nil, maxVarInt4+1, 4) }).Should(Panic())
-			})
-
-			It("writes a 1-byte number in minimal encoding", func() {
-				Expect(AppendWithLen(nil, 37, 1)).To(Equal([]byte{0x25}))
-			})
-
-			It("writes a 1-byte number in 2 bytes", func() {
-				b := AppendWithLen(nil, 37, 2)
-				Expect(b).To(Equal([]byte{0b01000000, 0x25}))
-				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(37))
-			})
-
-			It("writes a 1-byte number in 4 bytes", func() {
-				b := AppendWithLen(nil, 37, 4)
-				Expect(b).To(Equal([]byte{0b10000000, 0, 0, 0x25}))
-				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(37))
-			})
-
-			It("writes a 1-byte number in 8 bytes", func() {
-				b := AppendWithLen(nil, 37, 8)
-				Expect(b).To(Equal([]byte{0b11000000, 0, 0, 0, 0, 0, 0, 0x25}))
-				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(37))
-			})
-
-			It("writes a 2-byte number in 4 bytes", func() {
-				b := AppendWithLen(nil, 15293, 4)
-				Expect(b).To(Equal([]byte{0b10000000, 0, 0x3b, 0xbd}))
-				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(15293))
-			})
-
-			It("write a 4-byte number in 8 bytes", func() {
-				b := AppendWithLen(nil, 494878333, 8)
-				Expect(b).To(Equal([]byte{0b11000000, 0, 0, 0, 0x1d, 0x7f, 0x3e, 0x7d}))
-				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(494878333))
-			})
-		})
-	})
-
-	Context("determining the length needed for encoding", func() {
-		It("for numbers that need 1 byte", func() {
-			Expect(Len(0)).To(BeEquivalentTo(1))
-			Expect(Len(maxVarInt1)).To(BeEquivalentTo(1))
-		})
-
-		It("for numbers that need 2 bytes", func() {
-			Expect(Len(maxVarInt1 + 1)).To(BeEquivalentTo(2))
-			Expect(Len(maxVarInt2)).To(BeEquivalentTo(2))
-		})
-
-		It("for numbers that need 4 bytes", func() {
-			Expect(Len(maxVarInt2 + 1)).To(BeEquivalentTo(4))
-			Expect(Len(maxVarInt4)).To(BeEquivalentTo(4))
-		})
-
-		It("for numbers that need 8 bytes", func() {
-			Expect(Len(maxVarInt4 + 1)).To(BeEquivalentTo(8))
-			Expect(Len(maxVarInt8)).To(BeEquivalentTo(8))
-		})
-
-		It("panics when given a too large number (> 62 bit)", func() {
-			Expect(func() { Len(maxVarInt8 + 1) }).Should(Panic())
-		})
-	})
-})
+}
 
 type benchmarkValue struct {
 	b []byte
