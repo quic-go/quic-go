@@ -335,6 +335,23 @@ var _ = Describe("Response", func() {
 		Expect(rsp.Status).To(Equal("200 OK"))
 	})
 
+	It("parses trailer", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "200"},
+			{Name: "trailer", Value: "Trailer1, Trailer2"},
+			{Name: "trailer", Value: "TRAILER3"},
+		}
+		rsp := &http.Response{}
+		err := updateResponseFromHeaders(rsp, headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rsp.Header).To(HaveLen(0))
+		Expect(rsp.Trailer).To(Equal(http.Header(map[string][]string{
+			"Trailer1": nil,
+			"Trailer2": nil,
+			"Trailer3": nil,
+		})))
+	})
+
 	It("rejects pseudo header fields after regular header fields", func() {
 		headers := []qpack.HeaderField{
 			{Name: "content-length", Value: "42"},
