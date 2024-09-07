@@ -278,6 +278,8 @@ func (r packetDropReason) String() string {
 		return "unexpected_version"
 	case logging.PacketDropDuplicate:
 		return "duplicate"
+	case logging.PacketTooLarge:
+		return "too_large"
 	default:
 		return "unknown packet drop reason"
 	}
