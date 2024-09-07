@@ -1019,4 +1019,45 @@ var _ = Describe("HTTP tests", func() {
 			Expect(num0RTTPackets.Load()).To(BeNumerically(">", 0))
 		})
 	})
+
+	It("sends and receives trailers", func() {
+		mux.HandleFunc("/trailers", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Set("Trailer", "AtEnd1, AtEnd2")
+			w.Header().Add("Trailer", "LAST")
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("AtEnd1", "value 1")
+			io.WriteString(w, "This HTTP response has both headers before this text and trailers at the end.\n")
+			w.(http.Flusher).Flush()
+			w.Header().Set("AtEnd2", "value 2")
+			io.WriteString(w, "More text\n")
+			w.(http.Flusher).Flush()
+			w.Header().Set("LAST", "value 3")
+			w.Header().Set(http.TrailerPrefix+"Unannounced", "Surprise!")
+			w.Header().Set("Late-Header", "No surprise!")
+		})
+
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/trailers", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		Expect(resp.Header.Values("Trailer")).To(Equal([]string{"AtEnd1, AtEnd2", "LAST"}))
+		Expect(resp.Header).To(Not(HaveKey("Atend1")))
+		Expect(resp.Header).To(Not(HaveKey("Atend2")))
+		Expect(resp.Header).To(Not(HaveKey("Last")))
+		Expect(resp.Header).To(Not(HaveKey("Late-Header")))
+
+		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal("This HTTP response has both headers before this text and trailers at the end.\nMore text\n"))
+		for k := range resp.Header {
+			Expect(k).To(Not(HavePrefix(http.TrailerPrefix)))
+		}
+		Expect(resp.Trailer).To(Equal(http.Header(map[string][]string{
+			"Atend1":      {"value 1"},
+			"Atend2":      {"value 2"},
+			"Last":        {"value 3"},
+			"Unannounced": {"Surprise!"},
+		})))
+	})
 })

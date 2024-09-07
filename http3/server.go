@@ -625,6 +625,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 			}
 		}
 		r.Flush()
+		r.flushTrailers()
 	}
 
 	// abort the stream when there is a panic
