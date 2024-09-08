@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -244,15 +243,9 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
 	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := s.isConnect && res.StatusCode >= 200 && res.StatusCode < 300
-	if !isInformational && !isNoContent && !isSuccessfulConnect {
-		res.ContentLength = -1
-		if clens, ok := res.Header["Content-Length"]; ok && len(clens) == 1 {
-			if clen64, err := strconv.ParseInt(clens[0], 10, 64); err == nil {
-				res.ContentLength = clen64
-			}
-		}
+	if (isInformational || isNoContent || isSuccessfulConnect) && res.ContentLength == -1 {
+		res.ContentLength = 0
 	}
-
 	if s.requestedGzip && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")
