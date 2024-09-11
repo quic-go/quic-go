@@ -7,151 +7,260 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/logging"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Types", func() {
-	It("has a string representation for the owner", func() {
-		Expect(ownerLocal.String()).To(Equal("local"))
-		Expect(ownerRemote.String()).To(Equal("remote"))
-	})
+func TestOwnerStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		owner    owner
+		expected string
+	}{
+		{ownerLocal, "local"},
+		{ownerRemote, "remote"},
+	}
 
-	It("has a string representation for the category", func() {
-		Expect(categoryConnectivity.String()).To(Equal("connectivity"))
-		Expect(categoryTransport.String()).To(Equal("transport"))
-		Expect(categoryRecovery.String()).To(Equal("recovery"))
-		Expect(categorySecurity.String()).To(Equal("security"))
-	})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, tc.owner.String())
+	}
+}
 
-	It("has a string representation for the packet type", func() {
-		Expect(packetType(logging.PacketTypeInitial).String()).To(Equal("initial"))
-		Expect(packetType(logging.PacketTypeHandshake).String()).To(Equal("handshake"))
-		Expect(packetType(logging.PacketType0RTT).String()).To(Equal("0RTT"))
-		Expect(packetType(logging.PacketType1RTT).String()).To(Equal("1RTT"))
-		Expect(packetType(logging.PacketTypeStatelessReset).String()).To(Equal("stateless_reset"))
-		Expect(packetType(logging.PacketTypeRetry).String()).To(Equal("retry"))
-		Expect(packetType(logging.PacketTypeVersionNegotiation).String()).To(Equal("version_negotiation"))
-		Expect(packetType(logging.PacketTypeNotDetermined).String()).To(BeEmpty())
-	})
+func TestCategoryStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		category category
+		expected string
+	}{
+		{categoryConnectivity, "connectivity"},
+		{categoryTransport, "transport"},
+		{categoryRecovery, "recovery"},
+		{categorySecurity, "security"},
+	}
 
-	It("has a string representation for the packet drop reason", func() {
-		Expect(packetDropReason(logging.PacketDropKeyUnavailable).String()).To(Equal("key_unavailable"))
-		Expect(packetDropReason(logging.PacketDropUnknownConnectionID).String()).To(Equal("unknown_connection_id"))
-		Expect(packetDropReason(logging.PacketDropHeaderParseError).String()).To(Equal("header_parse_error"))
-		Expect(packetDropReason(logging.PacketDropPayloadDecryptError).String()).To(Equal("payload_decrypt_error"))
-		Expect(packetDropReason(logging.PacketDropProtocolViolation).String()).To(Equal("protocol_violation"))
-		Expect(packetDropReason(logging.PacketDropDOSPrevention).String()).To(Equal("dos_prevention"))
-		Expect(packetDropReason(logging.PacketDropUnsupportedVersion).String()).To(Equal("unsupported_version"))
-		Expect(packetDropReason(logging.PacketDropUnexpectedPacket).String()).To(Equal("unexpected_packet"))
-		Expect(packetDropReason(logging.PacketDropUnexpectedSourceConnectionID).String()).To(Equal("unexpected_source_connection_id"))
-		Expect(packetDropReason(logging.PacketDropUnexpectedVersion).String()).To(Equal("unexpected_version"))
-	})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, tc.category.String())
+	}
+}
 
-	It("has a string representation for the timer type", func() {
-		Expect(timerType(logging.TimerTypeACK).String()).To(Equal("ack"))
-		Expect(timerType(logging.TimerTypePTO).String()).To(Equal("pto"))
-	})
+func TestPacketTypeStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		packetType logging.PacketType
+		expected   string
+	}{
+		{logging.PacketTypeInitial, "initial"},
+		{logging.PacketTypeHandshake, "handshake"},
+		{logging.PacketType0RTT, "0RTT"},
+		{logging.PacketType1RTT, "1RTT"},
+		{logging.PacketTypeStatelessReset, "stateless_reset"},
+		{logging.PacketTypeRetry, "retry"},
+		{logging.PacketTypeVersionNegotiation, "version_negotiation"},
+		{logging.PacketTypeNotDetermined, ""},
+	}
 
-	It("has a string representation for the key type", func() {
-		Expect(encLevelToKeyType(protocol.EncryptionInitial, protocol.PerspectiveClient).String()).To(Equal("client_initial_secret"))
-		Expect(encLevelToKeyType(protocol.EncryptionInitial, protocol.PerspectiveServer).String()).To(Equal("server_initial_secret"))
-		Expect(encLevelToKeyType(protocol.EncryptionHandshake, protocol.PerspectiveClient).String()).To(Equal("client_handshake_secret"))
-		Expect(encLevelToKeyType(protocol.EncryptionHandshake, protocol.PerspectiveServer).String()).To(Equal("server_handshake_secret"))
-		Expect(encLevelToKeyType(protocol.Encryption0RTT, protocol.PerspectiveClient).String()).To(Equal("client_0rtt_secret"))
-		Expect(encLevelToKeyType(protocol.Encryption0RTT, protocol.PerspectiveServer).String()).To(Equal("server_0rtt_secret"))
-		Expect(encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient).String()).To(Equal("client_1rtt_secret"))
-		Expect(encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer).String()).To(Equal("server_1rtt_secret"))
-	})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, packetType(tc.packetType).String())
+	}
+}
 
-	It("has a string representation for the key update trigger", func() {
-		Expect(keyUpdateTLS.String()).To(Equal("tls"))
-		Expect(keyUpdateRemote.String()).To(Equal("remote_update"))
-		Expect(keyUpdateLocal.String()).To(Equal("local_update"))
-	})
+func TestPacketDropReasonStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		reason   logging.PacketDropReason
+		expected string
+	}{
+		{logging.PacketDropKeyUnavailable, "key_unavailable"},
+		{logging.PacketDropUnknownConnectionID, "unknown_connection_id"},
+		{logging.PacketDropHeaderParseError, "header_parse_error"},
+		{logging.PacketDropPayloadDecryptError, "payload_decrypt_error"},
+		{logging.PacketDropProtocolViolation, "protocol_violation"},
+		{logging.PacketDropDOSPrevention, "dos_prevention"},
+		{logging.PacketDropUnsupportedVersion, "unsupported_version"},
+		{logging.PacketDropUnexpectedPacket, "unexpected_packet"},
+		{logging.PacketDropUnexpectedSourceConnectionID, "unexpected_source_connection_id"},
+		{logging.PacketDropUnexpectedVersion, "unexpected_version"},
+	}
 
-	It("tells the packet number space from the encryption level", func() {
-		Expect(encLevelToPacketNumberSpace(protocol.EncryptionInitial)).To(Equal("initial"))
-		Expect(encLevelToPacketNumberSpace(protocol.EncryptionHandshake)).To(Equal("handshake"))
-		Expect(encLevelToPacketNumberSpace(protocol.Encryption0RTT)).To(Equal("application_data"))
-		Expect(encLevelToPacketNumberSpace(protocol.Encryption1RTT)).To(Equal("application_data"))
-	})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, packetDropReason(tc.reason).String())
+	}
+}
 
-	Context("transport errors", func() {
-		It("has a string representation for every error code", func() {
-			// We parse the error code file, extract all constants, and verify that
-			// each of them has a string version. Go FTW!
-			_, thisfile, _, ok := runtime.Caller(0)
-			if !ok {
-				panic("Failed to get current frame")
-			}
-			filename := path.Join(path.Dir(thisfile), "../internal/qerr/error_codes.go")
-			fileAst, err := parser.ParseFile(gotoken.NewFileSet(), filename, nil, 0)
-			Expect(err).NotTo(HaveOccurred())
-			constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
-			Expect(len(constSpecs)).To(BeNumerically(">", 4)) // at time of writing
-			for _, c := range constSpecs {
-				valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
-				val, err := strconv.ParseInt(valString, 0, 64)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(transportError(val).String()).ToNot(BeEmpty())
-			}
-		})
+func TestTimerTypeStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		timerType logging.TimerType
+		expected  string
+	}{
+		{logging.TimerTypeACK, "ack"},
+		{logging.TimerTypePTO, "pto"},
+	}
 
-		It("has a string representation for transport errors", func() {
-			Expect(transportError(qerr.NoError).String()).To(Equal("no_error"))
-			Expect(transportError(qerr.InternalError).String()).To(Equal("internal_error"))
-			Expect(transportError(qerr.ConnectionRefused).String()).To(Equal("connection_refused"))
-			Expect(transportError(qerr.FlowControlError).String()).To(Equal("flow_control_error"))
-			Expect(transportError(qerr.StreamLimitError).String()).To(Equal("stream_limit_error"))
-			Expect(transportError(qerr.StreamStateError).String()).To(Equal("stream_state_error"))
-			Expect(transportError(qerr.FrameEncodingError).String()).To(Equal("frame_encoding_error"))
-			Expect(transportError(qerr.ConnectionIDLimitError).String()).To(Equal("connection_id_limit_error"))
-			Expect(transportError(qerr.ProtocolViolation).String()).To(Equal("protocol_violation"))
-			Expect(transportError(qerr.InvalidToken).String()).To(Equal("invalid_token"))
-			Expect(transportError(qerr.ApplicationErrorErrorCode).String()).To(Equal("application_error"))
-			Expect(transportError(qerr.CryptoBufferExceeded).String()).To(Equal("crypto_buffer_exceeded"))
-			Expect(transportError(qerr.NoViablePathError).String()).To(Equal("no_viable_path"))
-			Expect(transportError(1337).String()).To(BeEmpty())
-		})
-	})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, timerType(tc.timerType).String())
+	}
+}
 
-	It("has a string representation for congestion state updates", func() {
-		Expect(congestionState(logging.CongestionStateSlowStart).String()).To(Equal("slow_start"))
-		Expect(congestionState(logging.CongestionStateCongestionAvoidance).String()).To(Equal("congestion_avoidance"))
-		Expect(congestionState(logging.CongestionStateApplicationLimited).String()).To(Equal("application_limited"))
-		Expect(congestionState(logging.CongestionStateRecovery).String()).To(Equal("recovery"))
-	})
+func TestKeyTypeStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		encLevel    protocol.EncryptionLevel
+		perspective protocol.Perspective
+		expected    string
+	}{
+		{protocol.EncryptionInitial, protocol.PerspectiveClient, "client_initial_secret"},
+		{protocol.EncryptionInitial, protocol.PerspectiveServer, "server_initial_secret"},
+		{protocol.EncryptionHandshake, protocol.PerspectiveClient, "client_handshake_secret"},
+		{protocol.EncryptionHandshake, protocol.PerspectiveServer, "server_handshake_secret"},
+		{protocol.Encryption0RTT, protocol.PerspectiveClient, "client_0rtt_secret"},
+		{protocol.Encryption0RTT, protocol.PerspectiveServer, "server_0rtt_secret"},
+		{protocol.Encryption1RTT, protocol.PerspectiveClient, "client_1rtt_secret"},
+		{protocol.Encryption1RTT, protocol.PerspectiveServer, "server_1rtt_secret"},
+	}
 
-	It("has a string representation for the ECN bits", func() {
-		Expect(ecn(logging.ECT0).String()).To(Equal("ECT(0)"))
-		Expect(ecn(logging.ECT1).String()).To(Equal("ECT(1)"))
-		Expect(ecn(logging.ECNCE).String()).To(Equal("CE"))
-		Expect(ecn(logging.ECTNot).String()).To(Equal("Not-ECT"))
-		Expect(ecn(42).String()).To(Equal("unknown ECN"))
-	})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, encLevelToKeyType(tc.encLevel, tc.perspective).String())
+	}
+}
 
-	It("has a string representation for the ECN state", func() {
-		Expect(ecnState(logging.ECNStateTesting).String()).To(Equal("testing"))
-		Expect(ecnState(logging.ECNStateUnknown).String()).To(Equal("unknown"))
-		Expect(ecnState(logging.ECNStateFailed).String()).To(Equal("failed"))
-		Expect(ecnState(logging.ECNStateCapable).String()).To(Equal("capable"))
-		Expect(ecnState(42).String()).To(Equal("unknown ECN state"))
-	})
+func TestKeyUpdateTriggerStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		trigger  keyUpdateTrigger
+		expected string
+	}{
+		{keyUpdateTLS, "tls"},
+		{keyUpdateRemote, "remote_update"},
+		{keyUpdateLocal, "local_update"},
+	}
 
-	It("has a string representation for the ECN state trigger", func() {
-		Expect(ecnStateTrigger(logging.ECNTriggerNoTrigger).String()).To(Equal(""))
-		Expect(ecnStateTrigger(logging.ECNFailedNoECNCounts).String()).To(Equal("ACK doesn't contain ECN marks"))
-		Expect(ecnStateTrigger(logging.ECNFailedDecreasedECNCounts).String()).To(Equal("ACK decreases ECN counts"))
-		Expect(ecnStateTrigger(logging.ECNFailedLostAllTestingPackets).String()).To(Equal("all ECN testing packets declared lost"))
-		Expect(ecnStateTrigger(logging.ECNFailedMoreECNCountsThanSent).String()).To(Equal("ACK contains more ECN counts than ECN-marked packets sent"))
-		Expect(ecnStateTrigger(logging.ECNFailedTooFewECNCounts).String()).To(Equal("ACK contains fewer new ECN counts than acknowledged ECN-marked packets"))
-		Expect(ecnStateTrigger(logging.ECNFailedManglingDetected).String()).To(Equal("ECN mangling detected"))
-		Expect(ecnStateTrigger(42).String()).To(Equal("unknown ECN state trigger"))
-	})
-})
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, tc.trigger.String())
+	}
+}
+
+func TestPacketNumberSpaceFromEncryptionLevel(t *testing.T) {
+	testCases := []struct {
+		encLevel protocol.EncryptionLevel
+		expected string
+	}{
+		{protocol.EncryptionInitial, "initial"},
+		{protocol.EncryptionHandshake, "handshake"},
+		{protocol.Encryption0RTT, "application_data"},
+		{protocol.Encryption1RTT, "application_data"},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, encLevelToPacketNumberSpace(tc.encLevel))
+	}
+}
+
+func TestTransportErrorStringRepresentationForEveryErrorCode(t *testing.T) {
+	_, thisfile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "Failed to get current frame")
+	filename := path.Join(path.Dir(thisfile), "../internal/qerr/error_codes.go")
+	fileAst, err := parser.ParseFile(gotoken.NewFileSet(), filename, nil, 0)
+	require.NoError(t, err)
+	constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
+	require.Greater(t, len(constSpecs), 4)
+	for _, c := range constSpecs {
+		valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
+		val, err := strconv.ParseInt(valString, 0, 64)
+		require.NoError(t, err)
+		require.NotEmpty(t, transportError(val).String())
+	}
+}
+
+func TestTransportErrorStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		err      qerr.TransportErrorCode
+		expected string
+	}{
+		{qerr.NoError, "no_error"},
+		{qerr.InternalError, "internal_error"},
+		{qerr.ConnectionRefused, "connection_refused"},
+		{qerr.FlowControlError, "flow_control_error"},
+		{qerr.StreamLimitError, "stream_limit_error"},
+		{qerr.StreamStateError, "stream_state_error"},
+		{qerr.FrameEncodingError, "frame_encoding_error"},
+		{qerr.ConnectionIDLimitError, "connection_id_limit_error"},
+		{qerr.ProtocolViolation, "protocol_violation"},
+		{qerr.InvalidToken, "invalid_token"},
+		{qerr.ApplicationErrorErrorCode, "application_error"},
+		{qerr.CryptoBufferExceeded, "crypto_buffer_exceeded"},
+		{qerr.NoViablePathError, "no_viable_path"},
+		{1337, ""},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, transportError(tc.err).String())
+	}
+}
+
+func TestCongestionStateUpdatesStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		state    logging.CongestionState
+		expected string
+	}{
+		{logging.CongestionStateSlowStart, "slow_start"},
+		{logging.CongestionStateCongestionAvoidance, "congestion_avoidance"},
+		{logging.CongestionStateApplicationLimited, "application_limited"},
+		{logging.CongestionStateRecovery, "recovery"},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, congestionState(tc.state).String())
+	}
+}
+
+func TestECNBitsStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		ecn      logging.ECN
+		expected string
+	}{
+		{logging.ECT0, "ECT(0)"},
+		{logging.ECT1, "ECT(1)"},
+		{logging.ECNCE, "CE"},
+		{logging.ECTNot, "Not-ECT"},
+		{42, "unknown ECN"},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, ecn(tc.ecn).String())
+	}
+}
+
+func TestECNStateStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		state    logging.ECNState
+		expected string
+	}{
+		{logging.ECNStateTesting, "testing"},
+		{logging.ECNStateUnknown, "unknown"},
+		{logging.ECNStateFailed, "failed"},
+		{logging.ECNStateCapable, "capable"},
+		{42, "unknown ECN state"},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, ecnState(tc.state).String())
+	}
+}
+
+func TestECNStateTriggerStringRepresentation(t *testing.T) {
+	testCases := []struct {
+		trigger  logging.ECNStateTrigger
+		expected string
+	}{
+		{logging.ECNTriggerNoTrigger, ""},
+		{logging.ECNFailedNoECNCounts, "ACK doesn't contain ECN marks"},
+		{logging.ECNFailedDecreasedECNCounts, "ACK decreases ECN counts"},
+		{logging.ECNFailedLostAllTestingPackets, "all ECN testing packets declared lost"},
+		{logging.ECNFailedMoreECNCountsThanSent, "ACK contains more ECN counts than ECN-marked packets sent"},
+		{logging.ECNFailedTooFewECNCounts, "ACK contains fewer new ECN counts than acknowledged ECN-marked packets"},
+		{logging.ECNFailedManglingDetected, "ECN mangling detected"},
+		{42, "unknown ECN state trigger"},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, ecnStateTrigger(tc.trigger).String())
+	}
+}

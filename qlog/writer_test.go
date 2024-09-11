@@ -6,11 +6,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 type limitedWriter struct {
@@ -28,22 +27,26 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-var _ = Describe("Writing", func() {
-	It("stops writing when encountering an error", func() {
-		buf := &bytes.Buffer{}
-		t := NewConnectionTracer(
+func TestWritingStopping(t *testing.T) {
+	buf := &bytes.Buffer{}
+	t.Run("stops writing when encountering an error", func(t *testing.T) {
+		tracer := NewConnectionTracer(
 			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
 			protocol.PerspectiveServer,
 			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		)
+
 		for i := uint32(0); i < 1000; i++ {
-			t.UpdatedPTOCount(i)
+			tracer.UpdatedPTOCount(i)
 		}
 
-		b := &bytes.Buffer{}
-		log.SetOutput(b)
+		// Capture log output
+		var logBuf bytes.Buffer
+		log.SetOutput(&logBuf)
 		defer log.SetOutput(os.Stdout)
-		t.Close()
-		Expect(b.String()).To(ContainSubstring("writer full"))
+
+		tracer.Close()
+
+		require.Contains(t, logBuf.String(), "writer full")
 	})
-})
+}

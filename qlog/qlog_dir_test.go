@@ -4,53 +4,62 @@ import (
 	"context"
 	"os"
 	"path"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("qlog dir tests", Serial, func() {
-	var originalQlogDirValue string
-	var tempTestDirPath string
-	ctx := context.Background()
-	perspective := logging.PerspectiveClient
+var (
+	originalQlogDirValue string
+	tempTestDirPath      string
+	ctx                  = context.Background()
+	perspective          = logging.PerspectiveClient
+)
+
+func setup(t *testing.T) {
+	originalQlogDirValue = os.Getenv("QLOGDIR")
+	var err error
+	tempTestDirPath, err = os.MkdirTemp("", "temp_test_dir")
+	require.NoError(t, err)
+}
+
+func cleanup(t *testing.T) {
+	require.NoError(t, os.Setenv("QLOGDIR", originalQlogDirValue))
+	require.NoError(t, os.RemoveAll(tempTestDirPath))
+}
+
+func TestEnvironmentVariableIsSet(t *testing.T) {
+	setup(t)
+	defer cleanup(t)
+
 	connID, _ := protocol.GenerateConnectionIDForInitial()
+	qlogDir := path.Join(tempTestDirPath, "qlogs")
+	err := os.Setenv("QLOGDIR", qlogDir)
+	require.NoError(t, err)
 
-	BeforeEach(func() {
-		originalQlogDirValue = os.Getenv("QLOGDIR")
-		var err error
-		tempTestDirPath, err = os.MkdirTemp("", "temp_test_dir")
-		Expect(err).ToNot(HaveOccurred())
-	})
+	tracer := DefaultConnectionTracer(ctx, perspective, connID)
+	require.NotNil(t, tracer)
+	tracer.Close()
 
-	AfterEach(func() {
-		err := os.Setenv("QLOGDIR", originalQlogDirValue)
-		Expect(err).ToNot(HaveOccurred())
-		err = os.RemoveAll(tempTestDirPath)
-		Expect(err).ToNot(HaveOccurred())
-	})
+	_, err = os.Stat(qlogDir)
+	qlogDirCreated := !os.IsNotExist(err)
+	require.True(t, qlogDirCreated)
 
-	It("environment variable is set", func() {
-		qlogDir := path.Join(tempTestDirPath, "qlogs")
-		err := os.Setenv("QLOGDIR", qlogDir)
-		Expect(err).ToNot(HaveOccurred())
-		tracer := DefaultConnectionTracer(ctx, perspective, connID)
-		Expect(tracer).ToNot(BeNil())
-		tracer.Close()
-		_, err = os.Stat(qlogDir)
-		qlogDirCreated := !os.IsNotExist(err)
-		Expect(qlogDirCreated).To(BeTrue())
-		childs, err := os.ReadDir(qlogDir)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(len(childs)).To(Equal(1))
-	})
+	childs, err := os.ReadDir(qlogDir)
+	require.NoError(t, err)
+	require.Len(t, childs, 1)
+}
 
-	It("environment variable is not set", func() {
-		err := os.Setenv("QLOGDIR", "")
-		Expect(err).ToNot(HaveOccurred())
-		tracer := DefaultConnectionTracer(ctx, perspective, connID)
-		Expect(tracer).To(BeNil())
-	})
-})
+func TestEnvironmentVariableIsNotSet(t *testing.T) {
+	setup(t)
+	defer cleanup(t)
+
+	connID, _ := protocol.GenerateConnectionIDForInitial()
+	err := os.Setenv("QLOGDIR", "")
+	require.NoError(t, err)
+
+	tracer := DefaultConnectionTracer(ctx, perspective, connID)
+	require.Nil(t, tracer)
+}

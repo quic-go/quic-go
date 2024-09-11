@@ -3,12 +3,11 @@ package qlog
 import (
 	"bytes"
 	"encoding/json"
+	"testing"
 	"time"
 
 	"github.com/francoispqt/gojay"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 type mevent struct{}
@@ -20,24 +19,26 @@ func (mevent) Name() string                         { return "mevent" }
 func (mevent) IsNil() bool                          { return false }
 func (mevent) MarshalJSONObject(enc *gojay.Encoder) { enc.StringKey("event", "details") }
 
-var _ = Describe("Events", func() {
-	It("marshals the fields before the event details", func() {
-		buf := &bytes.Buffer{}
-		enc := gojay.NewEncoder(buf)
-		Expect(enc.Encode(event{
-			RelativeTime: 1337 * time.Microsecond,
-			eventDetails: mevent{},
-		})).To(Succeed())
-
-		var decoded interface{}
-		Expect(json.Unmarshal(buf.Bytes(), &decoded)).To(Succeed())
-		Expect(decoded).To(HaveLen(3))
-
-		Expect(decoded).To(HaveKeyWithValue("time", 1.337))
-		Expect(decoded).To(HaveKeyWithValue("name", "connectivity:mevent"))
-		Expect(decoded).To(HaveKey("data"))
-		data := decoded.(map[string]interface{})["data"].(map[string]interface{})
-		Expect(data).To(HaveLen(1))
-		Expect(data).To(HaveKeyWithValue("event", "details"))
+func TestEventMarshaling(t *testing.T) {
+	buf := &bytes.Buffer{}
+	enc := gojay.NewEncoder(buf)
+	err := enc.Encode(event{
+		RelativeTime: 1337 * time.Microsecond,
+		eventDetails: mevent{},
 	})
-})
+	require.NoError(t, err)
+
+	var decoded map[string]interface{}
+	err = json.Unmarshal(buf.Bytes(), &decoded)
+	require.NoError(t, err)
+	require.Len(t, decoded, 3)
+
+	require.Equal(t, 1.337, decoded["time"])
+	require.Equal(t, "connectivity:mevent", decoded["name"])
+	require.Contains(t, decoded, "data")
+
+	data, ok := decoded["data"].(map[string]interface{})
+	require.True(t, ok)
+	require.Len(t, data, 1)
+	require.Equal(t, "details", data["event"])
+}
