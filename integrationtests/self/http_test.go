@@ -1069,6 +1069,105 @@ var _ = Describe("HTTP tests", func() {
 		})))
 	})
 
+	It("graceful shutdown successfully with no timeout", func() {
+		var (
+			startShutdownChan = make(chan struct{})
+			clientDoneChan    = make(chan struct{})
+			serverDoneChan    = make(chan struct{})
+		)
+
+		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+			close(startShutdownChan)
+			time.Sleep(deadlineDelay)
+			w.Write(PRData)
+		})
+		go func() {
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal(PRData))
+			close(clientDoneChan)
+		}()
+
+		go func() {
+			<-startShutdownChan
+			err := server.CloseGracefully(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			close(serverDoneChan)
+		}()
+		Eventually(clientDoneChan).Should(BeClosed())
+		Eventually(serverDoneChan).Should(BeClosed())
+	})
+
+	It("graceful shutdown successfully with timeout", func() {
+		// server will begin shutdown after receiving two requests
+		var (
+			fastChan       = make(chan struct{})
+			slowChan       = make(chan struct{})
+			fastDoneChan   = make(chan struct{})
+			slowDoneChan   = make(chan struct{})
+			serverDoneChan = make(chan struct{})
+		)
+
+		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
+			close(fastChan)
+			w.Write(PRData)
+		})
+		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+			close(slowChan)
+			ticker := time.NewTicker(deadlineDelay)
+			defer ticker.Stop()
+			chunkSize := len(PRData) / 5
+
+			for i := range 5 {
+				<-ticker.C
+				_, err := w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
+				if err != nil {
+					break
+				}
+			}
+			_, err := r.Body.Read(make([]byte, 1))
+			Expect(err).To(HaveOccurred())
+		})
+		// fast one will be done successfully
+		go func() {
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/fast", port), nil)
+			resp, err := client.Do(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal(PRData))
+			close(fastDoneChan)
+		}()
+		// slow one will be interrupted while reading the body
+		go func() {
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/slow", port), nil)
+			resp, err := client.Do(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).To(HaveOccurred())
+			Expect(bytes.HasPrefix(PRData, body)).To(BeTrue())
+			close(slowDoneChan)
+		}()
+
+		go func() {
+			<-fastChan
+			<-slowChan
+			ctx, cancel := context.WithTimeout(context.Background(), 2*deadlineDelay)
+			defer cancel()
+			err := server.CloseGracefully(ctx)
+			Expect(err).To(HaveOccurred())
+			close(serverDoneChan)
+		}()
+		Eventually(fastDoneChan).Should(BeClosed())
+		Eventually(slowDoneChan).Should(BeClosed())
+		Eventually(serverDoneChan).Should(BeClosed())
+	})
+
 	It("aborts requests on shutdown", func() {
 		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
