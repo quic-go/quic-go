@@ -75,6 +75,7 @@ var _ = Describe("Server", func() {
 				return context.WithValue(ctx, testConnContextKey("test"), c)
 			},
 		}
+		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
 		origQuicListenAddr = quicListenAddr
 	})
 
@@ -1198,7 +1199,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("closes gracefully", func() {
-		Expect(s.CloseGracefully(0)).To(Succeed())
+		Expect(s.CloseGracefully(context.Background())).To(Succeed())
 	})
 
 	It("errors when listening fails", func() {

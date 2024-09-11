@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -66,7 +67,8 @@ func (p *frameParser) ParseNext() (frame, error) {
 			return parseSettingsFrame(p.r, l)
 		case 0x3: // CANCEL_PUSH
 		case 0x5: // PUSH_PROMISE
-		case 0x7: // GOAWAY
+		case 0x7:
+			return parseGoawayFrame(p.r, l)
 		case 0xd: // MAX_PUSH_ID
 		case 0x2, 0x6, 0x8, 0x9:
 			p.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
@@ -193,4 +195,32 @@ func (f *settingsFrame) Append(b []byte) []byte {
 		b = quicvarint.Append(b, val)
 	}
 	return b
+}
+
+type goawayFrame struct {
+	StreamID quic.StreamID
+}
+
+// max length of an encoded quic varint: quicvarint.Len(quicvarint.Max)
+const maxQuicVarintLen = 8
+
+func parseGoawayFrame(r io.Reader, l uint64) (*goawayFrame, error) {
+	lr := &io.LimitedReader{R: r, N: int64(l)}
+	br := bufio.NewReaderSize(lr, maxQuicVarintLen)
+	frame := &goawayFrame{}
+	id, err := quicvarint.Read(br)
+	if err != nil {
+		return nil, err
+	}
+	if lr.N > 0 || br.Buffered() > 0 {
+		return nil, fmt.Errorf("GOAWAY frame: stream ID %d and its encoded length don't match", id)
+	}
+	frame.StreamID = quic.StreamID(id)
+	return frame, nil
+}
+
+func (f *goawayFrame) Append(b []byte) []byte {
+	b = quicvarint.Append(b, 0x7)
+	b = quicvarint.Append(b, uint64(quicvarint.Len(uint64(f.StreamID))))
+	return quicvarint.Append(b, uint64(f.StreamID))
 }
