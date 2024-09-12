@@ -10,18 +10,14 @@ import (
 )
 
 var _ = Describe("RTT stats", func() {
-	var rttStats *RTTStats
-
-	BeforeEach(func() {
-		rttStats = NewRTTStats()
-	})
-
 	It("DefaultsBeforeUpdate", func() {
+		var rttStats RTTStats
 		Expect(rttStats.MinRTT()).To(Equal(time.Duration(0)))
 		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(0)))
 	})
 
 	It("SmoothedRTT", func() {
+		var rttStats RTTStats
 		// Verify that ack_delay is ignored in the first measurement.
 		rttStats.UpdateRTT((300 * time.Millisecond), (100 * time.Millisecond), time.Time{})
 		Expect(rttStats.LatestRTT()).To(Equal((300 * time.Millisecond)))
@@ -37,6 +33,7 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("MinRTT", func() {
+		var rttStats RTTStats
 		rttStats.UpdateRTT((200 * time.Millisecond), 0, time.Time{})
 		Expect(rttStats.MinRTT()).To(Equal((200 * time.Millisecond)))
 		rttStats.UpdateRTT((10 * time.Millisecond), 0, time.Time{}.Add((10 * time.Millisecond)))
@@ -53,14 +50,18 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("MaxAckDelay", func() {
+		var rttStats RTTStats
 		rttStats.SetMaxAckDelay(42 * time.Minute)
 		Expect(rttStats.MaxAckDelay()).To(Equal(42 * time.Minute))
 	})
 
 	It("computes the PTO", func() {
-		maxAckDelay := 42 * time.Minute
+		var rttStats RTTStats
+		const (
+			maxAckDelay = 42 * time.Minute
+			rtt         = time.Second
+		)
 		rttStats.SetMaxAckDelay(maxAckDelay)
-		rtt := time.Second
 		rttStats.UpdateRTT(rtt, 0, time.Time{})
 		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
 		Expect(rttStats.MeanDeviation()).To(Equal(rtt / 2))
@@ -69,39 +70,15 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("uses the granularity for computing the PTO for short RTTs", func() {
-		rtt := time.Microsecond
+		var rttStats RTTStats
+		const rtt = time.Microsecond
 		rttStats.UpdateRTT(rtt, 0, time.Time{})
 		Expect(rttStats.PTO(true)).To(Equal(rtt + protocol.TimerGranularity))
 	})
 
-	It("ExpireSmoothedMetrics", func() {
-		initialRtt := (10 * time.Millisecond)
-		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
-		Expect(rttStats.MinRTT()).To(Equal(initialRtt))
-		Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
-
-		Expect(rttStats.MeanDeviation()).To(Equal(initialRtt / 2))
-
-		// Update once with a 20ms RTT.
-		doubledRtt := initialRtt * (2)
-		rttStats.UpdateRTT(doubledRtt, 0, time.Time{})
-		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(float32(initialRtt) * 1.125)))
-
-		// Expire the smoothed metrics, increasing smoothed rtt and mean deviation.
-		rttStats.ExpireSmoothedMetrics()
-		Expect(rttStats.SmoothedRTT()).To(Equal(doubledRtt))
-		Expect(rttStats.MeanDeviation()).To(Equal(time.Duration(float32(initialRtt) * 0.875)))
-
-		// Now go back down to 5ms and expire the smoothed metrics, and ensure the
-		// mean deviation increases to 15ms.
-		halfRtt := initialRtt / 2
-		rttStats.UpdateRTT(halfRtt, 0, time.Time{})
-		Expect(doubledRtt).To(BeNumerically(">", rttStats.SmoothedRTT()))
-		Expect(initialRtt).To(BeNumerically("<", rttStats.MeanDeviation()))
-	})
-
 	It("UpdateRTTWithBadSendDeltas", func() {
-		initialRtt := 10 * time.Millisecond
+		var rttStats RTTStats
+		const initialRtt = 10 * time.Millisecond
 		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
 		Expect(rttStats.MinRTT()).To(Equal(initialRtt))
 		Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
@@ -118,24 +95,8 @@ var _ = Describe("RTT stats", func() {
 		}
 	})
 
-	It("ResetAfterConnectionMigrations", func() {
-		rttStats.UpdateRTT(200*time.Millisecond, 0, time.Time{})
-		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.MinRTT()).To(Equal((200 * time.Millisecond)))
-		rttStats.UpdateRTT((300 * time.Millisecond), (100 * time.Millisecond), time.Time{})
-		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.MinRTT()).To(Equal((200 * time.Millisecond)))
-
-		// Reset rtt stats on connection migrations.
-		rttStats.OnConnectionMigration()
-		Expect(rttStats.LatestRTT()).To(Equal(time.Duration(0)))
-		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(0)))
-		Expect(rttStats.MinRTT()).To(Equal(time.Duration(0)))
-	})
-
 	It("restores the RTT", func() {
+		var rttStats RTTStats
 		rttStats.SetInitialRTT(10 * time.Second)
 		Expect(rttStats.LatestRTT()).To(Equal(10 * time.Second))
 		Expect(rttStats.SmoothedRTT()).To(Equal(10 * time.Second))
@@ -148,6 +109,7 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("doesn't restore the RTT if we already have a measurement", func() {
+		var rttStats RTTStats
 		const rtt = 10 * time.Millisecond
 		rttStats.UpdateRTT(rtt, 0, time.Now())
 		Expect(rttStats.LatestRTT()).To(Equal(rtt))

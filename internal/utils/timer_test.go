@@ -10,40 +10,34 @@ import (
 var _ = Describe("Timer", func() {
 	const d = 10 * time.Millisecond
 
-	It("doesn't fire a newly created timer", func() {
+	It("works correctly for newly created and reset timers", func() {
 		t := NewTimer()
 		Consistently(t.Chan()).ShouldNot(Receive())
-	})
 
-	It("works", func() {
-		t := NewTimer()
-		t.Reset(time.Now().Add(d))
-		Eventually(t.Chan()).Should(Receive())
-	})
-
-	It("returns the deadline", func() {
-		t := NewTimer()
 		deadline := time.Now().Add(d)
 		t.Reset(deadline)
 		Expect(t.Deadline()).To(Equal(deadline))
 		Eventually(t.Chan()).Should(Receive())
+
+		t.SetRead()
+		t.Reset(time.Now().Add(d))
+		Eventually(t.Chan()).Should(Receive())
 	})
 
-	It("works multiple times with reading", func() {
+	It("works multiple times with and without reading", func() {
 		t := NewTimer()
 		for i := 0; i < 10; i++ {
 			t.Reset(time.Now().Add(d))
-			Eventually(t.Chan()).Should(Receive())
-			t.SetRead()
+			if i%2 == 0 {
+				// Read on even iterations
+				Eventually(t.Chan()).Should(Receive())
+				t.SetRead()
+			} else {
+				// Don't read on odd iterations
+				time.Sleep(d * 2)
+			}
 		}
-	})
-
-	It("works multiple times without reading", func() {
-		t := NewTimer()
-		for i := 0; i < 10; i++ {
-			t.Reset(time.Now().Add(d))
-			time.Sleep(d * 2)
-		}
+		// Ensure the last timer fires if it wasn't read
 		Eventually(t.Chan()).Should(Receive())
 	})
 

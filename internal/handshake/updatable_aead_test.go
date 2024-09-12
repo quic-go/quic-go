@@ -59,20 +59,20 @@ var _ = Describe("Updatable AEAD", func() {
 					var (
 						client, server *updatableAEAD
 						serverTracer   *mocklogging.MockConnectionTracer
-						rttStats       *utils.RTTStats
+						rttStats       utils.RTTStats
 					)
 
 					BeforeEach(func() {
 						var tr *logging.ConnectionTracer
+						rttStats = utils.RTTStats{}
 						tr, serverTracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 						trafficSecret1 := make([]byte, 16)
 						trafficSecret2 := make([]byte, 16)
 						rand.Read(trafficSecret1)
 						rand.Read(trafficSecret2)
 
-						rttStats = utils.NewRTTStats()
-						client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, v)
-						server = newUpdatableAEAD(rttStats, tr, utils.DefaultLogger, v)
+						client = newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, v)
+						server = newUpdatableAEAD(&rttStats, tr, utils.DefaultLogger, v)
 						client.SetReadKey(cs, trafficSecret2)
 						client.SetWriteKey(cs, trafficSecret1)
 						server.SetReadKey(cs, trafficSecret1)
@@ -544,9 +544,9 @@ func getClientAndServer() (client, server *updatableAEAD) {
 	rand.Read(trafficSecret2)
 
 	cs := cipherSuites[0]
-	rttStats := utils.NewRTTStats()
-	client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
-	server = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	var rttStats utils.RTTStats
+	client = newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	server = newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, protocol.Version1)
 	client.SetReadKey(cs, trafficSecret2)
 	client.SetWriteKey(cs, trafficSecret1)
 	server.SetReadKey(cs, trafficSecret1)

@@ -43,8 +43,8 @@ var _ = Describe("SentPacketHandler", func() {
 
 	JustBeforeEach(func() {
 		lostPackets = nil
-		rttStats := utils.NewRTTStats()
-		handler = newSentPacketHandler(42, protocol.InitialPacketSize, rttStats, false, false, perspective, nil, utils.DefaultLogger)
+		var rttStats utils.RTTStats
+		handler = newSentPacketHandler(42, protocol.InitialPacketSize, &rttStats, false, false, perspective, nil, utils.DefaultLogger)
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
@@ -983,8 +983,8 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("amplification limit, for the server, with validated address", func() {
 		JustBeforeEach(func() {
-			rttStats := utils.NewRTTStats()
-			handler = newSentPacketHandler(42, protocol.InitialPacketSize, rttStats, true, false, perspective, nil, utils.DefaultLogger)
+			var rttStats utils.RTTStats
+			handler = newSentPacketHandler(42, protocol.InitialPacketSize, &rttStats, true, false, perspective, nil, utils.DefaultLogger)
 		})
 
 		It("do not limits the window", func() {
@@ -1441,9 +1441,9 @@ var _ = Describe("SentPacketHandler", func() {
 			cong.EXPECT().MaybeExitSlowStart().AnyTimes()
 			ecnHandler = NewMockECNHandler(mockCtrl)
 			lostPackets = nil
-			rttStats := utils.NewRTTStats()
+			var rttStats utils.RTTStats
 			rttStats.UpdateRTT(time.Hour, 0, time.Now())
-			handler = newSentPacketHandler(42, protocol.InitialPacketSize, rttStats, false, false, perspective, nil, utils.DefaultLogger)
+			handler = newSentPacketHandler(42, protocol.InitialPacketSize, &rttStats, false, false, perspective, nil, utils.DefaultLogger)
 			handler.ecnTracker = ecnHandler
 			handler.congestion = cong
 		})
