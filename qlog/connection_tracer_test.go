@@ -606,17 +606,12 @@ func TestDroppedPacketWithPacketNumber(t *testing.T) {
 
 func TestUpdatedMetrics(t *testing.T) {
 	now := time.Now()
-	rttStats := utils.NewRTTStats()
+	var rttStats utils.RTTStats
 	rttStats.UpdateRTT(15*time.Millisecond, 0, now)
 	rttStats.UpdateRTT(20*time.Millisecond, 0, now)
 	rttStats.UpdateRTT(25*time.Millisecond, 0, now)
 	tracer, buf := newConnectionTracer()
-	tracer.UpdatedMetrics(
-		rttStats,
-		4321,
-		1234,
-		42,
-	)
+	tracer.UpdatedMetrics(&rttStats, 4321, 1234, 42)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -635,29 +630,19 @@ func TestUpdatedMetrics(t *testing.T) {
 
 func TestDiffForOnlyChangedMetrics(t *testing.T) {
 	now := time.Now()
-	rttStats := utils.NewRTTStats()
+	var rttStats utils.RTTStats
 	rttStats.UpdateRTT(15*time.Millisecond, 0, now)
 	rttStats.UpdateRTT(20*time.Millisecond, 0, now)
 	rttStats.UpdateRTT(25*time.Millisecond, 0, now)
 
-	rttStats2 := utils.NewRTTStats()
+	var rttStats2 utils.RTTStats
 	rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
 	rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
 	rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
 
 	tracer, buf := newConnectionTracer()
-	tracer.UpdatedMetrics(
-		rttStats,
-		4321,
-		1234,
-		42,
-	)
-	tracer.UpdatedMetrics(
-		rttStats2,
-		4321,
-		12345, // changed
-		42,
-	)
+	tracer.UpdatedMetrics(&rttStats, 4321, 1234, 42)
+	tracer.UpdatedMetrics(&rttStats2, 4321, 12345 /* changed */, 42)
 	tracer.Close()
 	entries := exportAndParse(t, buf)
 	require.Len(t, entries, 2)
