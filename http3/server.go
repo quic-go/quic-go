@@ -707,6 +707,7 @@ func (s *Server) Close() error {
 	if s.closeCtx == nil {
 		return nil
 	}
+	s.closeCancel()
 
 	var err error
 	for ln := range s.listeners {
@@ -727,6 +728,7 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 		s.mutex.Unlock()
 		return nil
 	}
+	s.closeCancel()
 	s.mutex.Unlock()
 
 	// fast check if there is no serve goroutine running
