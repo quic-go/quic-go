@@ -4,47 +4,46 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/testdata"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Setting the Cipher Suite", func() {
-	for _, cs := range []uint16{tls.TLS_AES_128_GCM_SHA256, tls.TLS_CHACHA20_POLY1305_SHA256, tls.TLS_AES_256_GCM_SHA384} {
-		cs := cs
+func TestCipherSuiteSelection(t *testing.T) {
+	t.Run("TLS_AES_128_GCM_SHA256", func(t *testing.T) { testCipherSuiteSelection(t, tls.TLS_AES_128_GCM_SHA256) })
+	t.Run("TLS_CHACHA20_POLY1305_SHA256", func(t *testing.T) { testCipherSuiteSelection(t, tls.TLS_CHACHA20_POLY1305_SHA256) })
+	t.Run("TLS_AES_256_GCM_SHA384", func(t *testing.T) { testCipherSuiteSelection(t, tls.TLS_AES_256_GCM_SHA384) })
+}
 
-		It(fmt.Sprintf("selects %s", tls.CipherSuiteName(cs)), func() {
-			reset := SetCipherSuite(cs)
-			defer reset()
+func testCipherSuiteSelection(t *testing.T, cs uint16) {
+	reset := SetCipherSuite(cs)
+	defer reset()
 
-			ln, err := tls.Listen("tcp4", "localhost:0", testdata.GetTLSConfig())
-			Expect(err).ToNot(HaveOccurred())
-			defer ln.Close()
+	ln, err := tls.Listen("tcp4", "localhost:0", testdata.GetTLSConfig())
+	require.NoError(t, err)
+	defer ln.Close()
 
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				defer close(done)
-				conn, err := ln.Accept()
-				Expect(err).ToNot(HaveOccurred())
-				_, err = conn.Read(make([]byte, 10))
-				Expect(err).ToNot(HaveOccurred())
-				Expect(conn.(*tls.Conn).ConnectionState().CipherSuite).To(Equal(cs))
-			}()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, err := ln.Accept()
+		require.NoError(t, err)
+		_, err = conn.Read(make([]byte, 10))
+		require.NoError(t, err)
+		require.Equal(t, cs, conn.(*tls.Conn).ConnectionState().CipherSuite)
+	}()
 
-			conn, err := tls.Dial(
-				"tcp4",
-				fmt.Sprintf("localhost:%d", ln.Addr().(*net.TCPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
-			)
-			Expect(err).ToNot(HaveOccurred())
-			_, err = conn.Write([]byte("foobar"))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conn.ConnectionState().CipherSuite).To(Equal(cs))
-			Expect(conn.Close()).To(Succeed())
-			Eventually(done).Should(BeClosed())
-		})
-	}
-})
+	conn, err := tls.Dial(
+		"tcp4",
+		fmt.Sprintf("localhost:%d", ln.Addr().(*net.TCPAddr).Port),
+		&tls.Config{RootCAs: testdata.GetRootCA()},
+	)
+	require.NoError(t, err)
+	_, err = conn.Write([]byte("foobar"))
+	require.NoError(t, err)
+	require.Equal(t, cs, conn.ConnectionState().CipherSuite)
+	require.NoError(t, conn.Close())
+	<-done
+}

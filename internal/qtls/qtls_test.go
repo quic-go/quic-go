@@ -4,125 +4,134 @@ import (
 	"crypto/tls"
 	"net"
 	"reflect"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("interface go crypto/tls", func() {
-	It("converts to tls.EncryptionLevel", func() {
-		Expect(ToTLSEncryptionLevel(protocol.EncryptionInitial)).To(Equal(tls.QUICEncryptionLevelInitial))
-		Expect(ToTLSEncryptionLevel(protocol.EncryptionHandshake)).To(Equal(tls.QUICEncryptionLevelHandshake))
-		Expect(ToTLSEncryptionLevel(protocol.Encryption1RTT)).To(Equal(tls.QUICEncryptionLevelApplication))
-		Expect(ToTLSEncryptionLevel(protocol.Encryption0RTT)).To(Equal(tls.QUICEncryptionLevelEarly))
-	})
+func TestEncryptionLevelConversion(t *testing.T) {
+	testCases := []struct {
+		quicLevel protocol.EncryptionLevel
+		tlsLevel  tls.QUICEncryptionLevel
+	}{
+		{protocol.EncryptionInitial, tls.QUICEncryptionLevelInitial},
+		{protocol.EncryptionHandshake, tls.QUICEncryptionLevelHandshake},
+		{protocol.Encryption1RTT, tls.QUICEncryptionLevelApplication},
+		{protocol.Encryption0RTT, tls.QUICEncryptionLevelEarly},
+	}
 
-	It("converts from tls.EncryptionLevel", func() {
-		Expect(FromTLSEncryptionLevel(tls.QUICEncryptionLevelInitial)).To(Equal(protocol.EncryptionInitial))
-		Expect(FromTLSEncryptionLevel(tls.QUICEncryptionLevelHandshake)).To(Equal(protocol.EncryptionHandshake))
-		Expect(FromTLSEncryptionLevel(tls.QUICEncryptionLevelApplication)).To(Equal(protocol.Encryption1RTT))
-		Expect(FromTLSEncryptionLevel(tls.QUICEncryptionLevelEarly)).To(Equal(protocol.Encryption0RTT))
-	})
-
-	Context("setting up a tls.Config for the client", func() {
-		It("sets up a session cache if there's one present on the config", func() {
-			csc := tls.NewLRUClientSessionCache(1)
-			conf := &tls.QUICConfig{TLSConfig: &tls.Config{ClientSessionCache: csc}}
-			SetupConfigForClient(conf, nil, nil)
-			Expect(conf.TLSConfig.ClientSessionCache).ToNot(BeNil())
-			Expect(conf.TLSConfig.ClientSessionCache).ToNot(Equal(csc))
+	for _, tc := range testCases {
+		t.Run(tc.quicLevel.String(), func(t *testing.T) {
+			// conversion from QUIC to TLS encryption level
+			require.Equal(t, tc.tlsLevel, ToTLSEncryptionLevel(tc.quicLevel))
+			// conversion from TLS to QUIC encryption level
+			require.Equal(t, tc.quicLevel, FromTLSEncryptionLevel(tc.tlsLevel))
 		})
+	}
+}
 
-		It("doesn't set up a session cache if there's none present on the config", func() {
-			conf := &tls.QUICConfig{TLSConfig: &tls.Config{}}
-			SetupConfigForClient(conf, nil, nil)
-			Expect(conf.TLSConfig.ClientSessionCache).To(BeNil())
-		})
-	})
+func TestSetupSessionCache(t *testing.T) {
+	// Test with a session cache present
+	csc := tls.NewLRUClientSessionCache(1)
+	confWithCache := &tls.QUICConfig{TLSConfig: &tls.Config{ClientSessionCache: csc}}
+	SetupConfigForClient(confWithCache, nil, nil)
+	require.NotNil(t, confWithCache.TLSConfig.ClientSessionCache)
+	require.NotEqual(t, csc, confWithCache.TLSConfig.ClientSessionCache)
 
-	Context("setting up a tls.Config for the server", func() {
-		var (
-			local  = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
-			remote = &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		)
+	// Test without a session cache
+	confWithoutCache := &tls.QUICConfig{TLSConfig: &tls.Config{}}
+	SetupConfigForClient(confWithoutCache, nil, nil)
+	require.Nil(t, confWithoutCache.TLSConfig.ClientSessionCache)
+}
 
-		It("sets the minimum TLS version to TLS 1.3", func() {
-			orig := &tls.Config{MinVersion: tls.VersionTLS12}
-			conf := SetupConfigForServer(orig, local, remote, nil, nil)
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-			// check that the original config wasn't modified
-			Expect(orig.MinVersion).To(BeEquivalentTo(tls.VersionTLS12))
-		})
+func TestMinimumTLSVersion(t *testing.T) {
+	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
+	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 
-		It("wraps GetCertificate", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{
-				GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					localAddr = info.Conn.LocalAddr()
-					remoteAddr = info.Conn.RemoteAddr()
-					return &tls.Certificate{}, nil
-				},
-			}
-			conf := SetupConfigForServer(tlsConf, local, remote, nil, nil)
-			_, err := conf.GetCertificate(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-		})
+	orig := &tls.Config{MinVersion: tls.VersionTLS12}
+	conf := SetupConfigForServer(orig, local, remote, nil, nil)
+	require.EqualValues(t, tls.VersionTLS13, conf.MinVersion)
+	// check that the original config wasn't modified
+	require.EqualValues(t, tls.VersionTLS12, orig.MinVersion)
+}
 
-		It("wraps GetConfigForClient", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := SetupConfigForServer(
-				&tls.Config{
-					GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-						localAddr = info.Conn.LocalAddr()
-						remoteAddr = info.Conn.RemoteAddr()
-						return &tls.Config{}, nil
-					},
-				},
-				local,
-				remote,
-				nil,
-				nil,
-			)
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-			Expect(conf).ToNot(BeNil())
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-		})
+func TestServerConfigGetCertificate(t *testing.T) {
+	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
+	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 
-		It("wraps GetConfigForClient, recursively", func() {
-			var localAddr, remoteAddr net.Addr
-			tlsConf := &tls.Config{}
-			var innerConf *tls.Config
-			getCert := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) { //nolint:unparam
+	var localAddr, remoteAddr net.Addr
+	tlsConf := &tls.Config{
+		GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			localAddr = info.Conn.LocalAddr()
+			remoteAddr = info.Conn.RemoteAddr()
+			return &tls.Certificate{}, nil
+		},
+	}
+	conf := SetupConfigForServer(tlsConf, local, remote, nil, nil)
+	_, err := conf.GetCertificate(&tls.ClientHelloInfo{})
+	require.NoError(t, err)
+	require.Equal(t, local, localAddr)
+	require.Equal(t, remote, remoteAddr)
+}
+
+func TestServerConfigGetConfigForClient(t *testing.T) {
+	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
+	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+
+	var localAddr, remoteAddr net.Addr
+	tlsConf := SetupConfigForServer(
+		&tls.Config{
+			GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
 				localAddr = info.Conn.LocalAddr()
 				remoteAddr = info.Conn.RemoteAddr()
-				return &tls.Certificate{}, nil
-			}
-			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-				innerConf = tlsConf.Clone()
-				// set the MaxVersion, so we can check that quic-go doesn't overwrite the user's config
-				innerConf.MaxVersion = tls.VersionTLS12
-				innerConf.GetCertificate = getCert
-				return innerConf, nil
-			}
-			tlsConf = SetupConfigForServer(tlsConf, local, remote, nil, nil)
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf).ToNot(BeNil())
-			Expect(conf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
-			_, err = conf.GetCertificate(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(localAddr).To(Equal(local))
-			Expect(remoteAddr).To(Equal(remote))
-			// make sure that the tls.Config returned by GetConfigForClient isn't modified
-			Expect(reflect.ValueOf(innerConf.GetCertificate).Pointer() == reflect.ValueOf(getCert).Pointer()).To(BeTrue())
-			Expect(innerConf.MaxVersion).To(BeEquivalentTo(tls.VersionTLS12))
-		})
-	})
-})
+				return &tls.Config{}, nil
+			},
+		},
+		local,
+		remote,
+		nil,
+		nil,
+	)
+	conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+	require.NoError(t, err)
+	require.Equal(t, local, localAddr)
+	require.Equal(t, remote, remoteAddr)
+	require.NotNil(t, conf)
+	require.EqualValues(t, tls.VersionTLS13, conf.MinVersion)
+}
+
+func TestServerConfigGetConfigForClientRecursively(t *testing.T) {
+	local := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}
+	remote := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+
+	var localAddr, remoteAddr net.Addr
+	tlsConf := &tls.Config{}
+	var innerConf *tls.Config
+	//nolint:unparam
+	getCert := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		localAddr = info.Conn.LocalAddr()
+		remoteAddr = info.Conn.RemoteAddr()
+		return &tls.Certificate{}, nil
+	}
+	tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+		innerConf = tlsConf.Clone()
+		// set the MaxVersion, so we can check that quic-go doesn't overwrite the user's config
+		innerConf.MaxVersion = tls.VersionTLS12
+		innerConf.GetCertificate = getCert
+		return innerConf, nil
+	}
+	tlsConf = SetupConfigForServer(tlsConf, local, remote, nil, nil)
+	conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+	require.NoError(t, err)
+	require.NotNil(t, conf)
+	require.EqualValues(t, tls.VersionTLS13, conf.MinVersion)
+	_, err = conf.GetCertificate(&tls.ClientHelloInfo{})
+	require.NoError(t, err)
+	require.Equal(t, local, localAddr)
+	require.Equal(t, remote, remoteAddr)
+	// make sure that the tls.Config returned by GetConfigForClient isn't modified
+	require.True(t, reflect.ValueOf(innerConf.GetCertificate).Pointer() == reflect.ValueOf(getCert).Pointer())
+	require.EqualValues(t, tls.VersionTLS12, innerConf.MaxVersion)
+}
