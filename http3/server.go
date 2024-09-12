@@ -715,7 +715,17 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 	if s.closeCancel != nil {
 		s.closeCancel()
 	}
+	// this server hasn't been used to serve QUIC connections
+	if s.closeDoneChan == nil {
+		s.closeDoneChan = make(chan struct{})
+	}
 	s.mutex.Unlock()
+
+	// fast check if there is no serve goroutine running
+	if s.connCount.Load() == 0 && s.doneChanClosed.CompareAndSwap(false, true) {
+		close(s.closeDoneChan)
+		return s.Close()
+	}
 
 	select {
 	// all serve goroutine finished
