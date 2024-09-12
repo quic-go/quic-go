@@ -3,29 +3,26 @@ package testdata
 import (
 	"crypto/tls"
 	"io"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("certificates", func() {
-	It("returns certificates", func() {
-		ln, err := tls.Listen("tcp", "localhost:4433", GetTLSConfig())
-		Expect(err).ToNot(HaveOccurred())
+func TestCertificates(t *testing.T) {
+	ln, err := tls.Listen("tcp", "localhost:4433", GetTLSConfig())
+	require.NoError(t, err)
 
-		go func() {
-			defer GinkgoRecover()
-			conn, err := ln.Accept()
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.Close()
-			_, err = conn.Write([]byte("foobar"))
-			Expect(err).ToNot(HaveOccurred())
-		}()
+	go func() {
+		conn, err := ln.Accept()
+		require.NoError(t, err)
+		defer conn.Close()
+		_, err = conn.Write([]byte("foobar"))
+		require.NoError(t, err)
+	}()
 
-		conn, err := tls.Dial("tcp", "localhost:4433", &tls.Config{RootCAs: GetRootCA()})
-		Expect(err).ToNot(HaveOccurred())
-		data, err := io.ReadAll(conn)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(string(data)).To(Equal("foobar"))
-	})
-})
+	conn, err := tls.Dial("tcp", "localhost:4433", &tls.Config{RootCAs: GetRootCA()})
+	require.NoError(t, err)
+	data, err := io.ReadAll(conn)
+	require.NoError(t, err)
+	require.Equal(t, "foobar", string(data))
+}
