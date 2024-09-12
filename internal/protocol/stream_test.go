@@ -1,70 +1,66 @@
 package protocol
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Stream ID", func() {
-	It("InvalidStreamID is smaller than all valid stream IDs", func() {
-		Expect(InvalidStreamID).To(BeNumerically("<", 0))
-	})
+func TestInvalidStreamIDSmallerThanAllValidStreamIDs(t *testing.T) {
+	require.Less(t, InvalidStreamID, StreamID(0))
+}
 
-	It("says who initiated a stream", func() {
-		Expect(StreamID(4).InitiatedBy()).To(Equal(PerspectiveClient))
-		Expect(StreamID(5).InitiatedBy()).To(Equal(PerspectiveServer))
-		Expect(StreamID(6).InitiatedBy()).To(Equal(PerspectiveClient))
-		Expect(StreamID(7).InitiatedBy()).To(Equal(PerspectiveServer))
-	})
+func TestStreamIDInitiatedBy(t *testing.T) {
+	require.Equal(t, PerspectiveClient, StreamID(4).InitiatedBy())
+	require.Equal(t, PerspectiveServer, StreamID(5).InitiatedBy())
+	require.Equal(t, PerspectiveClient, StreamID(6).InitiatedBy())
+	require.Equal(t, PerspectiveServer, StreamID(7).InitiatedBy())
+}
 
-	It("tells the directionality", func() {
-		Expect(StreamID(4).Type()).To(Equal(StreamTypeBidi))
-		Expect(StreamID(5).Type()).To(Equal(StreamTypeBidi))
-		Expect(StreamID(6).Type()).To(Equal(StreamTypeUni))
-		Expect(StreamID(7).Type()).To(Equal(StreamTypeUni))
-	})
+func TestStreamIDType(t *testing.T) {
+	require.Equal(t, StreamTypeBidi, StreamID(4).Type())
+	require.Equal(t, StreamTypeBidi, StreamID(5).Type())
+	require.Equal(t, StreamTypeUni, StreamID(6).Type())
+	require.Equal(t, StreamTypeUni, StreamID(7).Type())
+}
 
-	It("tells the stream number", func() {
-		Expect(StreamID(0).StreamNum()).To(BeEquivalentTo(1))
-		Expect(StreamID(1).StreamNum()).To(BeEquivalentTo(1))
-		Expect(StreamID(2).StreamNum()).To(BeEquivalentTo(1))
-		Expect(StreamID(3).StreamNum()).To(BeEquivalentTo(1))
-		Expect(StreamID(8).StreamNum()).To(BeEquivalentTo(3))
-		Expect(StreamID(9).StreamNum()).To(BeEquivalentTo(3))
-		Expect(StreamID(10).StreamNum()).To(BeEquivalentTo(3))
-		Expect(StreamID(11).StreamNum()).To(BeEquivalentTo(3))
-	})
+func TestStreamIDStreamNum(t *testing.T) {
+	require.Equal(t, StreamNum(1), StreamID(0).StreamNum())
+	require.Equal(t, StreamNum(1), StreamID(1).StreamNum())
+	require.Equal(t, StreamNum(1), StreamID(2).StreamNum())
+	require.Equal(t, StreamNum(1), StreamID(3).StreamNum())
+	require.Equal(t, StreamNum(3), StreamID(8).StreamNum())
+	require.Equal(t, StreamNum(3), StreamID(9).StreamNum())
+	require.Equal(t, StreamNum(3), StreamID(10).StreamNum())
+	require.Equal(t, StreamNum(3), StreamID(11).StreamNum())
+}
 
-	Context("converting stream nums to stream IDs", func() {
-		It("handles 0", func() {
-			Expect(StreamNum(0).StreamID(StreamTypeBidi, PerspectiveClient)).To(Equal(InvalidStreamID))
-			Expect(StreamNum(0).StreamID(StreamTypeBidi, PerspectiveServer)).To(Equal(InvalidStreamID))
-			Expect(StreamNum(0).StreamID(StreamTypeUni, PerspectiveClient)).To(Equal(InvalidStreamID))
-			Expect(StreamNum(0).StreamID(StreamTypeUni, PerspectiveServer)).To(Equal(InvalidStreamID))
-		})
+func TestStreamIDNumToStreamID(t *testing.T) {
+	// 1st stream
+	require.Equal(t, StreamID(0), StreamNum(1).StreamID(StreamTypeBidi, PerspectiveClient))
+	require.Equal(t, StreamID(1), StreamNum(1).StreamID(StreamTypeBidi, PerspectiveServer))
+	require.Equal(t, StreamID(2), StreamNum(1).StreamID(StreamTypeUni, PerspectiveClient))
+	require.Equal(t, StreamID(3), StreamNum(1).StreamID(StreamTypeUni, PerspectiveServer))
 
-		It("handles the first", func() {
-			Expect(StreamNum(1).StreamID(StreamTypeBidi, PerspectiveClient)).To(Equal(StreamID(0)))
-			Expect(StreamNum(1).StreamID(StreamTypeBidi, PerspectiveServer)).To(Equal(StreamID(1)))
-			Expect(StreamNum(1).StreamID(StreamTypeUni, PerspectiveClient)).To(Equal(StreamID(2)))
-			Expect(StreamNum(1).StreamID(StreamTypeUni, PerspectiveServer)).To(Equal(StreamID(3)))
-		})
+	// 100th stream
+	require.Equal(t, StreamID(396), StreamNum(100).StreamID(StreamTypeBidi, PerspectiveClient))
+	require.Equal(t, StreamID(397), StreamNum(100).StreamID(StreamTypeBidi, PerspectiveServer))
+	require.Equal(t, StreamID(398), StreamNum(100).StreamID(StreamTypeUni, PerspectiveClient))
+	require.Equal(t, StreamID(399), StreamNum(100).StreamID(StreamTypeUni, PerspectiveServer))
 
-		It("handles others", func() {
-			Expect(StreamNum(100).StreamID(StreamTypeBidi, PerspectiveClient)).To(Equal(StreamID(396)))
-			Expect(StreamNum(100).StreamID(StreamTypeBidi, PerspectiveServer)).To(Equal(StreamID(397)))
-			Expect(StreamNum(100).StreamID(StreamTypeUni, PerspectiveClient)).To(Equal(StreamID(398)))
-			Expect(StreamNum(100).StreamID(StreamTypeUni, PerspectiveServer)).To(Equal(StreamID(399)))
-		})
+	// 0 is not a valid stream number
+	require.Equal(t, InvalidStreamID, StreamNum(0).StreamID(StreamTypeBidi, PerspectiveClient))
+	require.Equal(t, InvalidStreamID, StreamNum(0).StreamID(StreamTypeBidi, PerspectiveServer))
+	require.Equal(t, InvalidStreamID, StreamNum(0).StreamID(StreamTypeUni, PerspectiveClient))
+	require.Equal(t, InvalidStreamID, StreamNum(0).StreamID(StreamTypeUni, PerspectiveServer))
+}
 
-		It("has the right value for MaxStreamCount", func() {
-			const maxStreamID = StreamID(1<<62 - 1)
-			for _, dir := range []StreamType{StreamTypeUni, StreamTypeBidi} {
-				for _, pers := range []Perspective{PerspectiveClient, PerspectiveServer} {
-					Expect(MaxStreamCount.StreamID(dir, pers)).To(BeNumerically("<=", maxStreamID))
-					Expect((MaxStreamCount + 1).StreamID(dir, pers)).To(BeNumerically(">", maxStreamID))
-				}
-			}
-		})
-	})
-})
+func TestMaxStreamCountValue(t *testing.T) {
+	const maxStreamID = StreamID(1<<62 - 1)
+	for _, dir := range []StreamType{StreamTypeUni, StreamTypeBidi} {
+		for _, pers := range []Perspective{PerspectiveClient, PerspectiveServer} {
+			require.LessOrEqual(t, MaxStreamCount.StreamID(dir, pers), maxStreamID)
+			require.Greater(t, (MaxStreamCount+1).StreamID(dir, pers), maxStreamID)
+		}
+	}
+}
