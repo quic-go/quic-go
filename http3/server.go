@@ -220,7 +220,7 @@ type Server struct {
 	closeCancel context.CancelFunc // cancels the closeCtx
 
 	closeDoneChan  chan struct{} // will be closed when the server is shutdown and connCount is zero
-	doneChanClosed atomic.Bool   // closeDoneChan will be closed once
+	doneChanClosed atomic.Bool   // makes sure closeDoneChan will be closed once
 
 	altSvcHeader string
 }
@@ -471,8 +471,9 @@ func (s *Server) removeListener(l *QUICEarlyListener) {
 }
 
 func (s *Server) handleConn(conn quic.Connection) error {
-	// send a SETTINGS frame
-	str, err := conn.OpenUniStream()
+	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
+	// when the server is gracefully closed
+	ctrlStr, err := conn.OpenUniStream()
 	if err != nil {
 		return fmt.Errorf("opening the control stream failed: %w", err)
 	}
@@ -483,7 +484,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		ExtendedConnect: true,
 		Other:           s.AdditionalSettings,
 	}).Append(b)
-	str.Write(b)
+	ctrlStr.Write(b)
 
 	ctx := conn.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
@@ -500,19 +501,15 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	defer func() {
 		s.connCount.Add(-1)
 		s.mutex.RLock()
-		// close once
-		if s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
+		// close once when the server is closed and the connection count is zero
+		if s.closed && s.connCount.Load() == 0 && s.doneChanClosed.CompareAndSwap(false, true) {
 			close(s.closeDoneChan)
 		}
 		s.mutex.RUnlock()
 	}()
 
-	var (
-		// first valid ID is zero, subtract 4, so goaway frame id starts at 0
-		lastID = quic.StreamID(-4)
-		// ctrlStr is the control stream, which is used to send GOAWAY frames.
-		ctrlStr = str
-	)
+	// first valid ID is zero, subtract 4, so goaway frame id starts at 0
+	var lastID = quic.StreamID(-4)
 
 	hconn := newConnection(
 		ctx,
@@ -530,10 +527,12 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		str, datagrams, err := hconn.acceptStream(s.closeCtx)
 		if err != nil {
 			// server is closed, send GOAWAY frame and return, since those requests will be rejected anyway
-			if errors.Is(err, context.Canceled) {
+			if s.closeCtx.Err() != nil {
 				b = (&goawayFrame{
 					StreamID: lastID + 4,
 				}).Append(b[:0])
+				// set a deadline to send the GOAWAY frame
+				ctrlStr.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				ctrlStr.Write(b)
 				return http.ErrServerClosed
 			}
@@ -694,8 +693,9 @@ func (s *Server) Close() error {
 	defer s.mutex.Unlock()
 
 	s.closed = true
-	if s.closeCancel != nil {
-		s.closeCancel()
+	// server is never used
+	if s.closeCtx == nil {
+		return nil
 	}
 
 	var err error
@@ -712,18 +712,15 @@ func (s *Server) Close() error {
 func (s *Server) CloseGracefully(ctx context.Context) error {
 	s.mutex.Lock()
 	s.closed = true
-	if s.closeCancel != nil {
-		s.closeCancel()
-	}
-	// this server hasn't been used to serve QUIC connections
-	if s.closeDoneChan == nil {
-		s.closeDoneChan = make(chan struct{})
+	// server is never used
+	if s.closeCtx == nil {
+		s.mutex.Unlock()
+		return nil
 	}
 	s.mutex.Unlock()
 
 	// fast check if there is no serve goroutine running
-	if s.connCount.Load() == 0 && s.doneChanClosed.CompareAndSwap(false, true) {
-		close(s.closeDoneChan)
+	if s.connCount.Load() == 0 {
 		return s.Close()
 	}
 
