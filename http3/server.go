@@ -497,8 +497,17 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		}
 	}
 
+	var (
+		// first valid ID is zero, subtract 4, so goaway frame id starts at 0
+		lastID = quic.StreamID(-4)
+		// wait until all request goroutines are done
+		wg sync.WaitGroup
+	)
+
 	s.connCount.Add(1)
 	defer func() {
+		// some requests may be still running, wait for them to finish before decreasing the counter
+		wg.Wait()
 		s.connCount.Add(-1)
 		s.mutex.RLock()
 		// close once when the server is closed and the connection count is zero
@@ -507,9 +516,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		}
 		s.mutex.RUnlock()
 	}()
-
-	// first valid ID is zero, subtract 4, so goaway frame id starts at 0
-	lastID := quic.StreamID(-4)
 
 	hconn := newConnection(
 		ctx,
@@ -545,7 +551,11 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		}
 
 		lastID = str.StreamID()
-		go s.handleRequest(hconn, str, datagrams, hconn.decoder)
+		wg.Add(1)
+		go func() {
+			s.handleRequest(hconn, str, datagrams, hconn.decoder)
+			wg.Done()
+		}()
 	}
 }
 
