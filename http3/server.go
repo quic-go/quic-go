@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
@@ -220,6 +219,9 @@ type Server struct {
 	closeCtx    context.Context    // canceled when the server is closed
 	closeCancel context.CancelFunc // cancels the closeCtx
 
+	closeDoneChan  chan struct{} // will be closed when the server is shutdown and connCount is zero
+	doneChanClosed atomic.Bool   // closeDoneChan will be closed once
+
 	altSvcHeader string
 }
 
@@ -275,6 +277,7 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
 	if s.closeCtx == nil {
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
+		s.closeDoneChan = make(chan struct{})
 	}
 	s.mutex.Unlock()
 	return s.handleConn(conn)
@@ -442,6 +445,7 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	}
 	if s.closeCtx == nil {
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
+		s.closeDoneChan = make(chan struct{})
 	}
 
 	laddr := (*l).Addr()
@@ -493,22 +497,22 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}
 
 	s.connCount.Add(1)
+	defer func() {
+		s.connCount.Add(-1)
+		s.mutex.RLock()
+		// close once
+		if s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
+			close(s.closeDoneChan)
+		}
+		s.mutex.RUnlock()
+	}()
 
 	var (
-		lastID atomic.Int64
+		// first valid ID is zero, subtract 4, so goaway frame id starts at 0
+		lastID = quic.StreamID(-4)
+		// ctrlStr is the control stream, which is used to send GOAWAY frames.
+		ctrlStr = str
 	)
-	// first valid ID is zero, subtract 4, so goaway frame id starts at 0
-	lastID.Store(-4)
-	// run in a separate goroutine
-	stop := context.AfterFunc(s.closeCtx, func() {
-		b = (&goawayFrame{
-			StreamID: quic.StreamID(lastID.Load()) + 4,
-		}).Append(b[:0])
-		str.Write(b)
-	})
-	defer s.connCount.Add(-1)
-	// stop association to release resources
-	defer stop()
 
 	hconn := newConnection(
 		ctx,
@@ -523,8 +527,17 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, datagrams, err := hconn.acceptStream(context.Background())
+		str, datagrams, err := hconn.acceptStream(s.closeCtx)
 		if err != nil {
+			// server is closed, send GOAWAY frame and return, since those requests will be rejected anyway
+			if errors.Is(err, context.Canceled) {
+				b = (&goawayFrame{
+					StreamID: lastID + 4,
+				}).Append(b[:0])
+				ctrlStr.Write(b)
+				return http.ErrServerClosed
+			}
+
 			var appErr *quic.ApplicationError
 			if errors.As(err, &appErr) && appErr.ErrorCode == quic.ApplicationErrorCode(ErrCodeNoError) {
 				return nil
@@ -532,17 +545,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 
-		var closed bool
-		s.mutex.RLock()
-		closed = s.closed
-		s.mutex.RUnlock()
-		if closed {
-			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
-			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
-			continue
-		}
-		lastID.Store(int64(str.StreamID()))
-
+		lastID = str.StreamID()
 		go s.handleRequest(hconn, str, datagrams, hconn.decoder)
 	}
 }
@@ -704,8 +707,6 @@ func (s *Server) Close() error {
 	return err
 }
 
-const shutdownPollIntervalMax = 500 * time.Millisecond
-
 // CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
 // CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) CloseGracefully(ctx context.Context) error {
@@ -716,33 +717,14 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 	}
 	s.mutex.Unlock()
 
-	// copied from http.Server Shutdown
-	pollIntervalBase := time.Millisecond
-	nextPollInterval := func() time.Duration {
-		// Add 10% jitter.
-		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
-		// Double and clamp for next time.
-		pollIntervalBase *= 2
-		if pollIntervalBase > shutdownPollIntervalMax {
-			pollIntervalBase = shutdownPollIntervalMax
-		}
-		return interval
-	}
-
-	timer := time.NewTimer(nextPollInterval())
-	defer timer.Stop()
-
-	for {
-		if s.connCount.Load() == 0 {
-			return s.Close()
-		}
-		select {
-		case <-ctx.Done():
-			s.Close()
-			return ctx.Err()
-		case <-timer.C:
-			timer.Reset(nextPollInterval())
-		}
+	select {
+	// all serve goroutine finished
+	case <-s.closeDoneChan:
+		return s.Close()
+	// context canceled
+	case <-ctx.Done():
+		s.Close()
+		return ctx.Err()
 	}
 }
 

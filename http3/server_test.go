@@ -76,6 +76,7 @@ var _ = Describe("Server", func() {
 			},
 		}
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
+		s.closeDoneChan = make(chan struct{})
 		origQuicListenAddr = quicListenAddr
 	})
 
