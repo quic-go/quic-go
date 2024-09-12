@@ -509,7 +509,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}()
 
 	// first valid ID is zero, subtract 4, so goaway frame id starts at 0
-	var lastID = quic.StreamID(-4)
+	lastID := quic.StreamID(-4)
 
 	hconn := newConnection(
 		ctx,
