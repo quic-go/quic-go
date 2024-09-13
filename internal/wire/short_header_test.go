@@ -3,117 +3,92 @@ package wire
 import (
 	"bytes"
 	"io"
-	"log"
-	"os"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Short Header", func() {
-	Context("Parsing", func() {
-		It("parses", func() {
-			data := []byte{
-				0b01000110,
-				0xde, 0xad, 0xbe, 0xef,
-				0x13, 0x37, 0x99,
-			}
-			l, pn, pnLen, kp, err := ParseShortHeader(data, 4)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(l).To(Equal(len(data)))
-			Expect(kp).To(Equal(protocol.KeyPhaseOne))
-			Expect(pn).To(Equal(protocol.PacketNumber(0x133799)))
-			Expect(pnLen).To(Equal(protocol.PacketNumberLen3))
-		})
+func TestParseShortHeader(t *testing.T) {
+	data := []byte{
+		0b01000110,
+		0xde, 0xad, 0xbe, 0xef,
+		0x13, 0x37, 0x99,
+	}
+	l, pn, pnLen, kp, err := ParseShortHeader(data, 4)
+	require.NoError(t, err)
+	require.Equal(t, len(data), l)
+	require.Equal(t, protocol.KeyPhaseOne, kp)
+	require.Equal(t, protocol.PacketNumber(0x133799), pn)
+	require.Equal(t, protocol.PacketNumberLen3, pnLen)
+}
 
-		It("errors when the QUIC bit is not set", func() {
-			data := []byte{
-				0b00000101,
-				0xde, 0xad, 0xbe, 0xef,
-				0x13, 0x37,
-			}
-			_, _, _, _, err := ParseShortHeader(data, 4)
-			Expect(err).To(MatchError("not a QUIC packet"))
-		})
+func TestParseShortHeaderNoQUICBit(t *testing.T) {
+	data := []byte{
+		0b00000101,
+		0xde, 0xad, 0xbe, 0xef,
+		0x13, 0x37,
+	}
+	_, _, _, _, err := ParseShortHeader(data, 4)
+	require.EqualError(t, err, "not a QUIC packet")
+}
 
-		It("errors, but returns the header, when the reserved bits are set", func() {
-			data := []byte{
-				0b01010101,
-				0xde, 0xad, 0xbe, 0xef,
-				0x13, 0x37,
-			}
-			_, pn, _, _, err := ParseShortHeader(data, 4)
-			Expect(err).To(MatchError(ErrInvalidReservedBits))
-			Expect(pn).To(Equal(protocol.PacketNumber(0x1337)))
-		})
+func TestParseShortHeaderReservedBitsSet(t *testing.T) {
+	data := []byte{
+		0b01010101,
+		0xde, 0xad, 0xbe, 0xef,
+		0x13, 0x37,
+	}
+	_, pn, _, _, err := ParseShortHeader(data, 4)
+	require.EqualError(t, err, ErrInvalidReservedBits.Error())
+	require.Equal(t, protocol.PacketNumber(0x1337), pn)
+}
 
-		It("errors when passed a long header packet", func() {
-			_, _, _, _, err := ParseShortHeader([]byte{0x80}, 4)
-			Expect(err).To(MatchError("not a short header packet"))
-		})
+func TestParseShortHeaderErrorsWhenPassedLongHeaderPacket(t *testing.T) {
+	_, _, _, _, err := ParseShortHeader([]byte{0x80}, 4)
+	require.EqualError(t, err, "not a short header packet")
+}
 
-		It("errors on EOF", func() {
-			data := []byte{
-				0b01000110,
-				0xde, 0xad, 0xbe, 0xef,
-				0x13, 0x37, 0x99,
-			}
-			_, _, _, _, err := ParseShortHeader(data, 4)
-			Expect(err).ToNot(HaveOccurred())
-			for i := range data {
-				_, _, _, _, err := ParseShortHeader(data[:i], 4)
-				Expect(err).To(MatchError(io.EOF))
-			}
-		})
-	})
+func TestParseShortHeaderErrorsOnEOF(t *testing.T) {
+	data := []byte{
+		0b01000110,
+		0xde, 0xad, 0xbe, 0xef,
+		0x13, 0x37, 0x99,
+	}
+	_, _, _, _, err := ParseShortHeader(data, 4)
+	require.NoError(t, err)
+	for i := range data {
+		_, _, _, _, err := ParseShortHeader(data[:i], 4)
+		require.EqualError(t, err, io.EOF.Error())
+	}
+}
 
-	It("determines the length", func() {
-		Expect(ShortHeaderLen(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PacketNumberLen3)).To(BeEquivalentTo(8))
-		Expect(ShortHeaderLen(protocol.ParseConnectionID([]byte{}), protocol.PacketNumberLen1)).To(BeEquivalentTo(2))
-	})
+func TestShortHeaderLen(t *testing.T) {
+	require.Equal(t, protocol.ByteCount(8), ShortHeaderLen(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PacketNumberLen3))
+	require.Equal(t, protocol.ByteCount(2), ShortHeaderLen(protocol.ParseConnectionID([]byte{}), protocol.PacketNumberLen1))
+}
 
-	Context("writing", func() {
-		It("writes a short header packet", func() {
-			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-			b, err := AppendShortHeader(nil, connID, 1337, 4, protocol.KeyPhaseOne)
-			Expect(err).ToNot(HaveOccurred())
-			l, pn, pnLen, kp, err := ParseShortHeader(b, 4)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(pn).To(Equal(protocol.PacketNumber(1337)))
-			Expect(pnLen).To(Equal(protocol.PacketNumberLen4))
-			Expect(kp).To(Equal(protocol.KeyPhaseOne))
-			Expect(l).To(Equal(len(b)))
-		})
-	})
+func TestWriteShortHeaderPacket(t *testing.T) {
+	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+	b, err := AppendShortHeader(nil, connID, 1337, 4, protocol.KeyPhaseOne)
+	require.NoError(t, err)
+	l, pn, pnLen, kp, err := ParseShortHeader(b, 4)
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(1337), pn)
+	require.Equal(t, protocol.PacketNumberLen4, pnLen)
+	require.Equal(t, protocol.KeyPhaseOne, kp)
+	require.Equal(t, len(b), l)
+}
 
-	Context("logging", func() {
-		var (
-			buf    *bytes.Buffer
-			logger utils.Logger
-		)
+func TestLogShortHeaderWithConnectionID(t *testing.T) {
+	buf := &bytes.Buffer{}
+	logger := setupLogTest(t, buf)
 
-		BeforeEach(func() {
-			buf = &bytes.Buffer{}
-			logger = utils.DefaultLogger
-			logger.SetLogLevel(utils.LogLevelDebug)
-			log.SetOutput(buf)
-		})
-
-		AfterEach(func() {
-			log.SetOutput(os.Stdout)
-		})
-
-		It("logs Short Headers containing a connection ID", func() {
-			connID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37})
-			LogShortHeader(logger, connID, 1337, protocol.PacketNumberLen4, protocol.KeyPhaseOne)
-			Expect(buf.String()).To(ContainSubstring("Short Header{DestConnectionID: deadbeefcafe1337, PacketNumber: 1337, PacketNumberLen: 4, KeyPhase: 1}"))
-		})
-	})
-})
+	connID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37})
+	LogShortHeader(logger, connID, 1337, protocol.PacketNumberLen4, protocol.KeyPhaseOne)
+	require.Contains(t, buf.String(), "Short Header{DestConnectionID: deadbeefcafe1337, PacketNumber: 1337, PacketNumberLen: 4, KeyPhase: 1}")
+}
 
 func BenchmarkWriteShortHeader(b *testing.B) {
 	b.ReportAllocs()

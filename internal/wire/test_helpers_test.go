@@ -1,20 +1,15 @@
 package wire
 
 import (
+	"bytes"
 	"encoding/binary"
+	"log"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
-
-func TestWire(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Wire Suite")
-}
 
 func encodeVarInt(i uint64) []byte {
 	return quicvarint.Append(nil, i)
@@ -25,4 +20,13 @@ func appendVersion(data []byte, v protocol.Version) []byte {
 	data = append(data, []byte{0, 0, 0, 0}...)
 	binary.BigEndian.PutUint32(data[offset:], uint32(v))
 	return data
+}
+
+func setupLogTest(t *testing.T, buf *bytes.Buffer) utils.Logger {
+	logger := utils.DefaultLogger
+	logger.SetLogLevel(utils.LogLevelDebug)
+	originalOutput := log.Writer()
+	log.SetOutput(buf)
+	t.Cleanup(func() { log.SetOutput(originalOutput) })
+	return logger
 }

@@ -2,142 +2,122 @@ package wire
 
 import (
 	"io"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/quicvarint"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("CRYPTO frame", func() {
-	Context("when parsing", func() {
-		It("parses", func() {
-			data := encodeVarInt(0xdecafbad)        // offset
-			data = append(data, encodeVarInt(6)...) // length
-			data = append(data, []byte("foobar")...)
-			frame, l, err := parseCryptoFrame(data, protocol.Version1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.Offset).To(Equal(protocol.ByteCount(0xdecafbad)))
-			Expect(frame.Data).To(Equal([]byte("foobar")))
-			Expect(l).To(Equal(len(data)))
-		})
+func TestParseCryptoFrame(t *testing.T) {
+	data := encodeVarInt(0xdecafbad)        // offset
+	data = append(data, encodeVarInt(6)...) // length
+	data = append(data, []byte("foobar")...)
+	frame, l, err := parseCryptoFrame(data, protocol.Version1)
+	require.NoError(t, err)
+	require.Equal(t, protocol.ByteCount(0xdecafbad), frame.Offset)
+	require.Equal(t, []byte("foobar"), frame.Data)
+	require.Equal(t, len(data), l)
+}
 
-		It("errors on EOFs", func() {
-			data := encodeVarInt(0xdecafbad)        // offset
-			data = append(data, encodeVarInt(6)...) // data length
-			data = append(data, []byte("foobar")...)
-			_, l, err := parseCryptoFrame(data, protocol.Version1)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(l).To(Equal(len(data)))
-			for i := range data {
-				_, _, err := parseCryptoFrame(data[:i], protocol.Version1)
-				Expect(err).To(MatchError(io.EOF))
-			}
-		})
-	})
+func TestParseCryptoFrameErrorsOnEOFs(t *testing.T) {
+	data := encodeVarInt(0xdecafbad)        // offset
+	data = append(data, encodeVarInt(6)...) // data length
+	data = append(data, []byte("foobar")...)
+	_, l, err := parseCryptoFrame(data, protocol.Version1)
+	require.NoError(t, err)
+	require.Equal(t, len(data), l)
+	for i := range data {
+		_, _, err := parseCryptoFrame(data[:i], protocol.Version1)
+		require.Equal(t, io.EOF, err)
+	}
+}
 
-	Context("when writing", func() {
-		It("writes a frame", func() {
-			f := &CryptoFrame{
-				Offset: 0x123456,
-				Data:   []byte("foobar"),
-			}
+func TestWriteCryptoFrame(t *testing.T) {
+	f := &CryptoFrame{
+		Offset: 0x123456,
+		Data:   []byte("foobar"),
+	}
+	b, err := f.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	expected := []byte{cryptoFrameType}
+	expected = append(expected, encodeVarInt(0x123456)...) // offset
+	expected = append(expected, encodeVarInt(6)...)        // length
+	expected = append(expected, []byte("foobar")...)
+	require.Equal(t, expected, b)
+	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+}
+
+func TestCryptoFrameMaxDataLength(t *testing.T) {
+	const maxSize = 3000
+
+	data := make([]byte, maxSize)
+	f := &CryptoFrame{
+		Offset: 0xdeadbeef,
+	}
+	var frameOneByteTooSmallCounter int
+	for i := 1; i < maxSize; i++ {
+		f.Data = nil
+		maxDataLen := f.MaxDataLen(protocol.ByteCount(i))
+		if maxDataLen == 0 { // 0 means that no valid CRYPTO frame can be written
+			// check that writing a minimal size CRYPTO frame (i.e. with 1 byte data) is actually larger than the desired size
+			f.Data = []byte{0}
 			b, err := f.Append(nil, protocol.Version1)
-			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{cryptoFrameType}
-			expected = append(expected, encodeVarInt(0x123456)...) // offset
-			expected = append(expected, encodeVarInt(6)...)        // length
-			expected = append(expected, []byte("foobar")...)
-			Expect(b).To(Equal(expected))
-		})
-	})
+			require.NoError(t, err)
+			require.Greater(t, len(b), i)
+			continue
+		}
+		f.Data = data[:int(maxDataLen)]
+		b, err := f.Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		// There's *one* pathological case, where a data length of x can be encoded into 1 byte
+		// but a data lengths of x+1 needs 2 bytes
+		// In that case, it's impossible to create a STREAM frame of the desired size
+		if len(b) == i-1 {
+			frameOneByteTooSmallCounter++
+			continue
+		}
+		require.Equal(t, i, len(b))
+	}
+	require.Equal(t, 1, frameOneByteTooSmallCounter)
+}
 
-	Context("max data length", func() {
-		const maxSize = 3000
+func TestCryptoFrameSplitting(t *testing.T) {
+	f := &CryptoFrame{
+		Offset: 0x1337,
+		Data:   []byte("foobar"),
+	}
+	hdrLen := f.Length(protocol.Version1) - 6
+	new, needsSplit := f.MaybeSplitOffFrame(hdrLen+3, protocol.Version1)
+	require.True(t, needsSplit)
+	require.Equal(t, []byte("foo"), new.Data)
+	require.Equal(t, protocol.ByteCount(0x1337), new.Offset)
+	require.Equal(t, []byte("bar"), f.Data)
+	require.Equal(t, protocol.ByteCount(0x1337+3), f.Offset)
+}
 
-		It("always returns a data length such that the resulting frame has the right size", func() {
-			data := make([]byte, maxSize)
-			f := &CryptoFrame{
-				Offset: 0xdeadbeef,
-			}
-			var frameOneByteTooSmallCounter int
-			for i := 1; i < maxSize; i++ {
-				f.Data = nil
-				maxDataLen := f.MaxDataLen(protocol.ByteCount(i))
-				if maxDataLen == 0 { // 0 means that no valid CRYTPO frame can be written
-					// check that writing a minimal size CRYPTO frame (i.e. with 1 byte data) is actually larger than the desired size
-					f.Data = []byte{0}
-					b, err := f.Append(nil, protocol.Version1)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(len(b)).To(BeNumerically(">", i))
-					continue
-				}
-				f.Data = data[:int(maxDataLen)]
-				b, err := f.Append(nil, protocol.Version1)
-				Expect(err).ToNot(HaveOccurred())
-				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
-				// but a data lengths of x+1 needs 2 bytes
-				// In that case, it's impossible to create a STREAM frame of the desired size
-				if len(b) == i-1 {
-					frameOneByteTooSmallCounter++
-					continue
-				}
-				Expect(len(b)).To(Equal(i))
-			}
-			Expect(frameOneByteTooSmallCounter).To(Equal(1))
-		})
-	})
+func TestCryptoFrameNoSplitWhenEnoughSpace(t *testing.T) {
+	f := &CryptoFrame{
+		Offset: 0x1337,
+		Data:   []byte("foobar"),
+	}
+	splitFrame, needsSplit := f.MaybeSplitOffFrame(f.Length(protocol.Version1), protocol.Version1)
+	require.False(t, needsSplit)
+	require.Nil(t, splitFrame)
+}
 
-	Context("length", func() {
-		It("has the right length for a frame without offset and data length", func() {
-			f := &CryptoFrame{
-				Offset: 0x1337,
-				Data:   []byte("foobar"),
-			}
-			Expect(f.Length(protocol.Version1)).To(BeEquivalentTo(1 + quicvarint.Len(0x1337) + quicvarint.Len(6) + 6))
-		})
-	})
-
-	Context("splitting", func() {
-		It("splits a frame", func() {
-			f := &CryptoFrame{
-				Offset: 0x1337,
-				Data:   []byte("foobar"),
-			}
-			hdrLen := f.Length(protocol.Version1) - 6
-			new, needsSplit := f.MaybeSplitOffFrame(hdrLen+3, protocol.Version1)
-			Expect(needsSplit).To(BeTrue())
-			Expect(new.Data).To(Equal([]byte("foo")))
-			Expect(new.Offset).To(Equal(protocol.ByteCount(0x1337)))
-			Expect(f.Data).To(Equal([]byte("bar")))
-			Expect(f.Offset).To(Equal(protocol.ByteCount(0x1337 + 3)))
-		})
-
-		It("doesn't split if there's enough space in the frame", func() {
-			f := &CryptoFrame{
-				Offset: 0x1337,
-				Data:   []byte("foobar"),
-			}
-			f, needsSplit := f.MaybeSplitOffFrame(f.Length(protocol.Version1), protocol.Version1)
-			Expect(needsSplit).To(BeFalse())
-			Expect(f).To(BeNil())
-		})
-
-		It("doesn't split if the size is too small", func() {
-			f := &CryptoFrame{
-				Offset: 0x1337,
-				Data:   []byte("foobar"),
-			}
-			length := f.Length(protocol.Version1) - 6
-			for i := protocol.ByteCount(0); i <= length; i++ {
-				f, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
-				Expect(needsSplit).To(BeTrue())
-				Expect(f).To(BeNil())
-			}
-			f, needsSplit := f.MaybeSplitOffFrame(length+1, protocol.Version1)
-			Expect(needsSplit).To(BeTrue())
-			Expect(f).ToNot(BeNil())
-		})
-	})
-})
+func TestCryptoFrameNoSplitWhenSizeTooSmall(t *testing.T) {
+	f := &CryptoFrame{
+		Offset: 0x1337,
+		Data:   []byte("foobar"),
+	}
+	length := f.Length(protocol.Version1) - 6
+	for i := protocol.ByteCount(0); i <= length; i++ {
+		splitFrame, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
+		require.True(t, needsSplit)
+		require.Nil(t, splitFrame)
+	}
+	splitFrame, needsSplit := f.MaybeSplitOffFrame(length+1, protocol.Version1)
+	require.True(t, needsSplit)
+	require.NotNil(t, splitFrame)
+}
