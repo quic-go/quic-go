@@ -40,10 +40,10 @@ func newWriter(w io.WriteCloser, tr *trace) *writer {
 	}
 }
 
-func (w *writer) RecordEvent(eventTime time.Time, details eventDetails) {
+func (w *writer) RecordEvent(t time.Time, ev Event) {
 	w.events <- event{
-		RelativeTime: eventTime.Sub(w.referenceTime),
-		eventDetails: details,
+		RelativeTime: t.Sub(w.referenceTime),
+		Event:        ev,
 	}
 }
 

@@ -121,7 +121,7 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 	}
 }
 
-func (t *connectionTracer) recordEvent(eventTime time.Time, details eventDetails) {
+func (t *connectionTracer) recordEvent(eventTime time.Time, details Event) {
 	t.w.RecordEvent(eventTime, details)
 }
 

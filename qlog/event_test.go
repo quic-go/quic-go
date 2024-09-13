@@ -12,9 +12,9 @@ import (
 
 type mevent struct{}
 
-var _ eventDetails = mevent{}
+var _ Event = mevent{}
 
-func (mevent) Category() category                   { return categoryConnectivity }
+func (mevent) Category() string                     { return categoryConnectivity.String() }
 func (mevent) Name() string                         { return "mevent" }
 func (mevent) IsNil() bool                          { return false }
 func (mevent) MarshalJSONObject(enc *gojay.Encoder) { enc.StringKey("event", "details") }
@@ -24,7 +24,7 @@ func TestEventMarshaling(t *testing.T) {
 	enc := gojay.NewEncoder(buf)
 	err := enc.Encode(event{
 		RelativeTime: 1337 * time.Microsecond,
-		eventDetails: mevent{},
+		Event:        mevent{},
 	})
 	require.NoError(t, err)
 
