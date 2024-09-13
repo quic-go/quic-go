@@ -10,12 +10,10 @@ import (
 )
 
 func NewTracer(w io.WriteCloser) *logging.Tracer {
-	tr := &trace{
-		VantagePoint: vantagePoint{Type: "transport"},
-		CommonFields: commonFields{ReferenceTime: time.Now()},
+	wr := Writer{
+		WriteCloser:  w,
+		VantagePoint: "transport",
 	}
-	wr := *newWriter(w, tr)
-	go wr.Run()
 	return &logging.Tracer{
 		SentPacket: func(_ net.Addr, hdr *logging.Header, size logging.ByteCount, frames []logging.Frame) {
 			fs := make([]frame, 0, len(frames))
