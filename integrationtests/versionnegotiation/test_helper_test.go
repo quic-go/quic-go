@@ -5,15 +5,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
-	"testing"
-
-	"github.com/quic-go/quic-go/integrationtests/tools"
-	"github.com/quic-go/quic-go/logging"
+	"os"
 
 	"github.com/quic-go/quic-go"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/quic-go/quic-go/integrationtests/tools"
+	"github.com/quic-go/quic-go/logging"
 )
 
 var (
@@ -53,11 +49,6 @@ func init() {
 func getTLSConfig() *tls.Config       { return tlsConfig }
 func getTLSClientConfig() *tls.Config { return tlsClientConfig }
 
-func TestQuicVersionNegotiation(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Version Negotiation Suite")
-}
-
 func maybeAddQLOGTracer(c *quic.Config) *quic.Config {
 	if c == nil {
 		c = &quic.Config{}
@@ -65,7 +56,7 @@ func maybeAddQLOGTracer(c *quic.Config) *quic.Config {
 	if !enableQlog {
 		return c
 	}
-	qlogger := tools.NewQlogConnectionTracer(GinkgoWriter)
+	qlogger := tools.NewQlogConnectionTracer(os.Stdout)
 	if c.Tracer == nil {
 		c.Tracer = qlogger
 	} else if qlogger != nil {
