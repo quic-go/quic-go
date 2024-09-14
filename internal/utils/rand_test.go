@@ -1,32 +1,32 @@
 package utils
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Rand", func() {
-	It("generates random numbers", func() {
-		const (
-			num = 1000
-			max = 12345678
-		)
+func TestRandomNumbers(t *testing.T) {
+	const (
+		num = 1000
+		max = 12345678
+	)
 
-		var values [num]int32
-		var r Rand
-		for i := 0; i < num; i++ {
-			v := r.Int31n(max)
-			Expect(v).To(And(
-				BeNumerically(">=", 0),
-				BeNumerically("<", max),
-			))
-			values[i] = v
-		}
+	var values [num]int32
+	var r Rand
+	for i := 0; i < num; i++ {
+		v := r.Int31n(max)
+		require.GreaterOrEqual(t, v, int32(0))
+		require.Less(t, v, int32(max))
+		values[i] = v
+	}
 
-		var sum uint64
-		for _, n := range values {
-			sum += uint64(n)
-		}
-		Expect(float64(sum) / num).To(BeNumerically("~", max/2, max/25))
-	})
-})
+	var sum uint64
+	for _, n := range values {
+		sum += uint64(n)
+	}
+	average := float64(sum) / num
+	expectedAverage := float64(max) / 2
+	tolerance := float64(max) / 25
+	require.InDelta(t, expectedAverage, average, tolerance)
+}
