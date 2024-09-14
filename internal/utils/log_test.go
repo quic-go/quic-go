@@ -4,141 +4,145 @@ import (
 	"bytes"
 	"log"
 	"os"
+	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Log", func() {
-	var b *bytes.Buffer
+func TestLogLevelNothing(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	BeforeEach(func() {
-		b = &bytes.Buffer{}
-		log.SetOutput(b)
-	})
+	DefaultLogger.SetLogLevel(LogLevelNothing)
+	DefaultLogger.Debugf("debug")
+	DefaultLogger.Infof("info")
+	DefaultLogger.Errorf("err")
+	require.Empty(t, b.String())
+}
 
-	AfterEach(func() {
-		log.SetOutput(os.Stdout)
-		DefaultLogger.SetLogLevel(LogLevelNothing)
-	})
+func TestLogLevelError(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	It("the log level has the correct numeric value", func() {
-		Expect(LogLevelNothing).To(BeEquivalentTo(0))
-		Expect(LogLevelError).To(BeEquivalentTo(1))
-		Expect(LogLevelInfo).To(BeEquivalentTo(2))
-		Expect(LogLevelDebug).To(BeEquivalentTo(3))
-	})
+	DefaultLogger.SetLogLevel(LogLevelError)
+	DefaultLogger.Debugf("debug")
+	DefaultLogger.Infof("info")
+	DefaultLogger.Errorf("err")
+	require.Contains(t, b.String(), "err\n")
+	require.NotContains(t, b.String(), "info")
+	require.NotContains(t, b.String(), "debug")
+}
 
-	It("log level nothing", func() {
-		DefaultLogger.SetLogLevel(LogLevelNothing)
-		DefaultLogger.Debugf("debug")
-		DefaultLogger.Infof("info")
-		DefaultLogger.Errorf("err")
-		Expect(b.String()).To(BeEmpty())
-	})
+func TestLogLevelInfo(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	It("log level err", func() {
-		DefaultLogger.SetLogLevel(LogLevelError)
-		DefaultLogger.Debugf("debug")
-		DefaultLogger.Infof("info")
-		DefaultLogger.Errorf("err")
-		Expect(b.String()).To(ContainSubstring("err\n"))
-		Expect(b.String()).ToNot(ContainSubstring("info"))
-		Expect(b.String()).ToNot(ContainSubstring("debug"))
-	})
+	DefaultLogger.SetLogLevel(LogLevelInfo)
+	DefaultLogger.Debugf("debug")
+	DefaultLogger.Infof("info")
+	DefaultLogger.Errorf("err")
+	require.Contains(t, b.String(), "err\n")
+	require.Contains(t, b.String(), "info\n")
+	require.NotContains(t, b.String(), "debug")
+}
 
-	It("log level info", func() {
-		DefaultLogger.SetLogLevel(LogLevelInfo)
-		DefaultLogger.Debugf("debug")
-		DefaultLogger.Infof("info")
-		DefaultLogger.Errorf("err")
-		Expect(b.String()).To(ContainSubstring("err\n"))
-		Expect(b.String()).To(ContainSubstring("info\n"))
-		Expect(b.String()).ToNot(ContainSubstring("debug"))
-	})
+func TestLogLevelDebug(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	It("log level debug", func() {
-		DefaultLogger.SetLogLevel(LogLevelDebug)
-		DefaultLogger.Debugf("debug")
-		DefaultLogger.Infof("info")
-		DefaultLogger.Errorf("err")
-		Expect(b.String()).To(ContainSubstring("err\n"))
-		Expect(b.String()).To(ContainSubstring("info\n"))
-		Expect(b.String()).To(ContainSubstring("debug\n"))
-	})
+	require.False(t, DefaultLogger.Debug())
+	DefaultLogger.SetLogLevel(LogLevelDebug)
+	require.True(t, DefaultLogger.Debug())
+	DefaultLogger.Debugf("debug")
+	DefaultLogger.Infof("info")
+	DefaultLogger.Errorf("err")
+	require.Contains(t, b.String(), "err\n")
+	require.Contains(t, b.String(), "info\n")
+	require.Contains(t, b.String(), "debug\n")
+}
 
-	It("doesn't add a timestamp if the time format is empty", func() {
-		DefaultLogger.SetLogLevel(LogLevelDebug)
-		DefaultLogger.SetLogTimeFormat("")
-		DefaultLogger.Debugf("debug")
-		Expect(b.String()).To(Equal("debug\n"))
-	})
+func TestNoTimestampWithEmptyFormat(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	It("adds a timestamp", func() {
-		format := "Jan 2, 2006"
-		DefaultLogger.SetLogTimeFormat(format)
-		DefaultLogger.SetLogLevel(LogLevelInfo)
-		DefaultLogger.Infof("info")
-		t, err := time.Parse(format, b.String()[:b.Len()-6])
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t).To(BeTemporally("~", time.Now(), 25*time.Hour))
-	})
+	DefaultLogger.SetLogLevel(LogLevelDebug)
+	DefaultLogger.SetLogTimeFormat("")
+	DefaultLogger.Debugf("debug")
+	require.Equal(t, "debug\n", b.String())
+}
 
-	It("says whether debug is enabled", func() {
-		Expect(DefaultLogger.Debug()).To(BeFalse())
-		DefaultLogger.SetLogLevel(LogLevelDebug)
-		Expect(DefaultLogger.Debug()).To(BeTrue())
-	})
+func TestAddTimestamp(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	It("adds a prefix", func() {
-		DefaultLogger.SetLogLevel(LogLevelDebug)
-		prefixLogger := DefaultLogger.WithPrefix("prefix")
-		prefixLogger.Debugf("debug")
-		Expect(b.String()).To(ContainSubstring("prefix"))
-		Expect(b.String()).To(ContainSubstring("debug"))
-	})
+	format := "Jan 2, 2006"
+	DefaultLogger.SetLogTimeFormat(format)
+	DefaultLogger.SetLogLevel(LogLevelInfo)
+	DefaultLogger.Infof("info")
+	timestamp := b.String()[:b.Len()-6]
+	parsedTime, err := time.Parse(format, timestamp)
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now(), parsedTime, 25*time.Hour)
+}
 
-	It("adds multiple prefixes", func() {
-		DefaultLogger.SetLogLevel(LogLevelDebug)
-		prefixLogger := DefaultLogger.WithPrefix("prefix1")
-		prefixPrefixLogger := prefixLogger.WithPrefix("prefix2")
-		prefixPrefixLogger.Debugf("debug")
-		Expect(b.String()).To(ContainSubstring("prefix"))
-		Expect(b.String()).To(ContainSubstring("debug"))
-	})
+func TestLogAddPrefixes(t *testing.T) {
+	b := &bytes.Buffer{}
+	log.SetOutput(b)
+	defer log.SetOutput(os.Stdout)
+	defer DefaultLogger.SetLogLevel(LogLevelNothing)
 
-	Context("reading from env", func() {
-		BeforeEach(func() {
-			Expect(DefaultLogger.(*defaultLogger).logLevel).To(Equal(LogLevelNothing))
-		})
+	DefaultLogger.SetLogLevel(LogLevelDebug)
 
-		It("reads DEBUG", func() {
-			os.Setenv(logEnv, "DEBUG")
-			Expect(readLoggingEnv()).To(Equal(LogLevelDebug))
-		})
+	// single prefix
+	prefixLogger := DefaultLogger.WithPrefix("prefix")
+	prefixLogger.Debugf("debug1")
+	require.Contains(t, b.String(), "prefix")
+	require.Contains(t, b.String(), "debug1")
 
-		It("reads debug", func() {
-			os.Setenv(logEnv, "debug")
-			Expect(readLoggingEnv()).To(Equal(LogLevelDebug))
-		})
+	// multiple prefixes
+	b.Reset()
+	prefixLogger1 := DefaultLogger.WithPrefix("prefix1")
+	prefixLogger2 := prefixLogger1.WithPrefix("prefix2")
+	prefixLogger2.Debugf("debug2")
+	require.Contains(t, b.String(), "prefix1")
+	require.Contains(t, b.String(), "prefix2")
+	require.Contains(t, b.String(), "debug2")
+}
 
-		It("reads INFO", func() {
-			os.Setenv(logEnv, "INFO")
-			readLoggingEnv()
-			Expect(readLoggingEnv()).To(Equal(LogLevelInfo))
-		})
+func TestLogLevelFromEnv(t *testing.T) {
+	defer os.Unsetenv(logEnv)
 
-		It("reads ERROR", func() {
-			os.Setenv(logEnv, "ERROR")
-			Expect(readLoggingEnv()).To(Equal(LogLevelError))
-		})
+	testCases := []struct {
+		envValue string
+		expected LogLevel
+	}{
+		{"DEBUG", LogLevelDebug},
+		{"debug", LogLevelDebug},
+		{"INFO", LogLevelInfo},
+		{"ERROR", LogLevelError},
+	}
 
-		It("does not error reading invalid log levels from env", func() {
-			os.Setenv(logEnv, "")
-			Expect(readLoggingEnv()).To(Equal(LogLevelNothing))
-			os.Setenv(logEnv, "asdf")
-			Expect(readLoggingEnv()).To(Equal(LogLevelNothing))
-		})
-	})
-})
+	for _, tc := range testCases {
+		os.Setenv(logEnv, tc.envValue)
+		require.Equal(t, tc.expected, readLoggingEnv())
+	}
+
+	// invalid values
+	os.Setenv(logEnv, "")
+	require.Equal(t, LogLevelNothing, readLoggingEnv())
+	os.Setenv(logEnv, "asdf")
+	require.Equal(t, LogLevelNothing, readLoggingEnv())
+}
