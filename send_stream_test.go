@@ -981,6 +981,15 @@ var _ = Describe("Send Stream", func() {
 					ErrorCode: 123,
 				})
 			})
+			It("ignores cancellations after closeForShutdown", func() {
+				closeErr := errors.New("closed for shutdown")
+				str.closeForShutdown(closeErr)
+				_, err := str.Write([]byte("hello"))
+				Expect(err).To(Equal(closeErr))
+				str.CancelWrite(42)
+				_, err = str.Write([]byte("hello"))
+				Expect(err).To(Equal(closeErr))
+			})
 		})
 	})
 

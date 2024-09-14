@@ -630,6 +630,17 @@ var _ = Describe("Receive Stream", func() {
 					Fin:    true,
 				})).To(Succeed())
 			})
+
+			It("ignores cancellations after closeForShutdown", func() {
+				closeErr := errors.New("closed for shutdown")
+				str.closeForShutdown(closeErr)
+				buf := make([]byte, 100)
+				_, err := str.Read(buf)
+				Expect(err).To(Equal(closeErr))
+				str.CancelRead(42)
+				_, err = str.Read(buf)
+				Expect(err).To(Equal(closeErr))
+			})
 		})
 
 		Context("receiving RESET_STREAM frames", func() {
