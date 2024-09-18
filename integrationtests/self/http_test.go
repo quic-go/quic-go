@@ -1080,16 +1080,16 @@ var _ = Describe("HTTP tests", func() {
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
 			close(fastChan)
-			w.Write(PRData)
+			w.Write(PRDataLong)
 		})
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 			close(slowChan)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
-			chunkSize := len(PRData) / 20
-			for i := range 20 {
+			chunkSize := len(PRDataLong) / 10
+			for i := range 10 {
 				<-ticker.C
-				w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
+				w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
 			}
 		})
 		// makes two requests, one fast and one slow, both are expected to finish successfully
@@ -1100,7 +1100,7 @@ var _ = Describe("HTTP tests", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRData))
+			Expect(body).To(Equal(PRDataLong))
 			wg.Done()
 		}()
 		wg.Add(1)
@@ -1110,7 +1110,7 @@ var _ = Describe("HTTP tests", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRData))
+			Expect(body).To(Equal(PRDataLong))
 			wg.Done()
 		}()
 
@@ -1135,16 +1135,16 @@ var _ = Describe("HTTP tests", func() {
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
 			close(fastChan)
-			w.Write(PRData)
+			w.Write(PRDataLong)
 		})
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 			close(slowChan)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
-			chunkSize := len(PRData) / 20
-			for i := range 20 {
+			chunkSize := len(PRDataLong) / 10
+			for i := range 10 {
 				<-ticker.C
-				w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
+				w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
 			}
 		})
 		// makes two requests, one fast and one slow
@@ -1156,7 +1156,7 @@ var _ = Describe("HTTP tests", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRData))
+			Expect(body).To(Equal(PRDataLong))
 			wg.Done()
 		}()
 		wg.Add(1)
@@ -1167,7 +1167,7 @@ var _ = Describe("HTTP tests", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).To(HaveOccurred())
-			Expect(bytes.HasPrefix(PRData, body)).To(BeTrue())
+			Expect(bytes.HasPrefix(PRDataLong, body)).To(BeTrue())
 			wg.Done()
 		}()
 
@@ -1183,5 +1183,4 @@ var _ = Describe("HTTP tests", func() {
 		}()
 		wg.Wait()
 	})
-
 })
