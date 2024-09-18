@@ -282,6 +282,16 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 		s.closeDoneChan = make(chan struct{})
 	}
 	s.mutex.Unlock()
+
+	s.connCount.Add(1)
+	defer func() {
+		s.mutex.RLock()
+		// close once when the server is closed and the connection count is zero
+		if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
+			close(s.closeDoneChan)
+		}
+		s.mutex.RUnlock()
+	}()
 	return s.handleConn(conn)
 }
 
@@ -312,6 +322,15 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 			return err
 		}
 		go func() {
+			s.connCount.Add(1)
+			defer func() {
+				s.mutex.RLock()
+				// close once when the server is closed and the connection count is zero
+				if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
+					close(s.closeDoneChan)
+				}
+				s.mutex.RUnlock()
+			}()
 			if err := s.handleConn(conn); err != nil {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
@@ -506,18 +525,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		wg sync.WaitGroup
 	)
 
-	s.connCount.Add(1)
-	defer func() {
-		// some requests may be still running, wait for them to finish before decreasing the counter
-		wg.Wait()
-		s.mutex.RLock()
-		// close once when the server is closed and the connection count is zero
-		if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
-			close(s.closeDoneChan)
-		}
-		s.mutex.RUnlock()
-	}()
-
 	hconn := newConnection(
 		ctx,
 		conn,
@@ -541,6 +548,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				// set a deadline to send the GOAWAY frame
 				ctrlStr.SetWriteDeadline(time.Now().Add(goawayTimeout))
 				ctrlStr.Write(b)
+				// some requests may be still running, wait for them to finish before returning
+				wg.Wait()
 				return http.ErrServerClosed
 			}
 
