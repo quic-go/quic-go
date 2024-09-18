@@ -1075,6 +1075,7 @@ var _ = Describe("HTTP tests", func() {
 		var (
 			fastChan = make(chan struct{})
 			slowChan = make(chan struct{})
+			wg       sync.WaitGroup
 		)
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
@@ -1085,14 +1086,13 @@ var _ = Describe("HTTP tests", func() {
 			close(slowChan)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
-			chunkSize := len(PRData) / 10
-			for i := range 10 {
+			chunkSize := len(PRData) / 20
+			for i := range 20 {
 				<-ticker.C
 				w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
 			}
 		})
 		// makes two requests, one fast and one slow, both are expected to finish successfully
-		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
 			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/fast", port))
@@ -1130,6 +1130,7 @@ var _ = Describe("HTTP tests", func() {
 		var (
 			fastChan = make(chan struct{})
 			slowChan = make(chan struct{})
+			wg       sync.WaitGroup
 		)
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
@@ -1140,14 +1141,13 @@ var _ = Describe("HTTP tests", func() {
 			close(slowChan)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
-			chunkSize := len(PRData) / 10
-			for i := range 10 {
+			chunkSize := len(PRData) / 20
+			for i := range 20 {
 				<-ticker.C
 				w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
 			}
 		})
 		// makes two requests, one fast and one slow
-		var wg sync.WaitGroup
 		wg.Add(1)
 		// fast one will be done successfully
 		go func() {
