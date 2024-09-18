@@ -512,7 +512,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		wg.Wait()
 		s.mutex.RLock()
 		// close once when the server is closed and the connection count is zero
-		if s.closed && s.connCount.Add(-1) == 0 && s.doneChanClosed.CompareAndSwap(false, true) {
+		if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
 			close(s.closeDoneChan)
 		}
 		s.mutex.RUnlock()
