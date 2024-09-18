@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1068,4 +1069,119 @@ var _ = Describe("HTTP tests", func() {
 			"Unannounced": {"Surprise!"},
 		})))
 	})
+
+	It("graceful shutdown successfully with no timeout", func() {
+		// server will begin shutdown after receiving two requests
+		var (
+			fastChan = make(chan struct{})
+			slowChan = make(chan struct{})
+		)
+
+		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
+			close(fastChan)
+			w.Write(PRData)
+		})
+		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+			close(slowChan)
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			chunkSize := len(PRData) / 10
+			for i := range 10 {
+				<-ticker.C
+				w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
+			}
+		})
+		// makes two requests, one fast and one slow, both are expected to finish successfully
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/fast", port))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal(PRData))
+			wg.Done()
+		}()
+		wg.Add(1)
+		go func() {
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal(PRData))
+			wg.Done()
+		}()
+
+		wg.Add(1)
+		go func() {
+			<-fastChan
+			<-slowChan
+			err := server.CloseGracefully(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			wg.Done()
+		}()
+		wg.Wait()
+	})
+
+	It("graceful shutdown successfully with timeout", func() {
+		// server will begin shutdown after receiving two requests
+		var (
+			fastChan = make(chan struct{})
+			slowChan = make(chan struct{})
+		)
+
+		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
+			close(fastChan)
+			w.Write(PRData)
+		})
+		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+			close(slowChan)
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			chunkSize := len(PRData) / 10
+			for i := range 10 {
+				<-ticker.C
+				w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
+			}
+		})
+		// makes two requests, one fast and one slow
+		var wg sync.WaitGroup
+		wg.Add(1)
+		// fast one will be done successfully
+		go func() {
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/fast", port))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal(PRData))
+			wg.Done()
+		}()
+		wg.Add(1)
+		// slow one will be interrupted while reading the body
+		go func() {
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).To(HaveOccurred())
+			Expect(bytes.HasPrefix(PRData, body)).To(BeTrue())
+			wg.Done()
+		}()
+
+		wg.Add(1)
+		go func() {
+			<-fastChan
+			<-slowChan
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			err := server.CloseGracefully(ctx)
+			Expect(err).To(HaveOccurred())
+			wg.Done()
+		}()
+		wg.Wait()
+	})
+
 })
