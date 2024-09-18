@@ -46,6 +46,8 @@ const (
 	streamTypeQPACKDecoderStream = 3
 )
 
+const goawayTimeout = 5 * time.Second
+
 // A QUICEarlyListener listens for incoming QUIC connections.
 type QUICEarlyListener interface {
 	Accept(context.Context) (quic.EarlyConnection, error)
@@ -508,10 +510,9 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	defer func() {
 		// some requests may be still running, wait for them to finish before decreasing the counter
 		wg.Wait()
-		s.connCount.Add(-1)
 		s.mutex.RLock()
 		// close once when the server is closed and the connection count is zero
-		if s.closed && s.connCount.Load() == 0 && s.doneChanClosed.CompareAndSwap(false, true) {
+		if s.closed && s.connCount.Add(-1) == 0 && s.doneChanClosed.CompareAndSwap(false, true) {
 			close(s.closeDoneChan)
 		}
 		s.mutex.RUnlock()
@@ -538,7 +539,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 					StreamID: lastID + 4,
 				}).Append(b[:0])
 				// set a deadline to send the GOAWAY frame
-				ctrlStr.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				ctrlStr.SetWriteDeadline(time.Now().Add(goawayTimeout))
 				ctrlStr.Write(b)
 				return http.ErrServerClosed
 			}
@@ -737,10 +738,8 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 	}
 
 	select {
-	// all serve goroutine finished
-	case <-s.closeDoneChan:
+	case <-s.closeDoneChan: // all connections were closed
 		return s.Close()
-	// context canceled
 	case <-ctx.Done():
 		s.Close()
 		return ctx.Err()
