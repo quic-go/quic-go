@@ -1,71 +1,71 @@
 package helper
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("exporting", func() {
-	var dir string
+func createTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "fuzzing-helper")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
 
-	BeforeEach(func() {
-		var err error
-		dir, err = os.MkdirTemp("", "fuzzing-helper")
-		Expect(err).ToNot(HaveOccurred())
-		fmt.Fprintf(GinkgoWriter, "Created temporary directory %s", dir)
-	})
+func TestWriteCorpusFile(t *testing.T) {
+	const data = "lorem ipsum"
+	const expectedShaSum = "bfb7759a67daeb65410490b4d98bb9da7d1ea2ce"
 
-	AfterEach(func() {
-		Expect(dir).ToNot(BeEmpty())
-		Expect(os.RemoveAll(dir)).To(Succeed())
-	})
+	dir := createTempDir(t)
+	require.NoError(t, WriteCorpusFile(dir, []byte(data)))
 
-	It("writes a file", func() {
-		const data = "lorem ipsum"
-		// calculated by running sha1sum on the generated file
-		const expectedShaSum = "bfb7759a67daeb65410490b4d98bb9da7d1ea2ce"
-		Expect(WriteCorpusFile(dir, []byte("lorem ipsum"))).To(Succeed())
-		path := filepath.Join(dir, expectedShaSum)
-		Expect(path).To(BeARegularFile())
-		b, err := os.ReadFile(path)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(string(b)).To(Equal(data))
-	})
+	path := filepath.Join(dir, expectedShaSum)
+	require.FileExists(t, path)
 
-	It("writes a file and prepends data", func() {
-		const data = "lorem ipsum"
-		// calculated by running sha1sum on the generated file
-		const expectedShaSum = "523f5cab80fab0c7889dbf50dd310ab8c8879f9c"
-		const prefixLen = 7
-		Expect(WriteCorpusFileWithPrefix(dir, []byte("lorem ipsum"), prefixLen)).To(Succeed())
-		path := filepath.Join(dir, expectedShaSum)
-		Expect(path).To(BeARegularFile())
-		b, err := os.ReadFile(path)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(b[:prefixLen]).To(Equal(make([]byte, prefixLen)))
-		Expect(string(b[prefixLen:])).To(Equal(data))
-	})
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, data, string(b))
+}
 
-	It("creates the directory, if it doesn't yet", func() {
-		subdir := filepath.Join(dir, "corpus")
-		Expect(subdir).ToNot(BeADirectory())
-		Expect(WriteCorpusFile(subdir, []byte("lorem ipsum"))).To(Succeed())
-		Expect(subdir).To(BeADirectory())
-	})
+func TestWriteCorpusFileWithPrefix(t *testing.T) {
+	const data = "lorem ipsum"
+	const expectedShaSum = "523f5cab80fab0c7889dbf50dd310ab8c8879f9c"
+	const prefixLen = 7
 
-	It("gets the nth bit of a byte", func() {
-		const val = 0b10010001
-		Expect(NthBit(val, 0)).To(BeTrue())
-		Expect(NthBit(val, 1)).To(BeFalse())
-		Expect(NthBit(val, 2)).To(BeFalse())
-		Expect(NthBit(val, 3)).To(BeFalse())
-		Expect(NthBit(val, 4)).To(BeTrue())
-		Expect(NthBit(val, 5)).To(BeFalse())
-		Expect(NthBit(val, 6)).To(BeFalse())
-		Expect(NthBit(val, 7)).To(BeTrue())
-	})
-})
+	dir := createTempDir(t)
+	require.NoError(t, WriteCorpusFileWithPrefix(dir, []byte(data), prefixLen))
+
+	path := filepath.Join(dir, expectedShaSum)
+	require.FileExists(t, path)
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, make([]byte, prefixLen), b[:prefixLen])
+	require.Equal(t, data, string(b[prefixLen:]))
+}
+
+func TestCreateDirectoryIfNotExists(t *testing.T) {
+	dir := createTempDir(t)
+	subdir := filepath.Join(dir, "corpus")
+	require.NoDirExists(t, subdir)
+
+	require.NoError(t, WriteCorpusFile(subdir, []byte("lorem ipsum")))
+	require.DirExists(t, subdir)
+}
+
+func TestNthBit(t *testing.T) {
+	const val = 0b10010001
+
+	require.True(t, NthBit(val, 0))
+	require.False(t, NthBit(val, 1))
+	require.False(t, NthBit(val, 2))
+	require.False(t, NthBit(val, 3))
+	require.True(t, NthBit(val, 4))
+	require.False(t, NthBit(val, 5))
+	require.False(t, NthBit(val, 6))
+	require.True(t, NthBit(val, 7))
+}
