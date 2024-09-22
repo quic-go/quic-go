@@ -1,19 +1,18 @@
 package ackhandler
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Send Mode", func() {
-	It("has a string representation", func() {
-		Expect(SendNone.String()).To(Equal("none"))
-		Expect(SendAny.String()).To(Equal("any"))
-		Expect(SendPacingLimited.String()).To(Equal("pacing limited"))
-		Expect(SendAck.String()).To(Equal("ack"))
-		Expect(SendPTOInitial.String()).To(Equal("pto (Initial)"))
-		Expect(SendPTOHandshake.String()).To(Equal("pto (Handshake)"))
-		Expect(SendPTOAppData.String()).To(Equal("pto (Application Data)"))
-		Expect(SendMode(123).String()).To(Equal("invalid send mode: 123"))
-	})
-})
+func TestSendModeStringer(t *testing.T) {
+	require.Equal(t, "none", SendNone.String())
+	require.Equal(t, "any", SendAny.String())
+	require.Equal(t, "pacing limited", SendPacingLimited.String())
+	require.Equal(t, "ack", SendAck.String())
+	require.Equal(t, "pto (Initial)", SendPTOInitial.String())
+	require.Equal(t, "pto (Handshake)", SendPTOHandshake.String())
+	require.Equal(t, "pto (Application Data)", SendPTOAppData.String())
+	require.Equal(t, "invalid send mode: 123", SendMode(123).String())
+}
