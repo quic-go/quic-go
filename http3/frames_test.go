@@ -8,7 +8,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -329,7 +328,7 @@ var _ = Describe("Frames", func() {
 			frame, err := fp.ParseNext()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&goawayFrame{}))
-			Expect(frame.(*goawayFrame).StreamID).To(Equal(protocol.StreamID(100)))
+			Expect(frame.(*goawayFrame).StreamID).To(Equal(quic.StreamID(100)))
 		})
 
 		It("writes", func() {
@@ -339,7 +338,7 @@ var _ = Describe("Frames", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&goawayFrame{}))
-			Expect(frame.(*goawayFrame).StreamID).To(Equal(protocol.StreamID(200)))
+			Expect(frame.(*goawayFrame).StreamID).To(Equal(quic.StreamID(200)))
 		})
 	})
 })
