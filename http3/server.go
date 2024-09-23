@@ -274,6 +274,15 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveListener(ln)
 }
 
+func (s *Server) decreaseConnCount() {
+	s.mutex.RLock()
+	// close once when the server is closed and the connection count is zero
+	if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
+		close(s.closeDoneChan)
+	}
+	s.mutex.RUnlock()
+}
+
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
@@ -284,14 +293,7 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Unlock()
 
 	s.connCount.Add(1)
-	defer func() {
-		s.mutex.RLock()
-		// close once when the server is closed and the connection count is zero
-		if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
-			close(s.closeDoneChan)
-		}
-		s.mutex.RUnlock()
-	}()
+	defer s.decreaseConnCount()
 	return s.handleConn(conn)
 }
 
@@ -323,14 +325,7 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 		}
 		go func() {
 			s.connCount.Add(1)
-			defer func() {
-				s.mutex.RLock()
-				// close once when the server is closed and the connection count is zero
-				if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
-					close(s.closeDoneChan)
-				}
-				s.mutex.RUnlock()
-			}()
+			defer s.decreaseConnCount()
 			if err := s.handleConn(conn); err != nil {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
