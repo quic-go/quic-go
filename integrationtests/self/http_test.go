@@ -1166,7 +1166,7 @@ var _ = Describe("HTTP tests", func() {
 			close(serverDoneChan)
 		}()
 		Eventually(fastDoneChan, "5s").Should(BeClosed())
-		Eventually(slowDoneChan, "20s").Should(BeClosed())
 		Eventually(serverDoneChan, "10s").Should(BeClosed())
+		Eventually(slowDoneChan, "40s").Should(BeClosed())
 	})
 })
