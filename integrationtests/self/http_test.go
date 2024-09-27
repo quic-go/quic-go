@@ -1102,8 +1102,8 @@ var _ = Describe("HTTP tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			close(serverDoneChan)
 		}()
-		Eventually(clientDoneChan).Should(BeClosed())
-		Eventually(serverDoneChan).Should(BeClosed())
+		Eventually(clientDoneChan, "5s").Should(BeClosed())
+		Eventually(serverDoneChan, "5s").Should(BeClosed())
 	})
 
 	It("graceful shutdown successfully with timeout", func() {
@@ -1165,7 +1165,7 @@ var _ = Describe("HTTP tests", func() {
 			Expect(err).To(HaveOccurred())
 			close(serverDoneChan)
 		}()
-		Eventually(fastDoneChan).Should(BeClosed())
+		Eventually(fastDoneChan, "5s").Should(BeClosed())
 		Eventually(slowDoneChan, "20s").Should(BeClosed())
 		Eventually(serverDoneChan, "10s").Should(BeClosed())
 	})
