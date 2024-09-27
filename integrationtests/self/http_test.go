@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1071,39 +1070,21 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	It("graceful shutdown successfully with no timeout", func() {
-		// server will begin shutdown after receiving two requests
 		var (
-			fastChan = make(chan struct{})
-			slowChan = make(chan struct{})
-			wg       sync.WaitGroup
+			startShutdownChan   = make(chan struct{})
+			shutdownStartedChan = make(chan struct{})
+			clientDoneChan      = make(chan struct{})
+			serverDoneChan      = make(chan struct{})
 		)
 
-		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
-			close(fastChan)
-			w.Write(PRDataLong)
-		})
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
-			close(slowChan)
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
+			close(startShutdownChan)
+			<-shutdownStartedChan
 			chunkSize := len(PRDataLong) / 10
 			for i := range 10 {
-				<-ticker.C
 				w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
 			}
 		})
-		// makes two requests, one fast and one slow, both are expected to finish successfully
-		wg.Add(1)
-		go func() {
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/fast", port))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(200))
-			body, err := io.ReadAll(resp.Body)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRDataLong))
-			wg.Done()
-		}()
-		wg.Add(1)
 		go func() {
 			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
 			Expect(err).ToNot(HaveOccurred())
@@ -1111,26 +1092,28 @@ var _ = Describe("HTTP tests", func() {
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(body).To(Equal(PRDataLong))
-			wg.Done()
+			close(clientDoneChan)
 		}()
 
-		wg.Add(1)
 		go func() {
-			<-fastChan
-			<-slowChan
+			<-startShutdownChan
+			close(shutdownStartedChan)
 			err := server.CloseGracefully(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			wg.Done()
+			close(serverDoneChan)
 		}()
-		wg.Wait()
+		Eventually(clientDoneChan).Should(BeClosed())
+		Eventually(serverDoneChan).Should(BeClosed())
 	})
 
 	It("graceful shutdown successfully with timeout", func() {
 		// server will begin shutdown after receiving two requests
 		var (
-			fastChan = make(chan struct{})
-			slowChan = make(chan struct{})
-			wg       sync.WaitGroup
+			fastChan       = make(chan struct{})
+			slowChan       = make(chan struct{})
+			fastDoneChan   = make(chan struct{})
+			slowDoneChan   = make(chan struct{})
+			serverDoneChan = make(chan struct{})
 		)
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
@@ -1144,11 +1127,14 @@ var _ = Describe("HTTP tests", func() {
 			chunkSize := len(PRDataLong) / 10
 			for i := range 10 {
 				<-ticker.C
-				w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
+				_, err := w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
+				if err != nil {
+					break
+				}
 			}
+			_, err := r.Body.Read(make([]byte, 1))
+			Expect(err).To(HaveOccurred())
 		})
-		// makes two requests, one fast and one slow
-		wg.Add(1)
 		// fast one will be done successfully
 		go func() {
 			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/fast", port))
@@ -1157,9 +1143,8 @@ var _ = Describe("HTTP tests", func() {
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(body).To(Equal(PRDataLong))
-			wg.Done()
+			close(fastDoneChan)
 		}()
-		wg.Add(1)
 		// slow one will be interrupted while reading the body
 		go func() {
 			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
@@ -1168,10 +1153,9 @@ var _ = Describe("HTTP tests", func() {
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).To(HaveOccurred())
 			Expect(bytes.HasPrefix(PRDataLong, body)).To(BeTrue())
-			wg.Done()
+			close(slowDoneChan)
 		}()
 
-		wg.Add(1)
 		go func() {
 			<-fastChan
 			<-slowChan
@@ -1179,8 +1163,10 @@ var _ = Describe("HTTP tests", func() {
 			defer cancel()
 			err := server.CloseGracefully(ctx)
 			Expect(err).To(HaveOccurred())
-			wg.Done()
+			close(serverDoneChan)
 		}()
-		wg.Wait()
+		Eventually(fastDoneChan).Should(BeClosed())
+		Eventually(slowDoneChan, "20s").Should(BeClosed())
+		Eventually(serverDoneChan, "10s").Should(BeClosed())
 	})
 })
