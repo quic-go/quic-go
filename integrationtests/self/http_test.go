@@ -93,7 +93,7 @@ var _ = Describe("HTTP tests", func() {
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
-			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true}),
+			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true, MaxIdleTimeout: 2 * time.Second}),
 		}
 
 		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
@@ -1071,19 +1071,15 @@ var _ = Describe("HTTP tests", func() {
 
 	It("graceful shutdown successfully with no timeout", func() {
 		var (
-			startShutdownChan   = make(chan struct{})
-			shutdownStartedChan = make(chan struct{})
-			clientDoneChan      = make(chan struct{})
-			serverDoneChan      = make(chan struct{})
+			startShutdownChan = make(chan struct{})
+			clientDoneChan    = make(chan struct{})
+			serverDoneChan    = make(chan struct{})
 		)
 
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 			close(startShutdownChan)
-			<-shutdownStartedChan
-			chunkSize := len(PRDataLong) / 10
-			for i := range 10 {
-				w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
-			}
+			time.Sleep(deadlineDelay)
+			w.Write(PRData)
 		})
 		go func() {
 			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
@@ -1091,43 +1087,45 @@ var _ = Describe("HTTP tests", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRDataLong))
+			Expect(body).To(Equal(PRData))
 			close(clientDoneChan)
 		}()
 
 		go func() {
 			<-startShutdownChan
-			close(shutdownStartedChan)
 			err := server.CloseGracefully(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			close(serverDoneChan)
 		}()
-		Eventually(clientDoneChan, "5s").Should(BeClosed())
-		Eventually(serverDoneChan, "5s").Should(BeClosed())
+		Eventually(clientDoneChan).Should(BeClosed())
+		Eventually(serverDoneChan).Should(BeClosed())
 	})
 
 	It("graceful shutdown successfully with timeout", func() {
 		// server will begin shutdown after receiving two requests
 		var (
-			fastChan       = make(chan struct{})
-			slowChan       = make(chan struct{})
-			fastDoneChan   = make(chan struct{})
-			slowDoneChan   = make(chan struct{})
-			serverDoneChan = make(chan struct{})
+			fastCtx, fastCancel = context.WithCancel(context.Background())
+			fastChan            = make(chan struct{})
+			slowCtx, slowCancel = context.WithCancel(context.Background())
+			slowChan            = make(chan struct{})
+			fastDoneChan        = make(chan struct{})
+			slowDoneChan        = make(chan struct{})
+			serverDoneChan      = make(chan struct{})
 		)
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
 			close(fastChan)
-			w.Write(PRDataLong)
+			deadLineCtxWriter{w, fastCancel}.Write(PRData)
 		})
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 			close(slowChan)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
-			chunkSize := len(PRDataLong) / 10
-			for i := range 10 {
+			chunkSize := len(PRData) / 5
+			writer := deadLineCtxWriter{w, slowCancel}
+			for i := range 5 {
 				<-ticker.C
-				_, err := w.Write(PRDataLong[i*chunkSize : (i+1)*chunkSize])
+				_, err := writer.Write(PRData[i*chunkSize : (i+1)*chunkSize])
 				if err != nil {
 					break
 				}
@@ -1137,22 +1135,24 @@ var _ = Describe("HTTP tests", func() {
 		})
 		// fast one will be done successfully
 		go func() {
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/fast", port))
+			req, _ := http.NewRequestWithContext(fastCtx, http.MethodGet, fmt.Sprintf("https://localhost:%d/fast", port), nil)
+			resp, err := client.Do(req)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRDataLong))
+			Expect(body).To(Equal(PRData))
 			close(fastDoneChan)
 		}()
 		// slow one will be interrupted while reading the body
 		go func() {
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
+			req, _ := http.NewRequestWithContext(slowCtx, http.MethodGet, fmt.Sprintf("https://localhost:%d/slow", port), nil)
+			resp, err := client.Do(req)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			body, err := io.ReadAll(resp.Body)
 			Expect(err).To(HaveOccurred())
-			Expect(bytes.HasPrefix(PRDataLong, body)).To(BeTrue())
+			Expect(bytes.HasPrefix(PRData, body)).To(BeTrue())
 			close(slowDoneChan)
 		}()
 
@@ -1165,8 +1165,26 @@ var _ = Describe("HTTP tests", func() {
 			Expect(err).To(HaveOccurred())
 			close(serverDoneChan)
 		}()
-		Eventually(fastDoneChan, "5s").Should(BeClosed())
-		Eventually(serverDoneChan, "10s").Should(BeClosed())
-		Eventually(slowDoneChan, "40s").Should(BeClosed())
+		Eventually(fastDoneChan).Should(BeClosed())
+		Eventually(slowDoneChan, 5*time.Second).Should(BeClosed())
+		Eventually(serverDoneChan, 5*time.Second).Should(BeClosed())
 	})
 })
+
+type deadLineCtxWriter struct {
+	http.ResponseWriter
+	cancel context.CancelFunc
+}
+
+func (w deadLineCtxWriter) Write(p []byte) (int, error) {
+	err := http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(deadlineDelay))
+	if err != nil {
+		w.cancel()
+		return 0, err
+	}
+	n, err := w.ResponseWriter.Write(p)
+	if err != nil {
+		w.cancel()
+	}
+	return n, err
+}
