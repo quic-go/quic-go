@@ -19,9 +19,14 @@ var _ = Describe("Capsule", func() {
 		ct, r, err := ParseCapsule(bytes.NewReader(b))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(ct).To(BeEquivalentTo(1337))
-		val, err := io.ReadAll(r)
+		buf := make([]byte, 3)
+		n, err := r.Read(buf)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(string(val)).To(Equal("foobar"))
+		Expect(n).To(Equal(3))
+		Expect(buf).To(Equal([]byte("foo")))
+		data, err := io.ReadAll(r)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(data).To(Equal([]byte("bar")))
 	})
 
 	It("writes capsules", func() {
