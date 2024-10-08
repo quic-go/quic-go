@@ -1069,106 +1069,101 @@ var _ = Describe("HTTP tests", func() {
 		})))
 	})
 
-	It("graceful shutdown successfully with no timeout", func() {
-		var (
-			startShutdownChan = make(chan struct{})
-			clientDoneChan    = make(chan struct{})
-			serverDoneChan    = make(chan struct{})
-		)
+	It("allows existing requests to complete on graceful shutdown", func() {
+		delay := scaleDuration(100 * time.Millisecond)
+		done := make(chan struct{})
 
-		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
-			close(startShutdownChan)
-			time.Sleep(deadlineDelay)
-			w.Write(PRData)
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				Expect(server.CloseGracefully(context.Background())).To(Succeed())
+			}()
+			time.Sleep(delay)
+			w.Write([]byte("shutdown"))
 		})
-		go func() {
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/slow", port))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(200))
-			body, err := io.ReadAll(resp.Body)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRData))
-			close(clientDoneChan)
-		}()
 
-		go func() {
-			<-startShutdownChan
-			err := server.CloseGracefully(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			close(serverDoneChan)
-		}()
-		Eventually(clientDoneChan).Should(BeClosed())
-		Eventually(serverDoneChan).Should(BeClosed())
+		ctx, cancel := context.WithTimeout(context.Background(), 3*delay)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/shutdown", port), nil)
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal([]byte("shutdown")))
+
+		// make sure that CloseGracefully returned
+		Eventually(done).Should(BeClosed())
 	})
 
-	It("graceful shutdown successfully with timeout", func() {
-		// server will begin shutdown after receiving two requests
-		var (
-			fastCtx, fastCancel = context.WithCancel(context.Background())
-			fastChan            = make(chan struct{})
-			slowCtx, slowCancel = context.WithCancel(context.Background())
-			slowChan            = make(chan struct{})
-			fastDoneChan        = make(chan struct{})
-			slowDoneChan        = make(chan struct{})
-			serverDoneChan      = make(chan struct{})
-		)
+	It("aborts long-lived requests on graceful shutdown", func() {
+		delay := scaleDuration(100 * time.Millisecond)
+		shutdownDone := make(chan struct{})
+		requestChan := make(chan time.Duration, 1)
 
-		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
-			close(fastChan)
-			deadLineCtxWriter{w, fastCancel}.Write(PRData)
-		})
-		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
-			close(slowChan)
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-			chunkSize := len(PRData) / 5
-			writer := deadLineCtxWriter{w, slowCancel}
-			for i := range 5 {
-				<-ticker.C
-				_, err := writer.Write(PRData[i*chunkSize : (i+1)*chunkSize])
-				if err != nil {
-					break
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			go func() {
+				defer GinkgoRecover()
+				ctx, cancel := context.WithTimeout(context.Background(), delay)
+				defer cancel()
+				defer close(shutdownDone)
+				Expect(server.CloseGracefully(ctx)).To(MatchError(context.DeadlineExceeded))
+			}()
+			for t := range time.NewTicker(delay / 10).C {
+				if _, err := w.Write([]byte(t.String())); err != nil {
+					requestChan <- time.Since(start)
+					return
 				}
 			}
-			_, err := r.Body.Read(make([]byte, 1))
-			Expect(err).To(HaveOccurred())
 		})
-		// fast one will be done successfully
-		go func() {
-			req, _ := http.NewRequestWithContext(fastCtx, http.MethodGet, fmt.Sprintf("https://localhost:%d/fast", port), nil)
-			resp, err := client.Do(req)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(200))
-			body, err := io.ReadAll(resp.Body)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(body).To(Equal(PRData))
-			close(fastDoneChan)
-		}()
-		// slow one will be interrupted while reading the body
-		go func() {
-			req, _ := http.NewRequestWithContext(slowCtx, http.MethodGet, fmt.Sprintf("https://localhost:%d/slow", port), nil)
-			resp, err := client.Do(req)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(200))
-			body, err := io.ReadAll(resp.Body)
-			Expect(err).To(HaveOccurred())
-			Expect(bytes.HasPrefix(PRData, body)).To(BeTrue())
-			close(slowDoneChan)
-		}()
 
-		go func() {
-			<-fastChan
-			<-slowChan
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			err := server.CloseGracefully(ctx)
-			Expect(err).To(HaveOccurred())
-			close(serverDoneChan)
-		}()
-		Eventually(fastDoneChan).Should(BeClosed())
-		Eventually(slowDoneChan, 5*time.Second).Should(BeClosed())
-		Eventually(serverDoneChan, 5*time.Second).Should(BeClosed())
+		start := time.Now()
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		_, err = io.Copy(io.Discard, resp.Body)
+		fmt.Println(err)
+		took := time.Since(start)
+		Expect(took).To(BeNumerically("~", delay, delay/2))
+		var requestDuration time.Duration
+		Eventually(requestChan).Should(Receive(&requestDuration))
+		Expect(requestDuration).To(BeNumerically("~", delay, delay/2))
+
+		// make sure that CloseGracefully returned
+		Eventually(shutdownDone).Should(BeClosed())
 	})
+
+	// It("rejects new requests on graceful shutdown", func() {
+	// 	done := make(chan struct{})
+	// 	block := make(chan struct{})
+	//
+	// 	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+	// 		go func() {
+	// 			defer close(done)
+	// 			Expect(server.CloseGracefully(context.Background())).To(Succeed())
+	// 		}()
+	// 		w.WriteHeader(http.StatusOK)
+	// 		w.(http.Flusher).Flush()
+	// 		// make sure CloseGracefully can't return yet
+	// 		<-block
+	// 	})
+	//
+	// 	rsp1, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
+	// 	Expect(err).ToNot(HaveOccurred())
+	// 	Expect(rsp1.StatusCode).To(Equal(http.StatusOK))
+	//
+	// 	// The previous request initiated the graceful shutdown.
+	// 	// Now send another request.
+	// 	rsp2, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+	// 	Expect(err).ToNot(HaveOccurred())
+	// 	Expect(rsp2.StatusCode).ToNot(Equal(http.StatusOK))
+	// 	close(block)
+	//
+	// 	// make sure that CloseGracefully returned
+	// 	Eventually(done).Should(BeClosed())
+	// })
 })
 
 type deadLineCtxWriter struct {

@@ -723,8 +723,10 @@ func (s *Server) Close() error {
 	return err
 }
 
-// CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
-// CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
+// CloseGracefully shuts down the server gracefully.
+// The server first sends a GOAWAY frame, then waits for all running requests to complete.
+// CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race
+// if it is called before a UDP socket is established.
 func (s *Server) CloseGracefully(ctx context.Context) error {
 	s.mutex.Lock()
 	s.closed = true
