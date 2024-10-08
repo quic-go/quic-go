@@ -1068,4 +1068,17 @@ var _ = Describe("HTTP tests", func() {
 			"Unannounced": {"Surprise!"},
 		})))
 	})
+
+	It("aborts requests on shutdown", func() {
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			Expect(server.Close()).To(Succeed())
+		})
+
+		_, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
+		Expect(err).To(HaveOccurred())
+		var appErr *http3.Error
+		Expect(errors.As(err, &appErr)).To(BeTrue())
+		Expect(appErr.ErrorCode).To(Equal(http3.ErrCodeNoError))
+	})
 })
