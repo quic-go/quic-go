@@ -266,6 +266,8 @@ func (s *Server) Serve(conn net.PacketConn) error {
 }
 
 // ServeQUICConn serves a single QUIC connection.
+// It is the caller's responsibility to close the connection.
+// Specifically, closing the server does not close the connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	return s.handleConn(context.Background(), conn)
 }
