@@ -1104,28 +1104,26 @@ var _ = Describe("HTTP tests", func() {
 	It("graceful shutdown successfully with timeout", func() {
 		// server will begin shutdown after receiving two requests
 		var (
-			fastCtx, fastCancel = context.WithCancel(context.Background())
-			fastChan            = make(chan struct{})
-			slowCtx, slowCancel = context.WithCancel(context.Background())
-			slowChan            = make(chan struct{})
-			fastDoneChan        = make(chan struct{})
-			slowDoneChan        = make(chan struct{})
-			serverDoneChan      = make(chan struct{})
+			fastChan       = make(chan struct{})
+			slowChan       = make(chan struct{})
+			fastDoneChan   = make(chan struct{})
+			slowDoneChan   = make(chan struct{})
+			serverDoneChan = make(chan struct{})
 		)
 
 		mux.HandleFunc("/fast", func(w http.ResponseWriter, r *http.Request) {
 			close(fastChan)
-			deadLineCtxWriter{w, fastCancel}.Write(PRData)
+			w.Write(PRData)
 		})
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 			close(slowChan)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
 			chunkSize := len(PRData) / 5
-			writer := deadLineCtxWriter{w, slowCancel}
+
 			for i := range 5 {
 				<-ticker.C
-				_, err := writer.Write(PRData[i*chunkSize : (i+1)*chunkSize])
+				_, err := w.Write(PRData[i*chunkSize : (i+1)*chunkSize])
 				if err != nil {
 					break
 				}
@@ -1135,7 +1133,7 @@ var _ = Describe("HTTP tests", func() {
 		})
 		// fast one will be done successfully
 		go func() {
-			req, _ := http.NewRequestWithContext(fastCtx, http.MethodGet, fmt.Sprintf("https://localhost:%d/fast", port), nil)
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/fast", port), nil)
 			resp, err := client.Do(req)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
@@ -1146,7 +1144,7 @@ var _ = Describe("HTTP tests", func() {
 		}()
 		// slow one will be interrupted while reading the body
 		go func() {
-			req, _ := http.NewRequestWithContext(slowCtx, http.MethodGet, fmt.Sprintf("https://localhost:%d/slow", port), nil)
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/slow", port), nil)
 			resp, err := client.Do(req)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
@@ -1169,22 +1167,17 @@ var _ = Describe("HTTP tests", func() {
 		Eventually(slowDoneChan, 5*time.Second).Should(BeClosed())
 		Eventually(serverDoneChan, 5*time.Second).Should(BeClosed())
 	})
+
+	It("aborts requests on shutdown", func() {
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			Expect(server.Close()).To(Succeed())
+		})
+
+		_, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
+		Expect(err).To(HaveOccurred())
+		var appErr *http3.Error
+		Expect(errors.As(err, &appErr)).To(BeTrue())
+		Expect(appErr.ErrorCode).To(Equal(http3.ErrCodeNoError))
+	})
 })
-
-type deadLineCtxWriter struct {
-	http.ResponseWriter
-	cancel context.CancelFunc
-}
-
-func (w deadLineCtxWriter) Write(p []byte) (int, error) {
-	err := http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(deadlineDelay))
-	if err != nil {
-		w.cancel()
-		return 0, err
-	}
-	n, err := w.ResponseWriter.Write(p)
-	if err != nil {
-		w.cancel()
-	}
-	return n, err
-}

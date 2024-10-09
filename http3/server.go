@@ -217,12 +217,14 @@ type Server struct {
 	listeners map[*QUICEarlyListener]listenerInfo
 
 	closed      bool
-	connCount   atomic.Int64       // number of connections
 	closeCtx    context.Context    // canceled when the server is closed
 	closeCancel context.CancelFunc // cancels the closeCtx
+	connCount   atomic.Int64       // number of connections
+	graceCtx    context.Context    // canceled when the server is closed or gracefully closed
+	graceCancel context.CancelFunc // cancels the graceCtx
 
-	closeDoneChan  chan struct{} // will be closed when the server is shutdown and connCount is zero
-	doneChanClosed atomic.Bool   // makes sure closeDoneChan will be closed once
+	graceDoneChan  chan struct{} // will be closed when the server is shutdown and connCount is zero
+	doneChanClosed atomic.Bool   // makes sure graceDoneChan will be closed once
 
 	altSvcHeader string
 }
@@ -278,7 +280,7 @@ func (s *Server) decreaseConnCount() {
 	s.mutex.RLock()
 	// close once when the server is closed and the connection count is zero
 	if s.connCount.Add(-1) == 0 && s.closed && s.doneChanClosed.CompareAndSwap(false, true) {
-		close(s.closeDoneChan)
+		close(s.graceDoneChan)
 	}
 	s.mutex.RUnlock()
 }
@@ -288,7 +290,8 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
 	if s.closeCtx == nil {
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
-		s.closeDoneChan = make(chan struct{})
+		s.graceCtx, s.graceCancel = context.WithCancel(s.closeCtx)
+		s.graceDoneChan = make(chan struct{})
 	}
 	s.mutex.Unlock()
 
@@ -316,8 +319,9 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 
 func (s *Server) serveListener(ln QUICEarlyListener) error {
 	for {
-		conn, err := ln.Accept(context.Background())
-		if err == quic.ErrServerClosed {
+		conn, err := ln.Accept(s.closeCtx)
+		// server closed
+		if errors.Is(err, quic.ErrServerClosed) || s.closeCtx.Err() != nil {
 			return http.ErrServerClosed
 		}
 		if err != nil {
@@ -330,6 +334,10 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
 				}
+			}
+			// server closed
+			if s.closeCtx.Err() != nil {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 			}
 		}()
 	}
@@ -461,7 +469,8 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	}
 	if s.closeCtx == nil {
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
-		s.closeDoneChan = make(chan struct{})
+		s.graceCtx, s.graceCancel = context.WithCancel(s.closeCtx)
+		s.graceDoneChan = make(chan struct{})
 	}
 
 	laddr := (*l).Addr()
@@ -515,9 +524,10 @@ func (s *Server) handleConn(conn quic.Connection) error {
 
 	var (
 		// first valid ID is zero, subtract 4, so goaway frame id starts at 0
-		lastID = quic.StreamID(-4)
-		// wait until all request goroutines are done
-		wg sync.WaitGroup
+		lastID           = quic.StreamID(-4)
+		runningRequests  atomic.Int64
+		handlingDoneChan = make(chan struct{})
+		doneChanOnce     atomic.Bool
 	)
 
 	hconn := newConnection(
@@ -533,18 +543,22 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, datagrams, err := hconn.acceptStream(s.closeCtx)
+		str, datagrams, err := hconn.acceptStream(s.graceCtx)
 		if err != nil {
 			// server is closed, send GOAWAY frame and return, since those requests will be rejected anyway
-			if s.closeCtx.Err() != nil {
+			if s.graceCtx.Err() != nil {
 				b = (&goawayFrame{
 					StreamID: lastID + 4,
 				}).Append(b[:0])
 				// set a deadline to send the GOAWAY frame
 				ctrlStr.SetWriteDeadline(time.Now().Add(goawayTimeout))
 				ctrlStr.Write(b)
+
+				select {
 				// some requests may be still running, wait for them to finish before returning
-				wg.Wait()
+				case <-handlingDoneChan:
+				case <-s.closeCtx.Done():
+				}
 				return http.ErrServerClosed
 			}
 
@@ -556,10 +570,13 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		}
 
 		lastID = str.StreamID()
-		wg.Add(1)
+		runningRequests.Add(1)
 		go func() {
 			s.handleRequest(hconn, str, datagrams, hconn.decoder)
-			wg.Done()
+			// after closing, the request counter won't go up
+			if runningRequests.Add(-1) == 0 && s.graceCtx.Err() != nil && doneChanOnce.CompareAndSwap(false, true) {
+				close(handlingDoneChan)
+			}
 		}()
 	}
 }
@@ -733,7 +750,7 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 		s.mutex.Unlock()
 		return nil
 	}
-	s.closeCancel()
+	s.graceCancel()
 	s.mutex.Unlock()
 
 	// fast check if there is no serve goroutine running
@@ -742,7 +759,7 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 	}
 
 	select {
-	case <-s.closeDoneChan: // all connections were closed
+	case <-s.graceDoneChan: // all connections were closed
 		return s.Close()
 	case <-ctx.Done():
 		s.Close()
