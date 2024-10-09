@@ -266,8 +266,10 @@ func (s *Server) Serve(conn net.PacketConn) error {
 }
 
 // ServeQUICConn serves a single QUIC connection.
+// It is the caller's responsibility to close the connection.
+// Specifically, closing the server does not close the connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
-	return s.handleConn(conn)
+	return s.handleConn(context.Background(), conn)
 }
 
 // ServeListener serves an existing QUIC listener.
@@ -288,16 +290,19 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 }
 
 func (s *Server) serveListener(ln QUICEarlyListener) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for {
 		conn, err := ln.Accept(context.Background())
-		if err == quic.ErrServerClosed {
+		if errors.Is(err, quic.ErrServerClosed) {
 			return http.ErrServerClosed
 		}
 		if err != nil {
 			return err
 		}
 		go func() {
-			if err := s.handleConn(conn); err != nil {
+			if err := s.handleConn(ctx, conn); err != nil {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
 				}
@@ -453,7 +458,7 @@ func (s *Server) removeListener(l *QUICEarlyListener) {
 	s.generateAltSvcHeader()
 }
 
-func (s *Server) handleConn(conn quic.Connection) error {
+func (s *Server) handleConn(serverCtx context.Context, conn quic.Connection) error {
 	// send a SETTINGS frame
 	str, err := conn.OpenUniStream()
 	if err != nil {
@@ -492,8 +497,12 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, datagrams, err := hconn.acceptStream(context.Background())
+		str, datagrams, err := hconn.acceptStream(serverCtx)
 		if err != nil {
+			// close the connection if the server was closed
+			if errors.Is(err, context.Canceled) {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+			}
 			var appErr *quic.ApplicationError
 			if errors.As(err, &appErr) && appErr.ErrorCode == quic.ApplicationErrorCode(ErrCodeNoError) {
 				return nil

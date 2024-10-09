@@ -356,7 +356,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -384,7 +384,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -412,7 +412,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -440,7 +440,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(done).Should(BeClosed())
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -485,7 +485,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -510,7 +510,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(done).Should(BeClosed())
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -537,7 +537,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -585,7 +585,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 				str.EXPECT().Close().Do(func() error { close(done); return nil })
 
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(done).Should(BeClosed())
 				hfs := decodeHeader(responseBuf)
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -607,7 +607,7 @@ var _ = Describe("Server", func() {
 				var buf bytes.Buffer
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(handlerCalled).Should(BeClosed())
 
 				// The buffer is expected to contain:
@@ -643,7 +643,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -659,7 +659,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Consistently(handlerCalled).ShouldNot(BeClosed())
 			})
 
@@ -680,7 +680,7 @@ var _ = Describe("Server", func() {
 					close(done)
 					return nil
 				})
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -703,7 +703,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(conn)
+				s.handleConn(context.Background(), conn)
 				Eventually(done).Should(BeClosed())
 			})
 		})
@@ -1068,10 +1068,10 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves a listener", func() {
-			var called int32
+			var called atomic.Bool
 			ln := newMockAddrListener(":443")
 			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
-				atomic.StoreInt32(&called, 1)
+				called.Store(true)
 				return ln, nil
 			}
 
@@ -1090,7 +1090,7 @@ var _ = Describe("Server", func() {
 				s.ServeListener(ln)
 			}()
 
-			Consistently(func() int32 { return atomic.LoadInt32(&called) }).Should(Equal(int32(0)))
+			Consistently(called.Load).Should(BeFalse())
 			Consistently(done).ShouldNot(BeClosed())
 			ln.EXPECT().Close().Do(func() error { close(stopAccept); return nil })
 			Expect(s.Close()).To(Succeed())
@@ -1098,14 +1098,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves two listeners", func() {
-			var called int32
+			var called atomic.Bool
 			ln1 := newMockAddrListener(":443")
 			ln2 := newMockAddrListener(":8443")
 			lns := make(chan QUICEarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
 			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
-				atomic.StoreInt32(&called, 1)
+				called.Store(true)
 				return <-lns, nil
 			}
 
@@ -1137,7 +1137,7 @@ var _ = Describe("Server", func() {
 				s.ServeListener(ln2)
 			}()
 
-			Consistently(func() int32 { return atomic.LoadInt32(&called) }).Should(Equal(int32(0)))
+			Consistently(called.Load).Should(BeFalse())
 			Consistently(done1).ShouldNot(BeClosed())
 			Expect(done2).ToNot(BeClosed())
 			ln1.EXPECT().Close().Do(func() error { close(stopAccept1); return nil })
