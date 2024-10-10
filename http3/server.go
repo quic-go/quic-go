@@ -558,6 +558,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 
 				select {
 				// some requests may be still running, wait for them to finish before returning
+				// do nothing let quic to deliver the data the peer
 				case <-handlingDoneChan:
 				case <-s.closeCtx.Done():
 					// close the connection after graceful period
