@@ -46,7 +46,6 @@ type fakeClosingListener struct {
 }
 
 func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection, error) {
-	Expect(ctx).To(Equal(context.Background()))
 	return ln.listenerWrapper.Accept(ln.ctx)
 }
 

@@ -318,4 +318,27 @@ var _ = Describe("Frames", func() {
 			Expect(called).To(BeTrue())
 		})
 	})
+
+	Context("goaway frames", func() {
+		It("parses", func() {
+			data := quicvarint.Append(nil, 0x7) // type byte
+			data = quicvarint.Append(data, uint64(quicvarint.Len(100)))
+			data = quicvarint.Append(data, 100)
+			fp := frameParser{r: bytes.NewReader(data)}
+			frame, err := fp.ParseNext()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeAssignableToTypeOf(&goawayFrame{}))
+			Expect(frame.(*goawayFrame).StreamID).To(Equal(quic.StreamID(100)))
+		})
+
+		It("writes", func() {
+			data := (&goawayFrame{StreamID: 200}).Append(nil)
+			fp := frameParser{r: bytes.NewReader(data)}
+			frame, err := fp.ParseNext()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeAssignableToTypeOf(&goawayFrame{}))
+			Expect(frame.(*goawayFrame).StreamID).To(Equal(quic.StreamID(200)))
+		})
+	})
 })
