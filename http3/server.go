@@ -518,9 +518,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		}
 	}
 
+	var nextStreamID quic.StreamID
 	var (
-		// first valid ID is zero, subtract 4, so goaway frame id starts at 0
-		lastID           = quic.StreamID(-4)
 		runningRequests  atomic.Int64
 		handlingDoneChan = make(chan struct{})
 	)
@@ -549,9 +548,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
 			// new requests will be rejected and shouldn't be sent
 			if s.graceCtx.Err() != nil {
-				b = (&goawayFrame{
-					StreamID: lastID + 4,
-				}).Append(b[:0])
+				b = (&goawayFrame{StreamID: nextStreamID}).Append(b[:0])
 				// set a deadline to send the GOAWAY frame
 				ctrlStr.SetWriteDeadline(time.Now().Add(goawayTimeout))
 				ctrlStr.Write(b)
@@ -574,7 +571,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 
-		lastID = str.StreamID()
+		nextStreamID = str.StreamID() + 4
 		runningRequests.Add(1)
 		go func() {
 			s.handleRequest(hconn, str, datagrams, hconn.decoder)
