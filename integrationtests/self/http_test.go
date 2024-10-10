@@ -93,7 +93,7 @@ var _ = Describe("HTTP tests", func() {
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
-			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true, MaxIdleTimeout: 2 * time.Second}),
+			QUICConfig: getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true}),
 		}
 
 		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
@@ -1117,7 +1117,7 @@ var _ = Describe("HTTP tests", func() {
 		})
 		mux.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 			close(slowChan)
-			ticker := time.NewTicker(time.Second)
+			ticker := time.NewTicker(deadlineDelay)
 			defer ticker.Stop()
 			chunkSize := len(PRData) / 5
 
@@ -1157,15 +1157,15 @@ var _ = Describe("HTTP tests", func() {
 		go func() {
 			<-fastChan
 			<-slowChan
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*deadlineDelay)
 			defer cancel()
 			err := server.CloseGracefully(ctx)
 			Expect(err).To(HaveOccurred())
 			close(serverDoneChan)
 		}()
 		Eventually(fastDoneChan).Should(BeClosed())
-		Eventually(slowDoneChan, 5*time.Second).Should(BeClosed())
-		Eventually(serverDoneChan, 5*time.Second).Should(BeClosed())
+		Eventually(slowDoneChan).Should(BeClosed())
+		Eventually(serverDoneChan).Should(BeClosed())
 	})
 
 	It("aborts requests on shutdown", func() {

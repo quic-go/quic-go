@@ -335,10 +335,6 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 					s.Logger.Debug("handling connection failed", "error", err)
 				}
 			}
-			// server closed
-			if s.closeCtx.Err() != nil {
-				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
-			}
 		}()
 	}
 }
@@ -527,7 +523,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		lastID           = quic.StreamID(-4)
 		runningRequests  atomic.Int64
 		handlingDoneChan = make(chan struct{})
-		doneChanOnce     atomic.Bool
 	)
 
 	hconn := newConnection(
@@ -559,6 +554,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				case <-handlingDoneChan:
 				case <-s.closeCtx.Done():
 				}
+				// close the connection
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 				return http.ErrServerClosed
 			}
 
@@ -573,8 +570,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		runningRequests.Add(1)
 		go func() {
 			s.handleRequest(hconn, str, datagrams, hconn.decoder)
-			// after closing, the request counter won't go up
-			if runningRequests.Add(-1) == 0 && s.graceCtx.Err() != nil && doneChanOnce.CompareAndSwap(false, true) {
+			// after closing, the request counter will only decrease
+			if runningRequests.Add(-1) == 0 && s.graceCtx.Err() != nil {
 				close(handlingDoneChan)
 			}
 		}()
