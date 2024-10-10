@@ -334,10 +334,6 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
 				}
-				// server closed
-				if s.closeCtx.Err() != nil {
-					conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
-				}
 			}
 		}()
 	}
@@ -544,7 +540,14 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	for {
 		str, datagrams, err := hconn.acceptStream(s.graceCtx)
 		if err != nil {
-			// server is closed, send GOAWAY frame and return, since those requests will be rejected anyway
+			// not gracefully closed, close the connection immediately
+			if s.closeCtx.Err() != nil {
+				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+				return http.ErrServerClosed
+			}
+
+			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
+			// new requests will be rejected and shouldn't be sent
 			if s.graceCtx.Err() != nil {
 				b = (&goawayFrame{
 					StreamID: lastID + 4,
@@ -557,6 +560,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				// some requests may be still running, wait for them to finish before returning
 				case <-handlingDoneChan:
 				case <-s.closeCtx.Done():
+					// close the connection after graceful period
+					conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 				}
 				return http.ErrServerClosed
 			}
