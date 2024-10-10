@@ -6,8 +6,11 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
-// CapsuleType is the type of the capsule.
+// CapsuleType is the type of the capsule
 type CapsuleType uint64
+
+// CapsuleProtocolHeader is the header value used to advertise support for the capsule protocol
+const CapsuleProtocolHeader = "Capsule-Protocol"
 
 type exactReader struct {
 	R io.LimitedReader
