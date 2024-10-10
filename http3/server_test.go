@@ -359,7 +359,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -387,7 +387,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -415,7 +415,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -443,7 +443,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -488,7 +488,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -513,7 +513,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -540,7 +540,7 @@ var _ = Describe("Server", func() {
 				})
 				ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 				conn.EXPECT().Context().Return(ctx).AnyTimes()
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
@@ -588,7 +588,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 				str.EXPECT().Close().Do(func() error { close(done); return nil })
 
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 				hfs := decodeHeader(responseBuf)
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -610,7 +610,7 @@ var _ = Describe("Server", func() {
 				var buf bytes.Buffer
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(handlerCalled).Should(BeClosed())
 
 				// The buffer is expected to contain:
@@ -646,7 +646,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -662,7 +662,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Consistently(handlerCalled).ShouldNot(BeClosed())
 			})
 
@@ -683,7 +683,7 @@ var _ = Describe("Server", func() {
 					close(done)
 					return nil
 				})
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -706,7 +706,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(context.Background(), conn)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 		})
