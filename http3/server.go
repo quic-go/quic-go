@@ -334,6 +334,10 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
 				}
+				// server closed
+				if s.closeCtx.Err() != nil {
+					conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+				}
 			}
 		}()
 	}
@@ -554,8 +558,6 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				case <-handlingDoneChan:
 				case <-s.closeCtx.Done():
 				}
-				// close the connection
-				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 				return http.ErrServerClosed
 			}
 
