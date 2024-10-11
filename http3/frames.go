@@ -213,7 +213,7 @@ func parseGoawayFrame(r io.Reader, l uint64) (*goawayFrame, error) {
 		return nil, err
 	}
 	if lr.N > 0 || br.Buffered() > 0 {
-		return nil, fmt.Errorf("GOAWAY frame: stream ID %d and its encoded length don't match", id)
+		return nil, errors.New("GOAWAY frame: inconsistent length")
 	}
 	frame.StreamID = quic.StreamID(id)
 	return frame, nil
