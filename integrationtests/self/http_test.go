@@ -1071,8 +1071,11 @@ var _ = Describe("HTTP tests", func() {
 
 	It("aborts requests on shutdown", func() {
 		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
-			defer GinkgoRecover()
-			Expect(server.Close()).To(Succeed())
+			go func() {
+				defer GinkgoRecover()
+				Expect(server.Close()).To(Succeed())
+			}()
+			time.Sleep(scaleDuration(50 * time.Millisecond)) // make sure the server started shutting down
 		})
 
 		_, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
@@ -1091,6 +1094,7 @@ var _ = Describe("HTTP tests", func() {
 				defer GinkgoRecover()
 				defer close(done)
 				Expect(server.CloseGracefully(context.Background())).To(Succeed())
+				fmt.Println("close gracefully done")
 			}()
 			time.Sleep(delay)
 			w.Write([]byte("shutdown"))
@@ -1106,6 +1110,8 @@ var _ = Describe("HTTP tests", func() {
 		body, err := io.ReadAll(resp.Body)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(body).To(Equal([]byte("shutdown")))
+		// manually close the client, since we don't support
+		client.Transport.(*http3.RoundTripper).Close()
 
 		// make sure that CloseGracefully returned
 		Eventually(done).Should(BeClosed())
