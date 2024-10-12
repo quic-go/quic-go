@@ -484,7 +484,8 @@ var _ = Describe("HTTP tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")
-		cc := http3.ClientConn{Connection: conn}
+		tr := http3.Transport{}
+		cc := tr.NewClientConn(conn)
 		str, err := cc.OpenRequestStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.SendRequestHeader(req)).To(Succeed())
@@ -677,10 +678,10 @@ var _ = Describe("HTTP tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")
-		cc := http3.ClientConn{Connection: conn}
-		hconn := cc.Start()
-		Eventually(hconn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
-		settings := hconn.Settings()
+		var tr http3.Transport
+		cc := tr.NewClientConn(conn)
+		Eventually(cc.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
+		settings := cc.Settings()
 		Expect(settings.EnableExtendedConnect).To(BeTrue())
 		Expect(settings.EnableDatagrams).To(BeFalse())
 		Expect(settings.Other).To(BeEmpty())
@@ -803,10 +804,8 @@ var _ = Describe("HTTP tests", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			cc := &http3.ClientConn{
-				Connection:      conn,
-				EnableDatagrams: true,
-			}
+			tr := http3.Transport{EnableDatagrams: true}
+			cc := tr.NewClientConn(conn)
 			str, err := cc.OpenRequestStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			u, err := url.Parse(h)

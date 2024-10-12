@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -97,6 +98,11 @@ type Transport struct {
 	// However, if the user explicitly requested gzip it is not automatically uncompressed.
 	DisableCompression bool
 
+	StreamHijacker    func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
+	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
+
+	Logger *slog.Logger
+
 	initOnce sync.Once
 	initErr  error
 
@@ -117,13 +123,16 @@ var ErrNoCachedConn = errors.New("http3: no cached connection was available")
 func (t *Transport) init() error {
 	if t.newClient == nil {
 		t.newClient = func(conn quic.EarlyConnection) singleRoundTripper {
-			return &ClientConn{
-				Connection:             conn,
-				EnableDatagrams:        t.EnableDatagrams,
-				DisableCompression:     t.DisableCompression,
-				AdditionalSettings:     t.AdditionalSettings,
-				MaxResponseHeaderBytes: t.MaxResponseHeaderBytes,
-			}
+			return newClientConn(
+				conn,
+				t.EnableDatagrams,
+				t.AdditionalSettings,
+				t.StreamHijacker,
+				t.UniStreamHijacker,
+				t.MaxResponseHeaderBytes,
+				t.DisableCompression,
+				t.Logger,
+			)
 		}
 	}
 	if t.QUICConfig == nil {
@@ -323,6 +332,19 @@ func (t *Transport) removeClient(hostname string) {
 		return
 	}
 	delete(t.clients, hostname)
+}
+
+func (t *Transport) NewClientConn(conn quic.Connection) *ClientConn {
+	return newClientConn(
+		conn,
+		t.EnableDatagrams,
+		t.AdditionalSettings,
+		t.StreamHijacker,
+		t.UniStreamHijacker,
+		t.MaxResponseHeaderBytes,
+		t.DisableCompression,
+		t.Logger,
+	)
 }
 
 // Close closes the QUIC connections that this Transport has used.
