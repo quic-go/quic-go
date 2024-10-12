@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -215,12 +216,13 @@ type Server struct {
 	mutex     sync.RWMutex
 	listeners map[*QUICEarlyListener]listenerInfo
 
-	closed      bool
-	closeCtx    context.Context    // canceled when the server is closed
-	closeCancel context.CancelFunc // cancels the closeCtx
-	connCount   sync.WaitGroup
-	graceCtx    context.Context    // canceled when the server is closed or gracefully closed
-	graceCancel context.CancelFunc // cancels the graceCtx
+	closed           bool
+	closeCtx         context.Context    // canceled when the server is closed
+	closeCancel      context.CancelFunc // cancels the closeCtx
+	graceCtx         context.Context    // canceled when the server is closed or gracefully closed
+	graceCancel      context.CancelFunc // cancels the graceCtx
+	connCount        atomic.Int64
+	connHandlingDone chan struct{}
 
 	altSvcHeader string
 }
@@ -272,23 +274,31 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveListener(ln)
 }
 
-// initContexts initializes the contexts used for shutting down the server.
+// init initializes the contexts used for shutting down the server.
 // It must be called with the mutex held.
-func (s *Server) initContexts() {
+func (s *Server) init() {
 	if s.closeCtx == nil {
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
 		s.graceCtx, s.graceCancel = context.WithCancel(s.closeCtx)
+	}
+	s.connHandlingDone = make(chan struct{}, 1)
+}
+
+func (s *Server) decreaseConnCount() {
+	if s.connCount.Add(-1) == 0 {
+		close(s.connHandlingDone)
 	}
 }
 
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
-	s.initContexts()
+	s.init()
 	s.mutex.Unlock()
 
 	s.connCount.Add(1)
-	defer s.connCount.Done()
+	defer s.decreaseConnCount()
+
 	return s.handleConn(conn)
 }
 
@@ -321,8 +331,7 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 		}
 		s.connCount.Add(1)
 		go func() {
-			defer s.connCount.Done()
-
+			defer s.decreaseConnCount()
 			if err := s.handleConn(conn); err != nil {
 				if s.Logger != nil {
 					s.Logger.Debug("handling connection failed", "error", err)
@@ -456,7 +465,7 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.listeners == nil {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
-	s.initContexts()
+	s.init()
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
@@ -724,20 +733,17 @@ func (s *Server) Close() error {
 	}
 	s.closeCancel()
 
-	done := make(chan struct{})
-	go func() {
-		s.connCount.Wait()
-		close(done)
-	}()
-
 	var err error
 	for ln := range s.listeners {
 		if cerr := (*ln).Close(); cerr != nil && err == nil {
 			err = cerr
 		}
 	}
+	if s.connCount.Load() == 0 {
+		return err
+	}
 	// wait for all connections to be closed
-	<-done
+	<-s.connHandlingDone
 	return err
 }
 
@@ -755,14 +761,11 @@ func (s *Server) CloseGracefully(ctx context.Context) error {
 	s.graceCancel()
 	s.mutex.Unlock()
 
-	done := make(chan struct{})
-	go func() {
-		s.connCount.Wait()
-		close(done)
-	}()
-
+	if s.connCount.Load() == 0 {
+		return nil
+	}
 	select {
-	case <-done: // all connections were closed
+	case <-s.connHandlingDone: // all connections were closed
 		// When receiving a GOAWAY frame, HTTP/3 clients are expected to close the connection
 		// once all requests were successfully handled...
 		return s.Close()
