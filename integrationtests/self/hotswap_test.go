@@ -64,7 +64,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		mux1    *http.ServeMux
 		mux2    *http.ServeMux
 		client  *http.Client
-		rt      *http3.RoundTripper
+		rt      *http3.Transport
 		server1 *http3.Server
 		server2 *http3.Server
 		ln      *listenerWrapper
@@ -106,7 +106,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 	})
 
 	BeforeEach(func() {
-		rt = &http3.RoundTripper{
+		rt = &http3.Transport{
 			TLSClientConfig:    getTLSClientConfig(),
 			DisableCompression: true,
 			QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
@@ -151,7 +151,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		Expect(fake1.closed.Load()).To(BeTrue())
 		Expect(fake2.closed.Load()).To(BeFalse())
 		Expect(ln.listenerClosed).ToNot(BeTrue())
-		Expect(client.Transport.(*http3.RoundTripper).Close()).NotTo(HaveOccurred())
+		Expect(client.Transport.(*http3.Transport).Close()).NotTo(HaveOccurred())
 
 		// verify that new connections are being initiated from the second server now
 		resp, err = client.Get("https://localhost:" + port + "/hello2")
