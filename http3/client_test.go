@@ -81,7 +81,7 @@ var _ = Describe("Client", func() {
 		It("hijacks a bidirectional stream of unknown frame type", func() {
 			id := quic.ConnectionTracingID(1234)
 			frameTypeChan := make(chan FrameType, 1)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				StreamHijacker: func(ft FrameType, connTracingID quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
 					Expect(e).ToNot(HaveOccurred())
@@ -101,7 +101,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTrip(request)
+			_, err := cc.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -109,7 +109,7 @@ var _ = Describe("Client", func() {
 
 		It("closes the connection when hijacker didn't hijack a bidirectional stream", func() {
 			frameTypeChan := make(chan FrameType, 1)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				StreamHijacker: func(ft FrameType, _ quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
 					Expect(e).ToNot(HaveOccurred())
@@ -129,14 +129,14 @@ var _ = Describe("Client", func() {
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := rt.RoundTrip(request)
+			_, err := cc.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 		})
 
 		It("closes the connection when hijacker returned error", func() {
 			frameTypeChan := make(chan FrameType, 1)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				StreamHijacker: func(ft FrameType, _ quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
 					Expect(e).ToNot(HaveOccurred())
@@ -156,7 +156,7 @@ var _ = Describe("Client", func() {
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := rt.RoundTrip(request)
+			_, err := cc.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
 		})
@@ -165,7 +165,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("test error")
 			unknownStr := mockquic.NewMockStream(mockCtrl)
 			done := make(chan struct{})
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				StreamHijacker: func(ft FrameType, _ quic.ConnectionTracingID, str quic.Stream, e error) (hijacked bool, err error) {
 					defer close(done)
@@ -185,7 +185,7 @@ var _ = Describe("Client", func() {
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
-			_, err := rt.RoundTrip(request)
+			_, err := cc.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -226,7 +226,7 @@ var _ = Describe("Client", func() {
 		It("hijacks an unidirectional stream of unknown stream type", func() {
 			id := quic.ConnectionTracingID(100)
 			streamTypeChan := make(chan StreamType, 1)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				UniStreamHijacker: func(st StreamType, connTracingID quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
 					Expect(connTracingID).To(Equal(id))
@@ -248,7 +248,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTrip(req)
+			_, err := cc.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
 			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -258,7 +258,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("test error")
 			done := make(chan struct{})
 			unknownStr := mockquic.NewMockStream(mockCtrl)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				UniStreamHijacker: func(st StreamType, _ quic.ConnectionTracingID, str quic.ReceiveStream, err error) bool {
 					defer close(done)
@@ -277,7 +277,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTrip(req)
+			_, err := cc.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -285,7 +285,7 @@ var _ = Describe("Client", func() {
 
 		It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
 			streamTypeChan := make(chan StreamType, 1)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection: conn,
 				UniStreamHijacker: func(st StreamType, _ quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
 					Expect(err).ToNot(HaveOccurred())
@@ -307,7 +307,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
-			_, err := rt.RoundTrip(req)
+			_, err := cc.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
 			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -337,13 +337,13 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			}).AnyTimes()
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-			rt := &SingleDestinationRoundTripper{
+			cc := &ClientConn{
 				Connection:      conn,
 				EnableDatagrams: true,
 			}
 			req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = rt.RoundTrip(req)
+			_, err = cc.RoundTrip(req)
 			Expect(err).To(MatchError("test done"))
 			t, err := quicvarint.Read(&buf)
 			Expect(err).ToNot(HaveOccurred())
@@ -373,8 +373,8 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 
-			rt := &SingleDestinationRoundTripper{Connection: conn}
-			hconn := rt.Start()
+			cc := &ClientConn{Connection: conn}
+			hconn := cc.Start()
 			Eventually(hconn.ReceivedSettings()).Should(BeClosed())
 			settings := hconn.Settings()
 			Expect(settings.EnableExtendedConnect).To(BeTrue())
@@ -410,8 +410,8 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().Context().Return(context.Background())
 			conn.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("test error"))
 
-			rt := &SingleDestinationRoundTripper{Connection: conn}
-			_, err := rt.RoundTrip(&http.Request{
+			cc := &ClientConn{Connection: conn}
+			_, err := cc.RoundTrip(&http.Request{
 				Method: http.MethodConnect,
 				Proto:  "connect",
 				Host:   "localhost",
@@ -450,8 +450,8 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
 			conn.EXPECT().Context().Return(context.Background())
 
-			rt := &SingleDestinationRoundTripper{Connection: conn}
-			_, err := rt.RoundTrip(&http.Request{
+			cc := &ClientConn{Connection: conn}
+			_, err := cc.RoundTrip(&http.Request{
 				Method: http.MethodConnect,
 				Proto:  "connect",
 				Host:   "localhost",
@@ -470,7 +470,7 @@ var _ = Describe("Client", func() {
 			req                  *http.Request
 			str                  *mockquic.MockStream
 			conn                 *mockquic.MockEarlyConnection
-			cl                   *SingleDestinationRoundTripper
+			cl                   *ClientConn
 			settingsFrameWritten chan struct{}
 		)
 		testDone := make(chan struct{})
@@ -517,7 +517,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			cl = &SingleDestinationRoundTripper{Connection: conn}
+			cl = &ClientConn{Connection: conn}
 			var err error
 			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -947,7 +947,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("doesn't add gzip if the header disable it", func() {
-				client := &SingleDestinationRoundTripper{
+				client := &ClientConn{
 					Connection:         conn,
 					DisableCompression: true,
 				}

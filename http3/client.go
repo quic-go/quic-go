@@ -38,8 +38,8 @@ var defaultQuicConfig = &quic.Config{
 	KeepAlivePeriod:    10 * time.Second,
 }
 
-// SingleDestinationRoundTripper is an HTTP/3 client doing requests to a single remote server.
-type SingleDestinationRoundTripper struct {
+// ClientConn is an HTTP/3 client doing requests to a single remote server.
+type ClientConn struct {
 	Connection quic.Connection
 
 	// Enable support for HTTP/3 datagrams (RFC 9297).
@@ -72,14 +72,14 @@ type SingleDestinationRoundTripper struct {
 	decoder       *qpack.Decoder
 }
 
-var _ http.RoundTripper = &SingleDestinationRoundTripper{}
+var _ http.RoundTripper = &ClientConn{}
 
-func (c *SingleDestinationRoundTripper) Start() Connection {
+func (c *ClientConn) Start() Connection {
 	c.initOnce.Do(func() { c.init() })
 	return c.hconn
 }
 
-func (c *SingleDestinationRoundTripper) init() {
+func (c *ClientConn) init() {
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
 	c.requestWriter = newRequestWriter()
 	c.hconn = newConnection(
@@ -105,7 +105,7 @@ func (c *SingleDestinationRoundTripper) init() {
 	go c.hconn.HandleUnidirectionalStreams(c.UniStreamHijacker)
 }
 
-func (c *SingleDestinationRoundTripper) setupConn(conn *connection) error {
+func (c *ClientConn) setupConn(conn *connection) error {
 	// open the control stream
 	str, err := conn.OpenUniStream()
 	if err != nil {
@@ -119,7 +119,7 @@ func (c *SingleDestinationRoundTripper) setupConn(conn *connection) error {
 	return err
 }
 
-func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
+func (c *ClientConn) handleBidirectionalStreams() {
 	for {
 		str, err := c.hconn.AcceptStream(context.Background())
 		if err != nil {
@@ -150,7 +150,7 @@ func (c *SingleDestinationRoundTripper) handleBidirectionalStreams() {
 	}
 }
 
-func (c *SingleDestinationRoundTripper) maxHeaderBytes() uint64 {
+func (c *ClientConn) maxHeaderBytes() uint64 {
 	if c.MaxResponseHeaderBytes <= 0 {
 		return defaultMaxResponseHeaderBytes
 	}
@@ -158,7 +158,7 @@ func (c *SingleDestinationRoundTripper) maxHeaderBytes() uint64 {
 }
 
 // RoundTrip executes a request and returns a response
-func (c *SingleDestinationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (c *ClientConn) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.initOnce.Do(func() { c.init() })
 
 	rsp, err := c.roundTrip(req)
@@ -169,7 +169,7 @@ func (c *SingleDestinationRoundTripper) RoundTrip(req *http.Request) (*http.Resp
 	return rsp, err
 }
 
-func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Response, error) {
+func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	// Immediately send out this request, if this is a 0-RTT request.
 	switch req.Method {
 	case MethodGet0RTT:
@@ -238,7 +238,7 @@ func (c *SingleDestinationRoundTripper) roundTrip(req *http.Request) (*http.Resp
 	return rsp, maybeReplaceError(err)
 }
 
-func (c *SingleDestinationRoundTripper) OpenRequestStream(ctx context.Context) (RequestStream, error) {
+func (c *ClientConn) OpenRequestStream(ctx context.Context) (RequestStream, error) {
 	c.initOnce.Do(func() { c.init() })
 
 	return c.hconn.openRequestStream(ctx, c.requestWriter, nil, c.DisableCompression, c.maxHeaderBytes())
@@ -259,7 +259,7 @@ func (r *cancelingReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (c *SingleDestinationRoundTripper) sendRequestBody(str Stream, body io.ReadCloser, contentLength int64) error {
+func (c *ClientConn) sendRequestBody(str Stream, body io.ReadCloser, contentLength int64) error {
 	defer body.Close()
 	buf := make([]byte, bodyCopyBufferSize)
 	sr := &cancelingReader{str: str, r: body}
@@ -283,7 +283,7 @@ func (c *SingleDestinationRoundTripper) sendRequestBody(str Stream, body io.Read
 	return err
 }
 
-func (c *SingleDestinationRoundTripper) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
+func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
 	if err := str.SendRequestHeader(req); err != nil {
 		return nil, err
 	}

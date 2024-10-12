@@ -484,8 +484,8 @@ var _ = Describe("HTTP tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")
-		rt := http3.SingleDestinationRoundTripper{Connection: conn}
-		str, err := rt.OpenRequestStream(context.Background())
+		cc := http3.ClientConn{Connection: conn}
+		str, err := cc.OpenRequestStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.SendRequestHeader(req)).To(Succeed())
 		// make sure the request is received (and not stuck in some buffer, for example)
@@ -677,8 +677,8 @@ var _ = Describe("HTTP tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.CloseWithError(0, "")
-		rt := http3.SingleDestinationRoundTripper{Connection: conn}
-		hconn := rt.Start()
+		cc := http3.ClientConn{Connection: conn}
+		hconn := cc.Start()
 		Eventually(hconn.ReceivedSettings(), 5*time.Second, 10*time.Millisecond).Should(BeClosed())
 		settings := hconn.Settings()
 		Expect(settings.EnableExtendedConnect).To(BeTrue())
@@ -803,11 +803,11 @@ var _ = Describe("HTTP tests", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			rt := &http3.SingleDestinationRoundTripper{
+			cc := &http3.ClientConn{
 				Connection:      conn,
 				EnableDatagrams: true,
 			}
-			str, err := rt.OpenRequestStream(context.Background())
+			str, err := cc.OpenRequestStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			u, err := url.Parse(h)
 			Expect(err).ToNot(HaveOccurred())

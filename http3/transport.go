@@ -117,7 +117,7 @@ var ErrNoCachedConn = errors.New("http3: no cached connection was available")
 func (t *Transport) init() error {
 	if t.newClient == nil {
 		t.newClient = func(conn quic.EarlyConnection) singleRoundTripper {
-			return &SingleDestinationRoundTripper{
+			return &ClientConn{
 				Connection:             conn,
 				EnableDatagrams:        t.EnableDatagrams,
 				DisableCompression:     t.DisableCompression,
