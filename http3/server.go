@@ -272,13 +272,19 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveListener(ln)
 }
 
-// ServeQUICConn serves a single QUIC connection.
-func (s *Server) ServeQUICConn(conn quic.Connection) error {
-	s.mutex.Lock()
+// initContexts initializes the contexts used for shutting down the server.
+// It must be called with the mutex held.
+func (s *Server) initContexts() {
 	if s.closeCtx == nil {
 		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
 		s.graceCtx, s.graceCancel = context.WithCancel(s.closeCtx)
 	}
+}
+
+// ServeQUICConn serves a single QUIC connection.
+func (s *Server) ServeQUICConn(conn quic.Connection) error {
+	s.mutex.Lock()
+	s.initContexts()
 	s.mutex.Unlock()
 
 	s.connCount.Add(1)
@@ -450,10 +456,7 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.listeners == nil {
 		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
-	if s.closeCtx == nil {
-		s.closeCtx, s.closeCancel = context.WithCancel(context.Background())
-		s.graceCtx, s.graceCancel = context.WithCancel(s.closeCtx)
-	}
+	s.initContexts()
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
