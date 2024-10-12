@@ -1071,8 +1071,11 @@ var _ = Describe("HTTP tests", func() {
 
 	It("aborts requests on shutdown", func() {
 		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
-			defer GinkgoRecover()
-			Expect(server.Close()).To(Succeed())
+			go func() {
+				defer GinkgoRecover()
+				Expect(server.Close()).To(Succeed())
+			}()
+			time.Sleep(scaleDuration(50 * time.Millisecond)) // make sure the server started shutting down
 		})
 
 		_, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
@@ -1080,5 +1083,80 @@ var _ = Describe("HTTP tests", func() {
 		var appErr *http3.Error
 		Expect(errors.As(err, &appErr)).To(BeTrue())
 		Expect(appErr.ErrorCode).To(Equal(http3.ErrCodeNoError))
+	})
+
+	It("allows existing requests to complete on graceful shutdown", func() {
+		delay := scaleDuration(100 * time.Millisecond)
+		done := make(chan struct{})
+
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				Expect(server.CloseGracefully(context.Background())).To(Succeed())
+				fmt.Println("close gracefully done")
+			}()
+			time.Sleep(delay)
+			w.Write([]byte("shutdown"))
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*delay)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/shutdown", port), nil)
+		Expect(err).ToNot(HaveOccurred())
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal([]byte("shutdown")))
+		// manually close the client, since we don't support
+		client.Transport.(*http3.RoundTripper).Close()
+
+		// make sure that CloseGracefully returned
+		Eventually(done).Should(BeClosed())
+	})
+
+	It("aborts long-lived requests on graceful shutdown", func() {
+		delay := scaleDuration(100 * time.Millisecond)
+		shutdownDone := make(chan struct{})
+		requestChan := make(chan time.Duration, 1)
+
+		mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			go func() {
+				defer GinkgoRecover()
+				ctx, cancel := context.WithTimeout(context.Background(), delay)
+				defer cancel()
+				defer close(shutdownDone)
+				Expect(server.CloseGracefully(ctx)).To(MatchError(context.DeadlineExceeded))
+			}()
+			for t := range time.NewTicker(delay / 10).C {
+				if _, err := w.Write([]byte(t.String())); err != nil {
+					requestChan <- time.Since(start)
+					return
+				}
+			}
+		})
+
+		start := time.Now()
+		resp, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		_, err = io.Copy(io.Discard, resp.Body)
+		Expect(err).To(HaveOccurred())
+		var h3Err *http3.Error
+		Expect(errors.As(err, &h3Err)).To(BeTrue())
+		Expect(h3Err.ErrorCode).To(Equal(http3.ErrCodeNoError))
+		took := time.Since(start)
+		Expect(took).To(BeNumerically("~", delay, delay/2))
+		var requestDuration time.Duration
+		Eventually(requestChan).Should(Receive(&requestDuration))
+		Expect(requestDuration).To(BeNumerically("~", delay, delay/2))
+
+		// make sure that CloseGracefully returned
+		Eventually(shutdownDone).Should(BeClosed())
 	})
 })

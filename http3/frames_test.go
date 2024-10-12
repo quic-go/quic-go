@@ -252,6 +252,49 @@ var _ = Describe("Frames", func() {
 		})
 	})
 
+	Context("GOAWAY frames", func() {
+		It("parses", func() {
+			data := quicvarint.Append(nil, 0x7) // type byte
+			data = quicvarint.Append(data, uint64(quicvarint.Len(100)))
+			data = quicvarint.Append(data, 100)
+			fp := frameParser{r: bytes.NewReader(data)}
+			frame, err := fp.ParseNext()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeAssignableToTypeOf(&goAwayFrame{}))
+			Expect(frame.(*goAwayFrame).StreamID).To(Equal(quic.StreamID(100)))
+		})
+
+		It("errors on inconsistent lengths", func() {
+			data := quicvarint.Append(nil, 0x7) // type byte
+			data = quicvarint.Append(data, uint64(quicvarint.Len(100))+1)
+			data = quicvarint.Append(data, 100)
+			fp := frameParser{r: bytes.NewReader(data)}
+			_, err := fp.ParseNext()
+			Expect(err).To(MatchError("GOAWAY frame: inconsistent length"))
+		})
+
+		It("writes", func() {
+			data := (&goAwayFrame{StreamID: 200}).Append(nil)
+			fp := frameParser{r: bytes.NewReader(data)}
+			frame, err := fp.ParseNext()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeAssignableToTypeOf(&goAwayFrame{}))
+			Expect(frame.(*goAwayFrame).StreamID).To(Equal(quic.StreamID(200)))
+		})
+
+		It("errors on EOF", func() {
+			data := (&goAwayFrame{StreamID: 1337}).Append(nil)
+			fp := frameParser{r: bytes.NewReader(data)}
+			_, err := fp.ParseNext()
+			Expect(err).ToNot(HaveOccurred())
+			for i := range data {
+				fp := frameParser{r: bytes.NewReader(data[:i])}
+				_, err := fp.ParseNext()
+				Expect(err).To(MatchError(io.EOF))
+			}
+		})
+	})
+
 	Context("hijacking", func() {
 		It("reads a frame without hijacking the stream", func() {
 			buf := bytes.NewBuffer(quicvarint.Append(nil, 1337))
