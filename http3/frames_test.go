@@ -260,8 +260,8 @@ var _ = Describe("Frames", func() {
 			fp := frameParser{r: bytes.NewReader(data)}
 			frame, err := fp.ParseNext()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&goawayFrame{}))
-			Expect(frame.(*goawayFrame).StreamID).To(Equal(quic.StreamID(100)))
+			Expect(frame).To(BeAssignableToTypeOf(&goAwayFrame{}))
+			Expect(frame.(*goAwayFrame).StreamID).To(Equal(quic.StreamID(100)))
 		})
 
 		It("errors on inconsistent lengths", func() {
@@ -274,16 +274,16 @@ var _ = Describe("Frames", func() {
 		})
 
 		It("writes", func() {
-			data := (&goawayFrame{StreamID: 200}).Append(nil)
+			data := (&goAwayFrame{StreamID: 200}).Append(nil)
 			fp := frameParser{r: bytes.NewReader(data)}
 			frame, err := fp.ParseNext()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&goawayFrame{}))
-			Expect(frame.(*goawayFrame).StreamID).To(Equal(quic.StreamID(200)))
+			Expect(frame).To(BeAssignableToTypeOf(&goAwayFrame{}))
+			Expect(frame.(*goAwayFrame).StreamID).To(Equal(quic.StreamID(200)))
 		})
 
 		It("errors on EOF", func() {
-			data := (&goawayFrame{StreamID: 1337}).Append(nil)
+			data := (&goAwayFrame{StreamID: 1337}).Append(nil)
 			fp := frameParser{r: bytes.NewReader(data)}
 			_, err := fp.ParseNext()
 			Expect(err).ToNot(HaveOccurred())

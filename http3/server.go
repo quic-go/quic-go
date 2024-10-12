@@ -534,7 +534,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
 			// new requests will be rejected and shouldn't be sent
 			if s.graceCtx.Err() != nil {
-				b = (&goawayFrame{StreamID: nextStreamID}).Append(b[:0])
+				b = (&goAwayFrame{StreamID: nextStreamID}).Append(b[:0])
 				// set a deadline to send the GOAWAY frame
 				ctrlStr.SetWriteDeadline(time.Now().Add(goawayTimeout))
 				ctrlStr.Write(b)
