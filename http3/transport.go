@@ -62,8 +62,6 @@ func (r *roundTripperWithCount) Close() error {
 
 // Transport implements the http.RoundTripper interface
 type Transport struct {
-	mutex sync.Mutex
-
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
@@ -102,6 +100,8 @@ type Transport struct {
 	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
 	Logger *slog.Logger
+
+	mutex sync.Mutex
 
 	initOnce sync.Once
 	initErr  error
@@ -334,6 +334,12 @@ func (t *Transport) removeClient(hostname string) {
 	delete(t.clients, hostname)
 }
 
+// NewClientConn creates a new HTTP/3 client connection on top of a QUIC connection.
+// Most users should use RoundTrip instead of creating a connection directly.
+// Specifically, it is not needed to perform GET, POST, HEAD and CONNECT requests.
+//
+// Obtaining a ClientConn is only needed for more advanced use cases, such as
+// using Extended CONNECT for WebTransport or the various MASQUE protocols.
 func (t *Transport) NewClientConn(conn quic.Connection) *ClientConn {
 	return newClientConn(
 		conn,
@@ -348,7 +354,6 @@ func (t *Transport) NewClientConn(conn quic.Connection) *ClientConn {
 }
 
 // Close closes the QUIC connections that this Transport has used.
-// It also closes the underlying UDPConn if it is not nil.
 func (t *Transport) Close() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -398,6 +403,10 @@ func isNotToken(r rune) bool {
 	return !httpguts.IsTokenRune(r)
 }
 
+// CloseIdleConnections closes any QUIC connections in the transport's pool that are currently idle.
+// An idle connection is one that was previously used for requests but is now sitting unused.
+// This method does not interrupt any connections currently in use.
+// It also does not affect connections obtained via NewClientConn.
 func (t *Transport) CloseIdleConnections() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
