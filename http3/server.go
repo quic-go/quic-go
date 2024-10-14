@@ -804,11 +804,6 @@ func (s *Server) SetQUICHeaders(hdr http.Header) error {
 	return nil
 }
 
-// Deprecated: use SetQUICHeaders instead.
-func (s *Server) SetQuicHeaders(hdr http.Header) error {
-	return s.SetQUICHeaders(hdr)
-}
-
 // ListenAndServeQUIC listens on the UDP network address addr and calls the
 // handler for HTTP/3 requests on incoming connections. http.DefaultServeMux is
 // used when handler is nil.
@@ -818,11 +813,6 @@ func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) er
 		Handler: handler,
 	}
 	return server.ListenAndServeTLS(certFile, keyFile)
-}
-
-// Deprecated: use ListenAndServeTLS instead.
-func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error {
-	return ListenAndServeTLS(addr, certFile, keyFile, handler)
 }
 
 // ListenAndServeTLS listens on the given network address for both TLS/TCP and QUIC
