@@ -115,6 +115,7 @@ func newClientConn(
 	return c
 }
 
+// OpenRequestStream opens a new request stream on the HTTP/3 connection.
 func (c *ClientConn) OpenRequestStream(ctx context.Context) (RequestStream, error) {
 	return c.connection.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
 }

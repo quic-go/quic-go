@@ -316,10 +316,12 @@ func (c *connection) receiveDatagrams() error {
 }
 
 // ReceivedSettings returns a channel that is closed once the peer's SETTINGS frame was received.
+// Settings can be optained from the Settings method after the channel was closed.
 func (c *connection) ReceivedSettings() <-chan struct{} { return c.receivedSettings }
 
 // Settings returns the settings received on this connection.
 // It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *connection) Settings() *Settings { return c.settings }
 
+// Context returns the context of the underlying QUIC connection.
 func (c *connection) Context() context.Context { return c.ctx }
