@@ -117,6 +117,9 @@ var (
 	_ io.Closer         = &Transport{}
 )
 
+// Deprecated: RoundTripper was renamed to Transport.
+type RoundTripper = Transport
+
 // ErrNoCachedConn is returned when Transport.OnlyCachedConn is set
 var ErrNoCachedConn = errors.New("http3: no cached connection was available")
 
