@@ -12,12 +12,6 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
-// DefaultTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
-// Deprecated: use DefaultConnectionTracer instead.
-func DefaultTracer(ctx context.Context, p logging.Perspective, connID logging.ConnectionID) *logging.ConnectionTracer {
-	return DefaultConnectionTracer(ctx, p, connID)
-}
-
 // DefaultConnectionTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
 // File names are <odcid>_<perspective>.sqlog.
 // Returns nil if QLOGDIR is not set.
