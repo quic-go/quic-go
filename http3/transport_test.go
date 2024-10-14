@@ -45,7 +45,7 @@ func (m *mockBody) Close() error {
 	return m.closeErr
 }
 
-var _ = Describe("RoundTripper", func() {
+var _ = Describe("Transport", func() {
 	var req *http.Request
 
 	BeforeEach(func() {
@@ -58,14 +58,14 @@ var _ = Describe("RoundTripper", func() {
 		qconf := &quic.Config{
 			Versions: []quic.Version{protocol.Version2, protocol.Version1},
 		}
-		rt := &RoundTripper{QUICConfig: qconf}
-		_, err := rt.RoundTrip(req)
+		tr := &Transport{QUICConfig: qconf}
+		_, err := tr.RoundTrip(req)
 		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
 	})
 
 	It("uses the default QUIC and TLS config if none is give", func() {
 		var dialAddrCalled bool
-		rt := &RoundTripper{
+		tr := &Transport{
 			Dial: func(_ context.Context, _ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
 				Expect(quicConf.MaxIncomingStreams).To(Equal(defaultQuicConfig.MaxIncomingStreams))
@@ -75,14 +75,14 @@ var _ = Describe("RoundTripper", func() {
 				return nil, errors.New("test done")
 			},
 		}
-		_, err := rt.RoundTripOpt(req, RoundTripOpt{})
+		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError("test done"))
 		Expect(dialAddrCalled).To(BeTrue())
 	})
 
 	It("adds the port to the hostname, if none is given", func() {
 		var dialAddrCalled bool
-		rt := &RoundTripper{
+		tr := &Transport{
 			Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
 				Expect(hostname).To(Equal("quic.clemente.io:443"))
@@ -92,7 +92,7 @@ var _ = Describe("RoundTripper", func() {
 		}
 		req, err := http.NewRequest("GET", "https://quic.clemente.io:443", nil)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = rt.RoundTripOpt(req, RoundTripOpt{})
+		_, err = tr.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError("test done"))
 		Expect(dialAddrCalled).To(BeTrue())
 	})
@@ -100,7 +100,7 @@ var _ = Describe("RoundTripper", func() {
 	It("sets the ServerName in the tls.Config, if not set", func() {
 		const host = "foo.bar"
 		var dialCalled bool
-		rt := &RoundTripper{
+		tr := &Transport{
 			Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
 				Expect(tlsCfg.ServerName).To(Equal(host))
@@ -110,7 +110,7 @@ var _ = Describe("RoundTripper", func() {
 		}
 		req, err := http.NewRequest("GET", "https://foo.bar", nil)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = rt.RoundTripOpt(req, RoundTripOpt{})
+		_, err = tr.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError("test done"))
 		Expect(dialCalled).To(BeTrue())
 	})
@@ -122,7 +122,7 @@ var _ = Describe("RoundTripper", func() {
 		}
 		quicConf := &quic.Config{MaxIdleTimeout: 3 * time.Nanosecond}
 		var dialAddrCalled bool
-		rt := &RoundTripper{
+		tr := &Transport{
 			Dial: func(_ context.Context, host string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
 				Expect(host).To(Equal("www.example.org:443"))
@@ -135,7 +135,7 @@ var _ = Describe("RoundTripper", func() {
 			QUICConfig:      quicConf,
 			TLSClientConfig: tlsConf,
 		}
-		_, err := rt.RoundTripOpt(req, RoundTripOpt{})
+		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError("test done"))
 		Expect(dialAddrCalled).To(BeTrue())
 		// make sure the original tls.Config was not modified
@@ -149,7 +149,7 @@ var _ = Describe("RoundTripper", func() {
 		// nolint:staticcheck // This is a test.
 		ctx := context.WithValue(context.Background(), "foo", "bar")
 		var dialerCalled bool
-		rt := &RoundTripper{
+		tr := &Transport{
 			Dial: func(ctxP context.Context, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
 				Expect(ctx.Value("foo").(string)).To(Equal("bar"))
@@ -162,14 +162,14 @@ var _ = Describe("RoundTripper", func() {
 			TLSClientConfig: tlsConf,
 			QUICConfig:      quicConf,
 		}
-		_, err := rt.RoundTripOpt(req.WithContext(ctx), RoundTripOpt{})
+		_, err := tr.RoundTripOpt(req.WithContext(ctx), RoundTripOpt{})
 		Expect(err).To(MatchError(testErr))
 		Expect(dialerCalled).To(BeTrue())
 	})
 
 	It("enables HTTP/3 Datagrams", func() {
 		testErr := errors.New("handshake error")
-		rt := &RoundTripper{
+		tr := &Transport{
 			EnableDatagrams: true,
 			Dial: func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 				defer GinkgoRecover()
@@ -177,19 +177,19 @@ var _ = Describe("RoundTripper", func() {
 				return nil, testErr
 			},
 		}
-		_, err := rt.RoundTripOpt(req, RoundTripOpt{})
+		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError(testErr))
 	})
 
 	It("requires quic.Config.EnableDatagrams if HTTP/3 datagrams are enabled", func() {
-		rt := &RoundTripper{
+		tr := &Transport{
 			QUICConfig:      &quic.Config{EnableDatagrams: false},
 			EnableDatagrams: true,
 			Dial: func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlyConnection, error) {
 				return nil, errors.New("handshake error")
 			},
 		}
-		_, err := rt.RoundTrip(req)
+		_, err := tr.RoundTrip(req)
 		Expect(err).To(MatchError("HTTP Datagrams enabled, but QUIC Datagrams disabled"))
 	})
 
@@ -200,29 +200,29 @@ var _ = Describe("RoundTripper", func() {
 		req2, err := http.NewRequest("GET", "https://example.com/foobar.html", nil)
 		Expect(err).ToNot(HaveOccurred())
 		var hostsDialed []string
-		rt := &RoundTripper{
+		tr := &Transport{
 			Dial: func(_ context.Context, host string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 				hostsDialed = append(hostsDialed, host)
 				return nil, testErr
 			},
 		}
-		_, err = rt.RoundTrip(req1)
+		_, err = tr.RoundTrip(req1)
 		Expect(err).To(MatchError(testErr))
-		_, err = rt.RoundTrip(req2)
+		_, err = tr.RoundTrip(req2)
 		Expect(err).To(MatchError(testErr))
 		Expect(hostsDialed).To(Equal([]string{"quic-go.net:443", "example.com:443"}))
 	})
 
 	Context("reusing clients", func() {
 		var (
-			rt         *RoundTripper
+			tr         *Transport
 			req1, req2 *http.Request
 			clientChan chan *MockSingleRoundTripper
 		)
 
 		BeforeEach(func() {
 			clientChan = make(chan *MockSingleRoundTripper, 16)
-			rt = &RoundTripper{
+			tr = &Transport{
 				newClient: func(quic.EarlyConnection) singleRoundTripper {
 					select {
 					case c := <-clientChan:
@@ -252,14 +252,14 @@ var _ = Describe("RoundTripper", func() {
 			cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 			cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return conn, nil
 			}
-			rsp, err := rt.RoundTrip(req1)
+			rsp, err := tr.RoundTrip(req1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Request).To(Equal(req1))
-			rsp, err = rt.RoundTrip(req2)
+			rsp, err = tr.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Request).To(Equal(req2))
 			Expect(count).To(Equal(1))
@@ -277,7 +277,7 @@ var _ = Describe("RoundTripper", func() {
 			testErr := errors.New("handshake error")
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				if count == 1 {
 					return nil, testErr
@@ -288,9 +288,9 @@ var _ = Describe("RoundTripper", func() {
 			close(handshakeChan)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
 			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			_, err = rt.RoundTrip(req1)
+			_, err = tr.RoundTrip(req1)
 			Expect(err).To(MatchError(testErr))
-			rsp, err := rt.RoundTrip(req2)
+			rsp, err := tr.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Request).To(Equal(req2))
 			Expect(count).To(Equal(2))
@@ -309,7 +309,7 @@ var _ = Describe("RoundTripper", func() {
 
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return conn, nil
 			}
@@ -319,9 +319,9 @@ var _ = Describe("RoundTripper", func() {
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
 			cl1.EXPECT().RoundTrip(req1).Return(nil, testErr)
 			cl2.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			_, err = rt.RoundTrip(req1)
+			_, err = tr.RoundTrip(req1)
 			Expect(err).To(MatchError(testErr))
-			rsp, err := rt.RoundTrip(req2)
+			rsp, err := tr.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Request).To(Equal(req2))
 			Expect(count).To(Equal(2))
@@ -340,7 +340,7 @@ var _ = Describe("RoundTripper", func() {
 
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return conn, nil
 			}
@@ -350,9 +350,9 @@ var _ = Describe("RoundTripper", func() {
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
 			cl1.EXPECT().RoundTrip(req1).Return(nil, testErr)
 			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			_, err = rt.RoundTrip(req1)
+			_, err = tr.RoundTrip(req1)
 			Expect(err).To(MatchError(testErr))
-			rsp, err := rt.RoundTrip(req2)
+			rsp, err := tr.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Request).To(Equal(req2))
 			Expect(count).To(Equal(1))
@@ -383,30 +383,30 @@ var _ = Describe("RoundTripper", func() {
 			close(handshakeChan)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return conn, nil
 			}
-			rsp1, err := rt.RoundTrip(req1)
+			rsp1, err := tr.RoundTrip(req1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp1.Request.RemoteAddr).To(Equal(req1.RemoteAddr))
-			rsp2, err := rt.RoundTrip(req2)
+			rsp2, err := tr.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp2.Request.RemoteAddr).To(Equal(req2.RemoteAddr))
 		})
 
 		It("only issues a request once, even if a timeout error occurs", func() {
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return mockquic.NewMockEarlyConnection(mockCtrl), nil
 			}
-			rt.newClient = func(quic.EarlyConnection) singleRoundTripper {
+			tr.newClient = func(quic.EarlyConnection) singleRoundTripper {
 				cl := NewMockSingleRoundTripper(mockCtrl)
 				cl.EXPECT().RoundTrip(gomock.Any()).Return(nil, &qerr.IdleTimeoutError{})
 				return cl
 			}
-			_, err := rt.RoundTrip(req1)
+			_, err := tr.RoundTrip(req1)
 			Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
 			Expect(count).To(Equal(1))
 		})
@@ -426,7 +426,7 @@ var _ = Describe("RoundTripper", func() {
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn.EXPECT().HandshakeComplete().Return(wait).AnyTimes()
 			var count int
-			rt.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
 				return conn, nil
 			}
@@ -435,7 +435,7 @@ var _ = Describe("RoundTripper", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer func() { done <- struct{}{} }()
-				_, err := rt.RoundTrip(req1)
+				_, err := tr.RoundTrip(req1)
 				Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
 			}()
 			// wait for the first requests to be issued
@@ -443,7 +443,7 @@ var _ = Describe("RoundTripper", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer func() { done <- struct{}{} }()
-				_, err := rt.RoundTrip(req2)
+				_, err := tr.RoundTrip(req2)
 				Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
 			}()
 			Eventually(reqs).Should(Receive())
@@ -456,19 +456,19 @@ var _ = Describe("RoundTripper", func() {
 		It("doesn't create new clients if RoundTripOpt.OnlyCachedConn is set", func() {
 			req, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = rt.RoundTripOpt(req, RoundTripOpt{OnlyCachedConn: true})
+			_, err = tr.RoundTripOpt(req, RoundTripOpt{OnlyCachedConn: true})
 			Expect(err).To(MatchError(ErrNoCachedConn))
 		})
 	})
 
 	Context("validating request", func() {
-		var rt RoundTripper
+		var tr Transport
 
 		It("rejects plain HTTP requests", func() {
 			req, err := http.NewRequest("GET", "http://www.example.org/", nil)
 			req.Body = &mockBody{}
 			Expect(err).ToNot(HaveOccurred())
-			_, err = rt.RoundTrip(req)
+			_, err = tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: unsupported protocol scheme: http"))
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
@@ -476,7 +476,7 @@ var _ = Describe("RoundTripper", func() {
 		It("rejects requests without a URL", func() {
 			req.URL = nil
 			req.Body = &mockBody{}
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: nil Request.URL"))
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
@@ -484,7 +484,7 @@ var _ = Describe("RoundTripper", func() {
 		It("rejects request without a URL Host", func() {
 			req.URL.Host = ""
 			req.Body = &mockBody{}
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: no Host in request URL"))
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
@@ -492,34 +492,34 @@ var _ = Describe("RoundTripper", func() {
 		It("doesn't try to close the body if the request doesn't have one", func() {
 			req.URL = nil
 			Expect(req.Body).To(BeNil())
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: nil Request.URL"))
 		})
 
 		It("rejects requests without a header", func() {
 			req.Header = nil
 			req.Body = &mockBody{}
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: nil Request.Header"))
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
 
 		It("rejects requests with invalid header name fields", func() {
 			req.Header.Add("foobär", "value")
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: invalid http header field name \"foobär\""))
 		})
 
 		It("rejects requests with invalid header name values", func() {
 			req.Header.Add("foo", string([]byte{0x7}))
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err.Error()).To(ContainSubstring("http3: invalid http header field value"))
 		})
 
 		It("rejects requests with an invalid request method", func() {
 			req.Method = "foobär"
 			req.Body = &mockBody{}
-			_, err := rt.RoundTrip(req)
+			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: invalid method \"foobär\""))
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
@@ -528,7 +528,7 @@ var _ = Describe("RoundTripper", func() {
 	Context("closing", func() {
 		It("closes", func() {
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			rt := &RoundTripper{
+			tr := &Transport{
 				Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 					return conn, nil
 				},
@@ -540,14 +540,14 @@ var _ = Describe("RoundTripper", func() {
 			}
 			req, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = rt.RoundTrip(req)
+			_, err = tr.RoundTrip(req)
 			Expect(err).ToNot(HaveOccurred())
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(0), "")
-			Expect(rt.Close()).To(Succeed())
+			Expect(tr.Close()).To(Succeed())
 		})
 
 		It("closes while dialing", func() {
-			rt := &RoundTripper{
+			tr := &Transport{
 				Dial: func(ctx context.Context, _ string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
 					defer GinkgoRecover()
 					Eventually(ctx.Done()).Should(BeClosed())
@@ -560,12 +560,12 @@ var _ = Describe("RoundTripper", func() {
 			errChan := make(chan error, 1)
 			go func() {
 				defer GinkgoRecover()
-				_, err := rt.RoundTrip(req)
+				_, err := tr.RoundTrip(req)
 				errChan <- err
 			}()
 
 			Consistently(errChan, scaleDuration(30*time.Millisecond)).ShouldNot(Receive())
-			Expect(rt.Close()).To(Succeed())
+			Expect(tr.Close()).To(Succeed())
 			var rtErr error
 			Eventually(errChan).Should(Receive(&rtErr))
 			Expect(rtErr).To(MatchError("cancelled"))
@@ -574,7 +574,7 @@ var _ = Describe("RoundTripper", func() {
 		It("closes idle connections", func() {
 			conn1 := mockquic.NewMockEarlyConnection(mockCtrl)
 			conn2 := mockquic.NewMockEarlyConnection(mockCtrl)
-			rt := &RoundTripper{
+			tr := &Transport{
 				Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
 					switch hostname {
 					case "site1.com:443":
@@ -598,7 +598,7 @@ var _ = Describe("RoundTripper", func() {
 			req2 = req2.WithContext(ctx2)
 			roundTripCalled := make(chan struct{})
 			reqFinished := make(chan struct{})
-			rt.newClient = func(quic.EarlyConnection) singleRoundTripper {
+			tr.newClient = func(quic.EarlyConnection) singleRoundTripper {
 				cl := NewMockSingleRoundTripper(mockCtrl)
 				cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
 					roundTripCalled <- struct{}{}
@@ -608,11 +608,11 @@ var _ = Describe("RoundTripper", func() {
 				return cl
 			}
 			go func() {
-				rt.RoundTrip(req1)
+				tr.RoundTrip(req1)
 				reqFinished <- struct{}{}
 			}()
 			go func() {
-				rt.RoundTrip(req2)
+				tr.RoundTrip(req2)
 				reqFinished <- struct{}{}
 			}()
 			<-roundTripCalled
@@ -622,12 +622,12 @@ var _ = Describe("RoundTripper", func() {
 			<-reqFinished
 			// req1 is finished
 			conn1.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
-			rt.CloseIdleConnections()
+			tr.CloseIdleConnections()
 			cancel2()
 			<-reqFinished
 			// all requests are finished
 			conn2.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
-			rt.CloseIdleConnections()
+			tr.CloseIdleConnections()
 		})
 	})
 })

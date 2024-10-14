@@ -67,7 +67,7 @@ func runTestcase(testcase string) error {
 	quicConf := &quic.Config{Tracer: utils.NewQLOGConnectionTracer}
 
 	if testcase == "http3" {
-		r := &http3.RoundTripper{
+		r := &http3.Transport{
 			TLSClientConfig: tlsConf,
 			QUICConfig:      quicConf,
 		}
