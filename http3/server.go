@@ -684,7 +684,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 				if logger == nil {
 					logger = slog.Default()
 				}
-				logger.Error("http: panic serving", "arg", p, "trace", buf)
+				logger.Error("http: panic serving", "arg", p, "trace", string(buf))
 			}
 		}()
 		handler.ServeHTTP(r, req)
