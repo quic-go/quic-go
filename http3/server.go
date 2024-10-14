@@ -526,7 +526,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		s.Logger,
 		s.IdleTimeout,
 	)
-	go hconn.HandleUnidirectionalStreams(s.UniStreamHijacker)
+	go hconn.handleUnidirectionalStreams(s.UniStreamHijacker)
 
 	var nextStreamID quic.StreamID
 	var wg sync.WaitGroup

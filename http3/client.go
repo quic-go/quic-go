@@ -111,7 +111,7 @@ func newClientConn(
 	if streamHijacker != nil {
 		go c.handleBidirectionalStreams(streamHijacker)
 	}
-	go c.connection.HandleUnidirectionalStreams(uniStreamHijacker)
+	go c.connection.handleUnidirectionalStreams(uniStreamHijacker)
 	return c
 }
 

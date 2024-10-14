@@ -46,7 +46,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(conn.ReceivedSettings()).Should(BeClosed())
 			Expect(conn.Settings().EnableDatagrams).To(BeTrue())
@@ -85,7 +85,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(closed).Should(BeClosed())
 			Eventually(done).Should(BeClosed())
@@ -123,7 +123,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams(nil)
+					conn.handleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 			})
@@ -159,7 +159,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams(nil)
+					conn.handleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 			})
@@ -186,7 +186,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(reset).Should(BeClosed())
@@ -218,7 +218,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -250,7 +250,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -287,7 +287,7 @@ var _ = Describe("Connection", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
-					conn.HandleUnidirectionalStreams(nil)
+					conn.handleUnidirectionalStreams(nil)
 				}()
 				Eventually(done).Should(BeClosed())
 				Eventually(closed).Should(BeClosed())
@@ -321,7 +321,7 @@ var _ = Describe("Connection", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 			Eventually(closed).Should(BeClosed())
@@ -363,7 +363,7 @@ var _ = Describe("Connection", func() {
 			})
 			go func() {
 				defer GinkgoRecover()
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 		})
@@ -378,7 +378,7 @@ var _ = Describe("Connection", func() {
 			})
 			go func() {
 				defer GinkgoRecover()
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(done).Should(BeClosed())
 		})
@@ -395,7 +395,7 @@ var _ = Describe("Connection", func() {
 			})
 			go func() {
 				defer GinkgoRecover()
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 			Eventually(delivered).Should(BeClosed())
 
@@ -430,7 +430,7 @@ var _ = Describe("Connection", func() {
 			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("test done"))
 			go func() {
 				defer GinkgoRecover()
-				conn.HandleUnidirectionalStreams(nil)
+				conn.handleUnidirectionalStreams(nil)
 			}()
 
 			data, err := str.ReceiveDatagram(context.Background())

@@ -170,7 +170,7 @@ func (c *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) 
 	return c.Connection.CloseWithError(code, msg)
 }
 
-func (c *connection) HandleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)) {
+func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)) {
 	var (
 		rcvdControlStr      atomic.Bool
 		rcvdQPACKEncoderStr atomic.Bool
