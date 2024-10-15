@@ -2630,6 +2630,7 @@ var _ = Describe("Client Connection", func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().StartHandshake(gomock.Any()).MaxTimes(1)
 			cryptoSetup.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
+			conn.scheduleSending()
 			conn.run()
 		}()
 		Eventually(done).Should(BeClosed())

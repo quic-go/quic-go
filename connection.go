@@ -510,10 +510,6 @@ func (s *connection) run() error {
 		}
 	}()
 
-	if s.perspective == protocol.PerspectiveClient {
-		s.scheduleSending() // so the ClientHello actually gets sent
-	}
-
 	var sendQueueAvailable <-chan struct{}
 
 runLoop:
@@ -1416,8 +1412,10 @@ func (s *connection) handleHandshakeEvents() error {
 			err = s.dropEncryptionLevel(protocol.Encryption0RTT)
 		case handshake.EventWriteInitialData:
 			_, err = s.initialStream.Write(ev.Data)
+			s.scheduleSending()
 		case handshake.EventWriteHandshakeData:
 			_, err = s.handshakeStream.Write(ev.Data)
+			s.scheduleSending()
 		}
 		if err != nil {
 			return err
