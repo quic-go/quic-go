@@ -19,11 +19,22 @@ type StreamFrame struct {
 	fromPool bool
 }
 
-func parseStreamFrame(b []byte, typ uint64, _ protocol.Version) (*StreamFrame, int, error) {
+func parseStreamFrame(b []byte, typ uint64, v protocol.Version) (*StreamFrame, int, error) {
+	return parseStreamFrameWithMaxFrameSize(b, typ, v, 0)
+}
+
+func parseStreamFrameWithMaxFrameSize(b []byte, typ uint64, _ protocol.Version, maxSize int) (*StreamFrame, int, error) {
 	startLen := len(b)
 	hasOffset := typ&0b100 > 0
 	fin := typ&0b1 > 0
 	hasDataLen := typ&0b10 > 0
+	if !hasDataLen && maxSize > 0 {
+		if len(b) < maxSize {
+			return nil, 0, io.EOF
+		}
+		b = b[:maxSize]
+		startLen = len(b)
+	}
 
 	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {
@@ -61,6 +72,9 @@ func parseStreamFrame(b []byte, typ uint64, _ protocol.Version) (*StreamFrame, i
 		frame = &StreamFrame{Data: make([]byte, dataLen)}
 	} else {
 		frame = GetStreamFrame()
+		if cap(frame.Data) < maxSize {
+			frame.Data = make([]byte, dataLen)
+		}
 		// The STREAM frame can't be larger than the StreamFrame we obtained from the buffer,
 		// since those StreamFrames have a buffer length of the maximum packet size.
 		if dataLen > uint64(cap(frame.Data)) {
