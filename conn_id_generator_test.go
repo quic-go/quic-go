@@ -65,6 +65,18 @@ var _ = Describe("Connection ID Generator", func() {
 		}
 	})
 
+	It("generates connection IDs for Server Preferred Address", func() {
+		connID, _, err := g.GetConnIDForPreferredAddress()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(addedConnIDs).To(HaveLen(1))
+		Expect(addedConnIDs[0]).To(Equal(connID))
+		Expect(queuedFrames).To(BeEmpty())
+		Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
+		Expect(queuedFrames).To(HaveLen(2))
+		Expect(queuedFrames[0].(*wire.NewConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(2))
+		Expect(queuedFrames[1].(*wire.NewConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(3))
+	})
+
 	It("limits the number of connection IDs that it issues", func() {
 		Expect(g.SetMaxActiveConnIDs(9999999)).To(Succeed())
 		Expect(retiredConnIDs).To(BeEmpty())
