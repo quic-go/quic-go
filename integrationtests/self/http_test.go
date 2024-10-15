@@ -1092,7 +1092,7 @@ var _ = Describe("HTTP tests", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				Expect(server.CloseGracefully(context.Background())).To(Succeed())
+				Expect(server.Shutdown(context.Background())).To(Succeed())
 				fmt.Println("close gracefully done")
 			}()
 			time.Sleep(delay)
@@ -1112,7 +1112,7 @@ var _ = Describe("HTTP tests", func() {
 		// manually close the client, since we don't support
 		client.Transport.(*http3.Transport).Close()
 
-		// make sure that CloseGracefully returned
+		// make sure that Shutdown returned
 		Eventually(done).Should(BeClosed())
 	})
 
@@ -1130,7 +1130,7 @@ var _ = Describe("HTTP tests", func() {
 				ctx, cancel := context.WithTimeout(context.Background(), delay)
 				defer cancel()
 				defer close(shutdownDone)
-				Expect(server.CloseGracefully(ctx)).To(MatchError(context.DeadlineExceeded))
+				Expect(server.Shutdown(ctx)).To(MatchError(context.DeadlineExceeded))
 			}()
 			for t := range time.NewTicker(delay / 10).C {
 				if _, err := w.Write([]byte(t.String())); err != nil {
@@ -1155,7 +1155,7 @@ var _ = Describe("HTTP tests", func() {
 		Eventually(requestChan).Should(Receive(&requestDuration))
 		Expect(requestDuration).To(BeNumerically("~", delay, delay/2))
 
-		// make sure that CloseGracefully returned
+		// make sure that Shutdown returned
 		Eventually(shutdownDone).Should(BeClosed())
 	})
 })

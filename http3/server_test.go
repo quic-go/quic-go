@@ -1200,7 +1200,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("closes gracefully", func() {
-		Expect(s.CloseGracefully(context.Background())).To(Succeed())
+		Expect(s.Shutdown(context.Background())).To(Succeed())
 	})
 
 	It("errors when listening fails", func() {
