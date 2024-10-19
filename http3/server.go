@@ -222,6 +222,7 @@ type Server struct {
 	graceCtx         context.Context    // canceled when the server is closed or gracefully closed
 	graceCancel      context.CancelFunc // cancels the graceCtx
 	connCount        atomic.Int64
+	connDoneOnce     atomic.Bool
 	connHandlingDone chan struct{}
 
 	altSvcHeader string
@@ -285,7 +286,7 @@ func (s *Server) init() {
 }
 
 func (s *Server) decreaseConnCount() {
-	if s.connCount.Add(-1) == 0 {
+	if s.connCount.Add(-1) == 0 && s.graceCtx.Err() != nil && s.connDoneOnce.CompareAndSwap(false, true) {
 		close(s.connHandlingDone)
 	}
 }
