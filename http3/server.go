@@ -763,7 +763,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.mutex.Unlock()
 
 	if s.connCount.Load() == 0 {
-		return nil
+		return s.Close()
 	}
 	select {
 	case <-s.connHandlingDone: // all connections were closed
