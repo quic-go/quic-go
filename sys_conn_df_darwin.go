@@ -4,13 +4,12 @@ package quic
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 func setDF(rawConn syscall.RawConn) (bool, error) {
@@ -20,31 +19,28 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 		return false, err
 	}
 
-	// Enabling IP_DONTFRAG will force the kernel to return "sendto: message too long"
-	// and the datagram will not be fragmented
-	var errDFIPv4, errDFIPv6 error
+	var controlErr error
 	if err := rawConn.Control(func(fd uintptr) {
-		errDFIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_DONTFRAG, 1)
-		errDFIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_DONTFRAG, 1)
+		addr, err := unix.Getsockname(int(fd))
+		if err != nil {
+			controlErr = fmt.Errorf("getsockname: %w", err)
+			return
+		}
+		// Dual-stack sockets are effectively IPv6 sockets (with IPV6_ONLY set to 0).
+		// On macOS, the DF bit on dual-stack sockets is controlled by the IPV6_DONTFRAG option.
+		// See https://datatracker.ietf.org/doc/draft-seemann-tsvwg-udp-fragmentation/ for details.
+		switch addr.(type) {
+		case *unix.SockaddrInet4:
+			controlErr = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_DONTFRAG, 1)
+		case *unix.SockaddrInet6:
+			controlErr = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_DONTFRAG, 1)
+		default:
+			controlErr = fmt.Errorf("unknown address type: %T", addr)
+		}
 	}); err != nil {
 		return false, err
 	}
-	switch {
-	case errDFIPv4 == nil && errDFIPv6 == nil:
-		utils.DefaultLogger.Debugf("Setting DF for IPv4 and IPv6.")
-	case errDFIPv4 == nil && errDFIPv6 != nil:
-		utils.DefaultLogger.Debugf("Setting DF for IPv4.")
-	case errDFIPv4 != nil && errDFIPv6 == nil:
-		utils.DefaultLogger.Debugf("Setting DF for IPv6.")
-		// On macOS, the syscall for setting DF bit for IPv4 fails on dual-stack listeners.
-		// Treat the connection as not having DF enabled, even though the DF bit will be set
-		// when used for IPv6.
-		// See https://github.com/quic-go/quic-go/issues/3793 for details.
-		return false, nil
-	case errDFIPv4 != nil && errDFIPv6 != nil:
-		return false, errors.New("setting DF failed for both IPv4 and IPv6")
-	}
-	return true, nil
+	return controlErr == nil, controlErr
 }
 
 func isSendMsgSizeErr(err error) bool {
