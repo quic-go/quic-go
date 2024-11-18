@@ -1639,7 +1639,6 @@ var _ = Describe("Connection", func() {
 		})
 
 		for _, withGSO := range []bool{false, true} {
-			withGSO := withGSO
 			It(fmt.Sprintf("doesn't try to send if the send queue is full: %t", withGSO), func() {
 				if withGSO {
 					enableGSO()

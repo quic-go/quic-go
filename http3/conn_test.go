@@ -257,7 +257,6 @@ var _ = Describe("Connection", func() {
 		})
 
 		for _, pers := range []protocol.Perspective{protocol.PerspectiveServer, protocol.PerspectiveClient} {
-			pers := pers
 			expectedErr := ErrCodeIDError
 			if pers == protocol.PerspectiveClient {
 				expectedErr = ErrCodeStreamCreationError
