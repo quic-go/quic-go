@@ -2,22 +2,17 @@
 
 set -e
 
-DIR=$(pwd)
-TMP=$(mktemp -d)
-cd "$TMP"
-cp -r "$DIR" orig
-cp -r "$DIR" generated
-
-cd generated
-# delete all go-generated files generated (that adhere to the comment convention)
-grep --include \*.go -lrIZ "^// Code generated .* DO NOT EDIT\.$" . | xargs --null rm
+# delete all go-generated files (that adhere to the comment convention)
+git ls-files -z | grep --include \*.go -lrIZ "^// Code generated .* DO NOT EDIT\.$" | tr '\0' '\n' | xargs rm -f
 
 # First regenerate sys_conn_buffers_write.go.
 # If it doesn't exist, the following mockgen calls will fail.
 go generate -run "sys_conn_buffers_write.go"
 # now generate everything
 go generate ./...
-cd ..
 
-# don't compare fuzzing corpora
-diff --exclude=corpus --exclude=.git -ruN orig generated
+# Check if any files were changed
+git diff --exit-code || (
+    echo "Generated files are not up to date. Please run 'go generate ./...' and commit the changes."
+    exit 1
+)
