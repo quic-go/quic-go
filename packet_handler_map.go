@@ -224,12 +224,15 @@ func (h *packetHandlerMap) Close(e error) {
 
 	close(h.closeChan)
 
+	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
 		wg.Add(1)
+		sem <- struct{}{}
 		go func(handler packetHandler) {
 			handler.destroy(e)
 			wg.Done()
+			<-sem
 		}(handler)
 	}
 	h.closed = true
