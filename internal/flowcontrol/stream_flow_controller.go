@@ -2,6 +2,7 @@ package flowcontrol
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -70,8 +71,7 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 	if offset == c.highestReceived {
 		return nil
 	}
-	// A higher offset was received before.
-	// This can happen due to reordering.
+	// A higher offset was received before. This can happen due to reordering.
 	if offset <= c.highestReceived {
 		if final {
 			return &qerr.TransportError{
@@ -82,8 +82,13 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 		return nil
 	}
 
+	// If this is the first frame received for this stream, start flow-control auto-tuning.
+	if c.highestReceived == 0 {
+		c.startNewAutoTuningEpoch(time.Now())
+	}
 	increment := offset - c.highestReceived
 	c.highestReceived = offset
+
 	if c.checkFlowControlViolation() {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.FlowControlError,
