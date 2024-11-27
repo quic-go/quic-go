@@ -11,6 +11,7 @@ package quic
 
 import (
 	reflect "reflect"
+	time "time"
 
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
@@ -41,18 +42,18 @@ func (m *MockFrameSource) EXPECT() *MockFrameSourceMockRecorder {
 }
 
 // AppendControlFrames mocks base method.
-func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount, arg2 time.Time, arg3 protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]ackhandler.Frame)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }
 
 // AppendControlFrames indicates an expected call of AppendControlFrames.
-func (mr *MockFrameSourceMockRecorder) AppendControlFrames(arg0, arg1, arg2 any) *MockFrameSourceAppendControlFramesCall {
+func (mr *MockFrameSourceMockRecorder) AppendControlFrames(arg0, arg1, arg2, arg3 any) *MockFrameSourceAppendControlFramesCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendControlFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendControlFrames), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendControlFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendControlFrames), arg0, arg1, arg2, arg3)
 	return &MockFrameSourceAppendControlFramesCall{Call: call}
 }
 
@@ -68,13 +69,13 @@ func (c *MockFrameSourceAppendControlFramesCall) Return(arg0 []ackhandler.Frame,
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockFrameSourceAppendControlFramesCall) Do(f func([]ackhandler.Frame, protocol.ByteCount, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)) *MockFrameSourceAppendControlFramesCall {
+func (c *MockFrameSourceAppendControlFramesCall) Do(f func([]ackhandler.Frame, protocol.ByteCount, time.Time, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)) *MockFrameSourceAppendControlFramesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFrameSourceAppendControlFramesCall) DoAndReturn(f func([]ackhandler.Frame, protocol.ByteCount, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)) *MockFrameSourceAppendControlFramesCall {
+func (c *MockFrameSourceAppendControlFramesCall) DoAndReturn(f func([]ackhandler.Frame, protocol.ByteCount, time.Time, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)) *MockFrameSourceAppendControlFramesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

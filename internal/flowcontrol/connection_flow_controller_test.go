@@ -47,7 +47,7 @@ var _ = Describe("Connection Flow controller", func() {
 	Context("receive flow control", func() {
 		It("increases the highestReceived by a given window size", func() {
 			controller.highestReceived = 1337
-			controller.IncrementHighestReceived(123)
+			controller.IncrementHighestReceived(123, time.Now())
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337 + 123)))
 		})
 
@@ -61,11 +61,11 @@ var _ = Describe("Connection Flow controller", func() {
 
 			It("queues window updates", func() {
 				controller.AddBytesRead(1)
-				Expect(controller.GetWindowUpdate()).To(BeZero())
+				Expect(controller.GetWindowUpdate(time.Now())).To(BeZero())
 				controller.AddBytesRead(29)
-				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
+				Expect(controller.GetWindowUpdate(time.Now())).ToNot(BeZero())
 				controller.AddBytesRead(1)
-				Expect(controller.GetWindowUpdate()).To(BeZero())
+				Expect(controller.GetWindowUpdate(time.Now())).To(BeZero())
 			})
 
 			It("gets a window update", func() {
@@ -73,7 +73,7 @@ var _ = Describe("Connection Flow controller", func() {
 				oldOffset := controller.bytesRead
 				dataRead := windowSize/2 - 1 // make sure not to trigger auto-tuning
 				controller.AddBytesRead(dataRead)
-				offset := controller.GetWindowUpdate()
+				offset := controller.GetWindowUpdate(time.Now())
 				Expect(offset).To(Equal(oldOffset + dataRead + 60))
 			})
 
@@ -91,7 +91,7 @@ var _ = Describe("Connection Flow controller", func() {
 				controller.epochStartOffset = oldOffset
 				dataRead := oldWindowSize/2 + 1
 				controller.AddBytesRead(dataRead)
-				offset := controller.GetWindowUpdate()
+				offset := controller.GetWindowUpdate(time.Now())
 				newWindowSize := controller.receiveWindowSize
 				Expect(newWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(offset).To(Equal(oldOffset + dataRead + newWindowSize))
@@ -108,7 +108,7 @@ var _ = Describe("Connection Flow controller", func() {
 				controller.epochStartOffset = oldOffset
 				dataRead := oldWindowSize/2 + 1
 				controller.AddBytesRead(dataRead)
-				offset := controller.GetWindowUpdate()
+				offset := controller.GetWindowUpdate(time.Now())
 				newWindowSize := controller.receiveWindowSize
 				Expect(newWindowSize).To(Equal(oldWindowSize))
 				Expect(offset).To(Equal(oldOffset + dataRead + newWindowSize))
@@ -131,23 +131,23 @@ var _ = Describe("Connection Flow controller", func() {
 		})
 
 		It("sets the minimum window window size", func() {
-			controller.EnsureMinimumWindowSize(1800)
+			controller.EnsureMinimumWindowSize(1800, time.Now())
 			Expect(controller.receiveWindowSize).To(Equal(protocol.ByteCount(1800)))
 		})
 
 		It("doesn't reduce the window window size", func() {
-			controller.EnsureMinimumWindowSize(1)
+			controller.EnsureMinimumWindowSize(1, time.Now())
 			Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 		})
 
 		It("doesn't increase the window size beyond the maxReceiveWindowSize", func() {
 			max := controller.maxReceiveWindowSize
-			controller.EnsureMinimumWindowSize(2 * max)
+			controller.EnsureMinimumWindowSize(2*max, time.Now())
 			Expect(controller.receiveWindowSize).To(Equal(max))
 		})
 
 		It("starts a new epoch after the window size was increased", func() {
-			controller.EnsureMinimumWindowSize(1912)
+			controller.EnsureMinimumWindowSize(1912, time.Now())
 			Expect(controller.epochStartTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		})
 	})

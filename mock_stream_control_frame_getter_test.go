@@ -11,6 +11,7 @@ package quic
 
 import (
 	reflect "reflect"
+	time "time"
 
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
 	gomock "go.uber.org/mock/gomock"
@@ -40,9 +41,9 @@ func (m *MockStreamControlFrameGetter) EXPECT() *MockStreamControlFrameGetterMoc
 }
 
 // getControlFrame mocks base method.
-func (m *MockStreamControlFrameGetter) getControlFrame() (ackhandler.Frame, bool, bool) {
+func (m *MockStreamControlFrameGetter) getControlFrame(arg0 time.Time) (ackhandler.Frame, bool, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getControlFrame")
+	ret := m.ctrl.Call(m, "getControlFrame", arg0)
 	ret0, _ := ret[0].(ackhandler.Frame)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(bool)
@@ -50,9 +51,9 @@ func (m *MockStreamControlFrameGetter) getControlFrame() (ackhandler.Frame, bool
 }
 
 // getControlFrame indicates an expected call of getControlFrame.
-func (mr *MockStreamControlFrameGetterMockRecorder) getControlFrame() *MockStreamControlFrameGettergetControlFrameCall {
+func (mr *MockStreamControlFrameGetterMockRecorder) getControlFrame(arg0 any) *MockStreamControlFrameGettergetControlFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getControlFrame", reflect.TypeOf((*MockStreamControlFrameGetter)(nil).getControlFrame))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getControlFrame", reflect.TypeOf((*MockStreamControlFrameGetter)(nil).getControlFrame), arg0)
 	return &MockStreamControlFrameGettergetControlFrameCall{Call: call}
 }
 
@@ -68,13 +69,13 @@ func (c *MockStreamControlFrameGettergetControlFrameCall) Return(arg0 ackhandler
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamControlFrameGettergetControlFrameCall) Do(f func() (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
+func (c *MockStreamControlFrameGettergetControlFrameCall) Do(f func(time.Time) (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamControlFrameGettergetControlFrameCall) DoAndReturn(f func() (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
+func (c *MockStreamControlFrameGettergetControlFrameCall) DoAndReturn(f func(time.Time) (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

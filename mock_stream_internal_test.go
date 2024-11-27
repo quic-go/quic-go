@@ -459,17 +459,17 @@ func (c *MockStreamIcloseForShutdownCall) DoAndReturn(f func(error)) *MockStream
 }
 
 // handleResetStreamFrame mocks base method.
-func (m *MockStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
+func (m *MockStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame, arg1 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0)
+	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleResetStreamFrame indicates an expected call of handleResetStreamFrame.
-func (mr *MockStreamIMockRecorder) handleResetStreamFrame(arg0 any) *MockStreamIhandleResetStreamFrameCall {
+func (mr *MockStreamIMockRecorder) handleResetStreamFrame(arg0, arg1 any) *MockStreamIhandleResetStreamFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockStreamI)(nil).handleResetStreamFrame), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockStreamI)(nil).handleResetStreamFrame), arg0, arg1)
 	return &MockStreamIhandleResetStreamFrameCall{Call: call}
 }
 
@@ -485,13 +485,13 @@ func (c *MockStreamIhandleResetStreamFrameCall) Return(arg0 error) *MockStreamIh
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamIhandleResetStreamFrameCall) Do(f func(*wire.ResetStreamFrame) error) *MockStreamIhandleResetStreamFrameCall {
+func (c *MockStreamIhandleResetStreamFrameCall) Do(f func(*wire.ResetStreamFrame, time.Time) error) *MockStreamIhandleResetStreamFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamIhandleResetStreamFrameCall) DoAndReturn(f func(*wire.ResetStreamFrame) error) *MockStreamIhandleResetStreamFrameCall {
+func (c *MockStreamIhandleResetStreamFrameCall) DoAndReturn(f func(*wire.ResetStreamFrame, time.Time) error) *MockStreamIhandleResetStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -533,17 +533,17 @@ func (c *MockStreamIhandleStopSendingFrameCall) DoAndReturn(f func(*wire.StopSen
 }
 
 // handleStreamFrame mocks base method.
-func (m *MockStreamI) handleStreamFrame(arg0 *wire.StreamFrame) error {
+func (m *MockStreamI) handleStreamFrame(arg0 *wire.StreamFrame, arg1 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleStreamFrame", arg0)
+	ret := m.ctrl.Call(m, "handleStreamFrame", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleStreamFrame indicates an expected call of handleStreamFrame.
-func (mr *MockStreamIMockRecorder) handleStreamFrame(arg0 any) *MockStreamIhandleStreamFrameCall {
+func (mr *MockStreamIMockRecorder) handleStreamFrame(arg0, arg1 any) *MockStreamIhandleStreamFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStreamFrame", reflect.TypeOf((*MockStreamI)(nil).handleStreamFrame), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStreamFrame", reflect.TypeOf((*MockStreamI)(nil).handleStreamFrame), arg0, arg1)
 	return &MockStreamIhandleStreamFrameCall{Call: call}
 }
 
@@ -559,13 +559,13 @@ func (c *MockStreamIhandleStreamFrameCall) Return(arg0 error) *MockStreamIhandle
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamIhandleStreamFrameCall) Do(f func(*wire.StreamFrame) error) *MockStreamIhandleStreamFrameCall {
+func (c *MockStreamIhandleStreamFrameCall) Do(f func(*wire.StreamFrame, time.Time) error) *MockStreamIhandleStreamFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamIhandleStreamFrameCall) DoAndReturn(f func(*wire.StreamFrame) error) *MockStreamIhandleStreamFrameCall {
+func (c *MockStreamIhandleStreamFrameCall) DoAndReturn(f func(*wire.StreamFrame, time.Time) error) *MockStreamIhandleStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -473,7 +473,7 @@ func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
 	s.cancelWriteImpl(frame.ErrorCode, true)
 }
 
-func (s *sendStream) getControlFrame() (_ ackhandler.Frame, ok, hasMore bool) {
+func (s *sendStream) getControlFrame(time.Time) (_ ackhandler.Frame, ok, hasMore bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

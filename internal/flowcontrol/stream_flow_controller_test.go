@@ -65,76 +65,76 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("updates the highestReceived", func() {
 				controller.highestReceived = 1337
-				Expect(controller.UpdateHighestReceived(1338, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(1338, false, time.Now())).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
 			})
 
 			It("informs the connection flow controller about received data", func() {
 				controller.highestReceived = 10
 				controller.connection.(*connectionFlowController).highestReceived = 100
-				Expect(controller.UpdateHighestReceived(20, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(20, false, time.Now())).To(Succeed())
 				Expect(controller.connection.(*connectionFlowController).highestReceived).To(Equal(protocol.ByteCount(100 + 10)))
 			})
 
 			It("does not decrease the highestReceived", func() {
 				controller.highestReceived = 1337
-				Expect(controller.UpdateHighestReceived(1000, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(1000, false, time.Now())).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
 			})
 
 			It("does nothing when setting the same byte offset", func() {
 				controller.highestReceived = 1337
-				Expect(controller.UpdateHighestReceived(1337, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(1337, false, time.Now())).To(Succeed())
 			})
 
 			It("does not give a flow control violation when using the window completely", func() {
 				controller.connection.(*connectionFlowController).receiveWindow = receiveWindow
-				Expect(controller.UpdateHighestReceived(receiveWindow, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(receiveWindow, false, time.Now())).To(Succeed())
 			})
 
 			It("detects a flow control violation", func() {
-				Expect(controller.UpdateHighestReceived(receiveWindow+1, false)).To(MatchError(&qerr.TransportError{
+				Expect(controller.UpdateHighestReceived(receiveWindow+1, false, time.Now())).To(MatchError(&qerr.TransportError{
 					ErrorCode:    qerr.FlowControlError,
 					ErrorMessage: "received 10001 bytes on stream 10, allowed 10000 bytes",
 				}))
 			})
 
 			It("accepts a final offset higher than the highest received", func() {
-				Expect(controller.UpdateHighestReceived(100, false)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(101, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(100, false, time.Now())).To(Succeed())
+				Expect(controller.UpdateHighestReceived(101, true, time.Now())).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(101)))
 			})
 
 			It("errors when receiving a final offset smaller than the highest offset received so far", func() {
-				controller.UpdateHighestReceived(100, false)
-				Expect(controller.UpdateHighestReceived(50, true)).To(MatchError(&qerr.TransportError{
+				controller.UpdateHighestReceived(100, false, time.Now())
+				Expect(controller.UpdateHighestReceived(50, true, time.Now())).To(MatchError(&qerr.TransportError{
 					ErrorCode:    qerr.FinalSizeError,
 					ErrorMessage: "received final offset 50 for stream 10, but already received offset 100 before",
 				}))
 			})
 
 			It("accepts delayed data after receiving a final offset", func() {
-				Expect(controller.UpdateHighestReceived(300, true)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(250, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(300, true, time.Now())).To(Succeed())
+				Expect(controller.UpdateHighestReceived(250, false, time.Now())).To(Succeed())
 			})
 
 			It("errors when receiving a higher offset after receiving a final offset", func() {
-				Expect(controller.UpdateHighestReceived(200, true)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(250, false)).To(MatchError(&qerr.TransportError{
+				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
+				Expect(controller.UpdateHighestReceived(250, false, time.Now())).To(MatchError(&qerr.TransportError{
 					ErrorCode:    qerr.FinalSizeError,
 					ErrorMessage: "received offset 250 for stream 10, but final offset was already received at 200",
 				}))
 			})
 
 			It("accepts duplicate final offsets", func() {
-				Expect(controller.UpdateHighestReceived(200, true)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(200, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
+				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(200)))
 			})
 
 			It("errors when receiving inconsistent final offsets", func() {
-				Expect(controller.UpdateHighestReceived(200, true)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(201, true)).To(MatchError(&qerr.TransportError{
+				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
+				Expect(controller.UpdateHighestReceived(201, true, time.Now())).To(MatchError(&qerr.TransportError{
 					ErrorCode:    qerr.FinalSizeError,
 					ErrorMessage: "received inconsistent final offset for stream 10 (old: 200, new: 201 bytes)",
 				}))
@@ -142,14 +142,14 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("tells the connection flow controller when a stream is abandoned", func() {
 				controller.AddBytesRead(5)
-				Expect(controller.UpdateHighestReceived(100, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(100, true, time.Now())).To(Succeed())
 				controller.Abandon()
 				Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(100)))
 			})
 
 			It("tolerates repeated calls to Abandon", func() {
 				controller.AddBytesRead(5)
-				Expect(controller.UpdateHighestReceived(100, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(100, true, time.Now())).To(Succeed())
 				controller.Abandon()
 				controller.Abandon()
 				controller.Abandon()
@@ -184,7 +184,7 @@ var _ = Describe("Stream Flow controller", func() {
 			It("queues window updates", func() {
 				Expect(controller.AddBytesRead(1)).To(BeFalse())
 				Expect(controller.AddBytesRead(29)).To(BeTrue())
-				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
+				Expect(controller.GetWindowUpdate(time.Now())).ToNot(BeZero())
 				Expect(controller.AddBytesRead(1)).To(BeFalse())
 			})
 
@@ -199,7 +199,7 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate()
+				offset := controller.GetWindowUpdate(time.Now())
 				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(allowed).To(Equal(oldWindowSize))
@@ -214,23 +214,23 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate()
+				offset := controller.GetWindowUpdate(time.Now())
 				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(oldConnectionSize))
 			})
 
 			It("sends a connection-level window update when a large stream is abandoned", func() {
-				Expect(controller.UpdateHighestReceived(90, true)).To(Succeed())
-				Expect(controller.connection.GetWindowUpdate()).To(BeZero())
+				Expect(controller.UpdateHighestReceived(90, true, time.Now())).To(Succeed())
+				Expect(controller.connection.GetWindowUpdate(time.Now())).To(BeZero())
 				controller.Abandon()
-				Expect(controller.connection.GetWindowUpdate()).ToNot(BeZero())
+				Expect(controller.connection.GetWindowUpdate(time.Now())).ToNot(BeZero())
 			})
 
 			It("doesn't increase the window after a final offset was already received", func() {
-				Expect(controller.UpdateHighestReceived(90, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(90, true, time.Now())).To(Succeed())
 				Expect(controller.AddBytesRead(30)).To(BeFalse())
-				Expect(controller.GetWindowUpdate()).To(BeZero())
+				Expect(controller.GetWindowUpdate(time.Now())).To(BeZero())
 			})
 		})
 	})

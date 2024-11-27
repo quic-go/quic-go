@@ -46,7 +46,7 @@ func NewStreamFlowController(
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the offset is higher.
-func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool) error {
+func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now time.Time) error {
 	// If the final offset for this stream is already known, check for consistency.
 	if c.receivedFinalOffset {
 		// If we receive another final offset, check that it's the same.
@@ -84,7 +84,7 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 
 	// If this is the first frame received for this stream, start flow-control auto-tuning.
 	if c.highestReceived == 0 {
-		c.startNewAutoTuningEpoch(time.Now())
+		c.startNewAutoTuningEpoch(now)
 	}
 	increment := offset - c.highestReceived
 	c.highestReceived = offset
@@ -95,7 +95,7 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 			ErrorMessage: fmt.Sprintf("received %d bytes on stream %d, allowed %d bytes", offset, c.streamID, c.receiveWindow),
 		}
 	}
-	return c.connection.IncrementHighestReceived(increment)
+	return c.connection.IncrementHighestReceived(increment, now)
 }
 
 func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) (shouldQueueWindowUpdate bool) {
@@ -135,7 +135,7 @@ func (c *streamFlowController) shouldQueueWindowUpdate() bool {
 	return !c.receivedFinalOffset && c.hasWindowUpdate()
 }
 
-func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
+func (c *streamFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount {
 	// If we already received the final offset for this stream, the peer won't need any additional flow control credit.
 	if c.receivedFinalOffset {
 		return 0
@@ -147,7 +147,7 @@ func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
 	offset := c.baseFlowController.getWindowUpdate()
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
 		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
-		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
+		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize)*protocol.ConnectionFlowControlMultiplier), now)
 	}
 	c.mutex.Unlock()
 	return offset
