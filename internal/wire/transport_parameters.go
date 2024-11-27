@@ -209,13 +209,13 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 	}
 	if !fromSessionTicket {
 		if sentBy == protocol.PerspectiveServer && !readOriginalDestinationConnectionID {
-			return errors.New("missing original_destination_connection_id")
+			// return errors.New("missing original_destination_connection_id")
 		}
 		if p.MaxUDPPayloadSize == 0 {
 			p.MaxUDPPayloadSize = protocol.MaxByteCount
 		}
 		if !readInitialSourceConnectionID {
-			return errors.New("missing initial_source_connection_id")
+			// return errors.New("missing initial_source_connection_id")
 		}
 	}
 
@@ -326,6 +326,36 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
 	return nil
+}
+
+// Marshal the transport parameters
+func (p *TransportParameters) MarshalQoS(pers protocol.Perspective) []byte {
+	// Typical Transport Parameters consume around 110 bytes, depending on the exact values,
+	// especially the lengths of the Connection IDs.
+	// Allocate 256 bytes, so we won't have to grow the slice in any case.
+	b := make([]byte, 0, 256)
+
+	// add a greased value
+	random := make([]byte, 18)
+	rand.Read(random)
+	b = quicvarint.Append(b, 27+31*uint64(random[0]))
+	length := random[1] % 16
+	b = quicvarint.Append(b, uint64(length))
+	b = append(b, random[2:2+length]...)
+
+	// initial_max_stream_data_bidi_local
+	b = p.marshalVarintParam(b, initialMaxStreamDataBidiLocalParameterID, uint64(p.InitialMaxStreamDataBidiLocal))
+	// initial_max_stream_data_bidi_remote
+	b = p.marshalVarintParam(b, initialMaxStreamDataBidiRemoteParameterID, uint64(p.InitialMaxStreamDataBidiRemote))
+	// initial_max_stream_data_uni
+	b = p.marshalVarintParam(b, initialMaxStreamDataUniParameterID, uint64(p.InitialMaxStreamDataUni))
+	// initial_max_data
+	b = p.marshalVarintParam(b, initialMaxDataParameterID, uint64(p.InitialMaxData))
+	// initial_max_bidi_streams
+	b = p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
+	// initial_max_uni_streams
+	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+	return b
 }
 
 // Marshal the transport parameters

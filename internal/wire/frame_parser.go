@@ -41,6 +41,8 @@ type FrameParser struct {
 	ackDelayExponent  uint8
 	supportsDatagrams bool
 
+	maxFrameSize int
+
 	// To avoid allocating when parsing, keep a single ACK frame struct.
 	// It is used over and over again.
 	ackFrame *AckFrame
@@ -51,6 +53,14 @@ func NewFrameParser(supportsDatagrams bool) *FrameParser {
 	return &FrameParser{
 		supportsDatagrams: supportsDatagrams,
 		ackFrame:          &AckFrame{},
+	}
+}
+
+func NewFrameParserWithMaxSize(supportsDatagrams bool, size int) *FrameParser {
+	return &FrameParser{
+		supportsDatagrams: supportsDatagrams,
+		ackFrame:          &AckFrame{},
+		maxFrameSize:      size,
 	}
 }
 
@@ -77,9 +87,12 @@ func (p *FrameParser) parseNext(b []byte, encLevel protocol.EncryptionLevel, v p
 			continue
 		}
 
-		f, l, err := p.parseFrame(b, typ, encLevel, v)
+		f, l, err := p.parseFrame(b, typ, encLevel, v, l)
 		parsed += l
 		if err != nil {
+			if err == io.EOF {
+				return nil, parsed, err
+			}
 			return nil, parsed, &qerr.TransportError{
 				FrameType:    typ,
 				ErrorCode:    qerr.FrameEncodingError,
@@ -91,12 +104,12 @@ func (p *FrameParser) parseNext(b []byte, encLevel protocol.EncryptionLevel, v p
 	return nil, parsed, nil
 }
 
-func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, int, error) {
+func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.EncryptionLevel, v protocol.Version, typSize int) (Frame, int, error) {
 	var frame Frame
 	var err error
 	var l int
 	if typ&0xf8 == 0x8 {
-		frame, l, err = parseStreamFrame(b, typ, v)
+		frame, l, err = parseStreamFrameWithMaxFrameSize(b, typ, v, p.maxFrameSize-typSize)
 	} else {
 		switch typ {
 		case pingFrameType:
