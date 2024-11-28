@@ -46,7 +46,12 @@ func (c *connectionFlowController) IncrementHighestReceived(increment protocol.B
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	// If this is the first frame received on this connection, start flow-control auto-tuning.
+	if c.highestReceived == 0 {
+		c.startNewAutoTuningEpoch(time.Now())
+	}
 	c.highestReceived += increment
+
 	if c.checkFlowControlViolation() {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.FlowControlError,
