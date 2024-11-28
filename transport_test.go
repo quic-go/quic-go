@@ -143,6 +143,41 @@ var _ = Describe("Transport", func() {
 		}
 	})
 
+	It("closes transport concurrently with dial", func() {
+		// try 10 times to trigger race conditions
+		for i := 0; i < 10; i++ {
+			packetChan := make(chan packetToRead)
+			rawC := NewMockRawConn(mockCtrl)
+			rawC.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
+			rawC.EXPECT().ReadPacket().Return(receivedPacket{}, errors.New("fail")).AnyTimes()
+			rawC.EXPECT().capabilities().AnyTimes()
+			rawC.EXPECT().WritePacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			tr := &Transport{
+				Conn: &combinedConn{
+					PacketConn: newMockPacketConn(packetChan),
+					rawConn:    rawC,
+				},
+				ConnectionIDLength: 10,
+			}
+
+			addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
+
+			ch := make(chan bool)
+			// Close transport and dial simultaneously.
+			go func() {
+				ch <- true
+				ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+				defer cancel()
+				tr.Dial(ctx, addr, &tls.Config{}, nil)
+				ch <- true
+			}()
+			<-ch
+			close(packetChan)
+			Expect(tr.Close()).To(Succeed())
+			<-ch
+		}
+	})
+
 	It("drops unparseable QUIC packets", func() {
 		addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
 		packetChan := make(chan packetToRead)
@@ -440,4 +475,26 @@ type mockSyscallConn struct {
 
 func (c *mockSyscallConn) SyscallConn() (syscall.RawConn, error) {
 	return nil, errors.New("mocked")
+}
+
+type combinedConn struct {
+	net.PacketConn
+	rawConn
+}
+
+var (
+	_ net.PacketConn = &combinedConn{}
+	_ rawConn        = &combinedConn{}
+)
+
+func (c *combinedConn) Close() error {
+	return c.PacketConn.Close()
+}
+
+func (c *combinedConn) LocalAddr() net.Addr {
+	return c.PacketConn.LocalAddr()
+}
+
+func (c *combinedConn) SetReadDeadline(time.Time) error {
+	return c.PacketConn.SetReadDeadline(time.Time{})
 }
