@@ -345,7 +345,7 @@ var _ = Describe("Send Stream", func() {
 				_, ok, hasMoreData = str.popStreamFrame(1000, protocol.Version1)
 				Expect(ok).To(BeFalse())
 				Expect(hasMoreData).To(BeFalse())
-				cf, ok, hasMore := str.getControlFrame()
+				cf, ok, hasMore := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(cf.Frame).To(Equal(&wire.StreamDataBlockedFrame{
 					StreamID:          streamID,
@@ -692,7 +692,7 @@ var _ = Describe("Send Stream", func() {
 				mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any())
 				str.writeOffset = 1234
 				str.CancelWrite(9876)
-				cf, ok, hasMore := str.getControlFrame()
+				cf, ok, hasMore := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(cf.Frame).To(Equal(&wire.ResetStreamFrame{
 					StreamID:  streamID,
@@ -705,13 +705,13 @@ var _ = Describe("Send Stream", func() {
 			It("retransmits a RESET_STREAM frame", func() {
 				mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any())
 				str.CancelWrite(9876)
-				cf, ok, _ := str.getControlFrame()
+				cf, ok, _ := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(cf.Frame).To(BeAssignableToTypeOf(&wire.ResetStreamFrame{}))
 
 				mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any())
 				cf.Handler.OnLost(cf.Frame)
-				cf2, ok, _ := str.getControlFrame()
+				cf2, ok, _ := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(cf2.Frame).To(Equal(cf.Frame))
 			})
@@ -864,11 +864,11 @@ var _ = Describe("Send Stream", func() {
 				mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any())
 				str.CancelWrite(1234)
 				str.CancelWrite(4321)
-				cf, ok, hasMore := str.getControlFrame()
+				cf, ok, hasMore := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(cf.Frame).To(Equal(&wire.ResetStreamFrame{StreamID: streamID, ErrorCode: 1234}))
 				Expect(hasMore).To(BeFalse())
-				cf, ok, hasMore = str.getControlFrame()
+				cf, ok, hasMore = str.getControlFrame(time.Now())
 				Expect(ok).To(BeFalse())
 				Expect(cf.Frame).To(BeNil())
 				Expect(hasMore).To(BeFalse())
@@ -880,7 +880,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Close()).To(Succeed())
 				// don't EXPECT any calls to queueControlFrame
 				str.CancelWrite(123)
-				f, ok, hasMore := str.getControlFrame()
+				f, ok, hasMore := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(f.Frame).To(BeAssignableToTypeOf(&wire.ResetStreamFrame{}))
 				Expect(hasMore).To(BeFalse())
@@ -896,7 +896,7 @@ var _ = Describe("Send Stream", func() {
 					StreamID:  streamID,
 					ErrorCode: 101,
 				})
-				f, ok, hasMore := str.getControlFrame()
+				f, ok, hasMore := str.getControlFrame(time.Now())
 				Expect(ok).To(BeTrue())
 				Expect(f.Frame).To(Equal(&wire.ResetStreamFrame{
 					StreamID:  streamID,
@@ -1168,7 +1168,7 @@ var _ = Describe("Send Stream", func() {
 
 			mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 			str.CancelWrite(1234)
-			cf, ok, _ := str.getControlFrame()
+			cf, ok, _ := str.getControlFrame(time.Now())
 			Expect(ok).To(BeTrue())
 
 			// Acknowledge the STREAM frame.

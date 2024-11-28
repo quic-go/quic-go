@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
+	"go.uber.org/mock/gomock"
 )
 
 // in the tests for the stream deadlines we set a deadline
@@ -67,10 +68,8 @@ var _ = Describe("Stream", func() {
 		})
 
 		It("sets a read deadline, when SetDeadline is called", func() {
-			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false).AnyTimes()
-			f := &wire.StreamFrame{Data: []byte("foobar")}
-			err := str.handleStreamFrame(f)
-			Expect(err).ToNot(HaveOccurred())
+			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false, gomock.Any()).AnyTimes()
+			Expect(str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar")}, time.Now())).To(Succeed())
 			str.SetDeadline(time.Now().Add(-time.Second))
 			b := make([]byte, 6)
 			n, err := strWithTimeout.Read(b)

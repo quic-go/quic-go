@@ -17,8 +17,8 @@ import (
 type receiveStreamI interface {
 	ReceiveStream
 
-	handleStreamFrame(*wire.StreamFrame) error
-	handleResetStreamFrame(*wire.ResetStreamFrame) error
+	handleStreamFrame(*wire.StreamFrame, time.Time) error
+	handleResetStreamFrame(*wire.ResetStreamFrame, time.Time) error
 	closeForShutdown(error)
 }
 
@@ -266,9 +266,9 @@ func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) (queuedNe
 	return true
 }
 
-func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
+func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame, now time.Time) error {
 	s.mutex.Lock()
-	err := s.handleStreamFrameImpl(frame)
+	err := s.handleStreamFrameImpl(frame, now)
 	completed := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
@@ -279,9 +279,9 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	return err
 }
 
-func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) error {
+func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame, now time.Time) error {
 	maxOffset := frame.Offset + frame.DataLen()
-	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.Fin); err != nil {
+	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.Fin, now); err != nil {
 		return err
 	}
 	if frame.Fin {
@@ -297,9 +297,9 @@ func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) error {
 	return nil
 }
 
-func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
+func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame, now time.Time) error {
 	s.mutex.Lock()
-	err := s.handleResetStreamFrameImpl(frame)
+	err := s.handleResetStreamFrameImpl(frame, now)
 	completed := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
@@ -309,11 +309,11 @@ func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) err
 	return err
 }
 
-func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame) error {
+func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame, now time.Time) error {
 	if s.closeForShutdownErr != nil {
 		return nil
 	}
-	if err := s.flowController.UpdateHighestReceived(frame.FinalSize, true); err != nil {
+	if err := s.flowController.UpdateHighestReceived(frame.FinalSize, true, now); err != nil {
 		return err
 	}
 	s.finalOffset = frame.FinalSize
@@ -333,7 +333,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	return nil
 }
 
-func (s *receiveStream) getControlFrame() (_ ackhandler.Frame, ok, hasMore bool) {
+func (s *receiveStream) getControlFrame(now time.Time) (_ ackhandler.Frame, ok, hasMore bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -349,7 +349,10 @@ func (s *receiveStream) getControlFrame() (_ ackhandler.Frame, ok, hasMore bool)
 
 	s.queuedMaxStreamData = false
 	return ackhandler.Frame{
-		Frame: &wire.MaxStreamDataFrame{StreamID: s.streamID, MaximumStreamData: s.flowController.GetWindowUpdate()},
+		Frame: &wire.MaxStreamDataFrame{
+			StreamID:          s.streamID,
+			MaximumStreamData: s.flowController.GetWindowUpdate(now),
+		},
 	}, true, false
 }
 

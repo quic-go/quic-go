@@ -11,6 +11,7 @@ package mocks
 
 import (
 	reflect "reflect"
+	time "time"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
@@ -112,17 +113,17 @@ func (c *MockConnectionFlowControllerAddBytesSentCall) DoAndReturn(f func(protoc
 }
 
 // GetWindowUpdate mocks base method.
-func (m *MockConnectionFlowController) GetWindowUpdate() protocol.ByteCount {
+func (m *MockConnectionFlowController) GetWindowUpdate(arg0 time.Time) protocol.ByteCount {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWindowUpdate")
+	ret := m.ctrl.Call(m, "GetWindowUpdate", arg0)
 	ret0, _ := ret[0].(protocol.ByteCount)
 	return ret0
 }
 
 // GetWindowUpdate indicates an expected call of GetWindowUpdate.
-func (mr *MockConnectionFlowControllerMockRecorder) GetWindowUpdate() *MockConnectionFlowControllerGetWindowUpdateCall {
+func (mr *MockConnectionFlowControllerMockRecorder) GetWindowUpdate(arg0 any) *MockConnectionFlowControllerGetWindowUpdateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWindowUpdate", reflect.TypeOf((*MockConnectionFlowController)(nil).GetWindowUpdate))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWindowUpdate", reflect.TypeOf((*MockConnectionFlowController)(nil).GetWindowUpdate), arg0)
 	return &MockConnectionFlowControllerGetWindowUpdateCall{Call: call}
 }
 
@@ -138,13 +139,13 @@ func (c *MockConnectionFlowControllerGetWindowUpdateCall) Return(arg0 protocol.B
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockConnectionFlowControllerGetWindowUpdateCall) Do(f func() protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) Do(f func(time.Time) protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockConnectionFlowControllerGetWindowUpdateCall) DoAndReturn(f func() protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
+func (c *MockConnectionFlowControllerGetWindowUpdateCall) DoAndReturn(f func(time.Time) protocol.ByteCount) *MockConnectionFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

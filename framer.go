@@ -3,6 +3,7 @@ package quic
 import (
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -21,7 +22,7 @@ const (
 const maxStreamControlFrameSize = 25
 
 type streamControlFrameGetter interface {
-	getControlFrame() (_ ackhandler.Frame, ok, hasMore bool)
+	getControlFrame(time.Time) (_ ackhandler.Frame, ok, hasMore bool)
 }
 
 type framer struct {
@@ -78,7 +79,12 @@ func (f *framer) QueueControlFrame(frame wire.Frame) {
 	f.controlFrames = append(f.controlFrames, frame)
 }
 
-func (f *framer) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount, v protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
+func (f *framer) AppendControlFrames(
+	frames []ackhandler.Frame,
+	maxLen protocol.ByteCount,
+	now time.Time,
+	v protocol.Version,
+) ([]ackhandler.Frame, protocol.ByteCount) {
 	f.controlFrameMutex.Lock()
 	defer f.controlFrameMutex.Unlock()
 
@@ -101,7 +107,7 @@ func (f *framer) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.
 		if remainingLen <= maxStreamControlFrameSize {
 			break
 		}
-		fr, ok, hasMore := str.getControlFrame()
+		fr, ok, hasMore := str.getControlFrame(now)
 		if !hasMore {
 			delete(f.streamsWithControlFrames, id)
 		}

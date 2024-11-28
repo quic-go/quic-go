@@ -230,17 +230,17 @@ func (c *MockReceiveStreamIcloseForShutdownCall) DoAndReturn(f func(error)) *Moc
 }
 
 // handleResetStreamFrame mocks base method.
-func (m *MockReceiveStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
+func (m *MockReceiveStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame, arg1 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0)
+	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleResetStreamFrame indicates an expected call of handleResetStreamFrame.
-func (mr *MockReceiveStreamIMockRecorder) handleResetStreamFrame(arg0 any) *MockReceiveStreamIhandleResetStreamFrameCall {
+func (mr *MockReceiveStreamIMockRecorder) handleResetStreamFrame(arg0, arg1 any) *MockReceiveStreamIhandleResetStreamFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleResetStreamFrame), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleResetStreamFrame), arg0, arg1)
 	return &MockReceiveStreamIhandleResetStreamFrameCall{Call: call}
 }
 
@@ -256,29 +256,29 @@ func (c *MockReceiveStreamIhandleResetStreamFrameCall) Return(arg0 error) *MockR
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockReceiveStreamIhandleResetStreamFrameCall) Do(f func(*wire.ResetStreamFrame) error) *MockReceiveStreamIhandleResetStreamFrameCall {
+func (c *MockReceiveStreamIhandleResetStreamFrameCall) Do(f func(*wire.ResetStreamFrame, time.Time) error) *MockReceiveStreamIhandleResetStreamFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockReceiveStreamIhandleResetStreamFrameCall) DoAndReturn(f func(*wire.ResetStreamFrame) error) *MockReceiveStreamIhandleResetStreamFrameCall {
+func (c *MockReceiveStreamIhandleResetStreamFrameCall) DoAndReturn(f func(*wire.ResetStreamFrame, time.Time) error) *MockReceiveStreamIhandleResetStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // handleStreamFrame mocks base method.
-func (m *MockReceiveStreamI) handleStreamFrame(arg0 *wire.StreamFrame) error {
+func (m *MockReceiveStreamI) handleStreamFrame(arg0 *wire.StreamFrame, arg1 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "handleStreamFrame", arg0)
+	ret := m.ctrl.Call(m, "handleStreamFrame", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // handleStreamFrame indicates an expected call of handleStreamFrame.
-func (mr *MockReceiveStreamIMockRecorder) handleStreamFrame(arg0 any) *MockReceiveStreamIhandleStreamFrameCall {
+func (mr *MockReceiveStreamIMockRecorder) handleStreamFrame(arg0, arg1 any) *MockReceiveStreamIhandleStreamFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleStreamFrame), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleStreamFrame), arg0, arg1)
 	return &MockReceiveStreamIhandleStreamFrameCall{Call: call}
 }
 
@@ -294,13 +294,13 @@ func (c *MockReceiveStreamIhandleStreamFrameCall) Return(arg0 error) *MockReceiv
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockReceiveStreamIhandleStreamFrameCall) Do(f func(*wire.StreamFrame) error) *MockReceiveStreamIhandleStreamFrameCall {
+func (c *MockReceiveStreamIhandleStreamFrameCall) Do(f func(*wire.StreamFrame, time.Time) error) *MockReceiveStreamIhandleStreamFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockReceiveStreamIhandleStreamFrameCall) DoAndReturn(f func(*wire.StreamFrame) error) *MockReceiveStreamIhandleStreamFrameCall {
+func (c *MockReceiveStreamIhandleStreamFrameCall) DoAndReturn(f func(*wire.StreamFrame, time.Time) error) *MockReceiveStreamIhandleStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

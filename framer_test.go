@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"time"
 
 	"golang.org/x/exp/rand"
 
@@ -40,7 +41,7 @@ var _ = Describe("Framer", func() {
 			msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
 			framer.QueueControlFrame(pc)
 			framer.QueueControlFrame(msf)
-			frames, length := framer.AppendControlFrames(nil, 1000, protocol.Version1)
+			frames, length := framer.AppendControlFrames(nil, 1000, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(2))
 			fs := []wire.Frame{frames[0].Frame, frames[1].Frame}
 			Expect(fs).To(ContainElement(pc))
@@ -53,7 +54,7 @@ var _ = Describe("Framer", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
 			framer.QueueControlFrame(f)
 			Expect(framer.HasData()).To(BeTrue())
-			frames, _ := framer.AppendControlFrames(nil, 1000, protocol.Version1)
+			frames, _ := framer.AppendControlFrames(nil, 1000, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(1))
 			Expect(framer.HasData()).To(BeFalse())
 		})
@@ -62,7 +63,7 @@ var _ = Describe("Framer", func() {
 			ping := &wire.PingFrame{}
 			pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
 			framer.QueueControlFrame(pc)
-			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000, protocol.Version1)
+			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(2))
 			Expect(frames[0].Frame).To(Equal(ping))
 			Expect(frames[1].Frame).To(Equal(pc))
@@ -76,9 +77,10 @@ var _ = Describe("Framer", func() {
 			framer.AddStreamWithControlFrames(10, str)
 			mdf1 := &wire.MaxStreamDataFrame{MaximumStreamData: 1337}
 			mdf2 := &wire.MaxStreamDataFrame{MaximumStreamData: 1338}
-			str.EXPECT().getControlFrame().Return(ackhandler.Frame{Frame: mdf1}, true, true)
-			str.EXPECT().getControlFrame().Return(ackhandler.Frame{Frame: mdf2}, true, false)
-			frames, l := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			now := time.Now()
+			str.EXPECT().getControlFrame(now).Return(ackhandler.Frame{Frame: mdf1}, true, true)
+			str.EXPECT().getControlFrame(now).Return(ackhandler.Frame{Frame: mdf2}, true, false)
+			frames, l := framer.AppendControlFrames(nil, protocol.MaxByteCount, now, protocol.Version1)
 			Expect(frames).To(HaveLen(3))
 			Expect(frames[0].Frame).To(Equal(mdf1))
 			Expect(frames[1].Frame).To(Equal(mdf2))
@@ -90,8 +92,8 @@ var _ = Describe("Framer", func() {
 			str := NewMockStreamControlFrameGetter(mockCtrl)
 			framer.AddStreamWithControlFrames(10, str)
 			mdf1 := &wire.MaxStreamDataFrame{MaximumStreamData: 1337}
-			str.EXPECT().getControlFrame().Return(ackhandler.Frame{Frame: mdf1}, true, true).AnyTimes()
-			frames, l := framer.AppendControlFrames(nil, 100, protocol.Version1)
+			str.EXPECT().getControlFrame(gomock.Any()).Return(ackhandler.Frame{Frame: mdf1}, true, true).AnyTimes()
+			frames, l := framer.AppendControlFrames(nil, 100, time.Now(), protocol.Version1)
 			Expect(l).To(Equal(protocol.ByteCount(len(frames)) * mdf1.Length(protocol.Version1)))
 			Expect(l).To(And(
 				BeNumerically(">", 100-maxStreamControlFrameSize),
@@ -107,10 +109,10 @@ var _ = Describe("Framer", func() {
 			for i := 0; i < numFrames+1; i++ {
 				framer.QueueControlFrame(bf)
 			}
-			frames, length := framer.AppendControlFrames(nil, maxSize, protocol.Version1)
+			frames, length := framer.AppendControlFrames(nil, maxSize, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(numFrames))
 			Expect(length).To(BeNumerically(">", maxSize-bfLen))
-			frames, length = framer.AppendControlFrames(nil, maxSize, protocol.Version1)
+			frames, length = framer.AppendControlFrames(nil, maxSize, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(1))
 			Expect(length).To(Equal(bfLen))
 		})
@@ -133,7 +135,7 @@ var _ = Describe("Framer", func() {
 				framer.QueueControlFrame(f)
 			}
 			framer.Handle0RTTRejection()
-			fs, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			fs, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 			Expect(fs).To(HaveLen(2))
 			Expect(length).To(Equal(ping.Length(version) + ncid.Length(version)))
 		})
@@ -143,7 +145,7 @@ var _ = Describe("Framer", func() {
 				framer.QueueControlFrame(&wire.PingFrame{})
 				framer.QueueControlFrame(&wire.PingFrame{})
 				Expect(framer.QueuedTooManyControlFrames()).To(BeFalse())
-				frames, _ := framer.AppendControlFrames([]ackhandler.Frame{}, 1, protocol.Version1)
+				frames, _ := framer.AppendControlFrames([]ackhandler.Frame{}, 1, time.Now(), protocol.Version1)
 				Expect(frames).To(HaveLen(1))
 				Expect(framer.controlFrames).To(HaveLen(i + 1))
 			}
@@ -168,7 +170,7 @@ var _ = Describe("Framer", func() {
 			framer.QueueControlFrame(cf2)
 			// the first packet should contain a single PATH_RESPONSE frame, but all the other control frames
 			Expect(framer.HasData()).To(BeTrue())
-			frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(3))
 			Expect(frames[0].Frame).To(Equal(f1))
 			Expect([]wire.Frame{frames[1].Frame, frames[2].Frame}).To(ContainElement(cf1))
@@ -176,7 +178,7 @@ var _ = Describe("Framer", func() {
 			Expect(length).To(Equal(f1.Length(protocol.Version1) + cf1.Length(protocol.Version1) + cf2.Length(protocol.Version1)))
 			// the second packet should contain the other PATH_RESPONSE frame
 			Expect(framer.HasData()).To(BeTrue())
-			frames, length = framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			frames, length = framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].Frame).To(Equal(f2))
 			Expect(length).To(Equal(f2.Length(protocol.Version1)))
@@ -193,13 +195,13 @@ var _ = Describe("Framer", func() {
 			}
 			for i := 0; i < maxPathResponses; i++ {
 				Expect(framer.HasData()).To(BeTrue())
-				frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+				frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 				Expect(frames).To(HaveLen(1))
 				Expect(frames[0].Frame).To(Equal(pathResponses[i]))
 				Expect(length).To(Equal(pathResponses[i].Length(protocol.Version1)))
 			}
 			Expect(framer.HasData()).To(BeFalse())
-			frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, protocol.Version1)
+			frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 			Expect(frames).To(BeEmpty())
 			Expect(length).To(BeZero())
 		})
