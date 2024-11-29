@@ -144,7 +144,7 @@ func (c *streamFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount
 	// Don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()
 	oldWindowSize := c.receiveWindowSize
-	offset := c.baseFlowController.getWindowUpdate()
+	offset := c.baseFlowController.getWindowUpdate(now)
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
 		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
 		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize)*protocol.ConnectionFlowControlMultiplier), now)

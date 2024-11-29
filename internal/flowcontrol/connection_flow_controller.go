@@ -67,10 +67,10 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) {
 	c.mutex.Unlock()
 }
 
-func (c *connectionFlowController) GetWindowUpdate(time.Time) protocol.ByteCount {
+func (c *connectionFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount {
 	c.mutex.Lock()
 	oldWindowSize := c.receiveWindowSize
-	offset := c.baseFlowController.getWindowUpdate()
+	offset := c.baseFlowController.getWindowUpdate(now)
 	if c.logger.Debug() && oldWindowSize < c.receiveWindowSize {
 		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowSize/(1<<10))
 	}
