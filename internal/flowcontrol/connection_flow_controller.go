@@ -24,7 +24,7 @@ func NewConnectionFlowController(
 	allowWindowIncrease func(size protocol.ByteCount) bool,
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
-) ConnectionFlowController {
+) *connectionFlowController {
 	return &connectionFlowController{
 		baseFlowController: baseFlowController{
 			rttStats:             rttStats,
@@ -35,10 +35,6 @@ func NewConnectionFlowController(
 			logger:               logger,
 		},
 	}
-}
-
-func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
-	return c.baseFlowController.sendWindowSize()
 }
 
 // IncrementHighestReceived adds an increment to the highestReceived value
@@ -69,12 +65,13 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) {
 
 func (c *connectionFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount {
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	oldWindowSize := c.receiveWindowSize
 	offset := c.baseFlowController.getWindowUpdate(now)
 	if c.logger.Debug() && oldWindowSize < c.receiveWindowSize {
 		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowSize/(1<<10))
 	}
-	c.mutex.Unlock()
 	return offset
 }
 
@@ -82,19 +79,23 @@ func (c *connectionFlowController) GetWindowUpdate(now time.Time) protocol.ByteC
 // it should make sure that the connection-level window is increased when a stream-level window grows
 func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCount, now time.Time) {
 	c.mutex.Lock()
-	if inc > c.receiveWindowSize {
-		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB, in response to stream flow control window increase", c.receiveWindowSize/(1<<10))
-		newSize := min(inc, c.maxReceiveWindowSize)
-		if delta := newSize - c.receiveWindowSize; delta > 0 && c.allowWindowIncrease(delta) {
-			c.receiveWindowSize = newSize
-		}
-		c.startNewAutoTuningEpoch(now)
+	defer c.mutex.Unlock()
+
+	if inc <= c.receiveWindowSize {
+		return
 	}
-	c.mutex.Unlock()
+	newSize := min(inc, c.maxReceiveWindowSize)
+	if delta := newSize - c.receiveWindowSize; delta > 0 && c.allowWindowIncrease(delta) {
+		c.receiveWindowSize = newSize
+		if c.logger.Debug() {
+			c.logger.Debugf("Increasing receive flow control window for the connection to %d, in response to stream flow control window increase", newSize)
+		}
+	}
+	c.startNewAutoTuningEpoch(now)
 }
 
 // Reset rests the flow controller. This happens when 0-RTT is rejected.
-// All stream data is invalidated, it's if we had never opened a stream and never sent any data.
+// All stream data is invalidated, it's as if we had never opened a stream and never sent any data.
 // At that point, we only have sent stream data, but we didn't have the keys to open 1-RTT keys yet.
 func (c *connectionFlowController) Reset() error {
 	c.mutex.Lock()

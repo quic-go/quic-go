@@ -1,262 +1,265 @@
 package flowcontrol
 
 import (
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Stream Flow controller", func() {
-	var controller *streamFlowController
+func TestStreamFlowControlReceiving(t *testing.T) {
+	fc := NewStreamFlowController(
+		42,
+		NewConnectionFlowController(
+			protocol.MaxByteCount,
+			protocol.MaxByteCount,
+			nil,
+			&utils.RTTStats{},
+			utils.DefaultLogger,
+		),
+		100,
+		protocol.MaxByteCount,
+		protocol.MaxByteCount,
+		&utils.RTTStats{},
+		utils.DefaultLogger,
+	)
 
-	BeforeEach(func() {
-		rttStats := &utils.RTTStats{}
-		controller = &streamFlowController{
-			streamID: 10,
-			connection: NewConnectionFlowController(
-				1000,
-				1000,
-				func(protocol.ByteCount) bool { return true },
-				rttStats,
+	require.NoError(t, fc.UpdateHighestReceived(50, false, time.Now()))
+	// duplicates are fine
+	require.NoError(t, fc.UpdateHighestReceived(50, false, time.Now()))
+	// reordering is fine
+	require.NoError(t, fc.UpdateHighestReceived(40, false, time.Now()))
+	require.NoError(t, fc.UpdateHighestReceived(60, false, time.Now()))
+
+	// exceeding the limit is not fine
+	err := fc.UpdateHighestReceived(101, false, time.Now())
+	var terr *qerr.TransportError
+	require.ErrorAs(t, err, &terr)
+	require.Equal(t, qerr.FlowControlError, terr.ErrorCode)
+	require.Equal(t, "received 101 bytes on stream 42, allowed 100 bytes", terr.ErrorMessage)
+}
+
+func TestStreamFlowControllerFinalOffset(t *testing.T) {
+	newFC := func() StreamFlowController {
+		return NewStreamFlowController(
+			42,
+			NewConnectionFlowController(
+				protocol.MaxByteCount,
+				protocol.MaxByteCount,
+				nil,
+				&utils.RTTStats{},
 				utils.DefaultLogger,
-			).(*connectionFlowController),
-		}
-		controller.maxReceiveWindowSize = 10000
-		controller.rttStats = rttStats
-		controller.logger = utils.DefaultLogger
+			),
+			protocol.MaxByteCount,
+			protocol.MaxByteCount,
+			protocol.MaxByteCount,
+			&utils.RTTStats{},
+			utils.DefaultLogger,
+		)
+	}
+
+	t.Run("duplicate final offset", func(t *testing.T) {
+		fc := newFC()
+		require.NoError(t, fc.UpdateHighestReceived(50, true, time.Now()))
+		// it is valid to receive the same final offset multiple times
+		require.NoError(t, fc.UpdateHighestReceived(50, true, time.Now()))
 	})
 
-	Context("Constructor", func() {
-		rttStats := &utils.RTTStats{}
-		const receiveWindow protocol.ByteCount = 2000
-		const maxReceiveWindow protocol.ByteCount = 3000
-		const sendWindow protocol.ByteCount = 4000
-
-		It("sets the send and receive windows", func() {
-			cc := NewConnectionFlowController(0, 0, func(protocol.ByteCount) bool { return true }, nil, utils.DefaultLogger)
-			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats, utils.DefaultLogger).(*streamFlowController)
-			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
-			Expect(fc.receiveWindow).To(Equal(receiveWindow))
-			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))
-			Expect(fc.sendWindow).To(Equal(sendWindow))
-		})
-
-		It("queues window updates", func() {
-			cc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, func(protocol.ByteCount) bool { return true }, nil, utils.DefaultLogger)
-			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats, utils.DefaultLogger).(*streamFlowController)
-			Expect(fc.AddBytesRead(receiveWindow)).To(BeTrue())
-		})
+	t.Run("inconsistent final offset", func(t *testing.T) {
+		fc := newFC()
+		require.NoError(t, fc.UpdateHighestReceived(50, true, time.Now()))
+		err := fc.UpdateHighestReceived(51, true, time.Now())
+		require.Error(t, err)
+		var terr *qerr.TransportError
+		require.ErrorAs(t, err, &terr)
+		require.Equal(t, qerr.FinalSizeError, terr.ErrorCode)
+		require.Equal(t, "received inconsistent final offset for stream 42 (old: 50, new: 51 bytes)", terr.ErrorMessage)
 	})
 
-	Context("receiving data", func() {
-		Context("registering received offsets", func() {
-			var receiveWindow protocol.ByteCount = 10000
-			var receiveWindowSize protocol.ByteCount = 600
-
-			BeforeEach(func() {
-				controller.receiveWindow = receiveWindow
-				controller.receiveWindowSize = receiveWindowSize
-			})
-
-			It("updates the highestReceived", func() {
-				controller.highestReceived = 1337
-				Expect(controller.UpdateHighestReceived(1338, false, time.Now())).To(Succeed())
-				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
-			})
-
-			It("informs the connection flow controller about received data", func() {
-				controller.highestReceived = 10
-				controller.connection.(*connectionFlowController).highestReceived = 100
-				Expect(controller.UpdateHighestReceived(20, false, time.Now())).To(Succeed())
-				Expect(controller.connection.(*connectionFlowController).highestReceived).To(Equal(protocol.ByteCount(100 + 10)))
-			})
-
-			It("does not decrease the highestReceived", func() {
-				controller.highestReceived = 1337
-				Expect(controller.UpdateHighestReceived(1000, false, time.Now())).To(Succeed())
-				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
-			})
-
-			It("does nothing when setting the same byte offset", func() {
-				controller.highestReceived = 1337
-				Expect(controller.UpdateHighestReceived(1337, false, time.Now())).To(Succeed())
-			})
-
-			It("does not give a flow control violation when using the window completely", func() {
-				controller.connection.(*connectionFlowController).receiveWindow = receiveWindow
-				Expect(controller.UpdateHighestReceived(receiveWindow, false, time.Now())).To(Succeed())
-			})
-
-			It("detects a flow control violation", func() {
-				Expect(controller.UpdateHighestReceived(receiveWindow+1, false, time.Now())).To(MatchError(&qerr.TransportError{
-					ErrorCode:    qerr.FlowControlError,
-					ErrorMessage: "received 10001 bytes on stream 10, allowed 10000 bytes",
-				}))
-			})
-
-			It("accepts a final offset higher than the highest received", func() {
-				Expect(controller.UpdateHighestReceived(100, false, time.Now())).To(Succeed())
-				Expect(controller.UpdateHighestReceived(101, true, time.Now())).To(Succeed())
-				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(101)))
-			})
-
-			It("errors when receiving a final offset smaller than the highest offset received so far", func() {
-				controller.UpdateHighestReceived(100, false, time.Now())
-				Expect(controller.UpdateHighestReceived(50, true, time.Now())).To(MatchError(&qerr.TransportError{
-					ErrorCode:    qerr.FinalSizeError,
-					ErrorMessage: "received final offset 50 for stream 10, but already received offset 100 before",
-				}))
-			})
-
-			It("accepts delayed data after receiving a final offset", func() {
-				Expect(controller.UpdateHighestReceived(300, true, time.Now())).To(Succeed())
-				Expect(controller.UpdateHighestReceived(250, false, time.Now())).To(Succeed())
-			})
-
-			It("errors when receiving a higher offset after receiving a final offset", func() {
-				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
-				Expect(controller.UpdateHighestReceived(250, false, time.Now())).To(MatchError(&qerr.TransportError{
-					ErrorCode:    qerr.FinalSizeError,
-					ErrorMessage: "received offset 250 for stream 10, but final offset was already received at 200",
-				}))
-			})
-
-			It("accepts duplicate final offsets", func() {
-				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
-				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
-				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(200)))
-			})
-
-			It("errors when receiving inconsistent final offsets", func() {
-				Expect(controller.UpdateHighestReceived(200, true, time.Now())).To(Succeed())
-				Expect(controller.UpdateHighestReceived(201, true, time.Now())).To(MatchError(&qerr.TransportError{
-					ErrorCode:    qerr.FinalSizeError,
-					ErrorMessage: "received inconsistent final offset for stream 10 (old: 200, new: 201 bytes)",
-				}))
-			})
-
-			It("tells the connection flow controller when a stream is abandoned", func() {
-				controller.AddBytesRead(5)
-				Expect(controller.UpdateHighestReceived(100, true, time.Now())).To(Succeed())
-				controller.Abandon()
-				Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(100)))
-			})
-
-			It("tolerates repeated calls to Abandon", func() {
-				controller.AddBytesRead(5)
-				Expect(controller.UpdateHighestReceived(100, true, time.Now())).To(Succeed())
-				controller.Abandon()
-				controller.Abandon()
-				controller.Abandon()
-				Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(100)))
-			})
-		})
-
-		It("saves when data is read", func() {
-			controller.AddBytesRead(200)
-			Expect(controller.bytesRead).To(Equal(protocol.ByteCount(200)))
-			Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(200)))
-		})
-
-		Context("generating window updates", func() {
-			var oldWindowSize protocol.ByteCount
-
-			// update the congestion such that it returns a given value for the smoothed RTT
-			setRtt := func(t time.Duration) {
-				controller.rttStats.UpdateRTT(t, 0, time.Now())
-				Expect(controller.rttStats.SmoothedRTT()).To(Equal(t)) // make sure it worked
-			}
-
-			BeforeEach(func() {
-				controller.receiveWindow = 100
-				controller.receiveWindowSize = 60
-				controller.bytesRead = 100 - 60
-				controller.connection.(*connectionFlowController).receiveWindow = 100
-				controller.connection.(*connectionFlowController).receiveWindowSize = 120
-				oldWindowSize = controller.receiveWindowSize
-			})
-
-			It("queues window updates", func() {
-				Expect(controller.AddBytesRead(1)).To(BeFalse())
-				Expect(controller.AddBytesRead(29)).To(BeTrue())
-				Expect(controller.GetWindowUpdate(time.Now())).ToNot(BeZero())
-				Expect(controller.AddBytesRead(1)).To(BeFalse())
-			})
-
-			It("tells the connection flow controller when the window was auto-tuned", func() {
-				var allowed protocol.ByteCount
-				controller.connection.(*connectionFlowController).allowWindowIncrease = func(size protocol.ByteCount) bool {
-					allowed = size
-					return true
-				}
-				oldOffset := controller.bytesRead
-				setRtt(scaleDuration(20 * time.Millisecond))
-				controller.epochStartOffset = oldOffset
-				controller.epochStartTime = time.Now().Add(-time.Millisecond)
-				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate(time.Now())
-				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
-				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
-				Expect(allowed).To(Equal(oldWindowSize))
-				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(protocol.ByteCount(float64(controller.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier)))
-			})
-
-			It("doesn't increase the connection flow control window if it's not allowed", func() {
-				oldOffset := controller.bytesRead
-				oldConnectionSize := controller.connection.(*connectionFlowController).receiveWindowSize
-				controller.connection.(*connectionFlowController).allowWindowIncrease = func(protocol.ByteCount) bool { return false }
-				setRtt(scaleDuration(20 * time.Millisecond))
-				controller.epochStartOffset = oldOffset
-				controller.epochStartTime = time.Now().Add(-time.Millisecond)
-				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate(time.Now())
-				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
-				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
-				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(oldConnectionSize))
-			})
-
-			It("sends a connection-level window update when a large stream is abandoned", func() {
-				Expect(controller.UpdateHighestReceived(90, true, time.Now())).To(Succeed())
-				Expect(controller.connection.GetWindowUpdate(time.Now())).To(BeZero())
-				controller.Abandon()
-				Expect(controller.connection.GetWindowUpdate(time.Now())).ToNot(BeZero())
-			})
-
-			It("doesn't increase the window after a final offset was already received", func() {
-				Expect(controller.UpdateHighestReceived(90, true, time.Now())).To(Succeed())
-				Expect(controller.AddBytesRead(30)).To(BeFalse())
-				Expect(controller.GetWindowUpdate(time.Now())).To(BeZero())
-			})
-		})
+	t.Run("non-final offset past final offset", func(t *testing.T) {
+		fc := newFC()
+		require.NoError(t, fc.UpdateHighestReceived(50, true, time.Now()))
+		// No matter the ordering, it's never ok to receive an offset past the final offset.
+		err := fc.UpdateHighestReceived(60, false, time.Now())
+		var terr *qerr.TransportError
+		require.ErrorAs(t, err, &terr)
+		require.Equal(t, qerr.FinalSizeError, terr.ErrorCode)
+		require.Equal(t, "received offset 60 for stream 42, but final offset was already received at 50", terr.ErrorMessage)
 	})
 
-	Context("sending data", func() {
-		It("gets the size of the send window", func() {
-			controller.connection.UpdateSendWindow(1000)
-			controller.UpdateSendWindow(15)
-			controller.AddBytesSent(5)
-			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(10)))
-		})
-
-		It("makes sure that it doesn't overflow the connection-level window", func() {
-			controller.connection.UpdateSendWindow(12)
-			controller.UpdateSendWindow(20)
-			controller.AddBytesSent(10)
-			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(2)))
-		})
-
-		It("doesn't say that it's blocked, if only the connection is blocked", func() {
-			controller.connection.UpdateSendWindow(50)
-			controller.UpdateSendWindow(100)
-			controller.AddBytesSent(50)
-			blocked, _ := controller.connection.IsNewlyBlocked()
-			Expect(blocked).To(BeTrue())
-			Expect(controller.IsNewlyBlocked()).To(BeFalse())
-		})
+	t.Run("final offset smaller than previous offset", func(t *testing.T) {
+		fc := newFC()
+		require.NoError(t, fc.UpdateHighestReceived(50, false, time.Now()))
+		// If we received offset already, it's invalid to receive a smaller final offset.
+		err := fc.UpdateHighestReceived(40, true, time.Now())
+		var terr *qerr.TransportError
+		require.ErrorAs(t, err, &terr)
+		require.Equal(t, qerr.FinalSizeError, terr.ErrorCode)
+		require.Equal(t, "received final offset 40 for stream 42, but already received offset 50 before", terr.ErrorMessage)
 	})
-})
+}
+
+func TestStreamAbandoning(t *testing.T) {
+	connFC := NewConnectionFlowController(
+		100,
+		protocol.MaxByteCount,
+		nil,
+		&utils.RTTStats{},
+		utils.DefaultLogger,
+	)
+	require.True(t, connFC.UpdateSendWindow(300))
+	fc := NewStreamFlowController(
+		42,
+		connFC,
+		60,
+		protocol.MaxByteCount,
+		100,
+		&utils.RTTStats{},
+		utils.DefaultLogger,
+	)
+
+	require.NoError(t, fc.UpdateHighestReceived(50, true, time.Now()))
+	require.Zero(t, fc.GetWindowUpdate(time.Now()))
+	require.Zero(t, connFC.GetWindowUpdate(time.Now()))
+
+	// Abandon the stream.
+	// This marks all bytes as having been consumed.
+	fc.Abandon()
+	require.Equal(t, protocol.ByteCount(150), connFC.GetWindowUpdate(time.Now()))
+}
+
+func TestStreamSendWindow(t *testing.T) {
+	// We set up the connection flow controller with a limit of 300 bytes,
+	// and the stream flow controller with a limit of 100 bytes.
+	connFC := NewConnectionFlowController(
+		protocol.MaxByteCount,
+		protocol.MaxByteCount,
+		nil,
+		&utils.RTTStats{},
+		utils.DefaultLogger,
+	)
+	require.True(t, connFC.UpdateSendWindow(300))
+	fc := NewStreamFlowController(
+		42,
+		connFC,
+		protocol.MaxByteCount,
+		protocol.MaxByteCount,
+		100,
+		&utils.RTTStats{},
+		utils.DefaultLogger,
+	)
+	// first, we're limited by the stream flow controller
+	require.Equal(t, protocol.ByteCount(100), fc.SendWindowSize())
+	fc.AddBytesSent(50)
+	require.False(t, fc.IsNewlyBlocked())
+	require.Equal(t, protocol.ByteCount(50), fc.SendWindowSize())
+	fc.AddBytesSent(50)
+	require.True(t, fc.IsNewlyBlocked())
+	require.Zero(t, fc.SendWindowSize())
+	require.False(t, fc.IsNewlyBlocked()) // we're still blocked, but it's not new
+
+	// Update the stream flow control limit, but don't update the connection flow control limit.
+	// We're now limited by the connection flow controller.
+	require.True(t, fc.UpdateSendWindow(1000))
+	// reordered updates are ignored
+	require.False(t, fc.UpdateSendWindow(999))
+
+	require.False(t, fc.IsNewlyBlocked()) // we're not blocked anymore
+	require.Equal(t, protocol.ByteCount(200), fc.SendWindowSize())
+	fc.AddBytesSent(200)
+	require.Zero(t, fc.SendWindowSize())
+	require.False(t, fc.IsNewlyBlocked()) // we're blocked, but not on stream flow control
+}
+
+func TestStreamWindowUpdate(t *testing.T) {
+	fc := NewStreamFlowController(
+		42,
+		NewConnectionFlowController(
+			protocol.MaxByteCount,
+			protocol.MaxByteCount,
+			nil,
+			&utils.RTTStats{},
+			utils.DefaultLogger,
+		),
+		100,
+		100,
+		protocol.MaxByteCount,
+		&utils.RTTStats{},
+		utils.DefaultLogger,
+	)
+	require.Zero(t, fc.GetWindowUpdate(time.Now()))
+	fc.AddBytesRead(24)
+	require.Zero(t, fc.GetWindowUpdate(time.Now()))
+	// the window is updated when it's 25% filled
+	fc.AddBytesRead(1)
+	require.Equal(t, protocol.ByteCount(125), fc.GetWindowUpdate(time.Now()))
+
+	fc.AddBytesRead(24)
+	require.Zero(t, fc.GetWindowUpdate(time.Now()))
+	// the window is updated when it's 25% filled
+	fc.AddBytesRead(1)
+	require.Equal(t, protocol.ByteCount(150), fc.GetWindowUpdate(time.Now()))
+
+	// Receive the final offset.
+	// We don't need to send any more flow control updates.
+	require.NoError(t, fc.UpdateHighestReceived(100, true, time.Now()))
+	fc.AddBytesRead(50)
+	require.Zero(t, fc.GetWindowUpdate(time.Now()))
+}
+
+func TestStreamWindowAutoTuning(t *testing.T) {
+	// the RTT is 1 second
+	rttStats := &utils.RTTStats{}
+	rttStats.UpdateRTT(time.Second, 0, time.Now())
+	require.Equal(t, time.Second, rttStats.SmoothedRTT())
+
+	connFC := NewConnectionFlowController(
+		150, // initial receive window
+		350, // max receive window
+		func(size protocol.ByteCount) bool { return true },
+		rttStats,
+		utils.DefaultLogger,
+	)
+	fc := NewStreamFlowController(
+		42,
+		connFC,
+		100, // initial send window
+		399, // max send window
+		protocol.MaxByteCount,
+		rttStats,
+		utils.DefaultLogger,
+	)
+
+	now := time.Now()
+	require.NoError(t, fc.UpdateHighestReceived(100, false, now))
+
+	// data consumption is too slow, window size is not increased
+	now = now.Add(2500 * time.Millisecond)
+	fc.AddBytesRead(51)
+	// one initial stream window size added
+	require.Equal(t, protocol.ByteCount(51+100), fc.GetWindowUpdate(now))
+	// one initial connection window size added
+	require.Equal(t, protocol.ByteCount(51+150), connFC.getWindowUpdate(now))
+
+	// data consumption is fast enough, window size is increased
+	now = now.Add(2 * time.Second)
+	fc.AddBytesRead(51)
+	// stream window size doubled to 200 bytes
+	require.Equal(t, protocol.ByteCount(102+2*100), fc.GetWindowUpdate(now))
+	// The connection window is now increased as well,
+	// so that we don't get blocked on connection level flow control:
+	// The increase is by 200 bytes * a connection factor of 1.5: 300 bytes.
+	require.Equal(t, protocol.ByteCount(102+300), connFC.GetWindowUpdate(now))
+
+	// data consumption is fast enough, window size is increased
+	now = now.Add(2 * time.Second)
+	fc.AddBytesRead(101)
+	// stream window size increased again, but bumps into its maximum value
+	require.Equal(t, protocol.ByteCount(203+399), fc.GetWindowUpdate(now))
+	// the connection window is also increased, but it bumps into its maximum value
+	require.Equal(t, protocol.ByteCount(203+350), connFC.GetWindowUpdate(now))
+}
