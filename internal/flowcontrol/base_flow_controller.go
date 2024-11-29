@@ -77,19 +77,19 @@ func (c *baseFlowController) hasWindowUpdate() bool {
 
 // getWindowUpdate updates the receive window, if necessary
 // it returns the new offset
-func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
+func (c *baseFlowController) getWindowUpdate(now time.Time) protocol.ByteCount {
 	if !c.hasWindowUpdate() {
 		return 0
 	}
 
-	c.maybeAdjustWindowSize()
+	c.maybeAdjustWindowSize(now)
 	c.receiveWindow = c.bytesRead + c.receiveWindowSize
 	return c.receiveWindow
 }
 
 // maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.
 // For details about auto-tuning, see https://docs.google.com/document/d/1SExkMmGiz8VYzV3s9E35JQlJ73vhzCekKkDi85F1qCE/edit?usp=sharing.
-func (c *baseFlowController) maybeAdjustWindowSize() {
+func (c *baseFlowController) maybeAdjustWindowSize(now time.Time) {
 	bytesReadInEpoch := c.bytesRead - c.epochStartOffset
 	// don't do anything if less than half the window has been consumed
 	if bytesReadInEpoch <= c.receiveWindowSize/2 {
@@ -101,7 +101,6 @@ func (c *baseFlowController) maybeAdjustWindowSize() {
 	}
 
 	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
-	now := time.Now()
 	if now.Sub(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
 		// window is consumed too fast, try to increase the window size
 		newSize := min(2*c.receiveWindowSize, c.maxReceiveWindowSize)

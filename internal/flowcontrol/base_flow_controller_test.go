@@ -112,7 +112,7 @@ var _ = Describe("Base Flow controller", func() {
 			bytesRemaining := receiveWindowSize - protocol.ByteCount(bytesConsumed)
 			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
-			offset := controller.getWindowUpdate()
+			offset := controller.getWindowUpdate(time.Now())
 			Expect(offset).To(Equal(readPosition + receiveWindowSize))
 			Expect(controller.receiveWindow).To(Equal(readPosition + receiveWindowSize))
 		})
@@ -122,7 +122,7 @@ var _ = Describe("Base Flow controller", func() {
 			bytesRemaining := receiveWindowSize - protocol.ByteCount(bytesConsumed)
 			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
-			offset := controller.getWindowUpdate()
+			offset := controller.getWindowUpdate(time.Now())
 			Expect(offset).To(BeZero())
 		})
 
@@ -141,7 +141,7 @@ var _ = Describe("Base Flow controller", func() {
 			}
 
 			It("doesn't increase the window size for a new stream", func() {
-				controller.maybeAdjustWindowSize()
+				controller.maybeAdjustWindowSize(time.Now())
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 			})
 
@@ -149,7 +149,7 @@ var _ = Describe("Base Flow controller", func() {
 				setRtt(0)
 				controller.startNewAutoTuningEpoch(time.Now())
 				controller.addBytesRead(400)
-				offset := controller.getWindowUpdate()
+				offset := controller.getWindowUpdate(time.Now())
 				Expect(offset).ToNot(BeZero()) // make sure a window update is sent
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 			})
@@ -164,7 +164,7 @@ var _ = Describe("Base Flow controller", func() {
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
 				controller.addBytesRead(dataRead)
-				offset := controller.getWindowUpdate()
+				offset := controller.getWindowUpdate(time.Now())
 				Expect(offset).ToNot(BeZero())
 				// check that the window size was increased
 				newWindowSize := controller.receiveWindowSize
@@ -183,7 +183,7 @@ var _ = Describe("Base Flow controller", func() {
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 1 / 3)
 				controller.addBytesRead(dataRead)
-				offset := controller.getWindowUpdate()
+				offset := controller.getWindowUpdate(time.Now())
 				Expect(offset).ToNot(BeZero())
 				// check that the window size was not increased
 				newWindowSize := controller.receiveWindowSize
@@ -202,7 +202,7 @@ var _ = Describe("Base Flow controller", func() {
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
 				controller.addBytesRead(dataRead)
-				offset := controller.getWindowUpdate()
+				offset := controller.getWindowUpdate(time.Now())
 				Expect(offset).ToNot(BeZero())
 				// check that the window size was not increased
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
@@ -219,16 +219,16 @@ var _ = Describe("Base Flow controller", func() {
 				}
 				setRtt(scaleDuration(20 * time.Millisecond))
 				resetEpoch()
-				controller.maybeAdjustWindowSize()
+				controller.maybeAdjustWindowSize(time.Now())
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize)) // 2000
 				// because the lastWindowUpdateTime is updated by MaybeTriggerWindowUpdate(), we can just call maybeAdjustWindowSize() multiple times and get an increase of the window size every time
 				resetEpoch()
-				controller.maybeAdjustWindowSize()
+				controller.maybeAdjustWindowSize(time.Now())
 				Expect(controller.receiveWindowSize).To(Equal(2 * 2 * oldWindowSize)) // 4000
 				resetEpoch()
-				controller.maybeAdjustWindowSize()
+				controller.maybeAdjustWindowSize(time.Now())
 				Expect(controller.receiveWindowSize).To(Equal(controller.maxReceiveWindowSize)) // 5000
-				controller.maybeAdjustWindowSize()
+				controller.maybeAdjustWindowSize(time.Now())
 				Expect(controller.receiveWindowSize).To(Equal(controller.maxReceiveWindowSize)) // 5000
 			})
 		})
