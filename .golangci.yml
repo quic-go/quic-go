@@ -44,3 +44,4 @@ issues:
       linters:
         - exhaustive
         - prealloc
+        - unparam
