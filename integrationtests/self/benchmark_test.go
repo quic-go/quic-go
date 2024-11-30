@@ -7,15 +7,15 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go"
+
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkHandshake(b *testing.B) {
 	b.ReportAllocs()
 
 	ln, err := quic.ListenAddr("localhost:0", tlsConfig, nil)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 	defer ln.Close()
 
 	connChan := make(chan quic.Connection, 1)
@@ -30,9 +30,7 @@ func BenchmarkHandshake(b *testing.B) {
 	}()
 
 	conn, err := net.ListenUDP("udp", nil)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 	defer conn.Close()
 	tr := &quic.Transport{Conn: conn}
 	defer tr.Close()
@@ -40,9 +38,7 @@ func BenchmarkHandshake(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		c, err := tr.Dial(context.Background(), ln.Addr(), tlsClientConfig, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+		require.NoError(b, err)
 		<-connChan
 		c.CloseWithError(0, "")
 	}
@@ -52,9 +48,7 @@ func BenchmarkStreamChurn(b *testing.B) {
 	b.ReportAllocs()
 
 	ln, err := quic.ListenAddr("localhost:0", tlsConfig, &quic.Config{MaxIncomingStreams: 1e10})
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 	defer ln.Close()
 
 	errChan := make(chan error, 1)
@@ -75,21 +69,15 @@ func BenchmarkStreamChurn(b *testing.B) {
 	}()
 
 	c, err := quic.DialAddr(context.Background(), fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port), tlsClientConfig, nil)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 	if err := <-errChan; err != nil {
-		b.Fatal(err)
+		require.NoError(b, err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		str, err := c.OpenStreamSync(context.Background())
-		if err != nil {
-			b.Fatal(err)
-		}
-		if err := str.Close(); err != nil {
-			b.Fatal(err)
-		}
+		require.NoError(b, err)
+		require.NoError(b, str.Close())
 	}
 }
