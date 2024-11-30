@@ -36,7 +36,7 @@ type baseFlowController struct {
 // For every offset, it only returns true once.
 // If it is blocked, the offset is returned.
 func (c *baseFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
-	if c.sendWindowSize() != 0 || c.sendWindow == c.lastBlockedAt {
+	if c.SendWindowSize() != 0 || c.sendWindow == c.lastBlockedAt {
 		return false, 0
 	}
 	c.lastBlockedAt = c.sendWindow
@@ -56,7 +56,7 @@ func (c *baseFlowController) UpdateSendWindow(offset protocol.ByteCount) (update
 	return false
 }
 
-func (c *baseFlowController) sendWindowSize() protocol.ByteCount {
+func (c *baseFlowController) SendWindowSize() protocol.ByteCount {
 	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
 	if c.bytesSent > c.sendWindow {
 		return 0

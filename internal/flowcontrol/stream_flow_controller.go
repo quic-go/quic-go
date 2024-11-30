@@ -72,7 +72,7 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 		return nil
 	}
 	// A higher offset was received before. This can happen due to reordering.
-	if offset <= c.highestReceived {
+	if offset < c.highestReceived {
 		if final {
 			return &qerr.TransportError{
 				ErrorCode:    qerr.FinalSizeError,
@@ -123,7 +123,7 @@ func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	return min(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
+	return min(c.baseFlowController.SendWindowSize(), c.connection.SendWindowSize())
 }
 
 func (c *streamFlowController) IsNewlyBlocked() bool {
@@ -141,14 +141,14 @@ func (c *streamFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount
 		return 0
 	}
 
-	// Don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	oldWindowSize := c.receiveWindowSize
 	offset := c.baseFlowController.getWindowUpdate(now)
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
-		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
+		c.logger.Debugf("Increasing receive flow control window for stream %d to %d", c.streamID, c.receiveWindowSize)
 		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize)*protocol.ConnectionFlowControlMultiplier), now)
 	}
-	c.mutex.Unlock()
 	return offset
 }
