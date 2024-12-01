@@ -12,11 +12,17 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// for macOS versions, see https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards
+const (
+	macOSVersion11 = 20
+	macOSVersion15 = 24
+)
+
 func setDF(rawConn syscall.RawConn) (bool, error) {
 	// Setting DF bit is only supported from macOS 11.
 	// https://github.com/chromium/chromium/blob/117.0.5881.2/net/socket/udp_socket_posix.cc#L555
 	version, err := getMacOSVersion()
-	if err != nil || version < 11 {
+	if err != nil || version < macOSVersion11 {
 		return false, err
 	}
 
@@ -40,7 +46,7 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 
 			// Setting the DF bit on dual-stack sockets works since macOS Sequoia.
 			// Disable DF on dual-stack sockets before Sequoia.
-			if version < 15 {
+			if version < macOSVersion15 {
 				// check if this is a dual-stack socket by reading the IPV6_V6ONLY flag
 				v6only, err := unix.GetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_V6ONLY)
 				if err != nil {
@@ -67,8 +73,6 @@ func isSendMsgSizeErr(err error) bool {
 
 func isRecvMsgSizeErr(error) bool { return false }
 
-// for macOS versions, see
-// https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards
 func getMacOSVersion() (int, error) {
 	uname := &unix.Utsname{}
 	if err := unix.Uname(uname); err != nil {
