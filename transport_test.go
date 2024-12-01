@@ -265,7 +265,7 @@ var _ = Describe("Transport", func() {
 			phm.EXPECT().Get(connID),
 			phm.EXPECT().GetByResetToken(token).Return(conn, true),
 			conn.EXPECT().destroy(gomock.Any()).Do(func(err error) {
-				Expect(err).To(MatchError(&StatelessResetError{Token: token}))
+				Expect(err).To(MatchError(&StatelessResetError{}))
 				close(destroyed)
 			}),
 		)

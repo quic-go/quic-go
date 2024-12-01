@@ -114,14 +114,12 @@ func (e *VersionNegotiationError) Is(target error) bool {
 }
 
 // A StatelessResetError occurs when we receive a stateless reset.
-type StatelessResetError struct {
-	Token protocol.StatelessResetToken
-}
+type StatelessResetError struct{}
 
 var _ net.Error = &StatelessResetError{}
 
 func (e *StatelessResetError) Error() string {
-	return fmt.Sprintf("received a stateless reset with token %x", e.Token)
+	return "received a stateless reset"
 }
 
 func (e *StatelessResetError) Is(target error) bool {
