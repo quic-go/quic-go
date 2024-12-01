@@ -329,7 +329,6 @@ func TestRejectFrequentKeyUpdates(t *testing.T) {
 	}, err)
 }
 
-//nolint:unparam
 func setKeyUpdateIntervals(t *testing.T, firstKeyUpdateInterval, keyUpdateInterval uint64) {
 	origKeyUpdateInterval := KeyUpdateInterval
 	origFirstKeyUpdateInterval := FirstKeyUpdateInterval

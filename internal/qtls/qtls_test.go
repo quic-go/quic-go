@@ -109,7 +109,6 @@ func TestServerConfigGetConfigForClientRecursively(t *testing.T) {
 	var localAddr, remoteAddr net.Addr
 	tlsConf := &tls.Config{}
 	var innerConf *tls.Config
-	//nolint:unparam
 	getCert := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		localAddr = info.Conn.LocalAddr()
 		remoteAddr = info.Conn.RemoteAddr()
