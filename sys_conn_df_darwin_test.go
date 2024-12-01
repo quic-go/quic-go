@@ -52,6 +52,10 @@ func TestIPFragmentation(t *testing.T) {
 	})
 
 	t.Run("udp, dual-stack", func(t *testing.T) {
+		if version, err := getMacOSVersion(); err != nil || version < macOSVersion15 {
+			t.Skipf("skipping on darwin %d", version-9)
+		}
+
 		conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 0})
 		require.NoError(t, err)
 		defer conn.Close()
