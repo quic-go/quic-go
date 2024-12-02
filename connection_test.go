@@ -622,20 +622,17 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("closes due to a stateless reset", func() {
-			token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 			runConn()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
-					var srErr *StatelessResetError
-					Expect(errors.As(e, &srErr)).To(BeTrue())
-					Expect(srErr.Token).To(Equal(token))
+					Expect(errors.Is(e, &qerr.StatelessResetError{})).To(BeTrue())
 				}),
 				tracer.EXPECT().Close(),
 			)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
-			conn.destroy(&StatelessResetError{Token: token})
+			conn.destroy(&StatelessResetError{})
 		})
 	})
 

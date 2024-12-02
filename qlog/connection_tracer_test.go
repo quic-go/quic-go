@@ -134,18 +134,15 @@ func TestHandshakeTimeouts(t *testing.T) {
 
 func TestReceivedStatelessResetPacket(t *testing.T) {
 	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.StatelessResetError{
-		Token: protocol.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-	})
+	tracer.ClosedConnection(&quic.StatelessResetError{})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
 	require.Equal(t, "transport:connection_closed", entry.Name)
 	ev := entry.Event
-	require.Len(t, ev, 3)
+	require.Len(t, ev, 2)
 	require.Equal(t, "remote", ev["owner"])
 	require.Equal(t, "stateless_reset", ev["trigger"])
-	require.Equal(t, "00112233445566778899aabbccddeeff", ev["stateless_reset_token"])
 }
 
 func TestVersionNegotiationFailure(t *testing.T) {
