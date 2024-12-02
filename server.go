@@ -114,6 +114,7 @@ type baseServer struct {
 	invalidTokenQueue       chan rejectedPacket
 	connectionRefusedQueue  chan rejectedPacket
 	retryQueue              chan rejectedPacket
+	handshakingCount        sync.WaitGroup
 
 	verifySourceAddress func(net.Addr) bool
 
@@ -339,6 +340,8 @@ func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 
 func (s *baseServer) Close() error {
 	s.close(ErrServerClosed, true)
+	// wait until all handshakes in flight have terminated
+	s.handshakingCount.Wait()
 	return nil
 }
 
@@ -713,8 +716,9 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 	}
 
-	go conn.run()
+	s.handshakingCount.Add(1)
 	go func() {
+		defer s.handshakingCount.Done()
 		if completed := s.handleNewConn(conn); !completed {
 			return
 		}
@@ -725,6 +729,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			conn.closeWithTransportError(ConnectionRefused)
 		}
 	}()
+	go conn.run()
 	return nil
 }
 
