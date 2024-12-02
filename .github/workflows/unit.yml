@@ -45,7 +45,7 @@ jobs:
       - name: Run benchmark tests
         run: go test -v -run=^$ -benchtime 0.5s -bench=. $(go list ./... | grep -v integrationtests/self)
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage.txt,coverage-root.txt
           env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
