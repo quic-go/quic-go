@@ -640,27 +640,40 @@ var _ = Describe("Handshake tests", func() {
 			tr := &quic.Transport{Conn: udpConn}
 			addTracer(tr)
 			defer tr.Close()
-			tlsConf := &tls.Config{}
-			done := make(chan struct{})
-			tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-				<-done
-				return nil, errors.New("closed")
+
+			rtt := scaleDuration(40 * time.Millisecond)
+			connQueued := make(chan struct{})
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+					close(connQueued)
+					// Sleep for a bit.
+					// This allows the server to close the connection before the handshake completes.
+					time.Sleep(rtt / 2)
+					return getTLSConfig(), nil
+				},
 			}
 			ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
 			Expect(err).ToNot(HaveOccurred())
+			serverPort := ln.Addr().(*net.UDPAddr).Port
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
+				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+			})
+			Expect(err).ToNot(HaveOccurred())
+			defer proxy.Close()
 
 			errChan := make(chan error, 1)
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			go func() {
 				defer GinkgoRecover()
 				_, err := quic.DialAddr(ctx, ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
 				errChan <- err
 			}()
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
+			Eventually(connQueued, 5*rtt).Should(BeClosed())
 			Expect(ln.Close()).To(Succeed())
-			close(done)
 			err = <-errChan
+			Expect(err).To(HaveOccurred())
 			var transportErr *quic.TransportError
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
