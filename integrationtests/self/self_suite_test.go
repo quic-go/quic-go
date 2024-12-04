@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"runtime/pprof"
 	"strconv"
@@ -343,6 +344,10 @@ func (r *readerWithTimeout) Read(p []byte) (n int, err error) {
 	case <-time.After(r.Timeout):
 		return 0, fmt.Errorf("read timeout after %s", r.Timeout)
 	}
+}
+
+func randomDuration(min, max time.Duration) time.Duration {
+	return min + time.Duration(rand.Int63n(int64(max-min)))
 }
 
 func TestSelf(t *testing.T) {
