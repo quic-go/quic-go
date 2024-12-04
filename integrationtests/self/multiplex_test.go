@@ -79,7 +79,7 @@ func TestMultiplexesConnectionsToSameServer(t *testing.T) {
 	errChan2 := make(chan error, 1)
 	go func() { errChan2 <- dialAndReceiveData(tr, server.Addr()) }()
 
-	timeout := time.After(time.Minute)
+	timeout := time.After(15 * time.Second)
 	select {
 	case err := <-errChan1:
 		require.NoError(t, err, "error dialing server 1")
@@ -117,7 +117,7 @@ func TestMultiplexingToDifferentServers(t *testing.T) {
 	errChan2 := make(chan error, 1)
 	go func() { errChan2 <- dialAndReceiveData(tr, server2.Addr()) }()
 
-	timeout := time.After(time.Minute)
+	timeout := time.After(15 * time.Second)
 	select {
 	case err := <-errChan1:
 		require.NoError(t, err, "error dialing server 1")
@@ -143,6 +143,7 @@ func TestMultiplexingConnectToSelf(t *testing.T) {
 	server, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
+	go runMultiplexTestServer(t, server)
 
 	errChan := make(chan error, 1)
 	go func() { errChan <- dialAndReceiveData(tr, server.Addr()) }()
@@ -150,7 +151,7 @@ func TestMultiplexingConnectToSelf(t *testing.T) {
 	select {
 	case err := <-errChan:
 		require.NoError(t, err, "error dialing server")
-	case <-time.After(time.Minute):
+	case <-time.After(15 * time.Second):
 		t.Error("timeout waiting for connection to close")
 	}
 }
@@ -192,7 +193,7 @@ func TestMultiplexingServerAndClientOnSameConn(t *testing.T) {
 		close(done2)
 	}()
 
-	timeout := time.After(time.Minute)
+	timeout := time.After(15 * time.Second)
 	select {
 	case <-done1:
 	case <-timeout:
