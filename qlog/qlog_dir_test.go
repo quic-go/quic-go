@@ -10,15 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createTmpDir(t *testing.T) string {
-	path, err := os.MkdirTemp("", "temp_test_dir")
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, os.RemoveAll(path)) })
-	return path
-}
-
 func TestQLOGDIRSet(t *testing.T) {
-	tmpDir := createTmpDir(t)
+	tmpDir := t.TempDir()
 
 	connID, _ := protocol.GenerateConnectionIDForInitial()
 	qlogDir := filepath.Join(tmpDir, "qlogs")
