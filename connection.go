@@ -514,10 +514,15 @@ func (s *connection) run() error {
 	defer func() { s.ctxCancel(closeErr.err) }()
 	defer func() {
 		fmt.Println("clearing received packets")
+		defer fmt.Println("cleared received packets")
 		go func() {
-			for range s.receivedPackets {
+			for {
+				select {
+				case <-s.receivedPackets:
+				default:
+					return
+				}
 			}
-			fmt.Println("clearing received packets")
 		}()
 	}()
 
