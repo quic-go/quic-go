@@ -196,9 +196,12 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		// wait for the handshake to complete
 		earlyConn, ok := c.Connection.(quic.EarlyConnection)
 		if ok {
+			trace := httptrace.ContextClientTrace(req.Context())
 			select {
 			case <-earlyConn.HandshakeComplete():
+				traceTLSHandshakeDone(trace, earlyConn.ConnectionState().TLS, nil)
 			case <-req.Context().Done():
+				traceTLSHandshakeDone(trace, earlyConn.ConnectionState().TLS, req.Context().Err())
 				return nil, req.Context().Err()
 			}
 		}
@@ -295,9 +298,11 @@ func (c *ClientConn) sendRequestBody(str Stream, body io.ReadCloser, contentLeng
 
 func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
 	if err := str.SendRequestHeader(req); err != nil {
+		traceWroteRequest(req.Context(), err)
 		return nil, err
 	}
 	if req.Body == nil {
+		traceWroteRequest(req.Context(), nil)
 		str.Close()
 	} else {
 		// send the request body asynchronously
@@ -308,7 +313,9 @@ func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Res
 			if req.ContentLength > 0 {
 				contentLength = req.ContentLength
 			}
-			if err := c.sendRequestBody(str, req.Body, contentLength); err != nil {
+			err := c.sendRequestBody(str, req.Body, contentLength)
+			traceWroteRequest(req.Context(), err)
+			if err != nil {
 				if c.logger != nil {
 					c.logger.Debug("error writing request", "error", err)
 				}
@@ -342,6 +349,9 @@ func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Res
 				if err := trace.Got1xxResponse(resCode, textproto.MIMEHeader(res.Header)); err != nil {
 					return nil, err
 				}
+			}
+			if resCode == 100 {
+				traceGot100Continue(trace)
 			}
 			continue
 		}

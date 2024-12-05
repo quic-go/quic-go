@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +44,8 @@ func (w *requestWriter) WriteRequestHeader(str quic.Stream, req *http.Request, g
 		return err
 	}
 	_, err := str.Write(buf.Bytes())
+	trace := httptrace.ContextClientTrace(req.Context())
+	traceWroteHeaders(trace)
 	return err
 }
 
@@ -201,13 +204,16 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	// trace := httptrace.ContextClientTrace(req.Context())
 	// traceHeaders := traceHasWroteHeaderField(trace)
 
+	trace := httptrace.ContextClientTrace(req.Context())
+	traceHeaders := traceHasWroteHeaderField(trace)
+
 	// Header list size is ok. Write the headers.
 	enumerateHeaders(func(name, value string) {
 		name = strings.ToLower(name)
 		w.encoder.WriteField(qpack.HeaderField{Name: name, Value: value})
-		// if traceHeaders {
-		// 	traceWroteHeaderField(trace, name, value)
-		// }
+		if traceHeaders {
+			traceWroteHeaderField(trace, name, value)
+		}
 	})
 
 	return nil
