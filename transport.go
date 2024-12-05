@@ -172,7 +172,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		return nil, errListenerAlreadySet
 	}
 	conf = populateConfig(conf)
-	if err := t.init(false); err != nil {
+	if err := t.initUnlocked(false); err != nil {
 		return nil, err
 	}
 	s := newServer(
@@ -208,8 +208,10 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
+	t.mutex.Lock()
 	conf = populateConfig(conf)
-	if err := t.init(t.isSingleUse); err != nil {
+	if err := t.initUnlocked(t.isSingleUse); err != nil {
+		t.mutex.Unlock()
 		return nil, err
 	}
 	var onClose func()
@@ -218,10 +220,18 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	}
 	tlsConf = tlsConf.Clone()
 	setTLSConfigServerName(tlsConf, addr, host)
-	return dial(ctx, newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
+	sendConn := newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger)
+	t.mutex.Unlock()
+	return dial(ctx, sendConn, t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
 }
 
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	return t.initUnlocked(allowZeroLengthConnIDs)
+}
+
+func (t *Transport) initUnlocked(allowZeroLengthConnIDs bool) error {
 	t.initOnce.Do(func() {
 		var conn rawConn
 		if c, ok := t.Conn.(rawConn); ok {
@@ -304,9 +314,11 @@ func (t *Transport) runSendQueue() {
 // If any listener was started, it will be closed as well.
 // It is invalid to start new listeners or connections after that.
 func (t *Transport) Close() error {
-	t.close(errors.New("closing"))
+	t.mutex.Lock()
+	t.closeUnlocked(errors.New("closing"))
 	if t.createdConn {
 		if err := t.Conn.Close(); err != nil {
+			t.mutex.Unlock()
 			return err
 		}
 	} else if t.conn != nil {
@@ -314,8 +326,11 @@ func (t *Transport) Close() error {
 		defer func() { t.conn.SetReadDeadline(time.Time{}) }()
 	}
 	if t.listening != nil {
+		t.mutex.Unlock()
 		<-t.listening // wait until listening returns
+		return nil
 	}
+	t.mutex.Unlock()
 	return nil
 }
 
@@ -339,6 +354,10 @@ func (t *Transport) closeServer() {
 func (t *Transport) close(e error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	t.closeUnlocked(e)
+}
+
+func (t *Transport) closeUnlocked(e error) {
 	if t.closed {
 		return
 	}
