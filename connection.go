@@ -113,6 +113,8 @@ func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTr
 
 // A Connection is a QUIC connection
 type connection struct {
+	debugSendCtr atomic.Int64
+	debugRcvCtr  atomic.Int64
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
@@ -214,6 +216,20 @@ var (
 	_ streamSender    = &connection{}
 )
 
+const logThreshold = 30 // Only log when above 30 streams
+func debugLogStreamTracker(c *connection) {
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+			if c.debugSendCtr.Load() > logThreshold || c.debugRcvCtr.Load() > logThreshold {
+				fmt.Printf("Conn: %s. Open Send streams: %d, Open Receive Streams: %d\n", c.logID, c.debugSendCtr.Load(), c.debugRcvCtr.Load())
+			}
+		}
+	}
+}
+
 var newConnection = func(
 	ctx context.Context,
 	ctxCancel context.CancelCauseFunc,
@@ -248,6 +264,7 @@ var newConnection = func(
 		logger:              logger,
 		version:             v,
 	}
+	go debugLogStreamTracker(s)
 	if origDestConnID.Len() > 0 {
 		s.logID = origDestConnID.String()
 	} else {
@@ -495,6 +512,14 @@ func (s *connection) preSetup() {
 func (s *connection) run() error {
 	var closeErr closeError
 	defer func() { s.ctxCancel(closeErr.err) }()
+	defer func() {
+		fmt.Println("clearing received packets")
+		go func() {
+			for range s.receivedPackets {
+			}
+			fmt.Println("clearing received packets")
+		}()
+	}()
 
 	s.timer = *newTimer()
 
@@ -2172,9 +2197,57 @@ func (s *connection) maxPacketSize() protocol.ByteCount {
 	return s.mtuDiscoverer.CurrentSize()
 }
 
+type debugStreamTracker struct {
+	Stream
+	sendClosed func()
+	rcvClosed  func()
+}
+
+func (s *debugStreamTracker) Close() error {
+	s.sendClosed()
+	return s.Stream.Close()
+}
+
+func (s *debugStreamTracker) CancelRead(e StreamErrorCode) {
+	s.rcvClosed()
+	s.Stream.CancelRead(e)
+}
+
+func (s *debugStreamTracker) CancelWrite(e StreamErrorCode) {
+	s.sendClosed()
+	s.Stream.CancelWrite(e)
+}
+
+func (s *debugStreamTracker) Read(p []byte) (int, error) {
+	n, err := s.Stream.Read(p)
+	if err != nil {
+		s.rcvClosed()
+	}
+	return n, err
+}
+
+func wrapStream(c *connection, s Stream, err error) (*debugStreamTracker, error) {
+	if err != nil {
+		return nil, err
+	}
+	c.debugSendCtr.Add(1)
+	c.debugRcvCtr.Add(1)
+	return &debugStreamTracker{
+		Stream: s,
+		sendClosed: sync.OnceFunc(func() {
+			c.debugSendCtr.Add(-1)
+		}),
+		rcvClosed: sync.OnceFunc(func() {
+			c.debugRcvCtr.Add(-1)
+		}),
+	}, nil
+
+}
+
 // AcceptStream returns the next stream openend by the peer
 func (s *connection) AcceptStream(ctx context.Context) (Stream, error) {
-	return s.streamsMap.AcceptStream(ctx)
+	newS, err := s.streamsMap.AcceptStream(ctx)
+	return wrapStream(s, newS, err)
 }
 
 func (s *connection) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
@@ -2183,11 +2256,13 @@ func (s *connection) AcceptUniStream(ctx context.Context) (ReceiveStream, error)
 
 // OpenStream opens a stream
 func (s *connection) OpenStream() (Stream, error) {
-	return s.streamsMap.OpenStream()
+	newS, err := s.streamsMap.OpenStream()
+	return wrapStream(s, newS, err)
 }
 
 func (s *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
-	return s.streamsMap.OpenStreamSync(ctx)
+	newS, err := s.streamsMap.OpenStreamSync(ctx)
+	return wrapStream(s, newS, err)
 }
 
 func (s *connection) OpenUniStream() (SendStream, error) {
