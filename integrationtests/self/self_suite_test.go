@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"runtime/pprof"
@@ -262,7 +263,9 @@ func scaleDuration(d time.Duration) time.Duration {
 	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
 		scaleFactor = f
 	}
-	Expect(scaleFactor).ToNot(BeZero())
+	if scaleFactor == 0 {
+		panic("TIMESCALE_FACTOR is 0")
+	}
 	return time.Duration(scaleFactor) * d
 }
 
@@ -319,6 +322,26 @@ func newPacketTracer() (*packetCounter, *logging.ConnectionTracer) {
 			c.sentShortHdr = append(c.sentShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
 		},
 		Close: func() { close(c.closed) },
+	}
+}
+
+type readerWithTimeout struct {
+	io.Reader
+	Timeout time.Duration
+}
+
+func (r *readerWithTimeout) Read(p []byte) (n int, err error) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		n, err = r.Reader.Read(p)
+	}()
+
+	select {
+	case <-done:
+		return n, err
+	case <-time.After(r.Timeout):
+		return 0, fmt.Errorf("read timeout after %s", r.Timeout)
 	}
 }
 

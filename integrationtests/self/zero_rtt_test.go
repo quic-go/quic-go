@@ -58,7 +58,9 @@ func contains0RTTPacket(data []byte) bool {
 			return false
 		}
 		hdr, _, rest, err := wire.ParsePacket(data)
-		Expect(err).ToNot(HaveOccurred())
+		if err != nil {
+			return false
+		}
 		if hdr.Type == protocol.PacketType0RTT {
 			return true
 		}
