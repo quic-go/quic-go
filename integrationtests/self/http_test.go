@@ -957,3 +957,118 @@ func TestHTTPStreamer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, PRData, repl)
 }
+
+func TestHTTPClientTrace(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/client-trace", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusContinue)
+	})
+	port := startHTTPServer(t, mux)
+
+	buf := make([]byte, 1)
+	getConn := false
+	gotConn := false
+	gotFirstResponseByte := false
+	got100Continue := false
+	got1xxResponse := false
+	dnsStart := false
+	dnsDone := false
+	connectStart := false
+	connectDone := false
+	tlsHandshakeStart := false
+	tlsHandshakeDone := false
+	wroteHeaderField := false
+	wroteHeaders := false
+	wait100Continue := false
+	wroteRequest := false
+	trace := httptrace.ClientTrace{
+		GetConn: func(hostPort string) {
+			getConn = true
+			require.Equal(t, hostPort, fmt.Sprintf("localhost:%d", port))
+		},
+		GotConn: func(info httptrace.GotConnInfo) {
+			gotConn = true
+			require.Equal(t, fmt.Sprintf("127.0.0.1:%d", port), info.Conn.RemoteAddr().String())
+			host, _, err := net.SplitHostPort(info.Conn.LocalAddr().String())
+			require.NoError(t, err)
+			require.Contains(t, []string{"::", "0.0.0.0"}, host)
+			require.Panics(t, func() { info.Conn.Close() })
+			require.Panics(t, func() { info.Conn.Read(buf) })
+			require.Panics(t, func() { info.Conn.Write(buf) })
+			require.Panics(t, func() { info.Conn.SetDeadline(time.Now()) })
+			require.Panics(t, func() { info.Conn.SetReadDeadline(time.Now()) })
+			require.Panics(t, func() { info.Conn.SetWriteDeadline(time.Now()) })
+		},
+		GotFirstResponseByte: func() { gotFirstResponseByte = true },
+		Got100Continue:       func() { got100Continue = true },
+		Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+			got1xxResponse = true
+			require.Equal(t, 100, code)
+			return nil
+		},
+		DNSStart: func(di httptrace.DNSStartInfo) {
+			dnsStart = true
+			require.Equal(t, "localhost", di.Host)
+		},
+		DNSDone: func(di httptrace.DNSDoneInfo) {
+			dnsDone = true
+			require.Contains(t, di.Addrs, net.IPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		},
+		ConnectStart: func(network, addr string) {
+			connectStart = true
+			require.Equal(t, "udp", network)
+			require.Equal(t, fmt.Sprintf("localhost:%d", port), addr)
+		},
+		ConnectDone: func(network, addr string, err error) {
+			connectDone = true
+			require.NoError(t, err)
+			require.Equal(t, "udp", network)
+			require.Equal(t, fmt.Sprintf("localhost:%d", port), addr)
+		},
+		TLSHandshakeStart: func() { tlsHandshakeStart = true },
+		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
+			tlsHandshakeDone = true
+			require.NoError(t, err)
+			require.Equal(t, 1, len(state.PeerCertificates))
+			require.Equal(t, "localhost", state.PeerCertificates[0].DNSNames[0])
+		},
+		WroteHeaderField: func(key string, value []string) {
+			wroteHeaderField = true
+			if key != ":authority" {
+				return
+			}
+			require.Equal(t, ":authority", key)
+			require.Equal(t, fmt.Sprintf("localhost:%d", port), value[0])
+		},
+		WroteHeaders:    func() { wroteHeaders = true },
+		Wait100Continue: func() { wait100Continue = true },
+		WroteRequest: func(i httptrace.WroteRequestInfo) {
+			wroteRequest = true
+			require.NoError(t, i.Err)
+		},
+	}
+	ctx := httptrace.WithClientTrace(context.Background(), &trace)
+
+	cl := newHTTP3Client(t)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/client-trace", port), nil)
+	require.NoError(t, err)
+	resp, err := cl.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Truef(t, getConn, "get conn")
+	require.Truef(t, gotConn, "got conn")
+	require.Truef(t, gotFirstResponseByte, "got first response byte")
+	require.Truef(t, got100Continue, "got 100 continue")
+	require.Truef(t, got1xxResponse, "got 1xx response")
+	require.Truef(t, dnsStart, "dns start")
+	require.Truef(t, dnsDone, "dns done")
+	require.Truef(t, connectStart, "connect start")
+	require.Truef(t, connectDone, "connect done")
+	require.Truef(t, tlsHandshakeStart, "tls handshake start")
+	require.Truef(t, tlsHandshakeDone, "tls handshake done")
+	require.Truef(t, wroteHeaderField, "wrote header field")
+	require.Truef(t, wroteHeaders, "wrote headers")
+	require.Falsef(t, wait100Continue, "wait 100 continue")
+	require.Truef(t, wroteRequest, "wrote request")
+}
