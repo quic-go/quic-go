@@ -248,6 +248,7 @@ var _ = Describe("Transport", func() {
 			handshakeChan := make(chan struct{})
 			close(handshakeChan)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 
 			cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 			cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
@@ -348,6 +349,7 @@ var _ = Describe("Transport", func() {
 			handshakeChan := make(chan struct{})
 			close(handshakeChan)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			cl1.EXPECT().RoundTrip(req1).Return(nil, testErr)
 			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 			_, err = tr.RoundTrip(req1)
@@ -382,6 +384,7 @@ var _ = Describe("Transport", func() {
 			handshakeChan := make(chan struct{})
 			close(handshakeChan)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			var count int
 			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				count++
