@@ -112,7 +112,7 @@ func TestBidirectionalStreamMultiplexing(t *testing.T) {
 		}
 	})
 
-	t.Run("bidirectional", func(t *testing.T) {
+	t.Run("client <-> server", func(t *testing.T) {
 		ln, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
@@ -161,5 +161,161 @@ func TestBidirectionalStreamMultiplexing(t *testing.T) {
 		case <-time.After(time.Second):
 			require.Fail(t, "timeout")
 		}
+	})
+}
+
+func TestUnidirectionalStreams(t *testing.T) {
+	const numStreams = 500
+
+	dataForStream := func(id uint64) []byte { return GeneratePRData(10 * int(id)) }
+
+	runSendingPeer := func(conn quic.Connection) error {
+		g := new(errgroup.Group)
+		for i := 0; i < numStreams; i++ {
+			str, err := conn.OpenUniStreamSync(context.Background())
+			if err != nil {
+				return err
+			}
+			g.Go(func() error {
+				if _, err := str.Write(dataForStream(uint64(str.StreamID()))); err != nil {
+					return err
+				}
+				return str.Close()
+			})
+		}
+		return g.Wait()
+	}
+
+	runReceivingPeer := func(conn quic.Connection) error {
+		g := new(errgroup.Group)
+		for i := 0; i < numStreams; i++ {
+			str, err := conn.AcceptUniStream(context.Background())
+			if err != nil {
+				return err
+			}
+			g.Go(func() error {
+				data, err := io.ReadAll(str)
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(data, dataForStream(uint64(str.StreamID()))) {
+					return fmt.Errorf("data mismatch")
+				}
+				return nil
+			})
+		}
+		return g.Wait()
+	}
+
+	t.Run("client -> server", func(t *testing.T) {
+		ln, err := quic.ListenAddr(
+			"localhost:0",
+			getTLSConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+		defer ln.Close()
+
+		client, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+
+		serverConn, err := ln.Accept(context.Background())
+		require.NoError(t, err)
+		errChan := make(chan error, 1)
+		go func() { errChan <- runSendingPeer(client) }()
+		require.NoError(t, runReceivingPeer(serverConn))
+		serverConn.CloseWithError(0, "")
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			require.Fail(t, "timeout")
+		}
+	})
+
+	t.Run("server -> client", func(t *testing.T) {
+		ln, err := quic.ListenAddr(
+			"localhost:0",
+			getTLSConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+		defer ln.Close()
+
+		client, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+
+		serverConn, err := ln.Accept(context.Background())
+		require.NoError(t, err)
+		errChan := make(chan error, 1)
+		go func() { errChan <- runSendingPeer(serverConn) }()
+
+		require.NoError(t, runReceivingPeer(client))
+		client.CloseWithError(0, "")
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			require.Fail(t, "timeout")
+		}
+	})
+
+	t.Run("client <-> server", func(t *testing.T) {
+		ln, err := quic.ListenAddr(
+			"localhost:0",
+			getTLSConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+		defer ln.Close()
+
+		errChan1 := make(chan error, 1)
+		errChan2 := make(chan error, 1)
+		go func() {
+			conn, err := ln.Accept(context.Background())
+			if err != nil {
+				errChan1 <- err
+				errChan2 <- err
+				return
+			}
+			errChan1 <- runReceivingPeer(conn)
+			errChan2 <- runSendingPeer(conn)
+		}()
+
+		client, err := quic.DialAddr(
+			context.Background(),
+			fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+
+		errChan3 := make(chan error, 1)
+		go func() {
+			errChan3 <- runSendingPeer(client)
+		}()
+		require.NoError(t, runReceivingPeer(client))
+
+		for _, ch := range []chan error{errChan1, errChan2, errChan3} {
+			select {
+			case err := <-ch:
+				require.NoError(t, err)
+			case <-time.After(time.Second):
+				require.Fail(t, "timeout")
+			}
+		}
+		client.CloseWithError(0, "")
 	})
 }
