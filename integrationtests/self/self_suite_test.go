@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"runtime/pprof"
 	"strconv"
@@ -301,6 +302,17 @@ func (t *packetCounter) getRcvdLongHeaderPackets() []packet {
 	return t.rcvdLongHdr
 }
 
+func (t *packetCounter) getRcvd0RTTPacketNumbers() []protocol.PacketNumber {
+	packets := t.getRcvdLongHeaderPackets()
+	var zeroRTTPackets []protocol.PacketNumber
+	for _, p := range packets {
+		if p.hdr.Type == protocol.PacketType0RTT {
+			zeroRTTPackets = append(zeroRTTPackets, p.hdr.PacketNumber)
+		}
+	}
+	return zeroRTTPackets
+}
+
 func (t *packetCounter) getRcvdShortHeaderPackets() []shortHeaderPacket {
 	<-t.closed
 	return t.rcvdShortHdr
@@ -343,6 +355,29 @@ func (r *readerWithTimeout) Read(p []byte) (n int, err error) {
 	case <-time.After(r.Timeout):
 		return 0, fmt.Errorf("read timeout after %s", r.Timeout)
 	}
+}
+
+func randomDuration(min, max time.Duration) time.Duration {
+	return min + time.Duration(rand.Int63n(int64(max-min)))
+}
+
+// contains0RTTPacket says if a packet contains a 0-RTT long header packet.
+// It correctly handles coalesced packets.
+func contains0RTTPacket(data []byte) bool {
+	for len(data) > 0 {
+		if !wire.IsLongHeaderPacket(data[0]) {
+			return false
+		}
+		hdr, _, rest, err := wire.ParsePacket(data)
+		if err != nil {
+			return false
+		}
+		if hdr.Type == protocol.PacketType0RTT {
+			return true
+		}
+		data = rest
+	}
+	return false
 }
 
 func TestSelf(t *testing.T) {

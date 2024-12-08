@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -14,10 +16,8 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/qtls"
-	"github.com/quic-go/quic-go/logging"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 type tokenStore struct {
@@ -46,882 +46,657 @@ func (c *tokenStore) Pop(key string) *quic.ClientToken {
 	return c.store.Pop(key)
 }
 
-var _ = Describe("Handshake tests", func() {
-	var (
-		server        *quic.Listener
-		serverConfig  *quic.Config
-		acceptStopped chan struct{}
+func TestHandshake(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		conf *tls.Config
+	}{
+		{"short cert chain", getTLSConfig()},
+		{"long cert chain", getTLSConfigWithLongCertChain()},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server, err := quic.ListenAddr("localhost:0", tt.conf, getQuicConfig(nil))
+			require.NoError(t, err)
+			defer server.Close()
+
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			require.NoError(t, err)
+			defer conn.CloseWithError(0, "")
+
+			_, err = server.Accept(context.Background())
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestHandshakeServerMismatch(t *testing.T) {
+	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	conf := getTLSClientConfig()
+	conf.ServerName = "foo.bar"
+	_, err = quic.Dial(
+		context.Background(),
+		conn,
+		server.Addr(),
+		conf,
+		getQuicConfig(nil),
 	)
+	require.Error(t, err)
+	var transportErr *quic.TransportError
+	require.True(t, errors.As(err, &transportErr))
+	require.True(t, transportErr.ErrorCode.IsCryptoError())
+	require.Contains(t, transportErr.Error(), "x509: certificate is valid for localhost, not foo.bar")
+	var certErr *tls.CertificateVerificationError
+	require.True(t, errors.As(transportErr, &certErr))
+}
 
-	BeforeEach(func() {
-		server = nil
-		acceptStopped = make(chan struct{})
-		serverConfig = getQuicConfig(nil)
-	})
+func TestHandshakeCipherSuites(t *testing.T) {
+	for _, suiteID := range []uint16{
+		tls.TLS_AES_128_GCM_SHA256,
+		tls.TLS_AES_256_GCM_SHA384,
+		tls.TLS_CHACHA20_POLY1305_SHA256,
+	} {
+		t.Run(tls.CipherSuiteName(suiteID), func(t *testing.T) {
+			reset := qtls.SetCipherSuite(suiteID)
+			defer reset()
 
-	AfterEach(func() {
-		if server != nil {
-			server.Close()
-			<-acceptStopped
-		}
-	})
+			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+			require.NoError(t, err)
+			defer ln.Close()
 
-	runServer := func(tlsConf *tls.Config) {
-		var err error
-		// start the server
-		server, err = quic.ListenAddr("localhost:0", tlsConf, serverConfig)
-		Expect(err).ToNot(HaveOccurred())
+			go func() {
+				conn, err := ln.Accept(context.Background())
+				require.NoError(t, err)
+				str, err := conn.OpenStream()
+				require.NoError(t, err)
+				defer str.Close()
+				_, err = str.Write(PRData)
+				require.NoError(t, err)
+			}()
 
-		go func() {
-			defer GinkgoRecover()
-			defer close(acceptStopped)
-			for {
-				if _, err := server.Accept(context.Background()); err != nil {
-					return
-				}
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			require.NoError(t, err)
+			str, err := conn.AcceptStream(context.Background())
+			require.NoError(t, err)
+			data, err := io.ReadAll(str)
+			require.NoError(t, err)
+			require.Equal(t, PRData, data)
+			require.Equal(t, suiteID, conn.ConnectionState().TLS.CipherSuite)
+			require.NoError(t, conn.CloseWithError(0, ""))
+		})
+	}
+}
+
+func TestTLSGetConfigForClientError(t *testing.T) {
+	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	require.NoError(t, err)
+	udpConn, err := net.ListenUDP("udp", laddr)
+	require.NoError(t, err)
+	tr := &quic.Transport{Conn: udpConn}
+	addTracer(tr)
+	defer tr.Close()
+
+	tlsConf := &tls.Config{
+		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			return nil, errors.New("nope")
+		},
+	}
+	ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	_, err = quic.DialAddr(context.Background(), ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.True(t, transportErr.ErrorCode.IsCryptoError())
+}
+
+// Since we're not operating on a net.Conn, we need to jump through some hoops to set the addresses on the tls.ClientHelloInfo.
+// Use a recursive setup to test that this works under all conditions.
+func TestTLSConfigGetConfigForClientAddresses(t *testing.T) {
+	var local, remote net.Addr
+	var local2, remote2 net.Addr
+	done := make(chan struct{})
+	tlsConf := &tls.Config{
+		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			local = info.Conn.LocalAddr()
+			remote = info.Conn.RemoteAddr()
+			conf := getTLSConfig()
+			conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				defer close(done)
+				local2 = info.Conn.LocalAddr()
+				remote2 = info.Conn.RemoteAddr()
+				return &(conf.Certificates[0]), nil
 			}
-		}()
+			return conf, nil
+		},
+	}
+	server, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	conn, err := quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(nil),
+	)
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for GetCertificate callback")
 	}
 
-	It("returns the context cancellation error on timeouts", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(20*time.Millisecond))
-		defer cancel()
+	require.Equal(t, server.Addr(), local)
+	require.Equal(t, conn.LocalAddr().(*net.UDPAddr).Port, remote.(*net.UDPAddr).Port)
+	require.Equal(t, local, local2)
+	require.Equal(t, remote, remote2)
+}
+
+func TestHandshakeFailsWithoutClientCert(t *testing.T) {
+	tlsConf := getTLSConfig()
+	tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
+
+	server, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	conn, err := quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(nil),
+	)
+
+	// Usually, the error will occur after the client already finished the handshake.
+	// However, there's a race condition here. The server's CONNECTION_CLOSE might be
+	// received before the connection is returned, so we might already get the error while dialing.
+	if err == nil {
 		errChan := make(chan error, 1)
 		go func() {
-			_, err := quic.DialAddr(
-				ctx,
-				"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
+			_, err := conn.AcceptStream(context.Background())
 			errChan <- err
 		}()
 
-		var err error
-		Eventually(errChan).Should(Receive(&err))
-		Expect(err).To(HaveOccurred())
-		Expect(err).To(MatchError(context.DeadlineExceeded))
+		err = <-errChan
+	}
+
+	require.Error(t, err)
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.True(t, transportErr.ErrorCode.IsCryptoError())
+	require.Condition(t, func() bool {
+		errStr := transportErr.Error()
+		return strings.Contains(errStr, "tls: certificate required") ||
+			strings.Contains(errStr, "tls: bad certificate")
 	})
+}
 
-	It("returns the cancellation reason when a dial is canceled", func() {
-		ctx, cancel := context.WithCancelCause(context.Background())
-		errChan := make(chan error, 1)
-		go func() {
-			_, err := quic.DialAddr(
-				ctx,
-				"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
-			errChan <- err
-		}()
+func TestClosedConnectionsInAcceptQueue(t *testing.T) {
+	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	require.NoError(t, err)
+	pconn, err := net.ListenUDP("udp", laddr)
+	require.NoError(t, err)
+	defer pconn.Close()
+	dialer := &quic.Transport{Conn: pconn}
+	defer dialer.Close()
 
-		cancel(errors.New("application cancelled"))
-		var err error
-		Eventually(errChan).Should(Receive(&err))
-		Expect(err).To(HaveOccurred())
-		Expect(err).To(MatchError("application cancelled"))
+	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	raddr, err := net.ResolveUDPAddr("udp", server.Addr().String())
+	require.NoError(t, err)
+
+	// Create first connection
+	conn1, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	conn2, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn2.CloseWithError(0, "")
+	// close the first connection
+	const appErrCode quic.ApplicationErrorCode = 12345
+	require.NoError(t, conn1.CloseWithError(appErrCode, ""))
+
+	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued and closed
+
+	// accept all connections, and find the closed one
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	var closedConn quic.Connection
+	for i := 0; i < 2; i++ {
+		conn, err := server.Accept(ctx)
+		require.NoError(t, err)
+		if conn.Context().Err() != nil {
+			require.Nil(t, closedConn, "only expected a single closed connection")
+			closedConn = conn
+		}
+	}
+	require.NotNil(t, closedConn, "expected one closed connection")
+
+	_, err = closedConn.AcceptStream(context.Background())
+	var appErr *quic.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, appErrCode, appErr.ErrorCode)
+}
+
+func TestServerAcceptQueueOverflow(t *testing.T) {
+	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	require.NoError(t, err)
+	pconn, err := net.ListenUDP("udp", laddr)
+	require.NoError(t, err)
+	defer pconn.Close()
+	dialer := &quic.Transport{Conn: pconn}
+	defer dialer.Close()
+
+	remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
+	raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
+	require.NoError(t, err)
+
+	// fill up the accept queue
+	for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+		conn, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+		defer conn.CloseWithError(0, "")
+	}
+	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued
+
+	// next connection should be rejected
+	conn, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	_, err = conn.AcceptStream(ctx)
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
+
+	// accept one connection to free up a spot
+	_, err = server.Accept(context.Background())
+	require.NoError(t, err)
+
+	// should be able to dial again
+	conn2, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn2.CloseWithError(0, "")
+	time.Sleep(scaleDuration(25 * time.Millisecond))
+
+	// but next connection should be rejected again
+	conn3, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	_, err = conn3.AcceptStream(ctx)
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
+}
+
+func TestHandshakingConnectionsClosedOnServerShutdown(t *testing.T) {
+	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	require.NoError(t, err)
+	udpConn, err := net.ListenUDP("udp", laddr)
+	require.NoError(t, err)
+
+	tr := &quic.Transport{Conn: udpConn}
+	addTracer(tr)
+	defer tr.Close()
+
+	rtt := scaleDuration(40 * time.Millisecond)
+	connQueued := make(chan struct{})
+	tlsConf := &tls.Config{
+		GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+			close(connQueued)
+			// Sleep for a bit.
+			// This allows the server to close the connection before the handshake completes.
+			time.Sleep(rtt / 2)
+			return getTLSConfig(), nil
+		},
+	}
+
+	ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
+	require.NoError(t, err)
+
+	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+		RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
 	})
+	require.NoError(t, err)
+	defer proxy.Close()
 
-	It("uses the context everywhere, on the server side", func() {
-		tlsGetConfigForClientContextChan := make(chan context.Context, 1)
-		tlsGetCertificateContextChan := make(chan context.Context, 1)
-		tracerContextChan := make(chan context.Context, 1)
-		connContextChan := make(chan context.Context, 1)
-		streamContextChan := make(chan context.Context, 1)
-		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-		Expect(err).ToNot(HaveOccurred())
-		defer conn.Close()
-		tr := &quic.Transport{
-			Conn: conn,
-			ConnContext: func(ctx context.Context) context.Context {
-				//nolint:staticcheck
-				return context.WithValue(ctx, "foo", "bar")
-			},
-		}
-		defer tr.Close()
-		server, err := tr.Listen(
-			&tls.Config{
-				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-					tlsGetConfigForClientContextChan <- info.Context()
-					tlsConf := getTLSConfig()
-					tlsConf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-						tlsGetCertificateContextChan <- info.Context()
-						return &tlsConf.Certificates[0], nil
-					}
-					return tlsConf, nil
-				},
-			},
-			getQuicConfig(&quic.Config{
-				Tracer: func(ctx context.Context, _ logging.Perspective, _ quic.ConnectionID) *logging.ConnectionTracer {
-					tracerContextChan <- ctx
-					return nil
-				},
-			}),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		defer server.Close()
+	errChan := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-		go func() {
-			defer GinkgoRecover()
-			defer close(acceptStopped)
-			for {
-				conn, err := server.Accept(context.Background())
-				if err != nil {
-					return
-				}
-				connContextChan <- conn.Context()
-				str, err := conn.OpenUniStream()
-				Expect(err).ToNot(HaveOccurred())
-				streamContextChan <- str.Context()
-				str.Write([]byte{1, 2, 3})
-			}
-		}()
+	go func() {
+		_, err := quic.DialAddr(ctx, ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+		errChan <- err
+	}()
 
-		c, err := quic.DialAddr(
-			context.Background(),
-			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-			getTLSClientConfig(),
-			getQuicConfig(nil),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = c.AcceptUniStream(context.Background())
-		Expect(err).ToNot(HaveOccurred())
-		c.CloseWithError(1337, "bye")
+	select {
+	case <-connQueued:
+	case <-time.After(5 * rtt):
+		t.Fatal("timeout waiting for connection queued")
+	}
+	require.NoError(t, ln.Close())
 
-		checkContext := func(c <-chan context.Context, checkCancellationCause bool) {
-			var ctx context.Context
-			EventuallyWithOffset(1, c).Should(Receive(&ctx))
-			val := ctx.Value("foo")
-			ExpectWithOffset(1, val).ToNot(BeNil())
-			v := val.(string)
-			ExpectWithOffset(1, v).To(Equal("bar"))
-			EventuallyWithOffset(1, ctx.Done).Should(BeClosed())
-			if !checkCancellationCause {
-				return
-			}
-			ctxErr := context.Cause(ctx)
-			var appErr *quic.ApplicationError
-			ExpectWithOffset(1, errors.As(ctxErr, &appErr)).To(BeTrue())
-			ExpectWithOffset(1, appErr.ErrorCode).To(BeEquivalentTo(1337))
-		}
-		checkContext(connContextChan, true)
-		checkContext(tracerContextChan, true)
-		checkContext(streamContextChan, true)
-		// crypto/tls cancels the context when the TLS handshake completes.
-		checkContext(tlsGetConfigForClientContextChan, false)
-		checkContext(tlsGetCertificateContextChan, false)
-	})
+	err = <-errChan
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
+}
 
-	It("correctly handles a fresh context returned from ConnContext", func() {
-		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-		Expect(err).ToNot(HaveOccurred())
-		defer conn.Close()
-		tr := &quic.Transport{
-			Conn:        conn,
-			ConnContext: func(ctx context.Context) context.Context { return context.Background() },
-		}
-		server, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
-		Expect(err).ToNot(HaveOccurred())
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			defer close(done)
-			conn, err := server.Accept(context.Background())
+func TestALPN(t *testing.T) {
+	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	acceptChan := make(chan quic.Connection, 2)
+	go func() {
+		for {
+			conn, err := ln.Accept(context.Background())
 			if err != nil {
 				return
 			}
-			Eventually(conn.Context().Done).Should(BeClosed())
-		}()
-
-		c, err := quic.DialAddr(
-			context.Background(),
-			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-			getTLSClientConfig(),
-			getQuicConfig(nil),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		c.CloseWithError(1337, "bye")
-	})
-
-	It("uses the context everywhere, on the client side", func() {
-		tlsServerConf := getTLSConfig()
-		tlsServerConf.ClientAuth = tls.RequestClientCert
-		runServer(tlsServerConf)
-
-		tlsContextChan := make(chan context.Context, 1)
-		tracerContextChan := make(chan context.Context, 1)
-		tlsConf := getTLSClientConfig()
-		tlsConf.GetClientCertificate = func(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			tlsContextChan <- info.Context()
-			return &tlsServerConf.Certificates[0], nil
+			acceptChan <- conn
 		}
-		//nolint:staticcheck
-		ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar"))
-		conn, err := quic.DialAddr(
-			ctx,
-			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-			tlsConf,
-			getQuicConfig(&quic.Config{
-				Tracer: func(ctx context.Context, _ logging.Perspective, _ quic.ConnectionID) *logging.ConnectionTracer {
-					tracerContextChan <- ctx
-					return nil
-				},
-			}),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		cancel()
-		// make sure the connection context is not cancelled (even though derived from the ctx passed to Dial)
-		Expect(ctx.Done()).ToNot(Receive())
+	}()
 
-		checkContext := func(ctx context.Context, checkCancellationCause bool) {
-			val := ctx.Value("foo")
-			ExpectWithOffset(2, val).ToNot(BeNil())
-			v := val.(string)
-			ExpectWithOffset(2, v).To(Equal("bar"))
-			if !checkCancellationCause {
+	conn, err := quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		nil,
+	)
+	require.NoError(t, err)
+	cs := conn.ConnectionState()
+	require.Equal(t, alpn, cs.TLS.NegotiatedProtocol)
+	require.NoError(t, conn.CloseWithError(0, ""))
+
+	select {
+	case c := <-acceptChan:
+		require.Equal(t, alpn, c.ConnectionState().TLS.NegotiatedProtocol)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for server connection")
+	}
+
+	// now try with a different ALPN
+	tlsConf := getTLSClientConfig()
+	tlsConf.NextProtos = []string{"foobar"}
+	_, err = quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+		tlsConf,
+		nil,
+	)
+	require.Error(t, err)
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.True(t, transportErr.ErrorCode.IsCryptoError())
+	require.Contains(t, transportErr.Error(), "no application protocol")
+}
+
+func TestTokensFromNewTokenFrames(t *testing.T) {
+	addrVerifiedChan := make(chan bool, 2)
+	quicConf := getQuicConfig(nil)
+	quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		addrVerifiedChan <- info.AddrVerified
+		return quicConf, nil
+	}
+	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), quicConf)
+	require.NoError(t, err)
+	defer server.Close()
+
+	// dial the first connection and receive the token
+	acceptChan := make(chan error, 2)
+	go func() {
+		_, err := server.Accept(context.Background())
+		acceptChan <- err
+		_, err = server.Accept(context.Background())
+		acceptChan <- err
+	}()
+
+	gets := make(chan string, 2)
+	puts := make(chan string, 2)
+	tokenStore := newTokenStore(gets, puts)
+	conn, err := quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{TokenStore: tokenStore}),
+	)
+	require.NoError(t, err)
+
+	// verify token store was used
+	select {
+	case <-gets:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for token store get")
+	}
+	select {
+	case <-puts:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for token store put")
+	}
+	select {
+	case addrVerified := <-addrVerifiedChan:
+		require.False(t, addrVerified)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for addr verified")
+	}
+	select {
+	case <-acceptChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for accept")
+	}
+	// received a token. Close this connection.
+	require.NoError(t, conn.CloseWithError(0, ""))
+
+	conn, err = quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{TokenStore: tokenStore}),
+	)
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	select {
+	case addrVerified := <-addrVerifiedChan:
+		// this time, the address was verified using the token
+		// TODO (#4737): check that addrVerified is true
+		_ = addrVerified
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for addr verified")
+	}
+	select {
+	case <-gets:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for token store get")
+	}
+	select {
+	case <-acceptChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for accept")
+	}
+}
+
+func TestInvalidToken(t *testing.T) {
+	const rtt = 10 * time.Millisecond
+
+	// The validity period of the retry token is the handshake timeout,
+	// which is twice the handshake idle timeout.
+	// By setting the handshake timeout shorter than the RTT, the token will have
+	// expired by the time it reaches the server.
+	serverConfig := getQuicConfig(&quic.Config{HandshakeIdleTimeout: rtt / 5})
+
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	defer udpConn.Close()
+	tr := &quic.Transport{
+		Conn:                udpConn,
+		VerifySourceAddress: func(net.Addr) bool { return true },
+	}
+	addTracer(tr)
+	defer tr.Close()
+
+	server, err := tr.Listen(getTLSConfig(), serverConfig)
+	require.NoError(t, err)
+	defer server.Close()
+
+	serverPort := server.Addr().(*net.UDPAddr).Port
+	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+		RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+		DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
+			return rtt / 2
+		},
+	})
+	require.NoError(t, err)
+	defer proxy.Close()
+
+	_, err = quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+		getTLSClientConfig(),
+		nil,
+	)
+	require.Error(t, err)
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, quic.InvalidToken, transportErr.ErrorCode)
+}
+
+func TestGetConfigForClient(t *testing.T) {
+	var calledFrom net.Addr
+	serverConfig := getQuicConfig(&quic.Config{EnableDatagrams: true})
+	serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		conf := serverConfig.Clone()
+		conf.EnableDatagrams = true
+		calledFrom = info.RemoteAddr
+		return getQuicConfig(conf), nil
+	}
+	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+	require.NoError(t, err)
+
+	acceptDone := make(chan struct{})
+	go func() {
+		_, err := ln.Accept(context.Background())
+		require.NoError(t, err)
+		close(acceptDone)
+	}()
+
+	conn, err := quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	cs := conn.ConnectionState()
+	require.True(t, cs.SupportsDatagrams)
+
+	select {
+	case <-acceptDone:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for accept")
+	}
+
+	require.NoError(t, ln.Close())
+	require.Equal(t, conn.LocalAddr().(*net.UDPAddr).Port, calledFrom.(*net.UDPAddr).Port)
+}
+
+func TestGetConfigForClientErrorsConnectionRejection(t *testing.T) {
+	ln, err := quic.ListenAddr(
+		"localhost:0",
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{
+			EnableDatagrams: false,
+			GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				return nil, errors.New("rejected")
+			},
+		}),
+	)
+	require.NoError(t, err)
+
+	acceptChan := make(chan bool, 1)
+	go func() {
+		_, err := ln.Accept(context.Background())
+		acceptChan <- err == nil
+	}()
+
+	_, err = quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.ConnectionRefused, transportErr.ErrorCode)
+
+	// verify no connection was accepted
+	ln.Close()
+	require.False(t, <-acceptChan)
+}
+
+func TestNoPacketsSentWhenClientHelloFails(t *testing.T) {
+	ln, err := net.ListenUDP("udp", nil)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	packetChan := make(chan struct{}, 1)
+	go func() {
+		for {
+			_, _, err := ln.ReadFromUDP(make([]byte, protocol.MaxPacketBufferSize))
+			if err != nil {
 				return
 			}
-			ctxErr := context.Cause(ctx)
-			var appErr *quic.ApplicationError
-			ExpectWithOffset(1, errors.As(ctxErr, &appErr)).To(BeTrue())
-			ExpectWithOffset(1, appErr.ErrorCode).To(BeEquivalentTo(1337))
+			select {
+			case packetChan <- struct{}{}:
+			default:
+			}
 		}
+	}()
 
-		checkContextFromChan := func(c <-chan context.Context, checkCancellationCause bool) {
-			var ctx context.Context
-			EventuallyWithOffset(1, c).Should(Receive(&ctx))
-			checkContext(ctx, checkCancellationCause)
-		}
+	tlsConf := getTLSClientConfig()
+	tlsConf.NextProtos = []string{""}
+	_, err = quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", ln.LocalAddr().(*net.UDPAddr).Port),
+		tlsConf,
+		getQuicConfig(nil),
+	)
 
-		str, err := conn.OpenUniStream()
-		Expect(err).ToNot(HaveOccurred())
-		conn.CloseWithError(1337, "bye")
+	var transportErr *quic.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.True(t, transportErr.ErrorCode.IsCryptoError())
+	require.Contains(t, err.Error(), "tls: invalid NextProtos value")
 
-		checkContext(conn.Context(), true)
-		checkContext(str.Context(), true)
-		// crypto/tls cancels the context when the TLS handshake completes.
-		checkContextFromChan(tlsContextChan, false)
-		checkContextFromChan(tracerContextChan, false)
-	})
-
-	It("fails the handshake when tls.Config.GetConfigForClient errors", func() {
-		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-		Expect(err).ToNot(HaveOccurred())
-		udpConn, err := net.ListenUDP("udp", laddr)
-		Expect(err).ToNot(HaveOccurred())
-		tr := &quic.Transport{Conn: udpConn}
-		addTracer(tr)
-		defer tr.Close()
-		tlsConf := &tls.Config{}
-		tlsConf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-			return nil, errors.New("nope")
-		}
-		ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
-		Expect(err).ToNot(HaveOccurred())
-		defer ln.Close()
-
-		_, err = quic.DialAddr(context.Background(), ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
-		var transportErr *quic.TransportError
-		Expect(errors.As(err, &transportErr)).To(BeTrue())
-		Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-	})
-
-	Context("using different cipher suites", func() {
-		for n, id := range map[string]uint16{
-			"TLS_AES_128_GCM_SHA256":       tls.TLS_AES_128_GCM_SHA256,
-			"TLS_AES_256_GCM_SHA384":       tls.TLS_AES_256_GCM_SHA384,
-			"TLS_CHACHA20_POLY1305_SHA256": tls.TLS_CHACHA20_POLY1305_SHA256,
-		} {
-			name := n
-			suiteID := id
-
-			It(fmt.Sprintf("using %s", name), func() {
-				reset := qtls.SetCipherSuite(suiteID)
-				defer reset()
-
-				tlsConf := getTLSConfig()
-				ln, err := quic.ListenAddr("localhost:0", tlsConf, serverConfig)
-				Expect(err).ToNot(HaveOccurred())
-				defer ln.Close()
-
-				go func() {
-					defer GinkgoRecover()
-					conn, err := ln.Accept(context.Background())
-					Expect(err).ToNot(HaveOccurred())
-					str, err := conn.OpenStream()
-					Expect(err).ToNot(HaveOccurred())
-					defer str.Close()
-					_, err = str.Write(PRData)
-					Expect(err).ToNot(HaveOccurred())
-				}()
-
-				conn, err := quic.DialAddr(
-					context.Background(),
-					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-					getTLSClientConfig(),
-					getQuicConfig(nil),
-				)
-				Expect(err).ToNot(HaveOccurred())
-				str, err := conn.AcceptStream(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				data, err := io.ReadAll(str)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(data).To(Equal(PRData))
-				Expect(conn.ConnectionState().TLS.CipherSuite).To(Equal(suiteID))
-				Expect(conn.CloseWithError(0, "")).To(Succeed())
-			})
-		}
-	})
-
-	Context("Certificate validation", func() {
-		It("accepts the certificate", func() {
-			runServer(getTLSConfig())
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			conn.CloseWithError(0, "")
-		})
-
-		It("has the right local and remote address on the tls.Config.GetConfigForClient ClientHelloInfo.Conn", func() {
-			var local, remote net.Addr
-			var local2, remote2 net.Addr
-			done := make(chan struct{})
-			tlsConf := &tls.Config{
-				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-					local = info.Conn.LocalAddr()
-					remote = info.Conn.RemoteAddr()
-					conf := getTLSConfig()
-					conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-						defer close(done)
-						local2 = info.Conn.LocalAddr()
-						remote2 = info.Conn.RemoteAddr()
-						return &(conf.Certificates[0]), nil
-					}
-					return conf, nil
-				},
-			}
-			runServer(tlsConf)
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.CloseWithError(0, "")
-			Eventually(done).Should(BeClosed())
-			Expect(server.Addr()).To(Equal(local))
-			Expect(conn.LocalAddr().(*net.UDPAddr).Port).To(Equal(remote.(*net.UDPAddr).Port))
-			Expect(local).To(Equal(local2))
-			Expect(remote).To(Equal(remote2))
-		})
-
-		It("works with a long certificate chain", func() {
-			runServer(getTLSConfigWithLongCertChain())
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			conn.CloseWithError(0, "")
-		})
-
-		It("errors if the server name doesn't match", func() {
-			runServer(getTLSConfig())
-			conn, err := net.ListenUDP("udp", nil)
-			Expect(err).ToNot(HaveOccurred())
-			conf := getTLSClientConfig()
-			conf.ServerName = "foo.bar"
-			_, err = quic.Dial(
-				context.Background(),
-				conn,
-				server.Addr(),
-				conf,
-				getQuicConfig(nil),
-			)
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
-			var certErr *tls.CertificateVerificationError
-			Expect(errors.As(transportErr, &certErr)).To(BeTrue())
-		})
-
-		It("fails the handshake if the client fails to provide the requested client cert", func() {
-			tlsConf := getTLSConfig()
-			tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
-			runServer(tlsConf)
-
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
-			// Usually, the error will occur after the client already finished the handshake.
-			// However, there's a race condition here. The server's CONNECTION_CLOSE might be
-			// received before the connection is returned, so we might already get the error while dialing.
-			if err == nil {
-				errChan := make(chan error)
-				go func() {
-					defer GinkgoRecover()
-					_, err := conn.AcceptStream(context.Background())
-					errChan <- err
-				}()
-				Eventually(errChan).Should(Receive(&err))
-			}
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(Or(
-				ContainSubstring("tls: certificate required"),
-				ContainSubstring("tls: bad certificate"),
-			))
-		})
-
-		It("uses the ServerName in the tls.Config", func() {
-			runServer(getTLSConfig())
-			tlsConf := getTLSClientConfig()
-			tlsConf.ServerName = "foo.bar"
-			_, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				tlsConf,
-				getQuicConfig(nil),
-			)
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
-		})
-	})
-
-	Context("queuening and accepting connections", func() {
-		var (
-			server *quic.Listener
-			pconn  net.PacketConn
-			dialer *quic.Transport
-		)
-
-		dial := func() (quic.Connection, error) {
-			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
-			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
-			Expect(err).ToNot(HaveOccurred())
-			return dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
-		}
-
-		BeforeEach(func() {
-			var err error
-			// start the server, but don't call Accept
-			server, err = quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
-			Expect(err).ToNot(HaveOccurred())
-
-			// prepare a (single) packet conn for dialing to the server
-			laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-			Expect(err).ToNot(HaveOccurred())
-			pconn, err = net.ListenUDP("udp", laddr)
-			Expect(err).ToNot(HaveOccurred())
-			dialer = &quic.Transport{
-				Conn:               pconn,
-				ConnectionIDLength: 4,
-			}
-		})
-
-		AfterEach(func() {
-			Expect(server.Close()).To(Succeed())
-			Expect(pconn.Close()).To(Succeed())
-			Expect(dialer.Close()).To(Succeed())
-		})
-
-		It("rejects new connection attempts if connections don't get accepted", func() {
-			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
-				conn, err := dial()
-				Expect(err).ToNot(HaveOccurred())
-				defer conn.CloseWithError(0, "")
-			}
-			time.Sleep(25 * time.Millisecond) // wait a bit for the connection to be queued
-
-			conn, err := dial()
-			Expect(err).ToNot(HaveOccurred())
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-			defer cancel()
-			_, err = conn.AcceptStream(ctx)
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
-
-			// now accept one connection, freeing one spot in the queue
-			_, err = server.Accept(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			// dial again, and expect that this dial succeeds
-			conn2, err := dial()
-			Expect(err).ToNot(HaveOccurred())
-			defer conn2.CloseWithError(0, "")
-			time.Sleep(25 * time.Millisecond) // wait a bit for the connection to be queued
-
-			conn3, err := dial()
-			Expect(err).ToNot(HaveOccurred())
-			ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
-			defer cancel()
-			_, err = conn3.AcceptStream(ctx)
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
-		})
-
-		It("also returns closed connections from the accept queue", func() {
-			firstConn, err := dial()
-			Expect(err).ToNot(HaveOccurred())
-
-			for i := 1; i < protocol.MaxAcceptQueueSize; i++ {
-				conn, err := dial()
-				Expect(err).ToNot(HaveOccurred())
-				defer conn.CloseWithError(0, "")
-			}
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
-
-			conn, err := dial()
-			Expect(err).ToNot(HaveOccurred())
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-			defer cancel()
-			_, err = conn.AcceptStream(ctx)
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
-
-			// Now close the one of the connection that are waiting to be accepted.
-			const appErrCode quic.ApplicationErrorCode = 12345
-			Expect(firstConn.CloseWithError(appErrCode, ""))
-			Eventually(firstConn.Context().Done()).Should(BeClosed())
-			time.Sleep(scaleDuration(200 * time.Millisecond))
-
-			// dial again, and expect that this fails again
-			conn2, err := dial()
-			Expect(err).ToNot(HaveOccurred())
-			ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
-			defer cancel()
-			_, err = conn2.AcceptStream(ctx)
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
-
-			// now accept all connections
-			var closedConn quic.Connection
-			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
-				conn, err := server.Accept(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				if conn.Context().Err() != nil {
-					if closedConn != nil {
-						Fail("only expected a single closed connection")
-					}
-					closedConn = conn
-				}
-			}
-			Expect(closedConn).ToNot(BeNil()) // there should be exactly one closed connection
-			_, err = closedConn.AcceptStream(context.Background())
-			var appErr *quic.ApplicationError
-			Expect(errors.As(err, &appErr)).To(BeTrue())
-			Expect(appErr.ErrorCode).To(Equal(appErrCode))
-		})
-
-		It("closes handshaking connections when the server is closed", func() {
-			laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-			Expect(err).ToNot(HaveOccurred())
-			udpConn, err := net.ListenUDP("udp", laddr)
-			Expect(err).ToNot(HaveOccurred())
-			tr := &quic.Transport{Conn: udpConn}
-			addTracer(tr)
-			defer tr.Close()
-
-			rtt := scaleDuration(40 * time.Millisecond)
-			connQueued := make(chan struct{})
-			tlsConf := &tls.Config{
-				GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
-					close(connQueued)
-					// Sleep for a bit.
-					// This allows the server to close the connection before the handshake completes.
-					time.Sleep(rtt / 2)
-					return getTLSConfig(), nil
-				},
-			}
-			ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
-			Expect(err).ToNot(HaveOccurred())
-			serverPort := ln.Addr().(*net.UDPAddr).Port
-			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-				RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
-				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
-			})
-			Expect(err).ToNot(HaveOccurred())
-			defer proxy.Close()
-
-			errChan := make(chan error, 1)
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			go func() {
-				defer GinkgoRecover()
-				_, err := quic.DialAddr(ctx, ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
-				errChan <- err
-			}()
-			Eventually(connQueued, 5*rtt).Should(BeClosed())
-			Expect(ln.Close()).To(Succeed())
-			err = <-errChan
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
-		})
-	})
-
-	Context("ALPN", func() {
-		It("negotiates an application protocol", func() {
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
-			Expect(err).ToNot(HaveOccurred())
-
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				conn, err := ln.Accept(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				cs := conn.ConnectionState()
-				Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
-				close(done)
-			}()
-
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				nil,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.CloseWithError(0, "")
-			cs := conn.ConnectionState()
-			Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
-			Eventually(done).Should(BeClosed())
-			Expect(ln.Close()).To(Succeed())
-		})
-
-		It("errors if application protocol negotiation fails", func() {
-			runServer(getTLSConfig())
-
-			tlsConf := getTLSClientConfig()
-			tlsConf.NextProtos = []string{"foobar"}
-			_, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				tlsConf,
-				nil,
-			)
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(ContainSubstring("no application protocol"))
-		})
-	})
-
-	Context("using tokens", func() {
-		It("uses tokens provided in NEW_TOKEN frames", func() {
-			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
-			Expect(err).ToNot(HaveOccurred())
-			defer server.Close()
-
-			// dial the first connection and receive the token
-			go func() {
-				defer GinkgoRecover()
-				_, err := server.Accept(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-			}()
-
-			gets := make(chan string, 100)
-			puts := make(chan string, 100)
-			tokenStore := newTokenStore(gets, puts)
-			quicConf := getQuicConfig(&quic.Config{TokenStore: tokenStore})
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				quicConf,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(gets).To(Receive())
-			Eventually(puts).Should(Receive())
-			// received a token. Close this connection.
-			Expect(conn.CloseWithError(0, "")).To(Succeed())
-
-			// dial the second connection and verify that the token was used
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				defer close(done)
-				_, err := server.Accept(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-			}()
-			conn, err = quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				quicConf,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.CloseWithError(0, "")
-			Expect(gets).To(Receive())
-
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("rejects invalid Retry token with the INVALID_TOKEN error", func() {
-			const rtt = 10 * time.Millisecond
-
-			// The validity period of the retry token is the handshake timeout,
-			// which is twice the handshake idle timeout.
-			// By setting the handshake timeout shorter than the RTT, the token will have expired by the time
-			// it reaches the server.
-			serverConfig.HandshakeIdleTimeout = rtt / 5
-
-			laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-			Expect(err).ToNot(HaveOccurred())
-			udpConn, err := net.ListenUDP("udp", laddr)
-			Expect(err).ToNot(HaveOccurred())
-			defer udpConn.Close()
-			tr := &quic.Transport{
-				Conn:                udpConn,
-				VerifySourceAddress: func(net.Addr) bool { return true },
-			}
-			addTracer(tr)
-			defer tr.Close()
-			server, err := tr.Listen(getTLSConfig(), serverConfig)
-			Expect(err).ToNot(HaveOccurred())
-			defer server.Close()
-
-			serverPort := server.Addr().(*net.UDPAddr).Port
-			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-				RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-				DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
-					return rtt / 2
-				},
-			})
-			Expect(err).ToNot(HaveOccurred())
-			defer proxy.Close()
-
-			_, err = quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				getTLSClientConfig(),
-				nil,
-			)
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(quic.InvalidToken))
-		})
-	})
-
-	Context("GetConfigForClient", func() {
-		It("uses the quic.Config returned by GetConfigForClient", func() {
-			serverConfig.EnableDatagrams = false
-			var calledFrom net.Addr
-			serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-				conf := serverConfig.Clone()
-				conf.EnableDatagrams = true
-				calledFrom = info.RemoteAddr
-				return getQuicConfig(conf), nil
-			}
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
-			Expect(err).ToNot(HaveOccurred())
-
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := ln.Accept(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				close(done)
-			}()
-
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{EnableDatagrams: true}),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			defer conn.CloseWithError(0, "")
-			cs := conn.ConnectionState()
-			Expect(cs.SupportsDatagrams).To(BeTrue())
-			Eventually(done).Should(BeClosed())
-			Expect(ln.Close()).To(Succeed())
-			Expect(calledFrom.(*net.UDPAddr).Port).To(Equal(conn.LocalAddr().(*net.UDPAddr).Port))
-		})
-
-		It("rejects the connection attempt if GetConfigForClient errors", func() {
-			serverConfig.EnableDatagrams = false
-			serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-				return nil, errors.New("rejected")
-			}
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
-			Expect(err).ToNot(HaveOccurred())
-			defer ln.Close()
-
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := ln.Accept(context.Background())
-				Expect(err).To(HaveOccurred()) // we don't expect to accept any connection
-				close(done)
-			}()
-
-			_, err = quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{EnableDatagrams: true}),
-			)
-			Expect(err).To(HaveOccurred())
-			var transportErr *quic.TransportError
-			Expect(errors.As(err, &transportErr)).To(BeTrue())
-			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
-		})
-	})
-
-	It("doesn't send any packets when generating the ClientHello fails", func() {
-		ln, err := net.ListenUDP("udp", nil)
-		Expect(err).ToNot(HaveOccurred())
-		done := make(chan struct{})
-		packetChan := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			defer close(done)
-			for {
-				_, _, err := ln.ReadFromUDP(make([]byte, protocol.MaxPacketBufferSize))
-				if err != nil {
-					return
-				}
-				packetChan <- struct{}{}
-			}
-		}()
-
-		tlsConf := getTLSClientConfig()
-		tlsConf.NextProtos = []string{""}
-		_, err = quic.DialAddr(
-			context.Background(),
-			fmt.Sprintf("localhost:%d", ln.LocalAddr().(*net.UDPAddr).Port),
-			tlsConf,
-			nil,
-		)
-		var transportErr *quic.TransportError
-		Expect(errors.As(err, &transportErr)).To(BeTrue())
-		Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-		Expect(err.Error()).To(ContainSubstring("tls: invalid NextProtos value"))
-		Consistently(packetChan).ShouldNot(Receive())
-		ln.Close()
-		Eventually(done).Should(BeClosed())
-	})
-})
+	// verify no packets were sent
+	select {
+	case <-packetChan:
+		t.Fatal("received unexpected packet")
+	case <-time.After(50 * time.Millisecond):
+		// no packets received, as expected
+	}
+}
