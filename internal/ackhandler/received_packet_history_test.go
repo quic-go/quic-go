@@ -1,363 +1,222 @@
 package ackhandler
 
 import (
-	"fmt"
 	"math/rand"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("receivedPacketHistory", func() {
-	var hist *receivedPacketHistory
+func TestReceivedPacketHistorySingleRange(t *testing.T) {
+	hist := newReceivedPacketHistory()
 
-	BeforeEach(func() {
-		hist = newReceivedPacketHistory()
-	})
+	require.True(t, hist.ReceivedPacket(4))
+	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 4}}, hist.AppendAckRanges(nil))
 
-	Context("ranges", func() {
-		It("adds the first packet", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 4, End: 4}}))
-		})
+	// add a duplicate packet
+	require.False(t, hist.ReceivedPacket(4))
+	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 4}}, hist.AppendAckRanges(nil))
 
-		It("doesn't care about duplicate packets", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(4)).To(BeFalse())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 4, End: 4}}))
-		})
+	// add a few more packets to extend the range
+	require.True(t, hist.ReceivedPacket(5))
+	require.True(t, hist.ReceivedPacket(6))
+	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 6}}, hist.AppendAckRanges(nil))
 
-		It("adds a few consecutive packets", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 4, End: 6}}))
-		})
+	// add a duplicate within this range
+	require.False(t, hist.ReceivedPacket(5))
+	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 6}}, hist.AppendAckRanges(nil))
 
-		It("doesn't care about a duplicate packet contained in an existing range", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeFalse())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 4, End: 6}}))
-		})
+	// extend the range at the front
+	require.True(t, hist.ReceivedPacket(3))
+	require.Equal(t, []wire.AckRange{{Smallest: 3, Largest: 6}}, hist.AppendAckRanges(nil))
+}
 
-		It("extends a range at the front", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(3)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 3, End: 4}}))
-		})
+func TestReceivedPacketHistoryRanges(t *testing.T) {
+	hist := newReceivedPacketHistory()
+	require.Zero(t, hist.GetHighestAckRange())
 
-		It("creates a new range when a packet is lost", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 4, End: 4},
-				{Start: 6, End: 6},
-			}))
-		})
+	require.True(t, hist.ReceivedPacket(4))
+	require.True(t, hist.ReceivedPacket(10))
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 4, Largest: 4},
+	}, hist.AppendAckRanges(nil))
+	require.Equal(t, wire.AckRange{Smallest: 10, Largest: 10}, hist.GetHighestAckRange())
 
-		It("creates a new range in between two ranges", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(10)).To(BeTrue())
-			Expect(hist.ranges).To(HaveLen(2))
-			Expect(hist.ReceivedPacket(7)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 4, End: 4},
-				{Start: 7, End: 7},
-				{Start: 10, End: 10},
-			}))
-		})
+	// create a new range in the middle
+	require.True(t, hist.ReceivedPacket(7))
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 7, Largest: 7},
+		{Smallest: 4, Largest: 4},
+	}, hist.AppendAckRanges(nil))
 
-		It("creates a new range before an existing range for a belated packet", func() {
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 4, End: 4},
-				{Start: 6, End: 6},
-			}))
-		})
+	// create a new range at the front
+	require.True(t, hist.ReceivedPacket(1))
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 7, Largest: 7},
+		{Smallest: 4, Largest: 4},
+		{Smallest: 1, Largest: 1},
+	}, hist.AppendAckRanges(nil))
 
-		It("extends a previous range at the end", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(7)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 4, End: 5},
-				{Start: 7, End: 7},
-			}))
-		})
+	// extend an existing range at the end
+	require.True(t, hist.ReceivedPacket(8))
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 7, Largest: 8},
+		{Smallest: 4, Largest: 4},
+		{Smallest: 1, Largest: 1},
+	}, hist.AppendAckRanges(nil))
 
-		It("extends a range at the front", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(7)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 4, End: 4},
-				{Start: 6, End: 7},
-			}))
-		})
+	// extend an existing range at the front
+	require.True(t, hist.ReceivedPacket(6))
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 6, Largest: 8},
+		{Smallest: 4, Largest: 4},
+		{Smallest: 1, Largest: 1},
+	}, hist.AppendAckRanges(nil))
 
-		It("closes a range", func() {
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ranges).To(HaveLen(2))
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 4, End: 6}}))
-		})
+	// close a range
+	require.True(t, hist.ReceivedPacket(9))
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 6, Largest: 10},
+		{Smallest: 4, Largest: 4},
+		{Smallest: 1, Largest: 1},
+	}, hist.AppendAckRanges(nil))
+}
 
-		It("closes a range in the middle", func() {
-			Expect(hist.ReceivedPacket(1)).To(BeTrue())
-			Expect(hist.ReceivedPacket(10)).To(BeTrue())
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ranges).To(HaveLen(4))
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 1, End: 1},
-				{Start: 4, End: 6},
-				{Start: 10, End: 10},
-			}))
-		})
-	})
+func TestReceivedPacketHistoryMaxNumAckRanges(t *testing.T) {
+	hist := newReceivedPacketHistory()
 
-	Context("deleting", func() {
-		It("does nothing when the history is empty", func() {
-			hist.DeleteBelow(5)
-			Expect(hist.ranges).To(BeEmpty())
-		})
+	for i := protocol.PacketNumber(0); i < protocol.MaxNumAckRanges; i++ {
+		require.True(t, hist.ReceivedPacket(2*i))
+	}
+	require.Len(t, hist.ranges, protocol.MaxNumAckRanges)
+	require.Equal(t, interval{Start: 0, End: 0}, hist.ranges[0])
 
-		It("deletes a range", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(10)).To(BeTrue())
-			hist.DeleteBelow(6)
-			Expect(hist.ranges).To(Equal([]interval{{Start: 10, End: 10}}))
-		})
+	hist.ReceivedPacket(2*protocol.MaxNumAckRanges + 1000)
+	// check that the oldest ACK range was deleted
+	require.Len(t, hist.ranges, protocol.MaxNumAckRanges)
+	require.Equal(t, interval{Start: 2, End: 2}, hist.ranges[0])
+}
 
-		It("deletes multiple ranges", func() {
-			Expect(hist.ReceivedPacket(1)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(10)).To(BeTrue())
-			hist.DeleteBelow(8)
-			Expect(hist.ranges).To(Equal([]interval{{Start: 10, End: 10}}))
-		})
+func TestReceivedPacketHistoryDeleteBelow(t *testing.T) {
+	hist := newReceivedPacketHistory()
 
-		It("adjusts a range, if packets are delete from an existing range", func() {
-			Expect(hist.ReceivedPacket(3)).To(BeTrue())
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ReceivedPacket(7)).To(BeTrue())
-			hist.DeleteBelow(5)
-			Expect(hist.ranges).To(Equal([]interval{{Start: 5, End: 7}}))
-		})
+	hist.DeleteBelow(2)
+	require.Empty(t, hist.AppendAckRanges(nil))
 
-		It("adjusts a range, if only one packet remains in the range", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(10)).To(BeTrue())
-			hist.DeleteBelow(5)
-			Expect(hist.ranges).To(Equal([]interval{
-				{Start: 5, End: 5},
-				{Start: 10, End: 10},
-			}))
-		})
+	require.True(t, hist.ReceivedPacket(2))
+	require.True(t, hist.ReceivedPacket(4))
+	require.True(t, hist.ReceivedPacket(5))
+	require.True(t, hist.ReceivedPacket(6))
+	require.True(t, hist.ReceivedPacket(10))
 
-		It("keeps a one-packet range, if deleting up to the packet directly below", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			hist.DeleteBelow(4)
-			Expect(hist.ranges).To(Equal([]interval{{Start: 4, End: 4}}))
-		})
+	hist.DeleteBelow(6)
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 6, Largest: 6},
+	}, hist.AppendAckRanges(nil))
 
-		It("doesn't add delayed packets below deleted ranges", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			hist.DeleteBelow(5)
-			Expect(hist.ranges).To(Equal([]interval{{Start: 5, End: 6}}))
-			Expect(hist.ReceivedPacket(2)).To(BeFalse())
-			Expect(hist.ranges).To(Equal([]interval{{Start: 5, End: 6}}))
-		})
+	// deleting from an existing range
+	require.True(t, hist.ReceivedPacket(7))
+	require.True(t, hist.ReceivedPacket(8))
+	hist.DeleteBelow(7)
+	require.Equal(t, []wire.AckRange{
+		{Smallest: 10, Largest: 10},
+		{Smallest: 7, Largest: 8},
+	}, hist.AppendAckRanges(nil))
 
-		It("doesn't create more than MaxNumAckRanges ranges", func() {
-			for i := protocol.PacketNumber(0); i < protocol.MaxNumAckRanges; i++ {
-				Expect(hist.ReceivedPacket(2 * i)).To(BeTrue())
-			}
-			Expect(hist.ranges).To(HaveLen(protocol.MaxNumAckRanges))
-			Expect(hist.ranges[0]).To(Equal(interval{Start: 0, End: 0}))
-			hist.ReceivedPacket(2*protocol.MaxNumAckRanges + 1000)
-			// check that the oldest ACK range was deleted
-			Expect(hist.ranges).To(HaveLen(protocol.MaxNumAckRanges))
-			Expect(hist.ranges[0]).To(Equal(interval{Start: 2, End: 2}))
-		})
-	})
+	// keep a one-packet range
+	hist.DeleteBelow(10)
+	require.Equal(t, []wire.AckRange{{Smallest: 10, Largest: 10}}, hist.AppendAckRanges(nil))
 
-	Context("ACK range export", func() {
-		It("returns nil if there are no ranges", func() {
-			Expect(hist.AppendAckRanges(nil)).To(BeEmpty())
-		})
+	// delayed packets below deleted ranges are ignored
+	require.False(t, hist.ReceivedPacket(5))
+	require.Equal(t, []wire.AckRange{{Smallest: 10, Largest: 10}}, hist.AppendAckRanges(nil))
+}
 
-		It("gets a single ACK range", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			ackRanges := hist.AppendAckRanges(nil)
-			Expect(ackRanges).To(Equal([]wire.AckRange{{Smallest: 4, Largest: 5}}))
-		})
+func TestReceivedPacketHistoryDuplicateDetection(t *testing.T) {
+	hist := newReceivedPacketHistory()
 
-		It("appends ACK ranges", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			ackRanges := hist.AppendAckRanges([]wire.AckRange{{Smallest: 1, Largest: 2}})
-			Expect(ackRanges).To(Equal([]wire.AckRange{
-				{Smallest: 1, Largest: 2},
-				{Smallest: 4, Largest: 5},
-			}))
-		})
+	require.False(t, hist.IsPotentiallyDuplicate(5))
 
-		It("gets multiple ACK ranges", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ReceivedPacket(1)).To(BeTrue())
-			Expect(hist.ReceivedPacket(11)).To(BeTrue())
-			Expect(hist.ReceivedPacket(10)).To(BeTrue())
-			Expect(hist.ReceivedPacket(2)).To(BeTrue())
-			ackRanges := hist.AppendAckRanges(nil)
-			Expect(ackRanges).To(Equal([]wire.AckRange{
-				{Smallest: 10, Largest: 11},
-				{Smallest: 4, Largest: 6},
-				{Smallest: 1, Largest: 2},
-			}))
-		})
-	})
+	require.True(t, hist.ReceivedPacket(4))
+	require.True(t, hist.ReceivedPacket(5))
+	require.True(t, hist.ReceivedPacket(6))
+	require.True(t, hist.ReceivedPacket(8))
+	require.True(t, hist.ReceivedPacket(9))
 
-	Context("Getting the highest ACK range", func() {
-		It("returns the zero value if there are no ranges", func() {
-			Expect(hist.GetHighestAckRange()).To(BeZero())
-		})
+	require.False(t, hist.IsPotentiallyDuplicate(3))
+	require.True(t, hist.IsPotentiallyDuplicate(4))
+	require.True(t, hist.IsPotentiallyDuplicate(5))
+	require.True(t, hist.IsPotentiallyDuplicate(6))
+	require.False(t, hist.IsPotentiallyDuplicate(7))
+	require.True(t, hist.IsPotentiallyDuplicate(8))
+	require.True(t, hist.IsPotentiallyDuplicate(9))
+	require.False(t, hist.IsPotentiallyDuplicate(10))
 
-		It("gets a single ACK range", func() {
-			Expect(hist.ReceivedPacket(4)).To(BeTrue())
-			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			Expect(hist.GetHighestAckRange()).To(Equal(wire.AckRange{Smallest: 4, Largest: 5}))
-		})
+	// delete and check for potential duplicates
+	hist.DeleteBelow(8)
+	require.True(t, hist.IsPotentiallyDuplicate(7))
+	require.True(t, hist.IsPotentiallyDuplicate(8))
+	require.True(t, hist.IsPotentiallyDuplicate(9))
+	require.False(t, hist.IsPotentiallyDuplicate(10))
+}
 
-		It("gets the highest of multiple ACK ranges", func() {
-			Expect(hist.ReceivedPacket(3)).To(BeTrue())
-			Expect(hist.ReceivedPacket(6)).To(BeTrue())
-			Expect(hist.ReceivedPacket(7)).To(BeTrue())
-			Expect(hist.GetHighestAckRange()).To(Equal(wire.AckRange{Smallest: 6, Largest: 7}))
-		})
-	})
+func TestReceivedPacketHistoryRandomized(t *testing.T) {
+	hist := newReceivedPacketHistory()
+	packets := make(map[protocol.PacketNumber]int)
+	const num = 2 * protocol.MaxNumAckRanges
+	numLostPackets := rand.Intn(protocol.MaxNumAckRanges)
+	numRcvdPackets := num - numLostPackets
 
-	Context("duplicate detection", func() {
-		It("doesn't declare the first packet a duplicate", func() {
-			Expect(hist.IsPotentiallyDuplicate(5)).To(BeFalse())
-		})
+	for i := 0; i < num; i++ {
+		packets[protocol.PacketNumber(i)] = 0
+	}
+	lostPackets := make([]protocol.PacketNumber, 0, numLostPackets)
+	for len(lostPackets) < numLostPackets {
+		p := protocol.PacketNumber(rand.Intn(num))
+		if _, ok := packets[p]; ok {
+			lostPackets = append(lostPackets, p)
+			delete(packets, p)
+		}
+	}
+	slices.Sort(lostPackets)
+	t.Logf("Losing packets: %v", lostPackets)
 
-		It("detects a duplicate in a range", func() {
-			hist.ReceivedPacket(4)
-			hist.ReceivedPacket(5)
-			hist.ReceivedPacket(6)
-			Expect(hist.IsPotentiallyDuplicate(3)).To(BeFalse())
-			Expect(hist.IsPotentiallyDuplicate(4)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(5)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(6)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(7)).To(BeFalse())
-		})
+	ordered := make([]protocol.PacketNumber, 0, numRcvdPackets)
+	for p := range packets {
+		ordered = append(ordered, p)
+	}
+	rand.Shuffle(len(ordered), func(i, j int) { ordered[i], ordered[j] = ordered[j], ordered[i] })
 
-		It("detects a duplicate in multiple ranges", func() {
-			hist.ReceivedPacket(4)
-			hist.ReceivedPacket(5)
-			hist.ReceivedPacket(8)
-			hist.ReceivedPacket(9)
-			Expect(hist.IsPotentiallyDuplicate(3)).To(BeFalse())
-			Expect(hist.IsPotentiallyDuplicate(4)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(5)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(6)).To(BeFalse())
-			Expect(hist.IsPotentiallyDuplicate(7)).To(BeFalse())
-			Expect(hist.IsPotentiallyDuplicate(8)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(9)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(10)).To(BeFalse())
-		})
-
-		It("says a packet is a potentially duplicate if the ranges were already deleted", func() {
-			hist.ReceivedPacket(4)
-			hist.ReceivedPacket(5)
-			hist.ReceivedPacket(8)
-			hist.ReceivedPacket(9)
-			hist.ReceivedPacket(11)
-			hist.DeleteBelow(8)
-			Expect(hist.IsPotentiallyDuplicate(3)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(4)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(5)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(6)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(7)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(8)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(9)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(10)).To(BeFalse())
-			Expect(hist.IsPotentiallyDuplicate(11)).To(BeTrue())
-			Expect(hist.IsPotentiallyDuplicate(12)).To(BeFalse())
-		})
-	})
-
-	Context("randomized receiving", func() {
-		It("receiving packets in a random order, with gaps", func() {
-			packets := make(map[protocol.PacketNumber]int)
-			// Make sure we never end up with more than protocol.MaxNumAckRanges ACK ranges, even
-			// when we're receiving packets in a random order.
-			const num = 2 * protocol.MaxNumAckRanges
-			numLostPackets := rand.Intn(protocol.MaxNumAckRanges)
-			numRcvdPackets := num - numLostPackets
-
-			for i := 0; i < num; i++ {
-				packets[protocol.PacketNumber(i)] = 0
-			}
-			lostPackets := make([]protocol.PacketNumber, 0, numLostPackets)
-			for len(lostPackets) < numLostPackets {
-				p := protocol.PacketNumber(rand.Intn(num))
-				if _, ok := packets[p]; ok {
-					lostPackets = append(lostPackets, p)
-					delete(packets, p)
-				}
-			}
-			sort.Slice(lostPackets, func(i, j int) bool { return lostPackets[i] < lostPackets[j] })
-			fmt.Fprintf(GinkgoWriter, "Losing packets: %v\n", lostPackets)
-
-			ordered := make([]protocol.PacketNumber, 0, numRcvdPackets)
-			for p := range packets {
-				ordered = append(ordered, p)
-			}
-			rand.Shuffle(len(ordered), func(i, j int) { ordered[i], ordered[j] = ordered[j], ordered[i] })
-
-			fmt.Fprintf(GinkgoWriter, "Receiving packets: %v\n", ordered)
-			for i, p := range ordered {
-				Expect(hist.ReceivedPacket(p)).To(BeTrue())
-				// sometimes receive a duplicate
-				if i > 0 && rand.Int()%5 == 0 {
-					Expect(hist.ReceivedPacket(ordered[rand.Intn(i)])).To(BeFalse())
-				}
-			}
-			var counter int
-			ackRanges := hist.AppendAckRanges(nil)
-			fmt.Fprintf(GinkgoWriter, "ACK ranges: %v\n", ackRanges)
-			Expect(len(ackRanges)).To(BeNumerically("<=", numLostPackets+1))
-			for _, ackRange := range ackRanges {
-				for p := ackRange.Smallest; p <= ackRange.Largest; p++ {
-					counter++
-					Expect(packets).To(HaveKey(p))
-				}
-			}
-			Expect(counter).To(Equal(numRcvdPackets))
-		})
-	})
-})
+	t.Logf("Receiving packets: %v", ordered)
+	for i, p := range ordered {
+		require.True(t, hist.ReceivedPacket(p))
+		// sometimes receive a duplicate
+		if i > 0 && rand.Int()%5 == 0 {
+			require.False(t, hist.ReceivedPacket(ordered[rand.Intn(i)]))
+		}
+	}
+	var counter int
+	ackRanges := hist.AppendAckRanges(nil)
+	t.Logf("ACK ranges: %v", ackRanges)
+	require.LessOrEqual(t, len(ackRanges), numLostPackets+1)
+	for _, ackRange := range ackRanges {
+		for p := ackRange.Smallest; p <= ackRange.Largest; p++ {
+			counter++
+			require.Contains(t, packets, p)
+		}
+	}
+	require.Equal(t, numRcvdPackets, counter)
+}
 
 func BenchmarkHistoryReceiveSequentialPackets(b *testing.B) {
 	hist := newReceivedPacketHistory()
