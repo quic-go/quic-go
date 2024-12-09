@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -197,7 +198,9 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
+	trace := httptrace.ContextClientTrace(req.Context())
 	hostname := authorityAddr(hostnameFromURL(req.URL))
+	traceGetConn(trace, hostname)
 	cl, isReused, err := t.getClient(req.Context(), hostname, opt.OnlyCachedConn)
 	if err != nil {
 		return nil, err
@@ -213,6 +216,7 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		t.removeClient(hostname)
 		return nil, cl.dialErr
 	}
+	traceGotConn(trace, cl.conn, isReused)
 	defer cl.useCount.Add(-1)
 	rsp, err := cl.rt.RoundTrip(req)
 	if err != nil {
@@ -240,6 +244,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached bool) (rtc *roundTripperWithCount, isReused bool, err error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	trace := httptrace.ContextClientTrace(ctx)
 
 	if t.clients == nil {
 		t.clients = make(map[string]*roundTripperWithCount)
@@ -258,7 +263,10 @@ func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached b
 		go func() {
 			defer close(cl.dialing)
 			defer cancel()
+			traceConnectStart(trace, "udp", hostname)
 			conn, rt, err := t.dial(ctx, hostname)
+			traceConnectDone(trace, "udp", hostname, err)
+			traceTLSHandshakeStart(trace)
 			if err != nil {
 				cl.dialErr = err
 				return
@@ -276,6 +284,7 @@ func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached b
 		}
 		select {
 		case <-cl.conn.HandshakeComplete():
+			traceTLSHandshakeDone(trace, cl.conn.ConnectionState().TLS, nil)
 			isReused = true
 		default:
 		}
@@ -313,10 +322,23 @@ func (t *Transport) dial(ctx context.Context, hostname string) (quic.EarlyConnec
 			t.transport = &quic.Transport{Conn: udpConn}
 		}
 		dial = func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-			udpAddr, err := net.ResolveUDPAddr("udp", addr)
+			network := "udp"
+			host, portStr, err := net.SplitHostPort(addr)
 			if err != nil {
 				return nil, err
 			}
+			port, err := net.LookupPort(network, portStr)
+			if err != nil {
+				return nil, err
+			}
+			resolver := net.DefaultResolver
+			ipAddrs, err := resolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, err
+			}
+			addrs := addrList(ipAddrs)
+			ip := addrs.forResolve(network, addr)
+			udpAddr := &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}
 			return t.transport.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 		}
 	}
