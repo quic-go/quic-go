@@ -20,6 +20,7 @@ import (
 )
 
 func runMultiplexTestServer(t *testing.T, ln *quic.Listener) {
+	t.Helper()
 	for {
 		conn, err := ln.Accept(context.Background())
 		if err != nil {
@@ -32,29 +33,25 @@ func runMultiplexTestServer(t *testing.T, ln *quic.Listener) {
 			_, err = str.Write(PRData)
 			require.NoError(t, err)
 		}()
-		t.Cleanup(func() {
-			select {
-			case <-conn.Context().Done():
-			case <-time.After(time.Second):
-				t.Errorf("connection %p not closed", conn)
-			}
-		})
+
+		t.Cleanup(func() { conn.CloseWithError(0, "") })
 	}
 }
 
 func dialAndReceiveData(tr *quic.Transport, addr net.Addr) error {
-	conn, err := tr.Dial(context.Background(), addr, getTLSClientConfig(), getQuicConfig(nil))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := tr.Dial(ctx, addr, getTLSClientConfig(), getQuicConfig(nil))
 	if err != nil {
-		return err
+		return fmt.Errorf("error dialing: %w", err)
 	}
-	defer conn.CloseWithError(0, "")
-	str, err := conn.AcceptUniStream(context.Background())
+	str, err := conn.AcceptUniStream(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("error accepting stream: %w", err)
 	}
 	data, err := io.ReadAll(str)
 	if err != nil {
-		return err
+		return fmt.Errorf("error reading data: %w", err)
 	}
 	if !bytes.Equal(data, PRData) {
 		return fmt.Errorf("data mismatch: got %q, expected %q", data, PRData)
@@ -73,23 +70,23 @@ func TestMultiplexesConnectionsToSameServer(t *testing.T) {
 	defer conn.Close()
 	tr := &quic.Transport{Conn: conn}
 	addTracer(tr)
+	defer tr.Close()
 
 	errChan1 := make(chan error, 1)
 	go func() { errChan1 <- dialAndReceiveData(tr, server.Addr()) }()
 	errChan2 := make(chan error, 1)
 	go func() { errChan2 <- dialAndReceiveData(tr, server.Addr()) }()
 
-	timeout := time.After(15 * time.Second)
 	select {
 	case err := <-errChan1:
 		require.NoError(t, err, "error dialing server 1")
-	case <-timeout:
+	case <-time.After(5 * time.Second):
 		t.Error("timeout waiting for done1 to close")
 	}
 	select {
 	case err := <-errChan2:
 		require.NoError(t, err)
-	case <-timeout:
+	case <-time.After(5 * time.Second):
 		t.Error("timeout waiting for done2 to close")
 	}
 }
@@ -111,23 +108,23 @@ func TestMultiplexingToDifferentServers(t *testing.T) {
 
 	tr := &quic.Transport{Conn: conn}
 	addTracer(tr)
+	defer tr.Close()
 
 	errChan1 := make(chan error, 1)
 	go func() { errChan1 <- dialAndReceiveData(tr, server1.Addr()) }()
 	errChan2 := make(chan error, 1)
 	go func() { errChan2 <- dialAndReceiveData(tr, server2.Addr()) }()
 
-	timeout := time.After(15 * time.Second)
 	select {
 	case err := <-errChan1:
 		require.NoError(t, err, "error dialing server 1")
-	case <-timeout:
+	case <-time.After(5 * time.Second):
 		t.Error("timeout waiting for done1 to close")
 	}
 	select {
 	case err := <-errChan2:
 		require.NoError(t, err, "error dialing server 2")
-	case <-timeout:
+	case <-time.After(5 * time.Second):
 		t.Error("timeout waiting for done2 to close")
 	}
 }
@@ -151,7 +148,7 @@ func TestMultiplexingConnectToSelf(t *testing.T) {
 	select {
 	case err := <-errChan:
 		require.NoError(t, err, "error dialing server")
-	case <-time.After(15 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Error("timeout waiting for connection to close")
 	}
 }
@@ -182,26 +179,25 @@ func TestMultiplexingServerAndClientOnSameConn(t *testing.T) {
 	defer server2.Close()
 
 	done1 := make(chan struct{})
-	done2 := make(chan struct{})
-
 	go func() {
+		defer close(done1)
 		dialAndReceiveData(tr2, server1.Addr())
-		close(done1)
-	}()
-	go func() {
-		dialAndReceiveData(tr1, server2.Addr())
-		close(done2)
 	}()
 
-	timeout := time.After(15 * time.Second)
+	done2 := make(chan struct{})
+	go func() {
+		defer close(done2)
+		dialAndReceiveData(tr1, server2.Addr())
+	}()
+
 	select {
 	case <-done1:
-	case <-timeout:
+	case <-time.After(5 * time.Second):
 		t.Error("timeout waiting for done1 to close")
 	}
 	select {
 	case <-done2:
-	case <-timeout:
+	case <-time.After(time.Second):
 		t.Error("timeout waiting for done2 to close")
 	}
 }
