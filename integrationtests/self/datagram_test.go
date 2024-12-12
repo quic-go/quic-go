@@ -1,187 +1,244 @@
 package self_test
 
 import (
+	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
-	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Datagram test", func() {
-	const concurrentSends = 100
-	const maxDatagramSize = 250
+func TestDatagramNegotiation(t *testing.T) {
+	t.Run("server enable, client enable", func(t *testing.T) {
+		testDatagramNegotiation(t, true, true)
+	})
+	t.Run("server enable, client disable", func(t *testing.T) {
+		testDatagramNegotiation(t, true, false)
+	})
+	t.Run("server disable, client enable", func(t *testing.T) {
+		testDatagramNegotiation(t, false, true)
+	})
+	t.Run("server disable, client disable", func(t *testing.T) {
+		testDatagramNegotiation(t, false, false)
+	})
+}
 
-	var (
-		serverConn, clientConn *net.UDPConn
-		dropped, total         atomic.Int32
+func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDatagram bool) {
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	defer udpConn.Close()
+	server, err := quic.Listen(
+		udpConn,
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: serverEnableDatagram}),
 	)
+	require.NoError(t, err)
+	defer server.Close()
 
-	startServerAndProxy := func(enableDatagram, expectDatagramSupport bool) (port int, closeFn func()) {
-		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
-		Expect(err).ToNot(HaveOccurred())
-		serverConn, err = net.ListenUDP("udp", addr)
-		Expect(err).ToNot(HaveOccurred())
-		ln, err := quic.Listen(
-			serverConn,
-			getTLSConfig(),
-			getQuicConfig(&quic.Config{EnableDatagrams: enableDatagram}),
-		)
-		Expect(err).ToNot(HaveOccurred())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	clientConn, err := quic.DialAddr(
+		ctx,
+		server.Addr().String(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: clientEnableDatagram}),
+	)
+	require.NoError(t, err)
+	defer clientConn.CloseWithError(0, "")
 
-		accepted := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			defer close(accepted)
-			conn, err := ln.Accept(context.Background())
-			Expect(err).ToNot(HaveOccurred())
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
 
-			if expectDatagramSupport {
-				Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-				if enableDatagram {
-					f := &wire.DatagramFrame{DataLenPresent: true}
-					var wg sync.WaitGroup
-					wg.Add(concurrentSends)
-					for i := 0; i < concurrentSends; i++ {
-						go func(i int) {
-							defer GinkgoRecover()
-							defer wg.Done()
-							b := make([]byte, 8)
-							binary.BigEndian.PutUint64(b, uint64(i))
-							Expect(conn.SendDatagram(b)).To(Succeed())
-						}(i)
-					}
-					maxDatagramMessageSize := f.MaxDataLen(maxDatagramSize, conn.ConnectionState().Version)
-					b := make([]byte, maxDatagramMessageSize+1)
-					Expect(conn.SendDatagram(b)).To(MatchError(&quic.DatagramTooLargeError{
-						MaxDatagramPayloadSize: int64(maxDatagramMessageSize),
-					}))
-					wg.Wait()
-				}
-			} else {
-				Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
-			}
-		}()
-
-		serverPort := ln.Addr().(*net.UDPAddr).Port
-		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-			// drop 10% of Short Header packets sent from the server
-			DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
-				if dir == quicproxy.DirectionIncoming {
-					return false
-				}
-				// don't drop Long Header packets
-				if wire.IsLongHeaderPacket(packet[0]) {
-					return false
-				}
-				drop := mrand.Int()%10 == 0
-				if drop {
-					dropped.Add(1)
-				}
-				total.Add(1)
-				return drop
-			},
-		})
-		Expect(err).ToNot(HaveOccurred())
-		return proxy.LocalPort(), func() {
-			Eventually(accepted).Should(BeClosed())
-			proxy.Close()
-			ln.Close()
-		}
+	if clientEnableDatagram {
+		require.True(t, serverConn.ConnectionState().SupportsDatagrams)
+		require.NoError(t, serverConn.SendDatagram([]byte("foo")))
+		datagram, err := clientConn.ReceiveDatagram(ctx)
+		require.NoError(t, err)
+		require.Equal(t, []byte("foo"), datagram)
+	} else {
+		require.False(t, serverConn.ConnectionState().SupportsDatagrams)
+		require.Error(t, serverConn.SendDatagram([]byte("foo")))
 	}
 
-	BeforeEach(func() {
-		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
-		Expect(err).ToNot(HaveOccurred())
-		clientConn, err = net.ListenUDP("udp", addr)
-		Expect(err).ToNot(HaveOccurred())
-	})
+	if serverEnableDatagram {
+		require.True(t, clientConn.ConnectionState().SupportsDatagrams)
+		require.NoError(t, clientConn.SendDatagram([]byte("bar")))
+		datagram, err := serverConn.ReceiveDatagram(ctx)
+		require.NoError(t, err)
+		require.Equal(t, []byte("bar"), datagram)
+	} else {
+		require.False(t, clientConn.ConnectionState().SupportsDatagrams)
+		require.Error(t, clientConn.SendDatagram([]byte("bar")))
+	}
+}
 
-	It("sends datagrams", func() {
-		oldMaxDatagramSize := wire.MaxDatagramSize
-		wire.MaxDatagramSize = maxDatagramSize
-		proxyPort, close := startServerAndProxy(true, true)
-		defer close()
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
-		Expect(err).ToNot(HaveOccurred())
-		conn, err := quic.Dial(
-			context.Background(),
-			clientConn,
-			raddr,
-			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{EnableDatagrams: true}),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
-		var counter int
-		for {
-			// Close the connection if no message is received for 100 ms.
-			timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() { conn.CloseWithError(0, "") })
-			if _, err := conn.ReceiveDatagram(context.Background()); err != nil {
-				break
+func TestDatagramSizeLimit(t *testing.T) {
+	const maxDatagramSize = 456
+	originalMaxDatagramSize := wire.MaxDatagramSize
+	wire.MaxDatagramSize = maxDatagramSize
+	t.Cleanup(func() { wire.MaxDatagramSize = originalMaxDatagramSize })
+
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	defer udpConn.Close()
+	server, err := quic.Listen(
+		udpConn,
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer server.Close()
+
+	clientConn, err := quic.DialAddr(
+		context.Background(),
+		server.Addr().String(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer clientConn.CloseWithError(0, "")
+
+	err = clientConn.SendDatagram(bytes.Repeat([]byte("a"), maxDatagramSize+100)) // definitely too large
+	require.Error(t, err)
+	var sizeErr *quic.DatagramTooLargeError
+	require.ErrorAs(t, err, &sizeErr)
+	require.InDelta(t, sizeErr.MaxDatagramPayloadSize, maxDatagramSize, 10)
+
+	require.NoError(t, clientConn.SendDatagram(bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize))))
+	require.Error(t, clientConn.SendDatagram(bytes.Repeat([]byte("c"), int(sizeErr.MaxDatagramPayloadSize+1))))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+	datagram, err := serverConn.ReceiveDatagram(ctx)
+	require.NoError(t, err)
+	require.Equal(t, bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize)), datagram)
+}
+
+func TestDatagramLoss(t *testing.T) {
+	const rtt = 10 * time.Millisecond
+	const numDatagrams = 100
+	const datagramSize = 500
+
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	defer udpConn.Close()
+	server, err := quic.Listen(
+		udpConn,
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer server.Close()
+
+	var droppedIncoming, droppedOutgoing, total atomic.Int32
+	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+		RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
+			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
+				return false
 			}
-			timer.Stop()
-			counter++
+			if len(packet) < datagramSize { // don't drop ACK-only packets
+				return false
+			}
+			total.Add(1)
+			if mrand.Int()%10 == 0 {
+				switch dir {
+				case quicproxy.DirectionIncoming:
+					droppedIncoming.Add(1)
+				case quicproxy.DirectionOutgoing:
+					droppedOutgoing.Add(1)
+				}
+				return true
+			}
+			return false
+		},
+		DelayPacket: func(dir quicproxy.Direction, packet []byte) time.Duration { return rtt / 2 },
+	})
+	require.NoError(t, err)
+	defer proxy.Close()
+
+	clientConn, err := quic.DialAddr(
+		context.Background(),
+		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer clientConn.CloseWithError(0, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))
+	defer cancel()
+
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+
+	var clientDatagrams, serverDatagrams int
+	clientErrChan := make(chan error, 1)
+	go func() {
+		defer close(clientErrChan)
+		for {
+			if _, err := clientConn.ReceiveDatagram(ctx); err != nil {
+				clientErrChan <- err
+				return
+			}
+			clientDatagrams++
 		}
+	}()
 
-		numDropped := int(dropped.Load())
-		expVal := concurrentSends - numDropped
-		fmt.Fprintf(GinkgoWriter, "Dropped %d out of %d packets.\n", numDropped, total.Load())
-		fmt.Fprintf(GinkgoWriter, "Received %d out of %d sent datagrams.\n", counter, concurrentSends)
-		Expect(counter).To(And(
-			BeNumerically(">", expVal*9/10),
-			BeNumerically("<", concurrentSends),
-		))
-		Eventually(conn.Context().Done).Should(BeClosed())
-		wire.MaxDatagramSize = oldMaxDatagramSize
-	})
+	for i := 0; i < numDatagrams; i++ {
+		payload := bytes.Repeat([]byte{uint8(i)}, datagramSize)
+		require.NoError(t, clientConn.SendDatagram(payload))
+		require.NoError(t, serverConn.SendDatagram(payload))
+		time.Sleep(scaleDuration(time.Millisecond / 2))
+	}
 
-	It("server can disable datagram", func() {
-		proxyPort, close := startServerAndProxy(false, true)
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
-		Expect(err).ToNot(HaveOccurred())
-		conn, err := quic.Dial(
-			context.Background(),
-			clientConn,
-			raddr,
-			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{EnableDatagrams: true}),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
+	serverErrChan := make(chan error, 1)
+	go func() {
+		defer close(serverErrChan)
+		for {
+			if _, err := serverConn.ReceiveDatagram(ctx); err != nil {
+				serverErrChan <- err
+				return
+			}
+			serverDatagrams++
+		}
+	}()
 
-		close()
-		conn.CloseWithError(0, "")
-	})
+	select {
+	case err := <-clientErrChan:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(scaleDuration(5 * numDatagrams * time.Millisecond)):
+		t.Fatal("timeout")
+	}
+	select {
+	case err := <-serverErrChan:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(scaleDuration(5 * numDatagrams * time.Millisecond)):
+		t.Fatal("timeout")
+	}
 
-	It("client can disable datagram", func() {
-		proxyPort, close := startServerAndProxy(false, true)
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
-		Expect(err).ToNot(HaveOccurred())
-		conn, err := quic.Dial(
-			context.Background(),
-			clientConn,
-			raddr,
-			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{EnableDatagrams: true}),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
-
-		Expect(conn.SendDatagram([]byte{0})).To(HaveOccurred())
-
-		close()
-		conn.CloseWithError(0, "")
-	})
-})
+	numDroppedIncoming := droppedIncoming.Load()
+	numDroppedOutgoing := droppedOutgoing.Load()
+	t.Logf("dropped %d incoming and %d outgoing out of %d packets", numDroppedIncoming, numDroppedOutgoing, total.Load())
+	assert.NotZero(t, numDroppedIncoming)
+	assert.NotZero(t, numDroppedOutgoing)
+	t.Logf("server received %d out of %d sent datagrams", serverDatagrams, numDatagrams)
+	assert.InDelta(t, numDatagrams-numDroppedIncoming, serverDatagrams, numDatagrams/20, "datagrams received by the server")
+	t.Logf("client received %d out of %d sent datagrams", clientDatagrams, numDatagrams)
+	assert.InDelta(t, numDatagrams-numDroppedOutgoing, clientDatagrams, numDatagrams/20, "datagrams received by the client")
+}
