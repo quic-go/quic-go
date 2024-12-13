@@ -98,7 +98,6 @@ type ReceiveStream interface {
 	// SetReadDeadline sets the deadline for future Read calls and
 	// any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
-
 	SetReadDeadline(t time.Time) error
 }
 
