@@ -33,15 +33,13 @@ func requireIdleTimeoutError(t *testing.T, err error) {
 }
 
 func TestHandshakeIdleTimeout(t *testing.T) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-
 	errChan := make(chan error, 1)
 	go func() {
-		_, err := quic.DialAddr(
+		conn := newUPDConnLocalhost(t)
+		_, err := quic.Dial(
 			context.Background(),
-			fmt.Sprintf("localhost:%d", conn.LocalAddr().(*net.UDPAddr).Port),
+			newUPDConnLocalhost(t),
+			conn.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{HandshakeIdleTimeout: scaleDuration(50 * time.Millisecond)}),
 		)
@@ -56,17 +54,15 @@ func TestHandshakeIdleTimeout(t *testing.T) {
 }
 
 func TestHandshakeTimeoutContext(t *testing.T) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	errChan := make(chan error)
 	go func() {
-		_, err := quic.DialAddr(
+		conn := newUPDConnLocalhost(t)
+		_, err := quic.Dial(
 			ctx,
-			fmt.Sprintf("localhost:%d", conn.LocalAddr().(*net.UDPAddr).Port),
+			newUPDConnLocalhost(t),
+			conn.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)
@@ -81,17 +77,15 @@ func TestHandshakeTimeoutContext(t *testing.T) {
 }
 
 func TestHandshakeTimeout0RTTContext(t *testing.T) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	errChan := make(chan error)
 	go func() {
-		_, err := quic.DialAddrEarly(
+		conn := newUPDConnLocalhost(t)
+		_, err := quic.DialEarly(
 			ctx,
-			fmt.Sprintf("localhost:%d", conn.LocalAddr().(*net.UDPAddr).Port),
+			newUPDConnLocalhost(t),
+			conn.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)
@@ -108,8 +102,8 @@ func TestHandshakeTimeout0RTTContext(t *testing.T) {
 func TestIdleTimeout(t *testing.T) {
 	idleTimeout := scaleDuration(200 * time.Millisecond)
 
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -126,9 +120,10 @@ func TestIdleTimeout(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	conn, err := quic.DialAddr(
+	conn, err := quic.Dial(
 		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, MaxIdleTimeout: idleTimeout}),
 	)
@@ -175,8 +170,8 @@ func TestKeepAlive(t *testing.T) {
 		idleTimeout = max(idleTimeout, 600*time.Millisecond)
 	}
 
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -191,9 +186,12 @@ func TestKeepAlive(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			MaxIdleTimeout:          idleTimeout,
@@ -203,8 +201,6 @@ func TestKeepAlive(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 
@@ -242,18 +238,21 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 		idleTimeout = max(idleTimeout, 600*time.Millisecond)
 	}
 
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
 	require.NoError(t, err)
 	defer server.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	counter, tr := newPacketTracer()
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			MaxIdleTimeout:          idleTimeout,
@@ -263,8 +262,6 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 
@@ -314,8 +311,8 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 		idleTimeout = max(idleTimeout, 600*time.Millisecond)
 	}
 
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -330,16 +327,17 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout, DisablePathMTUDiscovery: true}),
 	)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 
@@ -436,15 +434,8 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 		return conn.CloseWithError(0, "done")
 	}
 
-	var cconn, sconn net.PacketConn
-	var err error
-	cconn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer cconn.Close()
-	sconn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer sconn.Close()
-
+	var cconn net.PacketConn = newUPDConnLocalhost(t)
+	var sconn net.PacketConn = newUPDConnLocalhost(t)
 	maxPackets := mrand.Int31n(25)
 	t.Logf("blocking %s's connection after %d packets", pers, maxPackets)
 	switch pers {

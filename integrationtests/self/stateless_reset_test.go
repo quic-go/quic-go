@@ -69,19 +69,14 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	udpConn, err := net.ListenUDP("udp", addr)
-	require.NoError(t, err)
-	defer udpConn.Close()
 	cl := &quic.Transport{
-		Conn:               udpConn,
+		Conn:               newUPDConnLocalhost(t),
 		ConnectionIDLength: connIDLen,
 	}
 	defer cl.Close()
 	conn, err := cl.Dial(
 		context.Background(),
-		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxy.LocalPort()},
+		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIdleTimeout: 2 * time.Second}),
 	)

@@ -26,19 +26,15 @@ import (
 const mitmTestConnIDLen = 6
 
 func getTransportsForMITMTest(t *testing.T) (serverTransport, clientTransport *quic.Transport) {
-	serverUDPConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
 	serverTransport = &quic.Transport{
-		Conn:               serverUDPConn,
+		Conn:               newUPDConnLocalhost(t),
 		ConnectionIDLength: mitmTestConnIDLen,
 	}
 	addTracer(serverTransport)
 	t.Cleanup(func() { serverTransport.Close() })
 
-	clientUDPConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
 	clientTransport = &quic.Transport{
-		Conn:               clientUDPConn,
+		Conn:               newUPDConnLocalhost(t),
 		ConnectionIDLength: mitmTestConnIDLen,
 	}
 	addTracer(clientTransport)

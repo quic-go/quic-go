@@ -34,11 +34,8 @@ func TestDatagramNegotiation(t *testing.T) {
 }
 
 func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDatagram bool) {
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
 	server, err := quic.Listen(
-		udpConn,
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: serverEnableDatagram}),
 	)
@@ -47,9 +44,10 @@ func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDat
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	clientConn, err := quic.DialAddr(
+	clientConn, err := quic.Dial(
 		ctx,
-		server.Addr().String(),
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: clientEnableDatagram}),
 	)
@@ -89,20 +87,20 @@ func TestDatagramSizeLimit(t *testing.T) {
 	wire.MaxDatagramSize = maxDatagramSize
 	t.Cleanup(func() { wire.MaxDatagramSize = originalMaxDatagramSize })
 
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
 	server, err := quic.Listen(
-		udpConn,
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
 	require.NoError(t, err)
 	defer server.Close()
 
-	clientConn, err := quic.DialAddr(
-		context.Background(),
-		server.Addr().String(),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	clientConn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
@@ -118,8 +116,6 @@ func TestDatagramSizeLimit(t *testing.T) {
 	require.NoError(t, clientConn.SendDatagram(bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize))))
 	require.Error(t, clientConn.SendDatagram(bytes.Repeat([]byte("c"), int(sizeErr.MaxDatagramPayloadSize+1))))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 	defer serverConn.CloseWithError(0, "")
@@ -133,11 +129,8 @@ func TestDatagramLoss(t *testing.T) {
 	const numDatagrams = 100
 	const datagramSize = 500
 
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
 	server, err := quic.Listen(
-		udpConn,
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
@@ -171,17 +164,17 @@ func TestDatagramLoss(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	clientConn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))
+	defer cancel()
+	clientConn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
 	require.NoError(t, err)
 	defer clientConn.CloseWithError(0, "")
-
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))
-	defer cancel()
 
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)

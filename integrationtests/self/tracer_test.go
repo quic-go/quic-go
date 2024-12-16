@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
-	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -70,7 +70,7 @@ func TestTracerHandshake(t *testing.T) {
 			quicClientConf := addTracers(protocol.PerspectiveClient, getQuicConfig(nil))
 			quicServerConf := addTracers(protocol.PerspectiveServer, getQuicConfig(nil))
 
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), quicServerConf)
+			ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), quicServerConf)
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, ln.Close()) })
 
@@ -79,16 +79,13 @@ func TestTracerHandshake(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					conn, err := quic.DialAddr(
-						context.Background(),
-						fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-						getTLSClientConfig(),
-						quicClientConf,
-					)
+					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+					defer cancel()
+					conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), quicClientConf)
 					require.NoError(t, err)
 					defer conn.CloseWithError(0, "")
 
-					sconn, err := ln.Accept(context.Background())
+					sconn, err := ln.Accept(ctx)
 					if err != nil {
 						return
 					}
@@ -98,7 +95,7 @@ func TestTracerHandshake(t *testing.T) {
 					require.NoError(t, err)
 					require.NoError(t, sstr.Close())
 
-					str, err := conn.AcceptUniStream(context.Background())
+					str, err := conn.AcceptUniStream(ctx)
 					require.NoError(t, err)
 					data, err := io.ReadAll(str)
 					require.NoError(t, err)

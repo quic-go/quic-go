@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool) (_ *quic.Listener, proxyPort int) {
+func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool) (_ *quic.Listener, proxyAddr net.Addr) {
 	t.Helper()
 	conf := getQuicConfig(&quic.Config{
 		MaxIdleTimeout:          timeout,
@@ -34,11 +34,8 @@ func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dro
 	} else {
 		tlsConf = getTLSConfig()
 	}
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	t.Cleanup(func() { conn.Close() })
 	tr := &quic.Transport{
-		Conn:                conn,
+		Conn:                newUPDConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return doRetry },
 	}
 	t.Cleanup(func() { tr.Close() })
@@ -53,13 +50,16 @@ func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dro
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { proxy.Close() })
-	return ln, proxy.LocalPort()
+	return ln, proxy.LocalAddr()
 }
 
-func dropTestProtocolClientSpeaksFirst(t *testing.T, ln *quic.Listener, port int, timeout time.Duration, data []byte) {
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", port),
+func dropTestProtocolClientSpeaksFirst(t *testing.T, ln *quic.Listener, addr net.Addr, timeout time.Duration, data []byte) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			MaxIdleTimeout:          timeout,
@@ -79,8 +79,6 @@ func dropTestProtocolClientSpeaksFirst(t *testing.T, ln *quic.Listener, port int
 		errChan <- err
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	serverConn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	serverStr, err := serverConn.AcceptUniStream(ctx)
@@ -91,10 +89,13 @@ func dropTestProtocolClientSpeaksFirst(t *testing.T, ln *quic.Listener, port int
 	serverConn.CloseWithError(0, "")
 }
 
-func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, port int, timeout time.Duration, data []byte) {
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", port),
+func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, addr net.Addr, timeout time.Duration, data []byte) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			MaxIdleTimeout:          timeout,
@@ -108,8 +109,6 @@ func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, port int
 	go func() {
 		defer close(errChan)
 		defer conn.CloseWithError(0, "")
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
 		str, err := conn.AcceptUniStream(ctx)
 		if err != nil {
 			errChan <- err
@@ -126,7 +125,7 @@ func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, port int
 		}
 	}()
 
-	serverConn, err := ln.Accept(context.Background())
+	serverConn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	serverStr, err := serverConn.OpenUniStream()
 	require.NoError(t, err)
@@ -148,10 +147,13 @@ func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, port int
 	}
 }
 
-func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, port int, timeout time.Duration) {
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", port),
+func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, addr net.Addr, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			MaxIdleTimeout:          timeout,
@@ -160,11 +162,10 @@ func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, port int, tim
 		}),
 	)
 	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
 
-	serverConn, err := ln.Accept(context.Background())
+	serverConn, err := ln.Accept(ctx)
 	require.NoError(t, err)
-
-	conn.CloseWithError(0, "")
 	serverConn.CloseWithError(0, "")
 }
 
@@ -247,18 +248,18 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 				} {
 					t.Run(fmt.Sprintf("retry: %t", conf.doRetry), func(t *testing.T) {
 						t.Run("client speaks first", func(t *testing.T) {
-							ln, proxyPort := startDropTestListenerAndProxy(t, rtt, timeout, dropPattern.fn, conf.doRetry, conf.longCertChain)
-							dropTestProtocolClientSpeaksFirst(t, ln, proxyPort, timeout, data)
+							ln, proxyAddr := startDropTestListenerAndProxy(t, rtt, timeout, dropPattern.fn, conf.doRetry, conf.longCertChain)
+							dropTestProtocolClientSpeaksFirst(t, ln, proxyAddr, timeout, data)
 						})
 
 						t.Run("server speaks first", func(t *testing.T) {
-							ln, proxyPort := startDropTestListenerAndProxy(t, rtt, timeout, dropPattern.fn, conf.doRetry, conf.longCertChain)
-							dropTestProtocolServerSpeaksFirst(t, ln, proxyPort, timeout, data)
+							ln, proxyAddr := startDropTestListenerAndProxy(t, rtt, timeout, dropPattern.fn, conf.doRetry, conf.longCertChain)
+							dropTestProtocolServerSpeaksFirst(t, ln, proxyAddr, timeout, data)
 						})
 
 						t.Run("nobody speaks", func(t *testing.T) {
-							ln, proxyPort := startDropTestListenerAndProxy(t, rtt, timeout, dropPattern.fn, conf.doRetry, conf.longCertChain)
-							dropTestProtocolNobodySpeaks(t, ln, proxyPort, timeout)
+							ln, proxyAddr := startDropTestListenerAndProxy(t, rtt, timeout, dropPattern.fn, conf.doRetry, conf.longCertChain)
+							dropTestProtocolNobodySpeaks(t, ln, proxyAddr, timeout)
 						})
 					})
 				}

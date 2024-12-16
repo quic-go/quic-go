@@ -14,8 +14,8 @@ import (
 )
 
 func runServerForRTTTest(t *testing.T) (net.Addr, <-chan error) {
-	ln, err := quic.ListenAddr(
-		"localhost:0",
+	ln, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(nil),
 	)
@@ -74,9 +74,10 @@ func TestDownloadWithFixedRTT(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			conn, err := quic.DialAddr(
+			conn, err := quic.Dial(
 				ctx,
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				newUPDConnLocalhost(t),
+				proxy.LocalAddr(),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
 			)
@@ -119,9 +120,10 @@ func TestDownloadWithReordering(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			conn, err := quic.DialAddr(
+			conn, err := quic.Dial(
 				ctx,
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				newUPDConnLocalhost(t),
+				proxy.LocalAddr(),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
 			)

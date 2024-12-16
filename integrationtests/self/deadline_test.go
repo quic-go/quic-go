@@ -16,18 +16,13 @@ import (
 
 func setupDeadlineTest(t *testing.T) (serverStr, clientStr quic.Stream) {
 	t.Helper()
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { server.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := quic.DialAddr(
-		ctx,
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.CloseWithError(0, "") })
 	clientStr, err = conn.OpenStream()

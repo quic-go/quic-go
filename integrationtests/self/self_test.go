@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"runtime/pprof"
 	"strconv"
@@ -21,6 +22,8 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
+
+	"github.com/stretchr/testify/require"
 )
 
 const alpn = tools.ALPN
@@ -148,6 +151,14 @@ func addTracer(tr *quic.Transport) {
 		tools.QlogTracer(os.Stdout),
 		origTracer,
 	)
+}
+
+func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
+	t.Helper()
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 func areHandshakesRunning() bool {

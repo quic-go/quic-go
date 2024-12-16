@@ -2,15 +2,15 @@ package self_test
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"net"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,33 +40,16 @@ func TestKeyUpdates(t *testing.T) {
 		return
 	}
 
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), nil)
 	require.NoError(t, err)
 	defer server.Close()
 
-	serverErrChan := make(chan error, 1)
-	go func() {
-		conn, err := server.Accept(context.Background())
-		if err != nil {
-			serverErrChan <- err
-			return
-		}
-		str, err := conn.OpenUniStream()
-		if err != nil {
-			serverErrChan <- err
-			return
-		}
-		defer str.Close()
-		if _, err := str.Write(PRDataLong); err != nil {
-			serverErrChan <- err
-			return
-		}
-		close(serverErrChan)
-	}()
-
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
 			return &logging.ConnectionTracer{
@@ -82,7 +65,26 @@ func TestKeyUpdates(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
-	str, err := conn.AcceptUniStream(context.Background())
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+
+	serverErrChan := make(chan error, 1)
+	go func() {
+		str, err := serverConn.OpenUniStream()
+		if err != nil {
+			serverErrChan <- err
+			return
+		}
+		defer str.Close()
+		if _, err := str.Write(PRDataLong); err != nil {
+			serverErrChan <- err
+			return
+		}
+		close(serverErrChan)
+	}()
+
+	str, err := conn.AcceptUniStream(ctx)
 	require.NoError(t, err)
 	data, err := io.ReadAll(str)
 	require.NoError(t, err)

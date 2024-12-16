@@ -59,9 +59,7 @@ func startHTTPServer(t *testing.T, mux *http.ServeMux, opts ...func(*http3.Serve
 		opt(server)
 	}
 
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-
+	conn := newUPDConnLocalhost(t)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -556,7 +554,7 @@ func TestHTTPDeadlines(t *testing.T) {
 func TestHTTPServeQUICConn(t *testing.T) {
 	tlsConf := getTLSConfig()
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
-	ln, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
+	ln, err := quic.Listen(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -595,9 +593,7 @@ func TestHTTPServeQUICConn(t *testing.T) {
 }
 
 func TestHTTPContextFromQUIC(t *testing.T) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
+	conn := newUPDConnLocalhost(t)
 	tr := &quic.Transport{
 		Conn: conn,
 		ConnContext: func(ctx context.Context) context.Context {
@@ -927,17 +923,14 @@ func TestHTTPStreamer(t *testing.T) {
 	require.NoError(t, err)
 	tlsConf := getTLSClientConfigWithoutServerName()
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", port),
-		tlsConf,
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}, tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 	tr := http3.Transport{}
 	cc := tr.NewClientConn(conn)
-	str, err := cc.OpenRequestStream(context.Background())
+	str, err := cc.OpenRequestStream(ctx)
 	require.NoError(t, err)
 	require.NoError(t, str.SendRequestHeader(req))
 
