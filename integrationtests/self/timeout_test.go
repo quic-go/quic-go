@@ -170,6 +170,10 @@ func TestIdleTimeout(t *testing.T) {
 
 func TestKeepAlive(t *testing.T) {
 	idleTimeout := scaleDuration(150 * time.Millisecond)
+	if runtime.GOOS == "windows" {
+		// increase the duration, since timers on Windows are not very precise
+		idleTimeout = max(idleTimeout, 600*time.Millisecond)
+	}
 
 	server, err := quic.ListenAddr(
 		"localhost:0",
@@ -233,6 +237,10 @@ func TestKeepAlive(t *testing.T) {
 
 func TestTimeoutAfterInactivity(t *testing.T) {
 	idleTimeout := scaleDuration(150 * time.Millisecond)
+	if runtime.GOOS == "windows" {
+		// increase the duration, since timers on Windows are not very precise
+		idleTimeout = max(idleTimeout, 600*time.Millisecond)
+	}
 
 	server, err := quic.ListenAddr(
 		"localhost:0",
@@ -300,10 +308,11 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 }
 
 func TestTimeoutAfterSendingPacket(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("This test is flaky on Windows due to low timer precision.")
-	}
 	idleTimeout := scaleDuration(150 * time.Millisecond)
+	if runtime.GOOS == "windows" {
+		// increase the duration, since timers on Windows are not very precise
+		idleTimeout = max(idleTimeout, 600*time.Millisecond)
+	}
 
 	server, err := quic.ListenAddr(
 		"localhost:0",
