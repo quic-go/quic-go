@@ -46,6 +46,27 @@ func (c *tokenStore) Pop(key string) *quic.ClientToken {
 	return c.store.Pop(key)
 }
 
+func TestHandshakeAddrResolutionHelpers(t *testing.T) {
+	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.DialAddr(
+		ctx,
+		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		getTLSClientConfig(),
+		getQuicConfig(nil),
+	)
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+}
+
 func TestHandshake(t *testing.T) {
 	for _, tt := range []struct {
 		name string
@@ -55,41 +76,33 @@ func TestHandshake(t *testing.T) {
 		{"long cert chain", getTLSConfigWithLongCertChain()},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			server, err := quic.ListenAddr("localhost:0", tt.conf, getQuicConfig(nil))
+			server, err := quic.Listen(newUPDConnLocalhost(t), tt.conf, getQuicConfig(nil))
 			require.NoError(t, err)
 			defer server.Close()
 
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
 			defer conn.CloseWithError(0, "")
 
-			_, err = server.Accept(context.Background())
+			serverConn, err := server.Accept(ctx)
 			require.NoError(t, err)
+			defer serverConn.CloseWithError(0, "")
 		})
 	}
 }
 
 func TestHandshakeServerMismatch(t *testing.T) {
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
 	conf := getTLSClientConfig()
 	conf.ServerName = "foo.bar"
-	_, err = quic.Dial(
-		context.Background(),
-		conn,
-		server.Addr(),
-		conf,
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), conf, getQuicConfig(nil))
 	require.Error(t, err)
 	var transportErr *quic.TransportError
 	require.True(t, errors.As(err, &transportErr))
@@ -109,44 +122,41 @@ func TestHandshakeCipherSuites(t *testing.T) {
 			reset := qtls.SetCipherSuite(suiteID)
 			defer reset()
 
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+			ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
 			defer ln.Close()
 
-			go func() {
-				conn, err := ln.Accept(context.Background())
-				require.NoError(t, err)
-				str, err := conn.OpenStream()
-				require.NoError(t, err)
-				defer str.Close()
-				_, err = str.Write(PRData)
-				require.NoError(t, err)
-			}()
-
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
+			defer conn.CloseWithError(0, "")
+
+			serverConn, err := ln.Accept(context.Background())
+			require.NoError(t, err)
+			defer serverConn.CloseWithError(0, "")
+			serverStr, err := serverConn.OpenStream()
+			require.NoError(t, err)
+			errChan := make(chan error, 1)
+			go func() {
+				defer serverStr.Close()
+				_, err = serverStr.Write(PRData)
+				errChan <- err
+			}()
+			require.NoError(t, <-errChan)
+
 			str, err := conn.AcceptStream(context.Background())
 			require.NoError(t, err)
 			data, err := io.ReadAll(str)
 			require.NoError(t, err)
 			require.Equal(t, PRData, data)
 			require.Equal(t, suiteID, conn.ConnectionState().TLS.CipherSuite)
-			require.NoError(t, conn.CloseWithError(0, ""))
 		})
 	}
 }
 
 func TestTLSGetConfigForClientError(t *testing.T) {
-	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	udpConn, err := net.ListenUDP("udp", laddr)
-	require.NoError(t, err)
-	tr := &quic.Transport{Conn: udpConn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -159,7 +169,9 @@ func TestTLSGetConfigForClientError(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	_, err = quic.DialAddr(context.Background(), ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.True(t, transportErr.ErrorCode.IsCryptoError())
@@ -185,16 +197,13 @@ func TestTLSConfigGetConfigForClientAddresses(t *testing.T) {
 			return conf, nil
 		},
 	}
-	server, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
@@ -214,16 +223,13 @@ func TestHandshakeFailsWithoutClientCert(t *testing.T) {
 	tlsConf := getTLSConfig()
 	tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
 
-	server, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 
 	// Usually, the error will occur after the client already finished the handshake.
 	// However, there's a race condition here. The server's CONNECTION_CLOSE might be
@@ -250,25 +256,19 @@ func TestHandshakeFailsWithoutClientCert(t *testing.T) {
 }
 
 func TestClosedConnectionsInAcceptQueue(t *testing.T) {
-	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	pconn, err := net.ListenUDP("udp", laddr)
-	require.NoError(t, err)
-	defer pconn.Close()
-	dialer := &quic.Transport{Conn: pconn}
+	dialer := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	defer dialer.Close()
 
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	raddr, err := net.ResolveUDPAddr("udp", server.Addr().String())
-	require.NoError(t, err)
-
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	// Create first connection
-	conn1, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	conn1, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
-	conn2, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	conn2, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn2.CloseWithError(0, "")
 	// close the first connection
@@ -278,8 +278,6 @@ func TestClosedConnectionsInAcceptQueue(t *testing.T) {
 	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued and closed
 
 	// accept all connections, and find the closed one
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
 	var closedConn quic.Connection
 	for i := 0; i < 2; i++ {
 		conn, err := server.Accept(ctx)
@@ -298,52 +296,43 @@ func TestClosedConnectionsInAcceptQueue(t *testing.T) {
 }
 
 func TestServerAcceptQueueOverflow(t *testing.T) {
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	pconn, err := net.ListenUDP("udp", laddr)
-	require.NoError(t, err)
-	defer pconn.Close()
-	dialer := &quic.Transport{Conn: pconn}
+	dialer := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	defer dialer.Close()
 
-	remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
-	raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
-	require.NoError(t, err)
-
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	// fill up the accept queue
 	for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
-		conn, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+		conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
 		defer conn.CloseWithError(0, "")
 	}
 	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued
 
 	// next connection should be rejected
-	conn, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
 	_, err = conn.AcceptStream(ctx)
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
 
 	// accept one connection to free up a spot
-	_, err = server.Accept(context.Background())
+	_, err = server.Accept(ctx)
 	require.NoError(t, err)
 
 	// should be able to dial again
-	conn2, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	conn2, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn2.CloseWithError(0, "")
 	time.Sleep(scaleDuration(25 * time.Millisecond))
 
 	// but next connection should be rejected again
-	conn3, err := dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
+	conn3, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	_, err = conn3.AcceptStream(ctx)
 	require.ErrorAs(t, err, &transportErr)
@@ -351,12 +340,7 @@ func TestServerAcceptQueueOverflow(t *testing.T) {
 }
 
 func TestHandshakingConnectionsClosedOnServerShutdown(t *testing.T) {
-	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	udpConn, err := net.ListenUDP("udp", laddr)
-	require.NoError(t, err)
-
-	tr := &quic.Transport{Conn: udpConn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -385,9 +369,8 @@ func TestHandshakingConnectionsClosedOnServerShutdown(t *testing.T) {
 	errChan := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	go func() {
-		_, err := quic.DialAddr(ctx, ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+		_, err := quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
@@ -405,7 +388,7 @@ func TestHandshakingConnectionsClosedOnServerShutdown(t *testing.T) {
 }
 
 func TestALPN(t *testing.T) {
-	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -420,12 +403,9 @@ func TestALPN(t *testing.T) {
 		}
 	}()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		nil,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), nil)
 	require.NoError(t, err)
 	cs := conn.ConnectionState()
 	require.Equal(t, alpn, cs.TLS.NegotiatedProtocol)
@@ -441,12 +421,9 @@ func TestALPN(t *testing.T) {
 	// now try with a different ALPN
 	tlsConf := getTLSClientConfig()
 	tlsConf.NextProtos = []string{"foobar"}
-	_, err = quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-		tlsConf,
-		nil,
-	)
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), tlsConf, nil)
 	require.Error(t, err)
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
@@ -461,7 +438,7 @@ func TestTokensFromNewTokenFrames(t *testing.T) {
 		addrVerifiedChan <- info.AddrVerified
 		return quicConf, nil
 	}
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), quicConf)
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), quicConf)
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -477,12 +454,9 @@ func TestTokensFromNewTokenFrames(t *testing.T) {
 	gets := make(chan string, 2)
 	puts := make(chan string, 2)
 	tokenStore := newTokenStore(gets, puts)
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{TokenStore: tokenStore}),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{TokenStore: tokenStore}))
 	require.NoError(t, err)
 
 	// verify token store was used
@@ -510,12 +484,7 @@ func TestTokensFromNewTokenFrames(t *testing.T) {
 	// received a token. Close this connection.
 	require.NoError(t, conn.CloseWithError(0, ""))
 
-	conn, err = quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{TokenStore: tokenStore}),
-	)
+	conn, err = quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{TokenStore: tokenStore}))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
@@ -548,11 +517,8 @@ func TestInvalidToken(t *testing.T) {
 	// expired by the time it reaches the server.
 	serverConfig := getQuicConfig(&quic.Config{HandshakeIdleTimeout: rtt / 5})
 
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
 	tr := &quic.Transport{
-		Conn:                udpConn,
+		Conn:                newUPDConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return true },
 	}
 	addTracer(tr)
@@ -572,12 +538,9 @@ func TestInvalidToken(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	_, err = quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-		getTLSClientConfig(),
-		nil,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), nil)
 	require.Error(t, err)
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
@@ -593,7 +556,7 @@ func TestGetConfigForClient(t *testing.T) {
 		calledFrom = info.RemoteAddr
 		return getQuicConfig(conf), nil
 	}
-	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+	ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), serverConfig)
 	require.NoError(t, err)
 
 	acceptDone := make(chan struct{})
@@ -603,12 +566,9 @@ func TestGetConfigForClient(t *testing.T) {
 		close(acceptDone)
 	}()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{EnableDatagrams: true}),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{EnableDatagrams: true}))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
@@ -626,11 +586,10 @@ func TestGetConfigForClient(t *testing.T) {
 }
 
 func TestGetConfigForClientErrorsConnectionRejection(t *testing.T) {
-	ln, err := quic.ListenAddr(
-		"localhost:0",
+	ln, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
-			EnableDatagrams: false,
 			GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
 				return nil, errors.New("rejected")
 			},
@@ -644,12 +603,9 @@ func TestGetConfigForClientErrorsConnectionRejection(t *testing.T) {
 		acceptChan <- err == nil
 	}()
 
-	_, err = quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{EnableDatagrams: true}),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, qerr.ConnectionRefused, transportErr.ErrorCode)
@@ -660,14 +616,12 @@ func TestGetConfigForClientErrorsConnectionRejection(t *testing.T) {
 }
 
 func TestNoPacketsSentWhenClientHelloFails(t *testing.T) {
-	ln, err := net.ListenUDP("udp", nil)
-	require.NoError(t, err)
-	defer ln.Close()
+	conn := newUPDConnLocalhost(t)
 
 	packetChan := make(chan struct{}, 1)
 	go func() {
 		for {
-			_, _, err := ln.ReadFromUDP(make([]byte, protocol.MaxPacketBufferSize))
+			_, _, err := conn.ReadFromUDP(make([]byte, protocol.MaxPacketBufferSize))
 			if err != nil {
 				return
 			}
@@ -680,12 +634,9 @@ func TestNoPacketsSentWhenClientHelloFails(t *testing.T) {
 
 	tlsConf := getTLSClientConfig()
 	tlsConf.NextProtos = []string{""}
-	_, err = quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", ln.LocalAddr().(*net.UDPAddr).Port),
-		tlsConf,
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err := quic.Dial(ctx, newUPDConnLocalhost(t), conn.LocalAddr(), tlsConf, getQuicConfig(nil))
 
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)

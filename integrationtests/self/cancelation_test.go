@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -196,24 +195,22 @@ func testStreamCancellation(
 		}
 	}
 
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
-	server, err := quic.Listen(udpConn, getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(2*time.Second))
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
 	)
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(2*time.Second))
-	defer cancel()
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 
@@ -324,24 +321,22 @@ func testStreamCancellation(
 func TestCancelAcceptStream(t *testing.T) {
 	const numStreams = 30
 
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
-	server, err := quic.Listen(udpConn, getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 3}),
 	)
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
@@ -419,16 +414,15 @@ func TestCancelOpenStreamSync(t *testing.T) {
 		numStreams         = 16
 		maxIncomingStreams = 4
 	)
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
-	server, err := quic.Listen(udpConn, getTLSConfig(), getQuicConfig(nil))
+
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	conn, err := quic.DialAddr(
+	conn, err := quic.Dial(
 		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingUniStreams: maxIncomingStreams}),
 	)
@@ -509,11 +503,8 @@ func TestCancelOpenStreamSync(t *testing.T) {
 func TestHeavyStreamCancellation(t *testing.T) {
 	const maxIncomingStreams = 500
 
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
 	server, err := quic.Listen(
-		udpConn,
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingStreams: maxIncomingStreams, MaxIdleTimeout: 10 * time.Second}),
 	)
@@ -523,12 +514,9 @@ func TestHeavyStreamCancellation(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2 * 4 * maxIncomingStreams)
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{}),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
 	serverConn, err := server.Accept(context.Background())
@@ -589,7 +577,7 @@ func TestHeavyStreamCancellation(t *testing.T) {
 
 	// We don't expect to accept any stream here.
 	// We're just making sure the connection stays open and there's no error.
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
+	ctx, cancel = context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
 	defer cancel()
 	_, err = conn.AcceptStream(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)

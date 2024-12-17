@@ -15,8 +15,8 @@ import (
 )
 
 func TestConnectionCloseRetransmission(t *testing.T) {
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -41,16 +41,13 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
-	sconn, err := server.Accept(context.Background())
+	sconn, err := server.Accept(ctx)
 	require.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
 	drop.Store(true)

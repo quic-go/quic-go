@@ -16,7 +16,7 @@ import (
 
 func TestEarlyData(t *testing.T) {
 	const rtt = 80 * time.Millisecond
-	ln, err := quic.ListenAddrEarly("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	ln, err := quic.ListenEarly(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -38,12 +38,9 @@ func TestEarlyData(t *testing.T) {
 		connChan <- conn
 	}()
 
-	clientConn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	clientConn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
 	var serverConn quic.EarlyConnection

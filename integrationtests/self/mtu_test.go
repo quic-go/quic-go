@@ -19,12 +19,8 @@ import (
 )
 
 func TestInitialPacketSize(t *testing.T) {
-	server, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer server.Close()
-	client, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer client.Close()
+	server := newUPDConnLocalhost(t)
+	client := newUPDConnLocalhost(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -49,8 +45,8 @@ func TestPathMTUDiscovery(t *testing.T) {
 	rtt := scaleDuration(5 * time.Millisecond)
 	const mtu = 1400
 
-	ln, err := quic.ListenAddr(
-		"localhost:0",
+	ln, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
 			InitialPacketSize:       1234,
@@ -109,10 +105,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 
 	// Make sure to use v4-only socket here.
 	// We can't reliably set the DF bit on dual-stack sockets on older versions of macOS (before Sequoia).
-	udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
-	tr := &quic.Transport{Conn: udpConn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	defer tr.Close()
 
 	var mtus []logging.ByteCount

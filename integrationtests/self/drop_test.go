@@ -28,7 +28,7 @@ func TestDropTests(t *testing.T) {
 			t.Logf("dropping packets for %s, after a delay of %s", dropDuration, dropDelay)
 			startTime := time.Now()
 
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+			ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
 			defer ln.Close()
 
@@ -53,16 +53,13 @@ func TestDropTests(t *testing.T) {
 			require.NoError(t, err)
 			defer proxy.Close()
 
-			conn, err := quic.DialAddr(
-				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				getTLSClientConfig(),
-				getQuicConfig(nil),
-			)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
 			defer conn.CloseWithError(0, "")
 
-			serverConn, err := ln.Accept(context.Background())
+			serverConn, err := ln.Accept(ctx)
 			require.NoError(t, err)
 			serverStr, err := serverConn.OpenUniStream()
 			require.NoError(t, err)
@@ -77,7 +74,7 @@ func TestDropTests(t *testing.T) {
 				}
 			}()
 
-			str, err := conn.AcceptUniStream(context.Background())
+			str, err := conn.AcceptUniStream(ctx)
 			require.NoError(t, err)
 			for i := uint8(1); i <= numMessages; i++ {
 				b := []byte{0}

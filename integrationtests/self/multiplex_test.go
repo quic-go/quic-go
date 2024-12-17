@@ -60,15 +60,12 @@ func dialAndReceiveData(tr *quic.Transport, addr net.Addr) error {
 }
 
 func TestMultiplexesConnectionsToSameServer(t *testing.T) {
-	server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 	go runMultiplexTestServer(t, server)
 
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-	tr := &quic.Transport{Conn: conn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -92,21 +89,17 @@ func TestMultiplexesConnectionsToSameServer(t *testing.T) {
 }
 
 func TestMultiplexingToDifferentServers(t *testing.T) {
-	server1, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server1, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server1.Close()
 	go runMultiplexTestServer(t, server1)
 
-	server2, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	server2, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server2.Close()
 	go runMultiplexTestServer(t, server2)
 
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-
-	tr := &quic.Transport{Conn: conn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -130,10 +123,7 @@ func TestMultiplexingToDifferentServers(t *testing.T) {
 }
 
 func TestMultiplexingConnectToSelf(t *testing.T) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-	tr := &quic.Transport{Conn: conn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -158,20 +148,14 @@ func TestMultiplexingServerAndClientOnSameConn(t *testing.T) {
 		t.Skip("This test requires setting of iptables rules on Linux, see https://stackoverflow.com/questions/23859164/linux-udp-socket-sendto-operation-not-permitted.")
 	}
 
-	conn1, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn1.Close()
-	tr1 := &quic.Transport{Conn: conn1}
+	tr1 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr1)
 	defer tr1.Close()
 	server1, err := tr1.Listen(getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server1.Close()
 
-	conn2, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn2.Close()
-	tr2 := &quic.Transport{Conn: conn2}
+	tr2 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	addTracer(tr2)
 	defer tr2.Close()
 	server2, err := tr2.Listen(getTLSConfig(), getQuicConfig(nil))
@@ -203,17 +187,11 @@ func TestMultiplexingServerAndClientOnSameConn(t *testing.T) {
 }
 
 func TestMultiplexingNonQUICPackets(t *testing.T) {
-	conn1, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn1.Close()
-	tr1 := &quic.Transport{Conn: conn1}
+	tr1 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	defer tr1.Close()
 	addTracer(tr1)
 
-	conn2, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn2.Close()
-	tr2 := &quic.Transport{Conn: conn2}
+	tr2 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
 	defer tr2.Close()
 	addTracer(tr2)
 

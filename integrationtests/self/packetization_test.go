@@ -3,7 +3,6 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -18,8 +17,8 @@ func TestACKBundling(t *testing.T) {
 	const numMsg = 100
 
 	serverCounter, serverTracer := newPacketTracer()
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
 			DisablePathMTUDiscovery: true,
@@ -28,10 +27,9 @@ func TestACKBundling(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer server.Close()
-	serverAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 
 	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: serverAddr,
+		RemoteAddr: server.Addr().String(),
 		DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
 			return 5 * time.Millisecond
 		},
@@ -40,9 +38,12 @@ func TestACKBundling(t *testing.T) {
 	defer proxy.Close()
 
 	clientCounter, clientTracer := newPacketTracer()
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			DisablePathMTUDiscovery: true,

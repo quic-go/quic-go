@@ -98,7 +98,9 @@ func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) http3.RequestStrea
 
 	tlsConf := getTLSClientConfigWithoutServerName()
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
-	conn, err := quic.DialAddr(context.Background(), u.Host, tlsConf, getQuicConfig(&quic.Config{EnableDatagrams: true}))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.DialAddr(ctx, u.Host, tlsConf, getQuicConfig(&quic.Config{EnableDatagrams: true}))
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.CloseWithError(0, "") })
 
@@ -106,7 +108,7 @@ func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) http3.RequestStrea
 	t.Cleanup(func() { tr.Close() })
 	cc := tr.NewClientConn(conn)
 	t.Cleanup(func() { cc.CloseWithError(0, "") })
-	str, err := cc.OpenRequestStream(context.Background())
+	str, err := cc.OpenRequestStream(ctx)
 	require.NoError(t, err)
 	req := &http.Request{
 		Method: http.MethodConnect,

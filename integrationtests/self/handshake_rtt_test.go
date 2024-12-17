@@ -3,7 +3,6 @@ package self_test
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -25,9 +24,12 @@ func handshakeWithRTT(t *testing.T, serverAddr net.Addr, tlsConf *tls.Config, qu
 	require.NoError(t, err)
 	t.Cleanup(func() { proxy.Close() })
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
+	ctx, cancel := context.WithTimeout(context.Background(), 10*rtt)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		tlsConf,
 		quicConf,
 	)
@@ -37,7 +39,7 @@ func handshakeWithRTT(t *testing.T, serverAddr net.Addr, tlsConf *tls.Config, qu
 }
 
 func TestHandshakeRTTWithoutRetry(t *testing.T) {
-	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -57,12 +59,8 @@ func TestHandshakeRTTWithoutRetry(t *testing.T) {
 }
 
 func TestHandshakeRTTWithRetry(t *testing.T) {
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
-
 	tr := &quic.Transport{
-		Conn:                udpConn,
+		Conn:                newUPDConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return true },
 	}
 	addTracer(tr)
@@ -89,7 +87,7 @@ func TestHandshakeRTTWithHelloRetryRequest(t *testing.T) {
 	tlsConf := getTLSConfig()
 	tlsConf.CurvePreferences = []tls.CurveID{tls.CurveP384}
 
-	ln, err := quic.ListenAddr("localhost:0", tlsConf, getQuicConfig(nil))
+	ln, err := quic.Listen(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -117,8 +115,8 @@ func TestHandshakeRTTReceiveMessage(t *testing.T) {
 		require.Equal(t, []byte("foobar"), data)
 	}
 
-	t.Run("using ListenAddr", func(t *testing.T) {
-		ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	t.Run("using Listen", func(t *testing.T) {
+		ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
 		defer ln.Close()
 
@@ -147,8 +145,8 @@ func TestHandshakeRTTReceiveMessage(t *testing.T) {
 		require.Less(t, rtts, float64(3))
 	})
 
-	t.Run("using ListenAddrEarly", func(t *testing.T) {
-		ln, err := quic.ListenAddrEarly("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	t.Run("using ListenEarly", func(t *testing.T) {
+		ln, err := quic.ListenEarly(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
 		defer ln.Close()
 

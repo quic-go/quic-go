@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlog"
@@ -25,8 +26,8 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 	require.NoError(t, os.Setenv("QLOGDIR", qlogDir))
 
 	serverStopped := make(chan struct{})
-	server, err := quic.ListenAddr(
-		"localhost:0",
+	server, err := quic.Listen(
+		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
 			Tracer: qlog.DefaultConnectionTracer,
@@ -43,9 +44,12 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 		}
 	}()
 
-	conn, err := quic.DialAddr(
-		context.Background(),
-		server.Addr().String(),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		getTLSClientConfig(),
 		&quic.Config{
 			Tracer: qlog.DefaultConnectionTracer,

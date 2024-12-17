@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -19,14 +17,11 @@ func TestHandshakeContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(20*time.Millisecond))
 	defer cancel()
 
+	conn := newUPDConnLocalhost(t)
+
 	errChan := make(chan error, 1)
 	go func() {
-		_, err := quic.DialAddr(
-			ctx,
-			"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
-			getTLSClientConfig(),
-			getQuicConfig(nil),
-		)
+		_, err := quic.Dial(ctx, newUPDConnLocalhost(t), conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
@@ -36,13 +31,9 @@ func TestHandshakeContextTimeout(t *testing.T) {
 func TestHandshakeCancellationError(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	errChan := make(chan error, 1)
+	conn := newUPDConnLocalhost(t)
 	go func() {
-		_, err := quic.DialAddr(
-			ctx,
-			"localhost:1234", // nobody is listening on this port, but we're going to cancel this dial anyway
-			getTLSClientConfig(),
-			getQuicConfig(nil),
-		)
+		_, err := quic.Dial(ctx, newUPDConnLocalhost(t), conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
@@ -57,12 +48,8 @@ func TestConnContextOnServerSide(t *testing.T) {
 	connContextChan := make(chan context.Context, 1)
 	streamContextChan := make(chan context.Context, 1)
 
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-
 	tr := &quic.Transport{
-		Conn: conn,
+		Conn: newUPDConnLocalhost(t),
 		ConnContext: func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
 		},
@@ -91,15 +78,12 @@ func TestConnContextOnServerSide(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Close()
 
-	c, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	c, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
-	serverConn, err := server.Accept(context.Background())
+	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 	connContextChan <- serverConn.Context()
 	str, err := serverConn.OpenUniStream()
@@ -107,7 +91,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 	streamContextChan <- str.Context()
 	str.Write([]byte{1, 2, 3})
 
-	_, err = c.AcceptUniStream(context.Background())
+	_, err = c.AcceptUniStream(ctx)
 	require.NoError(t, err)
 	c.CloseWithError(1337, "bye")
 
@@ -150,12 +134,8 @@ func TestConnContextOnServerSide(t *testing.T) {
 
 // Users are not supposed to return a fresh context from ConnContext, but we should handle it gracefully.
 func TestConnContextFreshContext(t *testing.T) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer conn.Close()
-
 	tr := &quic.Transport{
-		Conn:        conn,
+		Conn:        newUPDConnLocalhost(t),
 		ConnContext: func(ctx context.Context) context.Context { return context.Background() },
 	}
 	defer tr.Close()
@@ -173,12 +153,9 @@ func TestConnContextFreshContext(t *testing.T) {
 		conn.CloseWithError(1337, "bye")
 	}()
 
-	c, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	c, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
 	select {
@@ -193,7 +170,7 @@ func TestConnContextFreshContext(t *testing.T) {
 func TestContextOnClientSide(t *testing.T) {
 	tlsServerConf := getTLSConfig()
 	tlsServerConf.ClientAuth = tls.RequestClientCert
-	server, err := quic.ListenAddr("localhost:0", tlsServerConf, getQuicConfig(nil))
+	server, err := quic.Listen(newUPDConnLocalhost(t), tlsServerConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -206,9 +183,10 @@ func TestContextOnClientSide(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar")) //nolint:staticcheck
-	conn, err := quic.DialAddr(
+	conn, err := quic.Dial(
 		ctx,
-		fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+		newUPDConnLocalhost(t),
+		server.Addr(),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Tracer: func(ctx context.Context, _ logging.Perspective, _ quic.ConnectionID) *logging.ConnectionTracer {

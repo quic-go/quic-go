@@ -46,7 +46,7 @@ func dialAndReceiveTicket(
 ) (clientTLSConf *tls.Config) {
 	t.Helper()
 
-	ln, err := quic.ListenAddrEarly("localhost:0", serverTLSConf, serverConf)
+	ln, err := quic.ListenEarly(newUPDConnLocalhost(t), serverTLSConf, serverConf)
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -64,12 +64,9 @@ func dialAndReceiveTicket(
 		cache = tls.NewLRUClientSessionCache(100)
 	}
 	clientTLSConf.ClientSessionCache = newClientSessionCache(cache, nil, puts)
-	conn, err := quic.DialAddr(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-		clientTLSConf,
-		getQuicConfig(nil),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), clientTLSConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	require.False(t, conn.ConnectionState().Used0RTT)
 
@@ -80,8 +77,6 @@ func dialAndReceiveTicket(
 	}
 	require.NoError(t, conn.CloseWithError(0, ""))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 
@@ -96,17 +91,17 @@ func dialAndReceiveTicket(
 func transfer0RTTData(
 	t *testing.T,
 	ln *quic.EarlyListener,
-	proxyPort int,
+	proxyAddr net.Addr,
 	clientTLSConf *tls.Config,
 	clientConf *quic.Config,
 	testdata []byte, // data to transfer
 ) {
 	t.Helper()
-	conn, err := quic.DialAddrEarly(context.Background(), fmt.Sprintf("localhost:%d", proxyPort), clientTLSConf, clientConf)
-	require.NoError(t, err)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
+	conn, err := quic.DialEarly(ctx, newUPDConnLocalhost(t), proxyAddr, clientTLSConf, clientConf)
+	require.NoError(t, err)
+
 	errChan := make(chan error, 1)
 	serverConnChan := make(chan quic.EarlyConnection, 1)
 	go func() {
@@ -174,8 +169,8 @@ func Test0RTTTransfer(t *testing.T) {
 	clientTLSConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 	)
@@ -185,14 +180,7 @@ func Test0RTTTransfer(t *testing.T) {
 	proxy, num0RTTPackets := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 	require.Zero(t, num0RTTPackets.Load())
 
-	transfer0RTTData(
-		t,
-		ln,
-		proxy.LocalPort(),
-		clientTLSConf,
-		getQuicConfig(nil),
-		PRData,
-	)
+	transfer0RTTData(t, ln, proxy.LocalAddr(), clientTLSConf, getQuicConfig(nil), PRData)
 
 	num0RTT := num0RTTPackets.Load()
 	t.Logf("sent %d 0-RTT packets", num0RTT)
@@ -208,8 +196,8 @@ func Test0RTTDisabledOnDial(t *testing.T) {
 	clientTLSConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 	)
@@ -219,7 +207,9 @@ func Test0RTTDisabledOnDial(t *testing.T) {
 	proxy, num0RTTPackets := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 	require.Zero(t, num0RTTPackets.Load())
 
-	conn, err := quic.DialAddr(context.Background(), fmt.Sprintf("localhost:%d", proxy.LocalPort()), clientTLSConf, getQuicConfig(nil))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), clientTLSConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	// session Resumption is enabled at the TLS layer, but not 0-RTT at the QUIC layer
 	require.True(t, conn.ConnectionState().TLS.DidResume)
@@ -239,8 +229,8 @@ func Test0RTTWaitForHandshakeCompletion(t *testing.T) {
 	oneRTTData := PRData
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT: true,
@@ -288,9 +278,12 @@ func Test0RTTWaitForHandshakeCompletion(t *testing.T) {
 		<-conn.Context().Done()
 	}()
 
-	conn, err := quic.DialAddrEarly(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.DialEarly(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		clientTLSConf,
 		getQuicConfig(nil),
 	)
@@ -358,8 +351,8 @@ func Test0RTTDataLoss(t *testing.T) {
 	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 	)
@@ -390,7 +383,7 @@ func Test0RTTDataLoss(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	transfer0RTTData(t, ln, proxy.LocalPort(), clientConf, nil, PRData)
+	transfer0RTTData(t, ln, proxy.LocalAddr(), clientConf, nil, PRData)
 
 	num0RTT := num0RTTPackets.Load()
 	dropped := numDropped.Load()
@@ -420,11 +413,8 @@ func Test0RTTRetransmitOnRetry(t *testing.T) {
 	}
 
 	counter, tracer := newPacketTracer()
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer udpConn.Close()
 	tr := &quic.Transport{
-		Conn:                udpConn,
+		Conn:                newUPDConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return true },
 	}
 	addTracer(tr)
@@ -468,7 +458,7 @@ func Test0RTTRetransmitOnRetry(t *testing.T) {
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	transfer0RTTData(t, ln, proxy.LocalPort(), clientConf, nil, GeneratePRData(5000)) // ~5 packets
+	transfer0RTTData(t, ln, proxy.LocalAddr(), clientConf, nil, GeneratePRData(5000)) // ~5 packets
 
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -487,8 +477,8 @@ func Test0RTTWithIncreasedStreamLimit(t *testing.T) {
 	tlsConf := getTLSConfig()
 	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true, MaxIncomingUniStreams: maxStreams}), nil)
 
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{Allow0RTT: true, MaxIncomingUniStreams: maxStreams + 1}),
 	)
@@ -497,9 +487,12 @@ func Test0RTTWithIncreasedStreamLimit(t *testing.T) {
 
 	proxy, counter := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 
-	conn, err := quic.DialAddrEarly(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.DialEarly(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
 		clientConf,
 		getQuicConfig(nil),
 	)
@@ -529,8 +522,10 @@ func Test0RTTWithIncreasedStreamLimit(t *testing.T) {
 	require.NotZero(t, counter.Load())
 }
 
-func check0RTTRejected(t *testing.T, ln *quic.EarlyListener, port int, conf *tls.Config) quic.Connection {
-	conn, err := quic.DialAddrEarly(context.Background(), fmt.Sprintf("localhost:%d", port), conf, getQuicConfig(nil))
+func check0RTTRejected(t *testing.T, ln *quic.EarlyListener, addr net.Addr, conf *tls.Config) quic.Connection {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.DialEarly(ctx, newUPDConnLocalhost(t), addr, conf, getQuicConfig(nil))
 	require.NoError(t, err)
 	require.False(t, conn.ConnectionState().TLS.HandshakeComplete)
 	str, err := conn.OpenUniStream()
@@ -547,7 +542,7 @@ func check0RTTRejected(t *testing.T, ln *quic.EarlyListener, port int, conf *tls
 	require.False(t, conn.ConnectionState().Used0RTT)
 
 	// make sure the server doesn't process the data
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
+	ctx, cancel = context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
 	defer cancel()
 	serverConn, err := ln.Accept(ctx)
 	require.NoError(t, err)
@@ -582,8 +577,8 @@ func Test0RTTRejectedOnStreamLimitDecrease(t *testing.T) {
 	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true, MaxIncomingStreams: maxStreams}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT:          true,
@@ -595,7 +590,7 @@ func Test0RTTRejectedOnStreamLimitDecrease(t *testing.T) {
 	defer ln.Close()
 	proxy, num0RTT := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 
-	conn := check0RTTRejected(t, ln, proxy.LocalPort(), clientConf)
+	conn := check0RTTRejected(t, ln, proxy.LocalAddr(), clientConf)
 
 	// The client should send 0-RTT packets, but the server doesn't process them.
 	n := num0RTT.Load()
@@ -621,8 +616,8 @@ func Test0RTTRejectedOnALPNChanged(t *testing.T) {
 	// crypto/tls will attempt to resume with the ALPN from the original connection
 	clientConf.NextProtos = append(clientConf.NextProtos, "new-alpn")
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT: true,
@@ -633,7 +628,7 @@ func Test0RTTRejectedOnALPNChanged(t *testing.T) {
 	defer ln.Close()
 	proxy, num0RTTPackets := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 
-	conn := check0RTTRejected(t, ln, proxy.LocalPort(), clientConf)
+	conn := check0RTTRejected(t, ln, proxy.LocalAddr(), clientConf)
 	require.Equal(t, "new-alpn", conn.ConnectionState().TLS.NegotiatedProtocol)
 
 	// The client should send 0-RTT packets, but the server doesn't process them.
@@ -649,8 +644,8 @@ func Test0RTTRejectedWhenDisabled(t *testing.T) {
 	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT: false,
@@ -661,7 +656,7 @@ func Test0RTTRejectedWhenDisabled(t *testing.T) {
 	defer ln.Close()
 	proxy, num0RTTPackets := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 
-	check0RTTRejected(t, ln, proxy.LocalPort(), clientConf)
+	check0RTTRejected(t, ln, proxy.LocalAddr(), clientConf)
 
 	// The client should send 0-RTT packets, but the server doesn't process them.
 	num0RTT := num0RTTPackets.Load()
@@ -676,8 +671,8 @@ func Test0RTTRejectedOnDatagramsDisabled(t *testing.T) {
 	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT:       true,
@@ -689,7 +684,7 @@ func Test0RTTRejectedOnDatagramsDisabled(t *testing.T) {
 	defer ln.Close()
 	proxy, num0RTTPackets := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 
-	conn := check0RTTRejected(t, ln, proxy.LocalPort(), clientConf)
+	conn := check0RTTRejected(t, ln, proxy.LocalAddr(), clientConf)
 	require.False(t, conn.ConnectionState().SupportsDatagrams)
 
 	// The client should send 0-RTT packets, but the server doesn't process them.
@@ -758,11 +753,11 @@ func Test0RTTWithSessionTicketData(t *testing.T) {
 		}
 		clientConf := dialAndReceiveTicket(t, 0, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}), nil)
 
-		ln, err := quic.ListenAddrEarly("localhost:0", tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}))
+		ln, err := quic.ListenEarly(newUPDConnLocalhost(t), tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}))
 		require.NoError(t, err)
 		defer ln.Close()
 
-		transfer0RTTData(t, ln, ln.Addr().(*net.UDPAddr).Port, clientConf, getQuicConfig(nil), PRData)
+		transfer0RTTData(t, ln, ln.Addr(), clientConf, getQuicConfig(nil), PRData)
 
 		select {
 		case state := <-stateChan:
@@ -787,15 +782,11 @@ func Test0RTTWithSessionTicketData(t *testing.T) {
 			},
 		)
 
-		ln, err := quic.ListenAddrEarly(
-			"localhost:0",
-			tlsConf,
-			getQuicConfig(&quic.Config{Allow0RTT: true}),
-		)
+		ln, err := quic.ListenEarly(newUPDConnLocalhost(t), tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}))
 		require.NoError(t, err)
 		defer ln.Close()
 
-		transfer0RTTData(t, ln, ln.Addr().(*net.UDPAddr).Port, clientConf, getQuicConfig(nil), PRData)
+		transfer0RTTData(t, ln, ln.Addr(), clientConf, getQuicConfig(nil), PRData)
 		select {
 		case b := <-restoreChan:
 			require.Equal(t, []byte("foobar"), b)
@@ -811,8 +802,8 @@ func Test0RTTPacketQueueing(t *testing.T) {
 	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
 	)
@@ -833,7 +824,7 @@ func Test0RTTPacketQueueing(t *testing.T) {
 	defer proxy.Close()
 
 	data := GeneratePRData(5000) // ~5 packets
-	transfer0RTTData(t, ln, proxy.LocalPort(), clientConf, getQuicConfig(nil), data)
+	transfer0RTTData(t, ln, proxy.LocalAddr(), clientConf, getQuicConfig(nil), data)
 
 	require.Equal(t, protocol.PacketTypeInitial, counter.getRcvdLongHeaderPackets()[0].hdr.Type)
 	zeroRTTPackets := counter.getRcvd0RTTPacketNumbers()
@@ -864,8 +855,8 @@ func Test0RTTDatagrams(t *testing.T) {
 	clientTLSConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true}), nil)
 
 	counter, tracer := newPacketTracer()
-	ln, err := quic.ListenAddrEarly(
-		"localhost:0",
+	ln, err := quic.ListenEarly(
+		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT:       true,
@@ -878,12 +869,9 @@ func Test0RTTDatagrams(t *testing.T) {
 	proxy, num0RTTPackets := runCountingProxyAndCount0RTTPackets(t, ln.Addr().(*net.UDPAddr).Port, rtt)
 
 	msg := GeneratePRData(100)
-	conn, err := quic.DialAddrEarly(
-		context.Background(),
-		fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-		clientTLSConf,
-		getQuicConfig(&quic.Config{EnableDatagrams: true}),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.DialEarly(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), clientTLSConf, getQuicConfig(&quic.Config{EnableDatagrams: true}))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 	require.True(t, conn.ConnectionState().SupportsDatagrams)
@@ -894,8 +882,6 @@ func Test0RTTDatagrams(t *testing.T) {
 		t.Fatal("handshake did not complete in time")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	serverConn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	rcvdMsg, err := serverConn.ReceiveDatagram(ctx)

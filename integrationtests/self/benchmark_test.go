@@ -2,9 +2,8 @@ package self_test
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
 
@@ -14,7 +13,7 @@ import (
 func BenchmarkHandshake(b *testing.B) {
 	b.ReportAllocs()
 
-	ln, err := quic.ListenAddr("localhost:0", tlsConfig, nil)
+	ln, err := quic.Listen(newUPDConnLocalhost(b), tlsConfig, nil)
 	require.NoError(b, err)
 	defer ln.Close()
 
@@ -29,10 +28,7 @@ func BenchmarkHandshake(b *testing.B) {
 		}
 	}()
 
-	conn, err := net.ListenUDP("udp", nil)
-	require.NoError(b, err)
-	defer conn.Close()
-	tr := &quic.Transport{Conn: conn}
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(b)}
 	defer tr.Close()
 
 	b.ResetTimer()
@@ -48,11 +44,13 @@ func BenchmarkHandshake(b *testing.B) {
 func BenchmarkStreamChurn(b *testing.B) {
 	b.ReportAllocs()
 
-	ln, err := quic.ListenAddr("localhost:0", tlsConfig, &quic.Config{MaxIncomingStreams: 1e10})
+	ln, err := quic.Listen(newUPDConnLocalhost(b), tlsConfig, &quic.Config{MaxIncomingStreams: 1e10})
 	require.NoError(b, err)
 	defer ln.Close()
 
-	conn, err := quic.DialAddr(context.Background(), fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port), tlsClientConfig, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(b), ln.Addr(), tlsClientConfig, nil)
 	require.NoError(b, err)
 	defer conn.CloseWithError(0, "")
 

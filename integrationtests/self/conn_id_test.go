@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
-	"net"
 	"testing"
 
 	"github.com/quic-go/quic-go"
@@ -67,13 +66,8 @@ func testTransferWithConnectionIDs(
 	}
 
 	// setup server
-	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	conn, err := net.ListenUDP("udp", addr)
-	require.NoError(t, err)
-	t.Cleanup(func() { conn.Close() })
 	serverTr := &quic.Transport{
-		Conn:                  conn,
+		Conn:                  newUPDConnLocalhost(t),
 		ConnectionIDLength:    serverConnIDLen,
 		ConnectionIDGenerator: serverConnIDGenerator,
 	}
@@ -83,13 +77,8 @@ func testTransferWithConnectionIDs(
 	require.NoError(t, err)
 
 	// setup client
-	laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	require.NoError(t, err)
-	clientConn, err := net.ListenUDP("udp", laddr)
-	require.NoError(t, err)
-	t.Cleanup(func() { clientConn.Close() })
 	clientTr := &quic.Transport{
-		Conn:                  clientConn,
+		Conn:                  newUPDConnLocalhost(t),
 		ConnectionIDLength:    clientConnIDLen,
 		ConnectionIDGenerator: clientConnIDGenerator,
 	}
@@ -98,7 +87,7 @@ func testTransferWithConnectionIDs(
 
 	cl, err := clientTr.Dial(
 		context.Background(),
-		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: ln.Addr().(*net.UDPAddr).Port},
+		ln.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(nil),
 	)
