@@ -8,10 +8,14 @@ jobs:
         os: [ "ubuntu" ]
         go: [ "1.22.x", "1.23.x" ]
         race: [ false ]
+        use32bit: [ false ]
         include:
           - os: "ubuntu"
             go: "1.23.x"
             race: true
+          - os: "ubuntu"
+            go: "1.23.x"
+            use32bit: true
           - os: "windows"
             go: "1.23.x"
             race: false
@@ -26,54 +30,49 @@ jobs:
     env:
       DEBUG: false # set this to true to export qlogs and save them as artifacts
       TIMESCALE_FACTOR: 3
-    name: "Integration (${{ matrix.os }}, Go ${{ matrix.go }}, race: ${{ matrix.race }})"
+    name: "Integration (${{ matrix.os }}, Go ${{ matrix.go }}${{ matrix.race && ', race' || '' }}${{ matrix.use32bit && ', 32-bit' || '' }})"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - run: go version
-      - name: set qlogger
+      - name: Set qlogger
         if: env.DEBUG == 'true'
         run: echo "QLOGFLAG= -qlog" >> $GITHUB_ENV
       - name: Enable race detector
         if: ${{ matrix.race }}
         run: echo "RACEFLAG= -race" >> $GITHUB_ENV
-      - name: Run other tests
-        run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo ${{ env.RACEFLAG }} -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
-          go run github.com/onsi/ginkgo/v2/ginkgo ${{ env.RACEFLAG }} -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation -- ${{ env.QLOGFLAG }}
+      - name: Enable 32-bit build 
+        if: ${{ matrix.use32bit }}
+        run: echo "GOARCH=386" >> $GITHUB_ENV
+      - run: go version
+      - name: Run tools tests
+        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools
+      - name: Run version negotiation tests
+        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/versionnegotiation ${{ env.QLOGFLAG }}
       - name: Run self tests, using QUIC v1
         if: success() || failure() # run this step even if the previous one failed
-        run: go run github.com/onsi/ginkgo/v2/ginkgo ${{ env.RACEFLAG }} -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }}
       - name: Run self tests, using QUIC v2
         if: ${{ !matrix.race && (success() || failure()) }} # run this step even if the previous one failed
-        run: go run  github.com/onsi/ginkgo/v2/ginkgo ${{ env.RACEFLAG }} -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=2 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=2 ${{ env.QLOGFLAG }}
       - name: Run self tests, with GSO disabled
         if: ${{ matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_GSO: true
-        run: go run github.com/onsi/ginkgo/v2/ginkgo ${{ env.RACEFLAG }} -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }}
       - name: Run self tests, with ECN disabled
         if: ${{ !matrix.race && matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_ECN: true
-        run: go run github.com/onsi/ginkgo/v2/ginkgo ${{ env.RACEFLAG }} -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
-      - name: Run tests (32 bit)
-        if: ${{ !matrix.race && matrix.os != 'macos' && (success() || failure()) }} # run this step even if the previous one failed
-        env:
-          GOARCH: 386
-        run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation -- ${{ env.QLOGFLAG }}
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }}
       - name: Run benchmarks
         if: ${{ !matrix.race }}
-        run: go test -v -run=^$ -bench=. ./integrationtests/self
+        run: go test -v -run=^$ -timeout 5m -shuffle=on -bench=. ./integrationtests/self
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: qlogs-${{ matrix.os }}-go${{ matrix.go }}-race${{ matrix.race }}
+          name: qlogs-${{ matrix.os }}-go${{ matrix.go }}-race${{ matrix.race }}${{ matrix.use32bit && '-32bit' || '' }}
           path: integrationtests/self/*.qlog
           retention-days: 7
