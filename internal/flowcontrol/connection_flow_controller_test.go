@@ -59,8 +59,16 @@ func TestConnectionFlowControlViolation(t *testing.T) {
 	require.Equal(t, qerr.FlowControlError, terr.ErrorCode)
 }
 
-// TODO (#4732): add a test for successfully resetting the flow controller
 func TestConnectionFlowControllerReset(t *testing.T) {
+	fc := NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	fc.UpdateSendWindow(100)
+	fc.AddBytesSent(10)
+	require.Equal(t, protocol.ByteCount(90), fc.SendWindowSize())
+	require.NoError(t, fc.Reset())
+	require.Zero(t, fc.SendWindowSize())
+}
+
+func TestConnectionFlowControllerResetAfterReading(t *testing.T) {
 	fc := NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
 	fc.AddBytesRead(1)
 	require.EqualError(t, fc.Reset(), "flow controller reset after reading data")
