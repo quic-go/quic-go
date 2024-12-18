@@ -432,13 +432,29 @@ func TestALPN(t *testing.T) {
 }
 
 func TestTokensFromNewTokenFrames(t *testing.T) {
+	t.Run("MaxTokenAge: 1 hour", func(t *testing.T) {
+		testTokensFromNewTokenFrames(t, 0, true)
+	})
+	// If unset, the default value is 24h.
+	t.Run("MaxTokenAge: default", func(t *testing.T) {
+		testTokensFromNewTokenFrames(t, 0, true)
+	})
+	t.Run("MaxTokenAge: very short", func(t *testing.T) {
+		testTokensFromNewTokenFrames(t, time.Microsecond, false)
+	})
+}
+
+func testTokensFromNewTokenFrames(t *testing.T, maxTokenAge time.Duration, expectTokenUsed bool) {
 	addrVerifiedChan := make(chan bool, 2)
 	quicConf := getQuicConfig(nil)
 	quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
 		addrVerifiedChan <- info.AddrVerified
 		return quicConf, nil
 	}
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), quicConf)
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t), MaxTokenAge: maxTokenAge}
+	addTracer(tr)
+	defer tr.Close()
+	server, err := tr.Listen(getTLSConfig(), quicConf)
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -453,10 +469,10 @@ func TestTokensFromNewTokenFrames(t *testing.T) {
 
 	gets := make(chan string, 2)
 	puts := make(chan string, 2)
-	tokenStore := newTokenStore(gets, puts)
+	ts := newTokenStore(gets, puts)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{TokenStore: tokenStore}))
+	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{TokenStore: ts}))
 	require.NoError(t, err)
 
 	// verify token store was used
@@ -484,15 +500,20 @@ func TestTokensFromNewTokenFrames(t *testing.T) {
 	// received a token. Close this connection.
 	require.NoError(t, conn.CloseWithError(0, ""))
 
-	conn, err = quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{TokenStore: tokenStore}))
+	time.Sleep(scaleDuration(5 * time.Millisecond))
+	conn, err = quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{TokenStore: ts}))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
 	select {
 	case addrVerified := <-addrVerifiedChan:
 		// this time, the address was verified using the token
-		// TODO (#4737): check that addrVerified is true
-		_ = addrVerified
+		if expectTokenUsed {
+			require.True(t, addrVerified)
+		} else {
+			require.False(t, addrVerified)
+		}
+
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for addr verified")
 	}
