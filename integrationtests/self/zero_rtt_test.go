@@ -570,20 +570,35 @@ func check0RTTRejected(t *testing.T, ln *quic.EarlyListener, addr net.Addr, conf
 
 func Test0RTTRejectedOnStreamLimitDecrease(t *testing.T) {
 	const rtt = 5 * time.Millisecond
-	const maxStreams = 42
-	const newMaxStreams = maxStreams - 1
+
+	const (
+		maxBidiStreams    = 42
+		maxUniStreams     = 10
+		newMaxBidiStreams = maxBidiStreams - 1
+		newMaxUniStreams  = maxUniStreams - 1
+	)
 
 	tlsConf := getTLSConfig()
-	clientConf := dialAndReceiveTicket(t, rtt, tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true, MaxIncomingStreams: maxStreams}), nil)
+	clientConf := dialAndReceiveTicket(t,
+		rtt,
+		tlsConf,
+		getQuicConfig(&quic.Config{
+			Allow0RTT:             true,
+			MaxIncomingStreams:    maxBidiStreams,
+			MaxIncomingUniStreams: maxUniStreams,
+		}),
+		nil,
+	)
 
 	counter, tracer := newPacketTracer()
 	ln, err := quic.ListenEarly(
 		newUPDConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{
-			Allow0RTT:          true,
-			MaxIncomingStreams: newMaxStreams,
-			Tracer:             newTracer(tracer),
+			Allow0RTT:             true,
+			MaxIncomingStreams:    newMaxBidiStreams,
+			MaxIncomingUniStreams: newMaxUniStreams,
+			Tracer:                newTracer(tracer),
 		}),
 	)
 	require.NoError(t, err)
@@ -598,11 +613,25 @@ func Test0RTTRejectedOnStreamLimitDecrease(t *testing.T) {
 	require.NotZero(t, n)
 	require.Empty(t, counter.getRcvd0RTTPacketNumbers())
 
-	for i := 0; i < newMaxStreams; i++ {
+	// It should now be possible to open new bidirectional streams up to the new limit...
+	for i := 0; i < newMaxBidiStreams; i++ {
+		_, err = conn.OpenStream()
+		require.NoError(t, err)
+	}
+	// ... but not beyond it.
+	_, err = conn.OpenStream()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "too many open streams")
+
+	// It should now be possible to open new unidirectional streams up to the new limit...
+	for i := 0; i < newMaxUniStreams; i++ {
 		_, err = conn.OpenUniStream()
 		require.NoError(t, err)
 	}
-	// TODO(#4750): check that the client can't open any more streams at this point
+	// ... but not beyond it.
+	_, err = conn.OpenUniStream()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "too many open streams")
 }
 
 func Test0RTTRejectedOnALPNChanged(t *testing.T) {
