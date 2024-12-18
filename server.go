@@ -328,6 +328,13 @@ func (s *baseServer) Accept(ctx context.Context) (Connection, error) {
 }
 
 func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
+	// first drain the queue...
+	select {
+	case conn := <-s.connQueue:
+		return conn, nil
+	default:
+	}
+	// ...only then return the error
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
