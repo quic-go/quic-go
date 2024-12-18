@@ -106,5 +106,6 @@ func (c *connectionFlowController) Reset() error {
 	}
 	c.bytesSent = 0
 	c.lastBlockedAt = 0
+	c.sendWindow = 0
 	return nil
 }
