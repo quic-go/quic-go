@@ -175,6 +175,10 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
+	maxTokenAge := t.MaxTokenAge
+	if maxTokenAge == 0 {
+		maxTokenAge = 24 * time.Hour
+	}
 	s := newServer(
 		t.conn,
 		t.handlerMap,
@@ -185,7 +189,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.Tracer,
 		t.closeServer,
 		*t.TokenGeneratorKey,
-		t.MaxTokenAge,
+		maxTokenAge,
 		t.VerifySourceAddress,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
