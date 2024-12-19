@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -147,10 +148,12 @@ type requestStream struct {
 	reqDone            chan<- struct{}
 	disableCompression bool
 	response           *http.Response
+	trace              *httptrace.ClientTrace
 
 	sentRequest   bool
 	requestedGzip bool
 	isConnect     bool
+	firstByte     bool
 }
 
 var _ RequestStream = &requestStream{}
@@ -163,6 +166,7 @@ func newRequestStream(
 	disableCompression bool,
 	maxHeaderBytes uint64,
 	rsp *http.Response,
+	trace *httptrace.ClientTrace,
 ) *requestStream {
 	return &requestStream{
 		stream:             str,
@@ -172,6 +176,7 @@ func newRequestStream(
 		disableCompression: disableCompression,
 		maxHeaderBytes:     maxHeaderBytes,
 		response:           rsp,
+		trace:              trace,
 	}
 }
 
@@ -210,6 +215,10 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 	if !ok {
 		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
+	}
+	if !s.firstByte {
+		traceGotFirstResponseByte(s.trace)
+		s.firstByte = true
 	}
 	if hf.Length > s.maxHeaderBytes {
 		s.Stream.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))

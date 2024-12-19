@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"net/http/httptrace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -208,7 +209,18 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	return t.dial(ctx, addr, "", tlsConf, conf, true)
 }
 
-func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsConf *tls.Config, conf *Config, use0RTT bool) (EarlyConnection, error) {
+func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsConf *tls.Config, conf *Config, use0RTT bool) (c EarlyConnection, err error) {
+	trace := httptrace.ContextClientTrace(ctx)
+	if trace != nil {
+		if trace.ConnectStart != nil {
+			trace.ConnectStart(addr.Network(), addr.String())
+		}
+		defer func() {
+			if trace.ConnectDone != nil {
+				trace.ConnectDone(addr.Network(), addr.String(), err)
+			}
+		}()
+	}
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
