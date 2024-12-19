@@ -17,6 +17,7 @@ import (
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/qtls"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -671,4 +672,19 @@ func TestNoPacketsSentWhenClientHelloFails(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 		// no packets received, as expected
 	}
+}
+
+func TestTransportDialAfterClose(t *testing.T) {
+	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr.Close()
+	addTracer(tr)
+
+	start := time.Now()
+	conn := newUPDConnLocalhost(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err := tr.Dial(ctx, conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, net.ErrClosed)
+	assert.Less(t, time.Since(start), scaleDuration(50*time.Millisecond))
 }
