@@ -350,6 +350,9 @@ var _ = Describe("Connection ID Manager", func() {
 	It("removes the currently active stateless reset token when it is closed", func() {
 		m.Close()
 		Expect(removedTokens).To(BeEmpty())
+
+		// Reset
+		m.closed = false
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ParseConnectionID([]byte{1, 2, 3, 4}),

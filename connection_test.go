@@ -464,6 +464,9 @@ var _ = Describe("Connection", func() {
 			packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).DoAndReturn(func(e *qerr.ApplicationError, _ protocol.ByteCount, _ protocol.Version) (*coalescedPacket, error) {
 				Expect(e.ErrorCode).To(BeEquivalentTo(qerr.NoError))
 				Expect(e.ErrorMessage).To(BeEmpty())
+
+				// The packer uses the Connection ID Manager to get the latest connection ID
+				Expect(conn.connIDManager.closed).To(BeFalse())
 				return &coalescedPacket{buffer: buffer}, nil
 			})
 			mconn.EXPECT().Write([]byte("connection close"), gomock.Any(), gomock.Any())

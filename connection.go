@@ -1641,7 +1641,7 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	}
 
 	s.streamsMap.CloseWithError(e)
-	s.connIDManager.Close()
+	defer s.connIDManager.Close() // Defer closing the connIDManager because the packer may need it to form the connClosePacket bytes
 	if s.datagramQueue != nil {
 		s.datagramQueue.CloseWithError(e)
 	}
