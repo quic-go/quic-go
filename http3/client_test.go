@@ -100,6 +100,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
@@ -127,6 +128,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(request)
@@ -154,6 +156,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(request)
@@ -183,6 +186,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any()).Return(nil).AnyTimes()
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(request)
@@ -246,6 +250,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, id)
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
@@ -274,6 +279,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
@@ -303,6 +309,7 @@ var _ = Describe("Client", func() {
 			})
 			ctx := context.WithValue(context.Background(), quic.ConnectionTracingKey, quic.ConnectionTracingID(1234))
 			conn.EXPECT().Context().Return(ctx).AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(req)
 			Expect(err).To(MatchError("done"))
@@ -334,6 +341,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			}).AnyTimes()
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			tr := &Transport{
 				EnableDatagrams: true,
 			}
@@ -406,6 +414,7 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
 			conn.EXPECT().Context().Return(context.Background())
 			conn.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("test error"))
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
@@ -446,6 +455,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			conn.EXPECT().Context().Return(context.Background())
 
 			tr := &Transport{}
@@ -530,6 +540,7 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
 			_, err := cc.RoundTrip(req)
@@ -567,6 +578,7 @@ var _ = Describe("Client", func() {
 			rspBuf := bytes.NewBuffer(encodeResponse(418))
 			gomock.InOrder(
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 			)
@@ -596,6 +608,7 @@ var _ = Describe("Client", func() {
 
 			gomock.InOrder(
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 			)
@@ -624,6 +637,7 @@ var _ = Describe("Client", func() {
 
 			gomock.InOrder(
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 			)
@@ -663,6 +677,7 @@ var _ = Describe("Client", func() {
 
 			gomock.InOrder(
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 			)
@@ -705,6 +720,7 @@ var _ = Describe("Client", func() {
 
 			gomock.InOrder(
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 			)
@@ -755,6 +771,7 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, testErr
 				})
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
 				_, err := cc.RoundTrip(req)
@@ -783,6 +800,7 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, errors.New("done")
 				})
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
 				_, err := cc.RoundTrip(req)
@@ -810,6 +828,7 @@ var _ = Describe("Client", func() {
 				})
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
 				_, err := cc.RoundTrip(req)
@@ -824,6 +843,7 @@ var _ = Describe("Client", func() {
 				r := bytes.NewReader(b)
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
 				_, err := cc.RoundTrip(req)
@@ -845,6 +865,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
 				_, err := cc.RoundTrip(req)
@@ -862,6 +883,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				_, err := cc.RoundTrip(req)
 				Expect(err).To(MatchError("http3: HEADERS frame too large: 1338 bytes (max: 1337)"))
 				Eventually(closed).Should(BeClosed())
@@ -887,6 +909,7 @@ var _ = Describe("Client", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := req.WithContext(ctx)
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
@@ -904,6 +927,7 @@ var _ = Describe("Client", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := req.WithContext(ctx)
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
@@ -935,6 +959,7 @@ var _ = Describe("Client", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := req.WithContext(ctx)
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
@@ -957,6 +982,7 @@ var _ = Describe("Client", func() {
 		Context("gzip compression", func() {
 			BeforeEach(func() {
 				conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			})
 
 			It("adds the gzip header to requests", func() {
@@ -1074,6 +1100,7 @@ var _ = Describe("Client", func() {
 				rspBuf := bytes.NewBuffer(encodeResponse(103))
 				gomock.InOrder(
 					conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 					conn.EXPECT().OpenStreamSync(ctx).Return(str, nil),
 					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				)
@@ -1108,6 +1135,7 @@ var _ = Describe("Client", func() {
 				rspBuf := bytes.NewBuffer(encodeResponse(101))
 				gomock.InOrder(
 					conn.EXPECT().HandshakeComplete().Return(handshakeChan),
+					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 					conn.EXPECT().OpenStreamSync(ctx).Return(str, nil),
 					conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 				)
