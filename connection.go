@@ -496,6 +496,22 @@ func (s *connection) run() error {
 	var closeErr closeError
 	defer func() { s.ctxCancel(closeErr.err) }()
 
+	defer func() {
+		// Drain queued packets that will never be processed.
+		for {
+			select {
+			case p, ok := <-s.receivedPackets:
+				if !ok {
+					return
+				}
+				p.buffer.Decrement()
+				p.buffer.MaybeRelease()
+			default:
+				return
+			}
+		}
+	}()
+
 	s.timer = *newTimer()
 
 	if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
@@ -1649,22 +1665,6 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	if s.tracer != nil && s.tracer.ClosedConnection != nil && !errors.As(e, &recreateErr) {
 		s.tracer.ClosedConnection(e)
 	}
-
-	defer func() {
-		// Drop any queued packets that will never be processed.
-		for {
-			select {
-			case p, ok := <-s.receivedPackets:
-				if !ok {
-					return
-				}
-				p.buffer.Decrement()
-				p.buffer.MaybeRelease()
-			default:
-				return
-			}
-		}
-	}()
 
 	// If this is a remote close we're done here
 	if closeErr.remote {
