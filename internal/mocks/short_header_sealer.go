@@ -20,6 +20,7 @@ import (
 type MockShortHeaderSealer struct {
 	ctrl     *gomock.Controller
 	recorder *MockShortHeaderSealerMockRecorder
+	isgomock struct{}
 }
 
 // MockShortHeaderSealerMockRecorder is the mock recorder for MockShortHeaderSealer.
@@ -40,15 +41,15 @@ func (m *MockShortHeaderSealer) EXPECT() *MockShortHeaderSealerMockRecorder {
 }
 
 // EncryptHeader mocks base method.
-func (m *MockShortHeaderSealer) EncryptHeader(arg0 []byte, arg1 *byte, arg2 []byte) {
+func (m *MockShortHeaderSealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "EncryptHeader", arg0, arg1, arg2)
+	m.ctrl.Call(m, "EncryptHeader", sample, firstByte, pnBytes)
 }
 
 // EncryptHeader indicates an expected call of EncryptHeader.
-func (mr *MockShortHeaderSealerMockRecorder) EncryptHeader(arg0, arg1, arg2 any) *MockShortHeaderSealerEncryptHeaderCall {
+func (mr *MockShortHeaderSealerMockRecorder) EncryptHeader(sample, firstByte, pnBytes any) *MockShortHeaderSealerEncryptHeaderCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EncryptHeader", reflect.TypeOf((*MockShortHeaderSealer)(nil).EncryptHeader), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EncryptHeader", reflect.TypeOf((*MockShortHeaderSealer)(nil).EncryptHeader), sample, firstByte, pnBytes)
 	return &MockShortHeaderSealerEncryptHeaderCall{Call: call}
 }
 
@@ -152,17 +153,17 @@ func (c *MockShortHeaderSealerOverheadCall) DoAndReturn(f func() int) *MockShort
 }
 
 // Seal mocks base method.
-func (m *MockShortHeaderSealer) Seal(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 []byte) []byte {
+func (m *MockShortHeaderSealer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Seal", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Seal", dst, src, packetNumber, associatedData)
 	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockShortHeaderSealerMockRecorder) Seal(arg0, arg1, arg2, arg3 any) *MockShortHeaderSealerSealCall {
+func (mr *MockShortHeaderSealerMockRecorder) Seal(dst, src, packetNumber, associatedData any) *MockShortHeaderSealerSealCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockShortHeaderSealer)(nil).Seal), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockShortHeaderSealer)(nil).Seal), dst, src, packetNumber, associatedData)
 	return &MockShortHeaderSealerSealCall{Call: call}
 }
 

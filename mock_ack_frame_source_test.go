@@ -21,6 +21,7 @@ import (
 type MockAckFrameSource struct {
 	ctrl     *gomock.Controller
 	recorder *MockAckFrameSourceMockRecorder
+	isgomock struct{}
 }
 
 // MockAckFrameSourceMockRecorder is the mock recorder for MockAckFrameSource.
@@ -41,17 +42,17 @@ func (m *MockAckFrameSource) EXPECT() *MockAckFrameSourceMockRecorder {
 }
 
 // GetAckFrame mocks base method.
-func (m *MockAckFrameSource) GetAckFrame(arg0 protocol.EncryptionLevel, arg1 bool) *wire.AckFrame {
+func (m *MockAckFrameSource) GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAckFrame", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetAckFrame", encLevel, onlyIfQueued)
 	ret0, _ := ret[0].(*wire.AckFrame)
 	return ret0
 }
 
 // GetAckFrame indicates an expected call of GetAckFrame.
-func (mr *MockAckFrameSourceMockRecorder) GetAckFrame(arg0, arg1 any) *MockAckFrameSourceGetAckFrameCall {
+func (mr *MockAckFrameSourceMockRecorder) GetAckFrame(encLevel, onlyIfQueued any) *MockAckFrameSourceGetAckFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame), encLevel, onlyIfQueued)
 	return &MockAckFrameSourceGetAckFrameCall{Call: call}
 }
 

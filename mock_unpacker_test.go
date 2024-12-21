@@ -22,6 +22,7 @@ import (
 type MockUnpacker struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnpackerMockRecorder
+	isgomock struct{}
 }
 
 // MockUnpackerMockRecorder is the mock recorder for MockUnpacker.
@@ -42,18 +43,18 @@ func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 }
 
 // UnpackLongHeader mocks base method.
-func (m *MockUnpacker) UnpackLongHeader(arg0 *wire.Header, arg1 []byte) (*unpackedPacket, error) {
+func (m *MockUnpacker) UnpackLongHeader(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnpackLongHeader", arg0, arg1)
+	ret := m.ctrl.Call(m, "UnpackLongHeader", hdr, data)
 	ret0, _ := ret[0].(*unpackedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UnpackLongHeader indicates an expected call of UnpackLongHeader.
-func (mr *MockUnpackerMockRecorder) UnpackLongHeader(arg0, arg1 any) *MockUnpackerUnpackLongHeaderCall {
+func (mr *MockUnpackerMockRecorder) UnpackLongHeader(hdr, data any) *MockUnpackerUnpackLongHeaderCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackLongHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackLongHeader), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackLongHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackLongHeader), hdr, data)
 	return &MockUnpackerUnpackLongHeaderCall{Call: call}
 }
 
@@ -81,9 +82,9 @@ func (c *MockUnpackerUnpackLongHeaderCall) DoAndReturn(f func(*wire.Header, []by
 }
 
 // UnpackShortHeader mocks base method.
-func (m *MockUnpacker) UnpackShortHeader(arg0 time.Time, arg1 []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
+func (m *MockUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnpackShortHeader", arg0, arg1)
+	ret := m.ctrl.Call(m, "UnpackShortHeader", rcvTime, data)
 	ret0, _ := ret[0].(protocol.PacketNumber)
 	ret1, _ := ret[1].(protocol.PacketNumberLen)
 	ret2, _ := ret[2].(protocol.KeyPhaseBit)
@@ -93,9 +94,9 @@ func (m *MockUnpacker) UnpackShortHeader(arg0 time.Time, arg1 []byte) (protocol.
 }
 
 // UnpackShortHeader indicates an expected call of UnpackShortHeader.
-func (mr *MockUnpackerMockRecorder) UnpackShortHeader(arg0, arg1 any) *MockUnpackerUnpackShortHeaderCall {
+func (mr *MockUnpackerMockRecorder) UnpackShortHeader(rcvTime, data any) *MockUnpackerUnpackShortHeaderCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackShortHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackShortHeader), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackShortHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackShortHeader), rcvTime, data)
 	return &MockUnpackerUnpackShortHeaderCall{Call: call}
 }
 

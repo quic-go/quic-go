@@ -23,6 +23,7 @@ import (
 type MockEarlyConnection struct {
 	ctrl     *gomock.Controller
 	recorder *MockEarlyConnectionMockRecorder
+	isgomock struct{}
 }
 
 // MockEarlyConnectionMockRecorder is the mock recorder for MockEarlyConnection.
@@ -583,17 +584,17 @@ func (c *MockEarlyConnectionRemoteAddrCall) DoAndReturn(f func() net.Addr) *Mock
 }
 
 // SendDatagram mocks base method.
-func (m *MockEarlyConnection) SendDatagram(arg0 []byte) error {
+func (m *MockEarlyConnection) SendDatagram(payload []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendDatagram", arg0)
+	ret := m.ctrl.Call(m, "SendDatagram", payload)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendDatagram indicates an expected call of SendDatagram.
-func (mr *MockEarlyConnectionMockRecorder) SendDatagram(arg0 any) *MockEarlyConnectionSendDatagramCall {
+func (mr *MockEarlyConnectionMockRecorder) SendDatagram(payload any) *MockEarlyConnectionSendDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockEarlyConnection)(nil).SendDatagram), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockEarlyConnection)(nil).SendDatagram), payload)
 	return &MockEarlyConnectionSendDatagramCall{Call: call}
 }
 

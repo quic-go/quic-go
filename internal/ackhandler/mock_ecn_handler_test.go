@@ -20,6 +20,7 @@ import (
 type MockECNHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockECNHandlerMockRecorder
+	isgomock struct{}
 }
 
 // MockECNHandlerMockRecorder is the mock recorder for MockECNHandler.
@@ -40,17 +41,17 @@ func (m *MockECNHandler) EXPECT() *MockECNHandlerMockRecorder {
 }
 
 // HandleNewlyAcked mocks base method.
-func (m *MockECNHandler) HandleNewlyAcked(arg0 []*packet, arg1, arg2, arg3 int64) bool {
+func (m *MockECNHandler) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleNewlyAcked", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "HandleNewlyAcked", packets, ect0, ect1, ecnce)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // HandleNewlyAcked indicates an expected call of HandleNewlyAcked.
-func (mr *MockECNHandlerMockRecorder) HandleNewlyAcked(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockECNHandlerMockRecorder) HandleNewlyAcked(packets, ect0, ect1, ecnce any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleNewlyAcked", reflect.TypeOf((*MockECNHandler)(nil).HandleNewlyAcked), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleNewlyAcked", reflect.TypeOf((*MockECNHandler)(nil).HandleNewlyAcked), packets, ect0, ect1, ecnce)
 }
 
 // LostPacket mocks base method.

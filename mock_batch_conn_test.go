@@ -20,6 +20,7 @@ import (
 type MockBatchConn struct {
 	ctrl     *gomock.Controller
 	recorder *MockBatchConnMockRecorder
+	isgomock struct{}
 }
 
 // MockBatchConnMockRecorder is the mock recorder for MockBatchConn.

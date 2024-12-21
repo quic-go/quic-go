@@ -21,6 +21,7 @@ import (
 type MockSendConn struct {
 	ctrl     *gomock.Controller
 	recorder *MockSendConnMockRecorder
+	isgomock struct{}
 }
 
 // MockSendConnMockRecorder is the mock recorder for MockSendConn.
@@ -155,17 +156,17 @@ func (c *MockSendConnRemoteAddrCall) DoAndReturn(f func() net.Addr) *MockSendCon
 }
 
 // Write mocks base method.
-func (m *MockSendConn) Write(arg0 []byte, arg1 uint16, arg2 protocol.ECN) error {
+func (m *MockSendConn) Write(b []byte, gsoSize uint16, ecn protocol.ECN) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Write", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Write", b, gsoSize, ecn)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Write indicates an expected call of Write.
-func (mr *MockSendConnMockRecorder) Write(arg0, arg1, arg2 any) *MockSendConnWriteCall {
+func (mr *MockSendConnMockRecorder) Write(b, gsoSize, ecn any) *MockSendConnWriteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendConn)(nil).Write), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendConn)(nil).Write), b, gsoSize, ecn)
 	return &MockSendConnWriteCall{Call: call}
 }
 

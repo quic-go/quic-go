@@ -22,6 +22,7 @@ import (
 type MockCryptoSetup struct {
 	ctrl     *gomock.Controller
 	recorder *MockCryptoSetupMockRecorder
+	isgomock struct{}
 }
 
 // MockCryptoSetupMockRecorder is the mock recorder for MockCryptoSetup.

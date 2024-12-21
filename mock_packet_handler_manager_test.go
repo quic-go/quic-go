@@ -20,6 +20,7 @@ import (
 type MockPacketHandlerManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockPacketHandlerManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockPacketHandlerManagerMockRecorder is the mock recorder for MockPacketHandlerManager.
@@ -114,17 +115,17 @@ func (c *MockPacketHandlerManagerAddResetTokenCall) DoAndReturn(f func(protocol.
 }
 
 // AddWithConnID mocks base method.
-func (m *MockPacketHandlerManager) AddWithConnID(arg0, arg1 protocol.ConnectionID, arg2 packetHandler) bool {
+func (m *MockPacketHandlerManager) AddWithConnID(destConnID, newConnID protocol.ConnectionID, h packetHandler) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWithConnID", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "AddWithConnID", destConnID, newConnID, h)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // AddWithConnID indicates an expected call of AddWithConnID.
-func (mr *MockPacketHandlerManagerMockRecorder) AddWithConnID(arg0, arg1, arg2 any) *MockPacketHandlerManagerAddWithConnIDCall {
+func (mr *MockPacketHandlerManagerMockRecorder) AddWithConnID(destConnID, newConnID, h any) *MockPacketHandlerManagerAddWithConnIDCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWithConnID", reflect.TypeOf((*MockPacketHandlerManager)(nil).AddWithConnID), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWithConnID", reflect.TypeOf((*MockPacketHandlerManager)(nil).AddWithConnID), destConnID, newConnID, h)
 	return &MockPacketHandlerManagerAddWithConnIDCall{Call: call}
 }
 

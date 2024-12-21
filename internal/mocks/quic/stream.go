@@ -23,6 +23,7 @@ import (
 type MockStream struct {
 	ctrl     *gomock.Controller
 	recorder *MockStreamMockRecorder
+	isgomock struct{}
 }
 
 // MockStreamMockRecorder is the mock recorder for MockStream.
@@ -191,18 +192,18 @@ func (c *MockStreamContextCall) DoAndReturn(f func() context.Context) *MockStrea
 }
 
 // Read mocks base method.
-func (m *MockStream) Read(arg0 []byte) (int, error) {
+func (m *MockStream) Read(p []byte) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", arg0)
+	ret := m.ctrl.Call(m, "Read", p)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Read indicates an expected call of Read.
-func (mr *MockStreamMockRecorder) Read(arg0 any) *MockStreamReadCall {
+func (mr *MockStreamMockRecorder) Read(p any) *MockStreamReadCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStream)(nil).Read), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStream)(nil).Read), p)
 	return &MockStreamReadCall{Call: call}
 }
 
@@ -212,8 +213,8 @@ type MockStreamReadCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamReadCall) Return(arg0 int, arg1 error) *MockStreamReadCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockStreamReadCall) Return(n int, err error) *MockStreamReadCall {
+	c.Call = c.Call.Return(n, err)
 	return c
 }
 
@@ -230,17 +231,17 @@ func (c *MockStreamReadCall) DoAndReturn(f func([]byte) (int, error)) *MockStrea
 }
 
 // SetDeadline mocks base method.
-func (m *MockStream) SetDeadline(arg0 time.Time) error {
+func (m *MockStream) SetDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetDeadline indicates an expected call of SetDeadline.
-func (mr *MockStreamMockRecorder) SetDeadline(arg0 any) *MockStreamSetDeadlineCall {
+func (mr *MockStreamMockRecorder) SetDeadline(t any) *MockStreamSetDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDeadline", reflect.TypeOf((*MockStream)(nil).SetDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDeadline", reflect.TypeOf((*MockStream)(nil).SetDeadline), t)
 	return &MockStreamSetDeadlineCall{Call: call}
 }
 
@@ -268,17 +269,17 @@ func (c *MockStreamSetDeadlineCall) DoAndReturn(f func(time.Time) error) *MockSt
 }
 
 // SetReadDeadline mocks base method.
-func (m *MockStream) SetReadDeadline(arg0 time.Time) error {
+func (m *MockStream) SetReadDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetReadDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetReadDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetReadDeadline indicates an expected call of SetReadDeadline.
-func (mr *MockStreamMockRecorder) SetReadDeadline(arg0 any) *MockStreamSetReadDeadlineCall {
+func (mr *MockStreamMockRecorder) SetReadDeadline(t any) *MockStreamSetReadDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockStream)(nil).SetReadDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockStream)(nil).SetReadDeadline), t)
 	return &MockStreamSetReadDeadlineCall{Call: call}
 }
 
@@ -306,17 +307,17 @@ func (c *MockStreamSetReadDeadlineCall) DoAndReturn(f func(time.Time) error) *Mo
 }
 
 // SetWriteDeadline mocks base method.
-func (m *MockStream) SetWriteDeadline(arg0 time.Time) error {
+func (m *MockStream) SetWriteDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWriteDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetWriteDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetWriteDeadline indicates an expected call of SetWriteDeadline.
-func (mr *MockStreamMockRecorder) SetWriteDeadline(arg0 any) *MockStreamSetWriteDeadlineCall {
+func (mr *MockStreamMockRecorder) SetWriteDeadline(t any) *MockStreamSetWriteDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockStream)(nil).SetWriteDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockStream)(nil).SetWriteDeadline), t)
 	return &MockStreamSetWriteDeadlineCall{Call: call}
 }
 
@@ -382,18 +383,18 @@ func (c *MockStreamStreamIDCall) DoAndReturn(f func() protocol.StreamID) *MockSt
 }
 
 // Write mocks base method.
-func (m *MockStream) Write(arg0 []byte) (int, error) {
+func (m *MockStream) Write(p []byte) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Write", arg0)
+	ret := m.ctrl.Call(m, "Write", p)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Write indicates an expected call of Write.
-func (mr *MockStreamMockRecorder) Write(arg0 any) *MockStreamWriteCall {
+func (mr *MockStreamMockRecorder) Write(p any) *MockStreamWriteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockStream)(nil).Write), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockStream)(nil).Write), p)
 	return &MockStreamWriteCall{Call: call}
 }
 
@@ -403,8 +404,8 @@ type MockStreamWriteCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamWriteCall) Return(arg0 int, arg1 error) *MockStreamWriteCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockStreamWriteCall) Return(n int, err error) *MockStreamWriteCall {
+	c.Call = c.Call.Return(n, err)
 	return c
 }
 

@@ -22,6 +22,7 @@ import (
 type MockQUICConn struct {
 	ctrl     *gomock.Controller
 	recorder *MockQUICConnMockRecorder
+	isgomock struct{}
 }
 
 // MockQUICConnMockRecorder is the mock recorder for MockQUICConn.
@@ -582,17 +583,17 @@ func (c *MockQUICConnRemoteAddrCall) DoAndReturn(f func() net.Addr) *MockQUICCon
 }
 
 // SendDatagram mocks base method.
-func (m *MockQUICConn) SendDatagram(arg0 []byte) error {
+func (m *MockQUICConn) SendDatagram(payload []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendDatagram", arg0)
+	ret := m.ctrl.Call(m, "SendDatagram", payload)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendDatagram indicates an expected call of SendDatagram.
-func (mr *MockQUICConnMockRecorder) SendDatagram(arg0 any) *MockQUICConnSendDatagramCall {
+func (mr *MockQUICConnMockRecorder) SendDatagram(payload any) *MockQUICConnSendDatagramCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockQUICConn)(nil).SendDatagram), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendDatagram", reflect.TypeOf((*MockQUICConn)(nil).SendDatagram), payload)
 	return &MockQUICConnSendDatagramCall{Call: call}
 }
 

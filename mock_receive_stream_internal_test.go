@@ -23,6 +23,7 @@ import (
 type MockReceiveStreamI struct {
 	ctrl     *gomock.Controller
 	recorder *MockReceiveStreamIMockRecorder
+	isgomock struct{}
 }
 
 // MockReceiveStreamIMockRecorder is the mock recorder for MockReceiveStreamI.
@@ -79,18 +80,18 @@ func (c *MockReceiveStreamICancelReadCall) DoAndReturn(f func(qerr.StreamErrorCo
 }
 
 // Read mocks base method.
-func (m *MockReceiveStreamI) Read(arg0 []byte) (int, error) {
+func (m *MockReceiveStreamI) Read(p []byte) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", arg0)
+	ret := m.ctrl.Call(m, "Read", p)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Read indicates an expected call of Read.
-func (mr *MockReceiveStreamIMockRecorder) Read(arg0 any) *MockReceiveStreamIReadCall {
+func (mr *MockReceiveStreamIMockRecorder) Read(p any) *MockReceiveStreamIReadCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockReceiveStreamI)(nil).Read), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockReceiveStreamI)(nil).Read), p)
 	return &MockReceiveStreamIReadCall{Call: call}
 }
 
@@ -100,8 +101,8 @@ type MockReceiveStreamIReadCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockReceiveStreamIReadCall) Return(arg0 int, arg1 error) *MockReceiveStreamIReadCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockReceiveStreamIReadCall) Return(n int, err error) *MockReceiveStreamIReadCall {
+	c.Call = c.Call.Return(n, err)
 	return c
 }
 
@@ -118,17 +119,17 @@ func (c *MockReceiveStreamIReadCall) DoAndReturn(f func([]byte) (int, error)) *M
 }
 
 // SetReadDeadline mocks base method.
-func (m *MockReceiveStreamI) SetReadDeadline(arg0 time.Time) error {
+func (m *MockReceiveStreamI) SetReadDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetReadDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetReadDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetReadDeadline indicates an expected call of SetReadDeadline.
-func (mr *MockReceiveStreamIMockRecorder) SetReadDeadline(arg0 any) *MockReceiveStreamISetReadDeadlineCall {
+func (mr *MockReceiveStreamIMockRecorder) SetReadDeadline(t any) *MockReceiveStreamISetReadDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockReceiveStreamI)(nil).SetReadDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockReceiveStreamI)(nil).SetReadDeadline), t)
 	return &MockReceiveStreamISetReadDeadlineCall{Call: call}
 }
 

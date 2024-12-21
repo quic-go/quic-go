@@ -21,6 +21,7 @@ import (
 type MockConnectionFlowController struct {
 	ctrl     *gomock.Controller
 	recorder *MockConnectionFlowControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockConnectionFlowControllerMockRecorder is the mock recorder for MockConnectionFlowController.
@@ -286,8 +287,8 @@ type MockConnectionFlowControllerUpdateSendWindowCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockConnectionFlowControllerUpdateSendWindowCall) Return(arg0 bool) *MockConnectionFlowControllerUpdateSendWindowCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockConnectionFlowControllerUpdateSendWindowCall) Return(updated bool) *MockConnectionFlowControllerUpdateSendWindowCall {
+	c.Call = c.Call.Return(updated)
 	return c
 }
 

@@ -20,6 +20,7 @@ import (
 type MockSealingManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockSealingManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockSealingManagerMockRecorder is the mock recorder for MockSealingManager.

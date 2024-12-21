@@ -22,6 +22,7 @@ import (
 type MockMTUDiscoverer struct {
 	ctrl     *gomock.Controller
 	recorder *MockMTUDiscovererMockRecorder
+	isgomock struct{}
 }
 
 // MockMTUDiscovererMockRecorder is the mock recorder for MockMTUDiscoverer.
@@ -101,8 +102,8 @@ type MockMTUDiscovererGetPingCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockMTUDiscovererGetPingCall) Return(arg0 ackhandler.Frame, arg1 protocol.ByteCount) *MockMTUDiscovererGetPingCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockMTUDiscovererGetPingCall) Return(ping ackhandler.Frame, datagramSize protocol.ByteCount) *MockMTUDiscovererGetPingCall {
+	c.Call = c.Call.Return(ping, datagramSize)
 	return c
 }
 
@@ -119,17 +120,17 @@ func (c *MockMTUDiscovererGetPingCall) DoAndReturn(f func() (ackhandler.Frame, p
 }
 
 // ShouldSendProbe mocks base method.
-func (m *MockMTUDiscoverer) ShouldSendProbe(arg0 time.Time) bool {
+func (m *MockMTUDiscoverer) ShouldSendProbe(now time.Time) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ShouldSendProbe", arg0)
+	ret := m.ctrl.Call(m, "ShouldSendProbe", now)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // ShouldSendProbe indicates an expected call of ShouldSendProbe.
-func (mr *MockMTUDiscovererMockRecorder) ShouldSendProbe(arg0 any) *MockMTUDiscovererShouldSendProbeCall {
+func (mr *MockMTUDiscovererMockRecorder) ShouldSendProbe(now any) *MockMTUDiscovererShouldSendProbeCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldSendProbe", reflect.TypeOf((*MockMTUDiscoverer)(nil).ShouldSendProbe), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldSendProbe", reflect.TypeOf((*MockMTUDiscoverer)(nil).ShouldSendProbe), now)
 	return &MockMTUDiscovererShouldSendProbeCall{Call: call}
 }
 

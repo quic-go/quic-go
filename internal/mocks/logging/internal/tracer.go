@@ -23,6 +23,7 @@ import (
 type MockTracer struct {
 	ctrl     *gomock.Controller
 	recorder *MockTracerMockRecorder
+	isgomock struct{}
 }
 
 // MockTracerMockRecorder is the mock recorder for MockTracer.
@@ -79,15 +80,15 @@ func (c *MockTracerCloseCall) DoAndReturn(f func()) *MockTracerCloseCall {
 }
 
 // Debug mocks base method.
-func (m *MockTracer) Debug(arg0, arg1 string) {
+func (m *MockTracer) Debug(name, msg string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Debug", arg0, arg1)
+	m.ctrl.Call(m, "Debug", name, msg)
 }
 
 // Debug indicates an expected call of Debug.
-func (mr *MockTracerMockRecorder) Debug(arg0, arg1 any) *MockTracerDebugCall {
+func (mr *MockTracerMockRecorder) Debug(name, msg any) *MockTracerDebugCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Debug", reflect.TypeOf((*MockTracer)(nil).Debug), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Debug", reflect.TypeOf((*MockTracer)(nil).Debug), name, msg)
 	return &MockTracerDebugCall{Call: call}
 }
 
@@ -187,15 +188,15 @@ func (c *MockTracerSentPacketCall) DoAndReturn(f func(net.Addr, *wire.Header, pr
 }
 
 // SentVersionNegotiationPacket mocks base method.
-func (m *MockTracer) SentVersionNegotiationPacket(arg0 net.Addr, arg1, arg2 protocol.ArbitraryLenConnectionID, arg3 []protocol.Version) {
+func (m *MockTracer) SentVersionNegotiationPacket(arg0 net.Addr, dest, src protocol.ArbitraryLenConnectionID, arg3 []protocol.Version) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SentVersionNegotiationPacket", arg0, arg1, arg2, arg3)
+	m.ctrl.Call(m, "SentVersionNegotiationPacket", arg0, dest, src, arg3)
 }
 
 // SentVersionNegotiationPacket indicates an expected call of SentVersionNegotiationPacket.
-func (mr *MockTracerMockRecorder) SentVersionNegotiationPacket(arg0, arg1, arg2, arg3 any) *MockTracerSentVersionNegotiationPacketCall {
+func (mr *MockTracerMockRecorder) SentVersionNegotiationPacket(arg0, dest, src, arg3 any) *MockTracerSentVersionNegotiationPacketCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentVersionNegotiationPacket", reflect.TypeOf((*MockTracer)(nil).SentVersionNegotiationPacket), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentVersionNegotiationPacket", reflect.TypeOf((*MockTracer)(nil).SentVersionNegotiationPacket), arg0, dest, src, arg3)
 	return &MockTracerSentVersionNegotiationPacketCall{Call: call}
 }
 
