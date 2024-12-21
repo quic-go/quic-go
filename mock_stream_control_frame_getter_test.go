@@ -21,6 +21,7 @@ import (
 type MockStreamControlFrameGetter struct {
 	ctrl     *gomock.Controller
 	recorder *MockStreamControlFrameGetterMockRecorder
+	isgomock struct{}
 }
 
 // MockStreamControlFrameGetterMockRecorder is the mock recorder for MockStreamControlFrameGetter.
@@ -63,8 +64,8 @@ type MockStreamControlFrameGettergetControlFrameCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamControlFrameGettergetControlFrameCall) Return(arg0 ackhandler.Frame, arg1, arg2 bool) *MockStreamControlFrameGettergetControlFrameCall {
-	c.Call = c.Call.Return(arg0, arg1, arg2)
+func (c *MockStreamControlFrameGettergetControlFrameCall) Return(arg0 ackhandler.Frame, ok, hasMore bool) *MockStreamControlFrameGettergetControlFrameCall {
+	c.Call = c.Call.Return(arg0, ok, hasMore)
 	return c
 }
 

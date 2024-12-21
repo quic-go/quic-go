@@ -22,6 +22,7 @@ import (
 type MockQUICEarlyListener struct {
 	ctrl     *gomock.Controller
 	recorder *MockQUICEarlyListenerMockRecorder
+	isgomock struct{}
 }
 
 // MockQUICEarlyListenerMockRecorder is the mock recorder for MockQUICEarlyListener.

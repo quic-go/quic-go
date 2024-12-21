@@ -20,6 +20,7 @@ import (
 type MockSentPacketTracker struct {
 	ctrl     *gomock.Controller
 	recorder *MockSentPacketTrackerMockRecorder
+	isgomock struct{}
 }
 
 // MockSentPacketTrackerMockRecorder is the mock recorder for MockSentPacketTracker.

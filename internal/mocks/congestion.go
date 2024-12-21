@@ -21,6 +21,7 @@ import (
 type MockSendAlgorithmWithDebugInfos struct {
 	ctrl     *gomock.Controller
 	recorder *MockSendAlgorithmWithDebugInfosMockRecorder
+	isgomock struct{}
 }
 
 // MockSendAlgorithmWithDebugInfosMockRecorder is the mock recorder for MockSendAlgorithmWithDebugInfos.
@@ -41,17 +42,17 @@ func (m *MockSendAlgorithmWithDebugInfos) EXPECT() *MockSendAlgorithmWithDebugIn
 }
 
 // CanSend mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) CanSend(arg0 protocol.ByteCount) bool {
+func (m *MockSendAlgorithmWithDebugInfos) CanSend(bytesInFlight protocol.ByteCount) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CanSend", arg0)
+	ret := m.ctrl.Call(m, "CanSend", bytesInFlight)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // CanSend indicates an expected call of CanSend.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) CanSend(arg0 any) *MockSendAlgorithmWithDebugInfosCanSendCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) CanSend(bytesInFlight any) *MockSendAlgorithmWithDebugInfosCanSendCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CanSend", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).CanSend), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CanSend", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).CanSend), bytesInFlight)
 	return &MockSendAlgorithmWithDebugInfosCanSendCall{Call: call}
 }
 
@@ -117,17 +118,17 @@ func (c *MockSendAlgorithmWithDebugInfosGetCongestionWindowCall) DoAndReturn(f f
 }
 
 // HasPacingBudget mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) HasPacingBudget(arg0 time.Time) bool {
+func (m *MockSendAlgorithmWithDebugInfos) HasPacingBudget(now time.Time) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasPacingBudget", arg0)
+	ret := m.ctrl.Call(m, "HasPacingBudget", now)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // HasPacingBudget indicates an expected call of HasPacingBudget.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) HasPacingBudget(arg0 any) *MockSendAlgorithmWithDebugInfosHasPacingBudgetCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) HasPacingBudget(now any) *MockSendAlgorithmWithDebugInfosHasPacingBudgetCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).HasPacingBudget), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).HasPacingBudget), now)
 	return &MockSendAlgorithmWithDebugInfosHasPacingBudgetCall{Call: call}
 }
 
@@ -267,15 +268,15 @@ func (c *MockSendAlgorithmWithDebugInfosMaybeExitSlowStartCall) DoAndReturn(f fu
 }
 
 // OnCongestionEvent mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnCongestionEvent(arg0 protocol.PacketNumber, arg1, arg2 protocol.ByteCount) {
+func (m *MockSendAlgorithmWithDebugInfos) OnCongestionEvent(number protocol.PacketNumber, lostBytes, priorInFlight protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnCongestionEvent", arg0, arg1, arg2)
+	m.ctrl.Call(m, "OnCongestionEvent", number, lostBytes, priorInFlight)
 }
 
 // OnCongestionEvent indicates an expected call of OnCongestionEvent.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnCongestionEvent(arg0, arg1, arg2 any) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnCongestionEvent(number, lostBytes, priorInFlight any) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnCongestionEvent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnCongestionEvent), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnCongestionEvent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnCongestionEvent), number, lostBytes, priorInFlight)
 	return &MockSendAlgorithmWithDebugInfosOnCongestionEventCall{Call: call}
 }
 
@@ -303,15 +304,15 @@ func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) DoAndReturn(f fun
 }
 
 // OnPacketAcked mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnPacketAcked(arg0 protocol.PacketNumber, arg1, arg2 protocol.ByteCount, arg3 time.Time) {
+func (m *MockSendAlgorithmWithDebugInfos) OnPacketAcked(number protocol.PacketNumber, ackedBytes, priorInFlight protocol.ByteCount, eventTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnPacketAcked", arg0, arg1, arg2, arg3)
+	m.ctrl.Call(m, "OnPacketAcked", number, ackedBytes, priorInFlight, eventTime)
 }
 
 // OnPacketAcked indicates an expected call of OnPacketAcked.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketAcked(arg0, arg1, arg2, arg3 any) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketAcked(number, ackedBytes, priorInFlight, eventTime any) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketAcked), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketAcked), number, ackedBytes, priorInFlight, eventTime)
 	return &MockSendAlgorithmWithDebugInfosOnPacketAckedCall{Call: call}
 }
 
@@ -339,15 +340,15 @@ func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) DoAndReturn(f func(pr
 }
 
 // OnPacketSent mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnPacketSent(arg0 time.Time, arg1 protocol.ByteCount, arg2 protocol.PacketNumber, arg3 protocol.ByteCount, arg4 bool) {
+func (m *MockSendAlgorithmWithDebugInfos) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnPacketSent", arg0, arg1, arg2, arg3, arg4)
+	m.ctrl.Call(m, "OnPacketSent", sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable)
 }
 
 // OnPacketSent indicates an expected call of OnPacketSent.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketSent(arg0, arg1, arg2, arg3, arg4 any) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketSent(sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable any) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketSent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketSent), arg0, arg1, arg2, arg3, arg4)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketSent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketSent), sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable)
 	return &MockSendAlgorithmWithDebugInfosOnPacketSentCall{Call: call}
 }
 
@@ -375,15 +376,15 @@ func (c *MockSendAlgorithmWithDebugInfosOnPacketSentCall) DoAndReturn(f func(tim
 }
 
 // OnRetransmissionTimeout mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnRetransmissionTimeout(arg0 bool) {
+func (m *MockSendAlgorithmWithDebugInfos) OnRetransmissionTimeout(packetsRetransmitted bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnRetransmissionTimeout", arg0)
+	m.ctrl.Call(m, "OnRetransmissionTimeout", packetsRetransmitted)
 }
 
 // OnRetransmissionTimeout indicates an expected call of OnRetransmissionTimeout.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnRetransmissionTimeout(arg0 any) *MockSendAlgorithmWithDebugInfosOnRetransmissionTimeoutCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnRetransmissionTimeout(packetsRetransmitted any) *MockSendAlgorithmWithDebugInfosOnRetransmissionTimeoutCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnRetransmissionTimeout", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnRetransmissionTimeout), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnRetransmissionTimeout", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnRetransmissionTimeout), packetsRetransmitted)
 	return &MockSendAlgorithmWithDebugInfosOnRetransmissionTimeoutCall{Call: call}
 }
 
@@ -447,17 +448,17 @@ func (c *MockSendAlgorithmWithDebugInfosSetMaxDatagramSizeCall) DoAndReturn(f fu
 }
 
 // TimeUntilSend mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) TimeUntilSend(arg0 protocol.ByteCount) time.Time {
+func (m *MockSendAlgorithmWithDebugInfos) TimeUntilSend(bytesInFlight protocol.ByteCount) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TimeUntilSend", arg0)
+	ret := m.ctrl.Call(m, "TimeUntilSend", bytesInFlight)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
 // TimeUntilSend indicates an expected call of TimeUntilSend.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) TimeUntilSend(arg0 any) *MockSendAlgorithmWithDebugInfosTimeUntilSendCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) TimeUntilSend(bytesInFlight any) *MockSendAlgorithmWithDebugInfosTimeUntilSendCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).TimeUntilSend), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).TimeUntilSend), bytesInFlight)
 	return &MockSendAlgorithmWithDebugInfosTimeUntilSendCall{Call: call}
 }
 

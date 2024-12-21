@@ -21,6 +21,7 @@ import (
 type MockStreamFlowController struct {
 	ctrl     *gomock.Controller
 	recorder *MockStreamFlowControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockStreamFlowControllerMockRecorder is the mock recorder for MockStreamFlowController.
@@ -97,8 +98,8 @@ type MockStreamFlowControllerAddBytesReadCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFlowControllerAddBytesReadCall) Return(arg0 bool) *MockStreamFlowControllerAddBytesReadCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockStreamFlowControllerAddBytesReadCall) Return(shouldQueueWindowUpdate bool) *MockStreamFlowControllerAddBytesReadCall {
+	c.Call = c.Call.Return(shouldQueueWindowUpdate)
 	return c
 }
 
@@ -265,17 +266,17 @@ func (c *MockStreamFlowControllerSendWindowSizeCall) DoAndReturn(f func() protoc
 }
 
 // UpdateHighestReceived mocks base method.
-func (m *MockStreamFlowController) UpdateHighestReceived(arg0 protocol.ByteCount, arg1 bool, arg2 time.Time) error {
+func (m *MockStreamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateHighestReceived", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "UpdateHighestReceived", offset, final, now)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateHighestReceived indicates an expected call of UpdateHighestReceived.
-func (mr *MockStreamFlowControllerMockRecorder) UpdateHighestReceived(arg0, arg1, arg2 any) *MockStreamFlowControllerUpdateHighestReceivedCall {
+func (mr *MockStreamFlowControllerMockRecorder) UpdateHighestReceived(offset, final, now any) *MockStreamFlowControllerUpdateHighestReceivedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHighestReceived", reflect.TypeOf((*MockStreamFlowController)(nil).UpdateHighestReceived), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHighestReceived", reflect.TypeOf((*MockStreamFlowController)(nil).UpdateHighestReceived), offset, final, now)
 	return &MockStreamFlowControllerUpdateHighestReceivedCall{Call: call}
 }
 
@@ -323,8 +324,8 @@ type MockStreamFlowControllerUpdateSendWindowCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFlowControllerUpdateSendWindowCall) Return(arg0 bool) *MockStreamFlowControllerUpdateSendWindowCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockStreamFlowControllerUpdateSendWindowCall) Return(updated bool) *MockStreamFlowControllerUpdateSendWindowCall {
+	c.Call = c.Call.Return(updated)
 	return c
 }
 

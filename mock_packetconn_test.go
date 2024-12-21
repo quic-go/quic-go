@@ -21,6 +21,7 @@ import (
 type MockPacketConn struct {
 	ctrl     *gomock.Controller
 	recorder *MockPacketConnMockRecorder
+	isgomock struct{}
 }
 
 // MockPacketConnMockRecorder is the mock recorder for MockPacketConn.
@@ -117,9 +118,9 @@ func (c *MockPacketConnLocalAddrCall) DoAndReturn(f func() net.Addr) *MockPacket
 }
 
 // ReadFrom mocks base method.
-func (m *MockPacketConn) ReadFrom(arg0 []byte) (int, net.Addr, error) {
+func (m *MockPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadFrom", arg0)
+	ret := m.ctrl.Call(m, "ReadFrom", p)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(net.Addr)
 	ret2, _ := ret[2].(error)
@@ -127,9 +128,9 @@ func (m *MockPacketConn) ReadFrom(arg0 []byte) (int, net.Addr, error) {
 }
 
 // ReadFrom indicates an expected call of ReadFrom.
-func (mr *MockPacketConnMockRecorder) ReadFrom(arg0 any) *MockPacketConnReadFromCall {
+func (mr *MockPacketConnMockRecorder) ReadFrom(p any) *MockPacketConnReadFromCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFrom", reflect.TypeOf((*MockPacketConn)(nil).ReadFrom), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFrom", reflect.TypeOf((*MockPacketConn)(nil).ReadFrom), p)
 	return &MockPacketConnReadFromCall{Call: call}
 }
 
@@ -139,8 +140,8 @@ type MockPacketConnReadFromCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockPacketConnReadFromCall) Return(arg0 int, arg1 net.Addr, arg2 error) *MockPacketConnReadFromCall {
-	c.Call = c.Call.Return(arg0, arg1, arg2)
+func (c *MockPacketConnReadFromCall) Return(n int, addr net.Addr, err error) *MockPacketConnReadFromCall {
+	c.Call = c.Call.Return(n, addr, err)
 	return c
 }
 
@@ -157,17 +158,17 @@ func (c *MockPacketConnReadFromCall) DoAndReturn(f func([]byte) (int, net.Addr, 
 }
 
 // SetDeadline mocks base method.
-func (m *MockPacketConn) SetDeadline(arg0 time.Time) error {
+func (m *MockPacketConn) SetDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetDeadline indicates an expected call of SetDeadline.
-func (mr *MockPacketConnMockRecorder) SetDeadline(arg0 any) *MockPacketConnSetDeadlineCall {
+func (mr *MockPacketConnMockRecorder) SetDeadline(t any) *MockPacketConnSetDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDeadline", reflect.TypeOf((*MockPacketConn)(nil).SetDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDeadline", reflect.TypeOf((*MockPacketConn)(nil).SetDeadline), t)
 	return &MockPacketConnSetDeadlineCall{Call: call}
 }
 
@@ -195,17 +196,17 @@ func (c *MockPacketConnSetDeadlineCall) DoAndReturn(f func(time.Time) error) *Mo
 }
 
 // SetReadDeadline mocks base method.
-func (m *MockPacketConn) SetReadDeadline(arg0 time.Time) error {
+func (m *MockPacketConn) SetReadDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetReadDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetReadDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetReadDeadline indicates an expected call of SetReadDeadline.
-func (mr *MockPacketConnMockRecorder) SetReadDeadline(arg0 any) *MockPacketConnSetReadDeadlineCall {
+func (mr *MockPacketConnMockRecorder) SetReadDeadline(t any) *MockPacketConnSetReadDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockPacketConn)(nil).SetReadDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockPacketConn)(nil).SetReadDeadline), t)
 	return &MockPacketConnSetReadDeadlineCall{Call: call}
 }
 
@@ -233,17 +234,17 @@ func (c *MockPacketConnSetReadDeadlineCall) DoAndReturn(f func(time.Time) error)
 }
 
 // SetWriteDeadline mocks base method.
-func (m *MockPacketConn) SetWriteDeadline(arg0 time.Time) error {
+func (m *MockPacketConn) SetWriteDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWriteDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetWriteDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetWriteDeadline indicates an expected call of SetWriteDeadline.
-func (mr *MockPacketConnMockRecorder) SetWriteDeadline(arg0 any) *MockPacketConnSetWriteDeadlineCall {
+func (mr *MockPacketConnMockRecorder) SetWriteDeadline(t any) *MockPacketConnSetWriteDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockPacketConn)(nil).SetWriteDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockPacketConn)(nil).SetWriteDeadline), t)
 	return &MockPacketConnSetWriteDeadlineCall{Call: call}
 }
 
@@ -271,18 +272,18 @@ func (c *MockPacketConnSetWriteDeadlineCall) DoAndReturn(f func(time.Time) error
 }
 
 // WriteTo mocks base method.
-func (m *MockPacketConn) WriteTo(arg0 []byte, arg1 net.Addr) (int, error) {
+func (m *MockPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WriteTo", arg0, arg1)
+	ret := m.ctrl.Call(m, "WriteTo", p, addr)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // WriteTo indicates an expected call of WriteTo.
-func (mr *MockPacketConnMockRecorder) WriteTo(arg0, arg1 any) *MockPacketConnWriteToCall {
+func (mr *MockPacketConnMockRecorder) WriteTo(p, addr any) *MockPacketConnWriteToCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteTo", reflect.TypeOf((*MockPacketConn)(nil).WriteTo), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteTo", reflect.TypeOf((*MockPacketConn)(nil).WriteTo), p, addr)
 	return &MockPacketConnWriteToCall{Call: call}
 }
 
@@ -292,8 +293,8 @@ type MockPacketConnWriteToCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockPacketConnWriteToCall) Return(arg0 int, arg1 error) *MockPacketConnWriteToCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockPacketConnWriteToCall) Return(n int, err error) *MockPacketConnWriteToCall {
+	c.Call = c.Call.Return(n, err)
 	return c
 }
 

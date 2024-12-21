@@ -22,6 +22,7 @@ import (
 type MockRawConn struct {
 	ctrl     *gomock.Controller
 	recorder *MockRawConnMockRecorder
+	isgomock struct{}
 }
 
 // MockRawConnMockRecorder is the mock recorder for MockRawConn.
@@ -195,18 +196,18 @@ func (c *MockRawConnSetReadDeadlineCall) DoAndReturn(f func(time.Time) error) *M
 }
 
 // WritePacket mocks base method.
-func (m *MockRawConn) WritePacket(arg0 []byte, arg1 net.Addr, arg2 []byte, arg3 uint16, arg4 protocol.ECN) (int, error) {
+func (m *MockRawConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WritePacket", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "WritePacket", b, addr, packetInfoOOB, gsoSize, ecn)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // WritePacket indicates an expected call of WritePacket.
-func (mr *MockRawConnMockRecorder) WritePacket(arg0, arg1, arg2, arg3, arg4 any) *MockRawConnWritePacketCall {
+func (mr *MockRawConnMockRecorder) WritePacket(b, addr, packetInfoOOB, gsoSize, ecn any) *MockRawConnWritePacketCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WritePacket", reflect.TypeOf((*MockRawConn)(nil).WritePacket), arg0, arg1, arg2, arg3, arg4)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WritePacket", reflect.TypeOf((*MockRawConn)(nil).WritePacket), b, addr, packetInfoOOB, gsoSize, ecn)
 	return &MockRawConnWritePacketCall{Call: call}
 }
 

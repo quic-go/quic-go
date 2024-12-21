@@ -20,6 +20,7 @@ import (
 type MockSender struct {
 	ctrl     *gomock.Controller
 	recorder *MockSenderMockRecorder
+	isgomock struct{}
 }
 
 // MockSenderMockRecorder is the mock recorder for MockSender.
@@ -152,15 +153,15 @@ func (c *MockSenderRunCall) DoAndReturn(f func() error) *MockSenderRunCall {
 }
 
 // Send mocks base method.
-func (m *MockSender) Send(arg0 *packetBuffer, arg1 uint16, arg2 protocol.ECN) {
+func (m *MockSender) Send(p *packetBuffer, gsoSize uint16, ecn protocol.ECN) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Send", arg0, arg1, arg2)
+	m.ctrl.Call(m, "Send", p, gsoSize, ecn)
 }
 
 // Send indicates an expected call of Send.
-func (mr *MockSenderMockRecorder) Send(arg0, arg1, arg2 any) *MockSenderSendCall {
+func (mr *MockSenderMockRecorder) Send(p, gsoSize, ecn any) *MockSenderSendCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockSender)(nil).Send), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockSender)(nil).Send), p, gsoSize, ecn)
 	return &MockSenderSendCall{Call: call}
 }
 

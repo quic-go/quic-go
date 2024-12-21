@@ -25,6 +25,7 @@ import (
 type MockConnectionTracer struct {
 	ctrl     *gomock.Controller
 	recorder *MockConnectionTracerMockRecorder
+	isgomock struct{}
 }
 
 // MockConnectionTracerMockRecorder is the mock recorder for MockConnectionTracer.
@@ -117,15 +118,15 @@ func (c *MockConnectionTracerBufferedPacketCall) DoAndReturn(f func(logging.Pack
 }
 
 // ChoseALPN mocks base method.
-func (m *MockConnectionTracer) ChoseALPN(arg0 string) {
+func (m *MockConnectionTracer) ChoseALPN(protocol string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ChoseALPN", arg0)
+	m.ctrl.Call(m, "ChoseALPN", protocol)
 }
 
 // ChoseALPN indicates an expected call of ChoseALPN.
-func (mr *MockConnectionTracerMockRecorder) ChoseALPN(arg0 any) *MockConnectionTracerChoseALPNCall {
+func (mr *MockConnectionTracerMockRecorder) ChoseALPN(protocol any) *MockConnectionTracerChoseALPNCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseALPN", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseALPN), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChoseALPN", reflect.TypeOf((*MockConnectionTracer)(nil).ChoseALPN), protocol)
 	return &MockConnectionTracerChoseALPNCall{Call: call}
 }
 
@@ -225,15 +226,15 @@ func (c *MockConnectionTracerClosedConnectionCall) DoAndReturn(f func(error)) *M
 }
 
 // Debug mocks base method.
-func (m *MockConnectionTracer) Debug(arg0, arg1 string) {
+func (m *MockConnectionTracer) Debug(name, msg string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Debug", arg0, arg1)
+	m.ctrl.Call(m, "Debug", name, msg)
 }
 
 // Debug indicates an expected call of Debug.
-func (mr *MockConnectionTracerMockRecorder) Debug(arg0, arg1 any) *MockConnectionTracerDebugCall {
+func (mr *MockConnectionTracerMockRecorder) Debug(name, msg any) *MockConnectionTracerDebugCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Debug", reflect.TypeOf((*MockConnectionTracer)(nil).Debug), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Debug", reflect.TypeOf((*MockConnectionTracer)(nil).Debug), name, msg)
 	return &MockConnectionTracerDebugCall{Call: call}
 }
 
@@ -297,15 +298,15 @@ func (c *MockConnectionTracerDroppedEncryptionLevelCall) DoAndReturn(f func(prot
 }
 
 // DroppedKey mocks base method.
-func (m *MockConnectionTracer) DroppedKey(arg0 protocol.KeyPhase) {
+func (m *MockConnectionTracer) DroppedKey(generation protocol.KeyPhase) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DroppedKey", arg0)
+	m.ctrl.Call(m, "DroppedKey", generation)
 }
 
 // DroppedKey indicates an expected call of DroppedKey.
-func (mr *MockConnectionTracerMockRecorder) DroppedKey(arg0 any) *MockConnectionTracerDroppedKeyCall {
+func (mr *MockConnectionTracerMockRecorder) DroppedKey(generation any) *MockConnectionTracerDroppedKeyCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedKey", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedKey), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedKey", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedKey), generation)
 	return &MockConnectionTracerDroppedKeyCall{Call: call}
 }
 
@@ -369,15 +370,15 @@ func (c *MockConnectionTracerDroppedPacketCall) DoAndReturn(f func(logging.Packe
 }
 
 // ECNStateUpdated mocks base method.
-func (m *MockConnectionTracer) ECNStateUpdated(arg0 logging.ECNState, arg1 logging.ECNStateTrigger) {
+func (m *MockConnectionTracer) ECNStateUpdated(state logging.ECNState, trigger logging.ECNStateTrigger) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ECNStateUpdated", arg0, arg1)
+	m.ctrl.Call(m, "ECNStateUpdated", state, trigger)
 }
 
 // ECNStateUpdated indicates an expected call of ECNStateUpdated.
-func (mr *MockConnectionTracerMockRecorder) ECNStateUpdated(arg0, arg1 any) *MockConnectionTracerECNStateUpdatedCall {
+func (mr *MockConnectionTracerMockRecorder) ECNStateUpdated(state, trigger any) *MockConnectionTracerECNStateUpdatedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNStateUpdated", reflect.TypeOf((*MockConnectionTracer)(nil).ECNStateUpdated), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNStateUpdated", reflect.TypeOf((*MockConnectionTracer)(nil).ECNStateUpdated), state, trigger)
 	return &MockConnectionTracerECNStateUpdatedCall{Call: call}
 }
 
@@ -513,15 +514,15 @@ func (c *MockConnectionTracerLostPacketCall) DoAndReturn(f func(protocol.Encrypt
 }
 
 // NegotiatedVersion mocks base method.
-func (m *MockConnectionTracer) NegotiatedVersion(arg0 protocol.Version, arg1, arg2 []protocol.Version) {
+func (m *MockConnectionTracer) NegotiatedVersion(chosen protocol.Version, clientVersions, serverVersions []protocol.Version) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NegotiatedVersion", arg0, arg1, arg2)
+	m.ctrl.Call(m, "NegotiatedVersion", chosen, clientVersions, serverVersions)
 }
 
 // NegotiatedVersion indicates an expected call of NegotiatedVersion.
-func (mr *MockConnectionTracerMockRecorder) NegotiatedVersion(arg0, arg1, arg2 any) *MockConnectionTracerNegotiatedVersionCall {
+func (mr *MockConnectionTracerMockRecorder) NegotiatedVersion(chosen, clientVersions, serverVersions any) *MockConnectionTracerNegotiatedVersionCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NegotiatedVersion", reflect.TypeOf((*MockConnectionTracer)(nil).NegotiatedVersion), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NegotiatedVersion", reflect.TypeOf((*MockConnectionTracer)(nil).NegotiatedVersion), chosen, clientVersions, serverVersions)
 	return &MockConnectionTracerNegotiatedVersionCall{Call: call}
 }
 
@@ -693,15 +694,15 @@ func (c *MockConnectionTracerReceivedTransportParametersCall) DoAndReturn(f func
 }
 
 // ReceivedVersionNegotiationPacket mocks base method.
-func (m *MockConnectionTracer) ReceivedVersionNegotiationPacket(arg0, arg1 protocol.ArbitraryLenConnectionID, arg2 []protocol.Version) {
+func (m *MockConnectionTracer) ReceivedVersionNegotiationPacket(dest, src protocol.ArbitraryLenConnectionID, arg2 []protocol.Version) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReceivedVersionNegotiationPacket", arg0, arg1, arg2)
+	m.ctrl.Call(m, "ReceivedVersionNegotiationPacket", dest, src, arg2)
 }
 
 // ReceivedVersionNegotiationPacket indicates an expected call of ReceivedVersionNegotiationPacket.
-func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(arg0, arg1, arg2 any) *MockConnectionTracerReceivedVersionNegotiationPacketCall {
+func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(dest, src, arg2 any) *MockConnectionTracerReceivedVersionNegotiationPacketCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedVersionNegotiationPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedVersionNegotiationPacket), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedVersionNegotiationPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedVersionNegotiationPacket), dest, src, arg2)
 	return &MockConnectionTracerReceivedVersionNegotiationPacketCall{Call: call}
 }
 
@@ -729,15 +730,15 @@ func (c *MockConnectionTracerReceivedVersionNegotiationPacketCall) DoAndReturn(f
 }
 
 // RestoredTransportParameters mocks base method.
-func (m *MockConnectionTracer) RestoredTransportParameters(arg0 *wire.TransportParameters) {
+func (m *MockConnectionTracer) RestoredTransportParameters(parameters *wire.TransportParameters) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RestoredTransportParameters", arg0)
+	m.ctrl.Call(m, "RestoredTransportParameters", parameters)
 }
 
 // RestoredTransportParameters indicates an expected call of RestoredTransportParameters.
-func (mr *MockConnectionTracerMockRecorder) RestoredTransportParameters(arg0 any) *MockConnectionTracerRestoredTransportParametersCall {
+func (mr *MockConnectionTracerMockRecorder) RestoredTransportParameters(parameters any) *MockConnectionTracerRestoredTransportParametersCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoredTransportParameters", reflect.TypeOf((*MockConnectionTracer)(nil).RestoredTransportParameters), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoredTransportParameters", reflect.TypeOf((*MockConnectionTracer)(nil).RestoredTransportParameters), parameters)
 	return &MockConnectionTracerRestoredTransportParametersCall{Call: call}
 }
 
@@ -909,15 +910,15 @@ func (c *MockConnectionTracerSetLossTimerCall) DoAndReturn(f func(logging.TimerT
 }
 
 // StartedConnection mocks base method.
-func (m *MockConnectionTracer) StartedConnection(arg0, arg1 net.Addr, arg2, arg3 protocol.ConnectionID) {
+func (m *MockConnectionTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID protocol.ConnectionID) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartedConnection", arg0, arg1, arg2, arg3)
+	m.ctrl.Call(m, "StartedConnection", local, remote, srcConnID, destConnID)
 }
 
 // StartedConnection indicates an expected call of StartedConnection.
-func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, arg3 any) *MockConnectionTracerStartedConnectionCall {
+func (mr *MockConnectionTracerMockRecorder) StartedConnection(local, remote, srcConnID, destConnID any) *MockConnectionTracerStartedConnectionCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), local, remote, srcConnID, destConnID)
 	return &MockConnectionTracerStartedConnectionCall{Call: call}
 }
 
@@ -981,15 +982,15 @@ func (c *MockConnectionTracerUpdatedCongestionStateCall) DoAndReturn(f func(logg
 }
 
 // UpdatedKey mocks base method.
-func (m *MockConnectionTracer) UpdatedKey(arg0 protocol.KeyPhase, arg1 bool) {
+func (m *MockConnectionTracer) UpdatedKey(generation protocol.KeyPhase, remote bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdatedKey", arg0, arg1)
+	m.ctrl.Call(m, "UpdatedKey", generation, remote)
 }
 
 // UpdatedKey indicates an expected call of UpdatedKey.
-func (mr *MockConnectionTracerMockRecorder) UpdatedKey(arg0, arg1 any) *MockConnectionTracerUpdatedKeyCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedKey(generation, remote any) *MockConnectionTracerUpdatedKeyCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedKey", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedKey), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedKey", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedKey), generation, remote)
 	return &MockConnectionTracerUpdatedKeyCall{Call: call}
 }
 
@@ -1053,15 +1054,15 @@ func (c *MockConnectionTracerUpdatedKeyFromTLSCall) DoAndReturn(f func(protocol.
 }
 
 // UpdatedMTU mocks base method.
-func (m *MockConnectionTracer) UpdatedMTU(arg0 protocol.ByteCount, arg1 bool) {
+func (m *MockConnectionTracer) UpdatedMTU(mtu protocol.ByteCount, done bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdatedMTU", arg0, arg1)
+	m.ctrl.Call(m, "UpdatedMTU", mtu, done)
 }
 
 // UpdatedMTU indicates an expected call of UpdatedMTU.
-func (mr *MockConnectionTracerMockRecorder) UpdatedMTU(arg0, arg1 any) *MockConnectionTracerUpdatedMTUCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedMTU(mtu, done any) *MockConnectionTracerUpdatedMTUCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedMTU", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedMTU), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedMTU", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedMTU), mtu, done)
 	return &MockConnectionTracerUpdatedMTUCall{Call: call}
 }
 
@@ -1089,15 +1090,15 @@ func (c *MockConnectionTracerUpdatedMTUCall) DoAndReturn(f func(protocol.ByteCou
 }
 
 // UpdatedMetrics mocks base method.
-func (m *MockConnectionTracer) UpdatedMetrics(arg0 *utils.RTTStats, arg1, arg2 protocol.ByteCount, arg3 int) {
+func (m *MockConnectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdatedMetrics", arg0, arg1, arg2, arg3)
+	m.ctrl.Call(m, "UpdatedMetrics", rttStats, cwnd, bytesInFlight, packetsInFlight)
 }
 
 // UpdatedMetrics indicates an expected call of UpdatedMetrics.
-func (mr *MockConnectionTracerMockRecorder) UpdatedMetrics(arg0, arg1, arg2, arg3 any) *MockConnectionTracerUpdatedMetricsCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedMetrics(rttStats, cwnd, bytesInFlight, packetsInFlight any) *MockConnectionTracerUpdatedMetricsCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedMetrics", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedMetrics), arg0, arg1, arg2, arg3)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedMetrics", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedMetrics), rttStats, cwnd, bytesInFlight, packetsInFlight)
 	return &MockConnectionTracerUpdatedMetricsCall{Call: call}
 }
 
@@ -1125,15 +1126,15 @@ func (c *MockConnectionTracerUpdatedMetricsCall) DoAndReturn(f func(*utils.RTTSt
 }
 
 // UpdatedPTOCount mocks base method.
-func (m *MockConnectionTracer) UpdatedPTOCount(arg0 uint32) {
+func (m *MockConnectionTracer) UpdatedPTOCount(value uint32) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdatedPTOCount", arg0)
+	m.ctrl.Call(m, "UpdatedPTOCount", value)
 }
 
 // UpdatedPTOCount indicates an expected call of UpdatedPTOCount.
-func (mr *MockConnectionTracerMockRecorder) UpdatedPTOCount(arg0 any) *MockConnectionTracerUpdatedPTOCountCall {
+func (mr *MockConnectionTracerMockRecorder) UpdatedPTOCount(value any) *MockConnectionTracerUpdatedPTOCountCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedPTOCount", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedPTOCount), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedPTOCount", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedPTOCount), value)
 	return &MockConnectionTracerUpdatedPTOCountCall{Call: call}
 }
 

@@ -21,6 +21,7 @@ import (
 type MockShortHeaderOpener struct {
 	ctrl     *gomock.Controller
 	recorder *MockShortHeaderOpenerMockRecorder
+	isgomock struct{}
 }
 
 // MockShortHeaderOpenerMockRecorder is the mock recorder for MockShortHeaderOpener.
@@ -41,17 +42,17 @@ func (m *MockShortHeaderOpener) EXPECT() *MockShortHeaderOpenerMockRecorder {
 }
 
 // DecodePacketNumber mocks base method.
-func (m *MockShortHeaderOpener) DecodePacketNumber(arg0 protocol.PacketNumber, arg1 protocol.PacketNumberLen) protocol.PacketNumber {
+func (m *MockShortHeaderOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DecodePacketNumber", arg0, arg1)
+	ret := m.ctrl.Call(m, "DecodePacketNumber", wirePN, wirePNLen)
 	ret0, _ := ret[0].(protocol.PacketNumber)
 	return ret0
 }
 
 // DecodePacketNumber indicates an expected call of DecodePacketNumber.
-func (mr *MockShortHeaderOpenerMockRecorder) DecodePacketNumber(arg0, arg1 any) *MockShortHeaderOpenerDecodePacketNumberCall {
+func (mr *MockShortHeaderOpenerMockRecorder) DecodePacketNumber(wirePN, wirePNLen any) *MockShortHeaderOpenerDecodePacketNumberCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecodePacketNumber", reflect.TypeOf((*MockShortHeaderOpener)(nil).DecodePacketNumber), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecodePacketNumber", reflect.TypeOf((*MockShortHeaderOpener)(nil).DecodePacketNumber), wirePN, wirePNLen)
 	return &MockShortHeaderOpenerDecodePacketNumberCall{Call: call}
 }
 
@@ -79,15 +80,15 @@ func (c *MockShortHeaderOpenerDecodePacketNumberCall) DoAndReturn(f func(protoco
 }
 
 // DecryptHeader mocks base method.
-func (m *MockShortHeaderOpener) DecryptHeader(arg0 []byte, arg1 *byte, arg2 []byte) {
+func (m *MockShortHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DecryptHeader", arg0, arg1, arg2)
+	m.ctrl.Call(m, "DecryptHeader", sample, firstByte, pnBytes)
 }
 
 // DecryptHeader indicates an expected call of DecryptHeader.
-func (mr *MockShortHeaderOpenerMockRecorder) DecryptHeader(arg0, arg1, arg2 any) *MockShortHeaderOpenerDecryptHeaderCall {
+func (mr *MockShortHeaderOpenerMockRecorder) DecryptHeader(sample, firstByte, pnBytes any) *MockShortHeaderOpenerDecryptHeaderCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptHeader", reflect.TypeOf((*MockShortHeaderOpener)(nil).DecryptHeader), arg0, arg1, arg2)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptHeader", reflect.TypeOf((*MockShortHeaderOpener)(nil).DecryptHeader), sample, firstByte, pnBytes)
 	return &MockShortHeaderOpenerDecryptHeaderCall{Call: call}
 }
 
@@ -115,18 +116,18 @@ func (c *MockShortHeaderOpenerDecryptHeaderCall) DoAndReturn(f func([]byte, *byt
 }
 
 // Open mocks base method.
-func (m *MockShortHeaderOpener) Open(arg0, arg1 []byte, arg2 time.Time, arg3 protocol.PacketNumber, arg4 protocol.KeyPhaseBit, arg5 []byte) ([]byte, error) {
+func (m *MockShortHeaderOpener) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, associatedData []byte) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Open", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "Open", dst, src, rcvTime, pn, kp, associatedData)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Open indicates an expected call of Open.
-func (mr *MockShortHeaderOpenerMockRecorder) Open(arg0, arg1, arg2, arg3, arg4, arg5 any) *MockShortHeaderOpenerOpenCall {
+func (mr *MockShortHeaderOpenerMockRecorder) Open(dst, src, rcvTime, pn, kp, associatedData any) *MockShortHeaderOpenerOpenCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockShortHeaderOpener)(nil).Open), arg0, arg1, arg2, arg3, arg4, arg5)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockShortHeaderOpener)(nil).Open), dst, src, rcvTime, pn, kp, associatedData)
 	return &MockShortHeaderOpenerOpenCall{Call: call}
 }
 

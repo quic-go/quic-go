@@ -25,6 +25,7 @@ import (
 type MockSendStreamI struct {
 	ctrl     *gomock.Controller
 	recorder *MockSendStreamIMockRecorder
+	isgomock struct{}
 }
 
 // MockSendStreamIMockRecorder is the mock recorder for MockSendStreamI.
@@ -157,17 +158,17 @@ func (c *MockSendStreamIContextCall) DoAndReturn(f func() context.Context) *Mock
 }
 
 // SetWriteDeadline mocks base method.
-func (m *MockSendStreamI) SetWriteDeadline(arg0 time.Time) error {
+func (m *MockSendStreamI) SetWriteDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWriteDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetWriteDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetWriteDeadline indicates an expected call of SetWriteDeadline.
-func (mr *MockSendStreamIMockRecorder) SetWriteDeadline(arg0 any) *MockSendStreamISetWriteDeadlineCall {
+func (mr *MockSendStreamIMockRecorder) SetWriteDeadline(t any) *MockSendStreamISetWriteDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockSendStreamI)(nil).SetWriteDeadline), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockSendStreamI)(nil).SetWriteDeadline), t)
 	return &MockSendStreamISetWriteDeadlineCall{Call: call}
 }
 
@@ -233,18 +234,18 @@ func (c *MockSendStreamIStreamIDCall) DoAndReturn(f func() protocol.StreamID) *M
 }
 
 // Write mocks base method.
-func (m *MockSendStreamI) Write(arg0 []byte) (int, error) {
+func (m *MockSendStreamI) Write(p []byte) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Write", arg0)
+	ret := m.ctrl.Call(m, "Write", p)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Write indicates an expected call of Write.
-func (mr *MockSendStreamIMockRecorder) Write(arg0 any) *MockSendStreamIWriteCall {
+func (mr *MockSendStreamIMockRecorder) Write(p any) *MockSendStreamIWriteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendStreamI)(nil).Write), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendStreamI)(nil).Write), p)
 	return &MockSendStreamIWriteCall{Call: call}
 }
 
@@ -254,8 +255,8 @@ type MockSendStreamIWriteCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSendStreamIWriteCall) Return(arg0 int, arg1 error) *MockSendStreamIWriteCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockSendStreamIWriteCall) Return(n int, err error) *MockSendStreamIWriteCall {
+	c.Call = c.Call.Return(n, err)
 	return c
 }
 
@@ -382,9 +383,9 @@ func (c *MockSendStreamIhasDataCall) DoAndReturn(f func() bool) *MockSendStreamI
 }
 
 // popStreamFrame mocks base method.
-func (m *MockSendStreamI) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.Version) (ackhandler.StreamFrame, bool, bool) {
+func (m *MockSendStreamI) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "popStreamFrame", arg0, arg1)
+	ret := m.ctrl.Call(m, "popStreamFrame", maxBytes, v)
 	ret0, _ := ret[0].(ackhandler.StreamFrame)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(bool)
@@ -392,9 +393,9 @@ func (m *MockSendStreamI) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.
 }
 
 // popStreamFrame indicates an expected call of popStreamFrame.
-func (mr *MockSendStreamIMockRecorder) popStreamFrame(arg0, arg1 any) *MockSendStreamIpopStreamFrameCall {
+func (mr *MockSendStreamIMockRecorder) popStreamFrame(maxBytes, v any) *MockSendStreamIpopStreamFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popStreamFrame", reflect.TypeOf((*MockSendStreamI)(nil).popStreamFrame), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popStreamFrame", reflect.TypeOf((*MockSendStreamI)(nil).popStreamFrame), maxBytes, v)
 	return &MockSendStreamIpopStreamFrameCall{Call: call}
 }
 
@@ -404,8 +405,8 @@ type MockSendStreamIpopStreamFrameCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSendStreamIpopStreamFrameCall) Return(arg0 ackhandler.StreamFrame, arg1, arg2 bool) *MockSendStreamIpopStreamFrameCall {
-	c.Call = c.Call.Return(arg0, arg1, arg2)
+func (c *MockSendStreamIpopStreamFrameCall) Return(frame ackhandler.StreamFrame, ok, hasMore bool) *MockSendStreamIpopStreamFrameCall {
+	c.Call = c.Call.Return(frame, ok, hasMore)
 	return c
 }
 
