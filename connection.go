@@ -499,9 +499,11 @@ func (s *connection) run() error {
 	s.timer = *newTimer()
 
 	if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
+		s.connIDGenerator.RemoveAll()
 		return err
 	}
 	if err := s.handleHandshakeEvents(); err != nil {
+		s.connIDGenerator.RemoveAll()
 		return err
 	}
 	go func() {
