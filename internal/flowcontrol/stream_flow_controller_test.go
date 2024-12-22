@@ -214,7 +214,7 @@ func TestStreamWindowUpdate(t *testing.T) {
 func TestStreamWindowAutoTuning(t *testing.T) {
 	// the RTT is 1 second
 	rttStats := &utils.RTTStats{}
-	rttStats.UpdateRTT(time.Second, 0, time.Now())
+	rttStats.UpdateRTT(time.Second, 0)
 	require.Equal(t, time.Second, rttStats.SmoothedRTT())
 
 	connFC := NewConnectionFlowController(

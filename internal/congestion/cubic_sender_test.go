@@ -67,7 +67,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	// Normal is that TCP acks every other segment.
 	AckNPackets := func(n int) {
-		rttStats.UpdateRTT(60*time.Millisecond, 0, clock.Now())
+		rttStats.UpdateRTT(60*time.Millisecond, 0)
 		sender.MaybeExitSlowStart()
 		for i := 0; i < n; i++ {
 			ackedPacketNumber++
@@ -109,7 +109,7 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("paces", func() {
-		rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
+		rttStats.UpdateRTT(10*time.Millisecond, 0)
 		clock.Advance(time.Hour)
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
