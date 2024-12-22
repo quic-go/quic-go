@@ -110,7 +110,7 @@ func TestMessageReceivedAtWrongEncryptionLevel(t *testing.T) {
 func newRTTStatsWithRTT(t *testing.T, rtt time.Duration) *utils.RTTStats {
 	t.Helper()
 	rttStats := &utils.RTTStats{}
-	rttStats.UpdateRTT(rtt, 0, time.Now())
+	rttStats.UpdateRTT(rtt, 0)
 	require.Equal(t, rtt, rttStats.SmoothedRTT())
 	return rttStats
 }

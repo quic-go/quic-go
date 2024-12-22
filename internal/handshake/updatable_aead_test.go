@@ -274,7 +274,7 @@ func TestDropsKeys3PTOsAfterKeyUpdate(t *testing.T) {
 	client, server, serverTracer := setupEndpoints(t, &rttStats)
 
 	now := time.Now()
-	rttStats.UpdateRTT(10*time.Millisecond, 0, now)
+	rttStats.UpdateRTT(10*time.Millisecond, 0)
 	pto := rttStats.PTO(true)
 	encrypted01 := client.Seal(nil, []byte(msg), 0x42, []byte(ad))
 	encrypted02 := client.Seal(nil, []byte(msg), 0x43, []byte(ad))
@@ -466,7 +466,7 @@ func TestKeyUpdateKeyPhaseSkipping(t *testing.T) {
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
 	var rttStats utils.RTTStats
-	rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
+	rttStats.UpdateRTT(10*time.Millisecond, 0)
 	client, server, serverTracer := setupEndpoints(t, &rttStats)
 	server.SetHandshakeConfirmed()
 
@@ -538,7 +538,7 @@ func TestFastKeyUpdateByUs(t *testing.T) {
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
 	var rttStats utils.RTTStats
-	rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
+	rttStats.UpdateRTT(10*time.Millisecond, 0)
 	client, server, serverTracer := setupEndpoints(t, &rttStats)
 	server.SetHandshakeConfirmed()
 

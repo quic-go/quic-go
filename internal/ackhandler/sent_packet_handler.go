@@ -338,7 +338,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			if encLevel == protocol.Encryption1RTT {
 				ackDelay = min(ack.DelayTime, h.rttStats.MaxAckDelay())
 			}
-			h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
+			h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay)
 			if h.logger.Debug() {
 				h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 			}
@@ -890,7 +890,7 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) error {
 	// Otherwise, we don't know which Initial the Retry was sent in response to.
 	if h.ptoCount == 0 {
 		// Don't set the RTT to a value lower than 5ms here.
-		h.rttStats.UpdateRTT(max(minRTTAfterRetry, now.Sub(firstPacketSendTime)), 0, now)
+		h.rttStats.UpdateRTT(max(minRTTAfterRetry, now.Sub(firstPacketSendTime)), 0)
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}

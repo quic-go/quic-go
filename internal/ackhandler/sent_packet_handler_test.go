@@ -125,7 +125,7 @@ var _ = Describe("SentPacketHandler", func() {
 	}
 
 	updateRTT := func(rtt time.Duration) {
-		handler.rttStats.UpdateRTT(rtt, 0, time.Now())
+		handler.rttStats.UpdateRTT(rtt, 0)
 		ExpectWithOffset(1, handler.rttStats.SmoothedRTT()).To(Equal(rtt))
 	}
 
@@ -416,7 +416,7 @@ var _ = Describe("SentPacketHandler", func() {
 				sentPacket(initialPacket(&packet{PacketNumber: 1}))
 				handler.rttStats.SetMaxAckDelay(time.Hour)
 				// make sure the rttStats have a min RTT, so that the delay is used
-				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
+				handler.rttStats.UpdateRTT(5*time.Minute, 0)
 				getPacket(1, protocol.EncryptionInitial).SendTime = time.Now().Add(-10 * time.Minute)
 				ack := &wire.AckFrame{
 					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
@@ -430,7 +430,7 @@ var _ = Describe("SentPacketHandler", func() {
 			It("uses the DelayTime in the ACK frame", func() {
 				handler.rttStats.SetMaxAckDelay(time.Hour)
 				// make sure the rttStats have a min RTT, so that the delay is used
-				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
+				handler.rttStats.UpdateRTT(5*time.Minute, 0)
 				getPacket(1, protocol.Encryption1RTT).SendTime = time.Now().Add(-10 * time.Minute)
 				ack := &wire.AckFrame{
 					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
@@ -444,7 +444,7 @@ var _ = Describe("SentPacketHandler", func() {
 			It("limits the DelayTime in the ACK frame to max_ack_delay", func() {
 				handler.rttStats.SetMaxAckDelay(time.Minute)
 				// make sure the rttStats have a min RTT, so that the delay is used
-				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
+				handler.rttStats.UpdateRTT(5*time.Minute, 0)
 				getPacket(1, protocol.Encryption1RTT).SendTime = time.Now().Add(-10 * time.Minute)
 				ack := &wire.AckFrame{
 					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
@@ -752,7 +752,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 
 			now := time.Now()
-			handler.rttStats.UpdateRTT(time.Second/2, 0, now)
+			handler.rttStats.UpdateRTT(time.Second/2, 0)
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second / 2))
 			Expect(handler.rttStats.PTO(true)).To(And(
 				BeNumerically(">", time.Second),
@@ -1442,7 +1442,7 @@ var _ = Describe("SentPacketHandler", func() {
 			ecnHandler = NewMockECNHandler(mockCtrl)
 			lostPackets = nil
 			var rttStats utils.RTTStats
-			rttStats.UpdateRTT(time.Hour, 0, time.Now())
+			rttStats.UpdateRTT(time.Hour, 0)
 			handler = newSentPacketHandler(42, protocol.InitialPacketSize, &rttStats, false, false, perspective, nil, utils.DefaultLogger)
 			handler.ecnTracker = ecnHandler
 			handler.congestion = cong
