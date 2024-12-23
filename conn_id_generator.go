@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -15,7 +16,7 @@ type connRunnerCallbacks struct {
 	ReplaceWithClosed  func([]protocol.ConnectionID, []byte)
 }
 
-type connRunners []connRunnerCallbacks
+type connRunners map[transportID]connRunnerCallbacks
 
 func (cr connRunners) AddConnectionID(id protocol.ConnectionID) {
 	for _, c := range cr {
@@ -66,7 +67,9 @@ func newConnIDGenerator(
 		generator:         generator,
 		activeSrcConnIDs:  make(map[uint64]protocol.ConnectionID),
 		statelessResetter: statelessResetter,
-		connRunners:       []connRunnerCallbacks{connRunner},
+		connRunners: map[transportID]connRunnerCallbacks{
+			0: connRunner, // TODO: use the correct ID
+		},
 		queueControlFrame: queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
@@ -162,12 +165,16 @@ func (m *connIDGenerator) ReplaceWithClosed(connClose []byte) {
 	m.connRunners.ReplaceWithClosed(connIDs, connClose)
 }
 
-func (m *connIDGenerator) AddConnRunner(r connRunnerCallbacks) {
+func (m *connIDGenerator) AddConnRunner(id transportID, r connRunnerCallbacks) error {
+	if _, ok := m.connRunners[id]; ok {
+		return errors.New("connection runner already exists") // TODO: better error
+	}
+	m.connRunners[id] = r
 	if m.initialClientDestConnID != nil {
 		r.AddConnectionID(*m.initialClientDestConnID)
 	}
 	for _, connID := range m.activeSrcConnIDs {
 		r.AddConnectionID(connID)
 	}
-	m.connRunners = append(m.connRunners, r)
+	return nil
 }
