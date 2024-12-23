@@ -21,32 +21,22 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type packetToRead struct {
-	addr net.Addr
-	data []byte
-	err  error
-}
-
 type mockPacketConn struct {
 	localAddr net.Addr
-	reads     chan packetToRead
+	readErrs  chan error
 }
 
 func (c *mockPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	packet, ok := <-c.reads
+	err, ok := <-c.readErrs
 	if !ok {
 		return 0, nil, net.ErrClosed
 	}
-	if packet.err != nil {
-		return 0, nil, packet.err
-	}
-	n = copy(p, packet.data)
-	return n, packet.addr, nil
+	return 0, nil, err
 }
 
 func (c *mockPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) { panic("implement me") }
 func (c *mockPacketConn) LocalAddr() net.Addr                                { return c.localAddr }
-func (c *mockPacketConn) Close() error                                       { close(c.reads); return nil }
+func (c *mockPacketConn) Close() error                                       { close(c.readErrs); return nil }
 func (c *mockPacketConn) SetDeadline(t time.Time) error                      { return nil }
 func (c *mockPacketConn) SetReadDeadline(t time.Time) error                  { return nil }
 func (c *mockPacketConn) SetWriteDeadline(t time.Time) error                 { return nil }
@@ -151,8 +141,8 @@ func TestTransportAndListenerConcurrentClose(t *testing.T) {
 func TestTransportErrFromConn(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	phm := NewMockPacketHandlerManager(mockCtrl)
-	packetChan := make(chan packetToRead, 10)
-	conn := &mockPacketConn{reads: packetChan, localAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}}
+	readErrChan := make(chan error, 2)
+	conn := &mockPacketConn{readErrs: readErrChan, localAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}}
 	tr := Transport{Conn: conn, handlerMap: phm}
 	defer tr.Close()
 
@@ -162,14 +152,14 @@ func TestTransportErrFromConn(t *testing.T) {
 	// temporary errors don't lead to a shutdown...
 	var tempErr deadlineError
 	require.True(t, tempErr.Temporary())
-	packetChan <- packetToRead{err: tempErr}
+	readErrChan <- tempErr
 	// don't expect any calls to phm.Close
 	time.Sleep(scaleDuration(20 * time.Millisecond))
 
 	// ...but non-temporary errors do
 	done := make(chan struct{})
 	phm.EXPECT().Close(gomock.Any()).Do(func(error) { close(done) })
-	packetChan <- packetToRead{err: errors.New("read failed")}
+	readErrChan <- errors.New("read failed")
 	select {
 	case <-done:
 	case <-time.After(time.Second):
