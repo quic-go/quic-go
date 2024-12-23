@@ -510,7 +510,7 @@ func testTransportDial(t *testing.T, early bool) {
 	newClientConnection = func(
 		_ context.Context,
 		_ sendConn,
-		_ connRunner,
+		_ *Transport,
 		_ protocol.ConnectionID,
 		_ protocol.ConnectionID,
 		_ ConnectionIDGenerator,
@@ -585,7 +585,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 	newClientConnection = func(
 		_ context.Context,
 		_ sendConn,
-		_ connRunner,
+		_ *Transport,
 		_ protocol.ConnectionID,
 		_ protocol.ConnectionID,
 		_ ConnectionIDGenerator,
