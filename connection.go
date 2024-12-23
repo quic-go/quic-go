@@ -705,6 +705,7 @@ func (s *connection) ConnectionState() ConnectionState {
 	s.connState.TLS = cs.ConnectionState
 	s.connState.Used0RTT = cs.Used0RTT
 	s.connState.GSO = s.conn.capabilities().GSO
+	s.connState.ConnectionMigrationDisabled = s.peerParams.DisableActiveMigration
 	return s.connState
 }
 
