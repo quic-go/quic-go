@@ -161,6 +161,14 @@ func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
 	return conn
 }
 
+func newUPDConnLocalhostOnPort(t testing.TB, port int) *net.UDPConn {
+	t.Helper()
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port})
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
 func areHandshakesRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
