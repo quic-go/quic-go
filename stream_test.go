@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/mocks"
@@ -17,18 +16,6 @@ import (
 	"github.com/onsi/gomega/gbytes"
 	"go.uber.org/mock/gomock"
 )
-
-// in the tests for the stream deadlines we set a deadline
-// and wait to make an assertion when Read / Write was unblocked
-// on the CIs, the timing is a lot less precise, so scale every duration by this factor
-func scaleDuration(t time.Duration) time.Duration {
-	scaleFactor := 1
-	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
-		scaleFactor = f
-	}
-	Expect(scaleFactor).ToNot(BeZero())
-	return time.Duration(scaleFactor) * t
-}
 
 var _ = Describe("Stream", func() {
 	const streamID protocol.StreamID = 1337

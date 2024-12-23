@@ -241,7 +241,9 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
-		t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)
+		if t.handlerMap == nil { // allows mocking the handlerMap in tests
+			t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)
+		}
 		t.listening = make(chan struct{})
 
 		t.closeQueue = make(chan closePacket, 4)
