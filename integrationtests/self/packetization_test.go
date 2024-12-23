@@ -3,13 +3,17 @@ package self_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/quicvarint"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,4 +125,106 @@ func TestACKBundling(t *testing.T) {
 	require.Greater(t, numBundledIncoming, numMsg*9/10)
 	require.LessOrEqual(t, numBundledOutgoing, numMsg)
 	require.Greater(t, numBundledOutgoing, numMsg*9/10)
+}
+
+func TestStreamDataBlocked(t *testing.T) {
+	testConnAndStreamDataBlocked(t, true, false)
+}
+
+func TestConnDataBlocked(t *testing.T) {
+	testConnAndStreamDataBlocked(t, false, true)
+}
+
+func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
+	initialStreamWindow := uint64(quicvarint.Max)
+	initialConnWindow := uint64(quicvarint.Max)
+	if limitStream {
+		initialStreamWindow = 100
+	}
+	if limitConn {
+		initialConnWindow = 100
+	}
+
+	ln, err := quic.Listen(
+		newUPDConnLocalhost(t),
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{
+			InitialStreamReceiveWindow:     initialStreamWindow,
+			InitialConnectionReceiveWindow: initialConnWindow,
+		}),
+	)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	counter, tracer := newPacketTracer()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		ln.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{
+			Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+				return tracer
+			},
+		}),
+	)
+	require.NoError(t, err)
+
+	serverConn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+
+	str, err := conn.OpenUniStreamSync(ctx)
+	require.NoError(t, err)
+
+	var serverStr quic.ReceiveStream
+	for i := 0; i < 3; i++ {
+		str.SetWriteDeadline(time.Now().Add(scaleDuration(10 * time.Millisecond)))
+		n, err := str.Write(make([]byte, 10000))
+		require.Error(t, err)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+		require.Equal(t, 100, n)
+
+		if i == 0 {
+			serverStr, err = serverConn.AcceptUniStream(ctx)
+			require.NoError(t, err)
+		}
+		serverStr.SetReadDeadline(time.Now().Add(scaleDuration(10 * time.Millisecond)))
+		n2, err := io.ReadFull(serverStr, make([]byte, 10000))
+		require.Error(t, err)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+		require.Equal(t, n, n2)
+	}
+
+	conn.CloseWithError(0, "")
+	serverConn.CloseWithError(0, "")
+
+	var streamDataBlockedFrames []logging.StreamDataBlockedFrame
+	var dataBlockedFrames []logging.DataBlockedFrame
+	for _, p := range counter.getSentShortHeaderPackets() {
+		for _, f := range p.frames {
+			switch frame := f.(type) {
+			case *logging.StreamDataBlockedFrame:
+				streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
+			case *logging.DataBlockedFrame:
+				dataBlockedFrames = append(dataBlockedFrames, *frame)
+			}
+		}
+	}
+	if limitStream {
+		assert.Len(t, streamDataBlockedFrames, 3)
+		for i, f := range streamDataBlockedFrames {
+			assert.Equal(t, str.StreamID(), f.StreamID)
+			assert.Equal(t, logging.ByteCount(100*(i+1)), f.MaximumStreamData)
+		}
+		assert.Empty(t, dataBlockedFrames)
+	}
+	if limitConn {
+		assert.Len(t, dataBlockedFrames, 3)
+		for i, f := range dataBlockedFrames {
+			assert.Equal(t, logging.ByteCount(100*(i+1)), f.MaximumData)
+		}
+		assert.Empty(t, streamDataBlockedFrames)
+	}
 }
