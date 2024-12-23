@@ -286,15 +286,56 @@ func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
 	}
 }
 
-func TestTransportSingleListener(t *testing.T) {
-	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+func TestTransportListening(t *testing.T) {
+	mockTracer, tracer := mocklogging.NewMockTracer(gomock.NewController(t))
+	tr := &Transport{
+		Conn:               newUPDConnLocalhost(t),
+		ConnectionIDLength: 5,
+		Tracer:             mockTracer,
+	}
 	require.NoError(t, tr.init(true))
-	defer tr.Close()
+	defer func() {
+		tracer.EXPECT().Close()
+		tr.Close()
+	}()
 
-	// TODO(#4779): test that packets are dropped if no listener is set
+	conn := newUPDConnLocalhost(t)
+	data := wire.ComposeVersionNegotiation([]byte{1, 2, 3, 4, 5}, []byte{6, 7, 8, 9, 10}, []protocol.Version{protocol.Version1})
+	dropped := make(chan struct{}, 10)
+	tracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropUnknownConnectionID).Do(
+		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
+			dropped <- struct{}{}
+		},
+	)
+
+	_, err := conn.WriteTo(data, tr.Conn.LocalAddr())
+	require.NoError(t, err)
+	select {
+	case <-dropped:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 
 	ln, err := tr.Listen(&tls.Config{}, nil)
 	require.NoError(t, err)
+
+	// send the packet again
+	lnDropped := make(chan struct{}, 10)
+	tracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(
+		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
+			lnDropped <- struct{}{}
+		},
+	)
+
+	_, err = conn.WriteTo(data, tr.Conn.LocalAddr())
+	require.NoError(t, err)
+	select {
+	case <-lnDropped:
+	case <-dropped:
+		t.Fatal("packet should have been handled by the listener")
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 
 	// only a single listener can be set
 	_, err = tr.Listen(&tls.Config{}, nil)
