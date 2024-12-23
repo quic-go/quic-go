@@ -15,10 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type versioner interface {
-	GetVersion() protocol.Version
-}
-
 type result struct {
 	loggedVersions                 bool
 	receivedVersionNegotiation     bool
@@ -73,9 +69,9 @@ func TestServerSupportsMoreVersionsThanClient(t *testing.T) {
 
 	sconn, err := server.Accept(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, expectedVersion, sconn.(versioner).GetVersion())
+	require.Equal(t, expectedVersion, sconn.ConnectionState().Version)
 
-	require.Equal(t, expectedVersion, conn.(versioner).GetVersion())
+	require.Equal(t, expectedVersion, conn.ConnectionState().Version)
 	require.NoError(t, conn.CloseWithError(0, ""))
 
 	select {
@@ -129,9 +125,9 @@ func TestClientSupportsMoreVersionsThanServer(t *testing.T) {
 
 	sconn, err := server.Accept(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, expectedVersion, sconn.(versioner).GetVersion())
+	require.Equal(t, expectedVersion, sconn.ConnectionState().Version)
 
-	require.Equal(t, protocol.SupportedVersions[0], conn.(versioner).GetVersion())
+	require.Equal(t, protocol.SupportedVersions[0], conn.ConnectionState().Version)
 	require.NoError(t, conn.CloseWithError(0, ""))
 
 	select {

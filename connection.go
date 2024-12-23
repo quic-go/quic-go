@@ -2306,17 +2306,8 @@ func (s *connection) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 	return s.datagramQueue.Receive(ctx)
 }
 
-func (s *connection) LocalAddr() net.Addr {
-	return s.conn.LocalAddr()
-}
-
-func (s *connection) RemoteAddr() net.Addr {
-	return s.conn.RemoteAddr()
-}
-
-func (s *connection) GetVersion() protocol.Version {
-	return s.version
-}
+func (s *connection) LocalAddr() net.Addr  { return s.conn.LocalAddr() }
+func (s *connection) RemoteAddr() net.Addr { return s.conn.RemoteAddr() }
 
 func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
 	// The handshake might fail after the server rejected 0-RTT.
