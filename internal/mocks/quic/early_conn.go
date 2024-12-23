@@ -120,6 +120,45 @@ func (c *MockEarlyConnectionAcceptUniStreamCall) DoAndReturn(f func(context.Cont
 	return c
 }
 
+// AddPath mocks base method.
+func (m *MockEarlyConnection) AddPath(arg0 *quic.Transport) (*quic.Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddPath", arg0)
+	ret0, _ := ret[0].(*quic.Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddPath indicates an expected call of AddPath.
+func (mr *MockEarlyConnectionMockRecorder) AddPath(arg0 any) *MockEarlyConnectionAddPathCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPath", reflect.TypeOf((*MockEarlyConnection)(nil).AddPath), arg0)
+	return &MockEarlyConnectionAddPathCall{Call: call}
+}
+
+// MockEarlyConnectionAddPathCall wrap *gomock.Call
+type MockEarlyConnectionAddPathCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockEarlyConnectionAddPathCall) Return(arg0 *quic.Path, arg1 error) *MockEarlyConnectionAddPathCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockEarlyConnectionAddPathCall) Do(f func(*quic.Transport) (*quic.Path, error)) *MockEarlyConnectionAddPathCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockEarlyConnectionAddPathCall) DoAndReturn(f func(*quic.Transport) (*quic.Path, error)) *MockEarlyConnectionAddPathCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // CloseWithError mocks base method.
 func (m *MockEarlyConnection) CloseWithError(arg0 quic.ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()
