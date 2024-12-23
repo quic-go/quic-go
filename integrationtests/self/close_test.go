@@ -10,6 +10,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )
@@ -78,4 +79,37 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 	for i := 1; i < len(packets); i++ {
 		require.Equal(t, packets[0], packets[i])
 	}
+}
+
+func TestDrainServerAcceptQueue(t *testing.T) {
+	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	dialer := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	defer dialer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// fill up the accept queue
+	conns := make([]quic.Connection, 0, protocol.MaxAcceptQueueSize)
+	for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+		conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+		conns = append(conns, conn)
+	}
+	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued
+
+	server.Close()
+	for i := range protocol.MaxAcceptQueueSize {
+		c, err := server.Accept(ctx)
+		require.NoError(t, err)
+		// make sure the connection is not closed
+		require.NoError(t, conns[i].Context().Err(), "client connection closed")
+		require.NoError(t, c.Context().Err(), "server connection closed")
+		conns[i].CloseWithError(0, "")
+		c.CloseWithError(0, "")
+	}
+	_, err = server.Accept(ctx)
+	require.ErrorIs(t, err, quic.ErrServerClosed)
 }
