@@ -419,11 +419,6 @@ var _ = Describe("Connection", func() {
 		})
 	})
 
-	It("tells its versions", func() {
-		conn.version = 4242
-		Expect(conn.GetVersion()).To(Equal(protocol.Version(4242)))
-	})
-
 	Context("closing", func() {
 		var (
 			runErr         chan error
