@@ -5,6 +5,7 @@ package quic
 import (
 	"fmt"
 	"net"
+	"testing"
 	"time"
 
 	"golang.org/x/net/ipv4"
@@ -14,6 +15,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,6 +30,168 @@ func (c *oobRecordingConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oob
 }
 
 func isIPv4(ip net.IP) bool { return ip.To4() != nil }
+
+func runSysConnServer(t *testing.T, network string, addr *net.UDPAddr) (*net.UDPAddr, <-chan receivedPacket) {
+	t.Helper()
+	udpConn, err := net.ListenUDP(network, addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { udpConn.Close() })
+
+	oobConn, err := newConn(udpConn, true)
+	require.NoError(t, err)
+	require.True(t, oobConn.capabilities().DF)
+
+	packetChan := make(chan receivedPacket)
+	go func() {
+		for {
+			p, err := oobConn.ReadPacket()
+			if err != nil {
+				return
+			}
+			packetChan <- p
+		}
+	}()
+	return udpConn.LocalAddr().(*net.UDPAddr), packetChan
+}
+
+// sendUDPPacketWithECN opens a new UDP socket and sends one packet with the ECN set.
+// It returns the local address of the socket.
+func sendUDPPacketWithECN(t *testing.T, network string, addr *net.UDPAddr, setECN func(uintptr)) net.Addr {
+	conn, err := net.DialUDP(network, nil, addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+
+	rawConn, err := conn.SyscallConn()
+	require.NoError(t, err)
+	require.NoError(t, rawConn.Control(func(fd uintptr) { setECN(fd) }))
+	_, err = conn.Write([]byte("foobar"))
+	require.NoError(t, err)
+	return conn.LocalAddr()
+}
+
+func TestReadECNFlagsIPv4(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+
+	sentFrom := sendUDPPacketWithECN(t,
+		"udp4",
+		addr,
+		func(fd uintptr) {
+			require.NoError(t, unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_TOS, 2))
+		},
+	)
+
+	select {
+	case p := <-packetChan:
+		require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(20*time.Millisecond))
+		require.Equal(t, []byte("foobar"), p.data)
+		require.Equal(t, sentFrom, p.remoteAddr)
+		require.Equal(t, protocol.ECT0, p.ecn)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for packet")
+	}
+}
+
+func TestReadECNFlagsIPv6(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp6", &net.UDPAddr{IP: net.IPv6loopback, Port: 0})
+
+	sentFrom := sendUDPPacketWithECN(t,
+		"udp6",
+		addr,
+		func(fd uintptr) {
+			require.NoError(t, unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_TCLASS, 3))
+		},
+	)
+
+	select {
+	case p := <-packetChan:
+		require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(20*time.Millisecond))
+		require.Equal(t, []byte("foobar"), p.data)
+		require.Equal(t, sentFrom, p.remoteAddr)
+		require.Equal(t, protocol.ECNCE, p.ecn)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for packet")
+	}
+}
+
+func TestReadECNFlagsDualStack(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp", &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0})
+
+	// IPv4
+	sentFrom := sendUDPPacketWithECN(t,
+		"udp4",
+		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: addr.Port},
+		func(fd uintptr) {
+			require.NoError(t, unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_TOS, 3))
+		},
+	)
+
+	select {
+	case p := <-packetChan:
+		require.Equal(t, sentFrom, p.remoteAddr)
+		require.True(t, isIPv4(p.remoteAddr.(*net.UDPAddr).IP))
+		require.Equal(t, protocol.ECNCE, p.ecn)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for packet")
+	}
+
+	// IPv6
+	sentFrom = sendUDPPacketWithECN(t,
+		"udp6",
+		&net.UDPAddr{IP: net.IPv6loopback, Port: addr.Port},
+		func(fd uintptr) {
+			require.NoError(t, unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_TCLASS, 1))
+		},
+	)
+
+	select {
+	case p := <-packetChan:
+		require.Equal(t, sentFrom, p.remoteAddr)
+		require.False(t, isIPv4(p.remoteAddr.(*net.UDPAddr).IP))
+		require.Equal(t, protocol.ECT1, p.ecn)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for packet")
+	}
+}
+
+func TestSendPacketsWithECNOnIPv4(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+
+	c, err := net.ListenUDP("udp4", nil)
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+		_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv4ECNMsg([]byte{}, val), addr)
+		require.NoError(t, err)
+		select {
+		case p := <-packetChan:
+			require.Equal(t, []byte("foobar"), p.data)
+			require.Equal(t, val, p.ecn)
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for packet")
+		}
+	}
+}
+
+func TestSendPacketsWithECNOnIPv6(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp6", &net.UDPAddr{IP: net.IPv6loopback, Port: 0})
+
+	c, err := net.ListenUDP("udp6", nil)
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+		_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv6ECNMsg([]byte{}, val), addr)
+		require.NoError(t, err)
+		select {
+		case p := <-packetChan:
+			require.Equal(t, []byte("foobar"), p.data)
+			require.Equal(t, val, p.ecn)
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for packet")
+		}
+	}
+}
 
 var _ = Describe("OOB Conn Test", func() {
 	runServer := func(network, address string) (*net.UDPConn, <-chan receivedPacket) {
@@ -53,130 +217,6 @@ var _ = Describe("OOB Conn Test", func() {
 
 		return udpConn, packetChan
 	}
-
-	Context("reading ECN-marked packets", func() {
-		sendPacketWithECN := func(network string, addr *net.UDPAddr, setECN func(uintptr)) net.Addr {
-			conn, err := net.DialUDP(network, nil, addr)
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			rawConn, err := conn.SyscallConn()
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, rawConn.Control(func(fd uintptr) {
-				setECN(fd)
-			})).To(Succeed())
-			_, err = conn.Write([]byte("foobar"))
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			return conn.LocalAddr()
-		}
-
-		It("reads ECN flags on IPv4", func() {
-			conn, packetChan := runServer("udp4", "localhost:0")
-			defer conn.Close()
-
-			sentFrom := sendPacketWithECN(
-				"udp4",
-				conn.LocalAddr().(*net.UDPAddr),
-				func(fd uintptr) {
-					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_TOS, 2)).To(Succeed())
-				},
-			)
-
-			var p receivedPacket
-			Eventually(packetChan).Should(Receive(&p))
-			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
-			Expect(p.data).To(Equal([]byte("foobar")))
-			Expect(p.remoteAddr).To(Equal(sentFrom))
-			Expect(p.ecn).To(Equal(protocol.ECT0))
-		})
-
-		It("reads ECN flags on IPv6", func() {
-			conn, packetChan := runServer("udp6", "[::]:0")
-			defer conn.Close()
-
-			sentFrom := sendPacketWithECN(
-				"udp6",
-				conn.LocalAddr().(*net.UDPAddr),
-				func(fd uintptr) {
-					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_TCLASS, 3)).To(Succeed())
-				},
-			)
-
-			var p receivedPacket
-			Eventually(packetChan).Should(Receive(&p))
-			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
-			Expect(p.data).To(Equal([]byte("foobar")))
-			Expect(p.remoteAddr).To(Equal(sentFrom))
-			Expect(p.ecn).To(Equal(protocol.ECNCE))
-		})
-
-		It("reads ECN flags on a connection that supports both IPv4 and IPv6", func() {
-			conn, packetChan := runServer("udp", "0.0.0.0:0")
-			defer conn.Close()
-			port := conn.LocalAddr().(*net.UDPAddr).Port
-
-			// IPv4
-			sendPacketWithECN(
-				"udp4",
-				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
-				func(fd uintptr) {
-					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_TOS, 3)).To(Succeed())
-				},
-			)
-
-			var p receivedPacket
-			Eventually(packetChan).Should(Receive(&p))
-			Expect(isIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
-			Expect(p.ecn).To(Equal(protocol.ECNCE))
-
-			// IPv6
-			sendPacketWithECN(
-				"udp6",
-				&net.UDPAddr{IP: net.IPv6loopback, Port: port},
-				func(fd uintptr) {
-					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_TCLASS, 1)).To(Succeed())
-				},
-			)
-
-			Eventually(packetChan).Should(Receive(&p))
-			Expect(isIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeFalse())
-			Expect(p.ecn).To(Equal(protocol.ECT1))
-		})
-
-		It("sends packets with ECN on IPv4", func() {
-			conn, packetChan := runServer("udp4", "localhost:0")
-			defer conn.Close()
-
-			c, err := net.ListenUDP("udp4", nil)
-			Expect(err).ToNot(HaveOccurred())
-			defer c.Close()
-
-			for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
-				_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv4ECNMsg([]byte{}, val), conn.LocalAddr().(*net.UDPAddr))
-				Expect(err).ToNot(HaveOccurred())
-				var p receivedPacket
-				Eventually(packetChan).Should(Receive(&p))
-				Expect(p.data).To(Equal([]byte("foobar")))
-				Expect(p.ecn).To(Equal(val))
-			}
-		})
-
-		It("sends packets with ECN on IPv6", func() {
-			conn, packetChan := runServer("udp6", "[::1]:0")
-			defer conn.Close()
-
-			c, err := net.ListenUDP("udp6", nil)
-			Expect(err).ToNot(HaveOccurred())
-			defer c.Close()
-
-			for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
-				_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv6ECNMsg([]byte{}, val), conn.LocalAddr().(*net.UDPAddr))
-				Expect(err).ToNot(HaveOccurred())
-				var p receivedPacket
-				Eventually(packetChan).Should(Receive(&p))
-				Expect(p.data).To(Equal([]byte("foobar")))
-				Expect(p.ecn).To(Equal(val))
-			}
-		})
-	})
 
 	Context("Packet Info conn", func() {
 		sendPacket := func(network string, addr *net.UDPAddr) net.Addr {
