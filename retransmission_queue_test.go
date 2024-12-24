@@ -17,25 +17,25 @@ var _ = Describe("Retransmission queue", func() {
 
 	Context("Initial data", func() {
 		It("doesn't dequeue anything when it's empty", func() {
-			Expect(q.HasInitialData()).To(BeFalse())
-			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeFalse())
+			Expect(q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
 
 		It("queues and retrieves a control frame", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
 			q.addInitial(f)
-			Expect(q.HasInitialData()).To(BeTrue())
-			Expect(q.GetInitialFrame(f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
-			Expect(q.GetInitialFrame(f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
-			Expect(q.HasInitialData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionInitial, f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
+			Expect(q.GetFrame(protocol.EncryptionInitial, f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeFalse())
 		})
 
 		It("queues and retrieves a CRYPTO frame", func() {
 			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			q.addInitial(f)
-			Expect(q.HasInitialData()).To(BeTrue())
-			Expect(q.GetInitialFrame(f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
-			Expect(q.HasInitialData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionInitial, f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeFalse())
 		})
 
 		It("returns split CRYPTO frames", func() {
@@ -44,30 +44,30 @@ var _ = Describe("Retransmission queue", func() {
 				Data:   []byte("foobar"),
 			}
 			q.addInitial(f)
-			Expect(q.HasInitialData()).To(BeTrue())
-			f1 := q.GetInitialFrame(f.Length(protocol.Version1)-3, protocol.Version1)
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			f1 := q.GetFrame(protocol.EncryptionInitial, f.Length(protocol.Version1)-3, protocol.Version1)
 			Expect(f1).ToNot(BeNil())
 			Expect(f1).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
 			Expect(f1.(*wire.CryptoFrame).Data).To(Equal([]byte("foo")))
 			Expect(f1.(*wire.CryptoFrame).Offset).To(Equal(protocol.ByteCount(100)))
-			Expect(q.HasInitialData()).To(BeTrue())
-			f2 := q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			f2 := q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)
 			Expect(f2).ToNot(BeNil())
 			Expect(f2).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
 			Expect(f2.(*wire.CryptoFrame).Data).To(Equal([]byte("bar")))
 			Expect(f2.(*wire.CryptoFrame).Offset).To(Equal(protocol.ByteCount(103)))
-			Expect(q.HasInitialData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeFalse())
 		})
 
 		It("returns other frames when a CRYPTO frame wouldn't fit", func() {
 			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			q.addInitial(f)
 			q.addInitial(&wire.PingFrame{})
-			f1 := q.GetInitialFrame(2, protocol.Version1) // too small for a CRYPTO frame
+			f1 := q.GetFrame(protocol.EncryptionInitial, 2, protocol.Version1) // too small for a CRYPTO frame
 			Expect(f1).ToNot(BeNil())
 			Expect(f1).To(BeAssignableToTypeOf(&wire.PingFrame{}))
-			Expect(q.HasInitialData()).To(BeTrue())
-			f2 := q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			f2 := q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)
 			Expect(f2).To(Equal(f))
 		})
 
@@ -76,49 +76,49 @@ var _ = Describe("Retransmission queue", func() {
 			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			q.addInitial(f)
 			q.addInitial(cf)
-			Expect(q.HasInitialData()).To(BeTrue())
-			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
-			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(cf))
-			Expect(q.HasInitialData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+			Expect(q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)).To(Equal(cf))
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeFalse())
 		})
 
 		It("drops all Initial frames", func() {
 			q.addInitial(&wire.CryptoFrame{Data: []byte("foobar")})
 			q.addInitial(&wire.MaxDataFrame{MaximumData: 0x42})
 			q.DropPackets(protocol.EncryptionInitial)
-			Expect(q.HasInitialData()).To(BeFalse())
-			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeFalse())
+			Expect(q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
 
 		It("retransmits a frame", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
-			q.InitialAckHandler().OnLost(f)
-			Expect(q.HasInitialData()).To(BeTrue())
-			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+			q.AckHandler(protocol.EncryptionInitial).OnLost(f)
+			Expect(q.HasData(protocol.EncryptionInitial)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionInitial, protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
 		})
 	})
 
 	Context("Handshake data", func() {
 		It("doesn't dequeue anything when it's empty", func() {
-			Expect(q.HasHandshakeData()).To(BeFalse())
-			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeFalse())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
 
 		It("queues and retrieves a control frame", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
 			q.addHandshake(f)
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			Expect(q.GetHandshakeFrame(f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
-			Expect(q.GetHandshakeFrame(f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
-			Expect(q.HasHandshakeData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeFalse())
 		})
 
 		It("queues and retrieves a CRYPTO frame", func() {
 			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			q.addHandshake(f)
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			Expect(q.GetHandshakeFrame(f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
-			Expect(q.HasHandshakeData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeFalse())
 		})
 
 		It("returns split CRYPTO frames", func() {
@@ -127,30 +127,30 @@ var _ = Describe("Retransmission queue", func() {
 				Data:   []byte("foobar"),
 			}
 			q.addHandshake(f)
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			f1 := q.GetHandshakeFrame(f.Length(protocol.Version1)-3, protocol.Version1)
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			f1 := q.GetFrame(protocol.EncryptionHandshake, f.Length(protocol.Version1)-3, protocol.Version1)
 			Expect(f1).ToNot(BeNil())
 			Expect(f1).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
 			Expect(f1.(*wire.CryptoFrame).Data).To(Equal([]byte("foo")))
 			Expect(f1.(*wire.CryptoFrame).Offset).To(Equal(protocol.ByteCount(100)))
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			f2 := q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			f2 := q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)
 			Expect(f2).ToNot(BeNil())
 			Expect(f2).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
 			Expect(f2.(*wire.CryptoFrame).Data).To(Equal([]byte("bar")))
 			Expect(f2.(*wire.CryptoFrame).Offset).To(Equal(protocol.ByteCount(103)))
-			Expect(q.HasHandshakeData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeFalse())
 		})
 
 		It("returns other frames when a CRYPTO frame wouldn't fit", func() {
 			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			q.addHandshake(f)
 			q.addHandshake(&wire.PingFrame{})
-			f1 := q.GetHandshakeFrame(2, protocol.Version1) // too small for a CRYPTO frame
+			f1 := q.GetFrame(protocol.EncryptionHandshake, 2, protocol.Version1) // too small for a CRYPTO frame
 			Expect(f1).ToNot(BeNil())
 			Expect(f1).To(BeAssignableToTypeOf(&wire.PingFrame{}))
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			f2 := q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			f2 := q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)
 			Expect(f2).To(Equal(f))
 		})
 
@@ -159,48 +159,49 @@ var _ = Describe("Retransmission queue", func() {
 			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			q.addHandshake(f)
 			q.addHandshake(cf)
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
-			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(cf))
-			Expect(q.HasHandshakeData()).To(BeFalse())
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+			Expect(q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)).To(Equal(cf))
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeFalse())
 		})
 
 		It("drops all Handshake frames", func() {
 			q.addHandshake(&wire.CryptoFrame{Data: []byte("foobar")})
 			q.addHandshake(&wire.MaxDataFrame{MaximumData: 0x42})
 			q.DropPackets(protocol.EncryptionHandshake)
-			Expect(q.HasHandshakeData()).To(BeFalse())
-			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeFalse())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
 
 		It("retransmits a frame", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
-			q.HandshakeAckHandler().OnLost(f)
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+			q.AckHandler(protocol.EncryptionHandshake).OnLost(f)
+			Expect(q.HasData(protocol.EncryptionHandshake)).To(BeTrue())
+			Expect(q.GetFrame(protocol.EncryptionHandshake, protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
 		})
 	})
 
 	Context("Application data", func() {
 		It("doesn't dequeue anything when it's empty", func() {
-			Expect(q.GetAppDataFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
+			Expect(q.HasData(protocol.Encryption1RTT)).To(BeFalse())
+			Expect(q.GetFrame(protocol.Encryption1RTT, protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
 
 		It("queues and retrieves a control frame", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
-			Expect(q.HasAppData()).To(BeFalse())
+			Expect(q.HasData(protocol.Encryption1RTT)).To(BeFalse())
 			q.addAppData(f)
-			Expect(q.HasAppData()).To(BeTrue())
-			Expect(q.GetAppDataFrame(f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
-			Expect(q.GetAppDataFrame(f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
-			Expect(q.HasAppData()).To(BeFalse())
+			Expect(q.HasData(protocol.Encryption1RTT)).To(BeTrue())
+			Expect(q.GetFrame(protocol.Encryption1RTT, f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
+			Expect(q.GetFrame(protocol.Encryption1RTT, f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
+			Expect(q.HasData(protocol.Encryption1RTT)).To(BeFalse())
 		})
 
 		It("retransmits a frame", func() {
 			f := &wire.MaxDataFrame{MaximumData: 0x42}
-			q.AppDataAckHandler().OnLost(f)
-			Expect(q.HasAppData()).To(BeTrue())
-			Expect(q.GetAppDataFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+			q.AckHandler(protocol.Encryption1RTT).OnLost(f)
+			Expect(q.HasData(protocol.Encryption1RTT)).To(BeTrue())
+			Expect(q.GetFrame(protocol.Encryption1RTT, protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
 		})
 	})
 })

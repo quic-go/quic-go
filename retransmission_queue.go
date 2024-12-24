@@ -39,16 +39,17 @@ func (q *retransmissionQueue) addHandshake(f wire.Frame) {
 	q.handshake = append(q.handshake, f)
 }
 
-func (q *retransmissionQueue) HasInitialData() bool {
-	return len(q.initialCryptoData) > 0 || len(q.initial) > 0
-}
-
-func (q *retransmissionQueue) HasHandshakeData() bool {
-	return len(q.handshakeCryptoData) > 0 || len(q.handshake) > 0
-}
-
-func (q *retransmissionQueue) HasAppData() bool {
-	return len(q.appData) > 0
+func (q *retransmissionQueue) HasData(encLevel protocol.EncryptionLevel) bool {
+	//nolint:exhaustive // 0-RTT data is retransmitted in 1-RTT packets.
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return len(q.initialCryptoData) > 0 || len(q.initial) > 0
+	case protocol.EncryptionHandshake:
+		return len(q.handshakeCryptoData) > 0 || len(q.handshake) > 0
+	case protocol.Encryption1RTT:
+		return len(q.appData) > 0
+	}
+	return false
 }
 
 func (q *retransmissionQueue) addAppData(f wire.Frame) {
@@ -58,7 +59,20 @@ func (q *retransmissionQueue) addAppData(f wire.Frame) {
 	q.appData = append(q.appData, f)
 }
 
-func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
+func (q *retransmissionQueue) GetFrame(encLevel protocol.EncryptionLevel, maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
+	//nolint:exhaustive // 0-RTT packets can't contain retransmissions
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return q.getInitialFrame(maxLen, v)
+	case protocol.EncryptionHandshake:
+		return q.getHandshakeFrame(maxLen, v)
+	case protocol.Encryption1RTT:
+		return q.getAppDataFrame(maxLen, v)
+	}
+	return nil
+}
+
+func (q *retransmissionQueue) getInitialFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
 	if len(q.initialCryptoData) > 0 {
 		f := q.initialCryptoData[0]
 		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
@@ -81,7 +95,7 @@ func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount, v proto
 	return f
 }
 
-func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
+func (q *retransmissionQueue) getHandshakeFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
 	if len(q.handshakeCryptoData) > 0 {
 		f := q.handshakeCryptoData[0]
 		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
@@ -104,7 +118,7 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount, v pro
 	return f
 }
 
-func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
+func (q *retransmissionQueue) getAppDataFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
 	if len(q.appData) == 0 {
 		return nil
 	}
@@ -130,16 +144,16 @@ func (q *retransmissionQueue) DropPackets(encLevel protocol.EncryptionLevel) {
 	}
 }
 
-func (q *retransmissionQueue) InitialAckHandler() ackhandler.FrameHandler {
-	return (*retransmissionQueueInitialAckHandler)(q)
-}
-
-func (q *retransmissionQueue) HandshakeAckHandler() ackhandler.FrameHandler {
-	return (*retransmissionQueueHandshakeAckHandler)(q)
-}
-
-func (q *retransmissionQueue) AppDataAckHandler() ackhandler.FrameHandler {
-	return (*retransmissionQueueAppDataAckHandler)(q)
+func (q *retransmissionQueue) AckHandler(encLevel protocol.EncryptionLevel) ackhandler.FrameHandler {
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return (*retransmissionQueueInitialAckHandler)(q)
+	case protocol.EncryptionHandshake:
+		return (*retransmissionQueueHandshakeAckHandler)(q)
+	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+		return (*retransmissionQueueAppDataAckHandler)(q)
+	}
+	return nil
 }
 
 type retransmissionQueueInitialAckHandler retransmissionQueue

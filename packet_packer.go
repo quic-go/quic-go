@@ -513,21 +513,17 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	}
 
 	var s *cryptoStream
-	var handler ackhandler.FrameHandler
-	var hasRetransmission bool
 	//nolint:exhaustive // Initial and Handshake are the only two encryption levels here.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		s = p.initialStream
-		handler = p.retransmissionQueue.InitialAckHandler()
-		hasRetransmission = p.retransmissionQueue.HasInitialData()
 	case protocol.EncryptionHandshake:
 		s = p.handshakeStream
-		handler = p.retransmissionQueue.HandshakeAckHandler()
-		hasRetransmission = p.retransmissionQueue.HasHandshakeData()
 	}
-
 	hasData := s.HasData()
+	handler := p.retransmissionQueue.AckHandler(encLevel)
+	hasRetransmission := p.retransmissionQueue.HasData(encLevel)
+
 	var ack *wire.AckFrame
 	if ackAllowed {
 		ack = p.acks.GetAckFrame(encLevel, now, !hasRetransmission && !hasData)
@@ -552,21 +548,15 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	maxPacketSize -= hdr.GetLength(v)
 	if hasRetransmission {
 		for {
-			var f ackhandler.Frame
-			//nolint:exhaustive // 0-RTT packets can't contain any retransmissions
-			switch encLevel {
-			case protocol.EncryptionInitial:
-				f.Frame = p.retransmissionQueue.GetInitialFrame(maxPacketSize, v)
-				f.Handler = p.retransmissionQueue.InitialAckHandler()
-			case protocol.EncryptionHandshake:
-				f.Frame = p.retransmissionQueue.GetHandshakeFrame(maxPacketSize, v)
-				f.Handler = p.retransmissionQueue.HandshakeAckHandler()
-			}
-			if f.Frame == nil {
+			frame := p.retransmissionQueue.GetFrame(encLevel, maxPacketSize, v)
+			if frame == nil {
 				break
 			}
-			pl.frames = append(pl.frames, f)
-			frameLen := f.Frame.Length(v)
+			pl.frames = append(pl.frames, ackhandler.Frame{
+				Frame:   frame,
+				Handler: p.retransmissionQueue.AckHandler(encLevel),
+			})
+			frameLen := frame.Length(v)
 			pl.length += frameLen
 			maxPacketSize -= frameLen
 		}
@@ -578,18 +568,13 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	return hdr, pl
 }
 
-func (p *packetPacker) maybeGetAppDataPacketFor0RTT(
-	sealer sealer,
-	maxPacketSize protocol.ByteCount,
-	now time.Time,
-	v protocol.Version,
-) (*wire.ExtendedHeader, payload) {
+func (p *packetPacker) maybeGetAppDataPacketFor0RTT(sealer sealer, maxSize protocol.ByteCount, now time.Time, v protocol.Version) (*wire.ExtendedHeader, payload) {
 	if p.perspective != protocol.PerspectiveClient {
 		return nil, payload{}
 	}
 
 	hdr := p.getLongHeader(protocol.Encryption0RTT, v)
-	maxPayloadSize := maxPacketSize - hdr.GetLength(v) - protocol.ByteCount(sealer.Overhead())
+	maxPayloadSize := maxSize - hdr.GetLength(v) - protocol.ByteCount(sealer.Overhead())
 	return hdr, p.maybeGetAppDataPacket(maxPayloadSize, false, false, now, v)
 }
 
@@ -633,7 +618,7 @@ func (p *packetPacker) maybeGetAppDataPacket(
 }
 
 func (p *packetPacker) composeNextPacket(
-	maxFrameSize protocol.ByteCount,
+	maxPayloadSize protocol.ByteCount,
 	onlyAck, ackAllowed bool,
 	now time.Time,
 	v protocol.Version,
@@ -646,7 +631,7 @@ func (p *packetPacker) composeNextPacket(
 	}
 
 	hasData := p.framer.HasData()
-	hasRetransmission := p.retransmissionQueue.HasAppData()
+	hasRetransmission := p.retransmissionQueue.HasData(protocol.Encryption1RTT)
 
 	var hasAck bool
 	var pl payload
@@ -661,7 +646,7 @@ func (p *packetPacker) composeNextPacket(
 	if p.datagramQueue != nil {
 		if f := p.datagramQueue.Peek(); f != nil {
 			size := f.Length(v)
-			if size <= maxFrameSize-pl.length { // DATAGRAM frame fits
+			if size <= maxPayloadSize-pl.length { // DATAGRAM frame fits
 				pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
 				pl.length += size
 				p.datagramQueue.Pop()
@@ -681,15 +666,15 @@ func (p *packetPacker) composeNextPacket(
 
 	if hasRetransmission {
 		for {
-			remainingLen := maxFrameSize - pl.length
+			remainingLen := maxPayloadSize - pl.length
 			if remainingLen < protocol.MinStreamFrameSize {
 				break
 			}
-			f := p.retransmissionQueue.GetAppDataFrame(remainingLen, v)
+			f := p.retransmissionQueue.GetFrame(protocol.Encryption1RTT, remainingLen, v)
 			if f == nil {
 				break
 			}
-			pl.frames = append(pl.frames, ackhandler.Frame{Frame: f, Handler: p.retransmissionQueue.AppDataAckHandler()})
+			pl.frames = append(pl.frames, ackhandler.Frame{Frame: f, Handler: p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)})
 			pl.length += f.Length(v)
 		}
 	}
@@ -697,7 +682,7 @@ func (p *packetPacker) composeNextPacket(
 	if hasData {
 		var lengthAdded protocol.ByteCount
 		startLen := len(pl.frames)
-		pl.frames, pl.streamFrames, lengthAdded = p.framer.Append(pl.frames, pl.streamFrames, maxFrameSize-pl.length, now, v)
+		pl.frames, pl.streamFrames, lengthAdded = p.framer.Append(pl.frames, pl.streamFrames, maxPayloadSize-pl.length, now, v)
 		pl.length += lengthAdded
 		// add handlers for the control frames that were added
 		for i := startLen; i < len(pl.frames); i++ {
@@ -709,7 +694,8 @@ func (p *packetPacker) composeNextPacket(
 				// Path probing is currently not supported, therefore we don't need to set the OnAcked callback yet.
 				// PATH_CHALLENGE and PATH_RESPONSE are never retransmitted.
 			default:
-				pl.frames[i].Handler = p.retransmissionQueue.AppDataAckHandler()
+				// we might be packing a 0-RTT packet, but we need to use the 1-RTT ack handler anyway
+				pl.frames[i].Handler = p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)
 			}
 		}
 	}
