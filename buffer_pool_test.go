@@ -1,59 +1,44 @@
 package quic
 
 import (
+	"testing"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Buffer Pool", func() {
-	It("returns buffers of cap", func() {
-		buf1 := getPacketBuffer()
-		Expect(buf1.Data).To(HaveCap(protocol.MaxPacketBufferSize))
-		buf2 := getLargePacketBuffer()
-		Expect(buf2.Data).To(HaveCap(protocol.MaxLargePacketBufferSize))
-	})
+func TestBufferPoolSizes(t *testing.T) {
+	buf1 := getPacketBuffer()
+	require.Equal(t, protocol.MaxPacketBufferSize, cap(buf1.Data))
+	require.Zero(t, buf1.Len())
+	buf1.Data = append(buf1.Data, []byte("foobar")...)
+	require.Equal(t, protocol.ByteCount(6), buf1.Len())
 
-	It("releases buffers", func() {
-		buf1 := getPacketBuffer()
-		buf1.Release()
-		buf2 := getLargePacketBuffer()
-		buf2.Release()
-	})
+	buf2 := getLargePacketBuffer()
+	require.Equal(t, protocol.MaxLargePacketBufferSize, cap(buf2.Data))
+	require.Zero(t, buf2.Len())
+}
 
-	It("gets the length", func() {
-		buf := getPacketBuffer()
-		buf.Data = append(buf.Data, []byte("foobar")...)
-		Expect(buf.Len()).To(BeEquivalentTo(6))
-	})
+func TestBufferPoolRelease(t *testing.T) {
+	buf1 := getPacketBuffer()
+	buf1.Release()
+	// panics if released twice
+	require.Panics(t, func() { buf1.Release() })
 
-	It("panics if wrong-sized buffers are passed", func() {
-		buf := getPacketBuffer()
-		buf.Data = make([]byte, 10)
-		Expect(func() { buf.Release() }).To(Panic())
-	})
+	// panics if wrong-sized buffers are passed
+	buf2 := getLargePacketBuffer()
+	buf2.Data = make([]byte, 10) // replace the underlying slice
+	require.Panics(t, func() { buf2.Release() })
+}
 
-	It("panics if it is released twice", func() {
-		buf := getPacketBuffer()
-		buf.Release()
-		Expect(func() { buf.Release() }).To(Panic())
-	})
-
-	It("panics if it is decremented too many times", func() {
-		buf := getPacketBuffer()
-		buf.Decrement()
-		Expect(func() { buf.Decrement() }).To(Panic())
-	})
-
-	It("waits until all parts have been released", func() {
-		buf := getPacketBuffer()
-		buf.Split()
-		buf.Split()
-		// now we have 3 parts
-		buf.Decrement()
-		buf.Decrement()
-		buf.Decrement()
-		Expect(func() { buf.Decrement() }).To(Panic())
-	})
-})
+func TestBufferPoolSplitting(t *testing.T) {
+	buf := getPacketBuffer()
+	buf.Split()
+	buf.Split()
+	// now we have 3 parts
+	buf.Decrement()
+	buf.Decrement()
+	buf.Decrement()
+	require.Panics(t, func() { buf.Decrement() })
+}
