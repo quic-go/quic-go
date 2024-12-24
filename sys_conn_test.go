@@ -2,31 +2,31 @@ package quic
 
 import (
 	"net"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-var _ = Describe("Basic Conn Test", func() {
-	It("reads a packet", func() {
-		c := NewMockPacketConn(mockCtrl)
-		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		c.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(b []byte) (int, net.Addr, error) {
-			data := []byte("foobar")
-			Expect(b).To(HaveLen(protocol.MaxPacketBufferSize))
-			return copy(b, data), addr, nil
-		})
+func TestBasicConn(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 
-		conn, err := wrapConn(c)
-		Expect(err).ToNot(HaveOccurred())
-		p, err := conn.ReadPacket()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(p.data).To(Equal([]byte("foobar")))
-		Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(100*time.Millisecond)))
-		Expect(p.remoteAddr).To(Equal(addr))
+	c := NewMockPacketConn(mockCtrl)
+	addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
+	c.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(b []byte) (int, net.Addr, error) {
+		data := []byte("foobar")
+		require.Equal(t, protocol.MaxPacketBufferSize, len(b))
+		return copy(b, data), addr, nil
 	})
-})
+
+	conn, err := wrapConn(c)
+	require.NoError(t, err)
+	p, err := conn.ReadPacket()
+	require.NoError(t, err)
+	require.Equal(t, []byte("foobar"), p.data)
+	require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(100*time.Millisecond))
+	require.Equal(t, addr, p.remoteAddr)
+}
