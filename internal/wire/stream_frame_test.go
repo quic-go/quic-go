@@ -55,7 +55,7 @@ func TestParseStreamFrameAllowsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0x1337), f.StreamID)
 	require.Equal(t, protocol.ByteCount(0x12345), f.Offset)
-	require.Empty(t, f.Data)
+	require.Nil(t, f.Data)
 	require.False(t, f.Fin)
 	require.Equal(t, len(data), l)
 }
