@@ -4,31 +4,27 @@ package quic
 
 import (
 	"net"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Windows Conn Test", func() {
-	It("works on IPv4", func() {
-		addr, err := net.ResolveUDPAddr("udp4", "localhost:0")
-		Expect(err).ToNot(HaveOccurred())
-		udpConn, err := net.ListenUDP("udp4", addr)
-		Expect(err).ToNot(HaveOccurred())
+func TestWindowsConn(t *testing.T) {
+	t.Run("IPv4", func(t *testing.T) {
+		udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		require.NoError(t, err)
 		conn, err := newConn(udpConn, true)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.Close()).To(Succeed())
-		Expect(conn.capabilities().DF).To(BeTrue())
+		require.NoError(t, err)
+		require.NoError(t, conn.Close())
+		require.True(t, conn.capabilities().DF)
 	})
 
-	It("works on IPv6", func() {
-		addr, err := net.ResolveUDPAddr("udp6", "[::1]:0")
-		Expect(err).ToNot(HaveOccurred())
-		udpConn, err := net.ListenUDP("udp6", addr)
-		Expect(err).ToNot(HaveOccurred())
+	t.Run("IPv6", func(t *testing.T) {
+		udpConn, err := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6loopback, Port: 0})
+		require.NoError(t, err)
 		conn, err := newConn(udpConn, false)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.Close()).To(Succeed())
-		Expect(conn.capabilities().DF).To(BeFalse())
+		require.NoError(t, err)
+		require.NoError(t, conn.Close())
+		require.False(t, conn.capabilities().DF)
 	})
-})
+}

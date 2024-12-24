@@ -6,11 +6,11 @@ import (
 	"errors"
 	"net"
 	"os"
+	"testing"
 
 	"golang.org/x/sys/unix"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -18,64 +18,62 @@ var (
 	errNotPermitted = &os.SyscallError{Syscall: "sendmsg", Err: unix.EPERM}
 )
 
-var _ = Describe("forcing a change of send and receive buffer sizes", func() {
-	It("forces a change of the receive buffer size", func() {
-		if os.Getuid() != 0 {
-			Skip("Must be root to force change the receive buffer size")
-		}
+func TestForcingReceiveBufferSize(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("Must be root to force change the receive buffer size")
+	}
 
-		c, err := net.ListenPacket("udp", "127.0.0.1:0")
-		Expect(err).ToNot(HaveOccurred())
-		defer c.Close()
-		syscallConn, err := c.(*net.UDPConn).SyscallConn()
-		Expect(err).ToNot(HaveOccurred())
+	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer c.Close()
+	syscallConn, err := c.(*net.UDPConn).SyscallConn()
+	require.NoError(t, err)
 
-		const small = 256 << 10 // 256 KB
-		Expect(forceSetReceiveBuffer(syscallConn, small)).To(Succeed())
+	const small = 256 << 10 // 256 KB
+	require.NoError(t, forceSetReceiveBuffer(syscallConn, small))
 
-		size, err := inspectReadBuffer(syscallConn)
-		Expect(err).ToNot(HaveOccurred())
-		//  The kernel doubles this value (to allow space for bookkeeping overhead)
-		Expect(size).To(Equal(2 * small))
+	size, err := inspectReadBuffer(syscallConn)
+	require.NoError(t, err)
+	// the kernel doubles this value (to allow space for bookkeeping overhead)
+	require.Equal(t, 2*small, size)
 
-		const large = 32 << 20 // 32 MB
-		Expect(forceSetReceiveBuffer(syscallConn, large)).To(Succeed())
-		size, err = inspectReadBuffer(syscallConn)
-		Expect(err).ToNot(HaveOccurred())
-		//  The kernel doubles this value (to allow space for bookkeeping overhead)
-		Expect(size).To(Equal(2 * large))
-	})
+	const large = 32 << 20 // 32 MB
+	require.NoError(t, forceSetReceiveBuffer(syscallConn, large))
+	size, err = inspectReadBuffer(syscallConn)
+	require.NoError(t, err)
+	// the kernel doubles this value (to allow space for bookkeeping overhead)
+	require.Equal(t, 2*large, size)
+}
 
-	It("forces a change of the send buffer size", func() {
-		if os.Getuid() != 0 {
-			Skip("Must be root to force change the send buffer size")
-		}
+func TestForcingSendBufferSize(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("Must be root to force change the send buffer size")
+	}
 
-		c, err := net.ListenPacket("udp", "127.0.0.1:0")
-		Expect(err).ToNot(HaveOccurred())
-		defer c.Close()
-		syscallConn, err := c.(*net.UDPConn).SyscallConn()
-		Expect(err).ToNot(HaveOccurred())
+	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer c.Close()
+	syscallConn, err := c.(*net.UDPConn).SyscallConn()
+	require.NoError(t, err)
 
-		const small = 256 << 10 // 256 KB
-		Expect(forceSetSendBuffer(syscallConn, small)).To(Succeed())
+	const small = 256 << 10 // 256 KB
+	require.NoError(t, forceSetSendBuffer(syscallConn, small))
 
-		size, err := inspectWriteBuffer(syscallConn)
-		Expect(err).ToNot(HaveOccurred())
-		//  The kernel doubles this value (to allow space for bookkeeping overhead)
-		Expect(size).To(Equal(2 * small))
+	size, err := inspectWriteBuffer(syscallConn)
+	require.NoError(t, err)
+	// the kernel doubles this value (to allow space for bookkeeping overhead)
+	require.Equal(t, 2*small, size)
 
-		const large = 32 << 20 // 32 MB
-		Expect(forceSetSendBuffer(syscallConn, large)).To(Succeed())
-		size, err = inspectWriteBuffer(syscallConn)
-		Expect(err).ToNot(HaveOccurred())
-		//  The kernel doubles this value (to allow space for bookkeeping overhead)
-		Expect(size).To(Equal(2 * large))
-	})
+	const large = 32 << 20 // 32 MB
+	require.NoError(t, forceSetSendBuffer(syscallConn, large))
+	size, err = inspectWriteBuffer(syscallConn)
+	require.NoError(t, err)
+	// the kernel doubles this value (to allow space for bookkeeping overhead)
+	require.Equal(t, 2*large, size)
+}
 
-	It("detects GSO errors", func() {
-		Expect(isGSOError(errGSO)).To(BeTrue())
-		Expect(isGSOError(nil)).To(BeFalse())
-		Expect(isGSOError(errors.New("test"))).To(BeFalse())
-	})
-})
+func TestGSOError(t *testing.T) {
+	require.True(t, isGSOError(errGSO))
+	require.False(t, isGSOError(nil))
+	require.False(t, isGSOError(errors.New("test")))
+}
