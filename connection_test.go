@@ -1309,19 +1309,15 @@ var _ = Describe("Connection", func() {
 
 			Context(fmt.Sprintf("sending %s probe packets", encLevel), func() {
 				var sendMode ackhandler.SendMode
-				var getFrame func(protocol.ByteCount, protocol.Version) wire.Frame
 
 				BeforeEach(func() {
 					switch encLevel {
 					case protocol.EncryptionInitial:
 						sendMode = ackhandler.SendPTOInitial
-						getFrame = conn.retransmissionQueue.GetInitialFrame
 					case protocol.EncryptionHandshake:
 						sendMode = ackhandler.SendPTOHandshake
-						getFrame = conn.retransmissionQueue.GetHandshakeFrame
 					case protocol.Encryption1RTT:
 						sendMode = ackhandler.SendPTOAppData
-						getFrame = conn.retransmissionQueue.GetAppDataFrame
 					}
 				})
 
@@ -1370,7 +1366,7 @@ var _ = Describe("Connection", func() {
 					Eventually(sent).Should(BeClosed())
 					// We're using a mock packet packer in this test.
 					// We therefore need to test separately that the PING was actually queued.
-					Expect(getFrame(1000, protocol.Version1)).To(BeAssignableToTypeOf(&wire.PingFrame{}))
+					Expect(conn.retransmissionQueue.GetFrame(encLevel, 1000, protocol.Version1)).To(BeAssignableToTypeOf(&wire.PingFrame{}))
 				})
 			})
 		}
