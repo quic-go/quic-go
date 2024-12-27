@@ -54,6 +54,15 @@ var _ = Describe("Response Body", func() {
 		Expect(rb.Close()).To(Succeed())
 	})
 
+	It("allows concurrent calls to Close", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(2)
+		go Expect(rb.Close()).To(Succeed())
+		Expect(rb.Close()).To(Succeed())
+		Expect(reqDone).To(BeClosed())
+	})
+
 	Context("length limiting", func() {
 		It("reads all frames", func() {
 			var buf bytes.Buffer

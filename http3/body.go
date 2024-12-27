@@ -119,7 +119,6 @@ func (r *hijackableBody) Read(b []byte) (int, error) {
 
 func (r *hijackableBody) requestDone() {
 	if r.reqDone != nil {
-		// To make sure we won't close r.reqDone more than once.
 		r.reqDoneOnce.Do(func() {
 			close(r.reqDone)
 		})
