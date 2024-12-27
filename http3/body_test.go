@@ -58,7 +58,10 @@ var _ = Describe("Response Body", func() {
 		str := mockquic.NewMockStream(mockCtrl)
 		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
 		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(2)
-		go Expect(rb.Close()).To(Succeed())
+		go func() {
+			defer GinkgoRecover()
+			Expect(rb.Close()).To(Succeed())
+		}()
 		Expect(rb.Close()).To(Succeed())
 		Expect(reqDone).To(BeClosed())
 	})
