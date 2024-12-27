@@ -525,7 +525,7 @@ func (p *packetPacker) maybeGetCryptoPacket(maxPacketSize protocol.ByteCount, en
 	if hasRetransmission {
 		for {
 			var f ackhandler.Frame
-			//nolint:exhaustive // 0-RTT packets can't contain any retransmission.s
+			//nolint:exhaustive // 0-RTT packets can't contain any retransmissions
 			switch encLevel {
 			case protocol.EncryptionInitial:
 				f.Frame = p.retransmissionQueue.GetInitialFrame(maxPacketSize, v)
@@ -720,8 +720,6 @@ func (p *packetPacker) MaybePackProbePacket(
 		return packet, nil
 	}
 
-	var hdr *wire.ExtendedHeader
-	var pl payload
 	var sealer handshake.LongHeaderSealer
 	//nolint:exhaustive // Probe packets are never sent for 0-RTT.
 	switch encLevel {
@@ -731,18 +729,16 @@ func (p *packetPacker) MaybePackProbePacket(
 		if err != nil {
 			return nil, err
 		}
-		hdr, pl = p.maybeGetCryptoPacket(maxPacketSize-protocol.ByteCount(sealer.Overhead()), protocol.EncryptionInitial, false, true, v)
 	case protocol.EncryptionHandshake:
 		var err error
 		sealer, err = p.cryptoSetup.GetHandshakeSealer()
 		if err != nil {
 			return nil, err
 		}
-		hdr, pl = p.maybeGetCryptoPacket(maxPacketSize-protocol.ByteCount(sealer.Overhead()), protocol.EncryptionHandshake, false, true, v)
 	default:
 		panic("unknown encryption level")
 	}
-
+	hdr, pl := p.maybeGetCryptoPacket(maxPacketSize-protocol.ByteCount(sealer.Overhead()), encLevel, false, true, v)
 	if pl.length == 0 {
 		return nil, nil
 	}
