@@ -45,3 +45,7 @@ issues:
         - exhaustive
         - prealloc
         - unparam
+    - path: _test\.go
+      text: "SA1029:"
+      linters:
+        - staticcheck
