@@ -324,7 +324,7 @@ var _ = Describe("Connection", func() {
 			data := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 			err := conn.handleFrame(&wire.PathChallengeFrame{Data: data}, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now())
 			Expect(err).ToNot(HaveOccurred())
-			frames, _ := conn.framer.AppendControlFrames(nil, 1000, time.Now(), protocol.Version1)
+			frames, _, _ := conn.framer.Append(nil, nil, 1000, time.Now(), protocol.Version1)
 			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PathResponseFrame{Data: data}}}))
 		})
 
@@ -1322,7 +1322,7 @@ var _ = Describe("Connection", func() {
 			tracer.EXPECT().SentShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), nil, []logging.Frame{})
 			conn.scheduleSending()
 			Eventually(sent).Should(BeClosed())
-			frames, _ := conn.framer.AppendControlFrames(nil, 1000, time.Now(), protocol.Version1)
+			frames, _, _ := conn.framer.Append(nil, nil, 1000, time.Now(), protocol.Version1)
 			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &logging.DataBlockedFrame{MaximumData: 1337}}}))
 		})
 
@@ -1991,7 +1991,7 @@ var _ = Describe("Connection", func() {
 		Expect(conn.handleHandshakeComplete()).To(Succeed())
 		var frames []ackhandler.Frame
 		Eventually(func() []ackhandler.Frame {
-			frames, _ = conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
+			frames, _, _ = conn.framer.Append(nil, nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 			return frames
 		}).ShouldNot(BeEmpty())
 		var count int
@@ -2043,7 +2043,7 @@ var _ = Describe("Connection", func() {
 		done := make(chan struct{})
 		connRunner.EXPECT().Retire(clientDestConnID)
 		packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), conn.version).DoAndReturn(func(_ *packetBuffer, _ protocol.ByteCount, _ time.Time, v protocol.Version) (shortHeaderPacket, error) {
-			frames, _ := conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), v)
+			frames, _, _ := conn.framer.Append(nil, nil, protocol.MaxByteCount, time.Now(), v)
 			Expect(frames).ToNot(BeEmpty())
 			Expect(frames[0].Frame).To(BeEquivalentTo(&wire.HandshakeDoneFrame{}))
 			defer close(done)
@@ -2982,7 +2982,7 @@ var _ = Describe("Client Connection", func() {
 			paramsChan <- params
 			Eventually(processed).Should(BeClosed())
 			// make sure the connection ID is not retired
-			cf, _ := conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
+			cf, _, _ := conn.framer.Append(nil, nil, protocol.MaxByteCount, time.Now(), protocol.Version1)
 			Expect(cf).To(BeEmpty())
 			connRunner.EXPECT().AddResetToken(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, conn)
 			Expect(conn.connIDManager.Get()).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4})))
