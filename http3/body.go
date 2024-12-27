@@ -96,8 +96,8 @@ type hijackableBody struct {
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
 	// either when Read() errors, or when Close() is called.
-	reqDone       chan<- struct{}
-	reqDoneClosed sync.Once
+	reqDone     chan<- struct{}
+	reqDoneOnce sync.Once
 }
 
 var _ io.ReadCloser = &hijackableBody{}
@@ -119,7 +119,8 @@ func (r *hijackableBody) Read(b []byte) (int, error) {
 
 func (r *hijackableBody) requestDone() {
 	if r.reqDone != nil {
-		r.reqDoneClosed.Do(func() {
+		// To make sure we won't close r.reqDone more than once.
+		r.reqDoneOnce.Do(func() {
 			close(r.reqDone)
 		})
 	}
