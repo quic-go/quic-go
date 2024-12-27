@@ -79,7 +79,19 @@ func (f *framer) QueueControlFrame(frame wire.Frame) {
 	f.controlFrames = append(f.controlFrames, frame)
 }
 
-func (f *framer) AppendControlFrames(
+func (f *framer) Append(
+	frames []ackhandler.Frame,
+	streamFrames []ackhandler.StreamFrame,
+	maxLen protocol.ByteCount,
+	now time.Time,
+	v protocol.Version,
+) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+	frames, l := f.appendControlFrames(frames, maxLen, now, v)
+	streamFrames, l2 := f.appendStreamFrames(streamFrames, maxLen-l, v)
+	return frames, streamFrames, l + l2
+}
+
+func (f *framer) appendControlFrames(
 	frames []ackhandler.Frame,
 	maxLen protocol.ByteCount,
 	now time.Time,
@@ -173,7 +185,7 @@ func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	f.mutex.Unlock()
 }
 
-func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount) {
+func (f *framer) appendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount) {
 	startLen := len(frames)
 	var length protocol.ByteCount
 	f.mutex.Lock()
