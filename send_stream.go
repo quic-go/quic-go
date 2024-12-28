@@ -398,7 +398,7 @@ func (s *sendStream) isNewlyCompleted() bool {
 
 func (s *sendStream) Close() error {
 	s.mutex.Lock()
-	if s.closeForShutdownErr != nil {
+	if s.closeForShutdownErr != nil || s.finishedWriting {
 		s.mutex.Unlock()
 		return nil
 	}

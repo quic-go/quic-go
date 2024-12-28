@@ -431,8 +431,6 @@ func TestSendStreamClose(t *testing.T) {
 	require.False(t, hasMore)
 
 	// further calls to Close don't do anything
-	// TODO(#4800): there shouldn't be any calls to mockSender
-	mockSender.EXPECT().onHasStreamData(streamID, str)
 	require.NoError(t, str.Close())
 	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.False(t, ok)
