@@ -67,7 +67,7 @@ func (m *connMultiplexer) RemoveConn(c indexableConn) error {
 
 	connIndex := m.index(c.LocalAddr())
 	if _, ok := m.conns[connIndex]; !ok {
-		return fmt.Errorf("cannote remove connection, connection is unknown")
+		return fmt.Errorf("cannote remove connection %s, connection is unknown", connIndex)
 	}
 
 	delete(m.conns, connIndex)
