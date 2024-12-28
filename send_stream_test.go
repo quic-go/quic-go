@@ -741,7 +741,7 @@ func TestSendStreamCancellationResetStreamRetransmission(t *testing.T) {
 	require.False(t, hasMore)
 	require.True(t, mockCtrl.Satisfied())
 
-	// lose the frame
+	// lose the RESET_STREAM frame
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 	f1.Handler.OnLost(f1.Frame)
 	// get the retransmission
@@ -751,9 +751,8 @@ func TestSendStreamCancellationResetStreamRetransmission(t *testing.T) {
 	require.False(t, hasMore)
 	require.True(t, mockCtrl.Satisfied())
 
-	// acknowledge the frame
-	// TODO(#4803): this should complete the stream, if we correctly accounted for lost RESET_STREAM frames
-	// mockSender.EXPECT().onStreamCompleted(streamID)
+	// acknowledging the RESET_STREAM frame completes the stream
+	mockSender.EXPECT().onStreamCompleted(streamID)
 	f2.Handler.OnAcked(f2.Frame)
 }
 

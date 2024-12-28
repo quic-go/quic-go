@@ -597,6 +597,7 @@ func (s *sendStreamResetStreamHandler) OnAcked(wire.Frame) {
 func (s *sendStreamResetStreamHandler) OnLost(wire.Frame) {
 	s.mutex.Lock()
 	s.queuedResetStreamFrame = true
+	s.numOutstandingFrames--
 	s.mutex.Unlock()
 	s.sender.onHasStreamControlFrame(s.streamID, (*sendStream)(s))
 }
