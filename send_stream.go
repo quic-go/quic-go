@@ -277,6 +277,9 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	}
 
 	f, hasMoreData := s.popNewStreamFrame(maxBytes, sendWindow, v)
+	if f == nil {
+		return nil, hasMoreData, false
+	}
 	if dataLen := f.DataLen(); dataLen > 0 {
 		s.writeOffset += f.DataLen()
 		s.flowController.AddBytesSent(f.DataLen())
@@ -290,10 +293,12 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 
 func (s *sendStream) popNewStreamFrame(maxBytes, sendWindow protocol.ByteCount, v protocol.Version) (*wire.StreamFrame, bool) {
 	if s.nextFrame != nil {
+		maxDataLen := min(sendWindow, s.nextFrame.MaxDataLen(maxBytes, v))
+		if maxDataLen == 0 {
+			return nil, true
+		}
 		nextFrame := s.nextFrame
 		s.nextFrame = nil
-
-		maxDataLen := min(sendWindow, nextFrame.MaxDataLen(maxBytes, v))
 		if nextFrame.DataLen() > maxDataLen {
 			s.nextFrame = wire.GetStreamFrame()
 			s.nextFrame.StreamID = s.streamID
