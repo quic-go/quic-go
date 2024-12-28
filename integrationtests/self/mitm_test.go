@@ -63,13 +63,13 @@ func TestMITMDuplicatePackets(t *testing.T) {
 	})
 }
 
-func TestMITMInjectCorruptedPackets(t *testing.T) {
+func TestMITCorruptPackets(t *testing.T) {
 	t.Run("towards the server", func(t *testing.T) {
-		testMITMInjectCorruptedPackets(t, quicproxy.DirectionIncoming)
+		testMITMCorruptPackets(t, quicproxy.DirectionIncoming)
 	})
 
 	t.Run("towards the client", func(t *testing.T) {
-		testMITMInjectCorruptedPackets(t, quicproxy.DirectionOutgoing)
+		testMITMCorruptPackets(t, quicproxy.DirectionOutgoing)
 	})
 }
 
@@ -165,7 +165,7 @@ func testMITMDuplicatePackets(t *testing.T, direction quicproxy.Direction) {
 	runMITMTest(t, serverTransport, clientTransport, rtt, dropCallback)
 }
 
-func testMITMInjectCorruptedPackets(t *testing.T, direction quicproxy.Direction) {
+func testMITMCorruptPackets(t *testing.T, direction quicproxy.Direction) {
 	serverTransport, clientTransport := getTransportsForMITMTest(t)
 	rtt := scaleDuration(5 * time.Millisecond)
 
@@ -174,22 +174,28 @@ func testMITMInjectCorruptedPackets(t *testing.T, direction quicproxy.Direction)
 		if dir != direction {
 			return false
 		}
-		if rand.Intn(4) == 0 {
-			numCorrupted.Add(1)
-			pos := rand.Intn(len(b))
-			b[pos] = byte(rand.Intn(256))
-			return true
+		isLongHeaderPacket := wire.IsLongHeaderPacket(b[0])
+		// corrupt 20% of long header packets and 5% of short header packets
+		if isLongHeaderPacket && rand.Intn(4) != 0 {
+			return false
 		}
+		if !isLongHeaderPacket && rand.Intn(20) != 0 {
+			return false
+		}
+		numCorrupted.Add(1)
+		pos := rand.Intn(len(b))
+		b[pos] = byte(rand.Intn(256))
 		switch direction {
 		case quicproxy.DirectionIncoming:
 			clientTransport.WriteTo(b, serverTransport.Conn.LocalAddr())
 		case quicproxy.DirectionOutgoing:
 			serverTransport.WriteTo(b, clientTransport.Conn.LocalAddr())
 		}
-		return false
+		return true
 	}
 
 	runMITMTest(t, serverTransport, clientTransport, rtt, dropCallback)
+	t.Logf("corrupted %d packets", numCorrupted.Load())
 	require.NotZero(t, int(numCorrupted.Load()))
 }
 
@@ -207,7 +213,7 @@ func runMITMTest(t *testing.T, serverTr, clientTr *quic.Transport, rtt time.Dura
 	require.NoError(t, err)
 	defer proxy.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(time.Second))
 	defer cancel()
 	conn, err := clientTr.Dial(
 		ctx,
