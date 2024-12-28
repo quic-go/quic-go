@@ -156,8 +156,8 @@ func TestSendStreamLargeWrites(t *testing.T) {
 	rand.Read(data)
 	errChan := make(chan error, 1)
 	go func() {
-		defer str.Close()
 		_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write(data)
+		str.Close()
 		errChan <- err
 	}()
 	select {
