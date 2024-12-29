@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTransportErrorStringer(t *testing.T) {
+func TestTransportErrorCodeStringer(t *testing.T) {
 	_, thisfile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get current frame")
 
