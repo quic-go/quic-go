@@ -11,7 +11,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTransportErrorStriner(t *testing.T) {
+func TestTransportError(t *testing.T) {
+	require.True(t, errors.Is(&TransportError{}, net.ErrClosed))
+
+	require.True(t, errors.Is(
+		&TransportError{Remote: true, ErrorCode: 1, FrameType: 2},
+		&TransportError{Remote: true, ErrorCode: 1, FrameType: 2},
+	))
+	require.True(t, errors.Is(&TransportError{ErrorCode: 0x101}, &TransportError{ErrorCode: 0x101}))
+	require.False(t, errors.Is(&TransportError{}, &TransportError{ErrorCode: 0x101}))
+	require.False(t, errors.Is(&TransportError{}, &TransportError{FrameType: 0x1337}))
+	require.False(t, errors.Is(&TransportError{Remote: false}, &TransportError{Remote: true}))
+}
+
+func TestTransportErrorStringer(t *testing.T) {
 	t.Run("with error message", func(t *testing.T) {
 		err := &TransportError{
 			ErrorCode:    FlowControlError,
@@ -50,14 +63,26 @@ var _ error = myError(0)
 
 func (e myError) Error() string { return fmt.Sprintf("my error %d", e) }
 
-func TestCryptoErrorUnwrapsErrors(t *testing.T) {
+func TestCryptoError(t *testing.T) {
 	var myErr myError
 	err := NewLocalCryptoError(0x42, myError(1337))
 	require.True(t, errors.As(err, &myErr))
 	require.Equal(t, myError(1337), myErr)
+
+	testErr := errors.New("test error")
+	err = NewLocalCryptoError(0x42, testErr)
+	require.True(t, errors.Is(err, testErr))
+	require.True(t, errors.Is(
+		NewLocalCryptoError(0x42, testErr),
+		NewLocalCryptoError(0x42, testErr),
+	))
+	require.False(t, errors.Is(
+		NewLocalCryptoError(0x42, testErr),
+		NewLocalCryptoError(0x43, testErr),
+	))
 }
 
-func TestCryptoErrorStringRepresentation(t *testing.T) {
+func TestCryptoErrorStringer(t *testing.T) {
 	t.Run("with error message", func(t *testing.T) {
 		myErr := myError(1337)
 		err := NewLocalCryptoError(0x42, myErr)
@@ -71,6 +96,18 @@ func TestCryptoErrorStringRepresentation(t *testing.T) {
 }
 
 func TestApplicationError(t *testing.T) {
+	require.True(t, errors.Is(&ApplicationError{}, net.ErrClosed))
+
+	require.True(t, errors.Is(
+		&ApplicationError{ErrorCode: 1, Remote: true},
+		&ApplicationError{ErrorCode: 1, Remote: true},
+	))
+	require.True(t, errors.Is(&ApplicationError{ErrorCode: 0x101}, &ApplicationError{ErrorCode: 0x101}))
+	require.False(t, errors.Is(&ApplicationError{}, &ApplicationError{ErrorCode: 0x101}))
+	require.False(t, errors.Is(&ApplicationError{Remote: false}, &ApplicationError{Remote: true}))
+}
+
+func TestApplicationErrorStringer(t *testing.T) {
 	t.Run("with error message", func(t *testing.T) {
 		err := &ApplicationError{
 			ErrorCode:    0x42,
@@ -89,6 +126,9 @@ func TestApplicationError(t *testing.T) {
 }
 
 func TestHandshakeTimeoutError(t *testing.T) {
+	require.True(t, errors.Is(&HandshakeTimeoutError{}, &HandshakeTimeoutError{}))
+	require.False(t, errors.Is(&HandshakeTimeoutError{}, &IdleTimeoutError{}))
+
 	//nolint:gosimple // we need to assign to an interface here
 	var err error
 	err = &HandshakeTimeoutError{}
@@ -96,9 +136,13 @@ func TestHandshakeTimeoutError(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, nerr.Timeout())
 	require.Equal(t, "timeout: handshake did not complete in time", err.Error())
+	require.True(t, errors.Is(&HandshakeTimeoutError{}, net.ErrClosed))
 }
 
 func TestIdleTimeoutError(t *testing.T) {
+	require.True(t, errors.Is(&IdleTimeoutError{}, &IdleTimeoutError{}))
+	require.False(t, errors.Is(&IdleTimeoutError{}, &HandshakeTimeoutError{}))
+
 	//nolint:gosimple // we need to assign to an interface here
 	var err error
 	err = &IdleTimeoutError{}
@@ -106,6 +150,7 @@ func TestIdleTimeoutError(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, nerr.Timeout())
 	require.Equal(t, "timeout: no recent network activity", err.Error())
+	require.True(t, errors.Is(&IdleTimeoutError{}, net.ErrClosed))
 }
 
 func TestVersionNegotiationErrorString(t *testing.T) {
@@ -114,26 +159,18 @@ func TestVersionNegotiationErrorString(t *testing.T) {
 		Theirs: []protocol.Version{4, 5, 6},
 	}
 	require.Equal(t, "no compatible QUIC version found (we support [0x2 0x3], server offered [0x4 0x5 0x6])", err.Error())
+	require.True(t, errors.Is(&VersionNegotiationError{}, net.ErrClosed))
 }
 
-func TestStatelessResetErrorString(t *testing.T) {
+func TestStatelessResetError(t *testing.T) {
 	require.Equal(t, "received a stateless reset", (&StatelessResetError{}).Error())
-}
+	require.True(t, errors.Is(&StatelessResetError{}, &StatelessResetError{}))
 
-func TestStatelessResetErrorIsNetError(t *testing.T) {
 	//nolint:gosimple // we need to assign to an interface here
 	var err error
 	err = &StatelessResetError{}
 	nerr, ok := err.(net.Error)
 	require.True(t, ok)
 	require.False(t, nerr.Timeout())
-}
-
-func TestErrorsAreNetErrClosed(t *testing.T) {
-	require.True(t, errors.Is(&TransportError{}, net.ErrClosed))
-	require.True(t, errors.Is(&ApplicationError{}, net.ErrClosed))
-	require.True(t, errors.Is(&IdleTimeoutError{}, net.ErrClosed))
-	require.True(t, errors.Is(&HandshakeTimeoutError{}, net.ErrClosed))
 	require.True(t, errors.Is(&StatelessResetError{}, net.ErrClosed))
-	require.True(t, errors.Is(&VersionNegotiationError{}, net.ErrClosed))
 }
