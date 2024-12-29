@@ -209,6 +209,9 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 }
 
 func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsConf *tls.Config, conf *Config, use0RTT bool) (EarlyConnection, error) {
+	if t.closed {
+		return nil, net.ErrClosed
+	}
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
