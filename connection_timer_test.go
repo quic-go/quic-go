@@ -1,62 +1,60 @@
 package quic
 
 import (
+	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 func (t *connectionTimer) Deadline() time.Time { return t.timer.Deadline() }
 
-var _ = Describe("Timer", func() {
-	It("sets an idle timeout", func() {
-		now := time.Now()
-		t := newTimer()
-		t.SetTimer(now.Add(time.Hour), time.Time{}, time.Time{}, time.Time{})
-		Expect(t.Deadline()).To(Equal(now.Add(time.Hour)))
+func TestConnectionTimerModes(t *testing.T) {
+	now := time.Now()
+
+	t.Run("idle timeout", func(t *testing.T) {
+		timer := newTimer()
+		timer.SetTimer(now.Add(time.Hour), time.Time{}, time.Time{}, time.Time{})
+		require.Equal(t, now.Add(time.Hour), timer.Deadline())
 	})
 
-	It("sets an ACK timer", func() {
-		now := time.Now()
-		t := newTimer()
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
-		Expect(t.Deadline()).To(Equal(now.Add(time.Minute)))
+	t.Run("ACK timer", func(t *testing.T) {
+		timer := newTimer()
+		timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
+		require.Equal(t, now.Add(time.Minute), timer.Deadline())
 	})
 
-	It("sets a loss timer", func() {
-		now := time.Now()
-		t := newTimer()
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), now.Add(time.Second), time.Time{})
-		Expect(t.Deadline()).To(Equal(now.Add(time.Second)))
+	t.Run("loss timer", func(t *testing.T) {
+		timer := newTimer()
+		timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), now.Add(time.Second), time.Time{})
+		require.Equal(t, now.Add(time.Second), timer.Deadline())
 	})
 
-	It("sets a pacing timer", func() {
-		now := time.Now()
-		t := newTimer()
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), now.Add(time.Second), now.Add(time.Millisecond))
-		Expect(t.Deadline()).To(Equal(now.Add(time.Millisecond)))
+	t.Run("pacing timer", func(t *testing.T) {
+		timer := newTimer()
+		timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), now.Add(time.Second), now.Add(time.Millisecond))
+		require.Equal(t, now.Add(time.Millisecond), timer.Deadline())
 	})
+}
 
-	It("doesn't reset to an earlier time", func() {
-		now := time.Now()
-		t := newTimer()
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
-		Expect(t.Deadline()).To(Equal(now.Add(time.Minute)))
-		t.SetRead()
+func TestConnectionTimerReset(t *testing.T) {
+	now := time.Now()
+	timer := newTimer()
+	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
+	require.Equal(t, now.Add(time.Minute), timer.Deadline())
+	timer.SetRead()
 
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
-		Expect(t.Deadline()).To(Equal(now.Add(time.Hour)))
-	})
+	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
+	require.Equal(t, now.Add(time.Hour), timer.Deadline())
+}
 
-	It("allows the pacing timer to be set to send immediately", func() {
-		now := time.Now()
-		t := newTimer()
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
-		Expect(t.Deadline()).To(Equal(now.Add(time.Minute)))
-		t.SetRead()
+func TestConnectionTimerSendImmediately(t *testing.T) {
+	now := time.Now()
+	timer := newTimer()
+	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
+	require.Equal(t, now.Add(time.Minute), timer.Deadline())
+	timer.SetRead()
 
-		t.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, deadlineSendImmediately)
-		Expect(t.Deadline()).To(Equal(deadlineSendImmediately))
-	})
-})
+	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, deadlineSendImmediately)
+	require.Equal(t, deadlineSendImmediately, timer.Deadline())
+}
