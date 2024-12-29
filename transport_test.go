@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -183,8 +182,6 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 		tr.Close()
 	}()
 
-	// TODO(#4781): test that packets too short to be stateless resets are dropped
-
 	connID := protocol.ParseConnectionID([]byte{9, 10, 11, 12})
 	// now send a packet with a connection ID that doesn't exist
 	token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
@@ -214,21 +211,24 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 func TestTransportStatelessResetSending(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	phm := NewMockPacketHandlerManager(mockCtrl)
+	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	tr := &Transport{
 		Conn:               newUPDConnLocalhost(t),
 		ConnectionIDLength: 4,
 		StatelessResetKey:  &StatelessResetKey{1, 2, 3, 4},
 		handlerMap:         phm,
+		Tracer:             tracer,
 	}
 	tr.init(true)
 	defer func() {
+		mockTracer.EXPECT().Close()
 		phm.EXPECT().Close(gomock.Any())
 		tr.Close()
 	}()
 
 	connID := protocol.ParseConnectionID([]byte{9, 10, 11, 12})
-	phm.EXPECT().Get(connID).Times(2) // no handler for this connection ID
-	phm.EXPECT().GetByResetToken(gomock.Any()).Times(2)
+	phm.EXPECT().Get(connID) // no handler for this connection ID
+	phm.EXPECT().GetByResetToken(gomock.Any())
 
 	// now send a packet with a connection ID that doesn't exist
 	b, err := wire.AppendShortHeader(nil, connID, 1337, 2, protocol.KeyPhaseOne)
@@ -237,14 +237,23 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	conn := newUPDConnLocalhost(t)
 
 	// no stateless reset sent for packets smaller than MinStatelessResetSize
-	_, err = conn.WriteTo(append(b, make([]byte, protocol.MinStatelessResetSize-len(b))...), tr.Conn.LocalAddr())
+	dropped := make(chan struct{})
+	smallPacket := append(b, make([]byte, protocol.MinStatelessResetSize-len(b))...)
+	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(smallPacket)), logging.PacketDropUnknownConnectionID).Do(
+		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) { close(dropped) },
+	)
+	_, err = conn.WriteTo(smallPacket, tr.Conn.LocalAddr())
 	require.NoError(t, err)
-	conn.SetReadDeadline(time.Now().Add(scaleDuration(10 * time.Millisecond)))
-	_, _, err = conn.ReadFrom(make([]byte, 1024))
-	require.Error(t, err)
-	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	select {
+	case <-dropped:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for packet to be dropped")
+	}
+	require.True(t, mockCtrl.Satisfied())
 
-	// no stateless reset sent for packets smaller than MinStatelessResetSize
+	// but a stateless reset is sent for packets larger than MinStatelessResetSize
+	phm.EXPECT().Get(connID) // no handler for this connection ID
+	phm.EXPECT().GetByResetToken(gomock.Any())
 	token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	phm.EXPECT().GetStatelessResetToken(connID).Return(token)
 	_, err = conn.WriteTo(append(b, make([]byte, protocol.MinStatelessResetSize-len(b)+1)...), tr.Conn.LocalAddr())
@@ -259,22 +268,22 @@ func TestTransportStatelessResetSending(t *testing.T) {
 
 func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	mockTracer, tracer := mocklogging.NewMockTracer(mockCtrl)
+	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	tr := &Transport{
 		Conn:               newUPDConnLocalhost(t),
 		ConnectionIDLength: 10,
-		Tracer:             mockTracer,
+		Tracer:             tracer,
 	}
 	require.NoError(t, tr.init(true))
 	defer func() {
-		tracer.EXPECT().Close()
+		mockTracer.EXPECT().Close()
 		tr.Close()
 	}()
 
 	conn := newUPDConnLocalhost(t)
 
 	dropped := make(chan struct{})
-	tracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError).Do(
+	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError).Do(
 		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) { close(dropped) },
 	)
 	_, err := conn.WriteTo([]byte{0x40 /* set the QUIC bit */, 1, 2, 3}, tr.Conn.LocalAddr())
@@ -287,22 +296,22 @@ func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
 }
 
 func TestTransportListening(t *testing.T) {
-	mockTracer, tracer := mocklogging.NewMockTracer(gomock.NewController(t))
+	tracer, mockTracer := mocklogging.NewMockTracer(gomock.NewController(t))
 	tr := &Transport{
 		Conn:               newUPDConnLocalhost(t),
 		ConnectionIDLength: 5,
-		Tracer:             mockTracer,
+		Tracer:             tracer,
 	}
 	require.NoError(t, tr.init(true))
 	defer func() {
-		tracer.EXPECT().Close()
+		mockTracer.EXPECT().Close()
 		tr.Close()
 	}()
 
 	conn := newUPDConnLocalhost(t)
 	data := wire.ComposeVersionNegotiation([]byte{1, 2, 3, 4, 5}, []byte{6, 7, 8, 9, 10}, []protocol.Version{protocol.Version1})
 	dropped := make(chan struct{}, 10)
-	tracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropUnknownConnectionID).Do(
+	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropUnknownConnectionID).Do(
 		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 			dropped <- struct{}{}
 		},
@@ -321,7 +330,7 @@ func TestTransportListening(t *testing.T) {
 
 	// send the packet again
 	lnDropped := make(chan struct{}, 10)
-	tracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(
+	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(
 		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 			lnDropped <- struct{}{}
 		},
