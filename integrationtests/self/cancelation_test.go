@@ -187,14 +187,6 @@ func testStreamCancellation(
 ) {
 	const numStreams = 80
 
-	expectedCancellationError := func(streamID quic.StreamID, remote bool) error {
-		return &quic.StreamError{
-			StreamID:  streamID,
-			ErrorCode: quic.StreamErrorCode(streamID),
-			Remote:    remote,
-		}
-	}
-
 	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
@@ -291,7 +283,13 @@ func testStreamCancellation(
 					require.NoError(t, err.Err)
 					continue
 				}
-				assert.ErrorIs(t, err.Err, expectedCancellationError(err.StreamID, true))
+				var streamErr *quic.StreamError
+				require.ErrorAs(t, err.Err, &streamErr)
+				assert.Equal(t, streamErr.StreamID, err.StreamID)
+				assert.Equal(t, streamErr.ErrorCode, quic.StreamErrorCode(err.StreamID))
+				if readFunc != nil && writeFunc == nil {
+					assert.Equal(t, streamErr.Remote, readFunc != nil)
+				}
 				serverErrs++
 			}
 		case <-timeout:
@@ -304,7 +302,13 @@ func testStreamCancellation(
 					require.NoError(t, err.Err)
 					continue
 				}
-				assert.ErrorIs(t, err.Err, expectedCancellationError(err.StreamID, true))
+				var streamErr *quic.StreamError
+				require.ErrorAs(t, err.Err, &streamErr)
+				assert.Equal(t, streamErr.StreamID, err.StreamID)
+				assert.Equal(t, streamErr.ErrorCode, quic.StreamErrorCode(err.StreamID))
+				if readFunc != nil && writeFunc == nil {
+					assert.Equal(t, streamErr.Remote, writeFunc != nil)
+				}
 				clientErrs++
 			}
 		case <-timeout:
