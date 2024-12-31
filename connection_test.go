@@ -2162,19 +2162,6 @@ var _ = Describe("Connection", func() {
 			Eventually(sent).Should(BeClosed())
 		})
 
-		It("sends a PING after a maximum of protocol.MaxKeepAliveInterval", func() {
-			conn.config.MaxIdleTimeout = time.Hour
-			setRemoteIdleTimeout(time.Hour)
-			conn.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval).Add(-time.Millisecond)
-			sent := make(chan struct{})
-			packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), gomock.Any(), conn.version).Do(func(bool, protocol.ByteCount, time.Time, protocol.Version) (*coalescedPacket, error) {
-				close(sent)
-				return nil, nil
-			})
-			runConn()
-			Eventually(sent).Should(BeClosed())
-		})
-
 		It("doesn't send a PING packet if keep-alive is disabled", func() {
 			setRemoteIdleTimeout(5 * time.Second)
 			conn.config.KeepAlivePeriod = 0

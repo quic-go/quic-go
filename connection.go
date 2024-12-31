@@ -1778,7 +1778,7 @@ func (s *connection) applyTransportParameters() {
 	if params.MaxIdleTimeout > 0 {
 		s.idleTimeout = min(s.idleTimeout, params.MaxIdleTimeout)
 	}
-	s.keepAliveInterval = min(s.config.KeepAlivePeriod, min(s.idleTimeout/2, protocol.MaxKeepAliveInterval))
+	s.keepAliveInterval = min(s.config.KeepAlivePeriod, s.idleTimeout/2)
 	s.streamsMap.UpdateLimits(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
