@@ -2989,6 +2989,7 @@ var _ = Describe("Client Connection", func() {
 			processed := make(chan struct{})
 			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
 			paramsChan <- params
+			connRunner.EXPECT().Remove(gomock.Any())
 			Eventually(processed).Should(BeClosed())
 			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.TransportParameterError,
@@ -3008,6 +3009,7 @@ var _ = Describe("Client Connection", func() {
 			processed := make(chan struct{})
 			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
 			paramsChan <- params
+			connRunner.EXPECT().Remove(gomock.Any())
 			Eventually(processed).Should(BeClosed())
 			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.TransportParameterError,
@@ -3029,6 +3031,7 @@ var _ = Describe("Client Connection", func() {
 			processed := make(chan struct{})
 			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
 			paramsChan <- params
+			connRunner.EXPECT().Remove(gomock.Any())
 			Eventually(processed).Should(BeClosed())
 			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.TransportParameterError,
@@ -3048,6 +3051,7 @@ var _ = Describe("Client Connection", func() {
 			processed := make(chan struct{})
 			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
 			paramsChan <- params
+			connRunner.EXPECT().Remove(gomock.Any())
 			Eventually(processed).Should(BeClosed())
 			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.TransportParameterError,
@@ -3066,6 +3070,7 @@ var _ = Describe("Client Connection", func() {
 			processed := make(chan struct{})
 			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
 			paramsChan <- params
+			connRunner.EXPECT().Remove(gomock.Any())
 			Eventually(processed).Should(BeClosed())
 			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.TransportParameterError,
@@ -3100,6 +3105,7 @@ var _ = Describe("Client Connection", func() {
 			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
 			cryptoSetup.EXPECT().ConnectionState().Return(handshake.ConnectionState{Used0RTT: true})
 			paramsChan <- params
+			connRunner.EXPECT().Remove(gomock.Any())
 			Eventually(processed).Should(BeClosed())
 			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.ProtocolViolation,
