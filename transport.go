@@ -430,7 +430,12 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {
-		t.maybeSendStatelessReset(p)
+		if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
+			if t.Tracer != nil && t.Tracer.DroppedPacket != nil {
+				t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnknownConnectionID)
+			}
+			p.buffer.Release()
+		}
 		return
 	}
 
@@ -447,24 +452,23 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	t.server.handlePacket(p)
 }
 
-func (t *Transport) maybeSendStatelessReset(p receivedPacket) {
+func (t *Transport) maybeSendStatelessReset(p receivedPacket) (statelessResetQueued bool) {
 	if t.StatelessResetKey == nil {
-		p.buffer.Release()
-		return
+		return false
 	}
 
 	// Don't send a stateless reset in response to very small packets.
 	// This includes packets that could be stateless resets.
 	if len(p.data) <= protocol.MinStatelessResetSize {
-		p.buffer.Release()
-		return
+		return false
 	}
 
 	select {
 	case t.statelessResetQueue <- p:
+		return true
 	default:
 		// it's fine to not send a stateless reset when we're busy
-		p.buffer.Release()
+		return false
 	}
 }
 
