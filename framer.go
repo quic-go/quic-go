@@ -196,7 +196,7 @@ func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen prot
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
 		remainingLen += protocol.ByteCount(quicvarint.Len(uint64(remainingLen)))
-		frame, ok, hasMoreData := str.popStreamFrame(remainingLen, v)
+		frame, hasMoreData := str.popStreamFrame(remainingLen, v)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue.PushBack(id)
 		} else { // no more data to send. Stream is not active
@@ -205,7 +205,7 @@ func (f *framer) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen prot
 		// The frame can be "nil"
 		// * if the stream was canceled after it said it had data
 		// * the remaining size doesn't allow us to add another STREAM frame
-		if !ok {
+		if frame.Frame == nil {
 			continue
 		}
 		frames = append(frames, frame)

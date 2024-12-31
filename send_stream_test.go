@@ -71,8 +71,7 @@ func TestSendStreamWriteData(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-	frame, ok, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.False(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Data: []byte("foobar"), DataLenPresent: true},
@@ -81,8 +80,7 @@ func TestSendStreamWriteData(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// nothing more to send at this point
-	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	_, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.False(t, hasMore)
 	require.True(t, mockCtrl.Satisfied())
 
@@ -109,8 +107,7 @@ func TestSendStreamWriteData(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(4))
-	frame, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.False(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: 42, Offset: 6, Data: []byte{0xde, 0xad, 0xbe, 0xef}, DataLenPresent: true},
@@ -124,18 +121,16 @@ func TestSendStreamWriteData(t *testing.T) {
 	require.Equal(t, 6, n)
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(3)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3)).Times(2)
-	frame, ok, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 10), protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 10), protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.True(t, hasMore)
-	frame, ok, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 10)+3, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 10)+3, protocol.Version1)
 	require.True(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Offset: 10, Data: []byte("foo"), DataLenPresent: true},
 		frame.Frame,
 	)
-	frame, ok, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 13)+3, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 13)+3, protocol.Version1)
 	require.False(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Offset: 13, Data: []byte("baz"), DataLenPresent: true},
@@ -170,8 +165,8 @@ func TestSendStreamLargeWrites(t *testing.T) {
 	var offset protocol.ByteCount
 	const size = 40
 	for offset+size < protocol.ByteCount(len(data))-protocol.MaxPacketBufferSize {
-		frame, ok, hasMore := str.popStreamFrame(size+expectedFrameHeaderLen(streamID, offset), protocol.Version1)
-		require.True(t, ok)
+		frame, hasMore := str.popStreamFrame(size+expectedFrameHeaderLen(streamID, offset), protocol.Version1)
+		require.NotNil(t, frame.Frame)
 		require.True(t, hasMore)
 		require.Equal(t, offset, frame.Frame.Offset)
 		require.Equal(t, data[offset:offset+size], frame.Frame.Data)
@@ -186,8 +181,8 @@ func TestSendStreamLargeWrites(t *testing.T) {
 	}
 
 	mockSender.EXPECT().onHasStreamData(streamID, str) // from the Close call
-	frame, ok, hasMore := str.popStreamFrame(size+expectedFrameHeaderLen(streamID, offset), protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore := str.popStreamFrame(size+expectedFrameHeaderLen(streamID, offset), protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.True(t, hasMore)
 	require.Equal(t, data[offset:offset+size], frame.Frame.Data)
 	require.Equal(t, offset, frame.Frame.Offset)
@@ -199,8 +194,8 @@ func TestSendStreamLargeWrites(t *testing.T) {
 		t.Fatal("timeout")
 	}
 
-	frame, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.False(t, hasMore)
 	require.Equal(t, data[offset:], frame.Frame.Data)
 	require.True(t, frame.Frame.Fin)
@@ -230,8 +225,8 @@ func TestSendStreamLargeWriteBlocking(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
-	frame, ok, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+3, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+3, protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.True(t, hasMoreData)
 	require.Equal(t, []byte("foo"), frame.Frame.Data)
 
@@ -242,8 +237,8 @@ func TestSendStreamLargeWriteBlocking(t *testing.T) {
 	}
 
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
-	frame, ok, hasMoreData = str.popStreamFrame(expectedFrameHeaderLen(streamID, 3)+3, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMoreData = str.popStreamFrame(expectedFrameHeaderLen(streamID, 3)+3, protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.True(t, hasMoreData)
 	require.Equal(t, []byte("bar"), frame.Frame.Data)
 
@@ -270,10 +265,12 @@ func TestSendStreamCopyData(t *testing.T) {
 	require.NoError(t, err)
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(gomock.Any())
-	frame, ok, _ := str.popStreamFrame(protocol.MaxPacketBufferSize, protocol.Version1)
-	require.True(t, ok)
+	frame, _ := str.popStreamFrame(protocol.MaxPacketBufferSize, protocol.Version1)
 	data[1] = 'e' // modify the data after it has been written
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foobar"), DataLenPresent: true}, frame.Frame)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Data: []byte("foobar"), DataLenPresent: true},
+		frame.Frame,
+	)
 }
 
 func TestSendStreamDeadlineInThePast(t *testing.T) {
@@ -345,8 +342,8 @@ func TestSendStreamDeadlineRemoval(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(gomock.Any())
-	frame, ok, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.False(t, hasMoreData)
 	require.Equal(t, []byte("foobar"), frame.Frame.Data)
 }
@@ -381,8 +378,8 @@ func TestSendStreamDeadlineExtension(t *testing.T) {
 		t.Fatal("timeout")
 	}
 
-	_, ok, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMoreData)
 }
 
@@ -407,15 +404,14 @@ func TestSendStreamClose(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3)).Times(2)
-	frame, ok, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+3, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+3, protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.True(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Offset: 0, Data: []byte("foo"), DataLenPresent: true}, // no FIN yet
 		frame.Frame,
 	)
-	frame, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.False(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Offset: 3, Fin: true, Data: []byte("bar"), DataLenPresent: true},
@@ -426,14 +422,14 @@ func TestSendStreamClose(t *testing.T) {
 	// further calls to Write return an error
 	_, err = strWithTimeout.Write([]byte("foobar"))
 	require.ErrorContains(t, err, "write on closed stream 1234")
-	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
 	// further calls to Close don't do anything
 	require.NoError(t, str.Close())
-	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 	require.True(t, mockCtrl.Satisfied())
 }
@@ -446,8 +442,7 @@ func TestSendStreamImmediateClose(t *testing.T) {
 	str := newSendStream(context.Background(), streamID, mockSender, mockFC)
 	mockSender.EXPECT().onHasStreamData(streamID, str)
 	require.NoError(t, str.Close())
-	frame, ok, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 13)+3, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 13)+3, protocol.Version1)
 	require.False(t, hasMore)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Fin: true, DataLenPresent: true},
@@ -470,20 +465,25 @@ func TestSendStreamFlowControlBlocked(t *testing.T) {
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
 	mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(0))
 	mockFC.EXPECT().IsNewlyBlocked().Return(true)
-	frame, ok, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.True(t, hasMore)
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true}, frame.Frame)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
+		frame.Frame,
+	)
 
 	// TODO(#4771): the STREAM_DATA_BLOCKED frame should be sent immediately
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
-	frame, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
 	cf, ok, hasMore := str.getControlFrame(time.Now())
 	require.True(t, ok)
-	require.EqualExportedValues(t, &wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: 3}, cf.Frame)
+	require.EqualExportedValues(t,
+		&wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: 3},
+		cf.Frame,
+	)
 	require.False(t, hasMore)
 }
 
@@ -527,8 +527,8 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 	require.NoError(t, str.Close())
 
 	// no STREAM frames popped
-	_, ok, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
 	// canceling the stream doesn't do anything
@@ -566,8 +566,8 @@ func TestSendStreamCancellation(t *testing.T) {
 	require.NoError(t, err)
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
-	frame, ok, hasMore := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 0), protocol.Version1)
-	require.True(t, ok)
+	frame, hasMore := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 0), protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.True(t, hasMore)
 	require.Equal(t, []byte("foo"), frame.Frame.Data)
 	require.True(t, mockCtrl.Satisfied())
@@ -619,21 +619,21 @@ func TestSendStreamCancellation(t *testing.T) {
 	}
 
 	// no data to send
-	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
 	// future calls to Write should return an error
 	_, err = strWithTimeout.Write([]byte("foo"))
 	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
-	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
 	// Close has no effect
 	require.ErrorContains(t, str.Close(), "close called for canceled stream")
-	_, ok, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.Error(t, err)
 	// TODO(#4808):error code and remote flag are unchanged
@@ -655,8 +655,8 @@ func TestSendStreamCancellationAfterClose(t *testing.T) {
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 	str.CancelWrite(1337)
 
-	_, ok, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
 	cf, ok, hasMore := str.getControlFrame(time.Now())
@@ -687,11 +687,11 @@ func testSendStreamCancellationStreamRetransmission(t *testing.T, remote bool) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3)).Times(2)
-	f1, ok, hasMore := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 0), protocol.Version1)
-	require.True(t, ok)
+	f1, hasMore := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 0), protocol.Version1)
+	require.NotNil(t, f1.Frame)
 	require.True(t, hasMore)
-	f2, ok, hasMore := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 3), protocol.Version1)
-	require.True(t, ok)
+	f2, hasMore := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 3), protocol.Version1)
+	require.NotNil(t, f2.Frame)
 	require.False(t, hasMore)
 
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
@@ -708,8 +708,8 @@ func testSendStreamCancellationStreamRetransmission(t *testing.T, remote bool) {
 	// it doesn't matter if the STREAM frames are acked or lost
 	f1.Handler.OnAcked(f1.Frame)
 	f2.Handler.OnLost(f2.Frame)
-	_, ok, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 	// if CancelWrite was called, the stream is completed as soon as the RESET_STREAM frame is acked
 	if !remote {
@@ -768,8 +768,8 @@ func TestSendStreamStopSending(t *testing.T) {
 	require.NoError(t, err)
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(gomock.Any())
-	_, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	frame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
 	require.True(t, mockCtrl.Satisfied())
 
 	errChan := make(chan error, 1)
@@ -796,8 +796,8 @@ func TestSendStreamStopSending(t *testing.T) {
 	// calls to Write should return an error
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
-	_, ok, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 
 	// calls to CancelWrite have no effect
 	str.CancelWrite(1234)
@@ -809,8 +809,8 @@ func TestSendStreamStopSending(t *testing.T) {
 
 	// Close has no effect
 	require.ErrorContains(t, str.Close(), "close called for canceled stream")
-	_, ok, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.False(t, ok)
+	frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.Error(t, err)
 	// TODO(#4808):error code and remote flag are unchanged
@@ -882,9 +882,11 @@ func TestSendStreamRetransmissions(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
-	f1, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true}, f1.Frame)
+	f1, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
+		f1.Frame,
+	)
 	require.True(t, mockCtrl.Satisfied())
 
 	// write some more data
@@ -900,8 +902,7 @@ func TestSendStreamRetransmissions(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// when popping a new frame, we first get the retransmission...
-	f2, ok, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	f2, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true}, f2.Frame)
 	require.True(t, hasMoreData)
 	require.True(t, mockCtrl.Satisfied())
@@ -909,8 +910,7 @@ func TestSendStreamRetransmissions(t *testing.T) {
 	// ... then we get the new data
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
-	f3, ok, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	f3, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Offset: 3, Fin: true, Data: []byte("bar"), DataLenPresent: true}, f3.Frame)
 	require.False(t, hasMoreData)
 	require.True(t, mockCtrl.Satisfied())
@@ -935,31 +935,35 @@ func TestSendStreamRetransmissionFraming(t *testing.T) {
 
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-	f, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, ok)
+	f, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, f.Frame)
 
 	// lose the frame
 	mockSender.EXPECT().onHasStreamData(streamID, str)
 	f.Handler.OnLost(f.Frame)
 
 	// retransmission doesn't fit
-	_, ok, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0), protocol.Version1)
-	require.False(t, ok)
+	f, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0), protocol.Version1)
+	require.Nil(t, f.Frame)
 	require.True(t, hasMore)
 
 	// split the retransmission
-	r1, ok, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+3, protocol.Version1)
-	require.True(t, ok)
+	r1, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+3, protocol.Version1)
 	require.True(t, hasMore)
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true}, r1.Frame)
-	r2, ok, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 3)+3, protocol.Version1)
-	require.True(t, ok)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
+		r1.Frame,
+	)
+	r2, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 3)+3, protocol.Version1)
+	require.True(t, hasMore)
 	// When popping a retransmission, we always claim that there's more data to send.
 	// We accept that this might be incorrect.
 	require.True(t, hasMore)
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Offset: 3, Data: []byte("bar"), DataLenPresent: true}, r2.Frame)
-	_, ok, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 3)+3, protocol.Version1)
-	require.False(t, ok)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Offset: 3, Data: []byte("bar"), DataLenPresent: true},
+		r2.Frame,
+	)
+	_, hasMore = str.popStreamFrame(expectedFrameHeaderLen(streamID, 3)+3, protocol.Version1)
 	require.False(t, hasMore)
 }
 
@@ -1000,8 +1004,8 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 		if completed {
 			break
 		}
-		f, ok, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300)+100), protocol.Version1)
-		if !ok {
+		f, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300)+100), protocol.Version1)
+		if f.Frame == nil {
 			continue
 		}
 		sf := f.Frame
