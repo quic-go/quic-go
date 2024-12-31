@@ -476,6 +476,37 @@ var _ = Describe("Connection", func() {
 			Expect(conn.Context().Done()).To(BeClosed())
 		})
 
+		It("Clears any pending receivedPackets", func() {
+			conn.handshakeComplete = true
+			runConn()
+			streamManager.EXPECT().CloseWithError(&qerr.ApplicationError{})
+			expectReplaceWithClosed()
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackApplicationClose(gomock.Any(), gomock.Any(), conn.version).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
+			mconn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
+					// Send any old packet. It should get dropped.
+					conn.handlePacket(receivedPacket{
+						rcvTime:    time.Now(),
+						remoteAddr: &net.UDPAddr{},
+						buffer:     getPacketBuffer(),
+						data:       []byte("foobar"),
+					})
+
+					var appErr *ApplicationError
+					Expect(errors.As(e, &appErr)).To(BeTrue())
+					Expect(appErr.Remote).To(BeFalse())
+					Expect(appErr.ErrorCode).To(BeZero())
+				}),
+				tracer.EXPECT().Close(),
+			)
+			conn.CloseWithError(0, "")
+			Eventually(areConnsRunning).Should(BeFalse())
+			Expect(conn.Context().Done()).To(BeClosed())
+			Expect(len(conn.receivedPackets)).To(BeZero())
+		})
+
 		It("only closes once", func() {
 			runConn()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
