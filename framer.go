@@ -86,9 +86,37 @@ func (f *framer) Append(
 	now time.Time,
 	v protocol.Version,
 ) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
-	frames, l := f.appendControlFrames(frames, maxLen, now, v)
-	streamFrames, l2 := f.appendStreamFrames(streamFrames, maxLen-l, v)
-	return frames, streamFrames, l + l2
+	frames, controlFrameLen := f.appendControlFrames(frames, maxLen, now, v)
+	maxLen -= controlFrameLen
+
+	var lastFrame ackhandler.StreamFrame
+	var streamFrameLen protocol.ByteCount
+	f.mutex.Lock()
+	// pop STREAM frames, until less than 128 bytes are left in the packet
+	numActiveStreams := f.streamQueue.Len()
+	for i := 0; i < numActiveStreams; i++ {
+		if protocol.MinStreamFrameSize > maxLen {
+			break
+		}
+		sf := f.getNextStreamFrame(maxLen, v)
+		if sf.Frame == nil {
+			continue
+		}
+		streamFrames = append(streamFrames, sf)
+		maxLen -= sf.Frame.Length(v)
+		lastFrame = sf
+		streamFrameLen += sf.Frame.Length(v)
+	}
+	f.mutex.Unlock()
+
+	if lastFrame.Frame != nil {
+		// account for the smaller size of the last STREAM frame
+		streamFrameLen -= lastFrame.Frame.Length(v)
+		lastFrame.Frame.DataLenPresent = false
+		streamFrameLen += lastFrame.Frame.Length(v)
+	}
+
+	return frames, streamFrames, controlFrameLen + streamFrameLen
 }
 
 func (f *framer) appendControlFrames(
@@ -181,56 +209,36 @@ func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	delete(f.activeStreams, id)
 	// We don't delete the stream from the streamQueue,
 	// since we'd have to iterate over the ringbuffer.
-	// Instead, we check if the stream is still in activeStreams in AppendStreamFrames.
+	// Instead, we check if the stream is still in activeStreams when appending STREAM frames.
 	f.mutex.Unlock()
 }
 
-func (f *framer) appendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount) {
-	startLen := len(frames)
-	var length protocol.ByteCount
-	f.mutex.Lock()
-	// pop STREAM frames, until less than 128 bytes are left in the packet
-	numActiveStreams := f.streamQueue.Len()
-	for i := 0; i < numActiveStreams; i++ {
-		if protocol.MinStreamFrameSize+length > maxLen {
-			break
-		}
-		id := f.streamQueue.PopFront()
-		// This should never return an error. Better check it anyway.
-		// The stream will only be in the streamQueue, if it enqueued itself there.
-		str, ok := f.activeStreams[id]
-		// The stream might have been removed after being enqueued.
-		if !ok {
-			continue
-		}
-		remainingLen := maxLen - length
-		// For the last STREAM frame, we'll remove the DataLen field later.
-		// Therefore, we can pretend to have more bytes available when popping
-		// the STREAM frame (which will always have the DataLen set).
-		remainingLen += protocol.ByteCount(quicvarint.Len(uint64(remainingLen)))
-		frame, hasMoreData := str.popStreamFrame(remainingLen, v)
-		if hasMoreData { // put the stream back in the queue (at the end)
-			f.streamQueue.PushBack(id)
-		} else { // no more data to send. Stream is not active
-			delete(f.activeStreams, id)
-		}
-		// The frame can be "nil"
-		// * if the stream was canceled after it said it had data
-		// * the remaining size doesn't allow us to add another STREAM frame
-		if frame.Frame == nil {
-			continue
-		}
-		frames = append(frames, frame)
-		length += frame.Frame.Length(v)
+func (f *framer) getNextStreamFrame(maxLen protocol.ByteCount, v protocol.Version) ackhandler.StreamFrame {
+	id := f.streamQueue.PopFront()
+	// This should never return an error. Better check it anyway.
+	// The stream will only be in the streamQueue, if it enqueued itself there.
+	str, ok := f.activeStreams[id]
+	// The stream might have been removed after being enqueued.
+	if !ok {
+		return ackhandler.StreamFrame{}
 	}
-	f.mutex.Unlock()
-	if len(frames) > startLen {
-		l := frames[len(frames)-1].Frame.Length(v)
-		// account for the smaller size of the last STREAM frame
-		frames[len(frames)-1].Frame.DataLenPresent = false
-		length += frames[len(frames)-1].Frame.Length(v) - l
+	// For the last STREAM frame, we'll remove the DataLen field later.
+	// Therefore, we can pretend to have more bytes available when popping
+	// the STREAM frame (which will always have the DataLen set).
+	maxLen += protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
+	frame, hasMoreData := str.popStreamFrame(maxLen, v)
+	if hasMoreData { // put the stream back in the queue (at the end)
+		f.streamQueue.PushBack(id)
+	} else { // no more data to send. Stream is not active
+		delete(f.activeStreams, id)
 	}
-	return frames, length
+	// The frame can be "nil"
+	// * if the stream was canceled after it said it had data
+	// * the remaining size doesn't allow us to add another STREAM frame
+	if frame.Frame == nil {
+		return ackhandler.StreamFrame{}
+	}
+	return frame
 }
 
 func (f *framer) Handle0RTTRejection() {
