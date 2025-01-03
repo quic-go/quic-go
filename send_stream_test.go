@@ -763,7 +763,7 @@ func TestSendStreamStopSending(t *testing.T) {
 	mockSender := NewMockStreamSender(mockCtrl)
 	str := newSendStream(context.Background(), streamID, mockSender, mockFC)
 
-	mockSender.EXPECT().onHasStreamData(streamID, str)
+	mockSender.EXPECT().onHasStreamData(streamID, str).MaxTimes(2)
 	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.NoError(t, err)
 	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
