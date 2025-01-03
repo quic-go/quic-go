@@ -1351,7 +1351,10 @@ func (s *connection) handleFrame(
 		s.handlePathChallengeFrame(frame)
 	case *wire.PathResponseFrame:
 		// since we don't send PATH_CHALLENGEs, we don't expect PATH_RESPONSEs
-		err = errors.New("unexpected PATH_RESPONSE frame")
+		err = &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "unexpected PATH_RESPONSE frame",
+		}
 	case *wire.NewTokenFrame:
 		err = s.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
@@ -1452,9 +1455,7 @@ func (s *connection) handleStreamFrame(frame *wire.StreamFrame, rcvTime time.Tim
 	if err != nil {
 		return err
 	}
-	if str == nil {
-		// Stream is closed and already garbage collected
-		// ignore this StreamFrame
+	if str == nil { // stream was already closed and garbage collected
 		return nil
 	}
 	return str.handleStreamFrame(frame, rcvTime)
