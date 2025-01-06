@@ -974,7 +974,7 @@ func (s *connection) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header) 
 	// drop 0-RTT packets, if we are a client
 	if s.perspective == protocol.PerspectiveClient && hdr.Type == protocol.PacketType0RTT {
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
-			s.tracer.DroppedPacket(logging.PacketType0RTT, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropKeyUnavailable)
+			s.tracer.DroppedPacket(logging.PacketType0RTT, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 		}
 		return false
 	}
@@ -1084,14 +1084,6 @@ func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime ti
 		return false
 	}
 
-	if s.logger.Debug() {
-		s.logger.Debugf("<- Received Retry:")
-		(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
-		s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
-	}
-	if s.tracer != nil && s.tracer.ReceivedRetry != nil {
-		s.tracer.ReceivedRetry(hdr)
-	}
 	newDestConnID := hdr.SrcConnectionID
 	s.receivedRetry = true
 	if err := s.sentPacketHandler.ResetForRetry(rcvTime); err != nil {
@@ -1103,6 +1095,16 @@ func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime ti
 	s.cryptoStreamHandler.ChangeConnectionID(newDestConnID)
 	s.packer.SetToken(hdr.Token)
 	s.connIDManager.ChangeInitialConnID(newDestConnID)
+
+	if s.logger.Debug() {
+		s.logger.Debugf("<- Received Retry:")
+		(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
+		s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+	}
+	if s.tracer != nil && s.tracer.ReceivedRetry != nil {
+		s.tracer.ReceivedRetry(hdr)
+	}
+
 	s.scheduleSending()
 	return true
 }
@@ -1351,7 +1353,10 @@ func (s *connection) handleFrame(
 		s.handlePathChallengeFrame(frame)
 	case *wire.PathResponseFrame:
 		// since we don't send PATH_CHALLENGEs, we don't expect PATH_RESPONSEs
-		err = errors.New("unexpected PATH_RESPONSE frame")
+		err = &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "unexpected PATH_RESPONSE frame",
+		}
 	case *wire.NewTokenFrame:
 		err = s.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
@@ -1452,9 +1457,7 @@ func (s *connection) handleStreamFrame(frame *wire.StreamFrame, rcvTime time.Tim
 	if err != nil {
 		return err
 	}
-	if str == nil {
-		// Stream is closed and already garbage collected
-		// ignore this StreamFrame
+	if str == nil { // stream was already closed and garbage collected
 		return nil
 	}
 	return str.handleStreamFrame(frame, rcvTime)

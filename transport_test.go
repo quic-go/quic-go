@@ -65,7 +65,7 @@ func getPacketWithPacketType(t *testing.T, connID protocol.ConnectionID, typ pro
 		PacketNumberLen: protocol.PacketNumberLen2,
 	}).Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	return b
+	return append(b, bytes.Repeat([]byte{42}, int(length)-2)...)
 }
 
 func TestTransportPacketHandling(t *testing.T) {
