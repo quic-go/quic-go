@@ -3,13 +3,18 @@ package self_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/quicvarint"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,4 +126,112 @@ func TestACKBundling(t *testing.T) {
 	require.Greater(t, numBundledIncoming, numMsg*9/10)
 	require.LessOrEqual(t, numBundledOutgoing, numMsg)
 	require.Greater(t, numBundledOutgoing, numMsg*9/10)
+}
+
+func TestStreamDataBlocked(t *testing.T) {
+	const window = 100
+	const numBatches = 3
+	rtt := scaleDuration(5 * time.Millisecond)
+
+	ln, err := quic.Listen(
+		newUPDConnLocalhost(t),
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{
+			InitialStreamReceiveWindow:     window,
+			InitialConnectionReceiveWindow: quicvarint.Max,
+		}),
+	)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+		RemoteAddr: ln.Addr().String(),
+		DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
+			return rtt / 2
+		},
+	})
+	require.NoError(t, err)
+	defer proxy.Close()
+
+	counter, tracer := newPacketTracer()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(
+		ctx,
+		newUPDConnLocalhost(t),
+		proxy.LocalAddr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{
+			Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+				return tracer
+			},
+		}),
+	)
+	require.NoError(t, err)
+
+	serverConn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+
+	str, err := conn.OpenUniStreamSync(ctx)
+	require.NoError(t, err)
+
+	// Stream data is consumed (almost) immediately, so flow-control window auto-tuning kicks in.
+	// The window size is doubled for every batch.
+	var windowSizes []protocol.ByteCount
+	for i := 0; i < numBatches; i++ {
+		windowSizes = append(windowSizes, window<<i)
+	}
+
+	var serverStr quic.ReceiveStream
+	for i := 0; i < numBatches; i++ {
+		str.SetWriteDeadline(time.Now().Add(rtt))
+		n, err := str.Write(make([]byte, 10000))
+		require.Error(t, err)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+		require.Equal(t, int(windowSizes[i]), n)
+
+		if i == 0 {
+			serverStr, err = serverConn.AcceptUniStream(ctx)
+			require.NoError(t, err)
+		}
+		serverStr.SetReadDeadline(time.Now().Add(rtt))
+		n2, err := io.ReadFull(serverStr, make([]byte, 10000))
+		require.Error(t, err)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+		require.Equal(t, n, n2)
+	}
+
+	conn.CloseWithError(0, "")
+	serverConn.CloseWithError(0, "")
+
+	var streamDataBlockedFrames []logging.StreamDataBlockedFrame
+	var dataBlockedFrames []logging.DataBlockedFrame
+	var bundledCounter int
+	for _, p := range counter.getSentShortHeaderPackets() {
+		blockedOffset := protocol.InvalidByteCount
+		for _, f := range p.frames {
+			switch frame := f.(type) {
+			case *logging.StreamDataBlockedFrame:
+				streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
+				blockedOffset = frame.MaximumStreamData
+			case *logging.StreamFrame:
+				// the STREAM frame is always packed last
+				if frame.Offset+frame.Length == blockedOffset {
+					bundledCounter++
+				}
+			}
+		}
+	}
+
+	assert.Len(t, streamDataBlockedFrames, numBatches)
+	for i, f := range streamDataBlockedFrames {
+		assert.Equal(t, str.StreamID(), f.StreamID)
+		var offset protocol.ByteCount
+		for _, s := range windowSizes[:i+1] {
+			offset += s
+		}
+		assert.Equal(t, offset, f.MaximumStreamData)
+	}
+	assert.Empty(t, dataBlockedFrames)
+	assert.Equal(t, numBatches, bundledCounter)
 }
