@@ -2029,6 +2029,7 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 			return nil
 		}
 
+		ecn = nextECN
 		buf = getLargePacketBuffer()
 	}
 }

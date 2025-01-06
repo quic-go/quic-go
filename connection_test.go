@@ -2114,8 +2114,7 @@ func TestConnectionGSOBatchECN(t *testing.T) {
 
 	done3 := make(chan struct{})
 	tc.sendConn.EXPECT().Write(expectedData, uint16(maxPacketSize), protocol.ECT1)
-	// TODO(#4829): check that the correct ECN marking is used
-	tc.sendConn.EXPECT().Write([]byte("foobar"), uint16(maxPacketSize), gomock.Any()).DoAndReturn(
+	tc.sendConn.EXPECT().Write([]byte("foobar"), uint16(maxPacketSize), protocol.ECNCE).DoAndReturn(
 		func([]byte, uint16, protocol.ECN) error { close(done3); return nil },
 	)
 
