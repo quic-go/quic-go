@@ -223,6 +223,7 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		str.EXPECT().handleResetStreamFrame(rsf, now)
 		require.NoError(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now))
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
+		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
 		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
 	})
 
@@ -237,7 +238,7 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
 		require.NoError(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now))
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
-		// TODO(#4822): validate stream ID of STREAM_DATA_BLOCKED frames
+		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
 		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
 	})
 
@@ -253,8 +254,8 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
 		require.ErrorIs(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now), testErr)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
-		// TODO(#4822): validate stream ID of STREAM_DATA_BLOCKED frames
-		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
+		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
+		require.ErrorIs(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now), testErr)
 	})
 }
 
