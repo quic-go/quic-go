@@ -1325,16 +1325,13 @@ var _ = Describe("SentPacketHandler", func() {
 			perspective = protocol.PerspectiveClient
 		})
 
-		It("considers the server's address validated right away", func() {
-		})
-
 		It("queues outstanding packets for retransmission, cancels alarms and resets PTO count when receiving a Retry", func() {
 			sentPacket(initialPacket(&packet{PacketNumber: 42}))
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			Expect(handler.bytesInFlight).ToNot(BeZero())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 			// now receive a Retry
-			Expect(handler.ResetForRetry(time.Now())).To(Succeed())
+			handler.ResetForRetry(time.Now())
 			Expect(lostPackets).To(Equal([]protocol.PacketNumber{42}))
 			Expect(handler.bytesInFlight).To(BeZero())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
@@ -1369,7 +1366,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 			Expect(handler.bytesInFlight).ToNot(BeZero())
 			// now receive a Retry
-			Expect(handler.ResetForRetry(time.Now())).To(Succeed())
+			handler.ResetForRetry(time.Now())
 			Expect(handler.bytesInFlight).To(BeZero())
 			Expect(lostInitial).To(BeTrue())
 			Expect(lost0RTT).To(BeTrue())
@@ -1390,7 +1387,7 @@ var _ = Describe("SentPacketHandler", func() {
 				EncryptionLevel: protocol.EncryptionInitial,
 				SendTime:        now.Add(500 * time.Millisecond),
 			}))
-			Expect(handler.ResetForRetry(now.Add(time.Second))).To(Succeed())
+			handler.ResetForRetry(now.Add(time.Second))
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second))
 		})
 
@@ -1406,7 +1403,7 @@ var _ = Describe("SentPacketHandler", func() {
 				EncryptionLevel: protocol.EncryptionInitial,
 				SendTime:        now.Add(2 * time.Millisecond),
 			}))
-			Expect(handler.ResetForRetry(now.Add(4 * time.Millisecond))).To(Succeed())
+			handler.ResetForRetry(now.Add(4 * time.Millisecond))
 			Expect(minRTTAfterRetry).To(BeNumerically(">", 4*time.Millisecond))
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(minRTTAfterRetry))
 		})
@@ -1425,7 +1422,7 @@ var _ = Describe("SentPacketHandler", func() {
 				EncryptionLevel: protocol.EncryptionInitial,
 				SendTime:        now.Add(500 * time.Millisecond),
 			}))
-			Expect(handler.ResetForRetry(now.Add(time.Second))).To(Succeed())
+			handler.ResetForRetry(now.Add(time.Second))
 			Expect(handler.rttStats.SmoothedRTT()).To(BeZero())
 		})
 	})

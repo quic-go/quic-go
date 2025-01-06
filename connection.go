@@ -1086,10 +1086,7 @@ func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime ti
 
 	newDestConnID := hdr.SrcConnectionID
 	s.receivedRetry = true
-	if err := s.sentPacketHandler.ResetForRetry(rcvTime); err != nil {
-		s.closeLocal(err)
-		return false
-	}
+	s.sentPacketHandler.ResetForRetry(rcvTime)
 	s.handshakeDestConnID = newDestConnID
 	s.retrySrcConnID = &newDestConnID
 	s.cryptoStreamHandler.ChangeConnectionID(newDestConnID)
