@@ -86,6 +86,7 @@ func (f *framer) Append(
 	now time.Time,
 	v protocol.Version,
 ) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+	f.controlFrameMutex.Lock()
 	frames, controlFrameLen := f.appendControlFrames(frames, maxLen, now, v)
 	maxLen -= controlFrameLen
 
@@ -98,16 +99,29 @@ func (f *framer) Append(
 		if protocol.MinStreamFrameSize > maxLen {
 			break
 		}
-		sf := f.getNextStreamFrame(maxLen, v)
-		if sf.Frame == nil {
-			continue
+		sf, blocked := f.getNextStreamFrame(maxLen, v)
+		if sf.Frame != nil {
+			streamFrames = append(streamFrames, sf)
+			maxLen -= sf.Frame.Length(v)
+			lastFrame = sf
+			streamFrameLen += sf.Frame.Length(v)
 		}
-		streamFrames = append(streamFrames, sf)
-		maxLen -= sf.Frame.Length(v)
-		lastFrame = sf
-		streamFrameLen += sf.Frame.Length(v)
+		// If the stream just became blocked on stream flow control, attempt to pack the
+		// STREAM_DATA_BLOCKED into the same packet.
+		if blocked != nil {
+			l := blocked.Length(v)
+			// In case it doesn't fit, queue it for the next packet.
+			if maxLen < l {
+				f.controlFrames = append(f.controlFrames, blocked)
+				break
+			}
+			frames = append(frames, ackhandler.Frame{Frame: blocked})
+			maxLen -= l
+			controlFrameLen += l
+		}
 	}
 	f.mutex.Unlock()
+	f.controlFrameMutex.Unlock()
 
 	if lastFrame.Frame != nil {
 		// account for the smaller size of the last STREAM frame
@@ -125,9 +139,6 @@ func (f *framer) appendControlFrames(
 	now time.Time,
 	v protocol.Version,
 ) ([]ackhandler.Frame, protocol.ByteCount) {
-	f.controlFrameMutex.Lock()
-	defer f.controlFrameMutex.Unlock()
-
 	var length protocol.ByteCount
 	// add a PATH_RESPONSE first, but only pack a single PATH_RESPONSE per packet
 	if len(f.pathResponses) > 0 {
@@ -213,32 +224,29 @@ func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	f.mutex.Unlock()
 }
 
-func (f *framer) getNextStreamFrame(maxLen protocol.ByteCount, v protocol.Version) ackhandler.StreamFrame {
+func (f *framer) getNextStreamFrame(maxLen protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
 	id := f.streamQueue.PopFront()
 	// This should never return an error. Better check it anyway.
 	// The stream will only be in the streamQueue, if it enqueued itself there.
 	str, ok := f.activeStreams[id]
 	// The stream might have been removed after being enqueued.
 	if !ok {
-		return ackhandler.StreamFrame{}
+		return ackhandler.StreamFrame{}, nil
 	}
 	// For the last STREAM frame, we'll remove the DataLen field later.
 	// Therefore, we can pretend to have more bytes available when popping
 	// the STREAM frame (which will always have the DataLen set).
 	maxLen += protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
-	frame, hasMoreData := str.popStreamFrame(maxLen, v)
+	frame, blocked, hasMoreData := str.popStreamFrame(maxLen, v)
 	if hasMoreData { // put the stream back in the queue (at the end)
 		f.streamQueue.PushBack(id)
 	} else { // no more data to send. Stream is not active
 		delete(f.activeStreams, id)
 	}
-	// The frame can be "nil"
+	// Note that the frame.Frame can be nil:
 	// * if the stream was canceled after it said it had data
 	// * the remaining size doesn't allow us to add another STREAM frame
-	if frame.Frame == nil {
-		return ackhandler.StreamFrame{}
-	}
-	return frame
+	return frame, blocked
 }
 
 func (f *framer) Handle0RTTRejection() {

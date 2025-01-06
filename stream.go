@@ -57,7 +57,7 @@ type streamI interface {
 	// for sending
 	hasData() bool
 	handleStopSendingFrame(*wire.StopSendingFrame)
-	popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool)
+	popStreamFrame(protocol.ByteCount, protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool)
 	updateSendWindow(protocol.ByteCount)
 }
 

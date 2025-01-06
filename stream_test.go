@@ -69,7 +69,7 @@ func TestStreamCompletion(t *testing.T) {
 		require.NoError(t, str.Close())
 		mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 		mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-		f, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		f, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.NotNil(t, f.Frame)
 		require.True(t, f.Frame.Fin)
 		f.Handler.OnAcked(f.Frame)
