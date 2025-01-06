@@ -1342,6 +1342,7 @@ func (s *connection) handleFrame(
 		s.handleMaxStreamsFrame(frame)
 	case *wire.DataBlockedFrame:
 	case *wire.StreamDataBlockedFrame:
+		err = s.handleStreamDataBlockedFrame(frame)
 	case *wire.StreamsBlockedFrame:
 	case *wire.StopSendingFrame:
 		err = s.handleStopSendingFrame(frame)
@@ -1475,6 +1476,13 @@ func (s *connection) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) er
 	}
 	str.updateSendWindow(frame.MaximumStreamData)
 	return nil
+}
+
+func (s *connection) handleStreamDataBlockedFrame(frame *wire.StreamDataBlockedFrame) error {
+	// We don't need to do anything in response to a STREAM_DATA_BLOCKED frame,
+	// but we need to make sure that the stream ID is valid.
+	_, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
+	return err
 }
 
 func (s *connection) handleMaxStreamsFrame(frame *wire.MaxStreamsFrame) {
