@@ -864,7 +864,7 @@ func (h *sentPacketHandler) queueFramesForRetransmission(p *packet) {
 	p.Frames = nil
 }
 
-func (h *sentPacketHandler) ResetForRetry(now time.Time) error {
+func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 	h.bytesInFlight = 0
 	var firstPacketSendTime time.Time
 	h.initialPackets.history.Iterate(func(p *packet) (bool, error) {
@@ -911,7 +911,6 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) error {
 		}
 	}
 	h.ptoCount = 0
-	return nil
 }
 
 func (h *sentPacketHandler) SetHandshakeConfirmed() {

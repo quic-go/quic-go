@@ -384,11 +384,9 @@ func (c *MockSentPacketHandlerReceivedBytesCall) DoAndReturn(f func(protocol.Byt
 }
 
 // ResetForRetry mocks base method.
-func (m *MockSentPacketHandler) ResetForRetry(rcvTime time.Time) error {
+func (m *MockSentPacketHandler) ResetForRetry(rcvTime time.Time) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResetForRetry", rcvTime)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "ResetForRetry", rcvTime)
 }
 
 // ResetForRetry indicates an expected call of ResetForRetry.
@@ -404,19 +402,19 @@ type MockSentPacketHandlerResetForRetryCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSentPacketHandlerResetForRetryCall) Return(arg0 error) *MockSentPacketHandlerResetForRetryCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockSentPacketHandlerResetForRetryCall) Return() *MockSentPacketHandlerResetForRetryCall {
+	c.Call = c.Call.Return()
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerResetForRetryCall) Do(f func(time.Time) error) *MockSentPacketHandlerResetForRetryCall {
+func (c *MockSentPacketHandlerResetForRetryCall) Do(f func(time.Time)) *MockSentPacketHandlerResetForRetryCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerResetForRetryCall) DoAndReturn(f func(time.Time) error) *MockSentPacketHandlerResetForRetryCall {
+func (c *MockSentPacketHandlerResetForRetryCall) DoAndReturn(f func(time.Time)) *MockSentPacketHandlerResetForRetryCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

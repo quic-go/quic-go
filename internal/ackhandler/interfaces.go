@@ -16,7 +16,7 @@ type SentPacketHandler interface {
 	ReceivedAck(f *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) (bool /* 1-RTT packet acked */, error)
 	ReceivedBytes(protocol.ByteCount)
 	DropPackets(protocol.EncryptionLevel)
-	ResetForRetry(rcvTime time.Time) error
+	ResetForRetry(rcvTime time.Time)
 	SetHandshakeConfirmed()
 
 	// The SendMode determines if and what kind of packets can be sent.
