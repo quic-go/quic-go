@@ -69,8 +69,10 @@ func connectionOptHandshakeConfirmed() testConnectionOpt {
 	}
 }
 
-func connectionOptRTTStats(s *utils.RTTStats) testConnectionOpt {
-	return func(conn *connection) { conn.rttStats = s }
+func connectionOptRTT(rtt time.Duration) testConnectionOpt {
+	var rttStats utils.RTTStats
+	rttStats.UpdateRTT(rtt, 0)
+	return func(conn *connection) { conn.rttStats = &rttStats }
 }
 
 func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
@@ -1584,10 +1586,6 @@ func TestConnectionPacketPacing(t *testing.T) {
 	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 	sender := NewMockSender(mockCtrl)
 
-	// set a fixed RTT, so that the idle timeout doesn't interfere with this test
-	var rttStats utils.RTTStats
-	rttStats.UpdateRTT(10*time.Second, 0)
-
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		nil,
@@ -1595,7 +1593,8 @@ func TestConnectionPacketPacing(t *testing.T) {
 		connectionOptSentPacketHandler(sph),
 		connectionOptSender(sender),
 		connectionOptHandshakeConfirmed(),
-		connectionOptRTTStats(&rttStats),
+		// set a fixed RTT, so that the idle timeout doesn't interfere with this test
+		connectionOptRTT(10*time.Second),
 	)
 	sender.EXPECT().Run()
 
@@ -1696,8 +1695,6 @@ func TestConnectionPacketPacing(t *testing.T) {
 
 func TestConnectionIdleTimeout(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	var rttStats utils.RTTStats
-	rttStats.UpdateRTT(time.Millisecond, 0)
 	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 	tc := newServerTestConnection(t,
 		mockCtrl,
@@ -1705,7 +1702,7 @@ func TestConnectionIdleTimeout(t *testing.T) {
 		false,
 		connectionOptHandshakeConfirmed(),
 		connectionOptSentPacketHandler(sph),
-		connectionOptRTTStats(&rttStats),
+		connectionOptRTT(time.Millisecond),
 	)
 	// the idle timeout is set when the transport parameters are received
 	idleTimeout := scaleDuration(50 * time.Millisecond)
@@ -1765,15 +1762,13 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 
 	mockCtrl := gomock.NewController(t)
 	unpacker := NewMockUnpacker(mockCtrl)
-	var rttStats utils.RTTStats
-	rttStats.UpdateRTT(time.Millisecond, 0)
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		&Config{MaxIdleTimeout: time.Second, KeepAlivePeriod: keepAlivePeriod},
 		false,
 		connectionOptUnpacker(unpacker),
 		connectionOptHandshakeConfirmed(),
-		connectionOptRTTStats(&rttStats),
+		connectionOptRTT(time.Millisecond),
 	)
 	// the idle timeout is set when the transport parameters are received
 	idleTimeout := scaleDuration(50 * time.Millisecond)
@@ -1851,8 +1846,6 @@ func TestConnectionACKTimer(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-	rttStats := &utils.RTTStats{}
-	rttStats.UpdateRTT(10*time.Second, 0)
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		&Config{MaxIdleTimeout: time.Second},
@@ -1860,7 +1853,7 @@ func TestConnectionACKTimer(t *testing.T) {
 		connectionOptHandshakeConfirmed(),
 		connectionOptReceivedPacketHandler(rph),
 		connectionOptSentPacketHandler(sph),
-		connectionOptRTTStats(rttStats),
+		connectionOptRTT(10*time.Second),
 	)
 	alarmTimeout := scaleDuration(50 * time.Millisecond)
 
@@ -2222,13 +2215,14 @@ func TestConnectionCongestionControl(t *testing.T) {
 		false,
 		connectionOptHandshakeConfirmed(),
 		connectionOptSentPacketHandler(sph),
+		connectionOptRTT(10*time.Second),
 	)
 
 	sph.EXPECT().TimeUntilSend().AnyTimes()
 	sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 	sph.EXPECT().ECNMode(true).AnyTimes()
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(2)
-	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck)
+	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck).MaxTimes(1)
 	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
 	// Since we're already sending out packets, we don't expect any calls to PackAckOnlyPacket
 	for i := 0; i < 2; i++ {
