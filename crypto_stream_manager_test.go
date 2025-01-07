@@ -1,78 +1,87 @@
 package quic
 
 import (
+	"testing"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Crypto Stream Manager", func() {
-	var (
-		csm *cryptoStreamManager
-
-		initialStream   *cryptoStream
-		handshakeStream *cryptoStream
-		oneRTTStream    *cryptoStream
-	)
-
-	BeforeEach(func() {
-		initialStream = newCryptoStream()
-		handshakeStream = newCryptoStream()
-		oneRTTStream = newCryptoStream()
-		csm = newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
+func TestCryptoStreamManager(t *testing.T) {
+	t.Run("Initial", func(t *testing.T) {
+		testCryptoStreamManager(t, protocol.EncryptionInitial)
 	})
-
-	It("passes messages to the initial stream", func() {
-		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionInitial)).To(Succeed())
-		Expect(csm.GetCryptoData(protocol.EncryptionInitial)).To(Equal([]byte("foobar")))
+	t.Run("Handshake", func(t *testing.T) {
+		testCryptoStreamManager(t, protocol.EncryptionHandshake)
 	})
-
-	It("passes messages to the handshake stream", func() {
-		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
-		Expect(csm.GetCryptoData(protocol.EncryptionHandshake)).To(Equal([]byte("foobar")))
+	t.Run("1-RTT", func(t *testing.T) {
+		testCryptoStreamManager(t, protocol.Encryption1RTT)
 	})
+}
 
-	It("passes messages to the 1-RTT stream", func() {
-		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		Expect(csm.HandleCryptoFrame(cf, protocol.Encryption1RTT)).To(Succeed())
-		Expect(csm.GetCryptoData(protocol.Encryption1RTT)).To(Equal([]byte("foobar")))
-	})
+func testCryptoStreamManager(t *testing.T, encLevel protocol.EncryptionLevel) {
+	initialStream := newCryptoStream()
+	handshakeStream := newCryptoStream()
+	oneRTTStream := newCryptoStream()
+	csm := newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
 
-	It("processes all messages", func() {
-		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}, protocol.EncryptionHandshake)).To(Succeed())
-		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")}, protocol.EncryptionHandshake)).To(Succeed())
-		var data []byte
-		for {
-			b := csm.GetCryptoData(protocol.EncryptionHandshake)
-			if len(b) == 0 {
-				break
-			}
-			data = append(data, b...)
+	require.NoError(t, csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")}, encLevel))
+	require.NoError(t, csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}, encLevel))
+	var data []byte
+	for {
+		b := csm.GetCryptoData(encLevel)
+		if len(b) == 0 {
+			break
 		}
-		Expect(data).To(Equal([]byte("foobar")))
-	})
+		data = append(data, b...)
+	}
+	require.Equal(t, []byte("foobar"), data)
+}
 
-	It("errors for unknown encryption levels", func() {
-		err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, 42)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("received CRYPTO frame with unexpected encryption level"))
-	})
+func TestCryptoStreamManagerInvalidEncryptionLevel(t *testing.T) {
+	csm := newCryptoStreamManager(nil, nil, nil)
+	require.ErrorContains(t,
+		csm.HandleCryptoFrame(&wire.CryptoFrame{}, protocol.Encryption0RTT),
+		"received CRYPTO frame with unexpected encryption level",
+	)
+}
 
-	It("drops Initial", func() {
-		Expect(initialStream.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
-		err := csm.Drop(protocol.EncryptionInitial)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("encryption level changed, but crypto stream has more data to read"))
+func TestCryptoStreamManagerDropEncryptionLevel(t *testing.T) {
+	t.Run("Initial", func(t *testing.T) {
+		testCryptoStreamManagerDropEncryptionLevel(t, protocol.EncryptionInitial)
 	})
+	t.Run("Handshake", func(t *testing.T) {
+		testCryptoStreamManagerDropEncryptionLevel(t, protocol.EncryptionHandshake)
+	})
+}
 
-	It("drops Handshake", func() {
-		Expect(handshakeStream.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
-		err := csm.Drop(protocol.EncryptionHandshake)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("encryption level changed, but crypto stream has more data to read"))
-	})
-})
+func testCryptoStreamManagerDropEncryptionLevel(t *testing.T, encLevel protocol.EncryptionLevel) {
+	initialStream := newCryptoStream()
+	handshakeStream := newCryptoStream()
+	oneRTTStream := newCryptoStream()
+	csm := newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
+
+	require.NoError(t, csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")}, encLevel))
+	require.ErrorContains(t, csm.Drop(encLevel), "encryption level changed, but crypto stream has more data to read")
+
+	require.Equal(t, []byte("foo"), csm.GetCryptoData(encLevel))
+	require.NoError(t, csm.Drop(encLevel))
+}
+
+func TestCryptoStreamManagerPostHandshake(t *testing.T) {
+	initialStream := newCryptoStream()
+	handshakeStream := newCryptoStream()
+	oneRTTStream := newCryptoStream()
+	csm := newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
+
+	_, err := oneRTTStream.Write([]byte("foo"))
+	require.NoError(t, err)
+	_, err = oneRTTStream.Write([]byte("bar"))
+	require.NoError(t, err)
+	require.Equal(t,
+		&wire.CryptoFrame{Data: []byte("foobar")},
+		csm.GetPostHandshakeData(protocol.ByteCount(10)),
+	)
+}
