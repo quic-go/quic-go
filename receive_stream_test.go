@@ -152,7 +152,17 @@ func TestReceiveStreamReadOverlappingData(t *testing.T) {
 	require.Equal(t, []byte{'f', 'o', 'o', 'b', 'a', 'r'}, b)
 }
 
-func TestReceiveStreamMaxStreamData(t *testing.T) {
+func TestReceiveStreamFlowControlUpdates(t *testing.T) {
+	t.Run("stream", func(t *testing.T) {
+		testReceiveStreamFlowControlUpdates(t, true, false)
+	})
+
+	t.Run("connection", func(t *testing.T) {
+		testReceiveStreamFlowControlUpdates(t, false, true)
+	})
+}
+
+func testReceiveStreamFlowControlUpdates(t *testing.T, hasStreamWindowUpdate, hasConnWindowUpdate bool) {
 	const streamID protocol.StreamID = 42
 	mockCtrl := gomock.NewController(t)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
@@ -163,19 +173,31 @@ func TestReceiveStreamMaxStreamData(t *testing.T) {
 	mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(4), false, now)
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte{0xde, 0xad, 0xbe, 0xef}}, now))
 
-	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(3)).Return(true)
-	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(3)).Return(hasStreamWindowUpdate, hasConnWindowUpdate)
+	if hasStreamWindowUpdate {
+		mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	}
+	if hasConnWindowUpdate {
+		mockSender.EXPECT().onHasConnectionData()
+	}
 	n, err := (&readerWithTimeout{Reader: str, Timeout: time.Second}).Read(make([]byte, 3))
 	require.NoError(t, err)
 	require.Equal(t, 3, n)
 	require.True(t, mockCtrl.Satisfied())
 
-	now = now.Add(time.Second)
-	mockFC.EXPECT().GetWindowUpdate(now).Return(protocol.ByteCount(1337))
-	f, ok, hasMore := str.getControlFrame(now)
-	require.True(t, ok)
-	require.Equal(t, &wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1337}, f.Frame)
-	require.False(t, hasMore)
+	if hasStreamWindowUpdate {
+		now = now.Add(time.Second)
+		mockFC.EXPECT().GetWindowUpdate(now).Return(protocol.ByteCount(1337))
+		f, ok, hasMore := str.getControlFrame(now)
+		require.True(t, ok)
+		require.Equal(t, &wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1337}, f.Frame)
+		require.False(t, hasMore)
+	}
+	if hasConnWindowUpdate {
+		_, ok, hasMore := str.getControlFrame(now)
+		require.False(t, ok)
+		require.False(t, hasMore)
+	}
 }
 
 func TestReceiveStreamDeadlineInThePast(t *testing.T) {
@@ -583,9 +605,9 @@ func TestReceiveStreamConcurrentReads(t *testing.T) {
 
 	mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), gomock.Any(), gomock.Any()).AnyTimes()
 	var bytesRead protocol.ByteCount
-	mockFC.EXPECT().AddBytesRead(gomock.Any()).Do(func(n protocol.ByteCount) bool {
+	mockFC.EXPECT().AddBytesRead(gomock.Any()).Do(func(n protocol.ByteCount) (bool, bool) {
 		bytesRead += n
-		return false
+		return false, false
 	}).AnyTimes()
 
 	var numCompleted atomic.Int32

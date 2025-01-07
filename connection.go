@@ -2282,6 +2282,8 @@ func (s *connection) queueControlFrame(f wire.Frame) {
 	s.scheduleSending()
 }
 
+func (s *connection) onHasConnectionData() { s.scheduleSending() }
+
 func (s *connection) onHasStreamData(id protocol.StreamID, str sendStreamI) {
 	s.framer.AddActiveStream(id, str)
 	s.scheduleSending()

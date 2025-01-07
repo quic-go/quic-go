@@ -18,7 +18,7 @@ type flowController interface {
 // A StreamFlowController is a flow controller for a QUIC stream.
 type StreamFlowController interface {
 	flowController
-	AddBytesRead(protocol.ByteCount) (shouldQueueWindowUpdate bool)
+	AddBytesRead(protocol.ByteCount) (hasStreamWindowUpdate, hasConnWindowUpdate bool)
 	// UpdateHighestReceived is called when a new highest offset is received
 	// final has to be to true if this is the final offset of the stream,
 	// as contained in a STREAM frame with FIN bit, and the RESET_STREAM frame
@@ -32,7 +32,7 @@ type StreamFlowController interface {
 // The ConnectionFlowController is the flow controller for the connection.
 type ConnectionFlowController interface {
 	flowController
-	AddBytesRead(protocol.ByteCount)
+	AddBytesRead(protocol.ByteCount) (hasWindowUpdate bool)
 	Reset() error
 	IsNewlyBlocked() (bool, protocol.ByteCount)
 }
