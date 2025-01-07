@@ -477,7 +477,7 @@ func (s *connection) preSetup() {
 		uint64(s.config.MaxIncomingUniStreams),
 		s.perspective,
 	)
-	s.framer = newFramer()
+	s.framer = newFramer(s.connFlowController)
 	s.receivedPackets = make(chan receivedPacket, protocol.MaxConnUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -1906,9 +1906,6 @@ func (s *connection) sendPackets(now time.Time) error {
 		return nil
 	}
 
-	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
-	}
 	if offset := s.connFlowController.GetWindowUpdate(now); offset > 0 {
 		s.framer.QueueControlFrame(&wire.MaxDataFrame{MaximumData: offset})
 	}

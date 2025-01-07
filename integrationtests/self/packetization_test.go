@@ -129,16 +129,33 @@ func TestACKBundling(t *testing.T) {
 }
 
 func TestStreamDataBlocked(t *testing.T) {
+	testConnAndStreamDataBlocked(t, true, false)
+}
+
+func TestConnDataBlocked(t *testing.T) {
+	testConnAndStreamDataBlocked(t, false, true)
+}
+
+func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	const window = 100
 	const numBatches = 3
+
+	initialStreamWindow := uint64(quicvarint.Max)
+	initialConnWindow := uint64(quicvarint.Max)
+	if limitStream {
+		initialStreamWindow = window
+	}
+	if limitConn {
+		initialConnWindow = window
+	}
 	rtt := scaleDuration(5 * time.Millisecond)
 
 	ln, err := quic.Listen(
 		newUPDConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
-			InitialStreamReceiveWindow:     window,
-			InitialConnectionReceiveWindow: quicvarint.Max,
+			InitialStreamReceiveWindow:     initialStreamWindow,
+			InitialConnectionReceiveWindow: initialConnWindow,
 		}),
 	)
 	require.NoError(t, err)
@@ -214,6 +231,9 @@ func TestStreamDataBlocked(t *testing.T) {
 			case *logging.StreamDataBlockedFrame:
 				streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
 				blockedOffset = frame.MaximumStreamData
+			case *logging.DataBlockedFrame:
+				dataBlockedFrames = append(dataBlockedFrames, *frame)
+				blockedOffset = frame.MaximumData
 			case *logging.StreamFrame:
 				// the STREAM frame is always packed last
 				if frame.Offset+frame.Length == blockedOffset {
@@ -223,15 +243,29 @@ func TestStreamDataBlocked(t *testing.T) {
 		}
 	}
 
-	assert.Len(t, streamDataBlockedFrames, numBatches)
-	for i, f := range streamDataBlockedFrames {
-		assert.Equal(t, str.StreamID(), f.StreamID)
+	var expectedBlockOffsets []protocol.ByteCount
+	for i := 0; i < numBatches; i++ {
 		var offset protocol.ByteCount
 		for _, s := range windowSizes[:i+1] {
 			offset += s
 		}
-		assert.Equal(t, offset, f.MaximumStreamData)
+		expectedBlockOffsets = append(expectedBlockOffsets, offset)
 	}
-	assert.Empty(t, dataBlockedFrames)
+
 	assert.Equal(t, numBatches, bundledCounter)
+	if limitStream {
+		assert.Empty(t, dataBlockedFrames)
+		assert.Len(t, streamDataBlockedFrames, numBatches)
+		for i, f := range streamDataBlockedFrames {
+			assert.Equal(t, str.StreamID(), f.StreamID)
+			assert.Equal(t, expectedBlockOffsets[i], f.MaximumStreamData)
+		}
+	}
+	if limitConn {
+		assert.Empty(t, streamDataBlockedFrames)
+		assert.Len(t, dataBlockedFrames, numBatches)
+		for i, f := range dataBlockedFrames {
+			assert.Equal(t, expectedBlockOffsets[i], f.MaximumData)
+		}
+	}
 }
