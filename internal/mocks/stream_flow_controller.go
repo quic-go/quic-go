@@ -78,11 +78,12 @@ func (c *MockStreamFlowControllerAbandonCall) DoAndReturn(f func()) *MockStreamF
 }
 
 // AddBytesRead mocks base method.
-func (m *MockStreamFlowController) AddBytesRead(arg0 protocol.ByteCount) bool {
+func (m *MockStreamFlowController) AddBytesRead(arg0 protocol.ByteCount) (bool, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddBytesRead", arg0)
 	ret0, _ := ret[0].(bool)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // AddBytesRead indicates an expected call of AddBytesRead.
@@ -98,19 +99,19 @@ type MockStreamFlowControllerAddBytesReadCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFlowControllerAddBytesReadCall) Return(shouldQueueWindowUpdate bool) *MockStreamFlowControllerAddBytesReadCall {
-	c.Call = c.Call.Return(shouldQueueWindowUpdate)
+func (c *MockStreamFlowControllerAddBytesReadCall) Return(hasStreamWindowUpdate, hasConnWindowUpdate bool) *MockStreamFlowControllerAddBytesReadCall {
+	c.Call = c.Call.Return(hasStreamWindowUpdate, hasConnWindowUpdate)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamFlowControllerAddBytesReadCall) Do(f func(protocol.ByteCount) bool) *MockStreamFlowControllerAddBytesReadCall {
+func (c *MockStreamFlowControllerAddBytesReadCall) Do(f func(protocol.ByteCount) (bool, bool)) *MockStreamFlowControllerAddBytesReadCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamFlowControllerAddBytesReadCall) DoAndReturn(f func(protocol.ByteCount) bool) *MockStreamFlowControllerAddBytesReadCall {
+func (c *MockStreamFlowControllerAddBytesReadCall) DoAndReturn(f func(protocol.ByteCount) (bool, bool)) *MockStreamFlowControllerAddBytesReadCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

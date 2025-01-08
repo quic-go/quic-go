@@ -98,12 +98,12 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 	return c.connection.IncrementHighestReceived(increment, now)
 }
 
-func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) (shouldQueueWindowUpdate bool) {
+func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) (hasStreamWindowUpdate, hasConnWindowUpdate bool) {
 	c.mutex.Lock()
 	c.baseFlowController.addBytesRead(n)
-	shouldQueueWindowUpdate = c.shouldQueueWindowUpdate()
+	hasStreamWindowUpdate = c.shouldQueueWindowUpdate()
 	c.mutex.Unlock()
-	c.connection.AddBytesRead(n)
+	hasConnWindowUpdate = c.connection.AddBytesRead(n)
 	return
 }
 

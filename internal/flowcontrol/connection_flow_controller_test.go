@@ -19,8 +19,9 @@ func TestConnectionFlowControlWindowUpdate(t *testing.T) {
 		&utils.RTTStats{},
 		utils.DefaultLogger,
 	)
+	require.False(t, fc.AddBytesRead(1))
 	require.Zero(t, fc.GetWindowUpdate(time.Now()))
-	fc.AddBytesRead(100)
+	require.True(t, fc.AddBytesRead(99))
 	require.Equal(t, protocol.ByteCount(200), fc.GetWindowUpdate(time.Now()))
 }
 

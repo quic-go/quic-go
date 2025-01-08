@@ -24,6 +24,7 @@ var errDeadline net.Error = &deadlineError{}
 
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
+	onHasConnectionData()
 	onHasStreamData(protocol.StreamID, sendStreamI)
 	onHasStreamControlFrame(protocol.StreamID, streamControlFrameGetter)
 	// must be called without holding the mutex that is acquired by closeForShutdown

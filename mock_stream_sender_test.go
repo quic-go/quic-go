@@ -40,6 +40,42 @@ func (m *MockStreamSender) EXPECT() *MockStreamSenderMockRecorder {
 	return m.recorder
 }
 
+// onHasConnectionData mocks base method.
+func (m *MockStreamSender) onHasConnectionData() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "onHasConnectionData")
+}
+
+// onHasConnectionData indicates an expected call of onHasConnectionData.
+func (mr *MockStreamSenderMockRecorder) onHasConnectionData() *MockStreamSenderonHasConnectionDataCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasConnectionData", reflect.TypeOf((*MockStreamSender)(nil).onHasConnectionData))
+	return &MockStreamSenderonHasConnectionDataCall{Call: call}
+}
+
+// MockStreamSenderonHasConnectionDataCall wrap *gomock.Call
+type MockStreamSenderonHasConnectionDataCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamSenderonHasConnectionDataCall) Return() *MockStreamSenderonHasConnectionDataCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamSenderonHasConnectionDataCall) Do(f func()) *MockStreamSenderonHasConnectionDataCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamSenderonHasConnectionDataCall) DoAndReturn(f func()) *MockStreamSenderonHasConnectionDataCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // onHasStreamControlFrame mocks base method.
 func (m *MockStreamSender) onHasStreamControlFrame(arg0 protocol.StreamID, arg1 streamControlFrameGetter) {
 	m.ctrl.T.Helper()
