@@ -416,9 +416,6 @@ func TestTransportFaultySyscallConn(t *testing.T) {
 	_, err := tr.Listen(&tls.Config{}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "mocked")
-
-	conns := getMultiplexer().(*connMultiplexer).conns
-	require.Empty(t, conns)
 }
 
 func TestTransportSetTLSConfigServerName(t *testing.T) {

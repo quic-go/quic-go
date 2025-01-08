@@ -10,7 +10,6 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -29,9 +28,6 @@ var mockCtrl *gomock.Controller
 
 var _ = BeforeEach(func() {
 	mockCtrl = gomock.NewController(GinkgoT())
-
-	// reset the sync.Once
-	connMuxerOnce = *new(sync.Once)
 })
 
 var _ = BeforeSuite(func() {

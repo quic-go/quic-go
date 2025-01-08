@@ -17,20 +17,14 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type nullMultiplexer struct{}
-
-func (n nullMultiplexer) AddConn(indexableConn)          {}
-func (n nullMultiplexer) RemoveConn(indexableConn) error { return nil }
-
 var _ = Describe("Client", func() {
 	var (
-		cl              *client
-		packetConn      *MockSendConn
-		connID          protocol.ConnectionID
-		origMultiplexer multiplexer
-		tlsConf         *tls.Config
-		tracer          *mocklogging.MockConnectionTracer
-		config          *Config
+		cl         *client
+		packetConn *MockSendConn
+		connID     protocol.ConnectionID
+		tlsConf    *tls.Config
+		tracer     *mocklogging.MockConnectionTracer
+		config     *Config
 
 		originalClientConnConstructor func(
 			ctx context.Context,
@@ -74,14 +68,9 @@ var _ = Describe("Client", func() {
 			tracer:     tr,
 			logger:     utils.DefaultLogger,
 		}
-		getMultiplexer() // make the sync.Once execute
-		// replace the clientMuxer. getMultiplexer will now return the nullMultiplexer
-		origMultiplexer = connMuxer
-		connMuxer = &nullMultiplexer{}
 	})
 
 	AfterEach(func() {
-		connMuxer = origMultiplexer
 		newClientConnection = originalClientConnConstructor
 	})
 
