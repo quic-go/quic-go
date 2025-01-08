@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
+	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -35,13 +36,15 @@ type framer struct {
 	controlFrameMutex          sync.Mutex
 	controlFrames              []wire.Frame
 	pathResponses              []*wire.PathResponseFrame
+	connFlowController         flowcontrol.ConnectionFlowController
 	queuedTooManyControlFrames bool
 }
 
-func newFramer() *framer {
+func newFramer(connFlowController flowcontrol.ConnectionFlowController) *framer {
 	return &framer{
 		activeStreams:            make(map[protocol.StreamID]sendStreamI),
 		streamsWithControlFrames: make(map[protocol.StreamID]streamControlFrameGetter),
+		connFlowController:       connFlowController,
 	}
 }
 
@@ -120,6 +123,20 @@ func (f *framer) Append(
 			controlFrameLen += l
 		}
 	}
+
+	// The only way to become blocked on connection-level flow control is by sending STREAM frames.
+	if isBlocked, offset := f.connFlowController.IsNewlyBlocked(); isBlocked {
+		blocked := &wire.DataBlockedFrame{MaximumData: offset}
+		l := blocked.Length(v)
+		// In case it doesn't fit, queue it for the next packet.
+		if maxLen >= l {
+			frames = append(frames, ackhandler.Frame{Frame: blocked})
+			controlFrameLen += l
+		} else {
+			f.controlFrames = append(f.controlFrames, blocked)
+		}
+	}
+
 	f.mutex.Unlock()
 	f.controlFrameMutex.Unlock()
 
