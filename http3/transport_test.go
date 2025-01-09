@@ -333,9 +333,11 @@ var _ = Describe("Transport", func() {
 			cl2 := NewMockSingleRoundTripper(mockCtrl)
 			clientChan <- cl2
 
-			req1, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
+			ctx, cancel := context.WithCancel(context.Background())
+			req1, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://quic-go.net/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
-			req2, err := http.NewRequest("GET", "https://quic-go.net/bar.html", nil)
+
+			req2, err := http.NewRequest(http.MethodGet, "https://quic-go.net/bar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			conn := mockquic.NewMockEarlyConnection(mockCtrl)
@@ -344,14 +346,18 @@ var _ = Describe("Transport", func() {
 				count++
 				return conn, nil
 			}
-			testErr := context.Canceled
 			handshakeChan := make(chan struct{})
 			close(handshakeChan)
 			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
-			cl1.EXPECT().RoundTrip(req1).Return(nil, testErr)
+			cl1.EXPECT().RoundTrip(req1).DoAndReturn(
+				func(request *http.Request) (*http.Response, error) {
+					cancel()
+					return nil, context.Canceled
+				},
+			)
 			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 			_, err = tr.RoundTrip(req1)
-			Expect(err).To(MatchError(testErr))
+			Expect(err).To(MatchError(context.Canceled))
 			rsp, err := tr.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Request).To(Equal(req2))
