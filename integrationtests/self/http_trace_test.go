@@ -11,16 +11,70 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+
 	"github.com/stretchr/testify/require"
 )
 
 func TestHTTPClientTrace(t *testing.T) {
+	t.Run("without 0-RTT", func(t *testing.T) {
+		testHTTPClientTrace(t, false)
+	})
+
+	t.Run("with 0-RTT", func(t *testing.T) {
+		testHTTPClientTrace(t, true)
+	})
+}
+
+func testHTTPClientTrace(t *testing.T, use0RTT bool) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/client-trace", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
+		fmt.Println("handshake complete:", r.TLS.HandshakeComplete)
 		w.WriteHeader(http.StatusContinue)
 	})
 	port := startHTTPServer(t, mux)
+
+	tlsConf := getTLSClientConfigWithoutServerName()
+	puts := make(chan string, 10)
+	tlsConf.ClientSessionCache = newClientSessionCache(tls.NewLRUClientSessionCache(10), nil, puts)
+	tr := &http3.Transport{
+		TLSClientConfig:    tlsConf,
+		QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
+		DisableCompression: true,
+	}
+	defer tr.Close()
+
+	// when testing 0-RTT, we need to connect first and receive the session ticket
+	if use0RTT {
+		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+			RemoteAddr: fmt.Sprintf("localhost:%d", port),
+			DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
+				return scaleDuration(25 * time.Millisecond)
+			},
+		})
+		require.NoError(t, err)
+		defer proxy.Close()
+		port = proxy.LocalPort()
+
+		tr2 := &http3.Transport{
+			TLSClientConfig:    tr.TLSClientConfig,
+			QUICConfig:         tr.QUICConfig,
+			DisableCompression: true,
+		}
+		defer tr2.Close()
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d", port), nil)
+		require.NoError(t, err)
+		_, err = tr2.RoundTrip(req)
+		require.NoError(t, err)
+		select {
+		case <-puts:
+			fmt.Println("received session ticket")
+		case <-time.After(time.Second):
+			t.Fatal("didn't receive session ticket")
+		}
+	}
 
 	buf := make([]byte, 1)
 	type event struct {
@@ -51,19 +105,26 @@ func TestHTTPClientTrace(t *testing.T) {
 			eventQueue <- event{Key: "TLSHandshakeDone", Args: map[string]any{"state": state, "err": err}}
 		},
 		WroteHeaderField: func(key string, value []string) {
-			if key != ":authority" {
-				return
+			if key == ":authority" {
+				eventQueue <- event{Key: "WroteHeaderField", Args: value[0]}
 			}
-			eventQueue <- event{Key: "WroteHeaderField", Args: value[0]}
 		},
 		WroteHeaders:    func() { eventQueue <- event{Key: "WroteHeaders"} },
 		Wait100Continue: func() { wait100Continue = true },
 		WroteRequest:    func(i httptrace.WroteRequestInfo) { eventQueue <- event{Key: "WroteRequest", Args: i} },
 	}
-	ctx := httptrace.WithClientTrace(context.Background(), &trace)
 
-	cl := newHTTP3Client(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/client-trace", port), nil)
+	cl := http.Client{Transport: tr}
+	method := http.MethodGet
+	if use0RTT {
+		method = http3.MethodGet0RTT
+	}
+	req, err := http.NewRequestWithContext(
+		httptrace.WithClientTrace(context.Background(), &trace),
+		method,
+		fmt.Sprintf("https://localhost:%d/client-trace", port),
+		http.NoBody,
+	)
 	require.NoError(t, err)
 	resp, err := cl.Do(req)
 	close(eventQueue)
@@ -114,17 +175,63 @@ func TestHTTPClientTrace(t *testing.T) {
 			state := e.Args.(map[string]any)["state"].(tls.ConnectionState)
 			require.Equal(t, 1, len(state.PeerCertificates))
 			require.Equal(t, "localhost", state.PeerCertificates[0].DNSNames[0])
+			// We can't assert on 0-RTT here, since crypto/tls doesn't expose this on the ConnectionState.
+			// We can assert on handshake completion and resumption state.
+			if use0RTT {
+				require.False(t, state.HandshakeComplete)
+				require.True(t, state.DidResume)
+			} else {
+				require.True(t, state.HandshakeComplete)
+				require.False(t, state.DidResume)
+			}
 		case "WroteHeaderField":
 			require.Equal(t, fmt.Sprintf("localhost:%d", port), e.Args.(string))
 		case "WroteRequest":
 			require.NoError(t, e.Args.(httptrace.WroteRequestInfo).Err)
 		}
 	}
-	require.Equal(t,
-		[]string{
-			"GetConn", "DNSStart", "DNSDone", "ConnectStart", "TLSHandshakeStart", "TLSHandshakeDone",
-			"ConnectDone", "GotConn", "WroteHeaderField", "WroteHeaders", "WroteRequest",
-			"GotFirstResponseByte", "Got1xxResponse", "Got100Continue",
-		}, events)
+
 	require.Falsef(t, wait100Continue, "wait 100 continue") // Note: not supported Expect: 100-continue
+	switch use0RTT {
+	case true:
+		require.Equal(t,
+			[]string{
+				"GetConn",
+				"DNSStart",
+				"DNSDone",
+				"ConnectStart",
+				"TLSHandshakeStart",
+				"ConnectDone",
+				"GotConn",
+				"WroteHeaderField",
+				"WroteHeaders",
+				"WroteRequest",
+				"TLSHandshakeDone",
+				"GotFirstResponseByte",
+				"Got1xxResponse",
+				"Got100Continue",
+			},
+			events,
+		)
+	case false:
+		require.Equal(t,
+			[]string{
+				"GetConn",
+				"DNSStart",
+				"DNSDone",
+				"ConnectStart",
+				"TLSHandshakeStart",
+				"GotConn",
+				"TLSHandshakeDone",
+				"ConnectDone",
+				"WroteHeaderField",
+				"WroteHeaders",
+				"WroteRequest",
+				"GotFirstResponseByte",
+				"Got1xxResponse",
+				"Got100Continue",
+			},
+			events,
+		)
+	}
 }
