@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -14,8 +15,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -45,599 +45,407 @@ func (m *mockBody) Close() error {
 	return m.closeErr
 }
 
-var _ = Describe("Transport", func() {
-	var req *http.Request
+func TestRequestValidation(t *testing.T) {
+	var tr Transport
 
-	BeforeEach(func() {
-		var err error
-		req, err = http.NewRequest("GET", "https://www.example.org/file1.html", nil)
-		Expect(err).ToNot(HaveOccurred())
-	})
+	for _, tt := range []struct {
+		name                string
+		req                 *http.Request
+		expectedErr         string
+		expectedErrContains string
+	}{
+		{
+			name:        "plain HTTP",
+			req:         mustNewRequest(http.MethodGet, "http://www.example.org/", nil),
+			expectedErr: "http3: unsupported protocol scheme: http",
+		},
+		{
+			name: "missing URL",
+			req: func() *http.Request {
+				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r.URL = nil
+				return r
+			}(),
+			expectedErr: "http3: nil Request.URL",
+		},
+		{
+			name: "missing URL Host",
+			req: func() *http.Request {
+				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r.URL.Host = ""
+				return r
+			}(),
+			expectedErr: "http3: no Host in request URL",
+		},
+		{
+			name: "missing header",
+			req: func() *http.Request {
+				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r.Header = nil
+				return r
+			}(),
+			expectedErr: "http3: nil Request.Header",
+		},
+		{
+			name: "invalid header name",
+			req: func() *http.Request {
+				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r.Header.Add("foobär", "value")
+				return r
+			}(),
+			expectedErr: "http3: invalid http header field name \"foobär\"",
+		},
+		{
+			name: "invalid header value",
+			req: func() *http.Request {
+				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r.Header.Add("foo", string([]byte{0x7}))
+				return r
+			}(),
+			expectedErrContains: "http3: invalid http header field value",
+		},
+		{
+			name: "invalid method",
+			req: func() *http.Request {
+				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r.Method = "foobär"
+				return r
+			}(),
+			expectedErr: "http3: invalid method \"foobär\"",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.req.Body = &mockBody{}
+			_, err := tr.RoundTrip(tt.req)
+			if tt.expectedErr != "" {
+				require.EqualError(t, err, tt.expectedErr)
+			}
+			if tt.expectedErrContains != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedErrContains)
+			}
+			require.True(t, tt.req.Body.(*mockBody).closed)
+		})
+	}
+}
 
-	It("rejects quic.Configs that allow multiple QUIC versions", func() {
-		qconf := &quic.Config{
-			Versions: []quic.Version{protocol.Version2, protocol.Version1},
-		}
-		tr := &Transport{QUICConfig: qconf}
-		_, err := tr.RoundTrip(req)
-		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
-	})
+func TestTransportDialHostname(t *testing.T) {
+	type hostnameConfig struct {
+		dialHostname  string
+		tlsServerName string
+	}
+	hostnameChan := make(chan hostnameConfig, 1)
+	tr := &Transport{
+		Dial: func(_ context.Context, hostname string, tlsConf *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
+			hostnameChan <- hostnameConfig{
+				dialHostname:  hostname,
+				tlsServerName: tlsConf.ServerName,
+			}
+			return nil, errors.New("test done")
+		},
+	}
 
-	It("uses the default QUIC and TLS config if none is give", func() {
-		var dialAddrCalled bool
-		tr := &Transport{
-			Dial: func(_ context.Context, _ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
-				defer GinkgoRecover()
-				Expect(quicConf.MaxIncomingStreams).To(Equal(defaultQuicConfig.MaxIncomingStreams))
-				Expect(tlsConf.NextProtos).To(Equal([]string{NextProtoH3}))
-				Expect(quicConf.Versions).To(Equal([]protocol.Version{protocol.Version1}))
-				dialAddrCalled = true
-				return nil, errors.New("test done")
-			},
-		}
+	t.Run("port set", func(t *testing.T) {
+		req := mustNewRequest(http.MethodGet, "https://quic-go.net:1234", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError("test done"))
-		Expect(dialAddrCalled).To(BeTrue())
+		require.EqualError(t, err, "test done")
+		select {
+		case c := <-hostnameChan:
+			require.Equal(t, "quic-go.net:1234", c.dialHostname)
+			require.Equal(t, "quic-go.net", c.tlsServerName)
+		case <-time.After(1 * time.Second):
+			t.Fatal("timeout")
+		}
 	})
 
-	It("adds the port to the hostname, if none is given", func() {
-		var dialAddrCalled bool
-		tr := &Transport{
-			Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
-				defer GinkgoRecover()
-				Expect(hostname).To(Equal("quic.clemente.io:443"))
-				dialAddrCalled = true
-				return nil, errors.New("test done")
-			},
-		}
-		req, err := http.NewRequest("GET", "https://quic.clemente.io:443", nil)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = tr.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError("test done"))
-		Expect(dialAddrCalled).To(BeTrue())
-	})
-
-	It("sets the ServerName in the tls.Config, if not set", func() {
-		const host = "foo.bar"
-		var dialCalled bool
-		tr := &Transport{
-			Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-				defer GinkgoRecover()
-				Expect(tlsCfg.ServerName).To(Equal(host))
-				dialCalled = true
-				return nil, errors.New("test done")
-			},
-		}
-		req, err := http.NewRequest("GET", "https://foo.bar", nil)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = tr.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError("test done"))
-		Expect(dialCalled).To(BeTrue())
-	})
-
-	It("uses the TLS config and QUIC config", func() {
-		tlsConf := &tls.Config{
-			ServerName: "foo.bar",
-			NextProtos: []string{"proto foo", "proto bar"},
-		}
-		quicConf := &quic.Config{MaxIdleTimeout: 3 * time.Nanosecond}
-		var dialAddrCalled bool
-		tr := &Transport{
-			Dial: func(_ context.Context, host string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
-				defer GinkgoRecover()
-				Expect(host).To(Equal("www.example.org:443"))
-				Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
-				Expect(tlsConfP.NextProtos).To(Equal([]string{NextProtoH3}))
-				Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
-				dialAddrCalled = true
-				return nil, errors.New("test done")
-			},
-			QUICConfig:      quicConf,
-			TLSClientConfig: tlsConf,
-		}
+	// if the request doesn't have a port, the default port is used
+	t.Run("port not set", func(t *testing.T) {
+		req := mustNewRequest(http.MethodGet, "https://quic-go.net", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError("test done"))
-		Expect(dialAddrCalled).To(BeTrue())
-		// make sure the original tls.Config was not modified
-		Expect(tlsConf.NextProtos).To(Equal([]string{"proto foo", "proto bar"}))
-	})
-
-	It("uses the custom dialer, if provided", func() {
-		testErr := errors.New("test done")
-		tlsConf := &tls.Config{ServerName: "foo.bar"}
-		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
-		// nolint:staticcheck // This is a test.
-		ctx := context.WithValue(context.Background(), "foo", "bar")
-		var dialerCalled bool
-		tr := &Transport{
-			Dial: func(ctxP context.Context, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
-				defer GinkgoRecover()
-				Expect(ctx.Value("foo").(string)).To(Equal("bar"))
-				Expect(address).To(Equal("www.example.org:443"))
-				Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
-				Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
-				dialerCalled = true
-				return nil, testErr
-			},
-			TLSClientConfig: tlsConf,
-			QUICConfig:      quicConf,
+		require.EqualError(t, err, "test done")
+		select {
+		case c := <-hostnameChan:
+			require.Equal(t, "quic-go.net:443", c.dialHostname)
+			require.Equal(t, "quic-go.net", c.tlsServerName)
+		case <-time.After(1 * time.Second):
+			t.Fatal("timeout")
 		}
-		_, err := tr.RoundTripOpt(req.WithContext(ctx), RoundTripOpt{})
-		Expect(err).To(MatchError(testErr))
-		Expect(dialerCalled).To(BeTrue())
 	})
+}
 
-	It("enables HTTP/3 Datagrams", func() {
+func TestTransportDatagrams(t *testing.T) {
+	// if the default quic.Config is used, the transport automatically enables QUIC datagrams
+	t.Run("default quic.Config", func(t *testing.T) {
 		testErr := errors.New("handshake error")
 		tr := &Transport{
 			EnableDatagrams: true,
 			Dial: func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
-				defer GinkgoRecover()
-				Expect(quicConf.EnableDatagrams).To(BeTrue())
+				require.True(t, quicConf.EnableDatagrams)
 				return nil, testErr
 			},
 		}
+		req := mustNewRequest(http.MethodGet, "https://example.com", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
-		Expect(err).To(MatchError(testErr))
+		require.ErrorIs(t, err, testErr)
 	})
 
-	It("requires quic.Config.EnableDatagrams if HTTP/3 datagrams are enabled", func() {
+	// if a custom quic.Config is used, the transport just checks that QUIC datagrams are enabled
+	t.Run("custom quic.Config", func(t *testing.T) {
 		tr := &Transport{
-			QUICConfig:      &quic.Config{EnableDatagrams: false},
 			EnableDatagrams: true,
-			Dial: func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlyConnection, error) {
-				return nil, errors.New("handshake error")
+			QUICConfig:      &quic.Config{EnableDatagrams: false},
+			Dial: func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
+				t.Fatal("dial should not be called")
+				return nil, nil
 			},
 		}
-		_, err := tr.RoundTrip(req)
-		Expect(err).To(MatchError("HTTP Datagrams enabled, but QUIC Datagrams disabled"))
+		req := mustNewRequest(http.MethodGet, "https://example.com", nil)
+		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
+		require.EqualError(t, err, "HTTP Datagrams enabled, but QUIC Datagrams disabled")
+	})
+}
+
+func TestTransportMultipleQUICVersions(t *testing.T) {
+	qconf := &quic.Config{
+		Versions: []quic.Version{protocol.Version2, protocol.Version1},
+	}
+	tr := &Transport{QUICConfig: qconf}
+	req := mustNewRequest(http.MethodGet, "https://example.com", nil)
+	_, err := tr.RoundTrip(req)
+	require.EqualError(t, err, "can only use a single QUIC version for dialing a HTTP/3 connection")
+}
+
+func TestTransportConnectionReuse(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cl := NewMockSingleRoundTripper(mockCtrl)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	handshakeChan := make(chan struct{})
+	close(handshakeChan)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+	var dialCount int
+	tr := &Transport{
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			dialCount++
+			return conn, nil
+		},
+		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+	}
+
+	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	// if OnlyCachedConn is set, no connection is dialed
+	_, err := tr.RoundTripOpt(req1, RoundTripOpt{OnlyCachedConn: true})
+	require.ErrorIs(t, err, ErrNoCachedConn)
+	require.Zero(t, dialCount)
+
+	// the first request establishes the connection...
+	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
+	rsp, err := tr.RoundTrip(req1)
+	require.NoError(t, err)
+	require.Equal(t, req1, rsp.Request)
+	require.Equal(t, 1, dialCount)
+
+	// ... which is then used for the second request
+	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
+	rsp, err = tr.RoundTrip(req2)
+	require.NoError(t, err)
+	require.Equal(t, req2, rsp.Request)
+	require.Equal(t, 1, dialCount)
+}
+
+func TestTransportConnectionRedial(t *testing.T) {
+	t.Run("timeout error", func(t *testing.T) {
+		testTransportConnectionRedial(t, &qerr.IdleTimeoutError{}, nil)
 	})
 
-	It("creates new clients", func() {
-		testErr := errors.New("test err")
-		req1, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
-		Expect(err).ToNot(HaveOccurred())
-		req2, err := http.NewRequest("GET", "https://example.com/foobar.html", nil)
-		Expect(err).ToNot(HaveOccurred())
-		var hostsDialed []string
-		tr := &Transport{
-			Dial: func(_ context.Context, host string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
-				hostsDialed = append(hostsDialed, host)
+	t.Run("other error", func(t *testing.T) {
+		testErr := errors.New("test error")
+		testTransportConnectionRedial(t, testErr, testErr)
+	})
+}
+
+func testTransportConnectionRedial(t *testing.T, dialErr, expectedErr error) {
+	mockCtrl := gomock.NewController(t)
+	cl := NewMockSingleRoundTripper(mockCtrl)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	handshakeChan := make(chan struct{})
+	close(handshakeChan)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+	var dialCount int
+	tr := &Transport{
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			dialCount++
+			return conn, nil
+		},
+		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+	}
+
+	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
+	rsp, err := tr.RoundTrip(req1)
+	require.NoError(t, err)
+	require.Equal(t, req1, rsp.Request)
+	require.Equal(t, 1, dialCount)
+
+	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	cl.EXPECT().RoundTrip(req2).Return(nil, dialErr)
+	if expectedErr == nil {
+		cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
+	}
+	rsp, err = tr.RoundTrip(req2)
+	if expectedErr == nil {
+		require.NoError(t, err)
+		require.Equal(t, req2, rsp.Request)
+		require.Equal(t, 2, dialCount)
+	} else {
+		require.ErrorIs(t, err, expectedErr)
+		require.Equal(t, 1, dialCount)
+	}
+}
+
+func TestTransportConnetionRedialHandshakeError(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cl := NewMockSingleRoundTripper(mockCtrl)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	handshakeChan := make(chan struct{})
+	close(handshakeChan)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+	var dialCount int
+	testErr := errors.New("handshake error")
+	tr := &Transport{
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			dialCount++
+			if dialCount == 1 {
 				return nil, testErr
-			},
-		}
-		_, err = tr.RoundTrip(req1)
-		Expect(err).To(MatchError(testErr))
-		_, err = tr.RoundTrip(req2)
-		Expect(err).To(MatchError(testErr))
-		Expect(hostsDialed).To(Equal([]string{"quic-go.net:443", "example.com:443"}))
-	})
-
-	Context("reusing clients", func() {
-		var (
-			tr         *Transport
-			req1, req2 *http.Request
-			clientChan chan *MockSingleRoundTripper
-		)
-
-		BeforeEach(func() {
-			clientChan = make(chan *MockSingleRoundTripper, 16)
-			tr = &Transport{
-				newClient: func(quic.EarlyConnection) singleRoundTripper {
-					select {
-					case c := <-clientChan:
-						return c
-					default:
-						Fail("no client")
-						return nil
-					}
-				},
 			}
+			return conn, nil
+		},
+		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+	}
+
+	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	_, err := tr.RoundTrip(req1)
+	require.ErrorIs(t, err, testErr)
+	require.Equal(t, 1, dialCount)
+
+	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
+	rsp, err := tr.RoundTrip(req2)
+	require.NoError(t, err)
+	require.Equal(t, req2, rsp.Request)
+	require.Equal(t, 2, dialCount)
+}
+
+func TestTransportCloseEstablishedConnections(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	tr := &Transport{
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			return conn, nil
+		},
+		newClient: func(quic.EarlyConnection) singleRoundTripper {
+			cl := NewMockSingleRoundTripper(mockCtrl)
+			cl.EXPECT().RoundTrip(gomock.Any()).Return(&http.Response{}, nil)
+			return cl
+		},
+	}
+	req := mustNewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
+	_, err := tr.RoundTrip(req)
+	require.NoError(t, err)
+	conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(0), "")
+	require.NoError(t, tr.Close())
+}
+
+func TestTransportCloseInFlightDials(t *testing.T) {
+	tr := &Transport{
+		Dial: func(ctx context.Context, _ string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
 			var err error
-			req1, err = http.NewRequest("GET", "https://quic-go.net/file1.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			req2, err = http.NewRequest("GET", "https://quic-go.net/file2.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(req1.URL).ToNot(Equal(req2.URL))
-		})
-
-		It("reuses existing clients", func() {
-			cl := NewMockSingleRoundTripper(mockCtrl)
-			clientChan <- cl
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			handshakeChan := make(chan struct{})
-			close(handshakeChan)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
-
-			cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
-			cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				return conn, nil
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+			case <-time.After(time.Second):
+				err = errors.New("timeout")
 			}
-			rsp, err := tr.RoundTrip(req1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Request).To(Equal(req1))
-			rsp, err = tr.RoundTrip(req2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Request).To(Equal(req2))
-			Expect(count).To(Equal(1))
-		})
+			return nil, err
+		},
+	}
+	req := mustNewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
 
-		It("redials a connection if dialing failed", func() {
-			cl1 := NewMockSingleRoundTripper(mockCtrl)
-			clientChan <- cl1
+	errChan := make(chan error, 1)
+	go func() {
+		_, err := tr.RoundTrip(req)
+		errChan <- err
+	}()
 
-			req1, err := http.NewRequest("GET", "https://quic-go.net/foo.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			req2, err := http.NewRequest("GET", "https://quic-go.net/bar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
+	select {
+	case err := <-errChan:
+		t.Fatalf("received unexpected error: %v", err)
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
 
-			testErr := errors.New("handshake error")
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				if count == 1 {
-					return nil, testErr
-				}
-				return conn, nil
+	require.NoError(t, tr.Close())
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestTransportCloseIdleConnections(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	conn1 := mockquic.NewMockEarlyConnection(mockCtrl)
+	conn2 := mockquic.NewMockEarlyConnection(mockCtrl)
+	tr := &Transport{
+		Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
+			switch hostname {
+			case "site1.com:443":
+				return conn1, nil
+			case "site2.com:443":
+				return conn2, nil
+			default:
+				t.Fatal("unexpected hostname")
+				return nil, errors.New("unexpected hostname")
 			}
-			handshakeChan := make(chan struct{})
-			close(handshakeChan)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
-			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			_, err = tr.RoundTrip(req1)
-			Expect(err).To(MatchError(testErr))
-			rsp, err := tr.RoundTrip(req2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Request).To(Equal(req2))
-			Expect(count).To(Equal(2))
+		},
+	}
+	req1 := mustNewRequest(http.MethodGet, "https://site1.com", nil)
+	req2 := mustNewRequest(http.MethodGet, "https://site2.com", nil)
+	require.NotEqual(t, req1.Host, req2.Host)
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	req1 = req1.WithContext(ctx1)
+	req2 = req2.WithContext(ctx2)
+	roundTripCalled := make(chan struct{})
+	reqFinished := make(chan struct{})
+	tr.newClient = func(quic.EarlyConnection) singleRoundTripper {
+		cl := NewMockSingleRoundTripper(mockCtrl)
+		cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
+			roundTripCalled <- struct{}{}
+			<-r.Context().Done()
+			return nil, nil
 		})
-
-		It("immediately removes a clients when a request errored", func() {
-			cl1 := NewMockSingleRoundTripper(mockCtrl)
-			clientChan <- cl1
-			cl2 := NewMockSingleRoundTripper(mockCtrl)
-			clientChan <- cl2
-
-			req1, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			req2, err := http.NewRequest("GET", "https://quic-go.net/bar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				return conn, nil
-			}
-			testErr := errors.New("test err")
-			handshakeChan := make(chan struct{})
-			close(handshakeChan)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
-			cl1.EXPECT().RoundTrip(req1).Return(nil, testErr)
-			cl2.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			_, err = tr.RoundTrip(req1)
-			Expect(err).To(MatchError(testErr))
-			rsp, err := tr.RoundTrip(req2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Request).To(Equal(req2))
-			Expect(count).To(Equal(2))
-		})
-
-		It("does not remove a client when a request returns context canceled error", func() {
-			cl1 := NewMockSingleRoundTripper(mockCtrl)
-			clientChan <- cl1
-			cl2 := NewMockSingleRoundTripper(mockCtrl)
-			clientChan <- cl2
-
-			ctx, cancel := context.WithCancel(context.Background())
-			req1, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://quic-go.net/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			req2, err := http.NewRequest(http.MethodGet, "https://quic-go.net/bar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				return conn, nil
-			}
-			handshakeChan := make(chan struct{})
-			close(handshakeChan)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
-			cl1.EXPECT().RoundTrip(req1).DoAndReturn(
-				func(request *http.Request) (*http.Response, error) {
-					cancel()
-					return nil, context.Canceled
-				},
-			)
-			cl1.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-			_, err = tr.RoundTrip(req1)
-			Expect(err).To(MatchError(context.Canceled))
-			rsp, err := tr.RoundTrip(req2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Request).To(Equal(req2))
-			Expect(count).To(Equal(1))
-		})
-
-		It("recreates a client when a request times out", func() {
-			var reqCount int
-			cl1 := NewMockSingleRoundTripper(mockCtrl)
-			cl1.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(req *http.Request) (*http.Response, error) {
-				reqCount++
-				if reqCount == 1 { // the first request is successful...
-					Expect(req.URL).To(Equal(req1.URL))
-					return &http.Response{Request: req}, nil
-				}
-				// ... after that, the connection timed out in the background
-				Expect(req.URL).To(Equal(req2.URL))
-				return nil, &qerr.IdleTimeoutError{}
-			}).Times(2)
-			cl2 := NewMockSingleRoundTripper(mockCtrl)
-			cl2.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(req *http.Request) (*http.Response, error) {
-				return &http.Response{Request: req}, nil
-			})
-			clientChan <- cl1
-			clientChan <- cl2
-
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			handshakeChan := make(chan struct{})
-			close(handshakeChan)
-			conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				return conn, nil
-			}
-			rsp1, err := tr.RoundTrip(req1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp1.Request.RemoteAddr).To(Equal(req1.RemoteAddr))
-			rsp2, err := tr.RoundTrip(req2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp2.Request.RemoteAddr).To(Equal(req2.RemoteAddr))
-		})
-
-		It("only issues a request once, even if a timeout error occurs", func() {
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				return mockquic.NewMockEarlyConnection(mockCtrl), nil
-			}
-			tr.newClient = func(quic.EarlyConnection) singleRoundTripper {
-				cl := NewMockSingleRoundTripper(mockCtrl)
-				cl.EXPECT().RoundTrip(gomock.Any()).Return(nil, &qerr.IdleTimeoutError{})
-				return cl
-			}
-			_, err := tr.RoundTrip(req1)
-			Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
-			Expect(count).To(Equal(1))
-		})
-
-		It("handles a burst of requests", func() {
-			wait := make(chan struct{})
-			reqs := make(chan struct{}, 2)
-
-			cl := NewMockSingleRoundTripper(mockCtrl)
-			cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(req *http.Request) (*http.Response, error) {
-				reqs <- struct{}{}
-				<-wait
-				return nil, &qerr.IdleTimeoutError{}
-			}).Times(2)
-			clientChan <- cl
-
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			conn.EXPECT().HandshakeComplete().Return(wait).AnyTimes()
-			var count int
-			tr.Dial = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				count++
-				return conn, nil
-			}
-
-			done := make(chan struct{}, 2)
-			go func() {
-				defer GinkgoRecover()
-				defer func() { done <- struct{}{} }()
-				_, err := tr.RoundTrip(req1)
-				Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
-			}()
-			// wait for the first requests to be issued
-			Eventually(reqs).Should(Receive())
-			go func() {
-				defer GinkgoRecover()
-				defer func() { done <- struct{}{} }()
-				_, err := tr.RoundTrip(req2)
-				Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
-			}()
-			Eventually(reqs).Should(Receive())
-			close(wait) // now return the requests
-			Eventually(done).Should(Receive())
-			Eventually(done).Should(Receive())
-			Expect(count).To(Equal(1))
-		})
-
-		It("doesn't create new clients if RoundTripOpt.OnlyCachedConn is set", func() {
-			req, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			_, err = tr.RoundTripOpt(req, RoundTripOpt{OnlyCachedConn: true})
-			Expect(err).To(MatchError(ErrNoCachedConn))
-		})
-	})
-
-	Context("validating request", func() {
-		var tr Transport
-
-		It("rejects plain HTTP requests", func() {
-			req, err := http.NewRequest("GET", "http://www.example.org/", nil)
-			req.Body = &mockBody{}
-			Expect(err).ToNot(HaveOccurred())
-			_, err = tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: unsupported protocol scheme: http"))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-
-		It("rejects requests without a URL", func() {
-			req.URL = nil
-			req.Body = &mockBody{}
-			_, err := tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: nil Request.URL"))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-
-		It("rejects request without a URL Host", func() {
-			req.URL.Host = ""
-			req.Body = &mockBody{}
-			_, err := tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: no Host in request URL"))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-
-		It("doesn't try to close the body if the request doesn't have one", func() {
-			req.URL = nil
-			Expect(req.Body).To(BeNil())
-			_, err := tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: nil Request.URL"))
-		})
-
-		It("rejects requests without a header", func() {
-			req.Header = nil
-			req.Body = &mockBody{}
-			_, err := tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: nil Request.Header"))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-
-		It("rejects requests with invalid header name fields", func() {
-			req.Header.Add("foobär", "value")
-			req.Body = &mockBody{}
-			_, err := tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: invalid http header field name \"foobär\""))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-
-		It("rejects requests with invalid header name values", func() {
-			req.Header.Add("foo", string([]byte{0x7}))
-			req.Body = &mockBody{}
-			_, err := tr.RoundTrip(req)
-			Expect(err.Error()).To(ContainSubstring("http3: invalid http header field value"))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-
-		It("rejects requests with an invalid request method", func() {
-			req.Method = "foobär"
-			req.Body = &mockBody{}
-			_, err := tr.RoundTrip(req)
-			Expect(err).To(MatchError("http3: invalid method \"foobär\""))
-			Expect(req.Body.(*mockBody).closed).To(BeTrue())
-		})
-	})
-
-	Context("closing", func() {
-		It("closes", func() {
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			tr := &Transport{
-				Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-					return conn, nil
-				},
-				newClient: func(quic.EarlyConnection) singleRoundTripper {
-					cl := NewMockSingleRoundTripper(mockCtrl)
-					cl.EXPECT().RoundTrip(gomock.Any()).Return(&http.Response{}, nil)
-					return cl
-				},
-			}
-			req, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-			_, err = tr.RoundTrip(req)
-			Expect(err).ToNot(HaveOccurred())
-			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(0), "")
-			Expect(tr.Close()).To(Succeed())
-		})
-
-		It("closes while dialing", func() {
-			tr := &Transport{
-				Dial: func(ctx context.Context, _ string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
-					defer GinkgoRecover()
-					Eventually(ctx.Done()).Should(BeClosed())
-					return nil, errors.New("cancelled")
-				},
-			}
-			req, err := http.NewRequest("GET", "https://quic-go.net/foobar.html", nil)
-			Expect(err).ToNot(HaveOccurred())
-
-			errChan := make(chan error, 1)
-			go func() {
-				defer GinkgoRecover()
-				_, err := tr.RoundTrip(req)
-				errChan <- err
-			}()
-
-			Consistently(errChan, scaleDuration(30*time.Millisecond)).ShouldNot(Receive())
-			Expect(tr.Close()).To(Succeed())
-			var rtErr error
-			Eventually(errChan).Should(Receive(&rtErr))
-			Expect(rtErr).To(MatchError("cancelled"))
-		})
-
-		It("closes idle connections", func() {
-			conn1 := mockquic.NewMockEarlyConnection(mockCtrl)
-			conn2 := mockquic.NewMockEarlyConnection(mockCtrl)
-			tr := &Transport{
-				Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
-					switch hostname {
-					case "site1.com:443":
-						return conn1, nil
-					case "site2.com:443":
-						return conn2, nil
-					default:
-						Fail("unexpected hostname")
-						return nil, errors.New("unexpected hostname")
-					}
-				},
-			}
-			req1, err := http.NewRequest("GET", "https://site1.com", nil)
-			Expect(err).ToNot(HaveOccurred())
-			req2, err := http.NewRequest("GET", "https://site2.com", nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(req1.Host).ToNot(Equal(req2.Host))
-			ctx1, cancel1 := context.WithCancel(context.Background())
-			ctx2, cancel2 := context.WithCancel(context.Background())
-			req1 = req1.WithContext(ctx1)
-			req2 = req2.WithContext(ctx2)
-			roundTripCalled := make(chan struct{})
-			reqFinished := make(chan struct{})
-			tr.newClient = func(quic.EarlyConnection) singleRoundTripper {
-				cl := NewMockSingleRoundTripper(mockCtrl)
-				cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
-					roundTripCalled <- struct{}{}
-					<-r.Context().Done()
-					return nil, nil
-				})
-				return cl
-			}
-			go func() {
-				tr.RoundTrip(req1)
-				reqFinished <- struct{}{}
-			}()
-			go func() {
-				tr.RoundTrip(req2)
-				reqFinished <- struct{}{}
-			}()
-			<-roundTripCalled
-			<-roundTripCalled
-			// Both two requests are started.
-			cancel1()
-			<-reqFinished
-			// req1 is finished
-			conn1.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
-			tr.CloseIdleConnections()
-			cancel2()
-			<-reqFinished
-			// all requests are finished
-			conn2.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
-			tr.CloseIdleConnections()
-		})
-	})
-})
+		return cl
+	}
+	go func() {
+		tr.RoundTrip(req1)
+		reqFinished <- struct{}{}
+	}()
+	go func() {
+		tr.RoundTrip(req2)
+		reqFinished <- struct{}{}
+	}()
+	<-roundTripCalled
+	<-roundTripCalled
+	// Both two requests are started.
+	cancel1()
+	<-reqFinished
+	// req1 is finished
+	conn1.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
+	tr.CloseIdleConnections()
+	cancel2()
+	<-reqFinished
+	// all requests are finished
+	conn2.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
+	tr.CloseIdleConnections()
+}
