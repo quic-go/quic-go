@@ -115,7 +115,8 @@ type Transport struct {
 	connIDLen int
 	// Set in init.
 	// If no ConnectionIDGenerator is set, this is set to a default.
-	connIDGenerator ConnectionIDGenerator
+	connIDGenerator   ConnectionIDGenerator
+	statelessResetter *statelessResetter
 
 	server *baseServer
 
@@ -183,6 +184,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.conn,
 		t.handlerMap,
 		t.connIDGenerator,
+		t.statelessResetter,
 		t.ConnContext,
 		tlsConf,
 		conf,
@@ -222,7 +224,17 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	}
 	tlsConf = tlsConf.Clone()
 	setTLSConfigServerName(tlsConf, addr, host)
-	return dial(ctx, newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, use0RTT)
+	return dial(
+		ctx,
+		newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger),
+		t.connIDGenerator,
+		t.statelessResetter,
+		t.handlerMap,
+		tlsConf,
+		conf,
+		onClose,
+		use0RTT,
+	)
 }
 
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
@@ -242,7 +254,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
 		if t.handlerMap == nil { // allows mocking the handlerMap in tests
-			t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)
+			t.handlerMap = newPacketHandlerMap(t.enqueueClosePacket, t.logger)
 		}
 		t.listening = make(chan struct{})
 
@@ -268,6 +280,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 			t.connIDLen = connIDLen
 			t.connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: t.connIDLen}
 		}
+		t.statelessResetter = newStatelessResetter(t.StatelessResetKey)
 
 		go t.listen(conn)
 		go t.runSendQueue()
@@ -478,7 +491,7 @@ func (t *Transport) sendStatelessReset(p receivedPacket) {
 		t.logger.Errorf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
 		return
 	}
-	token := t.handlerMap.GetStatelessResetToken(connID)
+	token := t.statelessResetter.GetStatelessResetToken(connID)
 	t.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
 	data := make([]byte, protocol.MinStatelessResetSize-16, protocol.MinStatelessResetSize)
 	rand.Read(data)

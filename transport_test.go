@@ -254,8 +254,6 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	// but a stateless reset is sent for packets larger than MinStatelessResetSize
 	phm.EXPECT().Get(connID) // no handler for this connection ID
 	phm.EXPECT().GetByResetToken(gomock.Any())
-	token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-	phm.EXPECT().GetStatelessResetToken(connID).Return(token)
 	_, err = conn.WriteTo(append(b, make([]byte, protocol.MinStatelessResetSize-len(b)+1)...), tr.Conn.LocalAddr())
 	require.NoError(t, err)
 	conn.SetReadDeadline(time.Now().Add(time.Second))
@@ -263,7 +261,8 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	n, addr, err := conn.ReadFrom(p)
 	require.NoError(t, err)
 	require.Equal(t, addr, tr.Conn.LocalAddr())
-	require.Contains(t, string(p[:n]), string(token[:]))
+	srt := newStatelessResetter(tr.StatelessResetKey).GetStatelessResetToken(connID)
+	require.Contains(t, string(p[:n]), string(srt[:]))
 }
 
 func TestTransportDropsUnparseableQUICPackets(t *testing.T) {

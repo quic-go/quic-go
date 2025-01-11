@@ -33,6 +33,7 @@ var _ = Describe("Client", func() {
 			destConnID protocol.ConnectionID,
 			srcConnID protocol.ConnectionID,
 			connIDGenerator ConnectionIDGenerator,
+			statelessResetToken *statelessResetter,
 			conf *Config,
 			tlsConf *tls.Config,
 			initialPacketNumber protocol.PacketNumber,
@@ -107,6 +108,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ ConnectionIDGenerator,
+				_ *statelessResetter,
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -124,7 +126,15 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().HandshakeComplete().Return(c)
 				return conn
 			}
-			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, false)
+			cl, err := newClient(
+				packetConn,
+				&protocol.DefaultConnectionIDGenerator{},
+				newStatelessResetter(nil),
+				populateConfig(config),
+				tlsConf,
+				nil,
+				false,
+			)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -144,6 +154,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ ConnectionIDGenerator,
+				_ *statelessResetter,
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -161,7 +172,15 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, true)
+			cl, err := newClient(
+				packetConn,
+				&protocol.DefaultConnectionIDGenerator{},
+				newStatelessResetter(nil),
+				populateConfig(config),
+				tlsConf,
+				nil,
+				true,
+			)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -181,6 +200,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ ConnectionIDGenerator,
+				_ *statelessResetter,
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -197,7 +217,13 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 			var closed bool
-			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, func() { closed = true }, true)
+			cl, err := newClient(
+				packetConn,
+				&protocol.DefaultConnectionIDGenerator{},
+				newStatelessResetter(nil),
+				populateConfig(config), tlsConf, func() { closed = true },
+				true,
+			)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -266,6 +292,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ ConnectionIDGenerator,
+				_ *statelessResetter,
 				configP *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -309,6 +336,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				connID protocol.ConnectionID,
 				_ ConnectionIDGenerator,
+				_ *statelessResetter,
 				configP *Config,
 				_ *tls.Config,
 				pn protocol.PacketNumber,

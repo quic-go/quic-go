@@ -22,9 +22,10 @@ type client struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	connIDGenerator ConnectionIDGenerator
-	srcConnID       protocol.ConnectionID
-	destConnID      protocol.ConnectionID
+	connIDGenerator   ConnectionIDGenerator
+	statelessResetter *statelessResetter
+	srcConnID         protocol.ConnectionID
+	destConnID        protocol.ConnectionID
 
 	initialPacketNumber  protocol.PacketNumber
 	hasNegotiatedVersion bool
@@ -137,13 +138,14 @@ func dial(
 	ctx context.Context,
 	conn sendConn,
 	connIDGenerator ConnectionIDGenerator,
+	statelessResetter *statelessResetter,
 	packetHandlers packetHandlerManager,
 	tlsConf *tls.Config,
 	config *Config,
 	onClose func(),
 	use0RTT bool,
 ) (quicConn, error) {
-	c, err := newClient(conn, connIDGenerator, config, tlsConf, onClose, use0RTT)
+	c, err := newClient(conn, connIDGenerator, statelessResetter, config, tlsConf, onClose, use0RTT)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +164,15 @@ func dial(
 	return c.conn, nil
 }
 
-func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config *Config, tlsConf *tls.Config, onClose func(), use0RTT bool) (*client, error) {
+func newClient(
+	sendConn sendConn,
+	connIDGenerator ConnectionIDGenerator,
+	statelessResetter *statelessResetter,
+	config *Config,
+	tlsConf *tls.Config,
+	onClose func(),
+	use0RTT bool,
+) (*client, error) {
 	srcConnID, err := connIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return nil, err
@@ -172,17 +182,18 @@ func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config 
 		return nil, err
 	}
 	c := &client{
-		connIDGenerator: connIDGenerator,
-		srcConnID:       srcConnID,
-		destConnID:      destConnID,
-		sendConn:        sendConn,
-		use0RTT:         use0RTT,
-		onClose:         onClose,
-		tlsConf:         tlsConf,
-		config:          config,
-		version:         config.Versions[0],
-		handshakeChan:   make(chan struct{}),
-		logger:          utils.DefaultLogger.WithPrefix("client"),
+		connIDGenerator:   connIDGenerator,
+		statelessResetter: statelessResetter,
+		srcConnID:         srcConnID,
+		destConnID:        destConnID,
+		sendConn:          sendConn,
+		use0RTT:           use0RTT,
+		onClose:           onClose,
+		tlsConf:           tlsConf,
+		config:            config,
+		version:           config.Versions[0],
+		handshakeChan:     make(chan struct{}),
+		logger:            utils.DefaultLogger.WithPrefix("client"),
 	}
 	return c, nil
 }
@@ -197,6 +208,7 @@ func (c *client) dial(ctx context.Context) error {
 		c.destConnID,
 		c.srcConnID,
 		c.connIDGenerator,
+		c.statelessResetter,
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,
