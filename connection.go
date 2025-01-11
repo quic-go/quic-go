@@ -85,7 +85,6 @@ func (p *receivedPacket) Clone() *receivedPacket {
 
 type connRunner interface {
 	Add(protocol.ConnectionID, packetHandler) bool
-	GetStatelessResetToken(protocol.ConnectionID) protocol.StatelessResetToken
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
 	ReplaceWithClosed([]protocol.ConnectionID, []byte)
@@ -225,7 +224,7 @@ var newConnection = func(
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	connIDGenerator ConnectionIDGenerator,
-	statelessResetToken protocol.StatelessResetToken,
+	statelessResetter *statelessResetter,
 	conf *Config,
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
@@ -263,7 +262,7 @@ var newConnection = func(
 		srcConnID,
 		&clientDestConnID,
 		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
-		runner.GetStatelessResetToken,
+		statelessResetter,
 		runner.Remove,
 		runner.Retire,
 		runner.ReplaceWithClosed,
@@ -282,6 +281,7 @@ var newConnection = func(
 		s.logger,
 	)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -340,6 +340,7 @@ var newClientConnection = func(
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	connIDGenerator ConnectionIDGenerator,
+	statelessResetter *statelessResetter,
 	conf *Config,
 	tlsConf *tls.Config,
 	initialPacketNumber protocol.PacketNumber,
@@ -372,7 +373,7 @@ var newClientConnection = func(
 		srcConnID,
 		nil,
 		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
-		runner.GetStatelessResetToken,
+		statelessResetter,
 		runner.Remove,
 		runner.Retire,
 		runner.ReplaceWithClosed,

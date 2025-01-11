@@ -266,44 +266,6 @@ func (c *MockPacketHandlerManagerGetByResetTokenCall) DoAndReturn(f func(protoco
 	return c
 }
 
-// GetStatelessResetToken mocks base method.
-func (m *MockPacketHandlerManager) GetStatelessResetToken(arg0 protocol.ConnectionID) protocol.StatelessResetToken {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStatelessResetToken", arg0)
-	ret0, _ := ret[0].(protocol.StatelessResetToken)
-	return ret0
-}
-
-// GetStatelessResetToken indicates an expected call of GetStatelessResetToken.
-func (mr *MockPacketHandlerManagerMockRecorder) GetStatelessResetToken(arg0 any) *MockPacketHandlerManagerGetStatelessResetTokenCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatelessResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).GetStatelessResetToken), arg0)
-	return &MockPacketHandlerManagerGetStatelessResetTokenCall{Call: call}
-}
-
-// MockPacketHandlerManagerGetStatelessResetTokenCall wrap *gomock.Call
-type MockPacketHandlerManagerGetStatelessResetTokenCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockPacketHandlerManagerGetStatelessResetTokenCall) Return(arg0 protocol.StatelessResetToken) *MockPacketHandlerManagerGetStatelessResetTokenCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockPacketHandlerManagerGetStatelessResetTokenCall) Do(f func(protocol.ConnectionID) protocol.StatelessResetToken) *MockPacketHandlerManagerGetStatelessResetTokenCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPacketHandlerManagerGetStatelessResetTokenCall) DoAndReturn(f func(protocol.ConnectionID) protocol.StatelessResetToken) *MockPacketHandlerManagerGetStatelessResetTokenCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // Remove mocks base method.
 func (m *MockPacketHandlerManager) Remove(arg0 protocol.ConnectionID) {
 	m.ctrl.T.Helper()

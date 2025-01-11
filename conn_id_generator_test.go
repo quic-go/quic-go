@@ -19,14 +19,11 @@ var _ = Describe("Connection ID Generator", func() {
 		replacedWithClosed []protocol.ConnectionID
 		queuedFrames       []wire.Frame
 		g                  *connIDGenerator
+		statelessResetter  *statelessResetter
 	)
 	initialConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
 	initialClientDestConnID := protocol.ParseConnectionID([]byte{0xa, 0xb, 0xc, 0xd, 0xe})
-
-	connIDToToken := func(c protocol.ConnectionID) protocol.StatelessResetToken {
-		b := c.Bytes()[0]
-		return protocol.StatelessResetToken{b, b, b, b, b, b, b, b, b, b, b, b, b, b, b, b}
-	}
+	statelessResetter = newStatelessResetter(nil)
 
 	BeforeEach(func() {
 		addedConnIDs = nil
@@ -38,7 +35,7 @@ var _ = Describe("Connection ID Generator", func() {
 			initialConnID,
 			&initialClientDestConnID,
 			func(c protocol.ConnectionID) { addedConnIDs = append(addedConnIDs, c) },
-			connIDToToken,
+			statelessResetter,
 			func(c protocol.ConnectionID) { removedConnIDs = append(removedConnIDs, c) },
 			func(c protocol.ConnectionID) { retiredConnIDs = append(retiredConnIDs, c) },
 			func(cs []protocol.ConnectionID, _ []byte) { replacedWithClosed = append(replacedWithClosed, cs...) },
@@ -61,7 +58,7 @@ var _ = Describe("Connection ID Generator", func() {
 			nf := f.(*wire.NewConnectionIDFrame)
 			Expect(nf.SequenceNumber).To(BeEquivalentTo(i + 1))
 			Expect(nf.ConnectionID.Len()).To(Equal(7))
-			Expect(nf.StatelessResetToken).To(Equal(connIDToToken(nf.ConnectionID)))
+			Expect(nf.StatelessResetToken).To(Equal(statelessResetter.GetStatelessResetToken(nf.ConnectionID)))
 		}
 	})
 

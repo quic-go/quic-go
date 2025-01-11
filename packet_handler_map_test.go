@@ -14,7 +14,7 @@ import (
 )
 
 func TestPacketHandlerMapAddAndRemove(t *testing.T) {
-	m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
+	m := newPacketHandlerMap(nil, utils.DefaultLogger)
 	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 	h := &mockPacketHandler{}
 	require.True(t, m.Add(connID, h))
@@ -36,7 +36,7 @@ func TestPacketHandlerMapAddAndRemove(t *testing.T) {
 }
 
 func TestPacketHandlerMapAddWithClientChosenConnID(t *testing.T) {
-	m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
+	m := newPacketHandlerMap(nil, utils.DefaultLogger)
 	h := &mockPacketHandler{}
 
 	connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
@@ -54,7 +54,7 @@ func TestPacketHandlerMapAddWithClientChosenConnID(t *testing.T) {
 }
 
 func TestPacketHandlerMapRetire(t *testing.T) {
-	m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
+	m := newPacketHandlerMap(nil, utils.DefaultLogger)
 	dur := scaleDuration(10 * time.Millisecond)
 	m.deleteRetiredConnsAfter = dur
 	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
@@ -76,7 +76,7 @@ func TestPacketHandlerMapRetire(t *testing.T) {
 }
 
 func TestPacketHandlerMapAddGetRemoveResetTokens(t *testing.T) {
-	m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
+	m := newPacketHandlerMap(nil, utils.DefaultLogger)
 	token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}
 	handler := &mockPacketHandler{}
 	m.AddResetToken(token, handler)
@@ -88,43 +88,12 @@ func TestPacketHandlerMapAddGetRemoveResetTokens(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestPacketHandlerMapGenerateStatelessResetToken(t *testing.T) {
-	t.Run("no key", func(t *testing.T) {
-		m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
-		b := make([]byte, 8)
-		rand.Read(b)
-		connID := protocol.ParseConnectionID(b)
-		tokens := make(map[protocol.StatelessResetToken]struct{})
-		for i := 0; i < 100; i++ {
-			token := m.GetStatelessResetToken(connID)
-			require.NotZero(t, token)
-			if _, ok := tokens[token]; ok {
-				t.Fatalf("token %s already exists", token)
-			}
-			tokens[token] = struct{}{}
-		}
-	})
-
-	t.Run("with key", func(t *testing.T) {
-		var key StatelessResetKey
-		rand.Read(key[:])
-		m := newPacketHandlerMap(&key, nil, utils.DefaultLogger)
-		b := make([]byte, 8)
-		rand.Read(b)
-		connID := protocol.ParseConnectionID(b)
-		token := m.GetStatelessResetToken(connID)
-		require.NotZero(t, token)
-		require.Equal(t, token, m.GetStatelessResetToken(connID))
-		// generate a new connection ID
-		rand.Read(b)
-		connID2 := protocol.ParseConnectionID(b)
-		require.NotEqual(t, token, m.GetStatelessResetToken(connID2))
-	})
-}
-
 func TestPacketHandlerMapReplaceWithLocalClosed(t *testing.T) {
 	var closePackets []closePacket
-	m := newPacketHandlerMap(nil, func(p closePacket) { closePackets = append(closePackets, p) }, utils.DefaultLogger)
+	m := newPacketHandlerMap(
+		func(p closePacket) { closePackets = append(closePackets, p) },
+		utils.DefaultLogger,
+	)
 	dur := scaleDuration(10 * time.Millisecond)
 	m.deleteRetiredConnsAfter = dur
 
@@ -150,7 +119,10 @@ func TestPacketHandlerMapReplaceWithLocalClosed(t *testing.T) {
 
 func TestPacketHandlerMapReplaceWithRemoteClosed(t *testing.T) {
 	var closePackets []closePacket
-	m := newPacketHandlerMap(nil, func(p closePacket) { closePackets = append(closePackets, p) }, utils.DefaultLogger)
+	m := newPacketHandlerMap(
+		func(p closePacket) { closePackets = append(closePackets, p) },
+		utils.DefaultLogger,
+	)
 	dur := scaleDuration(50 * time.Millisecond)
 	m.deleteRetiredConnsAfter = dur
 
@@ -173,7 +145,7 @@ func TestPacketHandlerMapReplaceWithRemoteClosed(t *testing.T) {
 }
 
 func TestPacketHandlerMapClose(t *testing.T) {
-	m := newPacketHandlerMap(nil, nil, utils.DefaultLogger)
+	m := newPacketHandlerMap(nil, utils.DefaultLogger)
 	testErr := errors.New("shutdown")
 	const numConns = 10
 	destroyChan := make(chan error, 2*numConns)

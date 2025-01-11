@@ -72,9 +72,10 @@ type baseServer struct {
 	tokenGenerator *handshake.TokenGenerator
 	maxTokenAge    time.Duration
 
-	connIDGenerator ConnectionIDGenerator
-	connHandler     packetHandlerManager
-	onClose         func()
+	connIDGenerator   ConnectionIDGenerator
+	statelessResetter *statelessResetter
+	connHandler       packetHandlerManager
+	onClose           func()
 
 	receivedPackets chan receivedPacket
 
@@ -95,7 +96,7 @@ type baseServer struct {
 		protocol.ConnectionID, /* destination connection ID */
 		protocol.ConnectionID, /* source connection ID */
 		ConnectionIDGenerator,
-		protocol.StatelessResetToken,
+		*statelessResetter,
 		*Config,
 		*tls.Config,
 		*handshake.TokenGenerator,
@@ -248,6 +249,7 @@ func newServer(
 	conn rawConn,
 	connHandler packetHandlerManager,
 	connIDGenerator ConnectionIDGenerator,
+	statelessResetter *statelessResetter,
 	connContext func(context.Context) context.Context,
 	tlsConf *tls.Config,
 	config *Config,
@@ -268,6 +270,7 @@ func newServer(
 		maxTokenAge:               maxTokenAge,
 		verifySourceAddress:       verifySourceAddress,
 		connIDGenerator:           connIDGenerator,
+		statelessResetter:         statelessResetter,
 		connHandler:               connHandler,
 		connQueue:                 make(chan quicConn, protocol.MaxAcceptQueueSize),
 		errorChan:                 make(chan struct{}),
@@ -707,7 +710,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		hdr.SrcConnectionID,
 		connID,
 		s.connIDGenerator,
-		s.connHandler.GetStatelessResetToken(connID),
+		s.statelessResetter,
 		config,
 		s.tlsConf,
 		s.tokenGenerator,
