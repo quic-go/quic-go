@@ -1,162 +1,168 @@
 package ackhandler
 
 import (
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-var _ = Describe("Received Packet Handler", func() {
-	var handler ReceivedPacketHandler
-	var sentPackets *MockSentPacketTracker
+func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	sentPackets := NewMockSentPacketTracker(ctrl)
+	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	BeforeEach(func() {
-		sentPackets = NewMockSentPacketTracker(mockCtrl)
-		handler = newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
-	})
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial).Times(2)
+	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionHandshake).Times(2)
+	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT).Times(2)
 
-	It("generates ACKs for different packet number spaces", func() {
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-		sendTime := time.Now().Add(-time.Second)
-		sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial).Times(2)
-		sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionHandshake).Times(2)
-		sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT).Times(2)
-		Expect(handler.ReceivedPacket(2, protocol.ECT0, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(1, protocol.ECT1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(5, protocol.ECNCE, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(3, protocol.ECT0, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(2, protocol.ECT1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(4, protocol.ECNCE, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		initialAck := handler.GetAckFrame(protocol.EncryptionInitial, true)
-		Expect(initialAck).ToNot(BeNil())
-		Expect(initialAck.AckRanges).To(HaveLen(1))
-		Expect(initialAck.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 2, Largest: 3}))
-		Expect(initialAck.DelayTime).To(BeZero())
-		Expect(initialAck.ECT0).To(BeEquivalentTo(2))
-		Expect(initialAck.ECT1).To(BeZero())
-		Expect(initialAck.ECNCE).To(BeZero())
-		handshakeAck := handler.GetAckFrame(protocol.EncryptionHandshake, true)
-		Expect(handshakeAck).ToNot(BeNil())
-		Expect(handshakeAck.AckRanges).To(HaveLen(1))
-		Expect(handshakeAck.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 1, Largest: 2}))
-		Expect(handshakeAck.DelayTime).To(BeZero())
-		Expect(handshakeAck.ECT0).To(BeZero())
-		Expect(handshakeAck.ECT1).To(BeEquivalentTo(2))
-		Expect(handshakeAck.ECNCE).To(BeZero())
-		oneRTTAck := handler.GetAckFrame(protocol.Encryption1RTT, true)
-		Expect(oneRTTAck).ToNot(BeNil())
-		Expect(oneRTTAck.AckRanges).To(HaveLen(1))
-		Expect(oneRTTAck.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 4, Largest: 5}))
-		Expect(oneRTTAck.DelayTime).To(BeNumerically("~", time.Second, 50*time.Millisecond))
-		Expect(oneRTTAck.ECT0).To(BeZero())
-		Expect(oneRTTAck.ECT1).To(BeZero())
-		Expect(oneRTTAck.ECNCE).To(BeEquivalentTo(2))
-	})
+	sendTime := time.Now().Add(-time.Second)
 
-	It("uses the same packet number space for 0-RTT and 1-RTT packets", func() {
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-		sentPackets.EXPECT().ReceivedPacket(protocol.Encryption0RTT)
-		sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT)
-		sendTime := time.Now().Add(-time.Second)
-		Expect(handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		ack := handler.GetAckFrame(protocol.Encryption1RTT, true)
-		Expect(ack).ToNot(BeNil())
-		Expect(ack.AckRanges).To(HaveLen(1))
-		Expect(ack.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 2, Largest: 3}))
-	})
+	require.NoError(t, handler.ReceivedPacket(2, protocol.ECT0, protocol.EncryptionInitial, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(1, protocol.ECT1, protocol.EncryptionHandshake, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(5, protocol.ECNCE, protocol.Encryption1RTT, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(3, protocol.ECT0, protocol.EncryptionInitial, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(2, protocol.ECT1, protocol.EncryptionHandshake, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNCE, protocol.Encryption1RTT, sendTime, true))
 
-	It("rejects 0-RTT packets with higher packet numbers than 1-RTT packets", func() {
-		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(3)
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-		sendTime := time.Now()
-		Expect(handler.ReceivedPacket(10, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(11, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(12, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true)).To(MatchError("received packet number 12 on a 0-RTT packet after receiving 11 on a 1-RTT packet"))
-	})
+	// Initial
+	initialAck := handler.GetAckFrame(protocol.EncryptionInitial, true)
+	require.NotNil(t, initialAck)
+	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 3}}, initialAck.AckRanges)
+	require.Zero(t, initialAck.DelayTime)
+	require.EqualValues(t, 2, initialAck.ECT0)
+	require.Zero(t, initialAck.ECT1)
+	require.Zero(t, initialAck.ECNCE)
 
-	It("allows reordered 0-RTT packets", func() {
-		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(3)
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-		sendTime := time.Now()
-		Expect(handler.ReceivedPacket(10, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(12, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(11, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
-	})
+	// Handshake
+	handshakeAck := handler.GetAckFrame(protocol.EncryptionHandshake, true)
+	require.NotNil(t, handshakeAck)
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 2}}, handshakeAck.AckRanges)
+	require.Zero(t, handshakeAck.DelayTime)
+	require.Zero(t, handshakeAck.ECT0)
+	require.EqualValues(t, 2, handshakeAck.ECT1)
+	require.Zero(t, handshakeAck.ECNCE)
 
-	It("drops Initial packets", func() {
-		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(2)
-		sendTime := time.Now().Add(-time.Second)
-		Expect(handler.ReceivedPacket(2, protocol.ECNNon, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(1, protocol.ECNNon, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.GetAckFrame(protocol.EncryptionInitial, true)).ToNot(BeNil())
-		handler.DropPackets(protocol.EncryptionInitial)
-		Expect(handler.GetAckFrame(protocol.EncryptionInitial, true)).To(BeNil())
-		Expect(handler.GetAckFrame(protocol.EncryptionHandshake, true)).ToNot(BeNil())
-	})
+	// 1-RTT
+	oneRTTAck := handler.GetAckFrame(protocol.Encryption1RTT, true)
+	require.NotNil(t, oneRTTAck)
+	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 5}}, oneRTTAck.AckRanges)
+	require.InDelta(t, time.Second, oneRTTAck.DelayTime, float64(50*time.Millisecond))
+	require.Zero(t, oneRTTAck.ECT0)
+	require.Zero(t, oneRTTAck.ECT1)
+	require.EqualValues(t, 2, oneRTTAck.ECNCE)
+}
 
-	It("drops Handshake packets", func() {
-		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(2)
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-		sendTime := time.Now().Add(-time.Second)
-		Expect(handler.ReceivedPacket(1, protocol.ECNNon, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.GetAckFrame(protocol.EncryptionHandshake, true)).ToNot(BeNil())
-		handler.DropPackets(protocol.EncryptionInitial)
-		Expect(handler.GetAckFrame(protocol.EncryptionHandshake, true)).To(BeNil())
-		Expect(handler.GetAckFrame(protocol.Encryption1RTT, true)).ToNot(BeNil())
-	})
+func TestReceive0RTTAnd1RTT(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	sentPackets := NewMockSentPacketTracker(mockCtrl)
+	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	It("does nothing when dropping 0-RTT packets", func() {
-		handler.DropPackets(protocol.Encryption0RTT)
-	})
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption0RTT).AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT)
 
-	It("drops old ACK ranges", func() {
-		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
-		sendTime := time.Now()
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Times(2)
-		Expect(handler.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		ack := handler.GetAckFrame(protocol.Encryption1RTT, true)
-		Expect(ack).ToNot(BeNil())
-		Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
-		Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(2)))
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked()
-		Expect(handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(2))
-		Expect(handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		ack = handler.GetAckFrame(protocol.Encryption1RTT, true)
-		Expect(ack).ToNot(BeNil())
-		Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(2)))
-		Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(4)))
-	})
+	sendTime := time.Now().Add(-time.Second)
+	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	It("says if packets are duplicates", func() {
-		sendTime := time.Now()
-		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
-		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-		// Initial
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionInitial)).To(BeFalse())
-		Expect(handler.ReceivedPacket(3, protocol.ECNNon, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionInitial)).To(BeTrue())
-		// Handshake
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionHandshake)).To(BeFalse())
-		Expect(handler.ReceivedPacket(3, protocol.ECNNon, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionHandshake)).To(BeTrue())
-		// 0-RTT
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.Encryption0RTT)).To(BeFalse())
-		Expect(handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.Encryption0RTT)).To(BeTrue())
-		// 1-RTT
-		Expect(handler.IsPotentiallyDuplicate(3, protocol.Encryption1RTT)).To(BeTrue())
-		Expect(handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT)).To(BeFalse())
-		Expect(handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT)).To(BeTrue())
-	})
-})
+	ack := handler.GetAckFrame(protocol.Encryption1RTT, true)
+	require.NotNil(t, ack)
+	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 3}}, ack.AckRanges)
+
+	// 0-RTT packets with higher packet numbers than 1-RTT packets are rejected...
+	require.Error(t, handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true))
+	// ... but reordered 0-RTT packets are allowed
+	require.NoError(t, handler.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true))
+}
+
+func TestDropPackets(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	sentPackets := NewMockSentPacketTracker(mockCtrl)
+	sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
+
+	sendTime := time.Now().Add(-time.Second)
+
+	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.EncryptionInitial, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(1, protocol.ECNNon, protocol.EncryptionHandshake, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
+
+	// Initial
+	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionInitial, true))
+	handler.DropPackets(protocol.EncryptionInitial)
+	require.Nil(t, handler.GetAckFrame(protocol.EncryptionInitial, true))
+
+	// Handshake
+	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionHandshake, true))
+	handler.DropPackets(protocol.EncryptionHandshake)
+	require.Nil(t, handler.GetAckFrame(protocol.EncryptionHandshake, true))
+
+	// 1-RTT
+	require.NotNil(t, handler.GetAckFrame(protocol.Encryption1RTT, true))
+
+	// 0-RTT is a no-op
+	handler.DropPackets(protocol.Encryption0RTT)
+}
+
+func TestAckRangePruning(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	sentPackets := NewMockSentPacketTracker(mockCtrl)
+	sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Times(3)
+	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
+
+	sendTime := time.Now()
+	require.NoError(t, handler.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
+	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
+
+	ack := handler.GetAckFrame(protocol.Encryption1RTT, true)
+	require.NotNil(t, ack)
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 2}}, ack.AckRanges)
+
+	require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(2))
+	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
+
+	ack = handler.GetAckFrame(protocol.Encryption1RTT, true)
+	require.NotNil(t, ack)
+	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 4}}, ack.AckRanges)
+}
+
+func TestPacketDuplicateDetection(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	sentPackets := NewMockSentPacketTracker(mockCtrl)
+	sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+
+	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
+	sendTime := time.Now()
+
+	// 1-RTT is tested separately at the end
+	encLevels := []protocol.EncryptionLevel{
+		protocol.EncryptionInitial,
+		protocol.EncryptionHandshake,
+		protocol.Encryption0RTT,
+	}
+
+	for _, encLevel := range encLevels {
+		// first, packet 3 is not a duplicate
+		require.False(t, handler.IsPotentiallyDuplicate(3, encLevel))
+		require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, encLevel, sendTime, true))
+		// now packet 3 is considered a duplicate
+		require.True(t, handler.IsPotentiallyDuplicate(3, encLevel))
+	}
+
+	// 1-RTT
+	require.True(t, handler.IsPotentiallyDuplicate(3, protocol.Encryption1RTT))
+	require.False(t, handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT))
+	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
+	require.True(t, handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT))
+}
