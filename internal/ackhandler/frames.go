@@ -18,3 +18,24 @@ func HasAckElicitingFrames(fs []Frame) bool {
 	}
 	return false
 }
+
+// IsProbingFrame returns true if the frame is a probing frame.
+func IsProbingFrame(f wire.Frame) bool {
+	switch f.(type) {
+	case *wire.PathChallengeFrame,
+		*wire.PathResponseFrame,
+		*wire.NewConnectionIDFrame:
+		return true
+	}
+	return false
+}
+
+// HasNonProbingFrames returns true if at least one frame is not a probing frame.
+func HasNonProbingFrames(fs []Frame) bool {
+	for _, f := range fs {
+		if !IsProbingFrame(f.Frame) {
+			return true
+		}
+	}
+	return false
+}
