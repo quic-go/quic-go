@@ -86,6 +86,7 @@ type testConnection struct {
 	packer     *MockPacker
 	destConnID protocol.ConnectionID
 	srcConnID  protocol.ConnectionID
+	remoteAddr *net.UDPAddr
 }
 
 func newServerTestConnection(
@@ -145,6 +146,7 @@ func newServerTestConnection(
 		packer:     packer,
 		destConnID: origDestConnID,
 		srcConnID:  srcConnID,
+		remoteAddr: remoteAddr,
 	}
 }
 
@@ -501,25 +503,27 @@ func TestConnectionStatelessReset(t *testing.T) {
 	}
 }
 
-func getLongHeaderPacket(t *testing.T, extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
+func getLongHeaderPacket(t *testing.T, remoteAddr net.Addr, extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
 	t.Helper()
 	b, err := extHdr.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	return receivedPacket{
-		data:    append(b, data...),
-		buffer:  getPacketBuffer(),
-		rcvTime: time.Now(),
+		remoteAddr: remoteAddr,
+		data:       append(b, data...),
+		buffer:     getPacketBuffer(),
+		rcvTime:    time.Now(),
 	}
 }
 
-func getShortHeaderPacket(t *testing.T, connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) receivedPacket {
+func getShortHeaderPacket(t *testing.T, remoteAddr net.Addr, connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) receivedPacket {
 	t.Helper()
 	b, err := wire.AppendShortHeader(nil, connID, pn, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 	require.NoError(t, err)
 	return receivedPacket{
-		data:    append(b, data...),
-		buffer:  getPacketBuffer(),
-		rcvTime: time.Now(),
+		remoteAddr: remoteAddr,
+		data:       append(b, data...),
+		buffer:     getPacketBuffer(),
+		rcvTime:    time.Now(),
 	}
 }
 
@@ -529,13 +533,17 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-		p := getLongHeaderPacket(t, &wire.ExtendedHeader{Header: wire.Header{
-			Type:             protocol.PacketTypeRetry,
-			DestConnectionID: tc.conn.origDestConnID,
-			SrcConnectionID:  tc.srcConnID,
-			Version:          tc.conn.version,
-			Token:            []byte("foobar"),
-		}}, make([]byte, 16) /* Retry integrity tag */)
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{Header: wire.Header{
+				Type:             protocol.PacketTypeRetry,
+				DestConnectionID: tc.conn.origDestConnID,
+				SrcConnectionID:  tc.srcConnID,
+				Version:          tc.conn.version,
+				Token:            []byte("foobar"),
+			}},
+			make([]byte, 16), /* Retry integrity tag */
+		)
 		tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 		wasProcessed, err := tc.conn.handleOnePacket(p)
 		require.NoError(t, err)
@@ -563,10 +571,14 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-		p := getLongHeaderPacket(t, &wire.ExtendedHeader{
-			Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: 1234},
-			PacketNumberLen: protocol.PacketNumberLen2,
-		}, nil)
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{
+				Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: 1234},
+				PacketNumberLen: protocol.PacketNumberLen2,
+			},
+			nil,
+		)
 		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnsupportedVersion)
 		wasProcessed, err := tc.conn.handleOnePacket(p)
 		require.NoError(t, err)
@@ -578,10 +590,14 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-		p := getLongHeaderPacket(t, &wire.ExtendedHeader{
-			Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: Version1},
-			PacketNumberLen: protocol.PacketNumberLen2,
-		}, nil)
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{
+				Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: Version1},
+				PacketNumberLen: protocol.PacketNumberLen2,
+			},
+			nil,
+		)
 		p.data[0] ^= 0x40 // unset the QUIC bit
 		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropHeaderParseError)
 		wasProcessed, err := tc.conn.handleOnePacket(p)
@@ -595,10 +611,14 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 	tc := newClientTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-	p := getLongHeaderPacket(t, &wire.ExtendedHeader{
-		Header:          wire.Header{Type: protocol.PacketType0RTT, Length: 2, Version: protocol.Version1},
-		PacketNumberLen: protocol.PacketNumberLen2,
-	}, nil)
+	p := getLongHeaderPacket(t,
+		tc.remoteAddr,
+		&wire.ExtendedHeader{
+			Header:          wire.Header{Type: protocol.PacketType0RTT, Length: 2, Version: protocol.Version1},
+			PacketNumberLen: protocol.PacketNumberLen2,
+		},
+		nil,
+	)
 	tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 	wasProcessed, err := tc.conn.handleOnePacket(p)
 	require.NoError(t, err)
@@ -632,7 +652,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	}
 	unpackedHdr := *hdr
 	unpackedHdr.PacketNumber = 0x1337
-	packet := getLongHeaderPacket(t, hdr, nil)
+	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	packet.ecn = protocol.ECNCE
 	rcvTime := time.Now().Add(-10 * time.Second)
 	packet.rcvTime = rcvTime
@@ -655,7 +675,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// receive a duplicate of this packet
-	packet = getLongHeaderPacket(t, hdr, nil)
+	packet = getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.EncryptionInitial).Return(true)
 	unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 		encryptionLevel: protocol.EncryptionInitial,
@@ -669,7 +689,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// receive a short header packet
-	packet = getShortHeaderPacket(t, tc.srcConnID, 0x37, nil)
+	packet = getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x37, nil)
 	packet.ecn = protocol.ECT1
 	packet.rcvTime = rcvTime
 	gomock.InOrder(
@@ -735,9 +755,9 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 	unpackedHdr2 := *hdr2
 	unpackedHdr2.PacketNumber = 1338
 
-	packet := getLongHeaderPacket(t, hdr1, nil)
-	packet2 := getLongHeaderPacket(t, hdr2, nil)
-	packet3 := getLongHeaderPacket(t, hdr3, nil)
+	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr1, nil)
+	packet2 := getLongHeaderPacket(t, tc.remoteAddr, hdr2, nil)
+	packet3 := getLongHeaderPacket(t, tc.remoteAddr, hdr3, nil)
 	packet.data = append(packet.data, packet2.data...)
 	packet.data = append(packet.data, packet3.data...)
 	packet.ecn = protocol.ECT1
@@ -807,7 +827,7 @@ func testConnectionUnpackFailureFatal(t *testing.T, unpackErr error) error {
 	go func() { errChan <- tc.conn.run() }()
 
 	tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
-	tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, 0x42, nil))
+	tc.conn.handlePacket(getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x42, nil))
 
 	select {
 	case err := <-errChan:
@@ -856,7 +876,7 @@ func testConnectionUnpackFailureDropped(t *testing.T, unpackErr error, packetDro
 			close(done)
 		},
 	)
-	tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, 0x42, nil))
+	tc.conn.handlePacket(getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x42, nil))
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -928,7 +948,7 @@ func TestConnectionRemoteClose(t *testing.T) {
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
 
-	p := getShortHeaderPacket(t, tc.srcConnID, 1, []byte("encrypted"))
+	p := getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 1, []byte("encrypted"))
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1146,7 +1166,7 @@ func TestConnectionHandshakeServer(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
-	p := getLongHeaderPacket(t, hdr, nil)
+	p := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1258,7 +1278,7 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 		t.Fatal("timeout")
 	}
 
-	p := getLongHeaderPacket(t, hdr, nil)
+	p := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1289,7 +1309,7 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 		),
 	)
 	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shortHeaderPacket{}, errNothingToPack).AnyTimes()
-	p = getLongHeaderPacket(t, hdr, nil)
+	p = getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1385,7 +1405,7 @@ func TestConnection0RTTTransportParameters(t *testing.T) {
 		t.Fatal("timeout")
 	}
 
-	p := getLongHeaderPacket(t, hdr, nil)
+	p := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1463,7 +1483,7 @@ func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool, n
 	}
 
 	for i := range numPackets {
-		tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, protocol.PacketNumber(i), []byte("foobar")))
+		tc.conn.handlePacket(getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, protocol.PacketNumber(i), []byte("foobar")))
 	}
 
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
@@ -1532,8 +1552,8 @@ func TestConnectionPacketBuffering(t *testing.T) {
 		),
 	)
 
-	tc.conn.handlePacket(getLongHeaderPacket(t, &hdr1, []byte("packet1")))
-	tc.conn.handlePacket(getLongHeaderPacket(t, &hdr2, []byte("packet2")))
+	tc.conn.handlePacket(getLongHeaderPacket(t, tc.remoteAddr, &hdr1, []byte("packet1")))
+	tc.conn.handlePacket(getLongHeaderPacket(t, tc.remoteAddr, &hdr2, []byte("packet2")))
 
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
@@ -1586,7 +1606,7 @@ func TestConnectionPacketBuffering(t *testing.T) {
 		tr.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 	)
 
-	tc.conn.handlePacket(getLongHeaderPacket(t, &hdr3, []byte("packet3")))
+	tc.conn.handlePacket(getLongHeaderPacket(t, tc.remoteAddr, &hdr3, []byte("packet3")))
 
 	select {
 	case <-unpacked:
@@ -1892,7 +1912,7 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 				return shortHeaderPacket{}, errNothingToPack
 			},
 		)
-		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now()})
+		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 		select {
 		case <-done:
 			// the keep-alive packet should be sent after half the idle timeout
@@ -1903,7 +1923,7 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 		}
 	case false: // if keep-alives are disabled, the connection will run into an idle timeout
 		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
-		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now()})
+		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 		select {
 		case <-time.After(3 * time.Second):
 			t.Fatal("timeout")
@@ -2643,9 +2663,10 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 		}, nil,
 	)
 	wasProcessed, err := tc.conn.handleOnePacket(receivedPacket{
-		data:    regular,
-		buffer:  getPacketBuffer(),
-		rcvTime: time.Now(),
+		data:       regular,
+		buffer:     getPacketBuffer(),
+		rcvTime:    time.Now(),
+		remoteAddr: tc.remoteAddr,
 	})
 	require.NoError(t, err)
 	require.True(t, wasProcessed)
@@ -2747,7 +2768,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 		),
 	)
 
-	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr1), buffer: getPacketBuffer(), rcvTime: time.Now()})
+	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr1), buffer: getPacketBuffer(), rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 
 	select {
 	case <-receivedFirst:
@@ -2764,7 +2785,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 		},
 	)
 
-	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr2), buffer: getPacketBuffer(), rcvTime: time.Now()})
+	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr2), buffer: getPacketBuffer(), rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 	select {
 	case <-dropped:
 		// the connection ID should not have changed
@@ -2820,6 +2841,155 @@ func TestConnectionEarlyClose(t *testing.T) {
 	case err := <-errChan:
 		require.Error(t, err)
 		require.ErrorContains(t, err, "early error")
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestConnectionPathValidation(t *testing.T) {
+	t.Run("NAT rebinding", func(t *testing.T) {
+		testConnectionPathValidation(t, true)
+	})
+
+	t.Run("intentional migration", func(t *testing.T) {
+		testConnectionPathValidation(t, false)
+	})
+}
+
+func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
+	mockCtrl := gomock.NewController(t)
+	unpacker := NewMockUnpacker(mockCtrl)
+	tc := newServerTestConnection(
+		t,
+		mockCtrl,
+		nil,
+		false,
+		connectionOptUnpacker(unpacker),
+		connectionOptHandshakeConfirmed(),
+		connectionOptRTT(time.Second),
+	)
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{MaxUDPPayloadSize: 1456}))
+
+	newRemoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 1), Port: 1234}
+	require.NotEqual(t, tc.remoteAddr, newRemoteAddr)
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
+
+	probeSent := make(chan struct{})
+	var pathChallenge *wire.PathChallengeFrame
+	payload := []byte{0} // PADDING frame
+	if isNATRebinding {
+		payload = []byte{1} // PING frame
+	}
+	gomock.InOrder(
+		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+			protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
+		),
+		tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ protocol.ConnectionID, f ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				pathChallenge = f.Frame.(*wire.PathChallengeFrame)
+				return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
+			},
+		),
+		tc.sendConn.EXPECT().WriteTo(gomock.Any(), newRemoteAddr).DoAndReturn(
+			func([]byte, net.Addr) error { close(probeSent); return nil },
+		),
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{}, errNothingToPack,
+		),
+	)
+
+	tc.conn.handlePacket(receivedPacket{
+		data:       make([]byte, 10),
+		buffer:     getPacketBuffer(),
+		remoteAddr: newRemoteAddr,
+		rcvTime:    time.Now(),
+	})
+
+	select {
+	case <-probeSent:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// Receive a packed containing a PATH_RESPONSE frame.
+	// Only if the first packet received on the path was a probing packet
+	// (i.e. we're dealing with a NAT rebinding), this makes us switch to the new path.
+	migrated := make(chan struct{})
+	data, err := (&wire.PathResponseFrame{Data: pathChallenge.Data}).Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	calls := []any{
+		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+			protocol.PacketNumber(11), protocol.PacketNumberLen2, protocol.KeyPhaseZero, data, nil,
+		),
+	}
+	if isNATRebinding {
+		calls = append(calls,
+			tc.sendConn.EXPECT().ChangeRemoteAddr(newRemoteAddr, gomock.Any()).Do(
+				func(net.Addr, packetInfo) { close(migrated) },
+			),
+		)
+	}
+	calls = append(calls,
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{}, errNothingToPack,
+		),
+	)
+	gomock.InOrder(calls...)
+	require.Equal(t, tc.remoteAddr, tc.conn.RemoteAddr())
+	// the PATH_RESPONSE can be sent on the old path, if the client is just probing the new path
+	addr := tc.remoteAddr
+	if isNATRebinding {
+		addr = newRemoteAddr
+	}
+	tc.conn.handlePacket(receivedPacket{
+		data:       make([]byte, 100),
+		buffer:     getPacketBuffer(),
+		remoteAddr: addr,
+		rcvTime:    time.Now(),
+	})
+
+	if !isNATRebinding {
+		// If the first packet was a probing packet, we only switch to the new path when we
+		// receive a non-probing packet on that path.
+		select {
+		case <-migrated:
+			t.Fatal("didn't expect a migration yet")
+		case <-time.After(scaleDuration(10 * time.Millisecond)):
+		}
+
+		payload := []byte{1} // PING frame
+		gomock.InOrder(
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+				protocol.PacketNumber(12), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
+			),
+			tc.sendConn.EXPECT().ChangeRemoteAddr(newRemoteAddr, gomock.Any()).Do(
+				func(net.Addr, packetInfo) { close(migrated) },
+			),
+			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				shortHeaderPacket{}, errNothingToPack,
+			),
+		)
+		tc.conn.handlePacket(receivedPacket{
+			data:       make([]byte, 100),
+			buffer:     getPacketBuffer(),
+			remoteAddr: newRemoteAddr,
+			rcvTime:    time.Now(),
+		})
+	}
+
+	select {
+	case <-migrated:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// test teardown
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	tc.conn.destroy(nil)
+	select {
+	case <-errChan:
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}

@@ -17,6 +17,7 @@ type mtuDiscoverer interface {
 	ShouldSendProbe(now time.Time) bool
 	CurrentSize() protocol.ByteCount
 	GetPing(now time.Time) (ping ackhandler.Frame, datagramSize protocol.ByteCount)
+	Reset(now time.Time, start, max protocol.ByteCount)
 }
 
 const (
