@@ -2,310 +2,224 @@ package ackhandler
 
 import (
 	"errors"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("SentPacketHistory", func() {
-	var hist *sentPacketHistory
-
-	expectInHistory := func(expected []protocol.PacketNumber) {
-		pns := make([]protocol.PacketNumber, 0, len(expected))
-		for _, p := range hist.packets {
-			if p != nil && !p.skippedPacket {
-				pns = append(pns, p.PacketNumber)
-			}
+func (h *sentPacketHistory) getPacketNumbers() []protocol.PacketNumber {
+	pns := make([]protocol.PacketNumber, 0, len(h.packets))
+	for _, p := range h.packets {
+		if p != nil && !p.skippedPacket {
+			pns = append(pns, p.PacketNumber)
 		}
-		if len(expected) == 0 {
-			Expect(pns).To(BeEmpty())
-			return
-		}
-		Expect(pns).To(Equal(expected))
 	}
+	return pns
+}
 
-	expectSkippedInHistory := func(expected []protocol.PacketNumber) {
-		pns := make([]protocol.PacketNumber, 0, len(expected))
-		for _, p := range hist.packets {
-			if p != nil && p.skippedPacket {
-				pns = append(pns, p.PacketNumber)
-			}
+func (h *sentPacketHistory) getSkippedPacketNumbers() []protocol.PacketNumber {
+	var pns []protocol.PacketNumber
+	for _, p := range h.packets {
+		if p != nil && p.skippedPacket {
+			pns = append(pns, p.PacketNumber)
 		}
-		if len(expected) == 0 {
-			Expect(pns).To(BeEmpty())
-			return
-		}
-		Expect(pns).To(Equal(expected))
 	}
+	return pns
+}
 
-	BeforeEach(func() {
-		hist = newSentPacketHistory(true)
+func TestSentPacketHistoryPacketTracking(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	now := time.Now()
+
+	require.False(t, hist.HasOutstandingPackets())
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
+	require.True(t, hist.HasOutstandingPackets())
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
+	require.Equal(t, []protocol.PacketNumber{0, 1, 2}, hist.getPacketNumbers())
+	require.Empty(t, hist.getSkippedPacketNumbers())
+	require.Equal(t, 3, hist.Len())
+
+	// non-ack-eliciting packets are not saved
+	hist.SentNonAckElicitingPacket(3)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 4, SendTime: now})
+	hist.SentNonAckElicitingPacket(5)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 6, SendTime: now})
+	require.Equal(t, []protocol.PacketNumber{0, 1, 2, 4, 6}, hist.getPacketNumbers())
+
+	// handle skipped packet numbers
+	hist.SkippedPacket(7)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 8})
+	hist.SentNonAckElicitingPacket(9)
+	hist.SkippedPacket(10)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 11})
+	require.Equal(t, []protocol.PacketNumber{0, 1, 2, 4, 6, 8, 11}, hist.getPacketNumbers())
+	require.Equal(t, []protocol.PacketNumber{7, 10}, hist.getSkippedPacketNumbers())
+	require.Equal(t, 12, hist.Len())
+}
+
+func TestSentPacketHistoryNonSequentialPacketNumberUse(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 100})
+	require.Panics(t, func() {
+		hist.SentAckElicitingPacket(&packet{PacketNumber: 102})
 	})
+}
 
-	It("saves sent packets", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-		expectInHistory([]protocol.PacketNumber{0, 1, 2})
-		expectSkippedInHistory(nil)
-	})
+func TestSentPacketHistoryRemovePackets(t *testing.T) {
+	hist := newSentPacketHistory(true)
 
-	It("saves non-ack-eliciting packets", func() {
-		now := time.Now()
-		hist.SentNonAckElicitingPacket(0)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1, SendTime: now})
-		hist.SentNonAckElicitingPacket(2)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 3, SendTime: now})
-		expectInHistory([]protocol.PacketNumber{1, 3})
-	})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
+	hist.SkippedPacket(2)
+	hist.SkippedPacket(3)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 4})
+	hist.SkippedPacket(5)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 6})
+	require.Equal(t, []protocol.PacketNumber{0, 1, 4, 6}, hist.getPacketNumbers())
+	require.Equal(t, []protocol.PacketNumber{2, 3, 5}, hist.getSkippedPacketNumbers())
 
-	It("saves sent packets, with skipped packet number", func() {
-		hist.SkippedPacket(0)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SkippedPacket(2)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 3})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 4})
-		expectInHistory([]protocol.PacketNumber{1, 3, 4})
-		expectSkippedInHistory([]protocol.PacketNumber{0, 2})
-	})
+	require.NoError(t, hist.Remove(0))
+	require.NoError(t, hist.Remove(1))
+	require.Equal(t, []protocol.PacketNumber{4, 6}, hist.getPacketNumbers())
+	require.Equal(t, []protocol.PacketNumber{2, 3, 5}, hist.getSkippedPacketNumbers())
 
-	It("doesn't save non-ack-eliciting packets", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SkippedPacket(2)
-		hist.SentNonAckElicitingPacket(3)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 4})
-		expectInHistory([]protocol.PacketNumber{1, 4})
-	})
+	// add one more packet
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 7})
+	require.Equal(t, []protocol.PacketNumber{4, 6, 7}, hist.getPacketNumbers())
 
-	It("gets the length", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-		Expect(hist.Len()).To(Equal(3))
-	})
+	// remove last packet and add another
+	require.NoError(t, hist.Remove(7))
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 8})
+	require.Equal(t, []protocol.PacketNumber{4, 6, 8}, hist.getPacketNumbers())
 
-	Context("getting the first outstanding packet", func() {
-		It("gets nil, if there are no packets", func() {
-			Expect(hist.FirstOutstanding()).To(BeNil())
-		})
+	// try to remove non-existent packet
+	err := hist.Remove(9)
+	require.Error(t, err)
+	require.EqualError(t, err, "packet 9 not found in sent packet history")
 
-		It("gets the first outstanding packet", func() {
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 3})
-			front := hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-			hist.Remove(2)
-			front = hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(3)))
-		})
+	// Remove all packets
+	require.NoError(t, hist.Remove(4))
+	require.NoError(t, hist.Remove(6))
+	require.NoError(t, hist.Remove(8))
+	require.Empty(t, hist.getPacketNumbers())
+	require.Empty(t, hist.getSkippedPacketNumbers())
+	require.False(t, hist.HasOutstandingPackets())
+}
 
-		It("doesn't regard path MTU packets as outstanding", func() {
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-			hist.SkippedPacket(3)
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 4, IsPathMTUProbePacket: true})
-			front := hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-		})
-	})
+func TestSentPacketHistoryFirstOutstandingPacket(t *testing.T) {
+	hist := newSentPacketHistory(true)
 
-	It("removes packets", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 3})
-		Expect(hist.Remove(2)).To(Succeed())
-		expectInHistory([]protocol.PacketNumber{0, 1, 3})
-	})
+	require.Nil(t, hist.FirstOutstanding())
 
-	It("also removes skipped packets before the removed packet", func() {
-		hist.SkippedPacket(0)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SkippedPacket(2)
-		hist.SkippedPacket(3)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 4})
-		expectSkippedInHistory([]protocol.PacketNumber{0, 2, 3})
-		Expect(hist.Remove(4)).To(Succeed())
-		expectSkippedInHistory([]protocol.PacketNumber{0})
-		expectInHistory([]protocol.PacketNumber{1})
-		Expect(hist.Remove(1)).To(Succeed())
-		expectInHistory(nil)
-		expectSkippedInHistory(nil)
-	})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 3})
+	front := hist.FirstOutstanding()
+	require.NotNil(t, front)
+	require.Equal(t, protocol.PacketNumber(2), front.PacketNumber)
 
-	It("panics on non-sequential packet number use", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 100})
-		Expect(func() { hist.SentAckElicitingPacket(&packet{PacketNumber: 102}) }).To(Panic())
-	})
+	// remove the first packet
+	hist.Remove(2)
+	front = hist.FirstOutstanding()
+	require.NotNil(t, front)
+	require.Equal(t, protocol.PacketNumber(3), front.PacketNumber)
 
-	It("removes and adds packets", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		hist.SkippedPacket(2)
-		hist.SkippedPacket(3)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 4})
-		hist.SkippedPacket(5)
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 6})
-		Expect(hist.Remove(0)).To(Succeed())
-		Expect(hist.Remove(1)).To(Succeed())
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 7})
-		expectInHistory([]protocol.PacketNumber{4, 6, 7})
-	})
+	// Path MTU packets are not regarded as outstanding
+	hist = newSentPacketHistory(true)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
+	hist.SkippedPacket(3)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 4, IsPathMTUProbePacket: true})
+	front = hist.FirstOutstanding()
+	require.NotNil(t, front)
+	require.Equal(t, protocol.PacketNumber(2), front.PacketNumber)
+}
 
-	It("removes the last packet, then adds more", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		Expect(hist.Remove(0)).To(Succeed())
-		Expect(hist.Remove(1)).To(Succeed())
-		expectInHistory([]protocol.PacketNumber{})
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-		expectInHistory([]protocol.PacketNumber{2})
-		Expect(hist.Remove(2)).To(Succeed())
-		expectInHistory(nil)
-	})
+func TestSentPacketHistoryIterating(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	hist.SkippedPacket(0)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 3})
+	hist.SkippedPacket(4)
+	hist.SkippedPacket(5)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 6})
+	require.NoError(t, hist.Remove(3))
+	require.NoError(t, hist.Remove(4))
 
-	It("errors when trying to remove a non existing packet", func() {
-		hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-		Expect(hist.Remove(2)).To(MatchError("packet 2 not found in sent packet history"))
-	})
+	var packets, skippedPackets []protocol.PacketNumber
+	require.NoError(t, hist.Iterate(func(p *packet) (bool, error) {
+		if p.skippedPacket {
+			skippedPackets = append(skippedPackets, p.PacketNumber)
+		} else {
+			packets = append(packets, p.PacketNumber)
+		}
+		return true, nil
+	}))
 
-	Context("iterating", func() {
-		BeforeEach(func() {
-			hist.SkippedPacket(0)
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-			hist.SkippedPacket(2)
-			hist.SkippedPacket(3)
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 4})
-			hist.SkippedPacket(5)
-			hist.SkippedPacket(6)
-			hist.SkippedPacket(7)
-			hist.SentAckElicitingPacket(&packet{PacketNumber: 8})
-		})
+	require.Equal(t, []protocol.PacketNumber{1, 2, 6}, packets)
+	require.Equal(t, []protocol.PacketNumber{0, 5}, skippedPackets)
+}
 
-		It("iterates over all packets", func() {
-			var iterations []protocol.PacketNumber
-			Expect(hist.Iterate(func(p *packet) (bool, error) {
-				if p.skippedPacket {
-					return true, nil
-				}
-				iterations = append(iterations, p.PacketNumber)
-				return true, nil
-			})).To(Succeed())
-			Expect(iterations).To(Equal([]protocol.PacketNumber{1, 4, 8}))
-		})
+func TestSentPacketHistoryStopIterating(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	hist.SkippedPacket(0)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
 
-		It("also iterates over skipped packets", func() {
-			var packets, skippedPackets, allPackets []protocol.PacketNumber
-			Expect(hist.Iterate(func(p *packet) (bool, error) {
-				if p.skippedPacket {
-					skippedPackets = append(skippedPackets, p.PacketNumber)
-				} else {
-					packets = append(packets, p.PacketNumber)
-				}
-				allPackets = append(allPackets, p.PacketNumber)
-				return true, nil
-			})).To(Succeed())
-			Expect(packets).To(Equal([]protocol.PacketNumber{1, 4, 8}))
-			Expect(skippedPackets).To(Equal([]protocol.PacketNumber{0, 2, 3, 5, 6, 7}))
-			Expect(allPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 3, 4, 5, 6, 7, 8}))
-		})
+	var iterations []protocol.PacketNumber
+	require.NoError(t, hist.Iterate(func(p *packet) (bool, error) {
+		if p.skippedPacket {
+			return true, nil
+		}
+		iterations = append(iterations, p.PacketNumber)
+		return p.PacketNumber < 1, nil
+	}))
+	require.Equal(t, []protocol.PacketNumber{1}, iterations)
+}
 
-		It("stops iterating", func() {
-			var iterations []protocol.PacketNumber
-			Expect(hist.Iterate(func(p *packet) (bool, error) {
-				if p.skippedPacket {
-					return true, nil
-				}
-				iterations = append(iterations, p.PacketNumber)
-				return p.PacketNumber != 4, nil
-			})).To(Succeed())
-			Expect(iterations).To(Equal([]protocol.PacketNumber{1, 4}))
-		})
+func TestSentPacketHistoryIterateError(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
 
-		It("returns the error", func() {
-			testErr := errors.New("test error")
-			var iterations []protocol.PacketNumber
-			Expect(hist.Iterate(func(p *packet) (bool, error) {
-				if p.skippedPacket {
-					return true, nil
-				}
-				iterations = append(iterations, p.PacketNumber)
-				if p.PacketNumber == 4 {
-					return false, testErr
-				}
-				return true, nil
-			})).To(MatchError(testErr))
-			Expect(iterations).To(Equal([]protocol.PacketNumber{1, 4}))
-		})
+	testErr := errors.New("test error")
+	var iterations []protocol.PacketNumber
+	require.Equal(t, testErr, hist.Iterate(func(p *packet) (bool, error) {
+		iterations = append(iterations, p.PacketNumber)
+		if p.PacketNumber == 1 {
+			return false, testErr
+		}
+		return true, nil
+	}))
+	require.Equal(t, []protocol.PacketNumber{0, 1}, iterations)
+}
 
-		It("doesn't iterate over deleted packets", func() {
-			hist.Remove(4)
-			var iterations []protocol.PacketNumber
-			Expect(hist.Iterate(func(p *packet) (bool, error) {
-				if p.skippedPacket {
-					return true, nil
-				}
-				iterations = append(iterations, p.PacketNumber)
-				if p.PacketNumber == 4 {
-					Expect(hist.Remove(4)).To(Succeed())
-				}
-				return true, nil
-			})).To(Succeed())
-			Expect(iterations).To(Equal([]protocol.PacketNumber{1, 8}))
-		})
+func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
+	hist.SkippedPacket(2)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 3})
+	hist.SkippedPacket(4)
+	hist.SentAckElicitingPacket(&packet{PacketNumber: 5})
 
-		It("allows deletions", func() {
-			var iterations []protocol.PacketNumber
-			Expect(hist.Iterate(func(p *packet) (bool, error) {
-				if p.skippedPacket {
-					return true, nil
-				}
-				iterations = append(iterations, p.PacketNumber)
-				if p.PacketNumber == 4 {
-					Expect(hist.Remove(4)).To(Succeed())
-				}
-				return true, nil
-			})).To(Succeed())
-			expectInHistory([]protocol.PacketNumber{1, 8})
-			Expect(iterations).To(Equal([]protocol.PacketNumber{1, 4, 8}))
-		})
-	})
+	var iterations []protocol.PacketNumber
+	require.NoError(t, hist.Iterate(func(p *packet) (bool, error) {
+		iterations = append(iterations, p.PacketNumber)
+		switch p.PacketNumber {
+		case 0:
+			require.NoError(t, hist.Remove(0))
+		case 4:
+			require.NoError(t, hist.Remove(4))
+		}
+		return true, nil
+	}))
 
-	Context("outstanding packets", func() {
-		It("says if it has outstanding packets", func() {
-			Expect(hist.HasOutstandingPackets()).To(BeFalse())
-			hist.SentAckElicitingPacket(&packet{EncryptionLevel: protocol.Encryption1RTT, PacketNumber: 0})
-			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-		})
-
-		It("accounts for deleted packets", func() {
-			hist.SentAckElicitingPacket(&packet{
-				PacketNumber:    10,
-				EncryptionLevel: protocol.Encryption1RTT,
-			})
-			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-			Expect(hist.Remove(10)).To(Succeed())
-			Expect(hist.HasOutstandingPackets()).To(BeFalse())
-		})
-
-		It("counts the number of packets", func() {
-			hist.SentAckElicitingPacket(&packet{
-				PacketNumber:    10,
-				EncryptionLevel: protocol.Encryption1RTT,
-			})
-			hist.SentAckElicitingPacket(&packet{
-				PacketNumber:    11,
-				EncryptionLevel: protocol.Encryption1RTT,
-			})
-			Expect(hist.Remove(11)).To(Succeed())
-			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-			Expect(hist.Remove(10)).To(Succeed())
-			Expect(hist.HasOutstandingPackets()).To(BeFalse())
-		})
-	})
-})
+	require.Equal(t, []protocol.PacketNumber{0, 1, 2, 3, 4, 5}, iterations)
+	require.Equal(t, []protocol.PacketNumber{1, 3, 5}, hist.getPacketNumbers())
+	require.Equal(t, []protocol.PacketNumber{2}, hist.getSkippedPacketNumbers())
+}
