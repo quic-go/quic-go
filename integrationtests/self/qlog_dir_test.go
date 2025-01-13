@@ -15,15 +15,9 @@ import (
 )
 
 func TestQlogDirEnvironmentVariable(t *testing.T) {
-	originalQlogDirValue := os.Getenv("QLOGDIR")
-	tempTestDirPath, err := os.MkdirTemp("", "temp_test_dir")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, os.Setenv("QLOGDIR", originalQlogDirValue))
-		require.NoError(t, os.RemoveAll(tempTestDirPath))
-	})
-	qlogDir := path.Join(tempTestDirPath, "qlogs")
-	require.NoError(t, os.Setenv("QLOGDIR", qlogDir))
+	tempDir := t.TempDir()
+	qlogDir := path.Join(tempDir, "qlogs")
+	t.Setenv("QLOGDIR", qlogDir)
 
 	serverStopped := make(chan struct{})
 	server, err := quic.Listen(
@@ -60,7 +54,7 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 	server.Close()
 	<-serverStopped
 
-	_, err = os.Stat(tempTestDirPath)
+	_, err = os.Stat(qlogDir)
 	qlogDirCreated := !os.IsNotExist(err)
 	require.True(t, qlogDirCreated)
 
