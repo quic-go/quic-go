@@ -245,6 +245,11 @@ func (c *client) dial(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		c.conn.destroy(nil)
+		// wait until the Go routine that called Connection.run() returns
+		select {
+		case <-errorChan:
+		case <-recreateChan:
+		}
 		return context.Cause(ctx)
 	case err := <-errorChan:
 		return err
