@@ -199,6 +199,9 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 	}
 
 	trace := httptrace.ContextClientTrace(req.Context())
+	if trace != nil {
+		req = req.WithContext(withTraceTLSOnce(req.Context(), &sync.Once{}))
+	}
 	hostname := authorityAddr(hostnameFromURL(req.URL))
 	traceGetConn(trace, hostname)
 	cl, isReused, err := t.getClient(req.Context(), hostname, opt.OnlyCachedConn)
@@ -330,11 +333,15 @@ func (t *Transport) dial(ctx context.Context, hostname string) (quic.EarlyConnec
 			traceConnectStart(trace, network, udpAddr.String())
 			traceTLSHandshakeStart(trace)
 			conn, err := t.transport.DialEarly(ctx, udpAddr, tlsCfg, cfg)
-			var state tls.ConnectionState
-			if conn != nil {
-				state = conn.ConnectionState().TLS
+			select {
+			case <-conn.HandshakeComplete():
+				var state tls.ConnectionState
+				if conn != nil {
+					state = conn.ConnectionState().TLS
+				}
+				traceTLSHandshakeDone(trace, contextTraceTLSOnce(ctx), state, err)
+			default:
 			}
-			traceTLSHandshakeDone(trace, state, err)
 			traceConnectDone(trace, network, udpAddr.String(), err)
 			return conn, err
 		}

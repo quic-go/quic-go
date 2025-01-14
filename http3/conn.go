@@ -125,7 +125,8 @@ func (c *connection) openRequestStream(
 		return nil
 	})
 	trace := httptrace.ContextClientTrace(ctx)
-	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp, trace), nil
+	traceTLSOnce := contextTraceTLSOnce(ctx)
+	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp, trace, traceTLSOnce), nil
 }
 
 func (c *connection) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {

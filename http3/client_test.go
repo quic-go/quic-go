@@ -572,6 +572,7 @@ var _ = Describe("Client", func() {
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
@@ -601,6 +602,7 @@ var _ = Describe("Client", func() {
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
@@ -629,6 +631,7 @@ var _ = Describe("Client", func() {
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
@@ -668,6 +671,7 @@ var _ = Describe("Client", func() {
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
@@ -710,6 +714,7 @@ var _ = Describe("Client", func() {
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			tr := &Transport{}
 			cc := tr.NewClientConn(conn)
@@ -823,6 +828,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				r := bytes.NewReader(b)
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
@@ -844,6 +850,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
@@ -861,6 +868,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() error { close(closed); return nil })
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				_, err := cc.RoundTrip(req)
 				Expect(err).To(MatchError("http3: HEADERS frame too large: 1338 bytes (max: 1337)"))
@@ -942,6 +950,7 @@ var _ = Describe("Client", func() {
 
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) })
@@ -1013,6 +1022,7 @@ var _ = Describe("Client", func() {
 				gz.Close()
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
 
@@ -1039,6 +1049,7 @@ var _ = Describe("Client", func() {
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
 
@@ -1079,6 +1090,7 @@ var _ = Describe("Client", func() {
 				)
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 				str.EXPECT().Close()
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
@@ -1113,6 +1125,7 @@ var _ = Describe("Client", func() {
 				)
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 				str.EXPECT().Close()
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 				tr := &Transport{}
 				cc := tr.NewClientConn(conn)
