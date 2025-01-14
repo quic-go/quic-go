@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -197,7 +198,9 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
+	trace := httptrace.ContextClientTrace(req.Context())
 	hostname := authorityAddr(hostnameFromURL(req.URL))
+	traceGetConn(trace, hostname)
 	cl, isReused, err := t.getClient(req.Context(), hostname, opt.OnlyCachedConn)
 	if err != nil {
 		return nil, err
@@ -213,6 +216,7 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		t.removeClient(hostname)
 		return nil, cl.dialErr
 	}
+	traceGotConn(trace, cl.conn, isReused)
 	defer cl.useCount.Add(-1)
 	rsp, err := cl.rt.RoundTrip(req)
 	if err != nil {
@@ -317,19 +321,48 @@ func (t *Transport) dial(ctx context.Context, hostname string) (quic.EarlyConnec
 			t.transport = &quic.Transport{Conn: udpConn}
 		}
 		dial = func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-			udpAddr, err := net.ResolveUDPAddr("udp", addr)
+			network := "udp"
+			udpAddr, err := t.resolveUDPAddr(ctx, network, addr)
 			if err != nil {
 				return nil, err
 			}
-			return t.transport.DialEarly(ctx, udpAddr, tlsCfg, cfg)
+			trace := httptrace.ContextClientTrace(ctx)
+			traceConnectStart(trace, network, udpAddr.String())
+			traceTLSHandshakeStart(trace)
+			conn, err := t.transport.DialEarly(ctx, udpAddr, tlsCfg, cfg)
+			var state tls.ConnectionState
+			if conn != nil {
+				state = conn.ConnectionState().TLS
+			}
+			traceTLSHandshakeDone(trace, state, err)
+			traceConnectDone(trace, network, udpAddr.String(), err)
+			return conn, err
 		}
 	}
-
 	conn, err := dial(ctx, hostname, tlsConf, t.QUICConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 	return conn, t.newClient(conn), nil
+}
+
+func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*net.UDPAddr, error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	port, err := net.LookupPort(network, portStr)
+	if err != nil {
+		return nil, err
+	}
+	resolver := net.DefaultResolver
+	ipAddrs, err := resolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	addrs := addrList(ipAddrs)
+	ip := addrs.forResolve(network, addr)
+	return &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}, nil
 }
 
 func (t *Transport) removeClient(hostname string) {

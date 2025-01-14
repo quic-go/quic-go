@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptrace"
 
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -165,6 +166,7 @@ var _ = Describe("Request Stream", func() {
 			true,
 			math.MaxUint64,
 			&http.Response{},
+			&httptrace.ClientTrace{},
 		)
 	})
 
