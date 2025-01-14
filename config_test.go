@@ -175,6 +175,7 @@ func TestConfigDefaultValues(t *testing.T) {
 	c = populateConfig(&Config{})
 	require.Equal(t, protocol.SupportedVersions, c.Versions)
 	require.Equal(t, protocol.DefaultHandshakeIdleTimeout, c.HandshakeIdleTimeout)
+	require.Equal(t, protocol.DefaultIdleTimeout, c.MaxIdleTimeout)
 	require.EqualValues(t, protocol.DefaultInitialMaxStreamData, c.InitialStreamReceiveWindow)
 	require.EqualValues(t, protocol.DefaultMaxReceiveStreamFlowControlWindow, c.MaxStreamReceiveWindow)
 	require.EqualValues(t, protocol.DefaultInitialMaxData, c.InitialConnectionReceiveWindow)
@@ -183,4 +184,14 @@ func TestConfigDefaultValues(t *testing.T) {
 	require.EqualValues(t, protocol.DefaultMaxIncomingUniStreams, c.MaxIncomingUniStreams)
 	require.False(t, c.DisablePathMTUDiscovery)
 	require.Nil(t, c.GetConfigForClient)
+}
+
+func TestConfigZeroLimits(t *testing.T) {
+	config := &Config{
+		MaxIncomingStreams:    -1,
+		MaxIncomingUniStreams: -1,
+	}
+	c := populateConfig(config)
+	require.Zero(t, c.MaxIncomingStreams)
+	require.Zero(t, c.MaxIncomingUniStreams)
 }
