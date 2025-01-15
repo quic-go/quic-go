@@ -512,14 +512,18 @@ var _ = Describe("Transport", func() {
 
 		It("rejects requests with invalid header name fields", func() {
 			req.Header.Add("foobär", "value")
+			req.Body = &mockBody{}
 			_, err := tr.RoundTrip(req)
 			Expect(err).To(MatchError("http3: invalid http header field name \"foobär\""))
+			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
 
 		It("rejects requests with invalid header name values", func() {
 			req.Header.Add("foo", string([]byte{0x7}))
+			req.Body = &mockBody{}
 			_, err := tr.RoundTrip(req)
 			Expect(err.Error()).To(ContainSubstring("http3: invalid http header field value"))
+			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
 
 		It("rejects requests with an invalid request method", func() {
