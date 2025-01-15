@@ -217,7 +217,7 @@ func TestTransportMultipleQUICVersions(t *testing.T) {
 
 func TestTransportConnectionReuse(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	cl := NewMockSingleRoundTripper(mockCtrl)
+	cl := NewMockClientConn(mockCtrl)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
@@ -228,7 +228,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 			dialCount++
 			return conn, nil
 		},
-		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
 	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
@@ -279,7 +279,7 @@ func TestTransportConnectionRedial(t *testing.T) {
 
 func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, expectedErr error) {
 	mockCtrl := gomock.NewController(t)
-	cl := NewMockSingleRoundTripper(mockCtrl)
+	cl := NewMockClientConn(mockCtrl)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
@@ -290,7 +290,7 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 			dialCount++
 			return conn, nil
 		},
-		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
 	// the first request succeeds
@@ -338,7 +338,7 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 
 func TestTransportRequestContextCancellation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	cl := NewMockSingleRoundTripper(mockCtrl)
+	cl := NewMockClientConn(mockCtrl)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
@@ -349,7 +349,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 			dialCount++
 			return conn, nil
 		},
-		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
 	// the first request succeeds
@@ -385,7 +385,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 
 func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	cl := NewMockSingleRoundTripper(mockCtrl)
+	cl := NewMockClientConn(mockCtrl)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
@@ -400,7 +400,7 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 			}
 			return conn, nil
 		},
-		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
 	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
@@ -423,8 +423,8 @@ func TestTransportCloseEstablishedConnections(t *testing.T) {
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 			return conn, nil
 		},
-		newClient: func(quic.EarlyConnection) singleRoundTripper {
-			cl := NewMockSingleRoundTripper(mockCtrl)
+		newClientConn: func(quic.EarlyConnection) clientConn {
+			cl := NewMockClientConn(mockCtrl)
 			cl.EXPECT().RoundTrip(gomock.Any()).Return(&http.Response{}, nil)
 			return cl
 		},
@@ -476,6 +476,7 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	conn1 := mockquic.NewMockEarlyConnection(mockCtrl)
 	conn2 := mockquic.NewMockEarlyConnection(mockCtrl)
+	roundTripCalled := make(chan struct{})
 	tr := &Transport{
 		Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
 			switch hostname {
@@ -488,6 +489,15 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 				return nil, errors.New("unexpected hostname")
 			}
 		},
+		newClientConn: func(quic.EarlyConnection) clientConn {
+			cl := NewMockClientConn(mockCtrl)
+			cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
+				roundTripCalled <- struct{}{}
+				<-r.Context().Done()
+				return nil, nil
+			})
+			return cl
+		},
 	}
 	req1 := mustNewRequest(http.MethodGet, "https://site1.com", nil)
 	req2 := mustNewRequest(http.MethodGet, "https://site2.com", nil)
@@ -496,17 +506,7 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	req1 = req1.WithContext(ctx1)
 	req2 = req2.WithContext(ctx2)
-	roundTripCalled := make(chan struct{})
 	reqFinished := make(chan struct{})
-	tr.newClient = func(quic.EarlyConnection) singleRoundTripper {
-		cl := NewMockSingleRoundTripper(mockCtrl)
-		cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
-			roundTripCalled <- struct{}{}
-			<-r.Context().Done()
-			return nil, nil
-		})
-		return cl
-	}
 	go func() {
 		tr.RoundTrip(req1)
 		reqFinished <- struct{}{}
