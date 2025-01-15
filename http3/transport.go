@@ -161,26 +161,36 @@ func (t *Transport) init() error {
 
 // RoundTripOpt is like RoundTrip, but takes options.
 func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
+	rsp, err := t.roundTripOpt(req, opt)
+	if err != nil {
+		if req.Body != nil {
+			req.Body.Close()
+		}
+		return nil, err
+	}
+	return rsp, nil
+}
+
+func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	t.initOnce.Do(func() { t.initErr = t.init() })
 	if t.initErr != nil {
 		return nil, t.initErr
 	}
 
 	if req.URL == nil {
-		closeRequestBody(req)
 		return nil, errors.New("http3: nil Request.URL")
 	}
 	if req.URL.Scheme != "https" {
-		closeRequestBody(req)
 		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
 	if req.URL.Host == "" {
-		closeRequestBody(req)
 		return nil, errors.New("http3: no Host in request URL")
 	}
 	if req.Header == nil {
-		closeRequestBody(req)
 		return nil, errors.New("http3: nil Request.Header")
+	}
+	if req.Method != "" && !validMethod(req.Method) {
+		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 	for k, vv := range req.Header {
 		if !httpguts.ValidHeaderFieldName(k) {
@@ -191,11 +201,6 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 				return nil, fmt.Errorf("http3: invalid http header field value %q for key %v", v, k)
 			}
 		}
-	}
-
-	if req.Method != "" && !validMethod(req.Method) {
-		closeRequestBody(req)
-		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
 	trace := httptrace.ContextClientTrace(req.Context())
@@ -413,12 +418,6 @@ func (t *Transport) Close() error {
 		t.transport = nil
 	}
 	return nil
-}
-
-func closeRequestBody(req *http.Request) {
-	if req.Body != nil {
-		req.Body.Close()
-	}
 }
 
 func validMethod(method string) bool {
