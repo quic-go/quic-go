@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [  "1.22.x", "1.23.x" ]
+        go: [  "1.23.x", "1.24.0-rc.1" ]
     env:
       GOLANGCI_LINT_VERSION: v1.62.0
     name: golangci-lint (Go ${{ matrix.go }})
