@@ -225,22 +225,30 @@ func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 	defer cl.useCount.Add(-1)
 	rsp, err := cl.rt.RoundTrip(req)
 	if err != nil {
+		// request aborted due to context cancellation
 		select {
 		case <-req.Context().Done():
 			return nil, err
 		default:
 		}
 
-		// Non-nil errors are likely might be due to a problem with the connection,
-		// so we remove the client from the cache so that subsequent calls reconnect.
-		t.removeClient(hostname)
-		if isReused {
-			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
-				return t.RoundTripOpt(req, opt)
+		// Retry the request on a new connection if:
+		// 1. it was sent on a reused connection,
+		// 2. this connection is now closed,
+		// 3. and the error is a timeout error.
+		select {
+		case <-cl.conn.Context().Done():
+			t.removeClient(hostname)
+			if isReused {
+				var nerr net.Error
+				if errors.As(err, &nerr) && nerr.Timeout() {
+					return t.RoundTripOpt(req, opt)
+				}
 			}
+			return nil, err
+		default:
+			return nil, err
 		}
-
-		return nil, err
 	}
 	return rsp, nil
 }

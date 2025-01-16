@@ -253,18 +253,31 @@ func TestTransportConnectionReuse(t *testing.T) {
 	require.Equal(t, 1, dialCount)
 }
 
+// Requests reuse the same underlying QUIC connection.
+// If a request experiences an error, the behavior depends on the nature of that error.
 func TestTransportConnectionRedial(t *testing.T) {
+	// If it's connection error that is a timeout error, we re-dial a new connection.
+	// No error will be returned to the caller.
 	t.Run("timeout error", func(t *testing.T) {
-		testTransportConnectionRedial(t, &qerr.IdleTimeoutError{}, nil)
+		testTransportConnectionRedial(t, true, &qerr.IdleTimeoutError{}, nil)
 	})
 
-	t.Run("other error", func(t *testing.T) {
-		testErr := errors.New("test error")
-		testTransportConnectionRedial(t, testErr, testErr)
+	// If it's a different connection error, the error is returned to the caller.
+	// The connection is not redialed.
+	t.Run("other error from the connection", func(t *testing.T) {
+		testErr := &quic.TransportError{ErrorCode: quic.ConnectionIDLimitError}
+		testTransportConnectionRedial(t, true, testErr, testErr)
+	})
+
+	// If the error is not related to the connection, we return that error.
+	// The underlying connection remains open and is reused for subsequent requests.
+	t.Run("other error not from the connection", func(t *testing.T) {
+		testErr := &quic.TransportError{ErrorCode: quic.ConnectionIDLimitError}
+		testTransportConnectionRedial(t, false, testErr, testErr)
 	})
 }
 
-func testTransportConnectionRedial(t *testing.T, dialErr, expectedErr error) {
+func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, expectedErr error) {
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockSingleRoundTripper(mockCtrl)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
@@ -280,6 +293,7 @@ func testTransportConnectionRedial(t *testing.T, dialErr, expectedErr error) {
 		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
 	}
 
+	// the first request succeeds
 	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
 	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 	rsp, err := tr.RoundTrip(req1)
@@ -287,8 +301,15 @@ func testTransportConnectionRedial(t *testing.T, dialErr, expectedErr error) {
 	require.Equal(t, req1, rsp.Request)
 	require.Equal(t, 1, dialCount)
 
+	// the second request reuses the QUIC connection, and encounters an error
 	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
-	cl.EXPECT().RoundTrip(req2).Return(nil, dialErr)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if connClosed {
+		cancel()
+	}
+	conn.EXPECT().Context().Return(ctx)
+	cl.EXPECT().RoundTrip(req2).Return(nil, roundtripErr)
 	if expectedErr == nil {
 		cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 	}
@@ -301,6 +322,65 @@ func testTransportConnectionRedial(t *testing.T, dialErr, expectedErr error) {
 		require.ErrorIs(t, err, expectedErr)
 		require.Equal(t, 1, dialCount)
 	}
+
+	// if the error was not a connection error, the next request reuses the connection
+	if connClosed {
+		return
+	}
+	currentDialCount := dialCount
+	req3 := mustNewRequest("GET", "https://quic-go.net/file3.html", nil)
+	cl.EXPECT().RoundTrip(req3).Return(&http.Response{Request: req3}, nil)
+	rsp, err = tr.RoundTrip(req3)
+	require.NoError(t, err)
+	require.Equal(t, req3, rsp.Request)
+	require.Equal(t, currentDialCount, dialCount) // no new connection was dialed
+}
+
+func TestTransportRequestContextCancellation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cl := NewMockSingleRoundTripper(mockCtrl)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	handshakeChan := make(chan struct{})
+	close(handshakeChan)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(3)
+	var dialCount int
+	tr := &Transport{
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
+			dialCount++
+			return conn, nil
+		},
+		newClient: func(quic.EarlyConnection) singleRoundTripper { return cl },
+	}
+
+	// the first request succeeds
+	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
+	rsp, err := tr.RoundTrip(req1)
+	require.NoError(t, err)
+	require.Equal(t, req1, rsp.Request)
+	require.Equal(t, 1, dialCount)
+
+	// the second request reuses the QUIC connection, and runs into the cancelled context
+	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	req2 = req2.WithContext(ctx)
+	cl.EXPECT().RoundTrip(req2).DoAndReturn(
+		func(r *http.Request) (*http.Response, error) {
+			cancel()
+			return nil, context.Canceled
+		},
+	)
+	_, err = tr.RoundTrip(req2)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, dialCount)
+
+	// the next request reuses the QUIC connection
+	req3 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	cl.EXPECT().RoundTrip(req3).Return(&http.Response{Request: req3}, nil)
+	rsp, err = tr.RoundTrip(req3)
+	require.NoError(t, err)
+	require.Equal(t, req3, rsp.Request)
+	require.Equal(t, 1, dialCount)
 }
 
 func TestTransportConnetionRedialHandshakeError(t *testing.T) {
