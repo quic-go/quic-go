@@ -209,6 +209,26 @@ func TestConnIDManagerConnIDRotation(t *testing.T) {
 	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 2}}, frameQueue)
 }
 
+func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
+	m := newConnIDManager(
+		protocol.ConnectionID{},
+		func(protocol.StatelessResetToken) {},
+		func(protocol.StatelessResetToken) {},
+		func(f wire.Frame) {},
+	)
+	require.Equal(t, protocol.ConnectionID{}, m.Get())
+	for i := 0; i < 5*protocol.PacketsPerConnectionID; i++ {
+		m.SentPacket()
+		require.Equal(t, protocol.ConnectionID{}, m.Get())
+	}
+
+	require.ErrorIs(t, m.Add(&wire.NewConnectionIDFrame{
+		SequenceNumber:      1,
+		ConnectionID:        protocol.ConnectionID{},
+		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+	}), &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
+}
+
 func TestConnIDManagerClose(t *testing.T) {
 	var addedTokens, removedTokens []protocol.StatelessResetToken
 	m := newConnIDManager(
