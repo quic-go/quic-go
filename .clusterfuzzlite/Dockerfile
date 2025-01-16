@@ -3,7 +3,7 @@ FROM gcr.io/oss-fuzz-base/base-builder-go:v1
 ARG TARGETPLATFORM
 RUN echo "TARGETPLATFORM: ${TARGETPLATFORM}"
 
-ENV GOVERSION=1.23.0
+ENV GOVERSION=1.24.0
 
 RUN platform=$(echo ${TARGETPLATFORM} | tr '/' '-') && \
   filename="go${GOVERSION}.${platform}.tar.gz" && \
