@@ -7,33 +7,31 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("error codes", func() {
-	It("has a string representation for every error code", func() {
-		// We parse the error code file, extract all constants, and verify that
-		// each of them has a string version. Go FTW!
-		_, thisfile, _, ok := runtime.Caller(0)
-		if !ok {
-			panic("Failed to get current frame")
-		}
-		filename := path.Join(path.Dir(thisfile), "error_codes.go")
-		fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
-		Expect(err).NotTo(HaveOccurred())
-		constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
-		Expect(len(constSpecs)).To(BeNumerically(">", 4)) // at time of writing
-		for _, c := range constSpecs {
-			valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
-			val, err := strconv.ParseInt(valString, 0, 64)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ErrCode(val).String()).ToNot(Equal("unknown error code"))
-		}
-	})
+func TestErrorCodes(t *testing.T) {
+	// We parse the error code file, extract all constants, and verify that
+	// each of them has a string version. Go FTW!
+	_, thisfile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "Failed to get current frame")
 
-	It("has a string representation for unknown error codes", func() {
-		Expect(ErrCode(0x1337).String()).To(Equal("unknown error code: 0x1337"))
-	})
-})
+	filename := path.Join(path.Dir(thisfile), "error_codes.go")
+	fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
+	require.NoError(t, err)
+
+	constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
+	require.Greater(t, len(constSpecs), 4) // at time of writing
+
+	for _, c := range constSpecs {
+		valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
+		val, err := strconv.ParseInt(valString, 0, 64)
+		require.NoError(t, err)
+		require.NotEqual(t, "unknown error code", ErrCode(val).String())
+	}
+
+	// Test unknown error code
+	require.Equal(t, "unknown error code: 0x1337", ErrCode(0x1337).String())
+}
