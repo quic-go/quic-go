@@ -37,17 +37,17 @@ type RoundTripOpt struct {
 	OnlyCachedConn bool
 }
 
-type singleRoundTripper interface {
+type clientConn interface {
 	OpenRequestStream(context.Context) (RequestStream, error)
 	RoundTrip(*http.Request) (*http.Response, error)
 }
 
 type roundTripperWithCount struct {
-	cancel  context.CancelFunc
-	dialing chan struct{} // closed as soon as quic.Dial(Early) returned
-	dialErr error
-	conn    quic.EarlyConnection
-	rt      singleRoundTripper
+	cancel     context.CancelFunc
+	dialing    chan struct{} // closed as soon as quic.Dial(Early) returned
+	dialErr    error
+	conn       quic.EarlyConnection
+	clientConn clientConn
 
 	useCount atomic.Int64
 }
@@ -107,7 +107,7 @@ type Transport struct {
 	initOnce sync.Once
 	initErr  error
 
-	newClient func(quic.EarlyConnection) singleRoundTripper
+	newClientConn func(quic.EarlyConnection) clientConn
 
 	clients   map[string]*roundTripperWithCount
 	transport *quic.Transport
@@ -125,8 +125,8 @@ type RoundTripper = Transport
 var ErrNoCachedConn = errors.New("http3: no cached connection was available")
 
 func (t *Transport) init() error {
-	if t.newClient == nil {
-		t.newClient = func(conn quic.EarlyConnection) singleRoundTripper {
+	if t.newClientConn == nil {
+		t.newClientConn = func(conn quic.EarlyConnection) clientConn {
 			return newClientConn(
 				conn,
 				t.EnableDatagrams,
@@ -223,7 +223,7 @@ func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 	}
 	traceGotConn(trace, cl.conn, isReused)
 	defer cl.useCount.Add(-1)
-	rsp, err := cl.rt.RoundTrip(req)
+	rsp, err := cl.clientConn.RoundTrip(req)
 	if err != nil {
 		// request aborted due to context cancellation
 		select {
@@ -285,7 +285,7 @@ func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached b
 				return
 			}
 			cl.conn = conn
-			cl.rt = rt
+			cl.clientConn = rt
 		}()
 		t.clients[hostname] = cl
 	}
@@ -306,7 +306,7 @@ func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached b
 	return cl, isReused, nil
 }
 
-func (t *Transport) dial(ctx context.Context, hostname string) (quic.EarlyConnection, singleRoundTripper, error) {
+func (t *Transport) dial(ctx context.Context, hostname string) (quic.EarlyConnection, clientConn, error) {
 	var tlsConf *tls.Config
 	if t.TLSClientConfig == nil {
 		tlsConf = &tls.Config{}
@@ -356,7 +356,7 @@ func (t *Transport) dial(ctx context.Context, hostname string) (quic.EarlyConnec
 	if err != nil {
 		return nil, nil, err
 	}
-	return conn, t.newClient(conn), nil
+	return conn, t.newClientConn(conn), nil
 }
 
 func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*net.UDPAddr, error) {
