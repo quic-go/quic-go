@@ -632,8 +632,7 @@ func TestSendStreamCancellation(t *testing.T) {
 	require.Nil(t, frame.Frame)
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.Error(t, err)
-	// TODO(#4808):error code and remote flag are unchanged
-	// require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
 }
 
 func TestSendStreamCancellationAfterClose(t *testing.T) {
@@ -809,8 +808,7 @@ func TestSendStreamStopSending(t *testing.T) {
 	require.Nil(t, frame.Frame)
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.Error(t, err)
-	// TODO(#4808):error code and remote flag are unchanged
-	// require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
 }
 
 // This test is inherently racy, as it tests a concurrent call to Write() and CancelRead().
