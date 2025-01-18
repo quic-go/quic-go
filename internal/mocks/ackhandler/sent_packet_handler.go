@@ -44,15 +44,15 @@ func (m *MockSentPacketHandler) EXPECT() *MockSentPacketHandlerMockRecorder {
 }
 
 // DropPackets mocks base method.
-func (m *MockSentPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
+func (m *MockSentPacketHandler) DropPackets(arg0 protocol.EncryptionLevel, rcvTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DropPackets", arg0)
+	m.ctrl.Call(m, "DropPackets", arg0, rcvTime)
 }
 
 // DropPackets indicates an expected call of DropPackets.
-func (mr *MockSentPacketHandlerMockRecorder) DropPackets(arg0 any) *MockSentPacketHandlerDropPacketsCall {
+func (mr *MockSentPacketHandlerMockRecorder) DropPackets(arg0, rcvTime any) *MockSentPacketHandlerDropPacketsCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockSentPacketHandler)(nil).DropPackets), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockSentPacketHandler)(nil).DropPackets), arg0, rcvTime)
 	return &MockSentPacketHandlerDropPacketsCall{Call: call}
 }
 
@@ -68,13 +68,13 @@ func (c *MockSentPacketHandlerDropPacketsCall) Return() *MockSentPacketHandlerDr
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerDropPacketsCall) Do(f func(protocol.EncryptionLevel)) *MockSentPacketHandlerDropPacketsCall {
+func (c *MockSentPacketHandlerDropPacketsCall) Do(f func(protocol.EncryptionLevel, time.Time)) *MockSentPacketHandlerDropPacketsCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerDropPacketsCall) DoAndReturn(f func(protocol.EncryptionLevel)) *MockSentPacketHandlerDropPacketsCall {
+func (c *MockSentPacketHandlerDropPacketsCall) DoAndReturn(f func(protocol.EncryptionLevel, time.Time)) *MockSentPacketHandlerDropPacketsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -156,17 +156,17 @@ func (c *MockSentPacketHandlerGetLossDetectionTimeoutCall) DoAndReturn(f func() 
 }
 
 // OnLossDetectionTimeout mocks base method.
-func (m *MockSentPacketHandler) OnLossDetectionTimeout() error {
+func (m *MockSentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnLossDetectionTimeout")
+	ret := m.ctrl.Call(m, "OnLossDetectionTimeout", now)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnLossDetectionTimeout indicates an expected call of OnLossDetectionTimeout.
-func (mr *MockSentPacketHandlerMockRecorder) OnLossDetectionTimeout() *MockSentPacketHandlerOnLossDetectionTimeoutCall {
+func (mr *MockSentPacketHandlerMockRecorder) OnLossDetectionTimeout(now any) *MockSentPacketHandlerOnLossDetectionTimeoutCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).OnLossDetectionTimeout))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).OnLossDetectionTimeout), now)
 	return &MockSentPacketHandlerOnLossDetectionTimeoutCall{Call: call}
 }
 
@@ -182,13 +182,13 @@ func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) Return(arg0 error) *Mo
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) Do(f func() error) *MockSentPacketHandlerOnLossDetectionTimeoutCall {
+func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) Do(f func(time.Time) error) *MockSentPacketHandlerOnLossDetectionTimeoutCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) DoAndReturn(f func() error) *MockSentPacketHandlerOnLossDetectionTimeoutCall {
+func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) DoAndReturn(f func(time.Time) error) *MockSentPacketHandlerOnLossDetectionTimeoutCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -348,15 +348,15 @@ func (c *MockSentPacketHandlerReceivedAckCall) DoAndReturn(f func(*wire.AckFrame
 }
 
 // ReceivedBytes mocks base method.
-func (m *MockSentPacketHandler) ReceivedBytes(arg0 protocol.ByteCount) {
+func (m *MockSentPacketHandler) ReceivedBytes(arg0 protocol.ByteCount, rcvTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReceivedBytes", arg0)
+	m.ctrl.Call(m, "ReceivedBytes", arg0, rcvTime)
 }
 
 // ReceivedBytes indicates an expected call of ReceivedBytes.
-func (mr *MockSentPacketHandlerMockRecorder) ReceivedBytes(arg0 any) *MockSentPacketHandlerReceivedBytesCall {
+func (mr *MockSentPacketHandlerMockRecorder) ReceivedBytes(arg0, rcvTime any) *MockSentPacketHandlerReceivedBytesCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedBytes", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedBytes), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedBytes", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedBytes), arg0, rcvTime)
 	return &MockSentPacketHandlerReceivedBytesCall{Call: call}
 }
 
@@ -372,13 +372,13 @@ func (c *MockSentPacketHandlerReceivedBytesCall) Return() *MockSentPacketHandler
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerReceivedBytesCall) Do(f func(protocol.ByteCount)) *MockSentPacketHandlerReceivedBytesCall {
+func (c *MockSentPacketHandlerReceivedBytesCall) Do(f func(protocol.ByteCount, time.Time)) *MockSentPacketHandlerReceivedBytesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerReceivedBytesCall) DoAndReturn(f func(protocol.ByteCount)) *MockSentPacketHandlerReceivedBytesCall {
+func (c *MockSentPacketHandlerReceivedBytesCall) DoAndReturn(f func(protocol.ByteCount, time.Time)) *MockSentPacketHandlerReceivedBytesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -494,15 +494,15 @@ func (c *MockSentPacketHandlerSentPacketCall) DoAndReturn(f func(time.Time, prot
 }
 
 // SetHandshakeConfirmed mocks base method.
-func (m *MockSentPacketHandler) SetHandshakeConfirmed() {
+func (m *MockSentPacketHandler) SetHandshakeConfirmed(now time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHandshakeConfirmed")
+	m.ctrl.Call(m, "SetHandshakeConfirmed", now)
 }
 
 // SetHandshakeConfirmed indicates an expected call of SetHandshakeConfirmed.
-func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeConfirmed() *MockSentPacketHandlerSetHandshakeConfirmedCall {
+func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeConfirmed(now any) *MockSentPacketHandlerSetHandshakeConfirmedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeConfirmed))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeConfirmed), now)
 	return &MockSentPacketHandlerSetHandshakeConfirmedCall{Call: call}
 }
 
@@ -518,13 +518,13 @@ func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) Return() *MockSentPacke
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) Do(f func()) *MockSentPacketHandlerSetHandshakeConfirmedCall {
+func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) Do(f func(time.Time)) *MockSentPacketHandlerSetHandshakeConfirmedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) DoAndReturn(f func()) *MockSentPacketHandlerSetHandshakeConfirmedCall {
+func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) DoAndReturn(f func(time.Time)) *MockSentPacketHandlerSetHandshakeConfirmedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -17,12 +17,11 @@ func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
 	sentPackets := NewMockSentPacketTracker(ctrl)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial).Times(2)
-	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionHandshake).Times(2)
-	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT).Times(2)
-
 	sendTime := time.Now().Add(-time.Second)
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial, sendTime).Times(2)
+	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionHandshake, sendTime).Times(2)
+	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT, sendTime).Times(2)
 
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECT0, protocol.EncryptionInitial, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(1, protocol.ECT1, protocol.EncryptionHandshake, sendTime, true))
@@ -64,11 +63,11 @@ func TestReceive0RTTAnd1RTT(t *testing.T) {
 	sentPackets := NewMockSentPacketTracker(mockCtrl)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
-	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption0RTT).AnyTimes()
-	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT)
-
 	sendTime := time.Now().Add(-time.Second)
+	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption0RTT, sendTime).AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT, sendTime)
+
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
@@ -85,7 +84,7 @@ func TestReceive0RTTAnd1RTT(t *testing.T) {
 func TestDropPackets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	sentPackets := NewMockSentPacketTracker(mockCtrl)
-	sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any()).AnyTimes()
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
@@ -115,7 +114,7 @@ func TestDropPackets(t *testing.T) {
 func TestAckRangePruning(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	sentPackets := NewMockSentPacketTracker(mockCtrl)
-	sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any()).AnyTimes()
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Times(3)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
@@ -139,7 +138,7 @@ func TestAckRangePruning(t *testing.T) {
 func TestPacketDuplicateDetection(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	sentPackets := NewMockSentPacketTracker(mockCtrl)
-	sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
+	sentPackets.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any()).AnyTimes()
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)

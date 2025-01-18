@@ -518,7 +518,7 @@ func (s *connection) run() error {
 	if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
 		return err
 	}
-	if err := s.handleHandshakeEvents(); err != nil {
+	if err := s.handleHandshakeEvents(time.Now()); err != nil {
 		return err
 	}
 	go func() {
@@ -619,7 +619,7 @@ runLoop:
 		if timeout := s.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted.
 			// Check it before trying to send packets.
-			if err := s.sentPacketHandler.OnLossDetectionTimeout(); err != nil {
+			if err := s.sentPacketHandler.OnLossDetectionTimeout(now); err != nil {
 				s.closeLocal(err)
 			}
 		}
@@ -744,7 +744,7 @@ func (s *connection) idleTimeoutStartTime() time.Time {
 	return startTime
 }
 
-func (s *connection) handleHandshakeComplete() error {
+func (s *connection) handleHandshakeComplete(now time.Time) error {
 	defer close(s.handshakeCompleteChan)
 	// Once the handshake completes, we have derived 1-RTT keys.
 	// There's no point in queueing undecryptable packets for later decryption anymore.
@@ -765,7 +765,7 @@ func (s *connection) handleHandshakeComplete() error {
 	}
 
 	// All these only apply to the server side.
-	if err := s.handleHandshakeConfirmed(); err != nil {
+	if err := s.handleHandshakeConfirmed(now); err != nil {
 		return err
 	}
 
@@ -788,13 +788,13 @@ func (s *connection) handleHandshakeComplete() error {
 	return nil
 }
 
-func (s *connection) handleHandshakeConfirmed() error {
-	if err := s.dropEncryptionLevel(protocol.EncryptionHandshake); err != nil {
+func (s *connection) handleHandshakeConfirmed(now time.Time) error {
+	if err := s.dropEncryptionLevel(protocol.EncryptionHandshake, now); err != nil {
 		return err
 	}
 
 	s.handshakeConfirmed = true
-	s.sentPacketHandler.SetHandshakeConfirmed()
+	s.sentPacketHandler.SetHandshakeConfirmed(now)
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
 
 	if !s.config.DisablePathMTUDiscovery && s.conn.capabilities().DF {
@@ -804,7 +804,7 @@ func (s *connection) handleHandshakeConfirmed() error {
 }
 
 func (s *connection) handlePacketImpl(rp receivedPacket) bool {
-	s.sentPacketHandler.ReceivedBytes(rp.Size())
+	s.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
 		s.handleVersionNegotiationPacket(rp)
@@ -1211,7 +1211,7 @@ func (s *connection) handleUnpackedLongHeaderPacket(
 		!s.droppedInitialKeys {
 		// On the server side, Initial keys are dropped as soon as the first Handshake packet is received.
 		// See Section 4.9.1 of RFC 9001.
-		if err := s.dropEncryptionLevel(protocol.EncryptionInitial); err != nil {
+		if err := s.dropEncryptionLevel(protocol.EncryptionInitial, rcvTime); err != nil {
 			return err
 		}
 	}
@@ -1308,7 +1308,7 @@ func (s *connection) handleFrames(
 	// We receive a Handshake packet that contains the CRYPTO frame that allows us to complete the handshake,
 	// and an ACK serialized after that CRYPTO frame. In this case, we still want to process the ACK frame.
 	if !handshakeWasComplete && s.handshakeComplete {
-		if err := s.handleHandshakeComplete(); err != nil {
+		if err := s.handleHandshakeComplete(rcvTime); err != nil {
 			return false, err
 		}
 	}
@@ -1326,11 +1326,11 @@ func (s *connection) handleFrame(
 	wire.LogFrame(s.logger, f, false)
 	switch frame := f.(type) {
 	case *wire.CryptoFrame:
-		err = s.handleCryptoFrame(frame, encLevel)
+		err = s.handleCryptoFrame(frame, encLevel, rcvTime)
 	case *wire.StreamFrame:
 		err = s.handleStreamFrame(frame, rcvTime)
 	case *wire.AckFrame:
-		err = s.handleAckFrame(frame, encLevel)
+		err = s.handleAckFrame(frame, encLevel, rcvTime)
 	case *wire.ConnectionCloseFrame:
 		s.handleConnectionCloseFrame(frame)
 	case *wire.ResetStreamFrame:
@@ -1363,7 +1363,7 @@ func (s *connection) handleFrame(
 	case *wire.RetireConnectionIDFrame:
 		err = s.handleRetireConnectionIDFrame(frame, destConnID)
 	case *wire.HandshakeDoneFrame:
-		err = s.handleHandshakeDoneFrame()
+		err = s.handleHandshakeDoneFrame(rcvTime)
 	case *wire.DatagramFrame:
 		err = s.handleDatagramFrame(frame)
 	default:
@@ -1402,7 +1402,7 @@ func (s *connection) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame
 	})
 }
 
-func (s *connection) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
+func (s *connection) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
 	if err := s.cryptoStreamManager.HandleCryptoFrame(frame, encLevel); err != nil {
 		return err
 	}
@@ -1415,10 +1415,10 @@ func (s *connection) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protoco
 			return err
 		}
 	}
-	return s.handleHandshakeEvents()
+	return s.handleHandshakeEvents(rcvTime)
 }
 
-func (s *connection) handleHandshakeEvents() error {
+func (s *connection) handleHandshakeEvents(now time.Time) error {
 	for {
 		ev := s.cryptoStreamHandler.NextEvent()
 		var err error
@@ -1439,7 +1439,7 @@ func (s *connection) handleHandshakeEvents() error {
 			s.undecryptablePacketsToProcess = s.undecryptablePackets
 			s.undecryptablePackets = nil
 		case handshake.EventDiscard0RTTKeys:
-			err = s.dropEncryptionLevel(protocol.Encryption0RTT)
+			err = s.dropEncryptionLevel(protocol.Encryption0RTT, now)
 		case handshake.EventWriteInitialData:
 			_, err = s.initialStream.Write(ev.Data)
 		case handshake.EventWriteHandshakeData:
@@ -1540,7 +1540,7 @@ func (s *connection) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFra
 	return s.connIDGenerator.Retire(f.SequenceNumber, destConnID)
 }
 
-func (s *connection) handleHandshakeDoneFrame() error {
+func (s *connection) handleHandshakeDoneFrame(rcvTime time.Time) error {
 	if s.perspective == protocol.PerspectiveServer {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
@@ -1548,12 +1548,12 @@ func (s *connection) handleHandshakeDoneFrame() error {
 		}
 	}
 	if !s.handshakeConfirmed {
-		return s.handleHandshakeConfirmed()
+		return s.handleHandshakeConfirmed(rcvTime)
 	}
 	return nil
 }
 
-func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
+func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
 	acked1RTTPacket, err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime)
 	if err != nil {
 		return err
@@ -1565,7 +1565,7 @@ func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encr
 	// This is only possible if the ACK was sent in a 1-RTT packet.
 	// This is an optimization over simply waiting for a HANDSHAKE_DONE frame, see section 4.1.2 of RFC 9001.
 	if s.perspective == protocol.PerspectiveClient && !s.handshakeConfirmed {
-		if err := s.handleHandshakeConfirmed(); err != nil {
+		if err := s.handleHandshakeConfirmed(rcvTime); err != nil {
 			return err
 		}
 	}
@@ -1697,11 +1697,11 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	s.connIDGenerator.ReplaceWithClosed(connClosePacket)
 }
 
-func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel) error {
+func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now time.Time) error {
 	if s.tracer != nil && s.tracer.DroppedEncryptionLevel != nil {
 		s.tracer.DroppedEncryptionLevel(encLevel)
 	}
-	s.sentPacketHandler.DropPackets(encLevel)
+	s.sentPacketHandler.DropPackets(encLevel, now)
 	s.receivedPacketHandler.DropPackets(encLevel)
 	//nolint:exhaustive // only Initial and 0-RTT need special treatment
 	switch encLevel {
@@ -2140,7 +2140,7 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, ecn prot
 			!s.droppedInitialKeys {
 			// On the client side, Initial keys are dropped as soon as the first Handshake packet is sent.
 			// See Section 4.9.1 of RFC 9001.
-			if err := s.dropEncryptionLevel(protocol.EncryptionInitial); err != nil {
+			if err := s.dropEncryptionLevel(protocol.EncryptionInitial, now); err != nil {
 				return err
 			}
 		}
