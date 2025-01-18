@@ -155,7 +155,7 @@ func (h *sentPacketHandler) removeFromBytesInFlight(p *packet) {
 	}
 }
 
-func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now time.Time) {
 	// The server won't await address validation after the handshake is confirmed.
 	// This applies even if we didn't receive an ACK for a Handshake packet.
 	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake {
@@ -202,21 +202,21 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	h.ptoCount = 0
 	h.numProbesToSend = 0
 	h.ptoMode = SendNone
-	h.setLossDetectionTimer()
+	h.setLossDetectionTimer(now)
 }
 
-func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount) {
+func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t time.Time) {
 	wasAmplificationLimit := h.isAmplificationLimited()
 	h.bytesReceived += n
 	if wasAmplificationLimit && !h.isAmplificationLimited() {
-		h.setLossDetectionTimer()
+		h.setLossDetectionTimer(t)
 	}
 }
 
-func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel) {
+func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel, t time.Time) {
 	if h.perspective == protocol.PerspectiveServer && l == protocol.EncryptionHandshake && !h.peerAddressValidated {
 		h.peerAddressValidated = true
-		h.setLossDetectionTimer()
+		h.setLossDetectionTimer(t)
 	}
 }
 
@@ -269,7 +269,7 @@ func (h *sentPacketHandler) SentPacket(
 	if !isAckEliciting {
 		pnSpace.history.SentNonAckElicitingPacket(pn)
 		if !h.peerCompletedAddressValidation {
-			h.setLossDetectionTimer()
+			h.setLossDetectionTimer(t)
 		}
 		return
 	}
@@ -289,7 +289,7 @@ func (h *sentPacketHandler) SentPacket(
 	if h.tracer != nil && h.tracer.UpdatedMetrics != nil {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
-	h.setLossDetectionTimer()
+	h.setLossDetectionTimer(t)
 }
 
 func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLevel) *packetNumberSpace {
@@ -322,7 +322,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.peerCompletedAddressValidation = true
 		h.logger.Debugf("Peer doesn't await address validation any longer.")
 		// Make sure that the timer is reset, even if this ACK doesn't acknowledge any (ack-eliciting) packets.
-		h.setLossDetectionTimer()
+		h.setLossDetectionTimer(rcvTime)
 	}
 
 	priorInFlight := h.bytesInFlight
@@ -387,7 +387,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 
-	h.setLossDetectionTimer()
+	h.setLossDetectionTimer(rcvTime)
 	return acked1RTTPacket, nil
 }
 
@@ -498,14 +498,14 @@ func (h *sentPacketHandler) getScaledPTO(includeMaxAckDelay bool) time.Duration 
 }
 
 // same logic as getLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
-func (h *sentPacketHandler) getPTOTimeAndSpace() (pto time.Time, encLevel protocol.EncryptionLevel, ok bool) {
+func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, encLevel protocol.EncryptionLevel, ok bool) {
 	// We only send application data probe packets once the handshake is confirmed,
 	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
 	if !h.handshakeConfirmed && !h.hasOutstandingCryptoPackets() {
 		if h.peerCompletedAddressValidation {
 			return
 		}
-		t := time.Now().Add(h.getScaledPTO(false))
+		t := now.Add(h.getScaledPTO(false))
 		if h.initialPackets != nil {
 			return t, protocol.EncryptionInitial, true
 		}
@@ -549,7 +549,7 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 	return h.appDataPackets.history.HasOutstandingPackets() || h.hasOutstandingCryptoPackets()
 }
 
-func (h *sentPacketHandler) setLossDetectionTimer() {
+func (h *sentPacketHandler) setLossDetectionTimer(now time.Time) {
 	oldAlarm := h.alarm // only needed in case tracing is enabled
 	lossTime, encLevel := h.getLossTimeAndSpace()
 	if !lossTime.IsZero() {
@@ -586,7 +586,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 
 	// PTO alarm
-	ptoTime, encLevel, ok := h.getPTOTimeAndSpace()
+	ptoTime, encLevel, ok := h.getPTOTimeAndSpace(now)
 	if !ok {
 		if !oldAlarm.IsZero() {
 			h.alarm = time.Time{}
@@ -669,8 +669,8 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	})
 }
 
-func (h *sentPacketHandler) OnLossDetectionTimeout() error {
-	defer h.setLossDetectionTimer()
+func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
+	defer h.setLossDetectionTimer(now)
 	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
 		if h.logger.Debug() {
@@ -680,13 +680,13 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 			h.tracer.LossTimerExpired(logging.TimerTypeACK, encLevel)
 		}
 		// Early retransmit or time loss detection
-		return h.detectLostPackets(time.Now(), encLevel)
+		return h.detectLostPackets(now, encLevel)
 	}
 
 	// PTO
-	// When all outstanding are acknowledged, the alarm is canceled in
-	// setLossDetectionTimer. This doesn't reset the timer in the session though.
-	// When OnAlarm is called, we therefore need to make sure that there are
+	// When all outstanding are acknowledged, the alarm is canceled in setLossDetectionTimer.
+	// However, there's no way to reset the timer in the connection.
+	// When OnLossDetectionTimeout is called, we therefore need to make sure that there are
 	// actually packets outstanding.
 	if h.bytesInFlight == 0 && !h.peerCompletedAddressValidation {
 		h.ptoCount++
@@ -701,7 +701,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 		return nil
 	}
 
-	_, encLevel, ok := h.getPTOTimeAndSpace()
+	_, encLevel, ok := h.getPTOTimeAndSpace(now)
 	if !ok {
 		return nil
 	}
@@ -913,7 +913,7 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 	h.ptoCount = 0
 }
 
-func (h *sentPacketHandler) SetHandshakeConfirmed() {
+func (h *sentPacketHandler) SetHandshakeConfirmed(now time.Time) {
 	if h.initialPackets != nil {
 		panic("didn't drop initial correctly")
 	}
@@ -923,5 +923,5 @@ func (h *sentPacketHandler) SetHandshakeConfirmed() {
 	h.handshakeConfirmed = true
 	// We don't send PTOs for application data packets before the handshake completes.
 	// Make sure the timer is armed now, if necessary.
-	h.setLossDetectionTimer()
+	h.setLossDetectionTimer(now)
 }

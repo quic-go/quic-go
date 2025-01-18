@@ -38,7 +38,7 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	rcvTime time.Time,
 	ackEliciting bool,
 ) error {
-	h.sentPackets.ReceivedPacket(encLevel)
+	h.sentPackets.ReceivedPacket(encLevel, rcvTime)
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		return h.initialPackets.ReceivedPacket(pn, ecn, rcvTime, ackEliciting)

@@ -131,9 +131,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 	// setHandshakeConfirmed drops both Initial and Handshake packets and then confirms the handshake
 	setHandshakeConfirmed := func() {
-		handler.DropPackets(protocol.EncryptionInitial)
-		handler.DropPackets(protocol.EncryptionHandshake)
-		handler.SetHandshakeConfirmed()
+		handler.DropPackets(protocol.EncryptionInitial, time.Now())
+		handler.DropPackets(protocol.EncryptionHandshake, time.Now())
+		handler.SetHandshakeConfirmed(time.Now())
 	}
 
 	Context("registering sent packets", func() {
@@ -629,7 +629,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("passes the bytes in flight to the congestion controller", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			cong.EXPECT().OnPacketSent(gomock.Any(), protocol.ByteCount(42), gomock.Any(), protocol.ByteCount(42), true)
 			sentPacket(&packet{
 				Length:          42,
@@ -643,7 +643,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows sending of ACKs when congestion limited", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			cong.EXPECT().CanSend(gomock.Any()).Return(true)
 			cong.EXPECT().HasPacingBudget(gomock.Any()).Return(true)
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
@@ -652,7 +652,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows sending of ACKs when we're keeping track of MaxOutstandingSentPackets packets", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			cong.EXPECT().CanSend(gomock.Any()).Return(true).AnyTimes()
 			cong.EXPECT().HasPacingBudget(gomock.Any()).Return(true).AnyTimes()
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -664,7 +664,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows PTOs, even when congestion limited", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			// note that we don't EXPECT a call to GetCongestionWindow
 			// that means retransmissions are sent without considering the congestion window
 			handler.numProbesToSend = 1
@@ -680,7 +680,7 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	It("doesn't set an alarm if there are no outstanding packets", func() {
-		handler.ReceivedPacket(protocol.EncryptionHandshake)
+		handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 		sentPacket(ackElicitingPacket(&packet{PacketNumber: 10}))
 		sentPacket(ackElicitingPacket(&packet{PacketNumber: 11}))
 		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 10, Largest: 11}}}
@@ -690,8 +690,8 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	It("does nothing on OnAlarm if there are no outstanding packets", func() {
-		handler.ReceivedPacket(protocol.EncryptionHandshake)
-		Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+		handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
+		Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 		Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 	})
 
@@ -712,35 +712,36 @@ var _ = Describe("SentPacketHandler", func() {
 		It("implements exponential backoff", func() {
 			handler.peerAddressValidated = true
 			setHandshakeConfirmed()
-			sendTime := time.Now().Add(-time.Hour)
+			now := time.Now()
+			sendTime := now.Add(-time.Hour)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: sendTime}))
 			timeout := handler.GetLossDetectionTimeout().Sub(sendTime)
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(timeout))
 			handler.ptoCount = 1
-			handler.setLossDetectionTimer()
+			handler.setLossDetectionTimer(now)
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(2 * timeout))
 			handler.ptoCount = 2
-			handler.setLossDetectionTimer()
+			handler.setLossDetectionTimer(now)
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 			// truncated when the exponential gets too large
 			handler.ptoCount = 20
-			handler.setLossDetectionTimer()
+			handler.setLossDetectionTimer(now)
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(maxPTODuration))
 			// protected from rollover
 			handler.ptoCount = 100
-			handler.setLossDetectionTimer()
+			handler.setLossDetectionTimer(now)
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(maxPTODuration))
 		})
 
 		It("reset the PTO count when receiving an ACK", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			now := time.Now()
 			setHandshakeConfirmed()
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
 			handler.appDataPackets.pns.(*skippingPacketNumberGenerator).next = 3
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			_, err := handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}, protocol.Encryption1RTT, time.Now())
@@ -749,7 +750,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("resets the PTO mode and PTO count when a packet number space is dropped", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 
 			now := time.Now()
 			handler.rttStats.UpdateRTT(time.Second/2, 0)
@@ -772,12 +773,12 @@ var _ = Describe("SentPacketHandler", func() {
 			}))
 
 			// PTO timer based on the Handshake packet
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOHandshake))
 			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeHandshake.Add(handler.rttStats.PTO(false) << 1)))
 			setHandshakeConfirmed()
-			handler.DropPackets(protocol.EncryptionHandshake)
+			handler.DropPackets(protocol.EncryptionHandshake, time.Now())
 			// PTO timer based on the 1-RTT packet
 			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeAppData.Add(handler.rttStats.PTO(true)))) // no backoff. PTO count = 0
 			Expect(handler.SendMode(time.Now())).ToNot(Equal(SendPTOHandshake))
@@ -785,7 +786,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows two 1-RTT PTOs", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			setHandshakeConfirmed()
 			var lostPackets []protocol.PacketNumber
 			sentPacket(ackElicitingPacket(&packet{
@@ -798,7 +799,7 @@ var _ = Describe("SentPacketHandler", func() {
 					},
 				},
 			}))
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
@@ -807,13 +808,13 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("only counts ack-eliciting packets as probe packets", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			setHandshakeConfirmed()
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT),
 				SendTime:     time.Now().Add(-time.Hour),
 			}))
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
@@ -826,7 +827,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("gets two probe packets if PTO expires", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			setHandshakeConfirmed()
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
@@ -834,14 +835,14 @@ var _ = Describe("SentPacketHandler", func() {
 			updateRTT(time.Hour)
 			Expect(handler.appDataPackets.lossTime.IsZero()).To(BeTrue())
 
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // TLP
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed()) // TLP
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // PTO
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed()) // PTO
 			Expect(handler.ptoCount).To(BeEquivalentTo(2))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
@@ -852,14 +853,14 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("gets two probe packets if PTO expires, for Handshake packets", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			sentPacket(initialPacket(&packet{PacketNumber: 1}))
 			sentPacket(initialPacket(&packet{PacketNumber: 2}))
 
 			updateRTT(time.Hour)
 			Expect(handler.initialPackets.lossTime.IsZero()).To(BeTrue())
 
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOInitial))
 			sentPacket(initialPacket(&packet{PacketNumber: 3}))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOInitial))
@@ -869,25 +870,25 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("doesn't send 1-RTT probe packets before the handshake completes", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 			updateRTT(time.Hour)
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 			setHandshakeConfirmed()
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 		})
 
 		It("resets the send mode when it receives an acknowledgement after queueing probe packets", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			setHandshakeConfirmed()
 			pn := handler.PopPacketNumber(protocol.Encryption1RTT)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: pn, SendTime: time.Now().Add(-time.Hour)}))
 			updateRTT(time.Second)
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pn, Largest: pn}}}
 			_, err := handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())
@@ -896,18 +897,18 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("handles ACKs for the original packet", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT),
 				SendTime:     time.Now().Add(-time.Hour),
 			}))
 			updateRTT(time.Second)
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 		})
 
 		It("doesn't set the PTO timer for Path MTU probe packets", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			setHandshakeConfirmed()
 			updateRTT(time.Second)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 5, SendTime: time.Now(), IsPathMTUProbePacket: true}))
@@ -918,8 +919,8 @@ var _ = Describe("SentPacketHandler", func() {
 	Context("amplification limit, for the server", func() {
 		It("limits the window to 3x the bytes received, to avoid amplification attacks", func() {
 			now := time.Now()
-			handler.ReceivedPacket(protocol.EncryptionInitial) // receiving an Initial packet doesn't validate the client's address
-			handler.ReceivedBytes(200)
+			handler.ReceivedPacket(protocol.EncryptionInitial, now) // receiving an Initial packet doesn't validate the client's address
+			handler.ReceivedBytes(200, now)
 			sentPacket(&packet{
 				PacketNumber:    1,
 				Length:          599,
@@ -939,7 +940,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("cancels the loss detection timer when it is amplification limited, and resets it when becoming unblocked", func() {
-			handler.ReceivedBytes(300)
+			handler.ReceivedBytes(300, time.Now())
 			sentPacket(&packet{
 				PacketNumber:    1,
 				Length:          900,
@@ -950,12 +951,12 @@ var _ = Describe("SentPacketHandler", func() {
 			// Amplification limited. We don't need to set a timer now.
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			// Unblock the server. Now we should fire up the timer.
-			handler.ReceivedBytes(1)
+			handler.ReceivedBytes(1, time.Now())
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 		})
 
 		It("resets the loss detection timer when the client's address is validated", func() {
-			handler.ReceivedBytes(300)
+			handler.ReceivedBytes(300, time.Now())
 			sentPacket(&packet{
 				PacketNumber:    1,
 				Length:          900,
@@ -965,13 +966,13 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 			// Amplification limited. We don't need to set a timer now.
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 		})
 
 		It("cancels the loss detection alarm when all Handshake packets are acknowledged", func() {
 			t := time.Now().Add(-time.Second)
-			handler.ReceivedBytes(99999)
+			handler.ReceivedBytes(99999, time.Now())
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2, SendTime: t}))
 			sentPacket(handshakePacket(&packet{PacketNumber: 3, SendTime: t}))
 			sentPacket(handshakePacket(&packet{PacketNumber: 4, SendTime: t}))
@@ -988,7 +989,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("do not limits the window", func() {
-			handler.ReceivedBytes(0)
+			handler.ReceivedBytes(0, time.Now())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 			sentPacket(&packet{
 				PacketNumber:    1,
@@ -1017,7 +1018,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// No packets are outstanding at this point.
 			// Make sure that a probe packet is sent.
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOInitial))
 
 			// send a single packet to unblock the server
@@ -1027,7 +1028,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// Now receive an ACK for a Handshake packet.
 			// This tells the client that the server completed address validation.
 			sentPacket(handshakePacket(&packet{PacketNumber: 1}))
-			handler.DropPackets(protocol.EncryptionInitial) // sending a Handshake packet drops the Initial packet number space
+			handler.DropPackets(protocol.EncryptionInitial, time.Now()) // sending a Handshake packet drops the Initial packet number space
 			_, err = handler.ReceivedAck(
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
 				protocol.EncryptionHandshake,
@@ -1048,9 +1049,9 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			sentPacket(handshakePacketNonAckEliciting(&packet{PacketNumber: 1}))
-			handler.DropPackets(protocol.EncryptionInitial) // sending a Handshake packet drops the Initial packet number space
+			handler.DropPackets(protocol.EncryptionInitial, time.Now()) // sending a Handshake packet drops the Initial packet number space
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOHandshake))
 
 			// Now receive an ACK for this packet, and send another one.
@@ -1067,10 +1068,10 @@ var _ = Describe("SentPacketHandler", func() {
 		It("doesn't send a packet to unblock the server after handshake confirmation, even if no Handshake ACK was received", func() {
 			sentPacket(handshakePacket(&packet{PacketNumber: 1}))
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOHandshake))
 			// confirm the handshake
-			handler.DropPackets(protocol.EncryptionHandshake)
+			handler.DropPackets(protocol.EncryptionHandshake, time.Now())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
 
@@ -1083,7 +1084,7 @@ var _ = Describe("SentPacketHandler", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 			sentPacket(handshakePacketNonAckEliciting(&packet{PacketNumber: 1, SendTime: time.Now()}))
-			handler.DropPackets(protocol.EncryptionInitial) // sending a Handshake packet drops the Initial packet number space
+			handler.DropPackets(protocol.EncryptionInitial, time.Now()) // sending a Handshake packet drops the Initial packet number space
 
 			pto := handler.rttStats.PTO(false)
 			Expect(pto).ToNot(BeZero())
@@ -1097,7 +1098,7 @@ var _ = Describe("SentPacketHandler", func() {
 			sentPacket(initialPacket(&packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
 			sentPacket(initialPacket(&packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOInitial))
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			_, err := handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}, protocol.EncryptionInitial, time.Now())
@@ -1136,7 +1137,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("sets the early retransmit alarm", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			handler.handshakeConfirmed = true
 			now := time.Now()
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
@@ -1154,13 +1155,13 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 
 			expectInPacketHistory([]protocol.PacketNumber{1, 3}, protocol.Encryption1RTT)
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			expectInPacketHistory([]protocol.PacketNumber{3}, protocol.Encryption1RTT)
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 		})
 
 		It("sets the early retransmit alarm for crypto packets", func() {
-			handler.ReceivedBytes(1000)
+			handler.ReceivedBytes(1000, time.Now())
 			now := time.Now()
 			sentPacket(initialPacket(&packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
 			sentPacket(initialPacket(&packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))
@@ -1177,7 +1178,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 
 			expectInPacketHistory([]protocol.PacketNumber{1, 3}, protocol.EncryptionInitial)
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			expectInPacketHistory([]protocol.PacketNumber{3}, protocol.EncryptionInitial)
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 		})
@@ -1202,7 +1203,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(mtuPacketDeclaredLost).To(BeFalse())
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(mtuPacketDeclaredLost).To(BeTrue())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
@@ -1236,7 +1237,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}))
 			}
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(16)))
-			handler.DropPackets(protocol.EncryptionInitial)
+			handler.DropPackets(protocol.EncryptionInitial, time.Now())
 			Expect(lostPackets).To(BeEmpty()) // frames must not be queued for retransmission
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
 			Expect(handler.initialPackets).To(BeNil())
@@ -1257,7 +1258,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}))
 			}
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(16)))
-			handler.DropPackets(protocol.EncryptionHandshake)
+			handler.DropPackets(protocol.EncryptionHandshake, time.Now())
 			Expect(lostPackets).To(BeEmpty()) // frames must not be queued for retransmission
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
 			Expect(handler.handshakePackets).To(BeNil())
@@ -1278,21 +1279,21 @@ var _ = Describe("SentPacketHandler", func() {
 				sentPacket(ackElicitingPacket(&packet{PacketNumber: i}))
 			}
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
-			handler.DropPackets(protocol.Encryption0RTT)
+			handler.DropPackets(protocol.Encryption0RTT, time.Now())
 			Expect(lostPackets).To(BeEmpty())
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
 		})
 
 		It("cancels the PTO when dropping a packet number space", func() {
-			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.ReceivedPacket(protocol.EncryptionHandshake, time.Now())
 			now := time.Now()
 			sentPacket(handshakePacket(&packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
 			sentPacket(handshakePacket(&packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOHandshake))
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
-			handler.DropPackets(protocol.EncryptionHandshake)
+			handler.DropPackets(protocol.EncryptionHandshake, time.Now())
 			Expect(handler.ptoCount).To(BeZero())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
 		})
@@ -1415,7 +1416,7 @@ var _ = Describe("SentPacketHandler", func() {
 				EncryptionLevel: protocol.EncryptionInitial,
 				SendTime:        now,
 			}))
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.OnLossDetectionTimeout(time.Now())).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOInitial))
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber:    43,

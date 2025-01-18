@@ -11,6 +11,7 @@ package ackhandler
 
 import (
 	reflect "reflect"
+	time "time"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
@@ -79,15 +80,15 @@ func (c *MockSentPacketTrackerGetLowestPacketNotConfirmedAckedCall) DoAndReturn(
 }
 
 // ReceivedPacket mocks base method.
-func (m *MockSentPacketTracker) ReceivedPacket(arg0 protocol.EncryptionLevel) {
+func (m *MockSentPacketTracker) ReceivedPacket(arg0 protocol.EncryptionLevel, rcvTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReceivedPacket", arg0)
+	m.ctrl.Call(m, "ReceivedPacket", arg0, rcvTime)
 }
 
 // ReceivedPacket indicates an expected call of ReceivedPacket.
-func (mr *MockSentPacketTrackerMockRecorder) ReceivedPacket(arg0 any) *MockSentPacketTrackerReceivedPacketCall {
+func (mr *MockSentPacketTrackerMockRecorder) ReceivedPacket(arg0, rcvTime any) *MockSentPacketTrackerReceivedPacketCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockSentPacketTracker)(nil).ReceivedPacket), arg0)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockSentPacketTracker)(nil).ReceivedPacket), arg0, rcvTime)
 	return &MockSentPacketTrackerReceivedPacketCall{Call: call}
 }
 
@@ -103,13 +104,13 @@ func (c *MockSentPacketTrackerReceivedPacketCall) Return() *MockSentPacketTracke
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketTrackerReceivedPacketCall) Do(f func(protocol.EncryptionLevel)) *MockSentPacketTrackerReceivedPacketCall {
+func (c *MockSentPacketTrackerReceivedPacketCall) Do(f func(protocol.EncryptionLevel, time.Time)) *MockSentPacketTrackerReceivedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketTrackerReceivedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel)) *MockSentPacketTrackerReceivedPacketCall {
+func (c *MockSentPacketTrackerReceivedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, time.Time)) *MockSentPacketTrackerReceivedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
