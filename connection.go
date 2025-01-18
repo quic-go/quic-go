@@ -1658,6 +1658,8 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 		errors.As(e, &recreateErr),
 		errors.As(e, &applicationErr),
 		errors.As(e, &transportErr):
+	case closeErr.immediate:
+		e = closeErr.err
 	default:
 		e = &qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
