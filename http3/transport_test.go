@@ -283,7 +283,7 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
