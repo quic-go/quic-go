@@ -49,5 +49,5 @@ type ReceivedPacketHandler interface {
 	DropPackets(protocol.EncryptionLevel)
 
 	GetAlarmTimeout() time.Time
-	GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame
+	GetAckFrame(_ protocol.EncryptionLevel, now time.Time, onlyIfQueued bool) *wire.AckFrame
 }
