@@ -17,7 +17,8 @@ func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
 	sentPackets := NewMockSentPacketTracker(ctrl)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	sendTime := time.Now().Add(-time.Second)
+	now := time.Now()
+	sendTime := now.Add(-time.Second)
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial, sendTime).Times(2)
 	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionHandshake, sendTime).Times(2)
@@ -31,7 +32,7 @@ func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
 	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNCE, protocol.Encryption1RTT, sendTime, true))
 
 	// Initial
-	initialAck := handler.GetAckFrame(protocol.EncryptionInitial, true)
+	initialAck := handler.GetAckFrame(protocol.EncryptionInitial, now, true)
 	require.NotNil(t, initialAck)
 	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 3}}, initialAck.AckRanges)
 	require.Zero(t, initialAck.DelayTime)
@@ -40,7 +41,7 @@ func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
 	require.Zero(t, initialAck.ECNCE)
 
 	// Handshake
-	handshakeAck := handler.GetAckFrame(protocol.EncryptionHandshake, true)
+	handshakeAck := handler.GetAckFrame(protocol.EncryptionHandshake, now, true)
 	require.NotNil(t, handshakeAck)
 	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 2}}, handshakeAck.AckRanges)
 	require.Zero(t, handshakeAck.DelayTime)
@@ -49,10 +50,10 @@ func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
 	require.Zero(t, handshakeAck.ECNCE)
 
 	// 1-RTT
-	oneRTTAck := handler.GetAckFrame(protocol.Encryption1RTT, true)
+	oneRTTAck := handler.GetAckFrame(protocol.Encryption1RTT, now, true)
 	require.NotNil(t, oneRTTAck)
 	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 5}}, oneRTTAck.AckRanges)
-	require.InDelta(t, time.Second, oneRTTAck.DelayTime, float64(50*time.Millisecond))
+	require.Equal(t, time.Second, oneRTTAck.DelayTime)
 	require.Zero(t, oneRTTAck.ECT0)
 	require.Zero(t, oneRTTAck.ECT1)
 	require.EqualValues(t, 2, oneRTTAck.ECNCE)
@@ -71,7 +72,7 @@ func TestReceive0RTTAnd1RTT(t *testing.T) {
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	ack := handler.GetAckFrame(protocol.Encryption1RTT, true)
+	ack := handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true)
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 3}}, ack.AckRanges)
 
@@ -95,17 +96,17 @@ func TestDropPackets(t *testing.T) {
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
 	// Initial
-	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionInitial, true))
+	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionInitial, time.Now(), true))
 	handler.DropPackets(protocol.EncryptionInitial)
-	require.Nil(t, handler.GetAckFrame(protocol.EncryptionInitial, true))
+	require.Nil(t, handler.GetAckFrame(protocol.EncryptionInitial, time.Now(), true))
 
 	// Handshake
-	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionHandshake, true))
+	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionHandshake, time.Now(), true))
 	handler.DropPackets(protocol.EncryptionHandshake)
-	require.Nil(t, handler.GetAckFrame(protocol.EncryptionHandshake, true))
+	require.Nil(t, handler.GetAckFrame(protocol.EncryptionHandshake, time.Now(), true))
 
 	// 1-RTT
-	require.NotNil(t, handler.GetAckFrame(protocol.Encryption1RTT, true))
+	require.NotNil(t, handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true))
 
 	// 0-RTT is a no-op
 	handler.DropPackets(protocol.Encryption0RTT)
@@ -122,7 +123,7 @@ func TestAckRangePruning(t *testing.T) {
 	require.NoError(t, handler.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	ack := handler.GetAckFrame(protocol.Encryption1RTT, true)
+	ack := handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true)
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 2}}, ack.AckRanges)
 
@@ -130,7 +131,7 @@ func TestAckRangePruning(t *testing.T) {
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(2))
 	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	ack = handler.GetAckFrame(protocol.Encryption1RTT, true)
+	ack = handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true)
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 4}}, ack.AckRanges)
 }

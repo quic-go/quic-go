@@ -79,17 +79,17 @@ func (c *MockReceivedPacketHandlerDropPacketsCall) DoAndReturn(f func(protocol.E
 }
 
 // GetAckFrame mocks base method.
-func (m *MockReceivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame {
+func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel, now time.Time, onlyIfQueued bool) *wire.AckFrame {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAckFrame", encLevel, onlyIfQueued)
+	ret := m.ctrl.Call(m, "GetAckFrame", arg0, now, onlyIfQueued)
 	ret0, _ := ret[0].(*wire.AckFrame)
 	return ret0
 }
 
 // GetAckFrame indicates an expected call of GetAckFrame.
-func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(encLevel, onlyIfQueued any) *MockReceivedPacketHandlerGetAckFrameCall {
+func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(arg0, now, onlyIfQueued any) *MockReceivedPacketHandlerGetAckFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAckFrame), encLevel, onlyIfQueued)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAckFrame), arg0, now, onlyIfQueued)
 	return &MockReceivedPacketHandlerGetAckFrameCall{Call: call}
 }
 
@@ -105,13 +105,13 @@ func (c *MockReceivedPacketHandlerGetAckFrameCall) Return(arg0 *wire.AckFrame) *
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockReceivedPacketHandlerGetAckFrameCall) Do(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
+func (c *MockReceivedPacketHandlerGetAckFrameCall) Do(f func(protocol.EncryptionLevel, time.Time, bool) *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockReceivedPacketHandlerGetAckFrameCall) DoAndReturn(f func(protocol.EncryptionLevel, bool) *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
+func (c *MockReceivedPacketHandlerGetAckFrameCall) DoAndReturn(f func(protocol.EncryptionLevel, time.Time, bool) *wire.AckFrame) *MockReceivedPacketHandlerGetAckFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
