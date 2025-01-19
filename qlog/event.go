@@ -255,7 +255,6 @@ func (e eventPacketBuffered) Name() string       { return "packet_buffered" }
 func (e eventPacketBuffered) IsNil() bool        { return false }
 
 func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
-	//nolint:gosimple
 	enc.ObjectKey("header", packetHeaderWithType{PacketType: e.PacketType, PacketNumber: protocol.InvalidPacketNumber})
 	enc.ObjectKey("raw", rawInfo{Length: e.PacketSize})
 	enc.StringKey("trigger", "keys_unavailable")

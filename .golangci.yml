@@ -26,6 +26,7 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - nolintlint
     - prealloc
     - staticcheck
     - stylecheck

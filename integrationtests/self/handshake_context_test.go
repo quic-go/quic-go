@@ -51,7 +51,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 	tr := &quic.Transport{
 		Conn: newUPDConnLocalhost(t),
 		ConnContext: func(ctx context.Context) context.Context {
-			return context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
+			return context.WithValue(ctx, "foo", "bar")
 		},
 	}
 	defer tr.Close()
@@ -182,7 +182,7 @@ func TestContextOnClientSide(t *testing.T) {
 		return &tlsServerConf.Certificates[0], nil
 	}
 
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar")) //nolint:staticcheck
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar"))
 	conn, err := quic.Dial(
 		ctx,
 		newUPDConnLocalhost(t),

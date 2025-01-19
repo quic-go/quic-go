@@ -1834,7 +1834,6 @@ func (s *connection) triggerSending(now time.Time) error {
 	s.pacingDeadline = time.Time{}
 
 	sendMode := s.sentPacketHandler.SendMode(now)
-	//nolint:exhaustive // No need to handle pacing limited here.
 	switch sendMode {
 	case ackhandler.SendAny:
 		return s.sendPackets(now)

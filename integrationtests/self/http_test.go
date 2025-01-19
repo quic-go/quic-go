@@ -597,7 +597,7 @@ func TestHTTPContextFromQUIC(t *testing.T) {
 	tr := &quic.Transport{
 		Conn: conn,
 		ConnContext: func(ctx context.Context) context.Context {
-			return context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
+			return context.WithValue(ctx, "foo", "bar")
 		},
 	}
 	defer tr.Close()
@@ -650,7 +650,7 @@ func TestHTTPConnContext(t *testing.T) {
 		func(s *http3.Server) {
 			s.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
 				connCtxChan <- ctx
-				ctx = context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
+				ctx = context.WithValue(ctx, "foo", "bar")
 				return ctx
 			}
 		},
