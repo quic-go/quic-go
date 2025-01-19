@@ -44,7 +44,7 @@ func AddRootCA(certPool *x509.CertPool) {
 		panic(err)
 	}
 	if ok := certPool.AppendCertsFromPEM(caCertRaw); !ok {
-		panic("Could not add root ceritificate to pool.")
+		panic("Could not add root certificate to pool.")
 	}
 }
 

@@ -318,7 +318,7 @@ func (c *connection) receiveDatagrams() error {
 }
 
 // ReceivedSettings returns a channel that is closed once the peer's SETTINGS frame was received.
-// Settings can be optained from the Settings method after the channel was closed.
+// Settings can be obtained from the Settings method after the channel was closed.
 func (c *connection) ReceivedSettings() <-chan struct{} { return c.receivedSettings }
 
 // Settings returns the settings received on this connection.

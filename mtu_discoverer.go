@@ -37,7 +37,7 @@ const (
 //   1. The path doesn't support this larger packet size, or
 //   2. The packet was lost due to packet loss, independent of its size.
 // The algorithm used here is resilient to packet loss of (maxLostMTUProbes - 1) packets.
-// For simplicty, the following example use maxLostMTUProbes = 2.
+// For simplicity, the following example use maxLostMTUProbes = 2.
 //
 // Initialization:
 //    |------------------------------------------------------------------------------|

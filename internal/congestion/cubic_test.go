@@ -157,7 +157,7 @@ var _ = Describe("Cubic", func() {
 			clock.Advance(interval)
 			nextCwnd := cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 			rCwnd = renoCwnd(rCwnd)
-			// The window shoud increase on every ack.
+			// The window should increase on every ack.
 			Expect(nextCwnd).To(BeNumerically(">", currentCwnd))
 			Expect(nextCwnd).To(Equal(rCwnd))
 			currentCwnd = nextCwnd

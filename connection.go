@@ -2201,7 +2201,7 @@ func (s *connection) maxPacketSize() protocol.ByteCount {
 	return s.mtuDiscoverer.CurrentSize()
 }
 
-// AcceptStream returns the next stream openend by the peer
+// AcceptStream returns the next stream opened by the peer
 func (s *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	return s.streamsMap.AcceptStream(ctx)
 }
