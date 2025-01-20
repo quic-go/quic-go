@@ -25,7 +25,7 @@ func initAEAD(key [16]byte) cipher.AEAD {
 	if err != nil {
 		panic(err)
 	}
-	aead, err := cipher.NewGCM(aes)
+	aead, err := cipher.NewGCMWithRandomNonce(aes)
 	if err != nil {
 		panic(err)
 	}
