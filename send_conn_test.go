@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -97,4 +98,38 @@ func TestSendConnSendmsgFailures(t *testing.T) {
 		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), gomock.Any(), protocol.ECNCE).Return(0, errNotPermitted).Times(2)
 		require.Error(t, c.Write([]byte("foobar"), 0, protocol.ECNCE))
 	})
+}
+
+func TestSendConnRemoteAddrChange(t *testing.T) {
+	ln1 := newUPDConnLocalhost(t)
+	ln2 := newUPDConnLocalhost(t)
+
+	c := newSendConn(
+		&basicConn{PacketConn: newUPDConnLocalhost(t)},
+		ln1.LocalAddr(),
+		packetInfo{},
+		utils.DefaultLogger,
+	)
+
+	require.NoError(t, c.Write([]byte("foobar"), 0, protocol.ECNUnsupported))
+	ln1.SetReadDeadline(time.Now().Add(time.Second))
+	b := make([]byte, 1024)
+	n, err := ln1.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, "foobar", string(b[:n]))
+
+	require.NoError(t, c.WriteTo([]byte("foobaz"), ln2.LocalAddr()))
+	ln2.SetReadDeadline(time.Now().Add(time.Second))
+	b = make([]byte, 1024)
+	n, err = ln2.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, "foobaz", string(b[:n]))
+
+	c.ChangeRemoteAddr(ln2.LocalAddr(), packetInfo{})
+	require.NoError(t, c.Write([]byte("lorem ipsum"), 0, protocol.ECNUnsupported))
+	ln2.SetReadDeadline(time.Now().Add(time.Second))
+	b = make([]byte, 1024)
+	n, err = ln2.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, "lorem ipsum", string(b[:n]))
 }
