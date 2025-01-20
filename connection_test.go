@@ -2199,7 +2199,7 @@ func testConnectionPTOProbePackets(t *testing.T, encLevel protocol.EncryptionLev
 	sph.EXPECT().QueueProbePacket(encLevel).Return(false)
 	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
-	tc.packer.EXPECT().MaybePackProbePacket(encLevel, gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(
+	tc.packer.EXPECT().MaybePackPTOProbePacket(encLevel, gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(
 		func(encLevel protocol.EncryptionLevel, maxSize protocol.ByteCount, t time.Time, version protocol.Version) (*coalescedPacket, error) {
 			return &coalescedPacket{
 				buffer:         getPacketBuffer(),
