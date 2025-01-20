@@ -624,7 +624,7 @@ func TestUpdatedMetrics(t *testing.T) {
 	require.Equal(t, float64(42), ev["packets_in_flight"])
 }
 
-func TestDiffForOnlyChangedMetrics(t *testing.T) {
+func TestUpdatedMetricsDiff(t *testing.T) {
 	var rttStats utils.RTTStats
 	rttStats.UpdateRTT(15*time.Millisecond, 0)
 	rttStats.UpdateRTT(20*time.Millisecond, 0)
@@ -638,9 +638,10 @@ func TestDiffForOnlyChangedMetrics(t *testing.T) {
 	tracer, buf := newConnectionTracer()
 	tracer.UpdatedMetrics(&rttStats, 4321, 1234, 42)
 	tracer.UpdatedMetrics(&rttStats2, 4321, 12345 /* changed */, 42)
+	tracer.UpdatedMetrics(&rttStats2, 0, 0, 0)
 	tracer.Close()
 	entries := exportAndParse(t, buf)
-	require.Len(t, entries, 2)
+	require.Len(t, entries, 3)
 	require.WithinDuration(t, time.Now(), entries[0].Time, scaleDuration(10*time.Millisecond))
 	require.Equal(t, "recovery:metrics_updated", entries[0].Name)
 	require.Len(t, entries[0].Event, 7)
@@ -652,6 +653,13 @@ func TestDiffForOnlyChangedMetrics(t *testing.T) {
 	require.NotContains(t, ev, "packets_in_flight")
 	require.Equal(t, float64(12345), ev["bytes_in_flight"])
 	require.Equal(t, float64(15), ev["smoothed_rtt"])
+	ev = entries[2].Event
+	require.Contains(t, ev, "congestion_window")
+	require.Contains(t, ev, "packets_in_flight")
+	require.Contains(t, ev, "bytes_in_flight")
+	require.Zero(t, ev["bytes_in_flight"])
+	require.Zero(t, ev["packets_in_flight"])
+	require.Zero(t, ev["congestion_window"])
 }
 
 func TestLostPackets(t *testing.T) {

@@ -336,7 +336,7 @@ func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 		enc.Uint64Key("bytes_in_flight", uint64(e.Current.BytesInFlight))
 	}
 	if e.Last == nil || e.Last.PacketsInFlight != e.Current.PacketsInFlight {
-		enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.Current.PacketsInFlight))
+		enc.Uint64Key("packets_in_flight", uint64(e.Current.PacketsInFlight))
 	}
 }
 
