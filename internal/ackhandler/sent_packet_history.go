@@ -7,7 +7,8 @@ import (
 )
 
 type sentPacketHistory struct {
-	packets []*packet
+	packets          []*packet
+	pathProbePackets []*packet
 
 	numOutstanding int
 
@@ -32,11 +33,11 @@ func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNum
 			panic("non-sequential packet number use")
 		}
 	}
+	h.highestPacketNumber = pn
 }
 
 func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
 	h.checkSequentialPacketNumberUse(pn)
-	h.highestPacketNumber = pn
 	h.packets = append(h.packets, &packet{
 		PacketNumber:  pn,
 		skippedPacket: true,
@@ -45,7 +46,6 @@ func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
 
 func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber) {
 	h.checkSequentialPacketNumberUse(pn)
-	h.highestPacketNumber = pn
 	if len(h.packets) > 0 {
 		h.packets = append(h.packets, nil)
 	}
@@ -53,11 +53,19 @@ func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber) 
 
 func (h *sentPacketHistory) SentAckElicitingPacket(p *packet) {
 	h.checkSequentialPacketNumberUse(p.PacketNumber)
-	h.highestPacketNumber = p.PacketNumber
 	h.packets = append(h.packets, p)
 	if p.outstanding() {
 		h.numOutstanding++
 	}
+}
+
+func (h *sentPacketHistory) SentPathProbePacket(p *packet) {
+	h.checkSequentialPacketNumberUse(p.PacketNumber)
+	h.packets = append(h.packets, &packet{
+		PacketNumber:      p.PacketNumber,
+		isPathProbePacket: true,
+	})
+	h.pathProbePackets = append(h.pathProbePackets, p)
 }
 
 // Iterate iterates through all packets.
@@ -66,8 +74,16 @@ func (h *sentPacketHistory) Iterate(cb func(*packet) (cont bool)) {
 		if p == nil {
 			continue
 		}
-		cont := cb(p)
-		if !cont {
+		if cont := cb(p); !cont {
+			return
+		}
+	}
+}
+
+// IteratePathProbes iterates through all packets.
+func (h *sentPacketHistory) IteratePathProbes(cb func(*packet) (cont bool)) {
+	for _, p := range h.pathProbePackets {
+		if cont := cb(p); !cont {
 			return
 		}
 	}
@@ -84,6 +100,14 @@ func (h *sentPacketHistory) FirstOutstanding() *packet {
 		}
 	}
 	return nil
+}
+
+// FirstOutstandingPathProbe returns the first outstanding path probe packet
+func (h *sentPacketHistory) FirstOutstandingPathProbe() *packet {
+	if len(h.pathProbePackets) == 0 {
+		return nil
+	}
+	return h.pathProbePackets[0]
 }
 
 func (h *sentPacketHistory) Len() int {
@@ -121,6 +145,27 @@ func (h *sentPacketHistory) Remove(pn protocol.PacketNumber) error {
 	return nil
 }
 
+// RemovePathProbe removes a path probe packet.
+// It scales O(N), but that's ok, since we don't expect to send many path probe packets.
+// It is not valid to call this function in IteratePathProbes.
+func (h *sentPacketHistory) RemovePathProbe(pn protocol.PacketNumber) *packet {
+	var packetToDelete *packet
+	idx := -1
+	for i, p := range h.pathProbePackets {
+		if p.PacketNumber == pn {
+			packetToDelete = p
+			idx = i
+			break
+		}
+	}
+	if idx != -1 {
+		// don't use slices.Delete, because it zeros the deleted element
+		copy(h.pathProbePackets[idx:], h.pathProbePackets[idx+1:])
+		h.pathProbePackets = h.pathProbePackets[:len(h.pathProbePackets)-1]
+	}
+	return packetToDelete
+}
+
 // getIndex gets the index of packet p in the packets slice.
 func (h *sentPacketHistory) getIndex(p protocol.PacketNumber) (int, bool) {
 	if len(h.packets) == 0 {
@@ -139,6 +184,10 @@ func (h *sentPacketHistory) getIndex(p protocol.PacketNumber) (int, bool) {
 
 func (h *sentPacketHistory) HasOutstandingPackets() bool {
 	return h.numOutstanding > 0
+}
+
+func (h *sentPacketHistory) HasOutstandingPathProbes() bool {
+	return len(h.pathProbePackets) > 0
 }
 
 // delete all nil entries at the beginning of the packets slice
