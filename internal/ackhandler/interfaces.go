@@ -17,7 +17,6 @@ type SentPacketHandler interface {
 	ReceivedBytes(_ protocol.ByteCount, rcvTime time.Time)
 	DropPackets(_ protocol.EncryptionLevel, rcvTime time.Time)
 	ResetForRetry(rcvTime time.Time)
-	SetHandshakeConfirmed(now time.Time)
 
 	// The SendMode determines if and what kind of packets can be sent.
 	SendMode(now time.Time) SendMode
