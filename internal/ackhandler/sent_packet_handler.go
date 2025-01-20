@@ -179,6 +179,9 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 	case protocol.EncryptionInitial:
 		h.initialPackets = nil
 	case protocol.EncryptionHandshake:
+		// Dropping the handshake packet number space means that the handshake is confirmed,
+		// see section 4.9.2 of RFC 9001.
+		h.handshakeConfirmed = true
 		h.handshakePackets = nil
 	case protocol.Encryption0RTT:
 		// This function is only called when 0-RTT is rejected,
@@ -911,17 +914,4 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 		}
 	}
 	h.ptoCount = 0
-}
-
-func (h *sentPacketHandler) SetHandshakeConfirmed(now time.Time) {
-	if h.initialPackets != nil {
-		panic("didn't drop initial correctly")
-	}
-	if h.handshakePackets != nil {
-		panic("didn't drop handshake correctly")
-	}
-	h.handshakeConfirmed = true
-	// We don't send PTOs for application data packets before the handshake completes.
-	// Make sure the timer is armed now, if necessary.
-	h.setLossDetectionTimer(now)
 }

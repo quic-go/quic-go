@@ -493,42 +493,6 @@ func (c *MockSentPacketHandlerSentPacketCall) DoAndReturn(f func(time.Time, prot
 	return c
 }
 
-// SetHandshakeConfirmed mocks base method.
-func (m *MockSentPacketHandler) SetHandshakeConfirmed(now time.Time) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHandshakeConfirmed", now)
-}
-
-// SetHandshakeConfirmed indicates an expected call of SetHandshakeConfirmed.
-func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeConfirmed(now any) *MockSentPacketHandlerSetHandshakeConfirmedCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeConfirmed), now)
-	return &MockSentPacketHandlerSetHandshakeConfirmedCall{Call: call}
-}
-
-// MockSentPacketHandlerSetHandshakeConfirmedCall wrap *gomock.Call
-type MockSentPacketHandlerSetHandshakeConfirmedCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) Return() *MockSentPacketHandlerSetHandshakeConfirmedCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) Do(f func(time.Time)) *MockSentPacketHandlerSetHandshakeConfirmedCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerSetHandshakeConfirmedCall) DoAndReturn(f func(time.Time)) *MockSentPacketHandlerSetHandshakeConfirmedCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // SetMaxDatagramSize mocks base method.
 func (m *MockSentPacketHandler) SetMaxDatagramSize(count protocol.ByteCount) {
 	m.ctrl.T.Helper()

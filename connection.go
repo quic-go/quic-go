@@ -794,7 +794,6 @@ func (s *connection) handleHandshakeConfirmed(now time.Time) error {
 	}
 
 	s.handshakeConfirmed = true
-	s.sentPacketHandler.SetHandshakeConfirmed(now)
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
 
 	if !s.config.DisablePathMTUDiscovery && s.conn.capabilities().DF {

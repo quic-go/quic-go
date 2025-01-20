@@ -133,7 +133,6 @@ var _ = Describe("SentPacketHandler", func() {
 	setHandshakeConfirmed := func() {
 		handler.DropPackets(protocol.EncryptionInitial, time.Now())
 		handler.DropPackets(protocol.EncryptionHandshake, time.Now())
-		handler.SetHandshakeConfirmed(time.Now())
 	}
 
 	Context("registering sent packets", func() {
