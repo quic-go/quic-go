@@ -3,6 +3,7 @@ package frames
 import (
 	"fmt"
 
+	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -49,6 +50,8 @@ func Fuzz(data []byte) int {
 		if f == nil { // PADDING frame
 			continue
 		}
+		wire.IsProbingFrame(f)
+		ackhandler.IsFrameAckEliciting(f)
 		// We accept empty STREAM frames, but we don't write them.
 		if sf, ok := f.(*wire.StreamFrame); ok {
 			if sf.DataLen() == 0 {
