@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -15,6 +16,27 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 )
+
+// ErrTransportClosed is returned by the Transport's Listen or Dial method after it was closed.
+var ErrTransportClosed = &errTransportClosed{}
+
+type errTransportClosed struct {
+	err error
+}
+
+func (e *errTransportClosed) Unwrap() []error { return []error{net.ErrClosed, e.err} }
+
+func (e *errTransportClosed) Error() string {
+	if e.err == nil {
+		return "quic: transport closed"
+	}
+	return fmt.Sprintf("quic: transport closed: %s", e.err)
+}
+
+func (e *errTransportClosed) Is(target error) bool {
+	_, ok := target.(*errTransportClosed)
+	return ok
+}
 
 var errListenerAlreadySet = errors.New("listener already set")
 
@@ -126,7 +148,7 @@ type Transport struct {
 	statelessResetQueue chan receivedPacket
 
 	listening   chan struct{} // is closed when listen returns
-	closed      bool
+	closeErr    error
 	createdConn bool
 	isSingleUse bool // was created for a single server or client, i.e. by calling quic.Listen or quic.Dial
 
@@ -169,6 +191,9 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
+	if t.closeErr != nil {
+		return nil, t.closeErr
+	}
 	if t.server != nil {
 		return nil, errListenerAlreadySet
 	}
@@ -211,6 +236,12 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 }
 
 func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsConf *tls.Config, conf *Config, use0RTT bool) (EarlyConnection, error) {
+	t.mutex.Lock()
+	if t.closeErr != nil {
+		t.mutex.Unlock()
+		return nil, t.closeErr
+	}
+	t.mutex.Unlock()
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
@@ -417,11 +448,11 @@ func (t *Transport) runSendQueue() {
 	}
 }
 
-// Close closes the underlying connection.
+// Close stops listening for UDP datagrams on the Transport.Conn.
 // If any listener was started, it will be closed as well.
 // It is invalid to start new listeners or connections after that.
 func (t *Transport) Close() error {
-	t.close(errors.New("closing"))
+	t.close(nil)
 	if t.createdConn {
 		if err := t.Conn.Close(); err != nil {
 			return err
@@ -440,7 +471,7 @@ func (t *Transport) closeServer() {
 	t.mutex.Lock()
 	t.server = nil
 	if t.isSingleUse {
-		t.closed = true
+		t.closeErr = ErrServerClosed
 	}
 	t.mutex.Unlock()
 	if t.createdConn {
@@ -456,10 +487,12 @@ func (t *Transport) closeServer() {
 func (t *Transport) close(e error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	if t.closed {
+
+	if t.closeErr != nil {
 		return
 	}
 
+	e = &errTransportClosed{err: e}
 	if t.handlerMap != nil {
 		t.handlerMap.Close(e)
 	}
@@ -469,7 +502,7 @@ func (t *Transport) close(e error) {
 	if t.Tracer != nil && t.Tracer.Close != nil {
 		t.Tracer.Close()
 	}
-	t.closed = true
+	t.closeErr = e
 }
 
 // only print warnings about the UDP receive buffer size once
@@ -486,7 +519,7 @@ func (t *Transport) listen(conn rawConn) {
 		// See https://github.com/quic-go/quic-go/issues/1737 for details.
 		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
 			t.mutex.Lock()
-			closed := t.closed
+			closed := t.closeErr != nil
 			t.mutex.Unlock()
 			if closed {
 				return

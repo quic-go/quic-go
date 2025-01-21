@@ -166,7 +166,9 @@ func TestTransportErrFromConn(t *testing.T) {
 		t.Fatal("timeout")
 	}
 
-	// TODO(#4778): test that it's not possible to listen after the transport is closed
+	_, err := tr.Listen(&tls.Config{}, nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrTransportClosed)
 }
 
 func TestTransportStatelessResetReceiving(t *testing.T) {

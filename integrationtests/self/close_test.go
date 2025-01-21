@@ -2,6 +2,8 @@ package self_test
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -112,4 +114,107 @@ func TestDrainServerAcceptQueue(t *testing.T) {
 	}
 	_, err = server.Accept(ctx)
 	require.ErrorIs(t, err, quic.ErrServerClosed)
+}
+
+type brokenConn struct {
+	net.PacketConn
+
+	broken   chan struct{}
+	breakErr atomic.Pointer[error]
+}
+
+func newBrokenConn(conn net.PacketConn) *brokenConn {
+	c := &brokenConn{
+		PacketConn: conn,
+		broken:     make(chan struct{}),
+	}
+	go func() {
+		<-c.broken
+		// make calls to ReadFrom return
+		c.PacketConn.SetDeadline(time.Now())
+	}()
+	return c
+}
+
+func (c *brokenConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	if err := c.breakErr.Load(); err != nil {
+		return 0, nil, *err
+	}
+	n, addr, err := c.PacketConn.ReadFrom(b)
+	if err != nil {
+		select {
+		case <-c.broken:
+			err = *c.breakErr.Load()
+		default:
+		}
+	}
+	return n, addr, err
+}
+
+func (c *brokenConn) Break(e error) {
+	c.breakErr.Store(&e)
+	close(c.broken)
+}
+
+func TestTransportClose(t *testing.T) {
+	t.Run("Close", func(t *testing.T) {
+		conn := newUPDConnLocalhost(t)
+		testTransportClose(t, conn, func() { conn.Close() }, nil)
+	})
+
+	t.Run("connection error", func(t *testing.T) {
+		t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
+
+		bc := newBrokenConn(newUPDConnLocalhost(t))
+		testErr := errors.New("test error")
+		testTransportClose(t, bc, func() { bc.Break(testErr) }, testErr)
+	})
+}
+
+func testTransportClose(t *testing.T, conn net.PacketConn, closeFn func(), expectedErr error) {
+	server := newUPDConnLocalhost(t)
+	tr := &quic.Transport{Conn: conn}
+
+	errChan := make(chan error, 1)
+	go func() {
+		_, err := tr.Dial(context.Background(), server.LocalAddr(), &tls.Config{}, getQuicConfig(nil))
+		errChan <- err
+	}()
+
+	select {
+	case <-errChan:
+		t.Fatal("didn't expect Dial to return yet")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	closeFn()
+
+	select {
+	case err := <-errChan:
+		require.Error(t, err)
+		require.ErrorIs(t, err, quic.ErrTransportClosed)
+		if expectedErr != nil {
+			require.ErrorIs(t, err, expectedErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// it's not possible to dial new connections
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
+	defer cancel()
+	_, err := tr.Dial(ctx, server.LocalAddr(), &tls.Config{}, getQuicConfig(nil))
+	require.Error(t, err)
+	require.ErrorIs(t, err, quic.ErrTransportClosed)
+	if expectedErr != nil {
+		require.ErrorIs(t, err, expectedErr)
+	}
+
+	// it's not possible to create new listeners
+	_, err = tr.Listen(&tls.Config{}, nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, quic.ErrTransportClosed)
+	if expectedErr != nil {
+		require.ErrorIs(t, err, expectedErr)
+	}
 }
