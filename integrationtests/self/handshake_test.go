@@ -409,7 +409,6 @@ func TestALPN(t *testing.T) {
 	require.NoError(t, err)
 	cs := conn.ConnectionState()
 	require.Equal(t, alpn, cs.TLS.NegotiatedProtocol)
-	require.NoError(t, conn.CloseWithError(0, ""))
 
 	select {
 	case c := <-acceptChan:
@@ -417,6 +416,7 @@ func TestALPN(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for server connection")
 	}
+	require.NoError(t, conn.CloseWithError(0, ""))
 
 	// now try with a different ALPN
 	tlsConf := getTLSClientConfig()
