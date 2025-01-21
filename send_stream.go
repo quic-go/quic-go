@@ -519,7 +519,9 @@ func (s *sendStream) SetWriteDeadline(t time.Time) error {
 func (s *sendStream) closeForShutdown(err error) {
 	s.mutex.Lock()
 	s.closedForShutdown = true
-	s.finalError = err
+	if s.finalError == nil && !s.finishedWriting {
+		s.finalError = err
+	}
 	s.mutex.Unlock()
 	s.signalWrite()
 }

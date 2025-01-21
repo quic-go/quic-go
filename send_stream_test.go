@@ -432,6 +432,11 @@ func TestSendStreamClose(t *testing.T) {
 	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 	require.True(t, mockCtrl.Satisfied())
+
+	// shutting down has no effect
+	str.closeForShutdown(errors.New("goodbye"))
+	_, err = strWithTimeout.Write([]byte("foobar"))
+	require.ErrorContains(t, err, "write on closed stream 1234")
 }
 
 func TestSendStreamImmediateClose(t *testing.T) {
@@ -630,8 +635,13 @@ func TestSendStreamCancellation(t *testing.T) {
 	require.ErrorContains(t, str.Close(), "close called for canceled stream")
 	frame, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.Nil(t, frame.Frame)
-	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+	_, err = strWithTimeout.Write([]byte("foobar"))
 	require.Error(t, err)
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
+
+	// shutting down has no effect
+	str.closeForShutdown(errors.New("goodbyte"))
+	_, err = strWithTimeout.Write([]byte("foobar"))
 	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
 }
 
