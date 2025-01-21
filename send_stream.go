@@ -422,10 +422,13 @@ func (s *sendStream) Close() error {
 }
 
 func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
-	s.cancelWriteImpl(errorCode, false)
+	s.cancelWrite(errorCode, false)
 }
 
-func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool) {
+// cancelWrite cancels the stream
+// It is possible to cancel a stream after it has been closed, both locally and remotely.
+// This is useful to prevent the retransmission of outstanding stream data.
+func (s *sendStream) cancelWrite(errorCode qerr.StreamErrorCode, remote bool) {
 	s.mutex.Lock()
 	if s.closedForShutdown {
 		s.mutex.Unlock()
@@ -479,7 +482,7 @@ func (s *sendStream) updateSendWindow(limit protocol.ByteCount) {
 }
 
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	s.cancelWriteImpl(frame.ErrorCode, true)
+	s.cancelWrite(frame.ErrorCode, true)
 }
 
 func (s *sendStream) getControlFrame(time.Time) (_ ackhandler.Frame, ok, hasMore bool) {

@@ -635,15 +635,18 @@ func TestSendStreamCancellation(t *testing.T) {
 	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
 }
 
+// It is possible to cancel a stream after it has been closed.
+// This is useful if the applications wants to prevent the retransmission of outstanding stream data.
 func TestSendStreamCancellationAfterClose(t *testing.T) {
 	const streamID protocol.StreamID = 1234
 	mockCtrl := gomock.NewController(t)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
 	mockSender := NewMockStreamSender(mockCtrl)
 	str := newSendStream(context.Background(), streamID, mockSender, mockFC)
+	strWithTimeout := &writerWithTimeout{Writer: str, Timeout: time.Second}
 
 	mockSender.EXPECT().onHasStreamData(streamID, str).Times(2)
-	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+	_, err := strWithTimeout.Write([]byte("foobar"))
 	require.NoError(t, err)
 	require.NoError(t, str.Close())
 
@@ -658,6 +661,10 @@ func TestSendStreamCancellationAfterClose(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 0, ErrorCode: 1337}, cf.Frame)
 	require.False(t, hasMore)
+
+	_, err = strWithTimeout.Write([]byte("foobar"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: false})
 }
 
 func TestSendStreamCancellationStreamRetransmission(t *testing.T) {
