@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -23,8 +24,15 @@ type errTransportClosed struct {
 	err error
 }
 
-func (e *errTransportClosed) Error() string   { return "quic: transport closed" }
 func (e *errTransportClosed) Unwrap() []error { return []error{net.ErrClosed, e.err} }
+
+func (e *errTransportClosed) Error() string {
+	if e.err == nil {
+		return "quic: transport closed"
+	}
+	return fmt.Sprintf("quic: transport closed: %s", e.err)
+}
+
 func (e *errTransportClosed) Is(target error) bool {
 	_, ok := target.(*errTransportClosed)
 	return ok
