@@ -236,19 +236,13 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 }
 
 func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsConf *tls.Config, conf *Config, use0RTT bool) (EarlyConnection, error) {
-	t.mutex.Lock()
-	if t.closeErr != nil {
-		t.mutex.Unlock()
-		return nil, t.closeErr
+	if err := t.init(t.isSingleUse); err != nil {
+		return nil, err
 	}
-	t.mutex.Unlock()
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(t.isSingleUse); err != nil {
-		return nil, err
-	}
 	tlsConf = tlsConf.Clone()
 	setTLSConfigServerName(tlsConf, addr, host)
 	return t.doDial(ctx,
@@ -283,6 +277,13 @@ func (t *Transport) doDial(
 
 	tracingID := nextConnTracingID()
 	ctx = context.WithValue(ctx, ConnectionTracingKey, tracingID)
+
+	t.mutex.Lock()
+	if t.closeErr != nil {
+		t.mutex.Unlock()
+		return nil, t.closeErr
+	}
+
 	var tracer *logging.ConnectionTracer
 	if config.Tracer != nil {
 		tracer = config.Tracer(ctx, protocol.PerspectiveClient, destConnID)
@@ -312,6 +313,7 @@ func (t *Transport) doDial(
 		version,
 	)
 	t.handlerMap.Add(srcConnID, conn)
+	t.mutex.Unlock()
 
 	// The error channel needs to be buffered, as the run loop will continue running
 	// after doDial returns (if the handshake is successful).
@@ -452,6 +454,9 @@ func (t *Transport) runSendQueue() {
 // If any listener was started, it will be closed as well.
 // It is invalid to start new listeners or connections after that.
 func (t *Transport) Close() error {
+	// avoid race condition if the transport is currently being initialized
+	t.init(false)
+
 	t.close(nil)
 	if t.createdConn {
 		if err := t.Conn.Close(); err != nil {
