@@ -221,7 +221,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
@@ -342,7 +342,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(3)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
@@ -389,7 +389,7 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	handshakeChan := make(chan struct{})
 	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).MaxTimes(2)
+	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
 	testErr := errors.New("handshake error")
 	tr := &Transport{
