@@ -81,18 +81,18 @@ func (c *MockMTUDiscovererCurrentSizeCall) DoAndReturn(f func() protocol.ByteCou
 }
 
 // GetPing mocks base method.
-func (m *MockMTUDiscoverer) GetPing() (ackhandler.Frame, protocol.ByteCount) {
+func (m *MockMTUDiscoverer) GetPing(now time.Time) (ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPing")
+	ret := m.ctrl.Call(m, "GetPing", now)
 	ret0, _ := ret[0].(ackhandler.Frame)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }
 
 // GetPing indicates an expected call of GetPing.
-func (mr *MockMTUDiscovererMockRecorder) GetPing() *MockMTUDiscovererGetPingCall {
+func (mr *MockMTUDiscovererMockRecorder) GetPing(now any) *MockMTUDiscovererGetPingCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPing", reflect.TypeOf((*MockMTUDiscoverer)(nil).GetPing))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPing", reflect.TypeOf((*MockMTUDiscoverer)(nil).GetPing), now)
 	return &MockMTUDiscovererGetPingCall{Call: call}
 }
 
@@ -108,13 +108,13 @@ func (c *MockMTUDiscovererGetPingCall) Return(ping ackhandler.Frame, datagramSiz
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockMTUDiscovererGetPingCall) Do(f func() (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
+func (c *MockMTUDiscovererGetPingCall) Do(f func(time.Time) (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockMTUDiscovererGetPingCall) DoAndReturn(f func() (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
+func (c *MockMTUDiscovererGetPingCall) DoAndReturn(f func(time.Time) (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -158,15 +158,15 @@ func (c *MockMTUDiscovererShouldSendProbeCall) DoAndReturn(f func(time.Time) boo
 }
 
 // Start mocks base method.
-func (m *MockMTUDiscoverer) Start() {
+func (m *MockMTUDiscoverer) Start(now time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
+	m.ctrl.Call(m, "Start", now)
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockMTUDiscovererMockRecorder) Start() *MockMTUDiscovererStartCall {
+func (mr *MockMTUDiscovererMockRecorder) Start(now any) *MockMTUDiscovererStartCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMTUDiscoverer)(nil).Start))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMTUDiscoverer)(nil).Start), now)
 	return &MockMTUDiscovererStartCall{Call: call}
 }
 
@@ -182,13 +182,13 @@ func (c *MockMTUDiscovererStartCall) Return() *MockMTUDiscovererStartCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockMTUDiscovererStartCall) Do(f func()) *MockMTUDiscovererStartCall {
+func (c *MockMTUDiscovererStartCall) Do(f func(time.Time)) *MockMTUDiscovererStartCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockMTUDiscovererStartCall) DoAndReturn(f func()) *MockMTUDiscovererStartCall {
+func (c *MockMTUDiscovererStartCall) DoAndReturn(f func(time.Time)) *MockMTUDiscovererStartCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -40,7 +40,7 @@ var _ = Describe("MTU Discoverer", func() {
 			func(s protocol.ByteCount) { discoveredMTU = s },
 			nil,
 		)
-		d.Start()
+		d.Start(time.Now())
 		now = time.Now()
 	})
 
@@ -51,26 +51,26 @@ var _ = Describe("MTU Discoverer", func() {
 	})
 
 	It("doesn't allow a probe if another probe is still in flight", func() {
-		ping, _ := d.GetPing()
+		ping, _ := d.GetPing(time.Now())
 		Expect(d.ShouldSendProbe(now.Add(10 * rtt))).To(BeFalse())
 		ping.Handler.OnLost(ping.Frame)
 		Expect(d.ShouldSendProbe(now.Add(10 * rtt))).To(BeTrue())
 	})
 
 	It("tries a lower size when a probe is lost", func() {
-		ping, size := d.GetPing()
+		ping, size := d.GetPing(time.Now())
 		Expect(size).To(Equal(protocol.ByteCount(1500)))
 		ping.Handler.OnLost(ping.Frame)
-		_, size = d.GetPing()
+		_, size = d.GetPing(time.Now())
 		Expect(size).To(Equal(protocol.ByteCount(1250)))
 	})
 
 	It("tries a higher size and calls the callback when a probe is acknowledged", func() {
-		ping, size := d.GetPing()
+		ping, size := d.GetPing(time.Now())
 		Expect(size).To(Equal(protocol.ByteCount(1500)))
 		ping.Handler.OnAcked(ping.Frame)
 		Expect(discoveredMTU).To(Equal(protocol.ByteCount(1500)))
-		_, size = d.GetPing()
+		_, size = d.GetPing(time.Now())
 		Expect(size).To(Equal(protocol.ByteCount(1750)))
 	})
 
@@ -78,7 +78,7 @@ var _ = Describe("MTU Discoverer", func() {
 		var sizes []protocol.ByteCount
 		t := now.Add(5 * rtt)
 		for d.ShouldSendProbe(t) {
-			ping, size := d.GetPing()
+			ping, size := d.GetPing(time.Now())
 			fmt.Println("sending", size)
 			ping.Handler.OnAcked(ping.Frame)
 			sizes = append(sizes, size)
@@ -112,7 +112,7 @@ var _ = Describe("MTU Discoverer", func() {
 				},
 			},
 		)
-		d.Start()
+		d.Start(time.Now())
 		now := time.Now()
 		realMTU := protocol.ByteCount(r.Intn(int(maxMTU-startMTU))) + startMTU
 		fmt.Fprintf(GinkgoWriter, "MTU: %d, max: %d\n", realMTU, maxMTU)
@@ -122,7 +122,7 @@ var _ = Describe("MTU Discoverer", func() {
 			if len(probes) > 24 {
 				Fail(fmt.Sprintf("too many iterations: %v", probes))
 			}
-			ping, size := d.GetPing()
+			ping, size := d.GetPing(time.Now())
 			probes = append(probes, size)
 			if size <= realMTU {
 				ping.Handler.OnAcked(ping.Frame)
@@ -160,7 +160,7 @@ var _ = Describe("MTU Discoverer", func() {
 				},
 			},
 		)
-		d.Start()
+		d.Start(time.Now())
 		now := time.Now()
 		realMTU := protocol.ByteCount(r.Intn(int(maxMTU-startMTU))) + startMTU
 		fmt.Fprintf(GinkgoWriter, "MTU: %d, max: %d\n", realMTU, maxMTU)
@@ -170,7 +170,7 @@ var _ = Describe("MTU Discoverer", func() {
 			if len(probes) > 32 {
 				Fail(fmt.Sprintf("too many iterations: %v", probes))
 			}
-			ping, size := d.GetPing()
+			ping, size := d.GetPing(time.Now())
 			probes = append(probes, size)
 			packetFits := size <= realMTU
 			var acked bool
