@@ -94,7 +94,6 @@ type mtuFinder struct {
 
 	inFlight protocol.ByteCount // the size of the probe packet currently in flight. InvalidByteCount if none is in flight
 	min      protocol.ByteCount
-	limit    protocol.ByteCount
 
 	// on initialization, we treat the maximum size as the first "lost" packet
 	lost             [maxLostMTUProbes]protocol.ByteCount
@@ -114,7 +113,6 @@ func newMTUDiscoverer(
 	f := &mtuFinder{
 		inFlight:     protocol.InvalidByteCount,
 		min:          start,
-		limit:        max,
 		rttStats:     rttStats,
 		mtuIncreased: mtuIncreased,
 		tracer:       tracer,
