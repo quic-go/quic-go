@@ -797,7 +797,7 @@ func (s *connection) handleHandshakeConfirmed(now time.Time) error {
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
 
 	if !s.config.DisablePathMTUDiscovery && s.conn.capabilities().DF {
-		s.mtuDiscoverer.Start()
+		s.mtuDiscoverer.Start(now)
 	}
 	return nil
 }
@@ -1894,7 +1894,7 @@ func (s *connection) sendPackets(now time.Time) error {
 	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
 	// MTU probe packets per connection.
 	if s.handshakeConfirmed && s.mtuDiscoverer != nil && s.mtuDiscoverer.ShouldSendProbe(now) {
-		ping, size := s.mtuDiscoverer.GetPing()
+		ping, size := s.mtuDiscoverer.GetPing(now)
 		p, buf, err := s.packer.PackMTUProbePacket(ping, size, s.version)
 		if err != nil {
 			return err

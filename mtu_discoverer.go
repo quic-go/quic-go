@@ -13,10 +13,10 @@ import (
 type mtuDiscoverer interface {
 	// Start starts the MTU discovery process.
 	// It's unnecessary to call ShouldSendProbe before that.
-	Start()
+	Start(now time.Time)
 	ShouldSendProbe(now time.Time) bool
 	CurrentSize() protocol.ByteCount
-	GetPing() (ping ackhandler.Frame, datagramSize protocol.ByteCount)
+	GetPing(now time.Time) (ping ackhandler.Frame, datagramSize protocol.ByteCount)
 }
 
 const (
@@ -140,8 +140,8 @@ func (f *mtuFinder) max() protocol.ByteCount {
 	return f.lost[len(f.lost)-1]
 }
 
-func (f *mtuFinder) Start() {
-	f.lastProbeTime = time.Now() // makes sure the first probe packet is not sent immediately
+func (f *mtuFinder) Start(now time.Time) {
+	f.lastProbeTime = now // makes sure the first probe packet is not sent immediately
 }
 
 func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
@@ -154,14 +154,14 @@ func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
 	return !now.Before(f.lastProbeTime.Add(mtuProbeDelay * f.rttStats.SmoothedRTT()))
 }
 
-func (f *mtuFinder) GetPing() (ackhandler.Frame, protocol.ByteCount) {
+func (f *mtuFinder) GetPing(now time.Time) (ackhandler.Frame, protocol.ByteCount) {
 	var size protocol.ByteCount
 	if f.lastProbeWasLost {
 		size = (f.min + f.lost[0]) / 2
 	} else {
 		size = (f.min + f.max()) / 2
 	}
-	f.lastProbeTime = time.Now()
+	f.lastProbeTime = now
 	f.inFlight = size
 	return ackhandler.Frame{
 		Frame:   &wire.PingFrame{},
