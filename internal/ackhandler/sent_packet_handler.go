@@ -53,6 +53,12 @@ func newPacketNumberSpace(initialPN protocol.PacketNumber, isAppData bool) *pack
 	}
 }
 
+type alarmTimer struct {
+	Time            time.Time
+	TimerType       logging.TimerType
+	EncryptionLevel protocol.EncryptionLevel
+}
+
 type sentPacketHandler struct {
 	initialPackets   *packetNumberSpace
 	handshakePackets *packetNumberSpace
@@ -90,7 +96,7 @@ type sentPacketHandler struct {
 	numProbesToSend int
 
 	// The alarm timeout
-	alarm time.Time
+	alarm alarmTimer
 
 	enableECN  bool
 	ecnTracker ecnHandler
@@ -548,61 +554,53 @@ func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 	return false
 }
 
-func (h *sentPacketHandler) hasOutstandingPackets() bool {
-	return h.appDataPackets.history.HasOutstandingPackets() || h.hasOutstandingCryptoPackets()
-}
-
 func (h *sentPacketHandler) setLossDetectionTimer(now time.Time) {
 	oldAlarm := h.alarm // only needed in case tracing is enabled
+	newAlarm := h.lossDetectionTime(now)
+	h.alarm = newAlarm
+
+	if newAlarm.Time.IsZero() && !oldAlarm.Time.IsZero() {
+		h.logger.Debugf("Canceling loss detection timer.")
+		if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
+			h.tracer.LossTimerCanceled()
+		}
+	}
+
+	if h.tracer != nil && h.tracer.SetLossTimer != nil && newAlarm != oldAlarm {
+		h.tracer.SetLossTimer(newAlarm.TimerType, newAlarm.EncryptionLevel, newAlarm.Time)
+	}
+}
+
+func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
+	// cancel the alarm if no packets are outstanding
+	if h.peerCompletedAddressValidation &&
+		!h.hasOutstandingCryptoPackets() && !h.appDataPackets.history.HasOutstandingPackets() {
+		return alarmTimer{}
+	}
+
+	// cancel the alarm if amplification limited
+	if h.isAmplificationLimited() {
+		return alarmTimer{}
+	}
+
+	// early retransmit timer or time loss detection
 	lossTime, encLevel := h.getLossTimeAndSpace()
 	if !lossTime.IsZero() {
-		// Early retransmit timer or time loss detection.
-		h.alarm = lossTime
-		if h.tracer != nil && h.tracer.SetLossTimer != nil && h.alarm != oldAlarm {
-			h.tracer.SetLossTimer(logging.TimerTypeACK, encLevel, h.alarm)
+		return alarmTimer{
+			Time:            lossTime,
+			TimerType:       logging.TimerTypeACK,
+			EncryptionLevel: encLevel,
 		}
-		return
 	}
 
-	// Cancel the alarm if amplification limited.
-	if h.isAmplificationLimited() {
-		h.alarm = time.Time{}
-		if !oldAlarm.IsZero() {
-			h.logger.Debugf("Canceling loss detection timer. Amplification limited.")
-			if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
-				h.tracer.LossTimerCanceled()
-			}
-		}
-		return
-	}
-
-	// Cancel the alarm if no packets are outstanding
-	if !h.hasOutstandingPackets() && h.peerCompletedAddressValidation {
-		h.alarm = time.Time{}
-		if !oldAlarm.IsZero() {
-			h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
-			if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
-				h.tracer.LossTimerCanceled()
-			}
-		}
-		return
-	}
-
-	// PTO alarm
 	ptoTime, encLevel, ok := h.getPTOTimeAndSpace(now)
 	if !ok {
-		if !oldAlarm.IsZero() {
-			h.alarm = time.Time{}
-			h.logger.Debugf("Canceling loss detection timer. No PTO needed..")
-			if h.tracer != nil && h.tracer.LossTimerCanceled != nil {
-				h.tracer.LossTimerCanceled()
-			}
-		}
-		return
+		return alarmTimer{}
 	}
-	h.alarm = ptoTime
-	if h.tracer != nil && h.tracer.SetLossTimer != nil && h.alarm != oldAlarm {
-		h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
+	return alarmTimer{
+		Time:            ptoTime,
+		TimerType:       logging.TimerTypePTO,
+		EncryptionLevel: encLevel,
 	}
 }
 
@@ -742,7 +740,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 }
 
 func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
-	return h.alarm
+	return h.alarm.Time
 }
 
 func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
@@ -904,12 +902,12 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Peek(), false)
 	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Peek(), true)
 	oldAlarm := h.alarm
-	h.alarm = time.Time{}
+	h.alarm = alarmTimer{}
 	if h.tracer != nil {
 		if h.tracer.UpdatedPTOCount != nil {
 			h.tracer.UpdatedPTOCount(0)
 		}
-		if !oldAlarm.IsZero() && h.tracer.LossTimerCanceled != nil {
+		if !oldAlarm.Time.IsZero() && h.tracer.LossTimerCanceled != nil {
 			h.tracer.LossTimerCanceled()
 		}
 	}
