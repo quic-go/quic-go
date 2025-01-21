@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -52,6 +53,36 @@ func (h *sentPacketHandler) getBytesInFlight() protocol.ByteCount {
 	return h.bytesInFlight
 }
 
+func ackRanges(pns ...protocol.PacketNumber) []wire.AckRange {
+	if len(pns) == 0 {
+		return nil
+	}
+	slices.Sort(pns)
+	slices.Reverse(pns)
+
+	var ranges []wire.AckRange
+	start := pns[0]
+	for i := 1; i < len(pns); i++ {
+		if pns[i-1]-pns[i] > 1 {
+			ranges = append(ranges, wire.AckRange{Smallest: pns[i-1], Largest: start})
+			start = pns[i]
+		}
+	}
+	return append(ranges, wire.AckRange{Smallest: pns[len(pns)-1], Largest: start})
+}
+
+func TestAckRanges(t *testing.T) {
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 1}}, ackRanges(1))
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 2}}, ackRanges(1, 2))
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 3}}, ackRanges(1, 2, 3))
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 3}}, ackRanges(3, 2, 1))
+	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 3}}, ackRanges(1, 3, 2))
+
+	require.Equal(t, []wire.AckRange{{Smallest: 3, Largest: 3}, {Smallest: 1, Largest: 1}}, ackRanges(1, 3))
+	require.Equal(t, []wire.AckRange{{Smallest: 3, Largest: 4}, {Smallest: 1, Largest: 1}}, ackRanges(1, 3, 4))
+	require.Equal(t, []wire.AckRange{{Smallest: 5, Largest: 6}, {Smallest: 0, Largest: 2}}, ackRanges(0, 1, 2, 5, 6))
+}
+
 func TestSentPacketHandlerSendAndAcknowledge(t *testing.T) {
 	t.Run("Initial", func(t *testing.T) {
 		testSentPacketHandlerSendAndAcknowledge(t, protocol.EncryptionInitial)
@@ -91,12 +122,7 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 	}
 
 	_, err := sph.ReceivedAck(
-		&wire.AckFrame{
-			AckRanges: []wire.AckRange{
-				{Smallest: pns[7], Largest: pns[9]},
-				{Smallest: pns[0], Largest: pns[4]},
-			},
-		},
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[7], pns[8], pns[9])},
 		encLevel,
 		time.Now(),
 	)
@@ -105,7 +131,7 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 
 	// ACKs that don't acknowledge new packets are ok
 	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 3}}},
+		&wire.AckFrame{AckRanges: ackRanges(pns[1], pns[2], pns[3])},
 		encLevel,
 		time.Now(),
 	)
@@ -114,7 +140,7 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 
 	// ACKs that don't acknowledge packets that we didn't send are not ok
 	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[7], Largest: pns[9] + 1}}},
+		&wire.AckFrame{AckRanges: ackRanges(pns[7], pns[8], pns[9], pns[9]+1)},
 		encLevel,
 		time.Now(),
 	)
@@ -194,13 +220,9 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 		return pn
 	}
 
-	ackPacket := func(pn protocol.PacketNumber, ti time.Time, ackDelay time.Duration) {
+	ackPacket := func(pn protocol.PacketNumber, ti time.Time, d time.Duration) {
 		t.Helper()
-		_, err := sph.ReceivedAck(
-			&wire.AckFrame{DelayTime: ackDelay, AckRanges: []wire.AckRange{{Smallest: pn, Largest: pn}}},
-			encLevel,
-			ti,
-		)
+		_, err := sph.ReceivedAck(&wire.AckFrame{DelayTime: d, AckRanges: ackRanges(pn)}, encLevel, ti)
 		require.NoError(t, err)
 	}
 
@@ -356,7 +378,7 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 	require.NotZero(t, sph.GetLossDetectionTimeout())
 	// ... but it's still set after receiving an ACK for this packet,
 	// since we might need to unblock the server's amplification limit
-	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pn, Largest: pn}}}, protocol.EncryptionInitial, time.Now())
+	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pn)}, protocol.EncryptionInitial, time.Now())
 	require.NoError(t, err)
 	require.NotZero(t, sph.GetLossDetectionTimeout())
 	require.Equal(t, SendAny, sph.SendMode(time.Now()))
@@ -385,7 +407,7 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 	pn = sph.PopPacketNumber(protocol.EncryptionHandshake)
 	sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionHandshake, protocol.ECNNon, 999, false)
 	require.NotZero(t, sph.GetLossDetectionTimeout())
-	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pn, Largest: pn}}}, protocol.EncryptionHandshake, time.Now())
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pn)}, protocol.EncryptionHandshake, time.Now())
 	require.NoError(t, err)
 	require.Zero(t, sph.GetLossDetectionTimeout())
 }
@@ -423,7 +445,7 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	pn4 := sendPacket(now, false)
 
 	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pn4, Largest: pn4}}},
+		&wire.AckFrame{AckRanges: ackRanges(pn4)},
 		protocol.EncryptionInitial,
 		now.Add(time.Second),
 	)
@@ -465,7 +487,7 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 	}
 
 	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[3], Largest: pns[3]}}},
+		&wire.AckFrame{AckRanges: ackRanges(pns[3])},
 		protocol.EncryptionInitial,
 		now.Add(time.Second),
 	)
@@ -474,7 +496,7 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{pns[0]}, packets.Lost)
 
 	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[4], Largest: pns[4]}}},
+		&wire.AckFrame{AckRanges: ackRanges(pns[4])},
 		protocol.EncryptionInitial,
 		now.Add(time.Second),
 	)
@@ -630,7 +652,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 		tr.EXPECT().SetLossTimer(logging.TimerTypePTO, encLevel, gomock.Any()),
 	)
 	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[7], Largest: pns[7]}}},
+		&wire.AckFrame{AckRanges: ackRanges(pns[7])},
 		encLevel,
 		sendTimes[7].Add(time.Microsecond),
 	)
@@ -847,22 +869,14 @@ func TestSentPacketHandlerCongestion(t *testing.T) {
 		cong.EXPECT().OnPacketAcked(pns[2], protocol.ByteCount(1000), protocol.ByteCount(5000), ackTime),
 		cong.EXPECT().OnPacketAcked(pns[3], protocol.ByteCount(1000), protocol.ByteCount(5000), ackTime),
 	)
-	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[2], Largest: pns[3]}}},
-		protocol.EncryptionInitial,
-		ackTime,
-	)
+	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3])}, protocol.EncryptionInitial, ackTime)
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[2], pns[3]}, packets.Acked)
 	require.Equal(t, []protocol.PacketNumber{pns[0], pns[1]}, packets.Lost)
 
 	// Now receive a (delayed) ACK for the 1st packet.
 	// Since this packet was already lost, we don't expect any calls to the congestion controller.
-	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[0], Largest: pns[0]}}},
-		protocol.EncryptionInitial,
-		ackTime,
-	)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0])}, protocol.EncryptionInitial, ackTime)
 	require.NoError(t, err)
 
 	// we should now have a PTO timer armed for the 4th packet
@@ -1031,7 +1045,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	})
 	_, err := sph.ReceivedAck(
 		&wire.AckFrame{
-			AckRanges: []wire.AckRange{{Smallest: pns[2], Largest: pns[3]}},
+			AckRanges: ackRanges(pns[2], pns[3]),
 			ECT0:      10,
 			ECT1:      11,
 			ECNCE:     12,
@@ -1045,11 +1059,8 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	// The second packet is still outstanding.
 	// Receive a (delayed) ACK for it.
 	// Since the new ECN counts were already reported, ECN marks on this ACK frame are ignored.
-	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[1], Largest: pns[1]}}},
-		protocol.Encryption1RTT,
-		now.Add(100*time.Millisecond),
-	)
+	now = now.Add(100 * time.Millisecond)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[1])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 
 	// Send two more packets, and receive an ACK for the second one.
@@ -1063,19 +1074,13 @@ func TestSentPacketHandlerECN(t *testing.T) {
 			return false
 		},
 	)
-	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[1], Largest: pns[1]}}},
-		protocol.Encryption1RTT,
-		now.Add(100*time.Millisecond),
-	)
+	now = now.Add(100 * time.Millisecond)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[1])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 	// Receiving an ACK that covers both packets doesn't cause the ECN marks to be reported,
 	// since the largest acked didn't increase.
-	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[0], Largest: pns[1]}}},
-		protocol.Encryption1RTT,
-		now.Add(100*time.Millisecond),
-	)
+	now = now.Add(100 * time.Millisecond)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 
 	// Send another packet, and have the ECN handler report congestion.
@@ -1088,10 +1093,6 @@ func TestSentPacketHandlerECN(t *testing.T) {
 		ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true),
 		cong.EXPECT().OnCongestionEvent(pns[0], protocol.ByteCount(0), gomock.Any()),
 	)
-	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: pns[0], Largest: pns[0]}}},
-		protocol.Encryption1RTT,
-		now.Add(100*time.Millisecond),
-	)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0])}, protocol.Encryption1RTT, now.Add(100*time.Millisecond))
 	require.NoError(t, err)
 }
