@@ -22,7 +22,7 @@ type mtuDiscoverer interface {
 const (
 	// At some point, we have to stop searching for a higher MTU.
 	// We're happy to send a packet that's 10 bytes smaller than the actual MTU.
-	maxMTUDiff = 20
+	maxMTUDiff protocol.ByteCount = 20
 	// send a probe packet every mtuProbeDelay RTTs
 	mtuProbeDelay = 5
 	// Once maxLostMTUProbes MTU probe packets larger than a certain size are lost,
