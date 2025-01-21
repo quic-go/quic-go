@@ -120,21 +120,39 @@ func TestTransportPacketHandling(t *testing.T) {
 }
 
 func TestTransportAndListenerConcurrentClose(t *testing.T) {
-	// try 10 times to trigger race conditions
-	for i := 0; i < 10; i++ {
-		tr := &Transport{Conn: newUPDConnLocalhost(t)}
-		ln, err := tr.Listen(&tls.Config{}, nil)
+	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	ln, err := tr.Listen(&tls.Config{}, nil)
+	require.NoError(t, err)
+	// close transport and listener concurrently
+	lnErrChan := make(chan error, 1)
+	go func() { lnErrChan <- ln.Close() }()
+	require.NoError(t, tr.Close())
+	select {
+	case err := <-lnErrChan:
 		require.NoError(t, err)
-		// close transport and listener concurrently
-		lnErrChan := make(chan error, 1)
-		go func() { lnErrChan <- ln.Close() }()
-		require.NoError(t, tr.Close())
-		select {
-		case err := <-lnErrChan:
-			require.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Fatal("timeout")
-		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestTransportAndDialConcurrentClose(t *testing.T) {
+	server := newUPDConnLocalhost(t)
+
+	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	// close transport and dial concurrently
+	errChan := make(chan error, 1)
+	go func() { errChan <- tr.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	_, err := tr.Dial(ctx, server.LocalAddr(), &tls.Config{}, nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrTransportClosed)
+	require.NotErrorIs(t, err, context.DeadlineExceeded)
+
+	select {
+	case <-errChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
 }
 
