@@ -432,6 +432,11 @@ func TestSendStreamClose(t *testing.T) {
 	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 	require.True(t, mockCtrl.Satisfied())
+
+	// shutting down has no effect
+	str.closeForShutdown(errors.New("goodbye"))
+	_, err = strWithTimeout.Write([]byte("foobar"))
+	require.ErrorContains(t, err, "write on closed stream 1234")
 }
 
 func TestSendStreamImmediateClose(t *testing.T) {
@@ -630,21 +635,28 @@ func TestSendStreamCancellation(t *testing.T) {
 	require.ErrorContains(t, str.Close(), "close called for canceled stream")
 	frame, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.Nil(t, frame.Frame)
-	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+	_, err = strWithTimeout.Write([]byte("foobar"))
 	require.Error(t, err)
-	// TODO(#4808):error code and remote flag are unchanged
-	// require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
+
+	// shutting down has no effect
+	str.closeForShutdown(errors.New("goodbyte"))
+	_, err = strWithTimeout.Write([]byte("foobar"))
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
 }
 
+// It is possible to cancel a stream after it has been closed.
+// This is useful if the applications wants to prevent the retransmission of outstanding stream data.
 func TestSendStreamCancellationAfterClose(t *testing.T) {
 	const streamID protocol.StreamID = 1234
 	mockCtrl := gomock.NewController(t)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
 	mockSender := NewMockStreamSender(mockCtrl)
 	str := newSendStream(context.Background(), streamID, mockSender, mockFC)
+	strWithTimeout := &writerWithTimeout{Writer: str, Timeout: time.Second}
 
 	mockSender.EXPECT().onHasStreamData(streamID, str).Times(2)
-	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+	_, err := strWithTimeout.Write([]byte("foobar"))
 	require.NoError(t, err)
 	require.NoError(t, str.Close())
 
@@ -659,6 +671,10 @@ func TestSendStreamCancellationAfterClose(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 0, ErrorCode: 1337}, cf.Frame)
 	require.False(t, hasMore)
+
+	_, err = strWithTimeout.Write([]byte("foobar"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: false})
 }
 
 func TestSendStreamCancellationStreamRetransmission(t *testing.T) {
@@ -809,8 +825,7 @@ func TestSendStreamStopSending(t *testing.T) {
 	require.Nil(t, frame.Frame)
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 	require.Error(t, err)
-	// TODO(#4808):error code and remote flag are unchanged
-	// require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
 }
 
 // This test is inherently racy, as it tests a concurrent call to Write() and CancelRead().
