@@ -35,6 +35,8 @@ type connIDManager struct {
 	addStatelessResetToken    func(protocol.StatelessResetToken)
 	removeStatelessResetToken func(protocol.StatelessResetToken)
 	queueControlFrame         func(wire.Frame)
+
+	closed bool
 }
 
 func newConnIDManager(
@@ -148,6 +150,7 @@ func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID
 }
 
 func (h *connIDManager) updateConnectionID() {
+	h.assertNotClosed()
 	h.queueControlFrame(&wire.RetireConnectionIDFrame{
 		SequenceNumber: h.activeSequenceNumber,
 	})
@@ -166,6 +169,7 @@ func (h *connIDManager) updateConnectionID() {
 }
 
 func (h *connIDManager) Close() {
+	h.closed = true
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}
@@ -182,6 +186,7 @@ func (h *connIDManager) ChangeInitialConnID(newConnID protocol.ConnectionID) {
 
 // is called when the server provides a stateless reset token in the transport parameters
 func (h *connIDManager) SetStatelessResetToken(token protocol.StatelessResetToken) {
+	h.assertNotClosed()
 	if h.activeSequenceNumber != 0 {
 		panic("expected first connection ID to have sequence number 0")
 	}
@@ -209,6 +214,7 @@ func (h *connIDManager) shouldUpdateConnID() bool {
 }
 
 func (h *connIDManager) Get() protocol.ConnectionID {
+	h.assertNotClosed()
 	if h.shouldUpdateConnID() {
 		h.updateConnectionID()
 	}
@@ -217,4 +223,14 @@ func (h *connIDManager) Get() protocol.ConnectionID {
 
 func (h *connIDManager) SetHandshakeComplete() {
 	h.handshakeComplete = true
+}
+
+// Using the connIDManager after it has been closed can have disastrous effects:
+// If the connection ID is rotated, a new entry would be inserted into the packet handler map,
+// leading to a memory leak of the connection struct.
+// See https://github.com/quic-go/quic-go/pull/4852 for more details.
+func (h *connIDManager) assertNotClosed() {
+	if h.closed {
+		panic("connection ID manager is closed")
+	}
 }

@@ -1667,10 +1667,15 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	}
 
 	s.streamsMap.CloseWithError(e)
-	s.connIDManager.Close()
 	if s.datagramQueue != nil {
 		s.datagramQueue.CloseWithError(e)
 	}
+
+	// In rare instances, the connection ID manager might switch to a new connection ID
+	// when sending the CONNECTION_CLOSE frame.
+	// The connection ID manager removes the active stateless reset token from the packet
+	// handler map when it is closed, so we need to make sure that this happens last.
+	defer s.connIDManager.Close()
 
 	if s.tracer != nil && s.tracer.ClosedConnection != nil && !errors.As(e, &recreateErr) {
 		s.tracer.ClosedConnection(e)
