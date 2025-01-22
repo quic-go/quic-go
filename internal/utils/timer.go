@@ -37,11 +37,12 @@ func (t *Timer) Reset(deadline time.Time) (dur time.Duration, wasReset bool) {
 	if !deadline.IsZero() {
 		dur = time.Until(deadline)
 		t.t.Reset(dur)
+		wasReset = true
 	}
 
 	t.read = false
 	t.deadline = deadline
-	return dur, true
+	return dur, wasReset
 }
 
 // SetRead should be called after the value from the chan was read
