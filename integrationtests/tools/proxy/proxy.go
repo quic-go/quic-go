@@ -2,7 +2,7 @@ package quicproxy
 
 import (
 	"net"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -42,17 +42,11 @@ type packetEntry struct {
 	Raw  []byte
 }
 
-type packetEntries []packetEntry
-
-func (e packetEntries) Len() int           { return len(e) }
-func (e packetEntries) Less(i, j int) bool { return e[i].Time.Before(e[j].Time) }
-func (e packetEntries) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
-
 type queue struct {
 	sync.Mutex
 
 	timer   *utils.Timer
-	Packets packetEntries
+	Packets []packetEntry
 }
 
 func newQueue() *queue {
@@ -65,7 +59,15 @@ func (q *queue) Add(e packetEntry) {
 	if len(q.Packets) > 1 {
 		lastIndex := len(q.Packets) - 1
 		if q.Packets[lastIndex].Time.Before(q.Packets[lastIndex-1].Time) {
-			sort.Stable(q.Packets)
+			slices.SortStableFunc(q.Packets, func(a, b packetEntry) int {
+				if a.Time.Before(b.Time) {
+					return -1
+				}
+				if a.Time.After(b.Time) {
+					return 1
+				}
+				return 0
+			})
 		}
 	}
 	q.timer.Reset(q.Packets[0].Time)
