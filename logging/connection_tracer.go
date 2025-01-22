@@ -41,4 +41,15 @@ type ConnectionTracer struct {
 	// Close is called when the connection is closed.
 	Close func()
 	Debug func(name, msg string)
+
+	ConnectionTimerReset func(typ ConnectionTimerType, duration time.Duration, wasReset bool)
 }
+
+type ConnectionTimerType uint8
+
+const (
+	ConnectionTimerIdleTimeoutOrKeepAlive ConnectionTimerType = iota
+	ConnectionTimerPacing
+	ConnectionTimerAckAlarm
+	ConnectionTimerLossTime
+)
