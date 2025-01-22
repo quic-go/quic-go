@@ -71,7 +71,7 @@ var (
 			Namespace: metricNamespace,
 			Name:      "connection_timer_reset_seconds",
 			Help:      "Connection Timer Reset",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 1.3, 35),
+			Buckets:   prometheus.ExponentialBuckets(0.001/100, 1.3, 50),
 		},
 		[]string{"timer_type", "spurious"},
 	)
