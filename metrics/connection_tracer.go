@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -65,6 +66,15 @@ var (
 		},
 		[]string{"type"},
 	)
+	connTimerReset = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: metricNamespace,
+			Name:      "connection_timer_reset_seconds",
+			Help:      "Connection Timer Reset",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 1.3, 35),
+		},
+		[]string{"timer_type", "spurious"},
+	)
 )
 
 // DefaultConnectionTracer returns a callback that creates a metrics ConnectionTracer.
@@ -100,6 +110,7 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 		connDuration,
 		packetsSent,
 		packetsReceived,
+		connTimerReset,
 	} {
 		if err := registerer.Register(c); err != nil {
 			if ok := errors.As(err, &prometheus.AlreadyRegisteredError{}); !ok {
@@ -233,6 +244,25 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 
 			*tags = append(*tags, "1rtt")
 			packetsReceived.WithLabelValues(*tags...).Inc()
+		},
+		ConnectionTimerReset: func(typ logging.ConnectionTimerType, duration time.Duration, wasReset bool) {
+			tags := getStringSlice()
+			defer putStringSlice(tags)
+
+			var t string
+			switch typ {
+			case logging.ConnectionTimerIdleTimeoutOrKeepAlive:
+				t = "idle_timeout_or_keepalive"
+			case logging.ConnectionTimerPacing:
+				t = "pacing"
+			case logging.ConnectionTimerAckAlarm:
+				t = "ack_alarm"
+			case logging.ConnectionTimerLossTime:
+				t = "loss_time"
+			}
+			*tags = append(*tags, t)
+			*tags = append(*tags, strconv.FormatBool(!wasReset))
+			connTimerReset.WithLabelValues(*tags...).Observe(duration.Seconds())
 		},
 	}
 }

@@ -23,10 +23,10 @@ func (t *Timer) Chan() <-chan time.Time {
 }
 
 // Reset the timer, no matter whether the value was read or not
-func (t *Timer) Reset(deadline time.Time) {
+func (t *Timer) Reset(deadline time.Time) (dur time.Duration, wasReset bool) {
 	if deadline.Equal(t.deadline) && !t.read {
 		// No need to reset the timer
-		return
+		return 0, false
 	}
 
 	// We need to drain the timer if the value from its channel was not read yet.
@@ -35,11 +35,13 @@ func (t *Timer) Reset(deadline time.Time) {
 		<-t.t.C
 	}
 	if !deadline.IsZero() {
-		t.t.Reset(time.Until(deadline))
+		dur = time.Until(deadline)
+		t.t.Reset(dur)
 	}
 
 	t.read = false
 	t.deadline = deadline
+	return dur, true
 }
 
 // SetRead should be called after the value from the chan was read

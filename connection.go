@@ -511,7 +511,7 @@ func (s *connection) run() (err error) {
 		}
 	}()
 
-	s.timer = *newTimer()
+	s.timer = *newTimer(s.tracer)
 
 	if err := s.cryptoStreamHandler.StartHandshake(s.ctx); err != nil {
 		return err
