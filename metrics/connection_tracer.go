@@ -49,6 +49,14 @@ var (
 		},
 		[]string{"dir"},
 	)
+	packetsSent = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: metricNamespace,
+			Name:      "packets_sent_total",
+			Help:      "Packets Sent",
+		},
+		[]string{"type"},
+	)
 )
 
 // DefaultConnectionTracer returns a callback that creates a metrics ConnectionTracer.
@@ -82,6 +90,7 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 		connHandshakeDuration,
 		connClosed,
 		connDuration,
+		packetsSent,
 	} {
 		if err := registerer.Register(c); err != nil {
 			if ok := errors.As(err, &prometheus.AlreadyRegisteredError{}); !ok {
@@ -187,6 +196,29 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 
 			*tags = append(*tags, direction)
 			connHandshakeDuration.WithLabelValues(*tags...).Observe(time.Since(startTime).Seconds())
+		},
+		SentLongHeaderPacket: func(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
+			tags := getStringSlice()
+			defer putStringSlice(tags)
+
+			switch logging.PacketTypeFromHeader(&hdr.Header) {
+			case logging.PacketTypeInitial:
+				*tags = append(*tags, "initial")
+			case logging.PacketTypeRetry:
+				*tags = append(*tags, "retry")
+			case logging.PacketTypeHandshake:
+				*tags = append(*tags, "handshake")
+			case logging.PacketType0RTT:
+				*tags = append(*tags, "0rtt")
+			}
+			packetsSent.WithLabelValues(*tags...).Inc()
+		},
+		SentShortHeaderPacket: func(hdr *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
+			tags := getStringSlice()
+			defer putStringSlice(tags)
+
+			*tags = append(*tags, "1rtt")
+			packetsSent.WithLabelValues(*tags...).Inc()
 		},
 	}
 }
