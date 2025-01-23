@@ -33,7 +33,7 @@ type SentPacketHandler interface {
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
 
 	GetLossDetectionTimeout() time.Time
-	OnLossDetectionTimeout(now time.Time) error
+	OnLossDetectionTimeout(now time.Time)
 }
 
 type sentPacketTracker interface {

@@ -1,7 +1,6 @@
 package ackhandler
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -673,7 +672,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	})
 }
 
-func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
+func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) {
 	defer h.setLossDetectionTimer(now)
 	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
@@ -685,7 +684,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 		}
 		// Early retransmit or time loss detection
 		h.detectLostPackets(now, encLevel)
-		return nil
+		return
 	}
 
 	// PTO
@@ -700,18 +699,16 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 			h.ptoMode = SendPTOInitial
 		} else if h.handshakePackets != nil {
 			h.ptoMode = SendPTOHandshake
-		} else {
-			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0 and Initial and Handshake already dropped")
 		}
-		return nil
+		return
 	}
 
 	_, encLevel, ok := h.getPTOTimeAndSpace(now)
 	if !ok {
-		return nil
+		return
 	}
 	if ps := h.getPacketNumberSpace(encLevel); !ps.history.HasOutstandingPackets() && !h.peerCompletedAddressValidation {
-		return nil
+		return
 	}
 	h.ptoCount++
 	if h.logger.Debug() {
@@ -737,10 +734,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 		pn := h.PopPacketNumber(protocol.Encryption1RTT)
 		h.getPacketNumberSpace(protocol.Encryption1RTT).history.SkippedPacket(pn)
 		h.ptoMode = SendPTOAppData
-	default:
-		return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
 	}
-	return nil
 }
 
 func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {

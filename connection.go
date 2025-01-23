@@ -619,9 +619,7 @@ runLoop:
 		if timeout := s.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted.
 			// Check it before trying to send packets.
-			if err := s.sentPacketHandler.OnLossDetectionTimeout(now); err != nil {
-				s.closeLocal(err)
-			}
+			s.sentPacketHandler.OnLossDetectionTimeout(now)
 		}
 
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
