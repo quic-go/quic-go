@@ -1859,28 +1859,10 @@ func (s *connection) triggerSending(now time.Time) error {
 	case ackhandler.SendAck:
 		// We can at most send a single ACK only packet.
 		// There will only be a new ACK after receiving new packets.
-		// SendAck is only returned when we're congestion limited, so we don't need to set the pacinggs timer.
+		// SendAck is only returned when we're congestion limited, so we don't need to set the pacing timer.
 		return s.maybeSendAckOnlyPacket(now)
-	case ackhandler.SendPTOInitial:
-		if err := s.sendProbePacket(protocol.EncryptionInitial, now); err != nil {
-			return err
-		}
-		if s.sendQueue.WouldBlock() {
-			s.scheduleSending()
-			return nil
-		}
-		return s.triggerSending(now)
-	case ackhandler.SendPTOHandshake:
-		if err := s.sendProbePacket(protocol.EncryptionHandshake, now); err != nil {
-			return err
-		}
-		if s.sendQueue.WouldBlock() {
-			s.scheduleSending()
-			return nil
-		}
-		return s.triggerSending(now)
-	case ackhandler.SendPTOAppData:
-		if err := s.sendProbePacket(protocol.Encryption1RTT, now); err != nil {
+	case ackhandler.SendPTOInitial, ackhandler.SendPTOHandshake, ackhandler.SendPTOAppData:
+		if err := s.sendProbePacket(sendMode, now); err != nil {
 			return err
 		}
 		if s.sendQueue.WouldBlock() {
@@ -2073,7 +2055,19 @@ func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 	return nil
 }
 
-func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel, now time.Time) error {
+func (s *connection) sendProbePacket(sendMode ackhandler.SendMode, now time.Time) error {
+	var encLevel protocol.EncryptionLevel
+	//nolint:exhaustive // We only need to handle the PTO send modes here.
+	switch sendMode {
+	case ackhandler.SendPTOInitial:
+		encLevel = protocol.EncryptionInitial
+	case ackhandler.SendPTOHandshake:
+		encLevel = protocol.EncryptionHandshake
+	case ackhandler.SendPTOAppData:
+		encLevel = protocol.Encryption1RTT
+	default:
+		return fmt.Errorf("connection BUG: unexpected send mode: %d", sendMode)
+	}
 	// Queue probe packets until we actually send out a packet,
 	// or until there are no more packets to queue.
 	var packet *coalescedPacket
