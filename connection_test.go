@@ -900,13 +900,23 @@ func TestConnectionRemoteClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockStreamManager := NewMockStreamManager(mockCtrl)
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
+	unpacker := NewMockUnpacker(mockCtrl)
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		nil,
 		false,
 		connectionOptStreamManager(mockStreamManager),
 		connectionOptTracer(tr),
+		connectionOptUnpacker(unpacker),
 	)
+	ccf, err := (&wire.ConnectionCloseFrame{
+		ErrorCode:    uint64(qerr.StreamLimitError),
+		ReasonPhrase: "foobar",
+	}).Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(1), protocol.PacketNumberLen2, protocol.KeyPhaseBit(0), ccf, nil)
+	tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+
 	expectedErr := &qerr.TransportError{ErrorCode: qerr.StreamLimitError, Remote: true}
 	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 	streamErrChan := make(chan error, 1)
@@ -918,10 +928,8 @@ func TestConnectionRemoteClose(t *testing.T) {
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
 
-	tc.conn.handleFrame(&wire.ConnectionCloseFrame{
-		ErrorCode:    uint64(qerr.StreamLimitError),
-		ReasonPhrase: "foobar",
-	}, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now())
+	p := getShortHeaderPacket(t, tc.srcConnID, 1, []byte("encrypted"))
+	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
 	case err := <-errChan:
