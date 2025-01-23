@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	retryAEADv1 cipher.AEAD // used for QUIC v1 (RFC 9000)
-	retryAEADv2 cipher.AEAD // used for QUIC v2 (RFC 9369)
+	initRetryOnce sync.Once
+	retryAEADv1   cipher.AEAD // used for QUIC v1 (RFC 9000)
+	retryAEADv2   cipher.AEAD // used for QUIC v2 (RFC 9369)
 )
 
-func init() {
+func initRetry() {
 	retryAEADv1 = initAEAD([16]byte{0xbe, 0x0c, 0x69, 0x0b, 0x9f, 0x66, 0x57, 0x5a, 0x1d, 0x76, 0x6b, 0x54, 0xe3, 0x68, 0xc8, 0x4e})
 	retryAEADv2 = initAEAD([16]byte{0x8f, 0xb4, 0xb0, 0x1b, 0x56, 0xac, 0x48, 0xe2, 0x60, 0xfb, 0xcb, 0xce, 0xad, 0x7c, 0xcc, 0x92})
 }
@@ -41,6 +42,8 @@ var (
 
 // GetRetryIntegrityTag calculates the integrity tag on a Retry packet
 func GetRetryIntegrityTag(retry []byte, origDestConnID protocol.ConnectionID, version protocol.Version) *[16]byte {
+	initRetryOnce.Do(initRetry)
+
 	retryMutex.Lock()
 	defer retryMutex.Unlock()
 
