@@ -1890,8 +1890,8 @@ func (s *connection) sendPackets(now time.Time) error {
 		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, ecn, buf.Len(), false)
 		s.registerPackedShortHeaderPacket(p, ecn, now)
 		s.sendQueue.Send(buf, 0, ecn)
-		// This is kind of a hack. We need to trigger sending again somehow.
-		s.pacingDeadline = deadlineSendImmediately
+		// There's (likely) more data to send. Loop around again.
+		s.scheduleSending()
 		return nil
 	}
 
