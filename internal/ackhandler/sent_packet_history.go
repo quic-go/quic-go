@@ -61,20 +61,16 @@ func (h *sentPacketHistory) SentAckElicitingPacket(p *packet) {
 }
 
 // Iterate iterates through all packets.
-func (h *sentPacketHistory) Iterate(cb func(*packet) (cont bool, err error)) error {
+func (h *sentPacketHistory) Iterate(cb func(*packet) (cont bool)) {
 	for _, p := range h.packets {
 		if p == nil {
 			continue
 		}
-		cont, err := cb(p)
-		if err != nil {
-			return err
-		}
+		cont := cb(p)
 		if !cont {
-			return nil
+			return
 		}
 	}
-	return nil
 }
 
 // FirstOutstanding returns the first outstanding packet.
