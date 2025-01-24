@@ -3,6 +3,8 @@
 package quic
 
 import (
+	"encoding/binary"
+	"net/netip"
 	"reflect"
 	"syscall"
 	"unsafe"
@@ -40,6 +42,19 @@ func forceSetSendBuffer(c syscall.RawConn, bytes int) error {
 }
 
 func appendUDPSegmentSizeMsg([]byte, uint16) []byte { return nil }
+
+func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
+	// 	struct in_pktinfo {
+	// 		IN_ADDR ipi_addr;
+	// 		ULONG   ipi_ifindex;
+	// 	  } ;
+
+	// Check if the input byte slice has exactly 8 bytes (size of struct in_pktinfo)
+	if len(body) != 8 {
+		return netip.Addr{}, 0, false
+	}
+	return netip.AddrFrom4(*(*[4]byte)(body[:4])), binary.LittleEndian.Uint32(body), true
+}
 
 func isGSOEnabled(conn syscall.RawConn) bool {
 	gsoSegmentSize := getMaxGSOSegments()
