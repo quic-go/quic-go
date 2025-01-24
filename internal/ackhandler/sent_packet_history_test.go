@@ -1,7 +1,6 @@
 package ackhandler
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -150,14 +149,14 @@ func TestSentPacketHistoryIterating(t *testing.T) {
 	require.NoError(t, hist.Remove(4))
 
 	var packets, skippedPackets []protocol.PacketNumber
-	require.NoError(t, hist.Iterate(func(p *packet) (bool, error) {
+	hist.Iterate(func(p *packet) bool {
 		if p.skippedPacket {
 			skippedPackets = append(skippedPackets, p.PacketNumber)
 		} else {
 			packets = append(packets, p.PacketNumber)
 		}
-		return true, nil
-	}))
+		return true
+	})
 
 	require.Equal(t, []protocol.PacketNumber{1, 2, 6}, packets)
 	require.Equal(t, []protocol.PacketNumber{0, 5}, skippedPackets)
@@ -170,32 +169,14 @@ func TestSentPacketHistoryStopIterating(t *testing.T) {
 	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
 
 	var iterations []protocol.PacketNumber
-	require.NoError(t, hist.Iterate(func(p *packet) (bool, error) {
+	hist.Iterate(func(p *packet) bool {
 		if p.skippedPacket {
-			return true, nil
+			return true
 		}
 		iterations = append(iterations, p.PacketNumber)
-		return p.PacketNumber < 1, nil
-	}))
+		return p.PacketNumber < 1
+	})
 	require.Equal(t, []protocol.PacketNumber{1}, iterations)
-}
-
-func TestSentPacketHistoryIterateError(t *testing.T) {
-	hist := newSentPacketHistory(true)
-	hist.SentAckElicitingPacket(&packet{PacketNumber: 0})
-	hist.SentAckElicitingPacket(&packet{PacketNumber: 1})
-	hist.SentAckElicitingPacket(&packet{PacketNumber: 2})
-
-	testErr := errors.New("test error")
-	var iterations []protocol.PacketNumber
-	require.Equal(t, testErr, hist.Iterate(func(p *packet) (bool, error) {
-		iterations = append(iterations, p.PacketNumber)
-		if p.PacketNumber == 1 {
-			return false, testErr
-		}
-		return true, nil
-	}))
-	require.Equal(t, []protocol.PacketNumber{0, 1}, iterations)
 }
 
 func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
@@ -208,7 +189,7 @@ func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
 	hist.SentAckElicitingPacket(&packet{PacketNumber: 5})
 
 	var iterations []protocol.PacketNumber
-	require.NoError(t, hist.Iterate(func(p *packet) (bool, error) {
+	hist.Iterate(func(p *packet) bool {
 		iterations = append(iterations, p.PacketNumber)
 		switch p.PacketNumber {
 		case 0:
@@ -216,8 +197,8 @@ func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
 		case 4:
 			require.NoError(t, hist.Remove(4))
 		}
-		return true, nil
-	}))
+		return true
+	})
 
 	require.Equal(t, []protocol.PacketNumber{0, 1, 2, 3, 4, 5}, iterations)
 	require.Equal(t, []protocol.PacketNumber{1, 3, 5}, hist.getPacketNumbers())

@@ -174,9 +174,9 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 		if pnSpace == nil {
 			return
 		}
-		pnSpace.history.Iterate(func(p *packet) (bool, error) {
+		pnSpace.history.Iterate(func(p *packet) bool {
 			h.removeFromBytesInFlight(p)
-			return true, nil
+			return true
 		})
 	}
 	// drop the packet history
@@ -194,13 +194,13 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 		// and not when the client drops 0-RTT keys when the handshake completes.
 		// When 0-RTT is rejected, all application data sent so far becomes invalid.
 		// Delete the packets from the history and remove them from bytes_in_flight.
-		h.appDataPackets.history.Iterate(func(p *packet) (bool, error) {
+		h.appDataPackets.history.Iterate(func(p *packet) bool {
 			if p.EncryptionLevel != protocol.Encryption0RTT && !p.skippedPacket {
-				return false, nil
+				return false
 			}
 			h.removeFromBytesInFlight(p)
 			h.appDataPackets.history.Remove(p.PacketNumber)
-			return true, nil
+			return true
 		})
 	default:
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
@@ -365,9 +365,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	pnSpace.largestAcked = max(pnSpace.largestAcked, largestAcked)
 
-	if err := h.detectLostPackets(rcvTime, encLevel); err != nil {
-		return false, err
-	}
+	h.detectLostPackets(rcvTime, encLevel)
 	var acked1RTTPacket bool
 	for _, p := range ackedPackets {
 		if p.includedInBytesInFlight && !p.declaredLost {
@@ -411,14 +409,15 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	ackRangeIndex := 0
 	lowestAcked := ack.LowestAcked()
 	largestAcked := ack.LargestAcked()
-	err := pnSpace.history.Iterate(func(p *packet) (bool, error) {
+	var processErr error
+	pnSpace.history.Iterate(func(p *packet) bool {
 		// Ignore packets below the lowest acked
 		if p.PacketNumber < lowestAcked {
-			return true, nil
+			return true
 		}
 		// Break after largest acked is reached
 		if p.PacketNumber > largestAcked {
-			return false, nil
+			return false
 		}
 
 		if ack.HasMissingRanges() {
@@ -430,20 +429,22 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			}
 
 			if p.PacketNumber < ackRange.Smallest { // packet not contained in ACK range
-				return true, nil
+				return true
 			}
 			if p.PacketNumber > ackRange.Largest {
-				return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
+				processErr = fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
+				return false
 			}
 		}
 		if p.skippedPacket {
-			return false, &qerr.TransportError{
+			processErr = &qerr.TransportError{
 				ErrorCode:    qerr.ProtocolViolation,
 				ErrorMessage: fmt.Sprintf("received an ACK for skipped packet number: %d (%s)", p.PacketNumber, encLevel),
 			}
+			return false
 		}
 		h.ackedPackets = append(h.ackedPackets, p)
-		return true, nil
+		return true
 	})
 	if h.logger.Debug() && len(h.ackedPackets) > 0 {
 		pns := make([]protocol.PacketNumber, len(h.ackedPackets))
@@ -451,6 +452,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			pns[i] = p.PacketNumber
 		}
 		h.logger.Debugf("\tnewly acked packets (%d): %d", len(pns), pns)
+	}
+	if processErr != nil {
+		return nil, processErr
 	}
 
 	for _, p := range h.ackedPackets {
@@ -475,8 +479,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			h.tracer.AcknowledgedPacket(encLevel, p.PacketNumber)
 		}
 	}
-
-	return h.ackedPackets, err
+	return h.ackedPackets, nil
 }
 
 func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
@@ -604,7 +607,7 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 	}
 }
 
-func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) error {
+func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = time.Time{}
 
@@ -618,9 +621,9 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	lostSendTime := now.Add(-lossDelay)
 
 	priorInFlight := h.bytesInFlight
-	return pnSpace.history.Iterate(func(p *packet) (bool, error) {
+	pnSpace.history.Iterate(func(p *packet) bool {
 		if p.PacketNumber > pnSpace.largestAcked {
-			return false, nil
+			return false
 		}
 
 		var packetLost bool
@@ -666,7 +669,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 				}
 			}
 		}
-		return true, nil
+		return true
 	})
 }
 
@@ -681,7 +684,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 			h.tracer.LossTimerExpired(logging.TimerTypeACK, encLevel)
 		}
 		// Early retransmit or time loss detection
-		return h.detectLostPackets(now, encLevel)
+		h.detectLostPackets(now, encLevel)
+		return nil
 	}
 
 	// PTO
@@ -868,23 +872,23 @@ func (h *sentPacketHandler) queueFramesForRetransmission(p *packet) {
 func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 	h.bytesInFlight = 0
 	var firstPacketSendTime time.Time
-	h.initialPackets.history.Iterate(func(p *packet) (bool, error) {
+	h.initialPackets.history.Iterate(func(p *packet) bool {
 		if firstPacketSendTime.IsZero() {
 			firstPacketSendTime = p.SendTime
 		}
 		if p.declaredLost || p.skippedPacket {
-			return true, nil
+			return true
 		}
 		h.queueFramesForRetransmission(p)
-		return true, nil
+		return true
 	})
 	// All application data packets sent at this point are 0-RTT packets.
 	// In the case of a Retry, we can assume that the server dropped all of them.
-	h.appDataPackets.history.Iterate(func(p *packet) (bool, error) {
+	h.appDataPackets.history.Iterate(func(p *packet) bool {
 		if !p.declaredLost && !p.skippedPacket {
 			h.queueFramesForRetransmission(p)
 		}
-		return true, nil
+		return true
 	})
 
 	// Only use the Retry to estimate the RTT if we didn't send any retransmission for the Initial.
