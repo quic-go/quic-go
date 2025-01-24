@@ -1399,48 +1399,52 @@ func TestConnection0RTTTransportParameters(t *testing.T) {
 
 func TestConnectionReceivePrioritization(t *testing.T) {
 	t.Run("handshake complete", func(t *testing.T) {
-		counter := testConnectionReceivePrioritization(t, true)
-		require.Equal(t, 10, counter)
+		events := testConnectionReceivePrioritization(t, true, 5)
+		require.Equal(t, []string{"unpack", "unpack", "unpack", "unpack", "unpack", "pack"}, events)
 	})
 
 	// before handshake completion, we trigger packing of a new packet every time we receive a packet
 	t.Run("handshake not complete", func(t *testing.T) {
-		counter := testConnectionReceivePrioritization(t, false)
-		require.Equal(t, 1, counter)
+		events := testConnectionReceivePrioritization(t, false, 5)
+		require.Equal(t, []string{
+			"unpack", "pack",
+			"unpack", "pack",
+			"unpack", "pack",
+			"unpack", "pack",
+			"unpack", "pack",
+		}, events)
 	})
 }
 
-func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool) int {
+func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool, numPackets int) []string {
 	mockCtrl := gomock.NewController(t)
 	unpacker := NewMockUnpacker(mockCtrl)
 	opts := []testConnectionOpt{connectionOptUnpacker(unpacker)}
 	if handshakeComplete {
 		opts = append(opts, connectionOptHandshakeConfirmed())
 	}
-	tc := newServerTestConnection(t,
-		mockCtrl,
-		nil,
-		false,
-		opts...,
-	)
+	tc := newServerTestConnection(t, mockCtrl, nil, false, opts...)
 
+	var events []string
 	var counter int
-	var packedFirst bool
+	var testDone bool
 	done := make(chan struct{})
 	unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
-			if !packedFirst {
-				counter++
+			counter++
+			if counter == numPackets {
+				testDone = true
 			}
+			events = append(events, "unpack")
 			return protocol.PacketNumber(counter), protocol.PacketNumberLen2, protocol.KeyPhaseZero, []byte{0, 1} /* PADDING, PING */, nil
 		},
-	).AnyTimes()
+	).Times(numPackets)
 	switch handshakeComplete {
 	case false:
 		tc.packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(b bool, bc protocol.ByteCount, t time.Time, v protocol.Version) (*coalescedPacket, error) {
-				if !packedFirst {
-					packedFirst = true
+				events = append(events, "pack")
+				if testDone {
 					close(done)
 				}
 				return nil, nil
@@ -1449,8 +1453,8 @@ func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool) i
 	case true:
 		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(b *packetBuffer, bc protocol.ByteCount, t time.Time, v protocol.Version) (shortHeaderPacket, error) {
-				if !packedFirst {
-					packedFirst = true
+				events = append(events, "pack")
+				if testDone {
 					close(done)
 				}
 				return shortHeaderPacket{}, errNothingToPack
@@ -1458,10 +1462,11 @@ func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool) i
 		).AnyTimes()
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range numPackets {
 		tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, protocol.PacketNumber(i), []byte("foobar")))
 	}
 
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
 
@@ -1480,8 +1485,7 @@ func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool) i
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-
-	return counter
+	return events
 }
 
 func TestConnectionPacketBuffering(t *testing.T) {
