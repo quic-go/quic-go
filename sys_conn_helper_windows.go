@@ -3,7 +3,9 @@
 package quic
 
 import (
+	"reflect"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -82,19 +84,58 @@ func getMaxGSOSegments() int {
 
 // https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/shared/ws2def.h#L726
 type Cmsghdr struct {
-	Len   uint64
+	Len   uintptr
 	Level int32
 	Type  int32
 }
 
-const SizeofCmsghdr = 0x10 // 16
-// TO DO: Is this okay to do?
-const CmsgAlign = 0x8 // 8
+func (cmsghdr Cmsghdr) Align() int {
+	return reflect.TypeOf(cmsghdr).Align()
+}
+
+func (cmsghdr Cmsghdr) Size() uintptr {
+	return reflect.TypeOf(cmsghdr).Size()
+}
+
+func (cmsghdr Cmsghdr) cmsgLen(length uintptr) uintptr {
+	return cmsgDataAlign(cmsghdr.Size()) + length
+}
+
+func (cmsghdr *Cmsghdr) cmsgSpace(length uintptr) uintptr {
+	return cmsgDataAlign(cmsghdr.Size() + cmsgHdrAlign(length))
+}
 
 func cmsgHdrAlign(len uintptr) uintptr {
-	return (len + uintptr(CmsgAlign) - 1) & ^(uintptr(CmsgAlign) - 1)
+	var cmsghdr Cmsghdr
+	align := cmsghdr.Align()
+	return (len + uintptr(align) - 1) & ^(uintptr(align) - 1)
 }
 
 func cmsgDataAlign(len uintptr) uintptr {
-	return (len + uintptr(0x8) - 1) & ^(uintptr(0x8) - 1)
+	var uint uintptr
+	alignPointer := reflect.TypeOf(uint).Align()
+	return (len + uintptr(alignPointer) - 1) & ^(uintptr(alignPointer) - 1)
+}
+
+// ParseOneSocketControlMessage parses a single socket control message from b, returning the message header,
+// message data (a slice of b), and the remainder of b after that single message.
+// When there are no remaining messages, len(remainder) == 0.
+func ParseOneSocketControlMessage(b []byte) (hdr Cmsghdr, data []byte, remainder []byte, err error) {
+	h, dbuf, err := socketControlMessageHeaderAndData(b)
+	if err != nil {
+		return Cmsghdr{}, nil, nil, err
+	}
+	if i := int(cmsgDataAlign(h.Len)); i < len(b) {
+		remainder = b[i:]
+	}
+	return *h, dbuf, remainder, nil
+}
+
+func socketControlMessageHeaderAndData(b []byte) (*Cmsghdr, []byte, error) {
+	h := (*Cmsghdr)(unsafe.Pointer(&b[0]))
+	var cmsghdr Cmsghdr
+	if h.Len < cmsghdr.Size() || uint64(h.Len) > uint64(len(b)) {
+		return nil, nil, syscall.EINVAL
+	}
+	return h, b[cmsgDataAlign(cmsghdr.Size()):h.Len], nil
 }

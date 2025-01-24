@@ -3,7 +3,9 @@
 package quic
 
 import (
+	"encoding/binary"
 	"errors"
+	"log"
 	"net"
 	"net/netip"
 	"sync"
@@ -138,7 +140,51 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		data:       msg.Buffers[0][:msg.N],
 		buffer:     buffer,
 	}
-
+	for len(data) > 0 {
+		hdr, body, remainder, err := ParseOneSocketControlMessage(data)
+		if err != nil {
+			return receivedPacket{}, err
+		}
+		if hdr.Level == windows.IPPROTO_IP {
+			switch hdr.Type {
+			case windows.IP_TOS:
+				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
+			case windows.IP_PKTINFO:
+				ip, ifIndex, ok := parseIPv4PktInfo(body)
+				if ok {
+					p.info.addr = ip
+					p.info.ifIndex = ifIndex
+				} else {
+					invalidCmsgOnceV4.Do(func() {
+						log.Printf("Received invalid IPv4 packet info control message: %+x. "+
+							"This should never occur, please open a new issue and include details about the architecture.", body)
+					})
+				}
+			}
+		}
+		if hdr.Level == windows.IPPROTO_IPV6 {
+			switch hdr.Type {
+			case windows.IPV6_RECVTCLASS:
+				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
+			case windows.IPV6_PKTINFO:
+				// struct in6_pktinfo {
+				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
+				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
+				// };
+				if len(body) == 20 {
+					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
+					p.info.ifIndex = binary.BigEndian.Uint32(body[16:])
+				} else {
+					invalidCmsgOnceV6.Do(func() {
+						log.Printf("Received invalid IPv6 packet info control message: %+x. "+
+							"This should never occur, please open a new issue and include details about the architecture.", body)
+					})
+				}
+			}
+		}
+		data = remainder
+	}
+	return p, nil
 }
 
 func inspectReadBuffer(c syscall.RawConn) (int, error) {
@@ -176,7 +222,8 @@ type oobConn struct {
 }
 
 type packetInfo struct {
-	addr netip.Addr
+	addr    netip.Addr
+	ifIndex uint32
 }
 
 func (i *packetInfo) OOB() []byte { return nil }
