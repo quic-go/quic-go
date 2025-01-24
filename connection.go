@@ -551,7 +551,7 @@ runLoop:
 			queue := s.undecryptablePacketsToProcess
 			s.undecryptablePacketsToProcess = nil
 			for _, p := range queue {
-				processed, err := s.handlePacketImpl(p)
+				processed, err := s.handleOnePacket(p)
 				if err != nil {
 					s.setCloseError(&closeError{err: err})
 					break runLoop
@@ -575,33 +575,10 @@ runLoop:
 				// nothing to see here.
 			case <-sendQueueAvailable:
 			case firstPacket := <-s.receivedPackets:
-				wasProcessed, err := s.handlePacketImpl(firstPacket)
-				// Don't set timers and send packets if the packet made us close the connection.
+				wasProcessed, err := s.handlePackets(firstPacket)
 				if err != nil {
 					s.setCloseError(&closeError{err: err})
 					break runLoop
-				}
-				if s.handshakeComplete {
-					// Now process all packets in the receivedPackets channel.
-					// Limit the number of packets to the length of the receivedPackets channel,
-					// so we eventually get a chance to send out an ACK when receiving a lot of packets.
-					numPackets := len(s.receivedPackets)
-				receiveLoop:
-					for i := 0; i < numPackets; i++ {
-						select {
-						case p := <-s.receivedPackets:
-							processed, err := s.handlePacketImpl(p)
-							if err != nil {
-								s.setCloseError(&closeError{err: err})
-								break runLoop
-							}
-							if processed {
-								wasProcessed = true
-							}
-						default:
-							break receiveLoop
-						}
-					}
 				}
 				// Only reset the timers if this packet was actually processed.
 				// This avoids modifying any state when handling undecryptable packets,
@@ -807,7 +784,38 @@ func (s *connection) handleHandshakeConfirmed(now time.Time) error {
 	return nil
 }
 
-func (s *connection) handlePacketImpl(rp receivedPacket) (wasProcessed bool, _ error) {
+func (s *connection) handlePackets(firstPacket receivedPacket) (wasProcessed bool, _ error) {
+	wasProcessed, err := s.handleOnePacket(firstPacket)
+	if err != nil {
+		return false, err
+	}
+	// only process a single packet at a time before handshake completion
+	if !s.handshakeComplete {
+		return wasProcessed, nil
+	}
+	// Now process all packets in the receivedPackets channel.
+	// Limit the number of packets to the length of the receivedPackets channel,
+	// so we eventually get a chance to send out an ACK when receiving a lot of packets.
+	numPackets := len(s.receivedPackets)
+receiveLoop:
+	for i := 0; i < numPackets; i++ {
+		select {
+		case p := <-s.receivedPackets:
+			processed, err := s.handleOnePacket(p)
+			if err != nil {
+				return false, err
+			}
+			if processed {
+				wasProcessed = true
+			}
+		default:
+			break receiveLoop
+		}
+	}
+	return wasProcessed, nil
+}
+
+func (s *connection) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ error) {
 	s.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
