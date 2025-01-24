@@ -75,6 +75,15 @@ var (
 		},
 		[]string{"timer_type", "spurious"},
 	)
+	connTimerResetNegative = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: metricNamespace,
+			Name:      "connection_timer_reset_negative_seconds",
+			Help:      "Connection Timer Reset Negative",
+			Buckets:   prometheus.ExponentialBuckets(0.001/100, 1.3, 50),
+		},
+		[]string{"timer_type", "spurious"},
+	)
 )
 
 // DefaultConnectionTracer returns a callback that creates a metrics ConnectionTracer.
@@ -111,6 +120,7 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 		packetsSent,
 		packetsReceived,
 		connTimerReset,
+		connTimerResetNegative,
 	} {
 		if err := registerer.Register(c); err != nil {
 			if ok := errors.As(err, &prometheus.AlreadyRegisteredError{}); !ok {
@@ -262,7 +272,12 @@ func newConnectionTracerWithRegisterer(registerer prometheus.Registerer, isClien
 			}
 			*tags = append(*tags, t)
 			*tags = append(*tags, strconv.FormatBool(!wasReset))
-			connTimerReset.WithLabelValues(*tags...).Observe(duration.Seconds())
+			d := duration.Seconds()
+			if d < 0 {
+				connTimerResetNegative.WithLabelValues(*tags...).Observe(-d)
+			} else {
+				connTimerReset.WithLabelValues(*tags...).Observe(d)
+			}
 		},
 	}
 }
