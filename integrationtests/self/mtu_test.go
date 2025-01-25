@@ -79,10 +79,10 @@ func TestPathMTUDiscovery(t *testing.T) {
 	var mx sync.Mutex
 	var maxPacketSizeServer int
 	var clientPacketSizes []int
-	serverPort := ln.Addr().(*net.UDPAddr).Port
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
-		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+	proxy := &quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  ln.Addr().(*net.UDPAddr),
+		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
 		DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
 			if len(packet) > mtu {
 				return true
@@ -99,8 +99,8 @@ func TestPathMTUDiscovery(t *testing.T) {
 			}
 			return false
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	// Make sure to use v4-only socket here.

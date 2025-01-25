@@ -111,13 +111,12 @@ func TestIdleTimeout(t *testing.T) {
 	defer server.Close()
 
 	var drop atomic.Bool
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		DropPacket: func(quicproxy.Direction, []byte) bool {
-			return drop.Load()
-		},
-	})
-	require.NoError(t, err)
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: server.Addr().(*net.UDPAddr),
+		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	conn, err := quic.Dial(
@@ -179,11 +178,12 @@ func TestKeepAlive(t *testing.T) {
 	defer server.Close()
 
 	var drop atomic.Bool
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		DropPacket: func(quicproxy.Direction, []byte) bool { return drop.Load() },
-	})
-	require.NoError(t, err)
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: server.Addr().(*net.UDPAddr),
+		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -320,11 +320,12 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 	defer server.Close()
 
 	var drop atomic.Bool
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		DropPacket: func(d quicproxy.Direction, _ []byte) bool { return d == quicproxy.DirectionOutgoing && drop.Load() },
-	})
-	require.NoError(t, err)
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: server.Addr().(*net.UDPAddr),
+		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

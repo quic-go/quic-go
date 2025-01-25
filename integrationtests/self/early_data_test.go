@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -20,11 +19,12 @@ func TestEarlyData(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+	proxy := &quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	connChan := make(chan quic.EarlyConnection)

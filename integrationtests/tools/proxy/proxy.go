@@ -113,100 +113,52 @@ func (d Direction) Is(dir Direction) bool {
 // DropCallback is a callback that determines which packet gets dropped.
 type DropCallback func(dir Direction, packet []byte) bool
 
-// NoDropper doesn't drop packets.
-var NoDropper DropCallback = func(Direction, []byte) bool {
-	return false
-}
-
 // DelayCallback is a callback that determines how much delay to apply to a packet.
 type DelayCallback func(dir Direction, packet []byte) time.Duration
 
-// NoDelay doesn't apply a delay.
-var NoDelay DelayCallback = func(Direction, []byte) time.Duration {
-	return 0
-}
+// Proxy is a QUIC proxy that can drop and delay packets.
+type Proxy struct {
+	// Conn is the UDP socket that the proxy listens on for incoming packets
+	// from clients.
+	Conn *net.UDPConn
 
-// Opts are proxy options.
-type Opts struct {
-	// The address this proxy proxies packets to.
-	RemoteAddr string
-	// DropPacket determines whether a packet gets dropped.
+	// ServerAddr is the address of the server that the proxy forwards packets to.
+	ServerAddr *net.UDPAddr
+
+	// DropPacket is a callback that determines which packet gets dropped.
 	DropPacket DropCallback
-	// DelayPacket determines how long a packet gets delayed. This allows
-	// simulating a connection with non-zero RTTs.
-	// Note that the RTT is the sum of the delay for the incoming and the outgoing packet.
-	DelayPacket DelayCallback
-}
 
-// QuicProxy is a QUIC proxy that can drop and delay packets.
-type QuicProxy struct {
-	mutex sync.Mutex
+	// DelayPacket is a callback that determines how much delay to apply to a packet.
+	DelayPacket DelayCallback
 
 	closeChan chan struct{}
+	logger    utils.Logger
 
-	conn       *net.UDPConn
-	serverAddr *net.UDPAddr
-
-	dropPacket  DropCallback
-	delayPacket DelayCallback
-
-	// Mapping from client addresses (as host:port) to connection
+	// mapping from client addresses (as host:port) to connection
+	mutex      sync.Mutex
 	clientDict map[string]*connection
-
-	logger utils.Logger
 }
 
 // NewQuicProxy creates a new UDP proxy
-func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
-	if opts == nil {
-		opts = &Opts{}
+func (p *Proxy) Start() error {
+	p.clientDict = make(map[string]*connection)
+	p.closeChan = make(chan struct{})
+	p.logger = utils.DefaultLogger.WithPrefix("proxy")
+
+	if err := p.Conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
+		return err
 	}
-	laddr, err := net.ResolveUDPAddr("udp", local)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		return nil, err
-	}
-	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
-		return nil, err
-	}
-	if err := conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
-		return nil, err
-	}
-	raddr, err := net.ResolveUDPAddr("udp", opts.RemoteAddr)
-	if err != nil {
-		return nil, err
+	if err := p.Conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
+		return err
 	}
 
-	packetDropper := NoDropper
-	if opts.DropPacket != nil {
-		packetDropper = opts.DropPacket
-	}
-
-	packetDelayer := NoDelay
-	if opts.DelayPacket != nil {
-		packetDelayer = opts.DelayPacket
-	}
-
-	p := QuicProxy{
-		clientDict:  make(map[string]*connection),
-		conn:        conn,
-		closeChan:   make(chan struct{}),
-		serverAddr:  raddr,
-		dropPacket:  packetDropper,
-		delayPacket: packetDelayer,
-		logger:      utils.DefaultLogger.WithPrefix("proxy"),
-	}
-
-	p.logger.Debugf("Starting UDP Proxy %s <-> %s", conn.LocalAddr(), raddr)
+	p.logger.Debugf("Starting UDP Proxy %s <-> %s", p.Conn.LocalAddr(), p.ServerAddr)
 	go p.runProxy()
-	return &p, nil
+	return nil
 }
 
 // Close stops the UDP Proxy
-func (p *QuicProxy) Close() error {
+func (p *Proxy) Close() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -218,16 +170,14 @@ func (p *QuicProxy) Close() error {
 		c.Incoming.Close()
 		c.Outgoing.Close()
 	}
-	return p.conn.Close()
+	return nil
 }
 
 // LocalAddr is the address the proxy is listening on.
-func (p *QuicProxy) LocalAddr() net.Addr {
-	return p.conn.LocalAddr()
-}
+func (p *Proxy) LocalAddr() net.Addr { return p.Conn.LocalAddr() }
 
-func (p *QuicProxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
-	conn, err := net.DialUDP("udp", nil, p.serverAddr)
+func (p *Proxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
+	conn, err := net.DialUDP("udp", nil, p.ServerAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -247,10 +197,10 @@ func (p *QuicProxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
 }
 
 // runProxy listens on the proxy address and handles incoming packets.
-func (p *QuicProxy) runProxy() error {
+func (p *Proxy) runProxy() error {
 	for {
 		buffer := make([]byte, protocol.MaxPacketBufferSize)
-		n, cliaddr, err := p.conn.ReadFromUDP(buffer)
+		n, cliaddr, err := p.Conn.ReadFromUDP(buffer)
 		if err != nil {
 			return err
 		}
@@ -272,14 +222,17 @@ func (p *QuicProxy) runProxy() error {
 		}
 		p.mutex.Unlock()
 
-		if p.dropPacket(DirectionIncoming, raw) {
+		if p.DropPacket != nil && p.DropPacket(DirectionIncoming, raw) {
 			if p.logger.Debug() {
 				p.logger.Debugf("dropping incoming packet(%d bytes)", n)
 			}
 			continue
 		}
 
-		delay := p.delayPacket(DirectionIncoming, raw)
+		var delay time.Duration
+		if p.DelayPacket != nil {
+			delay = p.DelayPacket(DirectionIncoming, raw)
+		}
 		if delay == 0 {
 			if p.logger.Debug() {
 				p.logger.Debugf("forwarding incoming packet (%d bytes) to %s", len(raw), conn.ServerConn.RemoteAddr())
@@ -298,7 +251,7 @@ func (p *QuicProxy) runProxy() error {
 }
 
 // runConnection handles packets from server to a single client
-func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
+func (p *Proxy) runOutgoingConnection(conn *connection) error {
 	outgoingPackets := make(chan packetEntry, 10)
 	go func() {
 		for {
@@ -309,19 +262,22 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 			}
 			raw := buffer[0:n]
 
-			if p.dropPacket(DirectionOutgoing, raw) {
+			if p.DropPacket != nil && p.DropPacket(DirectionOutgoing, raw) {
 				if p.logger.Debug() {
 					p.logger.Debugf("dropping outgoing packet(%d bytes)", n)
 				}
 				continue
 			}
 
-			delay := p.delayPacket(DirectionOutgoing, raw)
+			var delay time.Duration
+			if p.DelayPacket != nil {
+				delay = p.DelayPacket(DirectionOutgoing, raw)
+			}
 			if delay == 0 {
 				if p.logger.Debug() {
 					p.logger.Debugf("forwarding outgoing packet (%d bytes) to %s", len(raw), conn.ClientAddr)
 				}
-				if _, err := p.conn.WriteToUDP(raw, conn.ClientAddr); err != nil {
+				if _, err := p.Conn.WriteToUDP(raw, conn.ClientAddr); err != nil {
 					return
 				}
 			} else {
@@ -342,14 +298,14 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 			conn.Outgoing.Add(e)
 		case <-conn.Outgoing.Timer():
 			conn.Outgoing.SetTimerRead()
-			if _, err := p.conn.WriteTo(conn.Outgoing.Get(), conn.ClientAddr); err != nil {
+			if _, err := p.Conn.WriteTo(conn.Outgoing.Get(), conn.ClientAddr); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func (p *QuicProxy) runIncomingConnection(conn *connection) error {
+func (p *Proxy) runIncomingConnection(conn *connection) error {
 	for {
 		select {
 		case <-p.closeChan:

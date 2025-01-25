@@ -359,11 +359,12 @@ func TestHandshakingConnectionsClosedOnServerShutdown(t *testing.T) {
 	ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+	proxy := quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	errChan := make(chan error, 1)
@@ -549,14 +550,12 @@ func TestInvalidToken(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Close()
 
-	serverPort := server.Addr().(*net.UDPAddr).Port
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-		DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
-			return rtt / 2
-		},
-	})
-	require.NoError(t, err)
+	proxy := quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  server.Addr().(*net.UDPAddr),
+		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

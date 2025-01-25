@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -33,13 +34,14 @@ func TestACKBundling(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Close()
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: server.Addr().String(),
-		DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: server.Addr().(*net.UDPAddr),
+		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
 			return 5 * time.Millisecond
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	clientCounter, clientTracer := newPacketTracer()
@@ -161,13 +163,14 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: ln.Addr().String(),
-		DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: ln.Addr().(*net.UDPAddr),
+		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
 			return rtt / 2
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	counter, tracer := newPacketTracer()

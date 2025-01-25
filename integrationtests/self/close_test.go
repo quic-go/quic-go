@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -28,9 +27,10 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 
 	var drop atomic.Bool
 	dropped := make(chan []byte, 100)
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-		DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
+	proxy := &quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: server.Addr().(*net.UDPAddr),
+		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
 			return 5 * time.Millisecond // 10ms RTT
 		},
 		DropPacket: func(dir quicproxy.Direction, b []byte) bool {
@@ -40,8 +40,8 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 			}
 			return false
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

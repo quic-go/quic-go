@@ -17,11 +17,12 @@ import (
 func handshakeWithRTT(t *testing.T, serverAddr net.Addr, tlsConf *tls.Config, quicConf *quic.Config, rtt time.Duration) quic.Connection {
 	t.Helper()
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  serverAddr.String(),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
-	})
-	require.NoError(t, err)
+	proxy := quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  serverAddr.(*net.UDPAddr),
+		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+	}
+	require.NoError(t, proxy.Start())
 	t.Cleanup(func() { proxy.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*rtt)

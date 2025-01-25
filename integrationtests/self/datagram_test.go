@@ -3,7 +3,6 @@ package self_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	mrand "math/rand/v2"
 	"net"
 	"sync/atomic"
@@ -138,8 +137,9 @@ func TestDatagramLoss(t *testing.T) {
 	defer server.Close()
 
 	var droppedIncoming, droppedOutgoing, total atomic.Int32
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+	proxy := &quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: server.Addr().(*net.UDPAddr),
 		DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
 			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
 				return false
@@ -159,9 +159,9 @@ func TestDatagramLoss(t *testing.T) {
 			}
 			return false
 		},
-		DelayPacket: func(dir quicproxy.Direction, packet []byte) time.Duration { return rtt / 2 },
-	})
-	require.NoError(t, err)
+		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))

@@ -65,11 +65,12 @@ func TestDownloadWithFixedRTT(t *testing.T) {
 				}
 			})
 
-			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-				RemoteAddr:  fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),
-				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
-			})
-			require.NoError(t, err)
+			proxy := quicproxy.Proxy{
+				Conn:        newUPDConnLocalhost(t),
+				ServerAddr:  &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: addr.(*net.UDPAddr).Port},
+				DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
+			}
+			require.NoError(t, proxy.Start())
 			t.Cleanup(func() { proxy.Close() })
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -109,13 +110,14 @@ func TestDownloadWithReordering(t *testing.T) {
 				}
 			})
 
-			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-				RemoteAddr: fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),
-				DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
+			proxy := quicproxy.Proxy{
+				Conn:       newUPDConnLocalhost(t),
+				ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: addr.(*net.UDPAddr).Port},
+				DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
 					return randomDuration(rtt/2, rtt*3/2) / 2
 				},
-			})
-			require.NoError(t, err)
+			}
+			require.NoError(t, proxy.Start())
 			t.Cleanup(func() { proxy.Close() })
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)

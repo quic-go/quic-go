@@ -33,9 +33,10 @@ func TestDropTests(t *testing.T) {
 			defer ln.Close()
 
 			var numDroppedPackets atomic.Int32
-			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-				RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
-				DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
+			proxy := &quicproxy.Proxy{
+				Conn:        newUPDConnLocalhost(t),
+				ServerAddr:  ln.Addr().(*net.UDPAddr),
+				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
 				DropPacket: func(d quicproxy.Direction, b []byte) bool {
 					if !d.Is(direction) {
 						return false
@@ -49,8 +50,8 @@ func TestDropTests(t *testing.T) {
 					}
 					return drop
 				},
-			})
-			require.NoError(t, err)
+			}
+			require.NoError(t, proxy.Start())
 			defer proxy.Close()
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
