@@ -870,7 +870,8 @@ func TestHTTP0RTT(t *testing.T) {
 	}
 	defer tr.Close()
 
-	req, err := http.NewRequest(http3.MethodGet0RTT, fmt.Sprintf("https://localhost:%d/0rtt", proxy.LocalPort()), nil)
+	proxyPort := proxy.LocalAddr().(*net.UDPAddr).Port
+	req, err := http.NewRequest(http3.MethodGet0RTT, fmt.Sprintf("https://localhost:%d/0rtt", proxyPort), nil)
 	require.NoError(t, err)
 	rsp, err := tr.RoundTrip(req)
 	require.NoError(t, err)
