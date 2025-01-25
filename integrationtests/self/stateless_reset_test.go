@@ -26,8 +26,7 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	var statelessResetKey quic.StatelessResetKey
 	rand.Read(statelessResetKey[:])
 
-	c, err := net.ListenUDP("udp", nil)
-	require.NoError(t, err)
+	c := newUPDConnLocalhost(t)
 	tr := &quic.Transport{
 		Conn:               c,
 		StatelessResetKey:  &statelessResetKey,
@@ -61,10 +60,9 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
-	require.NoError(t, err)
 	defer proxy.Close()
 
 	cl := &quic.Transport{
