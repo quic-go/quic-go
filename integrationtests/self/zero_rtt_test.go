@@ -21,19 +21,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runCountingProxyAndCount0RTTPackets(t *testing.T, serverPort int, rtt time.Duration) (*quicproxy.QuicProxy, *atomic.Uint32) {
+func runCountingProxyAndCount0RTTPackets(t *testing.T, serverPort int, rtt time.Duration) (*quicproxy.Proxy, *atomic.Uint32) {
 	t.Helper()
 	var num0RTTPackets atomic.Uint32
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+	proxy := &quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: serverPort},
 		DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
 			if contains0RTTPacket(data) {
 				num0RTTPackets.Add(1)
 			}
 			return rtt / 2
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	t.Cleanup(func() { proxy.Close() })
 	return proxy, &num0RTTPackets
 }
@@ -51,11 +52,12 @@ func dialAndReceiveTicket(
 	require.NoError(t, err)
 	defer ln.Close()
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  ln.Addr().String(),
+	proxy := &quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	clientTLSConf = getTLSClientConfig()
@@ -361,8 +363,9 @@ func Test0RTTDataLoss(t *testing.T) {
 	defer ln.Close()
 
 	var num0RTTPackets, numDropped atomic.Uint32
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+	proxy := quicproxy.Proxy{
+		Conn:        newUPDConnLocalhost(t),
+		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
 		DropPacket: func(_ quicproxy.Direction, data []byte) bool {
 			if !wire.IsLongHeaderPacket(data[0]) {
@@ -380,8 +383,8 @@ func Test0RTTDataLoss(t *testing.T) {
 			}
 			return false
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	transfer0RTTData(t, ln, proxy.LocalAddr(), clientConf, nil, PRData)
@@ -430,8 +433,9 @@ func Test0RTTRetransmitOnRetry(t *testing.T) {
 	}
 	var mutex sync.Mutex
 	var connIDToCounter []*connIDCounter
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
 			connID, err := wire.ParseConnectionID(data, 0)
 			if err != nil {
@@ -455,8 +459,8 @@ func Test0RTTRetransmitOnRetry(t *testing.T) {
 			}
 			return 2 * time.Millisecond
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	transfer0RTTData(t, ln, proxy.LocalAddr(), clientConf, nil, GeneratePRData(5000)) // ~5 packets
@@ -905,8 +909,9 @@ func Test0RTTPacketQueueing(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: ln.Addr().String(),
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
 			// delay the client's Initial by 1 RTT
 			if dir == quicproxy.DirectionIncoming && wire.IsLongHeaderPacket(data[0]) && data[0]&0x30>>4 == 0 {
@@ -914,8 +919,8 @@ func Test0RTTPacketQueueing(t *testing.T) {
 			}
 			return rtt / 2
 		},
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	data := GeneratePRData(5000) // ~5 packets

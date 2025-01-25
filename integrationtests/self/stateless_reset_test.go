@@ -3,7 +3,6 @@ package self_test
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -37,7 +36,6 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	defer tr.Close()
 	ln, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
-	serverPort := ln.Addr().(*net.UDPAddr).Port
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -60,12 +58,12 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	}()
 
 	var drop atomic.Bool
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-		DropPacket: func(quicproxy.Direction, []byte) bool {
-			return drop.Load()
-		},
-	})
+	proxy := quicproxy.Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: ln.Addr().(*net.UDPAddr),
+		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+	}
+	require.NoError(t, proxy.Start())
 	require.NoError(t, err)
 	defer proxy.Close()
 

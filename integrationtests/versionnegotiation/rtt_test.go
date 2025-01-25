@@ -2,6 +2,7 @@ package versionnegotiation
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -32,12 +33,17 @@ func TestVersionNegotiationFailure(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	// start the proxy
-	proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-		RemoteAddr:  ln.Addr().String(),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
-	})
+	proxyConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
+	defer proxyConn.Close()
+	// start the proxy
+	proxy := quicproxy.Proxy{
+		Conn:        proxyConn,
+		ServerAddr:  ln.Addr().(*net.UDPAddr),
+		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+	}
+	require.NoError(t, proxy.Start())
+	defer proxy.Close()
 
 	startTime := time.Now()
 	_, err = quic.DialAddr(
