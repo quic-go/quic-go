@@ -118,19 +118,25 @@ type DelayCallback func(dir Direction, packet []byte) time.Duration
 
 // Proxy is a QUIC proxy that can drop and delay packets.
 type Proxy struct {
-	closeChan chan struct{}
-
+	// Conn is the UDP socket that the proxy listens on for incoming packets
+	// from clients.
 	Conn *net.UDPConn
 
-	ServerAddr  *net.UDPAddr
-	DropPacket  DropCallback
+	// ServerAddr is the address of the server that the proxy forwards packets to.
+	ServerAddr *net.UDPAddr
+
+	// DropPacket is a callback that determines which packet gets dropped.
+	DropPacket DropCallback
+
+	// DelayPacket is a callback that determines how much delay to apply to a packet.
 	DelayPacket DelayCallback
 
-	// Mapping from client addresses (as host:port) to connection
+	closeChan chan struct{}
+	logger    utils.Logger
+
+	// mapping from client addresses (as host:port) to connection
 	mutex      sync.Mutex
 	clientDict map[string]*connection
-
-	logger utils.Logger
 }
 
 // NewQuicProxy creates a new UDP proxy
