@@ -215,12 +215,7 @@ func runMITMTest(t *testing.T, serverTr, clientTr *quic.Transport, rtt time.Dura
 
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(time.Second))
 	defer cancel()
-	conn, err := clientTr.Dial(
-		ctx,
-		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxy.LocalPort()},
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	conn, err := clientTr.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
@@ -428,12 +423,7 @@ func runMITMTestSuccessful(t *testing.T, serverTransport, clientTransport *quic.
 
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
 	defer cancel()
-	_, err = clientTransport.Dial(
-		ctx,
-		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxy.LocalPort()},
-		getTLSClientConfig(),
-		getQuicConfig(nil),
-	)
+	_, err = clientTransport.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.Error(t, err)
 	return err
 }

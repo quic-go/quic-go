@@ -209,6 +209,7 @@ func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 func (p *QuicProxy) Close() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+
 	close(p.closeChan)
 	for _, c := range p.clientDict {
 		if err := c.ServerConn.Close(); err != nil {
@@ -223,11 +224,6 @@ func (p *QuicProxy) Close() error {
 // LocalAddr is the address the proxy is listening on.
 func (p *QuicProxy) LocalAddr() net.Addr {
 	return p.conn.LocalAddr()
-}
-
-// LocalPort is the UDP port number the proxy is listening on.
-func (p *QuicProxy) LocalPort() int {
-	return p.conn.LocalAddr().(*net.UDPAddr).Port
 }
 
 func (p *QuicProxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {

@@ -2,9 +2,7 @@ package quicproxy
 
 import (
 	"bytes"
-	"fmt"
 	"net"
-	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -49,27 +47,6 @@ func readPacketNumber(t *testing.T, b []byte) protocol.PacketNumber {
 	return extHdr.PacketNumber
 }
 
-func TestProxySetupt(t *testing.T) {
-	proxy, err := NewQuicProxy("localhost:0", nil)
-	require.NoError(t, err)
-	require.Len(t, proxy.clientDict, 0)
-
-	// Check that the proxy port is in use
-	addr, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(proxy.LocalPort()))
-	require.NoError(t, err)
-	_, err = net.ListenUDP("udp", addr)
-	if runtime.GOOS == "windows" {
-		require.EqualError(t, err, fmt.Sprintf("listen udp 127.0.0.1:%d: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.", proxy.LocalPort()))
-	} else {
-		require.EqualError(t, err, fmt.Sprintf("listen udp 127.0.0.1:%d: bind: address already in use", proxy.LocalPort()))
-	}
-
-	require.Equal(t, "127.0.0.1:"+strconv.Itoa(proxy.LocalPort()), proxy.LocalAddr().String())
-	require.NotZero(t, proxy.LocalPort())
-
-	require.NoError(t, proxy.Close())
-}
-
 func TestProxyShutdown(t *testing.T) {
 	isProxyRunning := func() bool {
 		var b bytes.Buffer
@@ -79,7 +56,6 @@ func TestProxyShutdown(t *testing.T) {
 
 	proxy, err := NewQuicProxy("localhost:0", nil)
 	require.NoError(t, err)
-	port := proxy.LocalPort()
 	require.Eventually(t, func() bool { return isProxyRunning() }, time.Second, 10*time.Millisecond)
 
 	conn, err := net.DialUDP("udp", nil, proxy.LocalAddr().(*net.UDPAddr))
@@ -90,11 +66,9 @@ func TestProxyShutdown(t *testing.T) {
 	require.NoError(t, proxy.Close())
 
 	// check that the proxy port is not in use anymore
-	addr, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(port))
-	require.NoError(t, err)
 	// sometimes it takes a while for the OS to free the port
 	require.Eventually(t, func() bool {
-		ln, err := net.ListenUDP("udp", addr)
+		ln, err := net.ListenUDP("udp", proxy.LocalAddr().(*net.UDPAddr))
 		if err != nil {
 			return false
 		}
