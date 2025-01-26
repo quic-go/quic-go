@@ -809,7 +809,7 @@ func testPackProbePacket(t *testing.T, encLevel protocol.EncryptionLevel, perspe
 	tp.pnManager.EXPECT().PeekPacketNumber(encLevel).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 	tp.pnManager.EXPECT().PopPacketNumber(encLevel).Return(protocol.PacketNumber(0x42))
 
-	p, err := tp.packer.MaybePackProbePacket(encLevel, maxPacketSize, time.Now(), protocol.Version1)
+	p, err := tp.packer.MaybePackPTOProbePacket(encLevel, maxPacketSize, time.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, p)
 	require.Len(t, p.longHdrPackets, 1)
@@ -838,7 +838,7 @@ func TestPackProbePacketNothingToSend(t *testing.T) {
 	tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, gomock.Any(), true)
 
-	p, err := tp.packer.MaybePackProbePacket(protocol.EncryptionInitial, protocol.MaxByteCount, time.Now(), protocol.Version1)
+	p, err := tp.packer.MaybePackPTOProbePacket(protocol.EncryptionInitial, protocol.MaxByteCount, time.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Nil(t, p)
 }
@@ -861,7 +861,7 @@ func TestPack1RTTProbePacket(t *testing.T) {
 		},
 	)
 
-	p, err := tp.packer.MaybePackProbePacket(protocol.Encryption1RTT, maxPacketSize, time.Now(), protocol.Version1)
+	p, err := tp.packer.MaybePackPTOProbePacket(protocol.Encryption1RTT, maxPacketSize, time.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, p)
 	require.True(t, p.IsOnlyShortHeaderPacket())
@@ -882,7 +882,7 @@ func TestPackProbePacketNothingToPack(t *testing.T) {
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), true)
 	tp.framer.EXPECT().HasData()
 
-	packet, err := tp.packer.MaybePackProbePacket(protocol.Encryption1RTT, protocol.MaxByteCount, time.Now(), protocol.Version1)
+	packet, err := tp.packer.MaybePackPTOProbePacket(protocol.Encryption1RTT, protocol.MaxByteCount, time.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Nil(t, packet)
 }
@@ -905,4 +905,27 @@ func TestPackMTUProbePacket(t *testing.T) {
 	require.Equal(t, protocol.PacketNumber(0x43), p.PacketNumber)
 	require.Len(t, buffer.Data, int(probePacketSize))
 	require.True(t, p.IsPathMTUProbePacket)
+	require.False(t, p.IsPathProbePacket)
+}
+
+func TestPackPathProbePacket(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveServer)
+	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+	tp.pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x43), protocol.PacketNumberLen2)
+	tp.pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x43))
+
+	p, buf, err := tp.packer.PackPathProbePacket(
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		ackhandler.Frame{Frame: &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
+		protocol.Version1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(0x43), p.PacketNumber)
+	require.Nil(t, p.Ack)
+	require.Empty(t, p.StreamFrames)
+	require.Equal(t, &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, p.Frames[0].Frame)
+	require.Len(t, buf.Data, protocol.MinInitialPacketSize)
+	require.True(t, p.IsPathProbePacket)
+	require.False(t, p.IsPathMTUProbePacket)
 }

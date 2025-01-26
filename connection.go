@@ -2096,7 +2096,7 @@ func (s *connection) sendProbePacket(sendMode ackhandler.SendMode, now time.Time
 			break
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel, s.maxPacketSize(), now, s.version)
+		packet, err = s.packer.MaybePackPTOProbePacket(encLevel, s.maxPacketSize(), now, s.version)
 		if err != nil {
 			return err
 		}
@@ -2107,7 +2107,7 @@ func (s *connection) sendProbePacket(sendMode ackhandler.SendMode, now time.Time
 	if packet == nil {
 		s.retransmissionQueue.AddPing(encLevel)
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel, s.maxPacketSize(), now, s.version)
+		packet, err = s.packer.MaybePackPTOProbePacket(encLevel, s.maxPacketSize(), now, s.version)
 		if err != nil {
 			return err
 		}
