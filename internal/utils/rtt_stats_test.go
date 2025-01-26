@@ -116,3 +116,25 @@ func TestRTTMeasurementAfterRestore(t *testing.T) {
 	require.Equal(t, rtt, rttStats.LatestRTT())
 	require.Equal(t, rtt, rttStats.SmoothedRTT())
 }
+
+func TestRTTStatsResetForPathMigration(t *testing.T) {
+	var rttStats RTTStats
+	rttStats.SetMaxAckDelay(42 * time.Millisecond)
+	rttStats.UpdateRTT(time.Second, 0)
+	rttStats.UpdateRTT(10*time.Second, 0)
+	require.Equal(t, time.Second, rttStats.MinRTT())
+	require.Equal(t, 10*time.Second, rttStats.LatestRTT())
+	require.NotZero(t, rttStats.SmoothedRTT())
+
+	rttStats.ResetForPathMigration()
+	require.Zero(t, rttStats.MinRTT())
+	require.Zero(t, rttStats.LatestRTT())
+	require.Zero(t, rttStats.SmoothedRTT())
+	require.Equal(t, 2*defaultInitialRTT, rttStats.PTO(false))
+	// make sure that max_ack_delay was not reset
+	require.Equal(t, 42*time.Millisecond, rttStats.MaxAckDelay())
+
+	rttStats.UpdateRTT(10*time.Millisecond, 0)
+	require.Equal(t, 10*time.Millisecond, rttStats.SmoothedRTT())
+	require.Equal(t, 10*time.Millisecond, rttStats.LatestRTT())
+}
