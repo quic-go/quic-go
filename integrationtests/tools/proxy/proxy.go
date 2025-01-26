@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -64,17 +64,11 @@ type packetEntry struct {
 	Raw  []byte
 }
 
-type packetEntries []packetEntry
-
-func (e packetEntries) Len() int           { return len(e) }
-func (e packetEntries) Less(i, j int) bool { return e[i].Time.Before(e[j].Time) }
-func (e packetEntries) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
-
 type queue struct {
 	sync.Mutex
 
 	timer   *utils.Timer
-	Packets packetEntries
+	Packets []packetEntry // sorted by the packetEntry.Time
 }
 
 func newQueue() *queue {
@@ -83,15 +77,27 @@ func newQueue() *queue {
 
 func (q *queue) Add(e packetEntry) {
 	q.Lock()
-	q.Packets = append(q.Packets, e)
-	if len(q.Packets) > 1 {
-		lastIndex := len(q.Packets) - 1
-		if q.Packets[lastIndex].Time.Before(q.Packets[lastIndex-1].Time) {
-			sort.Stable(q.Packets)
-		}
+	defer q.Unlock()
+
+	if len(q.Packets) == 0 {
+		q.Packets = append(q.Packets, e)
+		q.timer.Reset(e.Time)
+		return
 	}
-	q.timer.Reset(q.Packets[0].Time)
-	q.Unlock()
+
+	// The packets slice is sorted by the packetEntry.Time.
+	// We only need to insert the packet at the correct position.
+	idx := slices.IndexFunc(q.Packets, func(p packetEntry) bool {
+		return p.Time.After(e.Time)
+	})
+	if idx == -1 {
+		q.Packets = append(q.Packets, e)
+	} else {
+		q.Packets = slices.Insert(q.Packets, idx, e)
+	}
+	if idx == 0 {
+		q.timer.Reset(q.Packets[0].Time)
+	}
 }
 
 func (q *queue) Get() []byte {

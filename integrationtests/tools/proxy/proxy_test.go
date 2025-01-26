@@ -13,6 +13,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPacketQueue(t *testing.T) {
+	q := newQueue()
+
+	getPackets := func() []string {
+		packets := make([]string, 0, len(q.Packets))
+		for _, p := range q.Packets {
+			packets = append(packets, string(p.Raw))
+		}
+		return packets
+	}
+
+	require.Empty(t, getPackets())
+	now := time.Now()
+
+	q.Add(packetEntry{Time: now, Raw: []byte("p3")})
+	require.Equal(t, []string{"p3"}, getPackets())
+	q.Add(packetEntry{Time: now.Add(time.Second), Raw: []byte("p4")})
+	require.Equal(t, []string{"p3", "p4"}, getPackets())
+	q.Add(packetEntry{Time: now.Add(-time.Second), Raw: []byte("p1")})
+	require.Equal(t, []string{"p1", "p3", "p4"}, getPackets())
+	q.Add(packetEntry{Time: now.Add(time.Second), Raw: []byte("p5")})
+	require.Equal(t, []string{"p1", "p3", "p4", "p5"}, getPackets())
+	q.Add(packetEntry{Time: now.Add(-time.Second), Raw: []byte("p2")})
+	require.Equal(t, []string{"p1", "p2", "p3", "p4", "p5"}, getPackets())
+}
+
 func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
 	t.Helper()
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
