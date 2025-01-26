@@ -21,8 +21,6 @@ func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
 	return conn
 }
 
-type packetData []byte
-
 func makePacket(t *testing.T, p protocol.PacketNumber, payload []byte) []byte {
 	t.Helper()
 	hdr := wire.ExtendedHeader{
@@ -54,11 +52,10 @@ func readPacketNumber(t *testing.T, b []byte) protocol.PacketNumber {
 
 // Set up a dumb UDP server.
 // In production this would be a QUIC server.
-func runServer(t *testing.T) (*net.UDPAddr, chan packetData) {
-	serverConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
+func runServer(t *testing.T) (*net.UDPAddr, chan []byte) {
+	serverConn := newUPDConnLocalhost(t)
 
-	serverReceivedPackets := make(chan packetData, 100)
+	serverReceivedPackets := make(chan []byte, 100)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -69,17 +66,15 @@ func runServer(t *testing.T) (*net.UDPAddr, chan packetData) {
 			if err != nil {
 				return
 			}
-			data := buf[:n]
-			serverReceivedPackets <- packetData(data)
-			if _, err := serverConn.WriteToUDP(data, addr); err != nil { // echo the packet
-
+			serverReceivedPackets <- buf[:n]
+			// echo the packet
+			if _, err := serverConn.WriteToUDP(buf[:n], addr); err != nil {
 				return
 			}
 		}
 	}()
 
 	t.Cleanup(func() {
-		require.NoError(t, serverConn.Close())
 		select {
 		case <-done:
 		case <-time.After(time.Second):
@@ -90,7 +85,7 @@ func runServer(t *testing.T) (*net.UDPAddr, chan packetData) {
 	return serverConn.LocalAddr().(*net.UDPAddr), serverReceivedPackets
 }
 
-func TestProxyyingBackAndForth(t *testing.T) {
+func TestProxyingBackAndForth(t *testing.T) {
 	serverAddr, _ := runServer(t)
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
@@ -179,7 +174,6 @@ func TestDropOutgoingPackets(t *testing.T) {
 	go func() {
 		for {
 			buf := make([]byte, protocol.MaxPacketBufferSize)
-			// the ReadFromUDP will error as soon as the UDP conn is closed
 			if _, _, err := clientConn.ReadFromUDP(buf); err != nil {
 				return
 			}
@@ -355,17 +349,16 @@ func TestDelayOutgoingPackets(t *testing.T) {
 	clientConn, err := net.DialUDP("udp", nil, proxy.LocalAddr().(*net.UDPAddr))
 	require.NoError(t, err)
 
-	clientReceivedPackets := make(chan packetData, numPackets)
+	clientReceivedPackets := make(chan []byte, numPackets)
 	// receive the packets echoed by the server on client side
 	go func() {
 		for {
 			buf := make([]byte, protocol.MaxPacketBufferSize)
-			// the ReadFromUDP will error as soon as the UDP conn is closed
 			n, _, err := clientConn.ReadFromUDP(buf)
 			if err != nil {
 				return
 			}
-			clientReceivedPackets <- packetData(buf[0:n])
+			clientReceivedPackets <- buf[:n]
 		}
 	}()
 
@@ -393,4 +386,83 @@ func TestDelayOutgoingPackets(t *testing.T) {
 			t.Fatalf("timeout waiting for packet %d", i)
 		}
 	}
+}
+
+func TestProxySwitchConn(t *testing.T) {
+	serverConn := newUPDConnLocalhost(t)
+
+	type packet struct {
+		Data []byte
+		Addr *net.UDPAddr
+	}
+
+	serverReceivedPackets := make(chan packet, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			buf := make([]byte, 1000)
+			n, addr, err := serverConn.ReadFromUDP(buf)
+			if err != nil {
+				return
+			}
+			serverReceivedPackets <- packet{Data: buf[:n], Addr: addr}
+		}
+	}()
+
+	proxy := Proxy{
+		Conn:       newUPDConnLocalhost(t),
+		ServerAddr: serverConn.LocalAddr().(*net.UDPAddr),
+	}
+	require.NoError(t, proxy.Start())
+	defer proxy.Close()
+
+	clientConn := newUPDConnLocalhost(t)
+	_, err := clientConn.WriteToUDP([]byte("hello"), proxy.LocalAddr().(*net.UDPAddr))
+	require.NoError(t, err)
+	clientConn.SetReadDeadline(time.Now().Add(time.Second))
+
+	var firstConnAddr *net.UDPAddr
+	select {
+	case p := <-serverReceivedPackets:
+		require.Equal(t, "hello", string(p.Data))
+		require.NotEqual(t, clientConn.LocalAddr(), p.Addr)
+		firstConnAddr = p.Addr
+	case <-time.After(time.Second):
+		t.Fatalf("timeout")
+	}
+
+	_, err = serverConn.WriteToUDP([]byte("hi"), firstConnAddr)
+	require.NoError(t, err)
+	buf := make([]byte, 1000)
+	n, addr, err := clientConn.ReadFromUDP(buf)
+	require.NoError(t, err)
+	require.Equal(t, "hi", string(buf[:n]))
+	require.Equal(t, proxy.LocalAddr(), addr)
+
+	newConn := newUPDConnLocalhost(t)
+	require.NoError(t, proxy.SwitchConn(clientConn.LocalAddr().(*net.UDPAddr), newConn))
+
+	_, err = clientConn.WriteToUDP([]byte("foobar"), proxy.LocalAddr().(*net.UDPAddr))
+	require.NoError(t, err)
+
+	select {
+	case p := <-serverReceivedPackets:
+		require.Equal(t, "foobar", string(p.Data))
+		require.NotEqual(t, clientConn.LocalAddr(), p.Addr)
+		require.NotEqual(t, firstConnAddr, p.Addr)
+		require.Equal(t, newConn.LocalAddr(), p.Addr)
+	case <-time.After(time.Second):
+		t.Fatalf("timeout")
+	}
+
+	// the old connection doesn't deliver any packets to the client anymore
+	_, err = serverConn.WriteTo([]byte("invalid"), firstConnAddr)
+	require.NoError(t, err)
+	_, err = serverConn.WriteTo([]byte("foobaz"), newConn.LocalAddr())
+	require.NoError(t, err)
+	n, addr, err = clientConn.ReadFromUDP(buf)
+	require.NoError(t, err)
+	require.Equal(t, "foobaz", string(buf[:n])) // "invalid" is not delivered
+	require.Equal(t, proxy.LocalAddr(), addr)
 }
