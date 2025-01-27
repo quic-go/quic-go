@@ -10,8 +10,6 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-type pathID int64
-
 type newConnID struct {
 	SequenceNumber      uint64
 	ConnectionID        protocol.ConnectionID
