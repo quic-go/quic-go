@@ -537,8 +537,10 @@ runLoop:
 	for {
 		loopCounter++
 		currentPacketCount := s.sendQueue.Counter()
-		if currentPacketCount == lastPacketCount && loopCounter > 100 {
-			panic("looped 100 times without sending a packet")
+		if currentPacketCount == lastPacketCount {
+			if loopCounter > 100 {
+				panic("looped 100 times without sending a packet")
+			}
 		} else {
 			loopCounter = 0
 			lastPacketCount = currentPacketCount
