@@ -537,6 +537,9 @@ func (s *connection) run() (err error) {
 	var loopCounter int
 runLoop:
 	for {
+		if s.tracer != nil && s.tracer.Debug != nil {
+			s.tracer.Debug("loop_counter", fmt.Sprintf("%d", loopCounter))
+		}
 		loopCounter++
 		currentPacketCount := s.sendQueue.Counter()
 		if currentPacketCount == lastPacketCount {
