@@ -545,8 +545,9 @@ runLoop:
 		}
 
 		// no need to set a timer if we can send packets immediately
+		var timerSet bool
 		if s.pacingDeadline != deadlineSendImmediately {
-			s.maybeResetTimer()
+			timerSet = s.maybeResetTimer()
 		}
 
 		// 1st: handle undecryptable packets, if any.
@@ -581,7 +582,7 @@ runLoop:
 		// We don't need to wait for new events if:
 		// * we processed packets: we probably need to send an ACK, and potentially more data
 		// * the pacer allows us to send more packets immediately
-		shouldProceedImmediately := sendQueueAvailable == nil && (processed || s.pacingDeadline == deadlineSendImmediately)
+		shouldProceedImmediately := sendQueueAvailable == nil && (processed || !timerSet)
 		if !shouldProceedImmediately {
 			// 3rd: wait for something to happen:
 			// * closing of the connection
@@ -715,7 +716,7 @@ func (s *connection) nextKeepAliveTime() time.Time {
 	return s.lastPacketReceivedTime.Add(keepAliveInterval)
 }
 
-func (s *connection) maybeResetTimer() {
+func (s *connection) maybeResetTimer() (wasReset bool) {
 	var deadline time.Time
 	if !s.handshakeComplete {
 		deadline = s.creationTime.Add(s.config.handshakeTimeout())
@@ -730,7 +731,7 @@ func (s *connection) maybeResetTimer() {
 		}
 	}
 
-	s.timer.SetTimer(
+	return s.timer.SetTimer(
 		deadline,
 		s.receivedPacketHandler.GetAlarmTimeout(),
 		s.sentPacketHandler.GetLossDetectionTimeout(),

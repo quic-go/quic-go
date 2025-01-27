@@ -40,7 +40,7 @@ func (t *connectionTimer) Chan() <-chan time.Time {
 // It makes sure that the deadline is strictly increasing.
 // This prevents busy-looping in cases where the timer fires, but we can't actually send out a packet.
 // This doesn't apply to the pacing deadline, which can be set multiple times to deadlineSendImmediately.
-func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, ackAlarm, lossTime, pacing time.Time) {
+func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, ackAlarm, lossTime, pacing time.Time) (wasReset bool) {
 	typ := logging.ConnectionTimerIdleTimeoutOrKeepAlive
 	deadline := idleTimeoutOrKeepAlive
 	if !ackAlarm.IsZero() && ackAlarm.Before(deadline) && ackAlarm.After(t.last) {
@@ -58,6 +58,9 @@ func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, ackAlarm, lossTime, p
 	if deadline == deadlineSendImmediately {
 		panic("connection BUG: deadlineSendImmediately should not be set as a timer deadline")
 	}
+	if deadline.Before(time.Now()) {
+		return false
+	}
 	duration, wasReset := t.timer.Reset(deadline)
 	if t.tracer != nil && t.tracer.ConnectionTimerReset != nil {
 		if !wasReset {
@@ -69,6 +72,7 @@ func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, ackAlarm, lossTime, p
 			t.tracer.ConnectionTimerReset(typ, duration, wasReset)
 		}
 	}
+	return true
 }
 
 var (
