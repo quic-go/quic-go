@@ -1,6 +1,10 @@
 package quic
 
-import "github.com/quic-go/quic-go/internal/protocol"
+import (
+	"sync/atomic"
+
+	"github.com/quic-go/quic-go/internal/protocol"
+)
 
 type sender interface {
 	Send(p *packetBuffer, gsoSize uint16, ecn protocol.ECN)
@@ -57,8 +61,14 @@ func (h *sendQueue) Send(p *packetBuffer, gsoSize uint16, ecn protocol.ECN) {
 	}
 }
 
+var sendQueueWouldBlockCounter atomic.Int64
+
 func (h *sendQueue) WouldBlock() bool {
-	return len(h.queue) == sendQueueCapacity
+	b := len(h.queue) == sendQueueCapacity
+	if b {
+		sendQueueWouldBlockCounter.Add(1)
+	}
+	return b
 }
 
 func (h *sendQueue) Available() <-chan struct{} {

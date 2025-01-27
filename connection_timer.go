@@ -96,6 +96,7 @@ func init() {
 			fmt.Printf("%-20s | %-12d | %-12d\n", "5ms - 10ms", positiveBelow10ms.Load(), negativeBelow10ms.Load())
 			fmt.Printf("%-20s | %-12d | %-12d\n", "10ms - 100ms", positiveBelow100ms.Load(), negativeBelow100ms.Load())
 			fmt.Printf("%-20s | %-12d | %-12d\n", "> 100ms", positiveAbove100ms.Load(), negativeAbove100ms.Load())
+			fmt.Printf("send queue WouldBlocks: %d", sendQueueWouldBlockCounter.Load())
 		}
 	}()
 }
