@@ -510,7 +510,7 @@ func (h *sentPacketHandler) getScaledPTO(includeMaxAckDelay bool) time.Duration 
 }
 
 // same logic as getLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
-func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, encLevel protocol.EncryptionLevel, ok bool) {
+func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, encLevel protocol.EncryptionLevel) {
 	// We only send application data probe packets once the handshake is confirmed,
 	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
 	if !h.handshakeConfirmed && !h.hasOutstandingCryptoPackets() {
@@ -519,9 +519,9 @@ func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, en
 		}
 		t := now.Add(h.getScaledPTO(false))
 		if h.initialPackets != nil {
-			return t, protocol.EncryptionInitial, true
+			return t, protocol.EncryptionInitial
 		}
-		return t, protocol.EncryptionHandshake, true
+		return t, protocol.EncryptionHandshake
 	}
 
 	if h.initialPackets != nil {
@@ -544,7 +544,7 @@ func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, en
 			encLevel = protocol.Encryption1RTT
 		}
 	}
-	return pto, encLevel, true
+	return pto, encLevel
 }
 
 func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
@@ -596,8 +596,8 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 		}
 	}
 
-	ptoTime, encLevel, ok := h.getPTOTimeAndSpace(now)
-	if !ok {
+	ptoTime, encLevel := h.getPTOTimeAndSpace(now)
+	if ptoTime.IsZero() {
 		return alarmTimer{}
 	}
 	return alarmTimer{
@@ -706,8 +706,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 		return nil
 	}
 
-	_, encLevel, ok := h.getPTOTimeAndSpace(now)
-	if !ok {
+	ptoTime, encLevel := h.getPTOTimeAndSpace(now)
+	if ptoTime.IsZero() {
 		return nil
 	}
 	if ps := h.getPacketNumberSpace(encLevel); !ps.history.HasOutstandingPackets() && !h.peerCompletedAddressValidation {
