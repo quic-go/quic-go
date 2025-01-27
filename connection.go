@@ -1928,6 +1928,9 @@ func (s *connection) triggerSending(now time.Time) error {
 	s.pacingDeadline = time.Time{}
 
 	sendMode := s.sentPacketHandler.SendMode(now)
+	if s.tracer != nil && s.tracer.Debug != nil {
+		s.tracer.Debug("send_mode", fmt.Sprintf("%s", sendMode))
+	}
 	//nolint:exhaustive // No need to handle pacing limited here.
 	switch sendMode {
 	case ackhandler.SendAny:
@@ -2016,6 +2019,9 @@ func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 		ecn := s.sentPacketHandler.ECNMode(true)
 		if _, err := s.appendOneShortHeaderPacket(buf, s.maxPacketSize(), ecn, now); err != nil {
 			if err == errNothingToPack {
+				if s.tracer != nil && s.tracer.Debug != nil {
+					s.tracer.Debug("send_packets_without_gso", "nothing_to_pack")
+				}
 				buf.Release()
 				return nil
 			}
@@ -2057,6 +2063,9 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 		if err != nil {
 			if err != errNothingToPack {
 				return err
+			}
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug("send_packets_with_gso", "nothing_to_pack")
 			}
 			if buf.Len() == 0 {
 				buf.Release()
@@ -2112,8 +2121,15 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 
 func (s *connection) resetPacingDeadline() {
 	deadline := s.sentPacketHandler.TimeUntilSend()
+	var str string
 	if deadline.IsZero() {
 		deadline = deadlineSendImmediately
+		str = "immediate"
+	} else {
+		str = deadline.String()
+	}
+	if s.tracer != nil && s.tracer.Debug != nil {
+		s.tracer.Debug("reset_pacing_deadline", str)
 	}
 	s.pacingDeadline = deadline
 }
@@ -2135,6 +2151,9 @@ func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 	p, buf, err := s.packer.PackAckOnlyPacket(s.maxPacketSize(), now, s.version)
 	if err != nil {
 		if err == errNothingToPack {
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug("maybe_send_ack_only_packet", "nothing_to_pack")
+			}
 			return nil
 		}
 		return err
