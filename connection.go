@@ -531,8 +531,18 @@ func (s *connection) run() (err error) {
 
 	var sendQueueAvailable <-chan struct{}
 
+	lastPacketCount := s.sendQueue.Counter()
+	var loopCounter int
 runLoop:
 	for {
+		loopCounter++
+		currentPacketCount := s.sendQueue.Counter()
+		if currentPacketCount == lastPacketCount && loopCounter > 100 {
+			panic("looped 100 times without sending a packet")
+		} else {
+			loopCounter = 0
+			lastPacketCount = currentPacketCount
+		}
 		if s.framer.QueuedTooManyControlFrames() {
 			s.setCloseError(&closeError{err: &qerr.TransportError{ErrorCode: InternalError}})
 			break runLoop
@@ -1916,11 +1926,7 @@ func (s *connection) triggerSending(now time.Time) error {
 	case ackhandler.SendNone:
 		return nil
 	case ackhandler.SendPacingLimited:
-		deadline := s.sentPacketHandler.TimeUntilSend()
-		if deadline.IsZero() {
-			deadline = deadlineSendImmediately
-		}
-		s.pacingDeadline = deadline
+		s.resetPacingDeadline()
 		// Allow sending of an ACK if we're pacing limit.
 		// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
 		// sends enough ACKs to allow its peer to utilize the bandwidth.
