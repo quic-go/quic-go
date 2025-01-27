@@ -147,7 +147,7 @@ type connection struct {
 	packer        packer
 	mtuDiscoverer mtuDiscoverer // initialized when the transport parameters are received
 
-	maxPayloadSizeEstimate atomic.Uint32
+	currentMTUEstimate atomic.Uint32
 
 	initialStream       *cryptoStream
 	handshakeStream     *cryptoStream
@@ -279,7 +279,7 @@ var newConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	s.currentMTUEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
 	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -391,7 +391,7 @@ var newClientConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	s.currentMTUEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -1586,6 +1586,13 @@ func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encr
 			return err
 		}
 	}
+	// If one of the acknowledged packets was a Path MTU probe packet, this might have increased the Path MTU estimate.
+	if s.mtuDiscoverer != nil {
+		if mtu := s.mtuDiscoverer.CurrentSize(); mtu > protocol.ByteCount(s.currentMTUEstimate.Load()) {
+			s.currentMTUEstimate.Store(uint32(mtu))
+			s.sentPacketHandler.SetMaxDatagramSize(mtu)
+		}
+	}
 	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 }
 
@@ -1851,7 +1858,6 @@ func (s *connection) applyTransportParameters() {
 		s.rttStats,
 		protocol.ByteCount(s.config.InitialPacketSize),
 		maxPacketSize,
-		s.onMTUIncreased,
 		s.tracer,
 	)
 }
@@ -2319,11 +2325,6 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 	s.framer.RemoveActiveStream(id)
 }
 
-func (s *connection) onMTUIncreased(mtu protocol.ByteCount) {
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(mtu)))
-	s.sentPacketHandler.SetMaxDatagramSize(mtu)
-}
-
 func (s *connection) SendDatagram(p []byte) error {
 	if !s.supportsDatagrams() {
 		return errors.New("datagram support disabled")
@@ -2334,7 +2335,7 @@ func (s *connection) SendDatagram(p []byte) error {
 	// Under many circumstances we could send a few more bytes.
 	maxDataLen := min(
 		f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version),
-		protocol.ByteCount(s.maxPayloadSizeEstimate.Load()),
+		protocol.ByteCount(s.currentMTUEstimate.Load()),
 	)
 	if protocol.ByteCount(len(p)) > maxDataLen {
 		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}

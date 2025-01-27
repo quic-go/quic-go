@@ -88,7 +88,6 @@ const (
 
 type mtuFinder struct {
 	lastProbeTime time.Time
-	mtuIncreased  func(protocol.ByteCount)
 
 	rttStats *utils.RTTStats
 
@@ -107,15 +106,13 @@ var _ mtuDiscoverer = &mtuFinder{}
 func newMTUDiscoverer(
 	rttStats *utils.RTTStats,
 	start, max protocol.ByteCount,
-	mtuIncreased func(protocol.ByteCount),
 	tracer *logging.ConnectionTracer,
 ) *mtuFinder {
 	f := &mtuFinder{
-		inFlight:     protocol.InvalidByteCount,
-		min:          start,
-		rttStats:     rttStats,
-		mtuIncreased: mtuIncreased,
-		tracer:       tracer,
+		inFlight: protocol.InvalidByteCount,
+		min:      start,
+		rttStats: rttStats,
+		tracer:   tracer,
 	}
 	for i := range f.lost {
 		if i == 0 {
@@ -207,7 +204,6 @@ func (h *mtuFinderAckHandler) OnAcked(wire.Frame) {
 	if h.tracer != nil && h.tracer.UpdatedMTU != nil {
 		h.tracer.UpdatedMTU(size, h.done())
 	}
-	h.mtuIncreased(size)
 }
 
 func (h *mtuFinderAckHandler) OnLost(wire.Frame) {
