@@ -571,6 +571,9 @@ runLoop:
 		// 1st: handle undecryptable packets, if any.
 		// This can only occur before completion of the handshake.
 		if len(s.undecryptablePacketsToProcess) > 0 {
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug("handle_undecryptable_packets", fmt.Sprintf("%d", len(s.undecryptablePacketsToProcess)))
+			}
 			var processedUndecryptablePacket bool
 			queue := s.undecryptablePacketsToProcess
 			s.undecryptablePacketsToProcess = nil
@@ -596,11 +599,17 @@ runLoop:
 			s.setCloseError(&closeError{err: err})
 			break runLoop
 		}
+		if s.tracer != nil && s.tracer.Debug != nil {
+			s.tracer.Debug("run_loop handle_packets", fmt.Sprintf("%t", processed))
+		}
 
 		// We don't need to wait for new events if:
 		// * we processed packets: we probably need to send an ACK, and potentially more data
 		// * the pacer allows us to send more packets immediately
 		shouldProceedImmediately := sendQueueAvailable == nil && (processed || s.pacingDeadline == deadlineSendImmediately)
+		if s.tracer != nil && s.tracer.Debug != nil {
+			s.tracer.Debug("run_loop should_proceed_immediately", fmt.Sprintf("%t", shouldProceedImmediately))
+		}
 		if !shouldProceedImmediately {
 			// 3rd: wait for something to happen:
 			// * closing of the connection
@@ -612,14 +621,26 @@ runLoop:
 			case <-s.closeChan:
 				break runLoop
 			case <-s.timer.Chan():
+				if s.tracer != nil && s.tracer.Debug != nil {
+					s.tracer.Debug("run_loop timer_fired", "timer_fired")
+				}
 				s.timer.SetRead()
 			case <-s.sendingScheduled:
+				if s.tracer != nil && s.tracer.Debug != nil {
+					s.tracer.Debug("run_loop sending_scheduled", "")
+				}
 			case <-sendQueueAvailable:
+				if s.tracer != nil && s.tracer.Debug != nil {
+					s.tracer.Debug("run_loop send_queue_available", "")
+				}
 			case <-s.notifyReceivedPacket:
 				wasProcessed, err := s.handlePackets()
 				if err != nil {
 					s.setCloseError(&closeError{err: err})
 					break runLoop
+				}
+				if s.tracer != nil && s.tracer.Debug != nil {
+					s.tracer.Debug("run_loop notify_received_packet", fmt.Sprintf("%t", wasProcessed))
 				}
 				// if we processed any undecryptable packets, jump to the resetting of the timers directly
 				if !wasProcessed {
@@ -656,6 +677,9 @@ runLoop:
 		}
 
 		if s.sendQueue.WouldBlock() {
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug("run_loop send_queue_would_block", "")
+			}
 			// The send queue is still busy sending out packets.
 			// Wait until there's space to enqueue new packets.
 			sendQueueAvailable = s.sendQueue.Available()
@@ -667,11 +691,17 @@ runLoop:
 			break runLoop
 		}
 
+		if s.tracer != nil && s.tracer.Debug != nil {
+			s.tracer.Debug("run_loop trigger_sending", "")
+		}
 		if err := s.triggerSending(now); err != nil {
 			s.setCloseError(&closeError{err: err})
 			break runLoop
 		}
 		if s.sendQueue.WouldBlock() {
+			if s.tracer != nil && s.tracer.Debug != nil {
+				s.tracer.Debug("run_loop send_queue_would_block 2", "")
+			}
 			sendQueueAvailable = s.sendQueue.Available()
 			s.pacingDeadline = time.Time{}
 		} else {
