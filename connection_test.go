@@ -1458,12 +1458,12 @@ func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool) i
 		).AnyTimes()
 	}
 
-	errChan := make(chan error, 1)
-	go func() { errChan <- tc.conn.run() }()
-
 	for i := 0; i < 10; i++ {
 		tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, protocol.PacketNumber(i), []byte("foobar")))
 	}
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
 
 	select {
 	case <-done:
