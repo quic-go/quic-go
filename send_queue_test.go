@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -169,4 +170,14 @@ func TestSendQueueWriteError(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestSendQueueSendProbe(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	c := NewMockSendConn(mockCtrl)
+	q := newSendQueue(c)
+
+	addr := &net.UDPAddr{IP: net.IPv4(42, 42, 42, 42), Port: 42}
+	c.EXPECT().WriteTo([]byte("foobar"), addr)
+	q.SendProbe(getPacketWithContents([]byte("foobar")), addr)
 }
