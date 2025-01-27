@@ -592,3 +592,30 @@ func (e eventALPNInformation) IsNil() bool        { return false }
 func (e eventALPNInformation) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("chosen_alpn", e.chosenALPN)
 }
+
+type eventConnectionTimerReset struct {
+	typ      logging.ConnectionTimerType
+	duration time.Duration
+	spurious bool
+}
+
+func (e eventConnectionTimerReset) Category() category { return categoryTransport }
+func (e eventConnectionTimerReset) Name() string       { return "connection_timer_reset" }
+func (e eventConnectionTimerReset) IsNil() bool        { return false }
+
+func (e eventConnectionTimerReset) MarshalJSONObject(enc *gojay.Encoder) {
+	var typ string
+	switch e.typ {
+	case logging.ConnectionTimerIdleTimeoutOrKeepAlive:
+		typ = "idle_timeout_or_keepalive"
+	case logging.ConnectionTimerPacing:
+		typ = "pacing"
+	case logging.ConnectionTimerAckAlarm:
+		typ = "ack_alarm"
+	case logging.ConnectionTimerLossTime:
+		typ = "loss_time"
+	}
+	enc.StringKey("type", typ)
+	enc.Float64Key("duration", milliseconds(e.duration))
+	enc.BoolKey("spurious", e.spurious)
+}

@@ -118,6 +118,9 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 		Close: func() {
 			t.Close()
 		},
+		ConnectionTimerReset: func(typ logging.ConnectionTimerType, duration time.Duration, wasReset bool) {
+			t.ConnectionTimerReset(typ, duration, wasReset)
+		},
 	}
 }
 
@@ -457,5 +460,13 @@ func (t *connectionTracer) Debug(name, msg string) {
 	t.recordEvent(time.Now(), &eventGeneric{
 		name: name,
 		msg:  msg,
+	})
+}
+
+func (t *connectionTracer) ConnectionTimerReset(typ logging.ConnectionTimerType, duration time.Duration, wasReset bool) {
+	t.recordEvent(time.Now(), &eventConnectionTimerReset{
+		typ:      typ,
+		duration: duration,
+		spurious: !wasReset,
 	})
 }
