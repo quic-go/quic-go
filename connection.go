@@ -121,6 +121,8 @@ type connection struct {
 
 	srcConnIDLen int
 
+	busyLoopingPrintOnce sync.Once
+
 	perspective protocol.Perspective
 	version     protocol.Version
 	config      *Config
@@ -538,8 +540,10 @@ runLoop:
 		loopCounter++
 		currentPacketCount := s.sendQueue.Counter()
 		if currentPacketCount == lastPacketCount {
-			if loopCounter > 100 {
-				panic("looped 100 times without sending a packet")
+			if loopCounter > 1000 && s.tracer != nil {
+				s.busyLoopingPrintOnce.Do(func() {
+					fmt.Println("detected busy-looping in connection", s.logID)
+				})
 			}
 		} else {
 			loopCounter = 0
