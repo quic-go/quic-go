@@ -27,6 +27,9 @@ const (
 	maxPTODuration = 60 * time.Second
 )
 
+// Path probe packets are declared lost after this time.
+const pathProbePacketLossTimeout = time.Second
+
 type packetNumberSpace struct {
 	history sentPacketHistory
 	pns     packetNumberGenerator
@@ -249,11 +252,12 @@ func (h *sentPacketHandler) SentPacket(
 	ecn protocol.ECN,
 	size protocol.ByteCount,
 	isPathMTUProbePacket bool,
+	isPathProbePacket bool,
 ) {
 	h.bytesSent += size
 
 	pnSpace := h.getPacketNumberSpace(encLevel)
-	if h.logger.Debug() && pnSpace.history.HasOutstandingPackets() {
+	if h.logger.Debug() && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
 		for p := max(0, pnSpace.largestSent+1); p < pn; p++ {
 			h.logger.Debugf("Skipping packet number %d", p)
 		}
@@ -262,6 +266,18 @@ func (h *sentPacketHandler) SentPacket(
 	pnSpace.largestSent = pn
 	isAckEliciting := len(streamFrames) > 0 || len(frames) > 0
 
+	if isPathProbePacket {
+		p := getPacket()
+		p.SendTime = t
+		p.PacketNumber = pn
+		p.EncryptionLevel = encLevel
+		p.Length = size
+		p.Frames = frames
+		p.isPathProbePacket = true
+		pnSpace.history.SentPathProbePacket(p)
+		h.setLossDetectionTimer(t)
+		return
+	}
 	if isAckEliciting {
 		pnSpace.lastAckElicitingPacketTime = t
 		h.bytesInFlight += size
@@ -341,7 +357,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 	// update the RTT, if the largest acked is newly acknowledged
 	if len(ackedPackets) > 0 {
-		if p := ackedPackets[len(ackedPackets)-1]; p.PacketNumber == ack.LargestAcked() {
+		if p := ackedPackets[len(ackedPackets)-1]; p.PacketNumber == ack.LargestAcked() && !p.isPathProbePacket {
 			// don't use the ack delay for Initial and Handshake packets
 			var ackDelay time.Duration
 			if encLevel == protocol.Encryption1RTT {
@@ -375,7 +391,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			acked1RTTPacket = true
 		}
 		h.removeFromBytesInFlight(p)
-		putPacket(p)
+		if !p.isPathProbePacket {
+			putPacket(p)
+		}
 	}
 	// After this point, we must not use ackedPackets any longer!
 	// We've already returned the buffers.
@@ -411,11 +429,11 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	largestAcked := ack.LargestAcked()
 	var processErr error
 	pnSpace.history.Iterate(func(p *packet) bool {
-		// Ignore packets below the lowest acked
+		// ignore packets below the lowest acked
 		if p.PacketNumber < lowestAcked {
 			return true
 		}
-		// Break after largest acked is reached
+		// break after largest acked is reached
 		if p.PacketNumber > largestAcked {
 			return false
 		}
@@ -443,7 +461,15 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			}
 			return false
 		}
-		h.ackedPackets = append(h.ackedPackets, p)
+		if p.isPathProbePacket {
+			probePacket := pnSpace.history.RemovePathProbe(p.PacketNumber)
+			if probePacket == nil {
+				panic(fmt.Sprintf("path probe doesn't exist: %d", p.PacketNumber))
+			}
+			h.ackedPackets = append(h.ackedPackets, probePacket)
+		} else {
+			h.ackedPackets = append(h.ackedPackets, p)
+		}
 		return true
 	})
 	if h.logger.Debug() && len(h.ackedPackets) > 0 {
@@ -524,20 +550,23 @@ func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, en
 		return t, protocol.EncryptionHandshake
 	}
 
-	if h.initialPackets != nil {
+	if h.initialPackets != nil && h.initialPackets.history.HasOutstandingPackets() &&
+		!h.initialPackets.lastAckElicitingPacketTime.IsZero() {
 		encLevel = protocol.EncryptionInitial
 		if t := h.initialPackets.lastAckElicitingPacketTime; !t.IsZero() {
 			pto = t.Add(h.getScaledPTO(false))
 		}
 	}
-	if h.handshakePackets != nil && !h.handshakePackets.lastAckElicitingPacketTime.IsZero() {
+	if h.handshakePackets != nil && h.handshakePackets.history.HasOutstandingPackets() &&
+		!h.handshakePackets.lastAckElicitingPacketTime.IsZero() {
 		t := h.handshakePackets.lastAckElicitingPacketTime.Add(h.getScaledPTO(false))
 		if pto.IsZero() || (!t.IsZero() && t.Before(pto)) {
 			pto = t
 			encLevel = protocol.EncryptionHandshake
 		}
 	}
-	if h.handshakeConfirmed && !h.appDataPackets.lastAckElicitingPacketTime.IsZero() {
+	if h.handshakeConfirmed && h.appDataPackets.history.HasOutstandingPackets() &&
+		!h.appDataPackets.lastAckElicitingPacketTime.IsZero() {
 		t := h.appDataPackets.lastAckElicitingPacketTime.Add(h.getScaledPTO(true))
 		if pto.IsZero() || (!t.IsZero() && t.Before(pto)) {
 			pto = t
@@ -576,8 +605,8 @@ func (h *sentPacketHandler) setLossDetectionTimer(now time.Time) {
 
 func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 	// cancel the alarm if no packets are outstanding
-	if h.peerCompletedAddressValidation &&
-		!h.hasOutstandingCryptoPackets() && !h.appDataPackets.history.HasOutstandingPackets() {
+	if h.peerCompletedAddressValidation && !h.hasOutstandingCryptoPackets() &&
+		!h.appDataPackets.history.HasOutstandingPackets() && !h.appDataPackets.history.HasOutstandingPathProbes() {
 		return alarmTimer{}
 	}
 
@@ -586,30 +615,60 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 		return alarmTimer{}
 	}
 
+	var pathProbeLossTime time.Time
+	if h.appDataPackets.history.HasOutstandingPathProbes() {
+		if p := h.appDataPackets.history.FirstOutstandingPathProbe(); p != nil {
+			pathProbeLossTime = p.SendTime.Add(pathProbePacketLossTimeout)
+		}
+	}
+
 	// early retransmit timer or time loss detection
 	lossTime, encLevel := h.getLossTimeAndSpace()
-	if !lossTime.IsZero() {
+	if !lossTime.IsZero() && (pathProbeLossTime.IsZero() || lossTime.Before(pathProbeLossTime)) {
 		return alarmTimer{
 			Time:            lossTime,
 			TimerType:       logging.TimerTypeACK,
 			EncryptionLevel: encLevel,
 		}
 	}
-
 	ptoTime, encLevel := h.getPTOTimeAndSpace(now)
-	if ptoTime.IsZero() {
-		return alarmTimer{}
+	if !ptoTime.IsZero() && (pathProbeLossTime.IsZero() || ptoTime.Before(pathProbeLossTime)) {
+		return alarmTimer{
+			Time:            ptoTime,
+			TimerType:       logging.TimerTypePTO,
+			EncryptionLevel: encLevel,
+		}
 	}
-	return alarmTimer{
-		Time:            ptoTime,
-		TimerType:       logging.TimerTypePTO,
-		EncryptionLevel: encLevel,
+	if !pathProbeLossTime.IsZero() {
+		return alarmTimer{
+			Time:            pathProbeLossTime,
+			TimerType:       logging.TimerTypePathProbe,
+			EncryptionLevel: encLevel,
+		}
 	}
+	return alarmTimer{}
 }
 
 func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = time.Time{}
+
+	if encLevel == protocol.Encryption1RTT {
+		lossTime := now.Add(-pathProbePacketLossTimeout)
+		var lostPathProbes []*packet
+		pnSpace.history.IteratePathProbes(func(p *packet) bool {
+			if p.SendTime.Before(lossTime) {
+				lostPathProbes = append(lostPathProbes, p)
+			}
+			return true
+		})
+		for _, p := range lostPathProbes {
+			for _, f := range p.Frames {
+				f.Handler.OnLost(f.Frame)
+			}
+			pnSpace.history.RemovePathProbe(p.PacketNumber)
+		}
+	}
 
 	maxRTT := float64(max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	lossDelay := time.Duration(timeThreshold * maxRTT)
@@ -626,10 +685,11 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			return false
 		}
 
+		isRegularPacket := !p.skippedPacket && !p.isPathProbePacket
 		var packetLost bool
 		if !p.SendTime.After(lostSendTime) {
 			packetLost = true
-			if !p.skippedPacket {
+			if isRegularPacket {
 				if h.logger.Debug() {
 					h.logger.Debugf("\tlost packet %d (time threshold)", p.PacketNumber)
 				}
@@ -639,7 +699,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			}
 		} else if pnSpace.largestAcked >= p.PacketNumber+packetThreshold {
 			packetLost = true
-			if !p.skippedPacket {
+			if isRegularPacket {
 				if h.logger.Debug() {
 					h.logger.Debugf("\tlost packet %d (reordering threshold)", p.PacketNumber)
 				}
@@ -657,7 +717,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		}
 		if packetLost {
 			pnSpace.history.DeclareLost(p.PacketNumber)
-			if !p.skippedPacket {
+			if isRegularPacket {
 				// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
 				h.removeFromBytesInFlight(p)
 				h.queueFramesForRetransmission(p)
@@ -710,7 +770,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 	if ptoTime.IsZero() {
 		return nil
 	}
-	if ps := h.getPacketNumberSpace(encLevel); !ps.history.HasOutstandingPackets() && !h.peerCompletedAddressValidation {
+	ps := h.getPacketNumberSpace(encLevel)
+	if !ps.history.HasOutstandingPackets() && !ps.history.HasOutstandingPathProbes() && !h.peerCompletedAddressValidation {
 		return nil
 	}
 	h.ptoCount++
@@ -916,4 +977,28 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 		}
 	}
 	h.ptoCount = 0
+}
+
+func (h *sentPacketHandler) MigratedPath(now time.Time, initialMaxDatagramSize protocol.ByteCount) {
+	h.rttStats.ResetForPathMigration()
+	h.appDataPackets.history.Iterate(func(p *packet) bool {
+		h.appDataPackets.history.DeclareLost(p.PacketNumber)
+		if !p.skippedPacket && !p.isPathProbePacket {
+			h.removeFromBytesInFlight(p)
+			h.queueFramesForRetransmission(p)
+		}
+		return true
+	})
+	h.appDataPackets.history.IteratePathProbes(func(p *packet) bool {
+		h.appDataPackets.history.RemovePathProbe(p.PacketNumber)
+		return true
+	})
+	h.congestion = congestion.NewCubicSender(
+		congestion.DefaultClock{},
+		h.rttStats,
+		initialMaxDatagramSize,
+		true, // use Reno
+		h.tracer,
+	)
+	h.setLossDetectionTimer(now)
 }

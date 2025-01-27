@@ -94,6 +94,7 @@ func TestTimerTypeStringRepresentation(t *testing.T) {
 	}{
 		{logging.TimerTypeACK, "ack"},
 		{logging.TimerTypePTO, "pto"},
+		{logging.TimerTypePathProbe, "path_probe"},
 	}
 
 	for _, tc := range testCases {

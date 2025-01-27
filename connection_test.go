@@ -1631,15 +1631,15 @@ func TestConnectionPacketPacing(t *testing.T) {
 	gomock.InOrder(
 		// 1. allow 2 packets to be sent
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny),
-		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
+		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny),
-		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
+		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited),
 		// 2. become pacing limited for 25ms
 		sph.EXPECT().TimeUntilSend().DoAndReturn(func() time.Time { return time.Now().Add(step) }),
 		// 3. send another packet
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny),
-		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
+		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited),
 		// 4. become pacing limited for 25ms...
 		sph.EXPECT().TimeUntilSend().DoAndReturn(func() time.Time { return time.Now().Add(step) }),
@@ -1648,7 +1648,7 @@ func TestConnectionPacketPacing(t *testing.T) {
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited),
 		// 5. stop the test by becoming pacing limited forever
 		sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour)),
-		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
+		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 	)
 	sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 	for i := 0; i < 3; i++ {
@@ -1739,7 +1739,7 @@ func TestConnectionIdleTimeout(t *testing.T) {
 
 	sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 	var lastSendTime time.Time
 	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1886,7 +1886,7 @@ func TestConnectionACKTimer(t *testing.T) {
 
 	sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 	rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(time.Hour))
 	tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1956,7 +1956,7 @@ func TestConnectionGSOBatch(t *testing.T) {
 	// allow packets to be sent
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
 	sph.EXPECT().TimeUntilSend().Return(time.Time{}).AnyTimes()
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	sph.EXPECT().GetLossDetectionTimeout().Return(time.Time{}).AnyTimes()
 	sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECT1).AnyTimes()
 
@@ -2015,7 +2015,7 @@ func TestConnectionGSOBatchPacketSize(t *testing.T) {
 	// allow packets to be sent
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
 	sph.EXPECT().TimeUntilSend().Return(time.Time{}).AnyTimes()
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	sph.EXPECT().GetLossDetectionTimeout().Return(time.Time{}).AnyTimes()
 	sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECT1).AnyTimes()
 
@@ -2095,7 +2095,7 @@ func TestConnectionGSOBatchECN(t *testing.T) {
 	ecnMode := protocol.ECT1
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
 	sph.EXPECT().TimeUntilSend().Return(time.Time{}).AnyTimes()
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	sph.EXPECT().GetLossDetectionTimeout().Return(time.Time{}).AnyTimes()
 	sph.EXPECT().ECNMode(gomock.Any()).DoAndReturn(func(bool) protocol.ECN { return ecnMode }).AnyTimes()
 
@@ -2197,7 +2197,7 @@ func testConnectionPTOProbePackets(t *testing.T, encLevel protocol.EncryptionLev
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
 	sph.EXPECT().ECNMode(gomock.Any())
 	sph.EXPECT().QueueProbePacket(encLevel).Return(false)
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	tc.packer.EXPECT().MaybePackPTOProbePacket(encLevel, gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(
 		func(encLevel protocol.EncryptionLevel, maxSize protocol.ByteCount, t time.Time, version protocol.Version) (*coalescedPacket, error) {
@@ -2250,7 +2250,7 @@ func TestConnectionCongestionControl(t *testing.T) {
 	sph.EXPECT().ECNMode(true).AnyTimes()
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).Times(2)
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck).MaxTimes(1)
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
 	// Since we're already sending out packets, we don't expect any calls to PackAckOnlyPacket
 	for i := 0; i < 2; i++ {
 		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -2343,7 +2343,7 @@ func testConnectionSendQueue(t *testing.T, enableGSO bool) {
 		},
 	)
 	sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
-	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
 	sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
 	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
