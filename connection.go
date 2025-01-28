@@ -637,9 +637,10 @@ runLoop:
 		}
 
 		if s.sendQueue.WouldBlock() {
-			// The send queue is still busy sending out packets.
-			// Wait until there's space to enqueue new packets.
+			// The send queue is still busy sending out packets. Wait until there's space to enqueue new packets.
 			sendQueueAvailable = s.sendQueue.Available()
+			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
+			s.pacingDeadline = time.Time{}
 			continue
 		}
 
@@ -652,7 +653,10 @@ runLoop:
 			break runLoop
 		}
 		if s.sendQueue.WouldBlock() {
+			// The send queue is still busy sending out packets. Wait until there's space to enqueue new packets.
 			sendQueueAvailable = s.sendQueue.Available()
+			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
+			s.pacingDeadline = time.Time{}
 		} else {
 			sendQueueAvailable = nil
 		}

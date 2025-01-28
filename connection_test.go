@@ -1724,6 +1724,61 @@ func TestConnectionPacketPacing(t *testing.T) {
 	}
 }
 
+// When the send queue blocks, we need to reset the pacing timer, otherwise the run loop might busy-loop.
+// See https://github.com/quic-go/quic-go/pull/4943 for more details.
+func TestConnectionPacingAndSendQueue(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+	sender := NewMockSender(mockCtrl)
+
+	tc := newServerTestConnection(t,
+		mockCtrl,
+		nil,
+		false,
+		connectionOptSentPacketHandler(sph),
+		connectionOptSender(sender),
+		connectionOptHandshakeConfirmed(),
+		// set a fixed RTT, so that the idle timeout doesn't interfere with this test
+		connectionOptRTT(10*time.Second),
+	)
+	sender.EXPECT().Run()
+
+	sendQueueAvailable := make(chan struct{})
+	pacingDeadline := time.Now().Add(-time.Millisecond)
+	var counter int
+	// allow exactly one packet to be sent, then become blocked
+	sender.EXPECT().WouldBlock().Return(false)
+	sender.EXPECT().WouldBlock().DoAndReturn(func() bool { counter++; return true }).AnyTimes()
+	sender.EXPECT().Available().Return(sendQueueAvailable).AnyTimes()
+	sph.EXPECT().GetLossDetectionTimeout().Return(time.Now().Add(time.Hour)).AnyTimes()
+	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendPacingLimited).AnyTimes()
+	sph.EXPECT().TimeUntilSend().Return(pacingDeadline).AnyTimes()
+	sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECNNon).AnyTimes()
+	tc.packer.EXPECT().PackAckOnlyPacket(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		shortHeaderPacket{}, nil, errNothingToPack,
+	)
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
+	tc.conn.scheduleSending()
+
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+
+	// test teardown
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	sender.EXPECT().Close()
+	tc.conn.destroy(nil)
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// make sure the run loop didn't do too many iterations
+	require.Less(t, counter, 3)
+}
+
 func TestConnectionIdleTimeout(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
