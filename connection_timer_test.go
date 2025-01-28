@@ -47,14 +47,3 @@ func TestConnectionTimerReset(t *testing.T) {
 	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
 	require.Equal(t, now.Add(time.Hour), timer.Deadline())
 }
-
-func TestConnectionTimerSendImmediately(t *testing.T) {
-	now := time.Now()
-	timer := newTimer()
-	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, time.Time{})
-	require.Equal(t, now.Add(time.Minute), timer.Deadline())
-	timer.SetRead()
-
-	timer.SetTimer(now.Add(time.Hour), now.Add(time.Minute), time.Time{}, deadlineSendImmediately)
-	require.Equal(t, deadlineSendImmediately, timer.Deadline())
-}

@@ -544,10 +544,15 @@ runLoop:
 		default:
 		}
 
-		s.maybeResetTimer()
+		// no need to set a timer if we can send packets immediately
+		if s.pacingDeadline != deadlineSendImmediately {
+			s.maybeResetTimer()
+		}
 
-		var processedUndecryptablePacket bool
+		// 1st: handle undecryptable packets, if any.
+		// This can only occur before completion of the handshake.
 		if len(s.undecryptablePacketsToProcess) > 0 {
+			var processedUndecryptablePacket bool
 			queue := s.undecryptablePacketsToProcess
 			s.undecryptablePacketsToProcess = nil
 			for _, p := range queue {
@@ -560,19 +565,36 @@ runLoop:
 					processedUndecryptablePacket = true
 				}
 			}
+			if processedUndecryptablePacket {
+				// if we processed any undecryptable packets, jump to the resetting of the timers directly
+				continue
+			}
 		}
-		// If we processed any undecryptable packets, jump to the resetting of the timers directly.
-		if !processedUndecryptablePacket {
+
+		// 2nd: receive packets.
+		processed, err := s.handlePackets() // don't check receivedPackets.Len() in the run loop to avoid locking the mutex
+		if err != nil {
+			s.setCloseError(&closeError{err: err})
+			break runLoop
+		}
+
+		// We don't need to wait for new events if:
+		// * we processed packets: we probably need to send an ACK, and potentially more data
+		// * the pacer allows us to send more packets immediately
+		shouldProceedImmediately := sendQueueAvailable == nil && (processed || s.pacingDeadline == deadlineSendImmediately)
+		if !shouldProceedImmediately {
+			// 3rd: wait for something to happen:
+			// * closing of the connection
+			// * timer firing
+			// * sending scheduled
+			// * send queue available
+			// * received packets
 			select {
 			case <-s.closeChan:
 				break runLoop
 			case <-s.timer.Chan():
 				s.timer.SetRead()
-				// We do all the interesting stuff after the switch statement, so
-				// nothing to see here.
 			case <-s.sendingScheduled:
-				// We do all the interesting stuff after the switch statement, so
-				// nothing to see here.
 			case <-sendQueueAvailable:
 			case <-s.notifyReceivedPacket:
 				wasProcessed, err := s.handlePackets()
@@ -580,19 +602,17 @@ runLoop:
 					s.setCloseError(&closeError{err: err})
 					break runLoop
 				}
-				// Only reset the timers if this packet was actually processed.
-				// This avoids modifying any state when handling undecryptable packets,
-				// which could be injected by an attacker.
+				// if we processed any undecryptable packets, jump to the resetting of the timers directly
 				if !wasProcessed {
 					continue
 				}
 			}
 		}
 
+		// Check for loss detection timeout.
+		// This could cause packets to be declared lost, and retransmissions to be enqueued.
 		now := time.Now()
 		if timeout := s.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() && timeout.Before(now) {
-			// This could cause packets to be retransmitted.
-			// Check it before trying to send packets.
 			if err := s.sentPacketHandler.OnLossDetectionTimeout(now); err != nil {
 				s.setCloseError(&closeError{err: err})
 				break runLoop
