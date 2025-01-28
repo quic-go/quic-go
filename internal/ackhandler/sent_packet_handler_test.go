@@ -117,7 +117,7 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 			e = protocol.Encryption0RTT
 		}
 		pn := sph.PopPacketNumber(e)
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, e, protocol.ECNNon, 1200, false)
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, e, protocol.ECNNon, 1200, false, false)
 		pns = append(pns, pn)
 	}
 
@@ -172,7 +172,7 @@ func TestSentPacketHandlerAcknowledgeSkippedPacket(t *testing.T) {
 		if pn >= 1e6 {
 			t.Fatal("expected a skipped packet number")
 		}
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false)
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, false)
 		lastPN = pn
 		if skippedPN != protocol.InvalidPacketNumber {
 			break
@@ -216,7 +216,7 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 
 	sendPacket := func(ti time.Time) protocol.PacketNumber {
 		pn := sph.PopPacketNumber(encLevel)
-		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1200, false)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1200, false, false)
 		return pn
 	}
 
@@ -318,7 +318,7 @@ func testSentPacketHandlerAmplificationLimitServer(t *testing.T, addressValidate
 	for i := 0; i < 4; i++ {
 		require.Equal(t, SendAny, sph.SendMode(time.Now()))
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
-		sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 999, false)
+		sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 999, false, false)
 		if i != 3 {
 			require.NotZero(t, sph.GetLossDetectionTimeout())
 		}
@@ -333,7 +333,7 @@ func testSentPacketHandlerAmplificationLimitServer(t *testing.T, addressValidate
 	for i := 0; i < 3; i++ {
 		require.Equal(t, SendAny, sph.SendMode(time.Now()))
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
-		sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false)
+		sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
 	}
 	require.Equal(t, SendNone, sph.SendMode(time.Now()))
 	require.Zero(t, sph.GetLossDetectionTimeout())
@@ -373,7 +373,7 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 
 	require.Equal(t, SendAny, sph.SendMode(time.Now()))
 	pn := sph.PopPacketNumber(protocol.EncryptionInitial)
-	sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 999, false)
+	sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 999, false, false)
 	// it's not surprising that the loss detection timer is set, as this packet might be lost...
 	require.NotZero(t, sph.GetLossDetectionTimeout())
 	// ... but it's still set after receiving an ACK for this packet,
@@ -405,7 +405,7 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 
 	// receiving an ACK for a handshake packet shows that the server completed address validation
 	pn = sph.PopPacketNumber(protocol.EncryptionHandshake)
-	sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionHandshake, protocol.ECNNon, 999, false)
+	sph.SentPacket(time.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionHandshake, protocol.ECNNon, 999, false, false)
 	require.NotZero(t, sph.GetLossDetectionTimeout())
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pn)}, protocol.EncryptionHandshake, time.Now())
 	require.NoError(t, err)
@@ -428,7 +428,7 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	var packets packetTracker
 	sendPacket := func(ti time.Time, isPathMTUProbePacket bool) protocol.PacketNumber {
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
-		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, isPathMTUProbePacket)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, isPathMTUProbePacket, false)
 		return pn
 	}
 
@@ -482,7 +482,7 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 	var pns []protocol.PacketNumber
 	for range 5 {
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false)
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
 		pns = append(pns, pn)
 	}
 
@@ -551,9 +551,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 		pn := sph.PopPacketNumber(encLevel)
 		if ackEliciting {
 			tr.EXPECT().SetLossTimer(logging.TimerTypePTO, encLevel, gomock.Any())
-			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false)
+			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
 		} else {
-			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, nil, encLevel, protocol.ECNNon, 1000, true)
+			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, nil, encLevel, protocol.ECNNon, 1000, true, false)
 		}
 		return pn
 	}
@@ -682,7 +682,7 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 
 	sendPacket := func(ti time.Time, encLevel protocol.EncryptionLevel) protocol.PacketNumber {
 		pn := sph.PopPacketNumber(encLevel)
-		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1000, false)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1000, false, false)
 		return pn
 	}
 
@@ -779,7 +779,7 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 		} else {
 			frames = []Frame{{Frame: &wire.PingFrame{}}}
 		}
-		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, frames, encLevel, protocol.ECNNon, 1000, false)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, frames, encLevel, protocol.ECNNon, 1000, false, false)
 		return pn
 	}
 
@@ -836,7 +836,7 @@ func TestSentPacketHandlerCongestion(t *testing.T) {
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
 		bytesInFlight += 1000
 		cong.EXPECT().OnPacketSent(now, bytesInFlight, pn, protocol.ByteCount(1000), true)
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, i == 1)
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, i == 1, false)
 		pns = append(pns, pn)
 		sendTimes = append(sendTimes, now)
 		now = now.Add(100 * time.Millisecond)
@@ -889,7 +889,7 @@ func TestSentPacketHandlerCongestion(t *testing.T) {
 	now = timeout.Add(100 * time.Millisecond)
 	pn := sph.PopPacketNumber(protocol.EncryptionInitial)
 	cong.EXPECT().OnPacketSent(now, protocol.ByteCount(2000), pn, protocol.ByteCount(1000), true)
-	sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false)
+	sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
 }
 
 func TestSentPacketHandlerRetry(t *testing.T) {
@@ -925,12 +925,12 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 	for range 2 {
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
 		initialPNs = append(initialPNs, pn)
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{initialPackets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false)
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{initialPackets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
 		now = now.Add(100 * time.Millisecond)
 
 		pn = sph.PopPacketNumber(protocol.Encryption0RTT)
 		appDataPNs = append(appDataPNs, pn)
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{appDataPackets.NewPingFrame(pn)}, protocol.Encryption0RTT, protocol.ECNNon, 1000, false)
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{appDataPackets.NewPingFrame(pn)}, protocol.Encryption0RTT, protocol.ECNNon, 1000, false, false)
 		now = now.Add(100 * time.Millisecond)
 	}
 	require.Equal(t, protocol.ByteCount(4000), sph.getBytesInFlight())
@@ -972,7 +972,7 @@ func TestSentPacketHandlerRetryAfterPTO(t *testing.T) {
 	start := time.Now()
 	now := start
 	pn1 := sph.PopPacketNumber(protocol.EncryptionInitial)
-	sph.SentPacket(now, pn1, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn1)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false)
+	sph.SentPacket(now, pn1, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn1)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
 
 	timeout := sph.GetLossDetectionTimeout()
 	require.NotZero(t, timeout)
@@ -983,7 +983,7 @@ func TestSentPacketHandlerRetryAfterPTO(t *testing.T) {
 	// send a retransmission for the first packet
 	now = timeout.Add(100 * time.Millisecond)
 	pn2 := sph.PopPacketNumber(protocol.EncryptionInitial)
-	sph.SentPacket(now, pn2, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn2)}, protocol.EncryptionInitial, protocol.ECNNon, 900, false)
+	sph.SentPacket(now, pn2, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn2)}, protocol.EncryptionInitial, protocol.ECNNon, 900, false, false)
 
 	const rtt = time.Second
 	sph.ResetForRetry(now.Add(rtt))
@@ -1014,15 +1014,15 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	sph.congestion = cong
 
 	// ECN marks on non-1-RTT packets are ignored
-	sph.SentPacket(time.Now(), sph.PopPacketNumber(protocol.EncryptionInitial), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false)
-	sph.SentPacket(time.Now(), sph.PopPacketNumber(protocol.EncryptionHandshake), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionHandshake, protocol.ECT0, 1200, false)
-	sph.SentPacket(time.Now(), sph.PopPacketNumber(protocol.Encryption0RTT), protocol.InvalidPacketNumber, nil, nil, protocol.Encryption0RTT, protocol.ECNCE, 1200, false)
+	sph.SentPacket(time.Now(), sph.PopPacketNumber(protocol.EncryptionInitial), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false, false)
+	sph.SentPacket(time.Now(), sph.PopPacketNumber(protocol.EncryptionHandshake), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionHandshake, protocol.ECT0, 1200, false, false)
+	sph.SentPacket(time.Now(), sph.PopPacketNumber(protocol.Encryption0RTT), protocol.InvalidPacketNumber, nil, nil, protocol.Encryption0RTT, protocol.ECNCE, 1200, false, false)
 
 	var packets packetTracker
 	sendPacket := func(ti time.Time, ecn protocol.ECN) protocol.PacketNumber {
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		ecnHandler.EXPECT().SentPacket(pn, ecn)
-		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, ecn, 1200, false)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, ecn, 1200, false, false)
 		return pn
 	}
 
@@ -1095,4 +1095,132 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	)
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0])}, protocol.Encryption1RTT, now.Add(100*time.Millisecond))
 	require.NoError(t, err)
+}
+
+func TestSentPacketHandlerPathProbe(t *testing.T) {
+	const rtt = 10 * time.Millisecond // RTT of the original path
+	var rttStats utils.RTTStats
+	rttStats.UpdateRTT(rtt, 0)
+
+	sph := newSentPacketHandler(
+		0,
+		1200,
+		&rttStats,
+		true,
+		false,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+	sph.DropPackets(protocol.EncryptionInitial, time.Now())
+	sph.DropPackets(protocol.EncryptionHandshake, time.Now())
+
+	var packets packetTracker
+	sendPacket := func(ti time.Time, isPathProbe bool) protocol.PacketNumber {
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, isPathProbe)
+		return pn
+	}
+
+	// send 5 packets: 2 non-probe packets, 1 probe packet, 2 non-probe packets
+	now := time.Now()
+	var pns [5]protocol.PacketNumber
+	pns[0] = sendPacket(now, false)
+	now = now.Add(rtt)
+	pns[1] = sendPacket(now, false)
+	pns[2] = sendPacket(now, true)
+	pathProbeTimeout := now.Add(pathProbePacketLossTimeout)
+	now = now.Add(rtt)
+	pns[3] = sendPacket(now, false)
+	now = now.Add(rtt)
+	pns[4] = sendPacket(now, false)
+	require.Less(t, sph.GetLossDetectionTimeout(), pathProbeTimeout)
+
+	now = now.Add(100 * time.Millisecond)
+	// make sure that this ACK doesn't declare the path probe packet lost
+	require.Greater(t, pathProbeTimeout, now)
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[3], pns[4])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[0], pns[3], pns[4]}, packets.Acked)
+	// despite having been sent at the same time, the probe packet was not lost
+	require.Equal(t, []protocol.PacketNumber{pns[1]}, packets.Lost)
+
+	// the timeout is now based on the probe packet
+	timeout := sph.GetLossDetectionTimeout()
+	require.Equal(t, pathProbeTimeout, timeout)
+	require.Zero(t, sph.getBytesInFlight())
+	pn1 := sendPacket(now, false)
+	pn2 := sendPacket(now, false)
+	require.Equal(t, protocol.ByteCount(2400), sph.getBytesInFlight())
+
+	// send one more non-probe packet
+	pn := sendPacket(now, false)
+	// the timeout is now based on this packet
+	require.Less(t, sph.GetLossDetectionTimeout(), pathProbeTimeout)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[2], pn)},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+
+	packets.Lost = packets.Lost[:0]
+	sph.MigratedPath(now, 1200)
+	require.Zero(t, sph.getBytesInFlight())
+	require.Zero(t, rttStats.SmoothedRTT())
+	require.Equal(t, []protocol.PacketNumber{pn1, pn2}, packets.Lost)
+}
+
+func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
+	const rtt = 10 * time.Millisecond // RTT of the original path
+	var rttStats utils.RTTStats
+	rttStats.UpdateRTT(rtt, 0)
+
+	sph := newSentPacketHandler(
+		0,
+		1200,
+		&rttStats,
+		true,
+		false,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+	sph.DropPackets(protocol.EncryptionInitial, time.Now())
+	sph.DropPackets(protocol.EncryptionHandshake, time.Now())
+
+	var packets packetTracker
+	sendPacket := func(ti time.Time, isPathProbe bool) protocol.PacketNumber {
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, isPathProbe)
+		return pn
+	}
+
+	now := time.Now()
+	pn1 := sendPacket(now, true)
+	t1 := now
+	now = now.Add(100 * time.Millisecond)
+	_ = sendPacket(now, true)
+	now = now.Add(100 * time.Millisecond)
+	pn3 := sendPacket(now, true)
+
+	now = now.Add(100 * time.Millisecond)
+	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pn3)},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pn3}, packets.Acked)
+	require.Empty(t, packets.Lost)
+
+	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
+
+	require.NoError(t, sph.OnLossDetectionTimeout(sph.GetLossDetectionTimeout()))
+	require.Equal(t, []protocol.PacketNumber{pn1}, packets.Lost)
 }

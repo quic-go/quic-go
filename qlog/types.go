@@ -291,6 +291,8 @@ func (t timerType) String() string {
 		return "ack"
 	case logging.TimerTypePTO:
 		return "pto"
+	case logging.TimerTypePathProbe:
+		return "path_probe"
 	default:
 		return "unknown timer type"
 	}
