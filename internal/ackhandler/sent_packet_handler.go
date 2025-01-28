@@ -382,6 +382,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	pnSpace.largestAcked = max(pnSpace.largestAcked, largestAcked)
 
 	h.detectLostPackets(rcvTime, encLevel)
+	if encLevel == protocol.Encryption1RTT {
+		h.detectLostPathProbes(rcvTime)
+	}
 	var acked1RTTPacket bool
 	for _, p := range ackedPackets {
 		if p.includedInBytesInFlight && !p.declaredLost {
@@ -649,26 +652,30 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 	return alarmTimer{}
 }
 
+func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {
+	if !h.appDataPackets.history.HasOutstandingPathProbes() {
+		return
+	}
+	lossTime := now.Add(-pathProbePacketLossTimeout)
+	// RemovePathProbe cannot be called while iterating.
+	var lostPathProbes []*packet
+	h.appDataPackets.history.IteratePathProbes(func(p *packet) bool {
+		if !p.SendTime.After(lossTime) {
+			lostPathProbes = append(lostPathProbes, p)
+		}
+		return true
+	})
+	for _, p := range lostPathProbes {
+		for _, f := range p.Frames {
+			f.Handler.OnLost(f.Frame)
+		}
+		h.appDataPackets.history.RemovePathProbe(p.PacketNumber)
+	}
+}
+
 func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = time.Time{}
-
-	if encLevel == protocol.Encryption1RTT {
-		lossTime := now.Add(-pathProbePacketLossTimeout)
-		var lostPathProbes []*packet
-		pnSpace.history.IteratePathProbes(func(p *packet) bool {
-			if p.SendTime.Before(lossTime) {
-				lostPathProbes = append(lostPathProbes, p)
-			}
-			return true
-		})
-		for _, p := range lostPathProbes {
-			for _, f := range p.Frames {
-				f.Handler.OnLost(f.Frame)
-			}
-			pnSpace.history.RemovePathProbe(p.PacketNumber)
-		}
-	}
 
 	maxRTT := float64(max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	lossDelay := time.Duration(timeThreshold * maxRTT)
@@ -735,6 +742,11 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 
 func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 	defer h.setLossDetectionTimer(now)
+
+	if h.handshakeConfirmed {
+		h.detectLostPathProbes(now)
+	}
+
 	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
 		if h.logger.Debug() {

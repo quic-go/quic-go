@@ -1101,7 +1101,6 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	const rtt = 10 * time.Millisecond // RTT of the original path
 	var rttStats utils.RTTStats
 	rttStats.UpdateRTT(rtt, 0)
-	utils.DefaultLogger.SetLogLevel(utils.LogLevelDebug)
 
 	sph := newSentPacketHandler(
 		0,
@@ -1174,4 +1173,54 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	require.Zero(t, sph.getBytesInFlight())
 	require.Zero(t, rttStats.SmoothedRTT())
 	require.Equal(t, []protocol.PacketNumber{pn1, pn2}, packets.Lost)
+}
+
+func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
+	const rtt = 10 * time.Millisecond // RTT of the original path
+	var rttStats utils.RTTStats
+	rttStats.UpdateRTT(rtt, 0)
+
+	sph := newSentPacketHandler(
+		0,
+		1200,
+		&rttStats,
+		true,
+		false,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+	sph.DropPackets(protocol.EncryptionInitial, time.Now())
+	sph.DropPackets(protocol.EncryptionHandshake, time.Now())
+
+	var packets packetTracker
+	sendPacket := func(ti time.Time, isPathProbe bool) protocol.PacketNumber {
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, isPathProbe)
+		return pn
+	}
+
+	now := time.Now()
+	pn1 := sendPacket(now, true)
+	t1 := now
+	now = now.Add(100 * time.Millisecond)
+	_ = sendPacket(now, true)
+	now = now.Add(100 * time.Millisecond)
+	pn3 := sendPacket(now, true)
+
+	now = now.Add(100 * time.Millisecond)
+	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pn3)},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pn3}, packets.Acked)
+	require.Empty(t, packets.Lost)
+
+	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
+
+	require.NoError(t, sph.OnLossDetectionTimeout(sph.GetLossDetectionTimeout()))
+	require.Equal(t, []protocol.PacketNumber{pn1}, packets.Lost)
 }
