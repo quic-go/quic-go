@@ -314,7 +314,7 @@ var _ = Describe("Server", func() {
 
 			s.handleRequest(conn, str, nil, qpackDecoder)
 			Expect(responseBuf.Bytes()).To(HaveLen(0))
-			Expect(logBuf.String()).To(ContainSubstring("http: panic serving"))
+			Expect(logBuf.String()).To(ContainSubstring("http3: panic serving"))
 			Expect(logBuf.String()).To(ContainSubstring("foobar"))
 		})
 
