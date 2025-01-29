@@ -14,7 +14,6 @@ import (
 	net "net"
 	reflect "reflect"
 
-	qerr "github.com/quic-go/quic-go/internal/qerr"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -121,7 +120,7 @@ func (c *MockQUICConnAcceptUniStreamCall) DoAndReturn(f func(context.Context) (R
 }
 
 // CloseWithError mocks base method.
-func (m *MockQUICConn) CloseWithError(arg0 qerr.ApplicationErrorCode, arg1 string) error {
+func (m *MockQUICConn) CloseWithError(arg0 ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseWithError", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -147,13 +146,13 @@ func (c *MockQUICConnCloseWithErrorCall) Return(arg0 error) *MockQUICConnCloseWi
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICConnCloseWithErrorCall) Do(f func(qerr.ApplicationErrorCode, string) error) *MockQUICConnCloseWithErrorCall {
+func (c *MockQUICConnCloseWithErrorCall) Do(f func(ApplicationErrorCode, string) error) *MockQUICConnCloseWithErrorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICConnCloseWithErrorCall) DoAndReturn(f func(qerr.ApplicationErrorCode, string) error) *MockQUICConnCloseWithErrorCall {
+func (c *MockQUICConnCloseWithErrorCall) DoAndReturn(f func(ApplicationErrorCode, string) error) *MockQUICConnCloseWithErrorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -621,7 +620,7 @@ func (c *MockQUICConnSendDatagramCall) DoAndReturn(f func([]byte) error) *MockQU
 }
 
 // closeWithTransportError mocks base method.
-func (m *MockQUICConn) closeWithTransportError(arg0 qerr.TransportErrorCode) {
+func (m *MockQUICConn) closeWithTransportError(arg0 TransportErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "closeWithTransportError", arg0)
 }
@@ -645,13 +644,13 @@ func (c *MockQUICConncloseWithTransportErrorCall) Return() *MockQUICConncloseWit
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICConncloseWithTransportErrorCall) Do(f func(qerr.TransportErrorCode)) *MockQUICConncloseWithTransportErrorCall {
+func (c *MockQUICConncloseWithTransportErrorCall) Do(f func(TransportErrorCode)) *MockQUICConncloseWithTransportErrorCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICConncloseWithTransportErrorCall) DoAndReturn(f func(qerr.TransportErrorCode)) *MockQUICConncloseWithTransportErrorCall {
+func (c *MockQUICConncloseWithTransportErrorCall) DoAndReturn(f func(TransportErrorCode)) *MockQUICConncloseWithTransportErrorCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

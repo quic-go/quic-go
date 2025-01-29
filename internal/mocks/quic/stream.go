@@ -14,8 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	protocol "github.com/quic-go/quic-go/internal/protocol"
-	qerr "github.com/quic-go/quic-go/internal/qerr"
+	quic "github.com/quic-go/quic-go"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -44,7 +43,7 @@ func (m *MockStream) EXPECT() *MockStreamMockRecorder {
 }
 
 // CancelRead mocks base method.
-func (m *MockStream) CancelRead(arg0 qerr.StreamErrorCode) {
+func (m *MockStream) CancelRead(arg0 quic.StreamErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelRead", arg0)
 }
@@ -68,19 +67,19 @@ func (c *MockStreamCancelReadCall) Return() *MockStreamCancelReadCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamCancelReadCall) Do(f func(qerr.StreamErrorCode)) *MockStreamCancelReadCall {
+func (c *MockStreamCancelReadCall) Do(f func(quic.StreamErrorCode)) *MockStreamCancelReadCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamCancelReadCall) DoAndReturn(f func(qerr.StreamErrorCode)) *MockStreamCancelReadCall {
+func (c *MockStreamCancelReadCall) DoAndReturn(f func(quic.StreamErrorCode)) *MockStreamCancelReadCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // CancelWrite mocks base method.
-func (m *MockStream) CancelWrite(arg0 qerr.StreamErrorCode) {
+func (m *MockStream) CancelWrite(arg0 quic.StreamErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelWrite", arg0)
 }
@@ -104,13 +103,13 @@ func (c *MockStreamCancelWriteCall) Return() *MockStreamCancelWriteCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamCancelWriteCall) Do(f func(qerr.StreamErrorCode)) *MockStreamCancelWriteCall {
+func (c *MockStreamCancelWriteCall) Do(f func(quic.StreamErrorCode)) *MockStreamCancelWriteCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamCancelWriteCall) DoAndReturn(f func(qerr.StreamErrorCode)) *MockStreamCancelWriteCall {
+func (c *MockStreamCancelWriteCall) DoAndReturn(f func(quic.StreamErrorCode)) *MockStreamCancelWriteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -345,10 +344,10 @@ func (c *MockStreamSetWriteDeadlineCall) DoAndReturn(f func(time.Time) error) *M
 }
 
 // StreamID mocks base method.
-func (m *MockStream) StreamID() protocol.StreamID {
+func (m *MockStream) StreamID() quic.StreamID {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamID")
-	ret0, _ := ret[0].(protocol.StreamID)
+	ret0, _ := ret[0].(quic.StreamID)
 	return ret0
 }
 
@@ -365,19 +364,19 @@ type MockStreamStreamIDCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamStreamIDCall) Return(arg0 protocol.StreamID) *MockStreamStreamIDCall {
+func (c *MockStreamStreamIDCall) Return(arg0 quic.StreamID) *MockStreamStreamIDCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamStreamIDCall) Do(f func() protocol.StreamID) *MockStreamStreamIDCall {
+func (c *MockStreamStreamIDCall) Do(f func() quic.StreamID) *MockStreamStreamIDCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamStreamIDCall) DoAndReturn(f func() protocol.StreamID) *MockStreamStreamIDCall {
+func (c *MockStreamStreamIDCall) DoAndReturn(f func() quic.StreamID) *MockStreamStreamIDCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
