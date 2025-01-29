@@ -57,8 +57,6 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	// connection IDs the peer will store. This limit includes the connection ID
 	// used during the handshake, and the one sent in the preferred_address
 	// transport parameter.
-	// We currently don't send the preferred_address transport parameter,
-	// so we can issue (limit - 1) connection IDs.
 	for i := uint64(len(m.activeSrcConnIDs)); i < min(limit, protocol.MaxIssuedConnectionIDs); i++ {
 		if err := m.issueNewConnID(); err != nil {
 			return err
@@ -92,6 +90,21 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 		return nil
 	}
 	return m.issueNewConnID()
+}
+
+func (m *connIDGenerator) GetConnIDForPreferredAddress() (protocol.ConnectionID, protocol.StatelessResetToken, error) {
+	connID, err := m.generator.GenerateConnectionID()
+	if err != nil {
+		return protocol.ConnectionID{}, protocol.StatelessResetToken{}, err
+	}
+	resetToken := m.getStatelessResetToken(connID)
+	m.addConnectionID(connID)
+	m.highestSeq++
+	if m.highestSeq != 1 {
+		panic("connIDGenerator BUG: connection ID for preferred address didn't have sequence number 1")
+	}
+	m.activeSrcConnIDs[1] = connID
+	return connID, resetToken, nil
 }
 
 func (m *connIDGenerator) issueNewConnID() error {
