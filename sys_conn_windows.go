@@ -21,10 +21,11 @@ import (
 
 // TO DO: Check if these are correct
 const (
-	ecnMask       = 0x3
-	oobBufferSize = 128
-	IP_RECVECN    = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_RECVECN.html
-	IPV6_RECVECN  = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_RECVECN.html
+	ecnMask         = 0x3
+	oobBufferSize   = 128
+	IP_RECVECN      = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_RECVECN.html
+	IPV6_RECVECN    = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_RECVECN.html
+	IPV6_RECVTCLASS = 0x28 // https://github.com/tpn/winsdk-10/blob/master/Include/10.0.14393.0/shared/ws2ipdef.h
 )
 
 type batchConn interface {
@@ -164,7 +165,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		}
 		if hdr.Level == windows.IPPROTO_IPV6 {
 			switch hdr.Type {
-			case windows.IPV6_RECVTCLASS:
+			case IPV6_RECVTCLASS:
 				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case windows.IPV6_PKTINFO:
 				// struct in6_pktinfo {
