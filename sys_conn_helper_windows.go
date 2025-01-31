@@ -41,7 +41,20 @@ func forceSetSendBuffer(c syscall.RawConn, bytes int) error {
 	return serr
 }
 
-func appendUDPSegmentSizeMsg([]byte, uint16) []byte { return nil }
+func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
+	startLen := len(b)
+	const dataLen = 2 // payload is a uint16
+	b = append(b, make([]byte, cmsgSpace(dataLen))...)
+	h := (*Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = syscall.IPPROTO_UDP
+	h.Type = UDP_SEND_MSG_SIZE
+	h.SetLen(cmsgLen(dataLen))
+
+	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
+	offset := startLen + int(cmsgSpace(0))
+	*(*uint16)(unsafe.Pointer(&b[offset])) = size
+	return b
+}
 
 func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	// 	struct in_pktinfo {
@@ -125,6 +138,10 @@ func cmsgSpace(length uintptr) uintptr {
 func cmsgHdrAlign(len uintptr) uintptr {
 	align := cmsgAlign()
 	return (len + uintptr(align) - 1) & ^(uintptr(align) - 1)
+}
+
+func (cmsg *Cmsghdr) SetLen(length uintptr) {
+	cmsg.Len = length
 }
 
 func cmsgDataAlign(len uintptr) uintptr {
