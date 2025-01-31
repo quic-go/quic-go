@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -169,12 +170,12 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case windows.IPV6_PKTINFO:
 				// struct in6_pktinfo {
-				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
-				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
+				// 	IN6_ADDR ipi6_addr;
+				// 	ULONG    ipi6_ifindex;
 				// };
 				if len(body) == 20 {
 					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
-					p.info.ifIndex = binary.BigEndian.Uint32(body[16:])
+					p.info.ifIndex = binary.LittleEndian.Uint32(body[16:])
 				} else {
 					invalidCmsgOnceV6.Do(func() {
 						log.Printf("Received invalid IPv6 packet info control message: %+x. "+
@@ -186,6 +187,62 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		data = remainder
 	}
 	return p, nil
+}
+
+// WritePacket writes a new packet.
+func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error) {
+	oob := packetInfoOOB
+	if gsoSize > 0 {
+		if !c.capabilities().GSO {
+			panic("GSO disabled")
+		}
+		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
+	}
+	if ecn != protocol.ECNUnsupported {
+		if !c.capabilities().ECN {
+			panic("tried to send an ECN-marked packet although ECN is disabled")
+		}
+		if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
+			if remoteUDPAddr.IP.To4() != nil {
+				oob = appendIPv4ECNMsg(oob, ecn)
+			} else {
+				oob = appendIPv6ECNMsg(oob, ecn)
+			}
+		}
+	}
+	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
+	return n, err
+}
+
+func (c *oobConn) capabilities() connCapabilities {
+	return c.cap
+}
+
+func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
+	startLen := len(b)
+	const dataLen = 4
+	b = append(b, make([]byte, cmsgLen(dataLen))...)
+	h := (*Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = windows.IPPROTO_IP
+	h.Type = windows.IP_TOS
+	h.Len = cmsgLen(dataLen)
+
+	offset := startLen + int(cmsgSpace(0))
+	b[offset] = val.ToHeaderBits()
+	return b
+}
+func appendIPv6ECNMsg(b []byte, val protocol.ECN) []byte {
+	startLen := len(b)
+	const dataLen = 4
+	b = append(b, make([]byte, cmsgLen(dataLen))...)
+	h := (*Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = windows.IPPROTO_IPV6
+	h.Type = IPV6_RECVTCLASS
+	h.Len = cmsgLen(dataLen)
+
+	offset := startLen + int(cmsgSpace(0))
+	b[offset] = val.ToHeaderBits()
+	return b
 }
 
 func inspectReadBuffer(c syscall.RawConn) (int, error) {

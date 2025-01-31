@@ -104,25 +104,26 @@ type Cmsghdr struct {
 	Type  int32
 }
 
-func (cmsghdr Cmsghdr) Align() int {
+func cmsgAlign() int {
+	var cmsghdr Cmsghdr
 	return reflect.TypeOf(cmsghdr).Align()
 }
 
-func (cmsghdr Cmsghdr) Size() uintptr {
+func cmsgSize() uintptr {
+	var cmsghdr Cmsghdr
 	return reflect.TypeOf(cmsghdr).Size()
 }
 
-func (cmsghdr Cmsghdr) cmsgLen(length uintptr) uintptr {
-	return cmsgDataAlign(cmsghdr.Size()) + length
+func cmsgLen(length uintptr) uintptr {
+	return cmsgDataAlign(cmsgSize()) + length
 }
 
-func (cmsghdr *Cmsghdr) cmsgSpace(length uintptr) uintptr {
-	return cmsgDataAlign(cmsghdr.Size() + cmsgHdrAlign(length))
+func cmsgSpace(length uintptr) uintptr {
+	return cmsgDataAlign(cmsgSize() + cmsgHdrAlign(length))
 }
 
 func cmsgHdrAlign(len uintptr) uintptr {
-	var cmsghdr Cmsghdr
-	align := cmsghdr.Align()
+	align := cmsgAlign()
 	return (len + uintptr(align) - 1) & ^(uintptr(align) - 1)
 }
 
@@ -148,9 +149,8 @@ func ParseOneSocketControlMessage(b []byte) (hdr Cmsghdr, data []byte, remainder
 
 func socketControlMessageHeaderAndData(b []byte) (*Cmsghdr, []byte, error) {
 	h := (*Cmsghdr)(unsafe.Pointer(&b[0]))
-	var cmsghdr Cmsghdr
-	if h.Len < cmsghdr.Size() || uint64(h.Len) > uint64(len(b)) {
+	if h.Len < cmsgSize() || uint64(h.Len) > uint64(len(b)) {
 		return nil, nil, syscall.EINVAL
 	}
-	return h, b[cmsgDataAlign(cmsghdr.Size()):h.Len], nil
+	return h, b[cmsgDataAlign(cmsgSize()):h.Len], nil
 }
