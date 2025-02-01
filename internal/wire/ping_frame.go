@@ -1,7 +1,7 @@
 package wire
 
 import (
-	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/protocol"
 )
 
 // A PingFrame is a PING frame

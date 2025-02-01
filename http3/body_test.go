@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/Noooste/quic-go"
+	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

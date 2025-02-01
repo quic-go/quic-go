@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/quic-go/quic-go/logging"
+	"github.com/Noooste/quic-go/logging"
 	"github.com/stretchr/testify/require"
 )
 

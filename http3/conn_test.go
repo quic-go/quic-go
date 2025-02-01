@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/Noooste/quic-go"
+	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/qerr"
+	"github.com/Noooste/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

@@ -3,11 +3,11 @@ package quic
 import (
 	"fmt"
 
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
-	list "github.com/quic-go/quic-go/internal/utils/linkedlist"
-	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/qerr"
+	"github.com/Noooste/quic-go/internal/utils"
+	list "github.com/Noooste/quic-go/internal/utils/linkedlist"
+	"github.com/Noooste/quic-go/internal/wire"
 )
 
 type newConnID struct {
@@ -285,7 +285,7 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 // Using the connIDManager after it has been closed can have disastrous effects:
 // If the connection ID is rotated, a new entry would be inserted into the packet handler map,
 // leading to a memory leak of the connection struct.
-// See https://github.com/quic-go/quic-go/pull/4852 for more details.
+// See https://github.com/Noooste/quic-go/pull/4852 for more details.
 func (h *connIDManager) assertNotClosed() {
 	if h.closed {
 		panic("connection ID manager is closed")
