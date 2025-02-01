@@ -27,7 +27,7 @@ const clientSessionStateRevision = 4
 
 type cryptoSetup struct {
 	tlsConf *tls.Config
-	conn    *tls.QUICConn
+	conn    *tls.UQUICConn
 
 	events []Event
 
@@ -94,7 +94,9 @@ func NewCryptoSetupClient(
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
-	cs.conn = tls.QUICClient(quicConf)
+	cs.conn = tls.UQUICClient(quicConf, tls.HelloCustom)
+	_ = cs.conn.ApplyPreset(tlsConf.ClientHelloSpec)
+
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
 	return cs
@@ -125,7 +127,7 @@ func NewCryptoSetupServer(
 
 	tlsConf = qtls.SetupConfigForServer(tlsConf, localAddr, remoteAddr, cs.getDataForSessionTicket, cs.handleSessionTicket)
 	cs.tlsConf = tlsConf
-	cs.conn = tls.QUICServer(&tls.QUICConfig{TLSConfig: tlsConf})
+	cs.conn = tls.UQUICServer(&tls.QUICConfig{TLSConfig: tlsConf})
 	return cs
 }
 
