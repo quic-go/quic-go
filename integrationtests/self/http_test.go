@@ -5,30 +5,29 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	mrand "math/rand"
 	"net"
-	"net/http"
-	"net/http/httptrace"
-	"net/textproto"
-	"os"
-	"strconv"
-	"sync/atomic"
-	"testing"
-	"time"
+"github.com/Noooste/fhttp/httptrace"
+"net/textproto"
+"os"
+"strconv"
+"sync/atomic"
+"testing"
+"time"
 
-	"golang.org/x/sync/errgroup"
+"golang.org/x/sync/errgroup"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/http3"
-	quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
+"github.com/Noooste/quic-go"
+"github.com/Noooste/quic-go/http3"
+quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
 
-	"github.com/stretchr/testify/require"
+"github.com/stretchr/testify/require"
 )
-
 type neverEnding byte
 
 func (b neverEnding) Read(p []byte) (n int, err error) {

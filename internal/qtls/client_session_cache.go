@@ -1,7 +1,7 @@
 package qtls
 
 import (
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"sync"
 )
 

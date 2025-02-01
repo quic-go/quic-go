@@ -2,8 +2,8 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"testing"
 	"time"
 
@@ -127,7 +127,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 	checkContext(connContextChan, true)
 	checkContext(tracerContextChan, true)
 	checkContext(streamContextChan, true)
-	// crypto/tls cancels the context when the TLS handshake completes.
+	// github.com/Noooste/utls cancels the context when the TLS handshake completes.
 	checkContext(tlsGetConfigForClientContextChan, false)
 	checkContext(tlsGetCertificateContextChan, false)
 }
@@ -236,7 +236,7 @@ func TestContextOnClientSide(t *testing.T) {
 
 	checkContext(conn.Context(), true)
 	checkContext(str.Context(), true)
-	// crypto/tls cancels the context when the TLS handshake completes
+	// github.com/Noooste/utls cancels the context when the TLS handshake completes
 	checkContextFromChan(tlsContextChan, false)
 	checkContextFromChan(tracerContextChan, false)
 }

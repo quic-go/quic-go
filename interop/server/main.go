@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"log"
 	"net"
-	"net/http"
 	"os"
 
 	"github.com/Noooste/quic-go"

@@ -2,9 +2,9 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/utls"
 	"io"
 	"net"
 	"strings"

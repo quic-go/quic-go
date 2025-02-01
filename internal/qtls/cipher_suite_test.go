@@ -1,8 +1,8 @@
 package qtls
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 	"net"
 	"testing"
 

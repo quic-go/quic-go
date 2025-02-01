@@ -5,22 +5,22 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"github.com/Noooste/fhttp"
 	"io"
-	"net/http"
-	"net/http/httptrace"
-	"net/textproto"
-	"sync"
-	"time"
+"github.com/Noooste/fhttp/httptrace"
+"net/textproto"
+"sync"
+"time"
 
-	"github.com/Noooste/quic-go"
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
-	"github.com/Noooste/quic-go/quicvarint"
+"github.com/Noooste/quic-go"
+mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+"github.com/Noooste/quic-go/quicvarint"
 
-	"github.com/quic-go/qpack"
+"github.com/quic-go/qpack"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"go.uber.org/mock/gomock"
+."github.com/onsi/ginkgo/v2"
+."github.com/onsi/gomega"
+"go.uber.org/mock/gomock"
 )
 
 func encodeResponse(status int) []byte {

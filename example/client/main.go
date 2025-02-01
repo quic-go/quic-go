@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"sync"
 

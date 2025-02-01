@@ -3,9 +3,9 @@ package quic
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/utls"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -115,7 +115,7 @@ type Transport struct {
 	// The context is closed when the connection is closed, or when the handshake fails for any reason.
 	// The context returned from the callback is used to derive every other context used during the
 	// lifetime of the connection:
-	// * the context passed to crypto/tls (and used on the tls.ClientHelloInfo)
+	// * the context passed to github.com/Noooste/utls (and used on the tls.ClientHelloInfo)
 	// * the context used in Config.Tracer
 	// * the context returned from Connection.Context
 	// * the context returned from SendStream.Context

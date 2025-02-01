@@ -2,8 +2,8 @@ package quic
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"net"
 
 	"github.com/Noooste/quic-go/internal/protocol"

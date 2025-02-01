@@ -2,9 +2,9 @@ package quic
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/utls"
 	"net"
 	"sync"
 	"time"

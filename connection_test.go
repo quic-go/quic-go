@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"net"
 	"net/netip"
 	"strconv"
@@ -2789,7 +2789,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 // When the connection is closed before sending the first packet,
 // we don't send a CONNECTION_CLOSE.
 // This can happen if there's something wrong the tls.Config, and
-// crypto/tls refuses to start the handshake.
+// github.com/Noooste/utls refuses to start the handshake.
 func TestConnectionEarlyClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)

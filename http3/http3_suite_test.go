@@ -1,8 +1,8 @@
 package http3
 
 import (
+	"github.com/Noooste/fhttp"
 	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"testing"

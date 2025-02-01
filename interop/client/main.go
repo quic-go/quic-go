@@ -1,13 +1,13 @@
 package main
 
 import (
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"time"

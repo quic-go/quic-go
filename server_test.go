@@ -3,8 +3,8 @@ package quic
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"net"
 	"sync"
 	"sync/atomic"

@@ -3,9 +3,9 @@ package handshake
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"github.com/Noooste/utls"
 
 	"golang.org/x/crypto/chacha20"
 

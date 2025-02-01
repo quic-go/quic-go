@@ -3,10 +3,10 @@ package self_test
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"github.com/Noooste/utls"
 	"io"
 	"math/rand"
 	"net"

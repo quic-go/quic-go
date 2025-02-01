@@ -1,12 +1,12 @@
 package http09
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/fhttp/httptest"
+	"github.com/Noooste/utls"
 	"io"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/Noooste/quic-go"

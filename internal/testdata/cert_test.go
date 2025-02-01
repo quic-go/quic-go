@@ -1,7 +1,7 @@
 package testdata
 
 import (
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"io"
 	"testing"
 

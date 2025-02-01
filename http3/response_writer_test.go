@@ -2,8 +2,8 @@ package http3
 
 import (
 	"bytes"
+	"github.com/Noooste/fhttp"
 	"io"
-	"net/http"
 	"time"
 
 	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
@@ -165,7 +165,7 @@ var _ = Describe("Response Writer", func() {
 		Expect(fields).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
 	})
 
-	It(`is compatible with "net/http".ResponseController`, func() {
+	It(`is compatible with "github.com/Noooste/fhttp".ResponseController`, func() {
 		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 	})

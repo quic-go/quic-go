@@ -2,9 +2,9 @@ package handshake
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/utls"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -257,7 +257,7 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 		return false, nil
 	default:
 		// Unknown events should be ignored.
-		// crypto/tls will ensure that this is safe to do.
+		// github.com/Noooste/utls will ensure that this is safe to do.
 		// See the discussion following https://github.com/golang/go/issues/68124#issuecomment-2187042510 for details.
 		return false, nil
 	}
@@ -347,7 +347,7 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 }
 
 // GetSessionTicket generates a new session ticket.
-// Due to limitations in crypto/tls, it's only possible to generate a single session ticket per connection.
+// Due to limitations in github.com/Noooste/utls, it's only possible to generate a single session ticket per connection.
 // It is only valid for the server.
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{EarlyData: h.allow0RTT}); err != nil {
@@ -363,11 +363,11 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	}
 	ev := h.conn.NextEvent()
 	if ev.Kind != tls.QUICWriteData || ev.Level != tls.QUICEncryptionLevelApplication {
-		panic("crypto/tls bug: where's my session ticket?")
+		panic("github.com/Noooste/utls bug: where's my session ticket?")
 	}
 	ticket := ev.Data
 	if ev := h.conn.NextEvent(); ev.Kind != tls.QUICNoEvent {
-		panic("crypto/tls bug: why more than one ticket?")
+		panic("github.com/Noooste/utls bug: why more than one ticket?")
 	}
 	return ticket, nil
 }

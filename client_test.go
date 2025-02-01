@@ -2,7 +2,7 @@ package quic
 
 import (
 	"context"
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"net"
 	"runtime"
 	"testing"

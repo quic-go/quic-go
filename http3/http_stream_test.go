@@ -3,20 +3,20 @@ package http3
 import (
 	"bytes"
 	"context"
+	"github.com/Noooste/fhttp"
 	"io"
 	"math"
-	"net/http"
-	"net/http/httptrace"
+"github.com/Noooste/fhttp/httptrace"
 
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
+mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+"github.com/Noooste/quic-go/internal/protocol"
+"github.com/Noooste/quic-go/internal/qerr"
 
-	"github.com/quic-go/qpack"
+"github.com/quic-go/qpack"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"go.uber.org/mock/gomock"
+. "github.com/onsi/ginkgo/v2"
+."github.com/onsi/gomega"
+"go.uber.org/mock/gomock"
 )
 
 func getDataFrame(data []byte) []byte {

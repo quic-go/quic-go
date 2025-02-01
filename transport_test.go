@@ -3,8 +3,8 @@ package quic
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"net"
 	"syscall"
 	"testing"

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"log"
 	"net"
 

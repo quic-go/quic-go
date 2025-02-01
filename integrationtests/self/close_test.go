@@ -2,8 +2,8 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"net"
 	"sync/atomic"
 	"testing"

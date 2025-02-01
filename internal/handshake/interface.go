@@ -2,8 +2,8 @@ package handshake
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"io"
 	"time"
 

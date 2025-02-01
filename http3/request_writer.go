@@ -4,20 +4,20 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/Noooste/fhttp"
 	"io"
 	"net"
-	"net/http"
-	"net/http/httptrace"
-	"strconv"
-	"strings"
-	"sync"
+"github.com/Noooste/fhttp/httptrace"
+"strconv"
+"strings"
+"sync"
 
-	"golang.org/x/net/http/httpguts"
-	"golang.org/x/net/http2/hpack"
-	"golang.org/x/net/idna"
+"golang.org/x/net/http/httpguts"
+"golang.org/x/net/http2/hpack"
+"golang.org/x/net/idna"
 
-	"github.com/Noooste/quic-go"
-	"github.com/quic-go/qpack"
+"github.com/Noooste/quic-go"
+"github.com/quic-go/qpack"
 )
 
 const bodyCopyBufferSize = 8 * 1024

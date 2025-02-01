@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Noooste/fhttp"
 	"io"
-	"net/http"
-	"net/http/httptrace"
+"github.com/Noooste/fhttp/httptrace"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/internal/protocol"
+"github.com/Noooste/quic-go"
+"github.com/Noooste/quic-go/internal/protocol"
 
-	"github.com/quic-go/qpack"
+"github.com/quic-go/qpack"
 )
 
 // A Stream is an HTTP/3 request stream.

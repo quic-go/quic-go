@@ -2,9 +2,9 @@ package self_test
 
 import (
 	"context"
+	"github.com/Noooste/fhttp"
 	"io"
 	"net"
-	"net/http"
 	"strconv"
 	"sync/atomic"
 	"testing"

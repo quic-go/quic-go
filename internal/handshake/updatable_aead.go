@@ -3,9 +3,9 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
-	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"github.com/Noooste/utls"
 	"time"
 
 	"github.com/Noooste/quic-go/internal/protocol"

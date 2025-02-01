@@ -2,13 +2,13 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"runtime"
 	"strconv"
 	"strings"

@@ -2,12 +2,12 @@ package http09
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
 

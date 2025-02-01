@@ -3,8 +3,8 @@ package self_test
 import (
 	"context"
 	"fmt"
+	"github.com/Noooste/fhttp"
 	"io"
-	"net/http"
 	"testing"
 	"time"
 

@@ -3,10 +3,10 @@ package http3
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
-	"net/http"
 	"testing"
 	"time"
 

@@ -4,8 +4,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 	"testing"
 
 	"github.com/Noooste/quic-go/internal/protocol"

@@ -1,8 +1,8 @@
 package qerr
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 )
 
 // TransportErrorCode is a QUIC transport error.

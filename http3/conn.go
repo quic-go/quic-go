@@ -3,20 +3,20 @@ package http3
 import (
 	"context"
 	"fmt"
+	"github.com/Noooste/fhttp"
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
-	"net/http/httptrace"
-	"sync"
-	"sync/atomic"
-	"time"
+"github.com/Noooste/fhttp/httptrace"
+"sync"
+"sync/atomic"
+"time"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/quicvarint"
+"github.com/Noooste/quic-go"
+"github.com/Noooste/quic-go/internal/protocol"
+"github.com/Noooste/quic-go/quicvarint"
 
-	"github.com/quic-go/qpack"
+"github.com/quic-go/qpack"
 )
 
 // Connection is an HTTP/3 connection.
