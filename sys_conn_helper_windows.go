@@ -78,8 +78,9 @@ func isGSOEnabled(conn syscall.RawConn) bool {
 }
 
 // TO DO: Implement
+// Changing
 func isECNEnabled() bool {
-	return false
+	return true
 }
 
 // I'm unable to find windows' response upon a failure caused related to GSO. TO DO

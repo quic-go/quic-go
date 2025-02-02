@@ -110,6 +110,10 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	return oobConn, nil
 }
 
+func (c *oobConn) capabilities() connCapabilities {
+	return c.cap
+}
+
 var invalidCmsgOnceV4, invalidCmsgOnceV6 sync.Once
 
 func (c *oobConn) ReadPacket() (receivedPacket, error) {
@@ -124,11 +128,20 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		}
 		c.readPos = 0
 
-		n, err := c.batchConn.ReadBatch(c.messages, 0)
+		buf := getPacketBuffer()
+		buf.Data = buf.Data[:protocol.MaxPacketBufferSize]
+		n, oobn, flags, addr, err := c.OOBCapablePacketConn.ReadMsgUDP(buf.Data, c.messages[0].OOB)
 		if n == 0 || err != nil {
 			return receivedPacket{}, err
 		}
-		c.messages = c.messages[:n]
+		c.buffers[0] = buf
+		c.messages[0].Buffers[0] = buf.Data
+		c.messages[0].Addr = addr
+		c.messages[0].N = n
+		c.messages[0].NN = oobn
+		c.messages[0].Flags = flags
+		c.messages = c.messages[:1]
+		c.readPos = 0
 	}
 
 	msg := c.messages[c.readPos]
@@ -212,10 +225,6 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 	}
 	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
-}
-
-func (c *oobConn) capabilities() connCapabilities {
-	return c.cap
 }
 
 func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
