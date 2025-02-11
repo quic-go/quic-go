@@ -34,11 +34,13 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 	g := newConnIDGenerator(
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
-		func(c protocol.ConnectionID) { added = append(added, c) },
 		sr,
-		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
-		func(c protocol.ConnectionID) { retired = append(retired, c) },
-		func([]protocol.ConnectionID, []byte) {},
+		connRunnerCallbacks{
+			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
+			RemoveConnectionID: func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
+			RetireConnectionID: func(c protocol.ConnectionID) { retired = append(retired, c) },
+			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte) {},
+		},
 		func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
 		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
 	)
@@ -116,11 +118,13 @@ func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool)
 	g := newConnIDGenerator(
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
-		func(c protocol.ConnectionID) { added = append(added, c) },
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
-		func(c protocol.ConnectionID) { removed = append(removed, c) },
-		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID retirements") },
-		func([]protocol.ConnectionID, []byte) {},
+		connRunnerCallbacks{
+			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
+			RemoveConnectionID: func(c protocol.ConnectionID) { removed = append(removed, c) },
+			RetireConnectionID: func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID retirements") },
+			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte) {},
+		},
 		func(f wire.Frame) {},
 		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
 	)
@@ -164,13 +168,15 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 	g := newConnIDGenerator(
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
-		func(c protocol.ConnectionID) { added = append(added, c) },
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
-		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
-		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID retirements") },
-		func(connIDs []protocol.ConnectionID, b []byte) {
-			replaced = connIDs
-			replacedWith = b
+		connRunnerCallbacks{
+			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
+			RemoveConnectionID: func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
+			RetireConnectionID: func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID retirements") },
+			ReplaceWithClosed: func(connIDs []protocol.ConnectionID, b []byte) {
+				replaced = connIDs
+				replacedWith = b
+			},
 		},
 		func(f wire.Frame) {},
 		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
