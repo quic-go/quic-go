@@ -1,184 +1,194 @@
 package quic
 
 import (
-	"fmt"
+	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Connection ID Generator", func() {
+func TestConnIDGeneratorIssueAndRetire(t *testing.T) {
+	t.Run("with initial client destination connection ID", func(t *testing.T) {
+		testConnIDGeneratorIssueAndRetire(t, true)
+	})
+	t.Run("without initial client destination connection ID", func(t *testing.T) {
+		testConnIDGeneratorIssueAndRetire(t, false)
+	})
+}
+
+func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID bool) {
 	var (
-		addedConnIDs       []protocol.ConnectionID
-		retiredConnIDs     []protocol.ConnectionID
-		removedConnIDs     []protocol.ConnectionID
-		replacedWithClosed []protocol.ConnectionID
-		queuedFrames       []wire.Frame
-		g                  *connIDGenerator
-		statelessResetter  *statelessResetter
+		added   []protocol.ConnectionID
+		retired []protocol.ConnectionID
 	)
-	initialConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
-	initialClientDestConnID := protocol.ParseConnectionID([]byte{0xa, 0xb, 0xc, 0xd, 0xe})
-	statelessResetter = newStatelessResetter(nil)
+	var queuedFrames []wire.Frame
+	sr := newStatelessResetter(&StatelessResetKey{1, 2, 3, 4})
+	var initialClientDestConnID *protocol.ConnectionID
+	if hasInitialClientDestConnID {
+		connID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
+		initialClientDestConnID = &connID
+	}
+	g := newConnIDGenerator(
+		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
+		initialClientDestConnID,
+		func(c protocol.ConnectionID) { added = append(added, c) },
+		sr,
+		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
+		func(c protocol.ConnectionID) { retired = append(retired, c) },
+		func([]protocol.ConnectionID, []byte) {},
+		func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
+		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
+	)
 
-	BeforeEach(func() {
-		addedConnIDs = nil
-		retiredConnIDs = nil
-		removedConnIDs = nil
-		queuedFrames = nil
-		replacedWithClosed = nil
-		g = newConnIDGenerator(
-			initialConnID,
-			&initialClientDestConnID,
-			func(c protocol.ConnectionID) { addedConnIDs = append(addedConnIDs, c) },
-			statelessResetter,
-			func(c protocol.ConnectionID) { removedConnIDs = append(removedConnIDs, c) },
-			func(c protocol.ConnectionID) { retiredConnIDs = append(retiredConnIDs, c) },
-			func(cs []protocol.ConnectionID, _ []byte) { replacedWithClosed = append(replacedWithClosed, cs...) },
-			func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
-			&protocol.DefaultConnectionIDGenerator{ConnLen: initialConnID.Len()},
-		)
+	require.Empty(t, added)
+	require.NoError(t, g.SetMaxActiveConnIDs(4))
+	require.Len(t, added, 3)
+	require.Len(t, queuedFrames, 3)
+	require.Empty(t, retired)
+	connIDs := make(map[uint64]protocol.ConnectionID)
+	// connection IDs 1, 2 and 3 were issued
+	for i, f := range queuedFrames {
+		ncid := f.(*wire.NewConnectionIDFrame)
+		require.EqualValues(t, i+1, ncid.SequenceNumber)
+		require.Equal(t, ncid.ConnectionID, added[i])
+		require.Equal(t, ncid.StatelessResetToken, sr.GetStatelessResetToken(ncid.ConnectionID))
+		connIDs[ncid.SequenceNumber] = ncid.ConnectionID
+	}
+
+	// completing the handshake retires the initial client destination connection ID
+	added = added[:0]
+	queuedFrames = queuedFrames[:0]
+	g.SetHandshakeComplete()
+	require.Empty(t, added)
+	require.Empty(t, queuedFrames)
+	if hasInitialClientDestConnID {
+		require.Equal(t, []protocol.ConnectionID{*initialClientDestConnID}, retired)
+		retired = retired[:0]
+	} else {
+		require.Empty(t, retired)
+	}
+
+	// it's invalid to retire a connection ID that hasn't been issued yet
+	err := g.Retire(4, protocol.ParseConnectionID([]byte{3, 3, 3, 3}))
+	require.ErrorIs(t, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation}, err)
+	require.ErrorContains(t, err, "retired connection ID 4 (highest issued: 3)")
+	// it's invalid to retire a connection ID in a packet that uses that connection ID
+	err = g.Retire(3, connIDs[3])
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
+	require.ErrorContains(t, err, "was used as the Destination Connection ID on this packet")
+
+	// retiring a connection ID makes us issue a new one
+	require.NoError(t, g.Retire(2, protocol.ParseConnectionID([]byte{3, 3, 3, 3})))
+	require.Equal(t, []protocol.ConnectionID{connIDs[2]}, retired)
+	require.Len(t, queuedFrames, 1)
+	require.EqualValues(t, 4, queuedFrames[0].(*wire.NewConnectionIDFrame).SequenceNumber)
+	queuedFrames = queuedFrames[:0]
+	retired = retired[:0]
+
+	// duplicate retirements don't do anything
+	require.NoError(t, g.Retire(2, protocol.ParseConnectionID([]byte{3, 3, 3, 3})))
+	require.Empty(t, queuedFrames)
+	require.Empty(t, retired)
+}
+
+func TestConnIDGeneratorRemoveAll(t *testing.T) {
+	t.Run("with initial client destination connection ID", func(t *testing.T) {
+		testConnIDGeneratorRemoveAll(t, true)
 	})
-
-	It("issues new connection IDs", func() {
-		Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
-		Expect(retiredConnIDs).To(BeEmpty())
-		Expect(addedConnIDs).To(HaveLen(3))
-		for i := 0; i < len(addedConnIDs)-1; i++ {
-			Expect(addedConnIDs[i]).ToNot(Equal(addedConnIDs[i+1]))
-		}
-		Expect(queuedFrames).To(HaveLen(3))
-		for i := 0; i < 3; i++ {
-			f := queuedFrames[i]
-			Expect(f).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
-			nf := f.(*wire.NewConnectionIDFrame)
-			Expect(nf.SequenceNumber).To(BeEquivalentTo(i + 1))
-			Expect(nf.ConnectionID.Len()).To(Equal(7))
-			Expect(nf.StatelessResetToken).To(Equal(statelessResetter.GetStatelessResetToken(nf.ConnectionID)))
-		}
+	t.Run("without initial client destination connection ID", func(t *testing.T) {
+		testConnIDGeneratorRemoveAll(t, false)
 	})
+}
 
-	It("limits the number of connection IDs that it issues", func() {
-		Expect(g.SetMaxActiveConnIDs(9999999)).To(Succeed())
-		Expect(retiredConnIDs).To(BeEmpty())
-		Expect(addedConnIDs).To(HaveLen(protocol.MaxIssuedConnectionIDs - 1))
-		Expect(queuedFrames).To(HaveLen(protocol.MaxIssuedConnectionIDs - 1))
+func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool) {
+	var initialClientDestConnID *protocol.ConnectionID
+	if hasInitialClientDestConnID {
+		connID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
+		initialClientDestConnID = &connID
+	}
+	var (
+		added   []protocol.ConnectionID
+		removed []protocol.ConnectionID
+	)
+	g := newConnIDGenerator(
+		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
+		initialClientDestConnID,
+		func(c protocol.ConnectionID) { added = append(added, c) },
+		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
+		func(c protocol.ConnectionID) { removed = append(removed, c) },
+		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID retirements") },
+		func([]protocol.ConnectionID, []byte) {},
+		func(f wire.Frame) {},
+		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
+	)
+
+	require.NoError(t, g.SetMaxActiveConnIDs(1000))
+	require.Len(t, added, protocol.MaxIssuedConnectionIDs-1)
+
+	g.RemoveAll()
+	if hasInitialClientDestConnID {
+		require.Len(t, removed, protocol.MaxIssuedConnectionIDs+1)
+		require.Contains(t, removed, *initialClientDestConnID)
+	} else {
+		require.Len(t, removed, protocol.MaxIssuedConnectionIDs)
+	}
+	for _, id := range added {
+		require.Contains(t, removed, id)
+	}
+	require.Contains(t, removed, protocol.ParseConnectionID([]byte{1, 1, 1, 1}))
+}
+
+func TestConnIDGeneratorReplaceWithClosed(t *testing.T) {
+	t.Run("with initial client destination connection ID", func(t *testing.T) {
+		testConnIDGeneratorReplaceWithClosed(t, true)
 	})
-
-	// SetMaxActiveConnIDs is called twice when dialing a 0-RTT connection:
-	// once for the restored from the old connections, once when we receive the transport parameters
-	Context("dealing with 0-RTT", func() {
-		It("doesn't issue new connection IDs when SetMaxActiveConnIDs is called with the same value", func() {
-			Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
-			Expect(queuedFrames).To(HaveLen(3))
-			queuedFrames = nil
-			Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
-			Expect(queuedFrames).To(BeEmpty())
-		})
-
-		It("issues more connection IDs if the server allows a higher limit on the resumed connection", func() {
-			Expect(g.SetMaxActiveConnIDs(3)).To(Succeed())
-			Expect(queuedFrames).To(HaveLen(2))
-			queuedFrames = nil
-			Expect(g.SetMaxActiveConnIDs(6)).To(Succeed())
-			Expect(queuedFrames).To(HaveLen(3))
-		})
-
-		It("issues more connection IDs if the server allows a higher limit on the resumed connection, when connection IDs were retired in between", func() {
-			Expect(g.SetMaxActiveConnIDs(3)).To(Succeed())
-			Expect(queuedFrames).To(HaveLen(2))
-			queuedFrames = nil
-			g.Retire(1, protocol.ConnectionID{})
-			Expect(queuedFrames).To(HaveLen(1))
-			queuedFrames = nil
-			Expect(g.SetMaxActiveConnIDs(6)).To(Succeed())
-			Expect(queuedFrames).To(HaveLen(3))
-		})
+	t.Run("without initial client destination connection ID", func(t *testing.T) {
+		testConnIDGeneratorReplaceWithClosed(t, false)
 	})
+}
 
-	It("errors if the peers tries to retire a connection ID that wasn't yet issued", func() {
-		Expect(g.Retire(1, protocol.ConnectionID{})).To(MatchError(&qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "retired connection ID 1 (highest issued: 0)",
-		}))
-	})
+func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConnID bool) {
+	var initialClientDestConnID *protocol.ConnectionID
+	if hasInitialClientDestConnID {
+		connID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
+		initialClientDestConnID = &connID
+	}
+	var (
+		added        []protocol.ConnectionID
+		replaced     []protocol.ConnectionID
+		replacedWith []byte
+	)
+	g := newConnIDGenerator(
+		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
+		initialClientDestConnID,
+		func(c protocol.ConnectionID) { added = append(added, c) },
+		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
+		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
+		func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID retirements") },
+		func(connIDs []protocol.ConnectionID, b []byte) {
+			replaced = connIDs
+			replacedWith = b
+		},
+		func(f wire.Frame) {},
+		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
+	)
 
-	It("errors if the peers tries to retire a connection ID in a packet with that connection ID", func() {
-		Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
-		Expect(queuedFrames).ToNot(BeEmpty())
-		Expect(queuedFrames[0]).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
-		f := queuedFrames[0].(*wire.NewConnectionIDFrame)
-		Expect(g.Retire(f.SequenceNumber, f.ConnectionID)).To(MatchError(&qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: fmt.Sprintf("retired connection ID %d (%s), which was used as the Destination Connection ID on this packet", f.SequenceNumber, f.ConnectionID),
-		}))
-	})
+	require.NoError(t, g.SetMaxActiveConnIDs(1000))
+	require.Len(t, added, protocol.MaxIssuedConnectionIDs-1)
 
-	It("issues new connection IDs, when old ones are retired", func() {
-		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
-		queuedFrames = nil
-		Expect(retiredConnIDs).To(BeEmpty())
-		Expect(g.Retire(3, protocol.ConnectionID{})).To(Succeed())
-		Expect(queuedFrames).To(HaveLen(1))
-		Expect(queuedFrames[0]).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
-		nf := queuedFrames[0].(*wire.NewConnectionIDFrame)
-		Expect(nf.SequenceNumber).To(BeEquivalentTo(5))
-		Expect(nf.ConnectionID.Len()).To(Equal(7))
-	})
-
-	It("retires the initial connection ID", func() {
-		Expect(g.Retire(0, protocol.ConnectionID{})).To(Succeed())
-		Expect(removedConnIDs).To(BeEmpty())
-		Expect(retiredConnIDs).To(HaveLen(1))
-		Expect(retiredConnIDs[0]).To(Equal(initialConnID))
-		Expect(addedConnIDs).To(BeEmpty())
-	})
-
-	It("handles duplicate retirements", func() {
-		Expect(g.SetMaxActiveConnIDs(11)).To(Succeed())
-		queuedFrames = nil
-		Expect(retiredConnIDs).To(BeEmpty())
-		Expect(g.Retire(5, protocol.ConnectionID{})).To(Succeed())
-		Expect(retiredConnIDs).To(HaveLen(1))
-		Expect(queuedFrames).To(HaveLen(1))
-		Expect(g.Retire(5, protocol.ConnectionID{})).To(Succeed())
-		Expect(retiredConnIDs).To(HaveLen(1))
-		Expect(queuedFrames).To(HaveLen(1))
-	})
-
-	It("retires the client's initial destination connection ID when the handshake completes", func() {
-		g.SetHandshakeComplete()
-		Expect(retiredConnIDs).To(HaveLen(1))
-		Expect(retiredConnIDs[0]).To(Equal(initialClientDestConnID))
-	})
-
-	It("removes all connection IDs", func() {
-		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
-		Expect(queuedFrames).To(HaveLen(4))
-		g.RemoveAll()
-		Expect(removedConnIDs).To(HaveLen(6)) // initial conn ID, initial client dest conn id, and newly issued ones
-		Expect(removedConnIDs).To(ContainElement(initialConnID))
-		Expect(removedConnIDs).To(ContainElement(initialClientDestConnID))
-		for _, f := range queuedFrames {
-			nf := f.(*wire.NewConnectionIDFrame)
-			Expect(removedConnIDs).To(ContainElement(nf.ConnectionID))
-		}
-	})
-
-	It("replaces with a closed connection for all connection IDs", func() {
-		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
-		Expect(queuedFrames).To(HaveLen(4))
-		g.ReplaceWithClosed([]byte("foobar"))
-		Expect(replacedWithClosed).To(HaveLen(6)) // initial conn ID, initial client dest conn id, and newly issued ones
-		Expect(replacedWithClosed).To(ContainElement(initialClientDestConnID))
-		Expect(replacedWithClosed).To(ContainElement(initialConnID))
-		for _, f := range queuedFrames {
-			nf := f.(*wire.NewConnectionIDFrame)
-			Expect(replacedWithClosed).To(ContainElement(nf.ConnectionID))
-		}
-	})
-})
+	g.ReplaceWithClosed([]byte("foobar"))
+	if hasInitialClientDestConnID {
+		require.Len(t, replaced, protocol.MaxIssuedConnectionIDs+1)
+		require.Contains(t, replaced, *initialClientDestConnID)
+	} else {
+		require.Len(t, replaced, protocol.MaxIssuedConnectionIDs)
+	}
+	for _, id := range added {
+		require.Contains(t, replaced, id)
+	}
+	require.Contains(t, replaced, protocol.ParseConnectionID([]byte{1, 1, 1, 1}))
+	require.Equal(t, []byte("foobar"), replacedWith)
+}
