@@ -1553,8 +1553,8 @@ func (s *connection) handleHandshakeEvents(now time.Time) error {
 			s.restoreTransportParameters(ev.TransportParameters)
 			close(s.earlyConnReadyChan)
 		case handshake.EventReceivedReadKeys:
-			// Queue all packets for decryption that have been undecryptable so far.
-			s.undecryptablePacketsToProcess = s.undecryptablePackets
+			// queue all previously undecryptable packets
+			s.undecryptablePacketsToProcess = append(s.undecryptablePacketsToProcess, s.undecryptablePackets...)
 			s.undecryptablePackets = nil
 		case handshake.EventDiscard0RTTKeys:
 			err = s.dropEncryptionLevel(protocol.Encryption0RTT, now)
