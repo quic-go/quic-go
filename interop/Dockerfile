@@ -23,6 +23,7 @@ ARG GITREF="master"
 
 RUN git clone https://github.com/quic-go/quic-go
 WORKDIR /quic-go
+RUN git fetch origin ${GITREF}
 RUN git checkout ${GITREF}
 RUN go get ./...
 
