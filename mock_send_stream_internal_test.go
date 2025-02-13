@@ -16,7 +16,6 @@ import (
 
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
-	qerr "github.com/quic-go/quic-go/internal/qerr"
 	wire "github.com/quic-go/quic-go/internal/wire"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -46,7 +45,7 @@ func (m *MockSendStreamI) EXPECT() *MockSendStreamIMockRecorder {
 }
 
 // CancelWrite mocks base method.
-func (m *MockSendStreamI) CancelWrite(arg0 qerr.StreamErrorCode) {
+func (m *MockSendStreamI) CancelWrite(arg0 StreamErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelWrite", arg0)
 }
@@ -70,13 +69,13 @@ func (c *MockSendStreamICancelWriteCall) Return() *MockSendStreamICancelWriteCal
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendStreamICancelWriteCall) Do(f func(qerr.StreamErrorCode)) *MockSendStreamICancelWriteCall {
+func (c *MockSendStreamICancelWriteCall) Do(f func(StreamErrorCode)) *MockSendStreamICancelWriteCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendStreamICancelWriteCall) DoAndReturn(f func(qerr.StreamErrorCode)) *MockSendStreamICancelWriteCall {
+func (c *MockSendStreamICancelWriteCall) DoAndReturn(f func(StreamErrorCode)) *MockSendStreamICancelWriteCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -196,10 +195,10 @@ func (c *MockSendStreamISetWriteDeadlineCall) DoAndReturn(f func(time.Time) erro
 }
 
 // StreamID mocks base method.
-func (m *MockSendStreamI) StreamID() protocol.StreamID {
+func (m *MockSendStreamI) StreamID() StreamID {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamID")
-	ret0, _ := ret[0].(protocol.StreamID)
+	ret0, _ := ret[0].(StreamID)
 	return ret0
 }
 
@@ -216,19 +215,19 @@ type MockSendStreamIStreamIDCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSendStreamIStreamIDCall) Return(arg0 protocol.StreamID) *MockSendStreamIStreamIDCall {
+func (c *MockSendStreamIStreamIDCall) Return(arg0 StreamID) *MockSendStreamIStreamIDCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendStreamIStreamIDCall) Do(f func() protocol.StreamID) *MockSendStreamIStreamIDCall {
+func (c *MockSendStreamIStreamIDCall) Do(f func() StreamID) *MockSendStreamIStreamIDCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendStreamIStreamIDCall) DoAndReturn(f func() protocol.StreamID) *MockSendStreamIStreamIDCall {
+func (c *MockSendStreamIStreamIDCall) DoAndReturn(f func() StreamID) *MockSendStreamIStreamIDCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

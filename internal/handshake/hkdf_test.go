@@ -3,14 +3,15 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/tls"
 	"testing"
 	"unsafe"
 
-	"golang.org/x/exp/rand"
-
 	"github.com/stretchr/testify/require"
 )
+
+var tls13CipherSuites = []uint16{tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384, tls.TLS_CHACHA20_POLY1305_SHA256}
 
 type cipherSuiteTLS13 struct {
 	ID     uint16
@@ -32,43 +33,31 @@ func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13 {
 	return nil
 }
 
-//go:linkname expandLabel crypto/tls.(*cipherSuiteTLS13).expandLabel
-func expandLabel(cs *cipherSuiteTLS13, secret []byte, label string, context []byte, length int) []byte
+//go:linkname nextTrafficSecret crypto/tls.(*cipherSuiteTLS13).nextTrafficSecret
+func nextTrafficSecret(cs *cipherSuiteTLS13, trafficSecret []byte) []byte
 
 func TestHKDF(t *testing.T) {
-	testCases := []struct {
-		name        string
-		cipherSuite uint16
-		secret      []byte
-		context     []byte
-		label       string
-		length      int
-	}{
-		{"TLS_AES_128_GCM_SHA256", tls.TLS_AES_128_GCM_SHA256, []byte("secret"), []byte("context"), "label", 42},
-		{"TLS_AES_256_GCM_SHA384", tls.TLS_AES_256_GCM_SHA384, []byte("secret"), []byte("context"), "label", 100},
-		{"TLS_CHACHA20_POLY1305_SHA256", tls.TLS_CHACHA20_POLY1305_SHA256, []byte("secret"), []byte("context"), "label", 77},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			cs := cipherSuiteTLS13ByID(tc.cipherSuite)
-			expected := expandLabel(cs, tc.secret, tc.label, tc.context, tc.length)
-			expanded := hkdfExpandLabel(cs.Hash, tc.secret, tc.context, tc.label, tc.length)
+	for _, id := range tls13CipherSuites {
+		t.Run(tls.CipherSuiteName(id), func(t *testing.T) {
+			cs := cipherSuiteTLS13ByID(id)
+			expected := nextTrafficSecret(cs, []byte("foobar"))
+			expanded := hkdfExpandLabel(cs.Hash, []byte("foobar"), nil, "traffic upd", cs.Hash.Size())
 			require.Equal(t, expected, expanded)
 		})
 	}
 }
 
+// As of Go 1.24, the standard library and our implementation of hkdfExpandLabel should provide the same performance.
 func BenchmarkHKDFExpandLabelStandardLibrary(b *testing.B) {
-	b.Run("TLS_AES_128_GCM_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_128_GCM_SHA256, true) })
-	b.Run("TLS_AES_256_GCM_SHA384", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_256_GCM_SHA384, true) })
-	b.Run("TLS_CHACHA20_POLY1305_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_CHACHA20_POLY1305_SHA256, true) })
+	for _, id := range tls13CipherSuites {
+		b.Run(tls.CipherSuiteName(id), func(b *testing.B) { benchmarkHKDFExpandLabel(b, id, true) })
+	}
 }
 
-func BenchmarkHKDFExpandLabelOptimized(b *testing.B) {
-	b.Run("TLS_AES_128_GCM_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_128_GCM_SHA256, false) })
-	b.Run("TLS_AES_256_GCM_SHA384", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_AES_256_GCM_SHA384, false) })
-	b.Run("TLS_CHACHA20_POLY1305_SHA256", func(b *testing.B) { benchmarkHKDFExpandLabel(b, tls.TLS_CHACHA20_POLY1305_SHA256, false) })
+func BenchmarkHKDFExpandLabelOurs(b *testing.B) {
+	for _, id := range tls13CipherSuites {
+		b.Run(tls.CipherSuiteName(id), func(b *testing.B) { benchmarkHKDFExpandLabel(b, id, false) })
+	}
 }
 
 func benchmarkHKDFExpandLabel(b *testing.B, cipherSuite uint16, useStdLib bool) {
@@ -79,9 +68,9 @@ func benchmarkHKDFExpandLabel(b *testing.B, cipherSuite uint16, useStdLib bool) 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if useStdLib {
-			expandLabel(cs, secret, "label", []byte("context"), 42)
+			nextTrafficSecret(cs, secret)
 		} else {
-			hkdfExpandLabel(cs.Hash, secret, []byte("context"), "label", 42)
+			hkdfExpandLabel(cs.Hash, secret, nil, "traffic upd", cs.Hash.Size())
 		}
 	}
 }

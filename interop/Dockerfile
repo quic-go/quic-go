@@ -5,7 +5,7 @@ RUN echo "TARGETPLATFORM: ${TARGETPLATFORM}"
 
 RUN apt-get update && apt-get install -y wget tar git
 
-ENV GOVERSION=1.23.0
+ENV GOVERSION=1.24.0
 
 RUN platform=$(echo ${TARGETPLATFORM} | tr '/' '-') && \
   filename="go${GOVERSION}.${platform}.tar.gz" && \
