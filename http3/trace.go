@@ -1,10 +1,12 @@
 package http3
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"net/http/httptrace"
 	"net/textproto"
+	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -98,8 +100,23 @@ func traceTLSHandshakeStart(trace *httptrace.ClientTrace) {
 	}
 }
 
-func traceTLSHandshakeDone(trace *httptrace.ClientTrace, state tls.ConnectionState, err error) {
-	if trace != nil && trace.TLSHandshakeDone != nil {
-		trace.TLSHandshakeDone(state, err)
+type traceTLSOnceCtxKey string
+
+const traceTLSOnceCtxKeyVal traceTLSOnceCtxKey = "http3.traceTLSOnce"
+
+func withTraceTLSOnce(ctx context.Context, once *sync.Once) context.Context {
+	return context.WithValue(ctx, traceTLSOnceCtxKeyVal, once)
+}
+
+func contextTraceTLSOnce(ctx context.Context) *sync.Once {
+	if v := ctx.Value(traceTLSOnceCtxKeyVal); v != nil {
+		return v.(*sync.Once)
+	}
+	return nil
+}
+
+func traceTLSHandshakeDone(trace *httptrace.ClientTrace, once *sync.Once, state tls.ConnectionState, err error) {
+	if once != nil && trace != nil && trace.TLSHandshakeDone != nil {
+		once.Do(func() { trace.TLSHandshakeDone(state, err) })
 	}
 }
