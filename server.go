@@ -17,7 +17,7 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
-// ErrServerClosed is returned by the Listener or EarlyListener's Accept method after a call to Close.
+// ErrServerClosed is returned by the [Listener] or [EarlyListener]'s Accept method after a call to Close.
 var ErrServerClosed = errServerClosed{}
 
 type errServerClosed struct{}
@@ -146,11 +146,11 @@ func (l *Listener) Accept(ctx context.Context) (Connection, error) {
 }
 
 // Close closes the listener.
-// Accept will return ErrServerClosed as soon as all connections in the accept queue have been accepted.
+// Accept will return [ErrServerClosed] as soon as all connections in the accept queue have been accepted.
 // QUIC handshakes that are still in flight will be rejected with a CONNECTION_REFUSED error.
 // The effect of closing the listener depends on how it was created:
-// * if it was created using Transport.Listen, already established connections will be unaffected
-// * if it was created using the Listen convenience method, all established connection will be closed immediately
+//   - if it was created using [Transport.Listen], already established connections will be unaffected
+//   - if it was created using the [Listen] convenience method, all established connection will be closed immediately
 func (l *Listener) Close() error {
 	return l.baseServer.Close()
 }
@@ -186,7 +186,7 @@ func (l *EarlyListener) Addr() net.Addr {
 }
 
 // ListenAddr creates a QUIC server listening on a given address.
-// See Listen for more details.
+// See [Listen] for more details.
 func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*Listener, error) {
 	conn, err := listenUDP(addr)
 	if err != nil {
@@ -199,7 +199,7 @@ func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*Listener, er
 	}).Listen(tlsConf, config)
 }
 
-// ListenAddrEarly works like ListenAddr, but it returns connections before the handshake completes.
+// ListenAddrEarly works like [ListenAddr], but it returns connections before the handshake completes.
 func ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (*EarlyListener, error) {
 	conn, err := listenUDP(addr)
 	if err != nil {
@@ -221,16 +221,16 @@ func listenUDP(addr string) (*net.UDPConn, error) {
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn.
-// If the PacketConn satisfies the OOBCapablePacketConn interface (as a net.UDPConn does),
+// If the PacketConn satisfies the [OOBCapablePacketConn] interface (as a [net.UDPConn] does),
 // ECN and packet info support will be enabled. In this case, ReadMsgUDP and WriteMsgUDP
 // will be used instead of ReadFrom and WriteTo to read/write packets.
 // A single net.PacketConn can only be used for a single call to Listen.
 //
 // The tls.Config must not be nil and must contain a certificate configuration.
-// Furthermore, it must define an application control (using NextProtos).
+// Furthermore, it must define an application control (using [NextProtos]).
 // The quic.Config may be nil, in that case the default values will be used.
 //
-// This is a convenience function. More advanced use cases should instantiate a Transport,
+// This is a convenience function. More advanced use cases should instantiate a [Transport],
 // which offers configuration options for a more fine-grained control of the connection establishment,
 // including reusing the underlying UDP socket for outgoing QUIC connections.
 // When closing a listener created with Listen, all established QUIC connections will be closed immediately.
@@ -239,7 +239,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener
 	return tr.Listen(tlsConf, config)
 }
 
-// ListenEarly works like Listen, but it returns connections before the handshake completes.
+// ListenEarly works like [Listen], but it returns connections before the handshake completes.
 func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*EarlyListener, error) {
 	tr := &Transport{Conn: conn, isSingleUse: true}
 	return tr.ListenEarly(tlsConf, config)

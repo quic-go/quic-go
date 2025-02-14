@@ -14,7 +14,7 @@ import (
 )
 
 // OOBCapablePacketConn is a connection that allows the reading of ECN bits from the IP header.
-// If the PacketConn passed to Dial or Listen satisfies this interface, quic-go will use it.
+// If the PacketConn passed to the [Transport] satisfies this interface, quic-go will use it.
 // In this case, ReadMsgUDP() will be used instead of ReadFrom() to read packets.
 type OOBCapablePacketConn interface {
 	net.PacketConn
