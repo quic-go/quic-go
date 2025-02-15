@@ -51,16 +51,16 @@ type TokenStore interface {
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// Deprecated: Applications can set their own tracing key using Transport.ConnContext.
-//
 // ConnectionTracingKey can be used to associate a [*logging.ConnectionTracer] with a [Connection].
 // It is set on the Connection.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
+//
+// Deprecated: Applications can set their own tracing key using Transport.ConnContext.
 var ConnectionTracingKey = connTracingCtxKey{}
 
-// Deprecated: Applications can set their own tracing key using Transport.ConnContext.
-//
 // ConnectionTracingID is the type of the context value saved under the ConnectionTracingKey.
+//
+// Deprecated: Applications can set their own tracing key using Transport.ConnContext.
 type ConnectionTracingID uint64
 
 type connTracingCtxKey struct{}
