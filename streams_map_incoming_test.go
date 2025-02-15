@@ -2,7 +2,6 @@ package quic
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"golang.org/x/exp/rand"
@@ -13,23 +12,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-type mockGenericStream struct {
-	num protocol.StreamNum
-
-	closed     bool
-	closeErr   error
-	sendWindow protocol.ByteCount
-}
-
-func (s *mockGenericStream) closeForShutdown(err error) {
-	s.closed = true
-	s.closeErr = err
-}
-
-func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) {
-	s.sendWindow = limit
-}
 
 var _ = Describe("Streams Map (incoming)", func() {
 	var (
@@ -63,110 +45,6 @@ var _ = Describe("Streams Map (incoming)", func() {
 			maxNumStreams,
 			func(f wire.Frame) { queuedControlFrames = append(queuedControlFrames, f) },
 		)
-	})
-
-	It("opens all streams up to the id on GetOrOpenStream", func() {
-		_, err := m.GetOrOpenStream(4)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(newItemCounter).To(Equal(4))
-	})
-
-	It("starts opening streams at the right position", func() {
-		// like the test above, but with 2 calls to GetOrOpenStream
-		_, err := m.GetOrOpenStream(2)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(newItemCounter).To(Equal(2))
-		_, err = m.GetOrOpenStream(5)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(newItemCounter).To(Equal(5))
-	})
-
-	It("accepts streams in the right order", func() {
-		_, err := m.GetOrOpenStream(2) // open streams 1 and 2
-		Expect(err).ToNot(HaveOccurred())
-		str, err := m.AcceptStream(context.Background())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(str.num).To(Equal(protocol.StreamNum(1)))
-		str, err = m.AcceptStream(context.Background())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(str.num).To(Equal(protocol.StreamNum(2)))
-	})
-
-	It("allows opening the maximum stream ID", func() {
-		str, err := m.GetOrOpenStream(1)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(str.num).To(Equal(protocol.StreamNum(1)))
-	})
-
-	It("errors when trying to get a stream ID higher than the maximum", func() {
-		_, err := m.GetOrOpenStream(6)
-		Expect(err).To(HaveOccurred())
-		Expect(err.(streamError).TestError()).To(MatchError("peer tried to open stream 6 (current limit: 5)"))
-	})
-
-	It("blocks AcceptStream until a new stream is available", func() {
-		strChan := make(chan *mockGenericStream)
-		go func() {
-			defer GinkgoRecover()
-			str, err := m.AcceptStream(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			strChan <- str
-		}()
-		Consistently(strChan).ShouldNot(Receive())
-		str, err := m.GetOrOpenStream(1)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(str.num).To(Equal(protocol.StreamNum(1)))
-		var acceptedStr *mockGenericStream
-		Eventually(strChan).Should(Receive(&acceptedStr))
-		Expect(acceptedStr.num).To(Equal(protocol.StreamNum(1)))
-	})
-
-	It("unblocks AcceptStream when the context is canceled", func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			_, err := m.AcceptStream(ctx)
-			Expect(err).To(MatchError("context canceled"))
-			close(done)
-		}()
-		Consistently(done).ShouldNot(BeClosed())
-		cancel()
-		Eventually(done).Should(BeClosed())
-	})
-
-	It("unblocks AcceptStream when it is closed", func() {
-		testErr := errors.New("test error")
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			_, err := m.AcceptStream(context.Background())
-			Expect(err).To(MatchError(testErr))
-			close(done)
-		}()
-		Consistently(done).ShouldNot(BeClosed())
-		m.CloseWithError(testErr)
-		Eventually(done).Should(BeClosed())
-	})
-
-	It("errors AcceptStream immediately if it is closed", func() {
-		testErr := errors.New("test error")
-		m.CloseWithError(testErr)
-		_, err := m.AcceptStream(context.Background())
-		Expect(err).To(MatchError(testErr))
-	})
-
-	It("closes all streams when CloseWithError is called", func() {
-		str1, err := m.GetOrOpenStream(1)
-		Expect(err).ToNot(HaveOccurred())
-		str2, err := m.GetOrOpenStream(3)
-		Expect(err).ToNot(HaveOccurred())
-		testErr := errors.New("test err")
-		m.CloseWithError(testErr)
-		Expect(str1.closed).To(BeTrue())
-		Expect(str1.closeErr).To(MatchError(testErr))
-		Expect(str2.closed).To(BeTrue())
-		Expect(str2.closeErr).To(MatchError(testErr))
 	})
 
 	It("deletes streams", func() {
