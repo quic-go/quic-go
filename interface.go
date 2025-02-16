@@ -205,6 +205,8 @@ type Connection interface {
 	SendDatagram(payload []byte) error
 	// ReceiveDatagram gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveDatagram(context.Context) ([]byte, error)
+
+	AddPath(*Transport) (*Path, error)
 }
 
 // An EarlyConnection is a connection that is handshaking.
@@ -338,7 +340,10 @@ type Config struct {
 	Allow0RTT bool
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
-	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
+	// DisableConnectionMigration disables connection migration.
+	DisableConnectionMigration bool
+	// Tracer is used to trace the connection events.
+	Tracer func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
 }
 
 // ClientHelloInfo contains information about an incoming connection attempt.
@@ -361,6 +366,9 @@ type ConnectionState struct {
 	// This is a unilateral declaration by the peer - receiving datagrams is only possible if
 	// datagram support was enabled locally via Config.EnableDatagrams.
 	SupportsDatagrams bool
+	// ConnectionMigrationDisabled says if it's possible to migrate this connection to a new interface.
+	// The server has the option to disable migration by sending the disable_active_migration transport parameter.
+	ConnectionMigrationDisabled bool
 	// Used0RTT says if 0-RTT resumption was used.
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.

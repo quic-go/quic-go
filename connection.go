@@ -129,8 +129,9 @@ type connection struct {
 	sendQueue sender
 
 	// lazily initialzed: most connections never migrate
-	pathManager        *pathManager
-	largestRcvdAppData protocol.PacketNumber
+	pathManager         *pathManager
+	largestRcvdAppData  protocol.PacketNumber
+	pathManagerOutgoing atomic.Pointer[pathManagerOutgoing]
 
 	streamsMap      streamManager
 	connIDManager   *connIDManager
@@ -299,7 +300,7 @@ var newConnection = func(
 		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:                protocol.AckDelayExponent,
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
-		DisableActiveMigration:          true,
+		DisableActiveMigration:          s.config.DisableConnectionMigration,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
 		// For interoperability with quic-go versions before May 2023, this value must be set to a value
@@ -705,6 +706,7 @@ func (s *connection) ConnectionState() ConnectionState {
 	s.connState.TLS = cs.ConnectionState
 	s.connState.Used0RTT = cs.Used0RTT
 	s.connState.GSO = s.conn.capabilities().GSO
+	s.connState.ConnectionMigrationDisabled = s.peerParams.DisableActiveMigration
 	return s.connState
 }
 
@@ -1638,7 +1640,30 @@ func (s *connection) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
 }
 
 func (s *connection) handlePathResponseFrame(f *wire.PathResponseFrame) error {
-	s.logger.Debugf("received PATH_RESPONSE frame: %v", f.Data)
+	fmt.Println(s.perspective, "handlePathResponseFrame", f)
+	switch s.perspective {
+	case protocol.PerspectiveClient:
+		return s.handlePathResponseFrameClient(f)
+	case protocol.PerspectiveServer:
+		return s.handlePathResponseFrameServer(f)
+	default:
+		panic("unreachable")
+	}
+}
+
+func (s *connection) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
+	pm := s.pathManagerOutgoing.Load()
+	if pm == nil {
+		return &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "unexpected PATH_RESPONSE frame",
+		}
+	}
+	pm.HandlePathResponseFrame(f)
+	return nil
+}
+
+func (s *connection) handlePathResponseFrameServer(f *wire.PathResponseFrame) error {
 	if s.pathManager == nil {
 		// since we didn't send PATH_CHALLENGEs yet, we don't expect PATH_RESPONSEs
 		return &qerr.TransportError{
@@ -2016,6 +2041,26 @@ func (s *connection) triggerSending(now time.Time) error {
 }
 
 func (s *connection) sendPackets(now time.Time) error {
+	if s.perspective == protocol.PerspectiveClient && s.handshakeConfirmed {
+		if pm := s.pathManagerOutgoing.Load(); pm != nil {
+			connID, frame, tr, ok := pm.NextPathToProbe()
+			if ok {
+				probe, buf, err := s.packer.PackPathProbePacket(connID, frame, s.version)
+				if err != nil {
+					return err
+				}
+				s.logger.Debugf("sending path probe packet from %s", s.LocalAddr())
+				s.logShortHeaderPacket(probe.DestConnID, probe.Ack, probe.Frames, probe.StreamFrames, probe.PacketNumber, probe.PacketNumberLen, probe.KeyPhase, protocol.ECNNon, buf.Len(), false)
+				s.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
+				fmt.Println("sending probe packet from", tr.Conn.LocalAddr())
+				tr.WriteTo(buf.Data, s.conn.RemoteAddr())
+				// There's (likely) more data to send. Loop around again.
+				s.scheduleSending()
+				return nil
+			}
+		}
+	}
+
 	// Path MTU Discovery
 	// Can't use GSO, since we need to send a single packet that's larger than our current maximum size.
 	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
@@ -2534,6 +2579,28 @@ func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
 		s.streamsMap.UseResetMaps()
 	}
 	return s, nil
+}
+
+func (s *connection) AddPath(t *Transport) (*Path, error) {
+	if s.perspective == protocol.PerspectiveServer {
+		return nil, errors.New("server cannot initiate connection migration")
+	}
+	if s.peerParams.DisableActiveMigration {
+		return nil, errors.New("server disabled connection migration")
+	}
+	// TODO: add all connection IDs to the new transport
+	s.pathManagerOutgoing.CompareAndSwap(
+		nil,
+		newPathManagerOutgoing(
+			s.connIDManager.GetConnIDForPath,
+			s.connIDManager.RetireConnIDForPath,
+			s.scheduleSending,
+		),
+	)
+	return &Path{
+		pathManager: s.pathManagerOutgoing.Load(),
+		tr:          t,
+	}, nil
 }
 
 // estimateMaxPayloadSize estimates the maximum payload size for short header packets.
