@@ -17,7 +17,7 @@ const (
 	UDP_SEND_MSG_SIZE = windows.UDP_SEND_MSG_SIZE
 )
 
-const batchSize = 8 // TO DO: Check if this is correct and works for windows too.
+const batchSize = 1 // TO DO: Check if this is correct.
 
 // TO DO: Check what this option (SNDBUF, RCVBUF) does when I try to set something above "max".
 
@@ -50,8 +50,8 @@ func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
 	h.Type = UDP_SEND_MSG_SIZE
 	h.SetLen(cmsgLen(dataLen))
 
-	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
-	offset := startLen + int(cmsgSpace(0))
+	// Calculate the offset where the UDP segment size should be written in the control message.
+	offset := startLen + int(cmsgLen(0))
 	*(*uint16)(unsafe.Pointer(&b[offset])) = size
 	return b
 }
@@ -98,9 +98,12 @@ func isPermissionError(err error) bool { return false }
 func getMaxGSOSegments() int {
 	// On Windows, GSO is supported if UDP_SEND_MSG_SIZE socket option is available
 	// We can check this by trying to set it on a dummy socket
-	dummy, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
+	dummy, err := syscall.Socket(syscall.AF_INET6, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 	if err != nil {
-		return 1
+		dummy, err = syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
+		if err != nil {
+			return 1
+		}
 	}
 	defer syscall.CloseHandle(dummy)
 
@@ -111,9 +114,10 @@ func getMaxGSOSegments() int {
 	return 512
 }
 
-// https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/shared/ws2def.h#L726
+// https://learn.microsoft.com/en-us/windows/win32/winprog/windows-data-types#uint
+// https://learn.microsoft.com/en-us/windows/win32/api/ws2def/ns-ws2def-wsamsg
 type Cmsghdr struct {
-	Len   uintptr
+	Len   uint32
 	Level int32
 	Type  int32
 }
@@ -142,12 +146,12 @@ func cmsgHdrAlign(len uintptr) uintptr {
 }
 
 func (cmsg *Cmsghdr) SetLen(length uintptr) {
-	cmsg.Len = length
+	cmsg.Len = uint32(length) // TO DO: Check if this is okay. Converting uintptr to uint32
 }
 
 func cmsgDataAlign(len uintptr) uintptr {
-	var uint uintptr
-	alignPointer := reflect.TypeOf(uint).Align()
+	var uint32var uint32
+	alignPointer := reflect.TypeOf(uint32var).Align()
 	return (len + uintptr(alignPointer) - 1) & ^(uintptr(alignPointer) - 1)
 }
 
@@ -159,7 +163,7 @@ func ParseOneSocketControlMessage(b []byte) (hdr Cmsghdr, data []byte, remainder
 	if err != nil {
 		return Cmsghdr{}, nil, nil, err
 	}
-	if i := int(cmsgDataAlign(h.Len)); i < len(b) {
+	if i := int(cmsgDataAlign(uintptr(h.Len))); i < len(b) {
 		remainder = b[i:]
 	}
 	return *h, dbuf, remainder, nil
@@ -167,7 +171,7 @@ func ParseOneSocketControlMessage(b []byte) (hdr Cmsghdr, data []byte, remainder
 
 func socketControlMessageHeaderAndData(b []byte) (*Cmsghdr, []byte, error) {
 	h := (*Cmsghdr)(unsafe.Pointer(&b[0]))
-	if h.Len < cmsgSize() || uint64(h.Len) > uint64(len(b)) {
+	if uintptr(h.Len) < cmsgSize() || uint64(h.Len) > uint64(len(b)) {
 		return nil, nil, syscall.EINVAL
 	}
 	return h, b[cmsgDataAlign(cmsgSize()):h.Len], nil

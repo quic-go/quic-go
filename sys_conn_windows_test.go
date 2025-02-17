@@ -10,6 +10,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/windows"
 )
 
 func isIPv4(ip net.IP) bool { return ip.To4() != nil }
@@ -78,6 +79,8 @@ func TestSysConnSendGSO(t *testing.T) {
 	require.NoError(t, err)
 	c := &oobRecordingConn{UDPConn: udpConn}
 	oobConn, err := newConn(c, true)
+	fmt.Println(getMaxGSOSegments())
+	fmt.Println(oobConn.capabilities().GSO)
 	require.NoError(t, err)
 	require.True(t, oobConn.capabilities().GSO)
 
@@ -93,4 +96,57 @@ func TestSysConnSendGSO(t *testing.T) {
 	expected := appendUDPSegmentSizeMsg([]byte{}, 3)
 	// Check that the first control message is the OOB control message.
 	require.Equal(t, expected, oobMsg[:len(expected)])
+}
+
+func TestAppendIPv6ECNMsg(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp6", &net.UDPAddr{IP: net.IPv6loopback, Port: 0})
+
+	c, err := net.ListenUDP("udp6", nil)
+	require.NoError(t, err)
+	defer c.Close()
+
+	sconn, err := c.SyscallConn()
+	require.NoError(t, err)
+
+	err = sconn.Control(func(fd uintptr) {
+		serr := windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_RECVECN, 1)
+		require.NoError(t, serr)
+	})
+	require.NoError(t, err)
+
+	for _, val := range []protocol.ECN{protocol.ECT1, protocol.ECT0, protocol.ECNCE, protocol.ECNNon} {
+		oob := appendIPv6ECNMsg([]byte{}, val)
+		_, _, err = c.WriteMsgUDP([]byte("foobar"), oob, addr)
+		require.NoError(t, err)
+		// doesn't seem to be sending the packet always times out if it reaches this point.
+		select {
+		case p := <-packetChan:
+			require.Equal(t, []byte("foobar"), p.data)
+			require.Equal(t, val, p.ecn)
+		case <-time.After(time.Minute):
+			t.Fatal("timeout waiting for packet")
+		}
+	}
+}
+
+func TestAppendIPv4ECNMsg(t *testing.T) {
+	addr, packetChan := runSysConnServer(t, "udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+
+	c, err := net.ListenUDP("udp4", nil)
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+		oob := appendIPv4ECNMsg([]byte{}, val)
+		_, _, err = c.WriteMsgUDP([]byte("foobar"), oob, addr)
+		require.NoError(t, err)
+		// doesn't seem to be sending the packet always times out if it reaches this point.
+		select {
+		case p := <-packetChan:
+			require.Equal(t, []byte("foobar"), p.data)
+			require.Equal(t, val, p.ecn)
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for packet")
+		}
+	}
 }
