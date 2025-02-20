@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 
+	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -153,11 +154,12 @@ var _ = Describe("Stream", func() {
 var _ = Describe("Request Stream", func() {
 	var str *requestStream
 	var qstr *mockquic.MockStream
+	var conn *mockquic.MockEarlyConnection
 
 	BeforeEach(func() {
 		qstr = mockquic.NewMockStream(mockCtrl)
 		requestWriter := newRequestWriter()
-		conn := mockquic.NewMockEarlyConnection(mockCtrl)
+		conn = mockquic.NewMockEarlyConnection(mockCtrl)
 		str = newRequestStream(
 			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil }),
 			requestWriter,
@@ -167,6 +169,7 @@ var _ = Describe("Request Stream", func() {
 			math.MaxUint64,
 			&http.Response{},
 			&httptrace.ClientTrace{},
+			nil,
 		)
 	})
 
@@ -192,6 +195,7 @@ var _ = Describe("Request Stream", func() {
 		buf := bytes.NewBuffer(encodeResponse(200))
 		buf.Write((&dataFrame{Length: 6}).Append(nil))
 		buf.Write([]byte("foobar"))
+		conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 		rsp, err := str.ReadResponse()
 		Expect(err).ToNot(HaveOccurred())
