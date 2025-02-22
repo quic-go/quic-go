@@ -267,11 +267,13 @@ var newConnection = func(
 	s.connIDGenerator = newConnIDGenerator(
 		srcConnID,
 		&clientDestConnID,
-		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 		statelessResetter,
-		runner.Remove,
-		runner.Retire,
-		runner.ReplaceWithClosed,
+		connRunnerCallbacks{
+			AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
+			RemoveConnectionID: runner.Remove,
+			RetireConnectionID: runner.Retire,
+			ReplaceWithClosed:  runner.ReplaceWithClosed,
+		},
 		s.queueControlFrame,
 		connIDGenerator,
 	)
@@ -378,11 +380,13 @@ var newClientConnection = func(
 	s.connIDGenerator = newConnIDGenerator(
 		srcConnID,
 		nil,
-		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 		statelessResetter,
-		runner.Remove,
-		runner.Retire,
-		runner.ReplaceWithClosed,
+		connRunnerCallbacks{
+			AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
+			RemoveConnectionID: runner.Remove,
+			RetireConnectionID: runner.Retire,
+			ReplaceWithClosed:  runner.ReplaceWithClosed,
+		},
 		s.queueControlFrame,
 		connIDGenerator,
 	)
