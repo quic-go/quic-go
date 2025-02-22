@@ -121,7 +121,7 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 	rtt := scaleDuration(10 * time.Millisecond)
 	serverTransport, clientTransport := getTransportsForMITMTest(t)
 
-	dropCallback := func(dir quicproxy.Direction, b []byte) bool {
+	dropCallback := func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 		if dir != direction {
 			return false
 		}
@@ -148,7 +148,7 @@ func testMITMDuplicatePackets(t *testing.T, direction quicproxy.Direction) {
 	serverTransport, clientTransport := getTransportsForMITMTest(t)
 	rtt := scaleDuration(10 * time.Millisecond)
 
-	dropCallback := func(dir quicproxy.Direction, b []byte) bool {
+	dropCallback := func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 		if dir != direction {
 			return false
 		}
@@ -169,7 +169,7 @@ func testMITMCorruptPackets(t *testing.T, direction quicproxy.Direction) {
 	rtt := scaleDuration(5 * time.Millisecond)
 
 	var numCorrupted atomic.Int32
-	dropCallback := func(dir quicproxy.Direction, b []byte) bool {
+	dropCallback := func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 		if dir != direction {
 			return false
 		}
@@ -206,7 +206,7 @@ func runMITMTest(t *testing.T, serverTr, clientTr *quic.Transport, rtt time.Dura
 	proxy := quicproxy.Proxy{
 		Conn:        newUPDConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, b []byte) time.Duration { return rtt / 2 },
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 		DropPacket:  dropCb,
 	}
 	require.NoError(t, proxy.Start())
@@ -269,7 +269,7 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 	const supportedVersion protocol.Version = 42
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		if dir != quicproxy.DirectionIncoming {
 			return rtt / 2
 		}
@@ -306,7 +306,7 @@ func TestMITMForgedRetryPacket(t *testing.T) {
 	rtt := scaleDuration(10 * time.Millisecond)
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		hdr, _, _, err := wire.ParsePacket(raw)
 		if err != nil {
 			panic("failed to parse packet: " + err.Error())
@@ -333,7 +333,7 @@ func TestMITMForgedInitialPacket(t *testing.T) {
 	rtt := scaleDuration(10 * time.Millisecond)
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		if dir == quicproxy.DirectionIncoming {
 			hdr, _, _, err := wire.ParsePacket(raw)
 			if err != nil {
@@ -370,7 +370,7 @@ func TestMITMForgedInitialPacketWithAck(t *testing.T) {
 	rtt := scaleDuration(10 * time.Millisecond)
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		if dir == quicproxy.DirectionIncoming {
 			hdr, _, _, err := wire.ParsePacket(raw)
 			if err != nil {

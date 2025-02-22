@@ -30,10 +30,10 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 	proxy := &quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 			return 5 * time.Millisecond // 10ms RTT
 		},
-		DropPacket: func(dir quicproxy.Direction, b []byte) bool {
+		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 			if drop := drop.Load(); drop && dir == quicproxy.DirectionOutgoing {
 				dropped <- b
 				return true

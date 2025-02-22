@@ -140,7 +140,7 @@ func TestDatagramLoss(t *testing.T) {
 	proxy := &quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
+		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
 				return false
 			}
@@ -159,7 +159,7 @@ func TestDatagramLoss(t *testing.T) {
 			}
 			return false
 		},
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()

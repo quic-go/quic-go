@@ -27,7 +27,7 @@ func runCountingProxyAndCount0RTTPackets(t *testing.T, serverPort int, rtt time.
 	proxy := &quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: serverPort},
-		DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
+		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
 			if contains0RTTPacket(data) {
 				num0RTTPackets.Add(1)
 			}
@@ -55,7 +55,7 @@ func dialAndReceiveTicket(
 	proxy := &quicproxy.Proxy{
 		Conn:        newUPDConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
@@ -366,8 +366,8 @@ func Test0RTTDataLoss(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:        newUPDConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
-		DropPacket: func(_ quicproxy.Direction, data []byte) bool {
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
+		DropPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) bool {
 			if !wire.IsLongHeaderPacket(data[0]) {
 				return false
 			}
@@ -436,7 +436,7 @@ func Test0RTTRetransmitOnRetry(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
+		DelayPacket: func(dir quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
 			connID, err := wire.ParseConnectionID(data, 0)
 			if err != nil {
 				panic("failed to parse connection ID")
@@ -912,7 +912,7 @@ func Test0RTTPacketQueueing(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
+		DelayPacket: func(dir quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
 			// delay the client's Initial by 1 RTT
 			if dir == quicproxy.DirectionIncoming && wire.IsLongHeaderPacket(data[0]) && data[0]&0x30>>4 == 0 {
 				return rtt * 3 / 2

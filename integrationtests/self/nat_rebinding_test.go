@@ -44,7 +44,7 @@ func TestNATRebinding(t *testing.T) {
 	var mx sync.Mutex
 	var switchedPath bool
 	var dataTransferred int
-	proxy.DelayPacket = func(dir quicproxy.Direction, b []byte) time.Duration {
+	proxy.DelayPacket = func(dir quicproxy.Direction, _, _ net.Addr, b []byte) time.Duration {
 		mx.Lock()
 		defer mx.Unlock()
 

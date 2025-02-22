@@ -37,7 +37,7 @@ func TestACKBundling(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 			return 5 * time.Millisecond
 		},
 	}
@@ -166,7 +166,7 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 			return rtt / 2
 		},
 	}
