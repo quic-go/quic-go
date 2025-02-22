@@ -82,8 +82,8 @@ func TestPathMTUDiscovery(t *testing.T) {
 	proxy := &quicproxy.Proxy{
 		Conn:        newUPDConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
-		DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
+		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 			if len(packet) > mtu {
 				return true
 			}

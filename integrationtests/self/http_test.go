@@ -851,7 +851,7 @@ func TestHTTP0RTT(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
-		DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
+		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
 			if contains0RTTPacket(data) {
 				num0RTTPackets.Add(1)
 			}

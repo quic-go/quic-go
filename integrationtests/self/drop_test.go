@@ -36,8 +36,8 @@ func TestDropTests(t *testing.T) {
 			proxy := &quicproxy.Proxy{
 				Conn:        newUPDConnLocalhost(t),
 				ServerAddr:  ln.Addr().(*net.UDPAddr),
-				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
-				DropPacket: func(d quicproxy.Direction, b []byte) bool {
+				DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
+				DropPacket: func(d quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 					if !d.Is(direction) {
 						return false
 					}

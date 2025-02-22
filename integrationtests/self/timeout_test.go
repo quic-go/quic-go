@@ -114,7 +114,7 @@ func TestIdleTimeout(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
@@ -181,7 +181,7 @@ func TestKeepAlive(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
@@ -323,7 +323,7 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 	proxy := quicproxy.Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()

@@ -20,7 +20,7 @@ func handshakeWithRTT(t *testing.T, serverAddr net.Addr, tlsConf *tls.Config, qu
 	proxy := quicproxy.Proxy{
 		Conn:        newUPDConnLocalhost(t),
 		ServerAddr:  serverAddr.(*net.UDPAddr),
-		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 	}
 	require.NoError(t, proxy.Start())
 	t.Cleanup(func() { proxy.Close() })
