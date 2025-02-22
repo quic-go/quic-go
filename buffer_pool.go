@@ -12,6 +12,8 @@ type packetBuffer struct {
 	// refCount counts how many packets Data is used in.
 	// It doesn't support concurrent use.
 	// It is > 1 when used for coalesced packet.
+	// More than one packet's data can be in the same buffer?
+	// So more than one packet will reference this buffer?
 	refCount int
 }
 
