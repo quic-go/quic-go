@@ -338,8 +338,12 @@ type Config struct {
 	Allow0RTT bool
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
-	// DisableConnectionMigration disables connection migration.
-	DisableConnectionMigration bool
+	// DisableActiveConnectionMigration requests that the client doesn't perform connection migration.
+	// Only valid for the server.
+	// Note that this:
+	//  - Does not prevent NAT rebindings, so the remote address might of the connection might still change.
+	//  - Cannot be enforced by the server.
+	DisableActiveConnectionMigration bool
 	// Tracer is used to trace the connection events.
 	Tracer func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
 }

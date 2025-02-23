@@ -301,7 +301,7 @@ var newConnection = func(
 		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:                protocol.AckDelayExponent,
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
-		DisableActiveMigration:          s.config.DisableConnectionMigration,
+		DisableActiveMigration:          s.config.DisableActiveConnectionMigration,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
 		// For interoperability with quic-go versions before May 2023, this value must be set to a value

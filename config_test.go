@@ -126,7 +126,7 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			f.Set(reflect.ValueOf(true))
 		case "Allow0RTT":
 			f.Set(reflect.ValueOf(true))
-		case "DisableConnectionMigration":
+		case "DisableActiveConnectionMigration":
 			f.Set(reflect.ValueOf(true))
 		default:
 			t.Fatalf("all fields must be accounted for, but saw unknown field %q", fn)
