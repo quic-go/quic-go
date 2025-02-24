@@ -139,10 +139,10 @@ func (d Direction) Is(dir Direction) bool {
 }
 
 // DropCallback is a callback that determines which packet gets dropped.
-type DropCallback func(dir Direction, packet []byte) bool
+type DropCallback func(dir Direction, from, to net.Addr, packet []byte) bool
 
 // DelayCallback is a callback that determines how much delay to apply to a packet.
-type DelayCallback func(dir Direction, packet []byte) time.Duration
+type DelayCallback func(dir Direction, from, to net.Addr, packet []byte) time.Duration
 
 // Proxy is a QUIC proxy that can drop and delay packets.
 type Proxy struct {
@@ -267,7 +267,7 @@ func (p *Proxy) runProxy() error {
 		}
 		p.mutex.Unlock()
 
-		if p.DropPacket != nil && p.DropPacket(DirectionIncoming, raw) {
+		if p.DropPacket != nil && p.DropPacket(DirectionIncoming, cliaddr, conn.ServerAddr, raw) {
 			if p.logger.Debug() {
 				p.logger.Debugf("dropping incoming packet(%d bytes)", n)
 			}
@@ -276,7 +276,7 @@ func (p *Proxy) runProxy() error {
 
 		var delay time.Duration
 		if p.DelayPacket != nil {
-			delay = p.DelayPacket(DirectionIncoming, raw)
+			delay = p.DelayPacket(DirectionIncoming, cliaddr, conn.ServerAddr, raw)
 		}
 		if delay == 0 {
 			if p.logger.Debug() {
@@ -301,7 +301,7 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 	go func() {
 		for {
 			buffer := make([]byte, protocol.MaxPacketBufferSize)
-			n, err := conn.GetServerConn().Read(buffer)
+			n, addr, err := conn.GetServerConn().ReadFrom(buffer)
 			if err != nil {
 				// when the connection is switched out, we set a deadline on the old connection,
 				// in order to return it immediately
@@ -312,7 +312,7 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 			}
 			raw := buffer[0:n]
 
-			if p.DropPacket != nil && p.DropPacket(DirectionOutgoing, raw) {
+			if p.DropPacket != nil && p.DropPacket(DirectionOutgoing, addr, conn.ClientAddr, raw) {
 				if p.logger.Debug() {
 					p.logger.Debugf("dropping outgoing packet(%d bytes)", n)
 				}
@@ -321,7 +321,7 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 
 			var delay time.Duration
 			if p.DelayPacket != nil {
-				delay = p.DelayPacket(DirectionOutgoing, raw)
+				delay = p.DelayPacket(DirectionOutgoing, addr, conn.ClientAddr, raw)
 			}
 			if delay == 0 {
 				if p.logger.Debug() {

@@ -40,7 +40,7 @@ func TestKeyUpdates(t *testing.T) {
 		return
 	}
 
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), nil)
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), nil)
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -48,7 +48,7 @@ func TestKeyUpdates(t *testing.T) {
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {

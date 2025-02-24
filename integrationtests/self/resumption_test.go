@@ -66,7 +66,7 @@ func TestTLSSessionResumption(t *testing.T) {
 }
 
 func handshakeWithSessionResumption(t *testing.T, serverTLSConf *tls.Config, expectSessionTicket bool) {
-	server, err := quic.Listen(newUPDConnLocalhost(t), serverTLSConf, getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), serverTLSConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -79,7 +79,7 @@ func handshakeWithSessionResumption(t *testing.T, serverTLSConf *tls.Config, exp
 	// first connection - doesn't use resumption
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn1, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), tlsConf, getQuicConfig(nil))
+	conn1, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn1.CloseWithError(0, "")
 	require.False(t, conn1.ConnectionState().TLS.DidResume)
@@ -101,7 +101,7 @@ func handshakeWithSessionResumption(t *testing.T, serverTLSConf *tls.Config, exp
 	require.False(t, serverConn.ConnectionState().TLS.DidResume)
 
 	// second connection - will use resumption, if enabled
-	conn2, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), tlsConf, getQuicConfig(nil))
+	conn2, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn2.CloseWithError(0, "")
 

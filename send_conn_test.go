@@ -101,11 +101,11 @@ func TestSendConnSendmsgFailures(t *testing.T) {
 }
 
 func TestSendConnRemoteAddrChange(t *testing.T) {
-	ln1 := newUPDConnLocalhost(t)
-	ln2 := newUPDConnLocalhost(t)
+	ln1 := newUDPConnLocalhost(t)
+	ln2 := newUDPConnLocalhost(t)
 
 	c := newSendConn(
-		&basicConn{PacketConn: newUPDConnLocalhost(t)},
+		&basicConn{PacketConn: newUDPConnLocalhost(t)},
 		ln1.LocalAddr(),
 		packetInfo{},
 		utils.DefaultLogger,

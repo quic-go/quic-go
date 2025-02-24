@@ -658,6 +658,7 @@ func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {
 		for _, f := range p.Frames {
 			f.Handler.OnLost(f.Frame)
 		}
+		h.appDataPackets.history.Remove(p.PacketNumber)
 		h.appDataPackets.history.RemovePathProbe(p.PacketNumber)
 	}
 }

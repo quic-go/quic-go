@@ -142,13 +142,16 @@ func TestDropIncomingPackets(t *testing.T) {
 	const numPackets = 6
 	serverAddr, serverReceivedPackets := runServer(t)
 	var counter atomic.Int32
+	var fromAddr, toAddr atomic.Pointer[net.Addr]
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: serverAddr,
-		DropPacket: func(d Direction, _ []byte) bool {
+		DropPacket: func(d Direction, from, to net.Addr, _ []byte) bool {
 			if d != DirectionIncoming {
 				return false
 			}
+			fromAddr.Store(&from)
+			toAddr.Store(&to)
 			return counter.Add(1)%2 == 1
 		},
 	}
@@ -174,19 +177,25 @@ func TestDropIncomingPackets(t *testing.T) {
 		t.Fatalf("received unexpected packet")
 	case <-time.After(100 * time.Millisecond):
 	}
+
+	require.Equal(t, *fromAddr.Load(), clientConn.LocalAddr())
+	require.Equal(t, *toAddr.Load(), serverAddr)
 }
 
 func TestDropOutgoingPackets(t *testing.T) {
 	const numPackets = 6
 	serverAddr, serverReceivedPackets := runServer(t)
 	var counter atomic.Int32
+	var fromAddr, toAddr atomic.Pointer[net.Addr]
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: serverAddr,
-		DropPacket: func(d Direction, _ []byte) bool {
+		DropPacket: func(d Direction, from, to net.Addr, _ []byte) bool {
 			if d != DirectionOutgoing {
 				return false
 			}
+			fromAddr.Store(&from)
+			toAddr.Store(&to)
 			return counter.Add(1)%2 == 1
 		},
 	}
@@ -225,6 +234,9 @@ func TestDropOutgoingPackets(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 	require.Len(t, serverReceivedPackets, numPackets)
+
+	require.Equal(t, *fromAddr.Load(), serverAddr)
+	require.Equal(t, *toAddr.Load(), clientConn.LocalAddr())
 }
 
 func TestDelayIncomingPackets(t *testing.T) {
@@ -235,7 +247,7 @@ func TestDelayIncomingPackets(t *testing.T) {
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: serverAddr,
-		DelayPacket: func(d Direction, _ []byte) time.Duration {
+		DelayPacket: func(d Direction, _, _ net.Addr, _ []byte) time.Duration {
 			// delay packet 1 by 200 ms
 			// delay packet 2 by 400 ms
 			// ...
@@ -282,7 +294,7 @@ func TestPacketReordering(t *testing.T) {
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: serverAddr,
-		DelayPacket: func(d Direction, _ []byte) time.Duration {
+		DelayPacket: func(d Direction, _, _ net.Addr, _ []byte) time.Duration {
 			// delay packet 1 by 600 ms
 			// delay packet 2 by 400 ms
 			// delay packet 3 by 200 ms
@@ -321,7 +333,7 @@ func TestConstantDelay(t *testing.T) { // no reordering expected here
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: serverAddr,
-		DelayPacket: func(d Direction, _ []byte) time.Duration {
+		DelayPacket: func(d Direction, _, _ net.Addr, _ []byte) time.Duration {
 			if d == DirectionOutgoing {
 				return 0
 			}
@@ -359,7 +371,7 @@ func TestDelayOutgoingPackets(t *testing.T) {
 	proxy := Proxy{
 		Conn:       newUPDConnLocalhost(t),
 		ServerAddr: serverAddr,
-		DelayPacket: func(d Direction, _ []byte) time.Duration {
+		DelayPacket: func(d Direction, _, _ net.Addr, _ []byte) time.Duration {
 			// delay packet 1 by 200 ms
 			// delay packet 2 by 400 ms
 			// ...

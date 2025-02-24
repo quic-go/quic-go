@@ -28,16 +28,16 @@ func TestDropTests(t *testing.T) {
 			t.Logf("dropping packets for %s, after a delay of %s", dropDuration, dropDelay)
 			startTime := time.Now()
 
-			ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+			ln, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
 			defer ln.Close()
 
 			var numDroppedPackets atomic.Int32
 			proxy := &quicproxy.Proxy{
-				Conn:        newUPDConnLocalhost(t),
+				Conn:        newUDPConnLocalhost(t),
 				ServerAddr:  ln.Addr().(*net.UDPAddr),
-				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
-				DropPacket: func(d quicproxy.Direction, b []byte) bool {
+				DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
+				DropPacket: func(d quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 					if !d.Is(direction) {
 						return false
 					}
@@ -56,7 +56,7 @@ func TestDropTests(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+			conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 			require.NoError(t, err)
 			defer conn.CloseWithError(0, "")
 

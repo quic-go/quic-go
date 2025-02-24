@@ -19,7 +19,6 @@ type path struct {
 	pathChallenge  [8]byte
 	validated      bool
 	rcvdNonProbing bool
-	acked          bool
 }
 
 type pathManager struct {
@@ -119,16 +118,7 @@ type pathManagerAckHandler pathManager
 var _ ackhandler.FrameHandler = &pathManagerAckHandler{}
 
 // Acknowledging the frame doesn't validate the path, only receiving the PATH_RESPONSE does.
-// However, it means that we don't need to retransmit the PATH_CHALLENGE.
-func (pm *pathManagerAckHandler) OnAcked(f wire.Frame) {
-	pc := f.(*wire.PathChallengeFrame)
-	for _, path := range pm.paths {
-		if path.pathChallenge == pc.Data {
-			path.acked = true
-			break
-		}
-	}
-}
+func (pm *pathManagerAckHandler) OnAcked(f wire.Frame) {}
 
 func (pm *pathManagerAckHandler) OnLost(f wire.Frame) {
 	// TODO: retransmit the packet the first time it is lost

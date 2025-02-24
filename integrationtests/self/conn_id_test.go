@@ -71,7 +71,7 @@ func testTransferWithConnectionIDs(
 
 	// setup server
 	serverTr := &quic.Transport{
-		Conn:                  newUPDConnLocalhost(t),
+		Conn:                  newUDPConnLocalhost(t),
 		ConnectionIDLength:    serverConnIDLen,
 		ConnectionIDGenerator: serverConnIDGenerator,
 	}
@@ -99,11 +99,11 @@ func testTransferWithConnectionIDs(
 		},
 	})
 	if clientConnIDGenerator == nil && clientConnIDLen == 0 {
-		conn, err = quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), clientQUICConf)
+		conn, err = quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), clientQUICConf)
 		require.NoError(t, err)
 	} else {
 		clientTr := &quic.Transport{
-			Conn:                  newUPDConnLocalhost(t),
+			Conn:                  newUDPConnLocalhost(t),
 			ConnectionIDLength:    clientConnIDLen,
 			ConnectionIDGenerator: clientConnIDGenerator,
 		}

@@ -1205,13 +1205,19 @@ func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
 	t1 := now
 	now = now.Add(100 * time.Millisecond)
 	_ = sendPacket(now, true)
+	t2 := now
 	now = now.Add(100 * time.Millisecond)
 	pn3 := sendPacket(now, true)
 
 	now = now.Add(100 * time.Millisecond)
 	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
+	require.NoError(t, sph.OnLossDetectionTimeout(sph.GetLossDetectionTimeout()))
+	require.Equal(t, []protocol.PacketNumber{pn1}, packets.Lost)
+	packets.Lost = packets.Lost[:0]
+
+	// receive a delayed ACK for the path probe packet
 	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: ackRanges(pn3)},
+		&wire.AckFrame{AckRanges: ackRanges(pn1, pn3)},
 		protocol.Encryption1RTT,
 		now,
 	)
@@ -1219,8 +1225,5 @@ func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{pn3}, packets.Acked)
 	require.Empty(t, packets.Lost)
 
-	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
-
-	require.NoError(t, sph.OnLossDetectionTimeout(sph.GetLossDetectionTimeout()))
-	require.Equal(t, []protocol.PacketNumber{pn1}, packets.Lost)
+	require.Equal(t, t2.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
 }
