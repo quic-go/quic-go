@@ -385,6 +385,7 @@ var _ = Describe("Server", func() {
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				packet.remoteAddr = raddr
 				done := make(chan struct{})
+				tracer.EXPECT().DroppedPacket(raddr, logging.PacketTypeNotDetermined, packet.Size(), logging.PacketDropUnexpectedVersion)
 				serv.handlePacket(packet)
 				Consistently(done, 50*time.Millisecond).ShouldNot(BeClosed())
 			})
