@@ -51,7 +51,7 @@ type TokenStore interface {
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// ConnectionTracingKey can be used to associate a [*logging.ConnectionTracer] with a [Connection].
+// ConnectionTracingKey can be used to associate a [logging.ConnectionTracer] with a [Connection].
 // It is set on the Connection.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
 //
@@ -237,7 +237,7 @@ type TokenGeneratorKey = handshake.TokenProtectorKey
 // as they are allowed by RFC 8999.
 type ConnectionID = protocol.ConnectionID
 
-// ConnectionIDFromBytes interprets b as a ConnectionID. It panics if b is
+// ConnectionIDFromBytes interprets b as a [ConnectionID]. It panics if b is
 // longer than 20 bytes.
 func ConnectionIDFromBytes(b []byte) ConnectionID {
 	return protocol.ParseConnectionID(b)

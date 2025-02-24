@@ -160,7 +160,7 @@ type Transport struct {
 
 // Listen starts listening for incoming QUIC connections.
 // There can only be a single listener on any net.PacketConn.
-// Listen may only be called again after the current [Listener] was closed.
+// Listen may only be called again after the current listener was closed.
 func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error) {
 	s, err := t.createServer(tlsConf, conf, false)
 	if err != nil {
@@ -171,7 +171,7 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 
 // ListenEarly starts listening for incoming QUIC connections.
 // There can only be a single listener on any net.PacketConn.
-// ListenEarly may only be called again after the current [Listener] was closed.
+// ListenEarly may only be called again after the current listener was closed.
 func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListener, error) {
 	s, err := t.createServer(tlsConf, conf, true)
 	if err != nil {
