@@ -14,12 +14,14 @@ import (
 func TestPathManagerOutgoingPathProbing(t *testing.T) {
 	connIDs := []protocol.ConnectionID{
 		protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-		protocol.ParseConnectionID([]byte{2, 3, 4, 5, 6, 7, 8, 9}),
 	}
-	var retiredConnIDs []protocol.ConnectionID
 	pm := newPathManagerOutgoing(
-		func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
-		func(id pathID) { retiredConnIDs = append(retiredConnIDs, connIDs[id]) },
+		func(id pathID) (protocol.ConnectionID, bool) {
+			connID := connIDs[0]
+			connIDs = connIDs[1:]
+			return connID, true
+		},
+		func(id pathID) { t.Fatal("didn't expect any connection ID to be retired") },
 		func() {},
 	)
 
@@ -41,7 +43,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 	connID, f, tr, ok := pm.NextPathToProbe()
 	require.True(t, ok)
 	require.Equal(t, tr1, tr)
-	require.Equal(t, connIDs[0], connID)
+	require.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), connID)
 	require.IsType(t, &wire.PathChallengeFrame{}, f.Frame)
 	pc := f.Frame.(*wire.PathChallengeFrame)
 	require.True(t, enabled)
@@ -93,6 +95,8 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 	_, ok = pm.ShouldSwitchPath()
 	require.False(t, ok)
 	require.NoError(t, p.Switch())
+	// the active path can't be closed
+	require.EqualError(t, p.Close(), "cannot close active path")
 	switchToTransport, ok := pm.ShouldSwitchPath()
 	require.True(t, ok)
 	require.Equal(t, tr1, switchToTransport)
@@ -198,4 +202,60 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestPathManagerOutgoingAbandonPath(t *testing.T) {
+	connIDs := []protocol.ConnectionID{
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+	}
+	var retiredPaths []pathID
+	pm := newPathManagerOutgoing(
+		func(id pathID) (protocol.ConnectionID, bool) {
+			connID := connIDs[0]
+			connIDs = connIDs[1:]
+			return connID, true
+		},
+		func(id pathID) { retiredPaths = append(retiredPaths, id) },
+		func() {},
+	)
+
+	// path abandoned before the PATH_CHALLENGE is sent out
+	p1 := pm.NewPath(&Transport{}, time.Second, func() {})
+	errChan := make(chan error, 1)
+	go func() { errChan <- p1.Probe(context.Background()) }()
+
+	// wait for the path to be queued for probing
+	time.Sleep(scaleDuration(5 * time.Millisecond))
+
+	require.NoError(t, p1.Close())
+	// closing the path multiple times is ok
+	require.NoError(t, p1.Close())
+	require.NoError(t, p1.Close())
+	_, _, _, ok := pm.NextPathToProbe()
+	require.False(t, ok)
+
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, ErrPathClosed)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	require.Empty(t, retiredPaths)
+
+	p2 := pm.NewPath(&Transport{}, time.Second, func() {})
+	go func() { errChan <- p2.Probe(context.Background()) }()
+
+	// wait for the path to be queued for probing
+	time.Sleep(scaleDuration(5 * time.Millisecond))
+	connID, f, _, ok := pm.NextPathToProbe()
+	require.True(t, ok)
+	require.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), connID)
+
+	require.NoError(t, p2.Close())
+	require.Equal(t, []pathID{p2.id}, retiredPaths)
+	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+	_, _, _, ok = pm.NextPathToProbe()
+	require.False(t, ok)
+	// it's not possible to switch to an abandoned path
+	require.ErrorIs(t, p2.Switch(), ErrPathClosed)
 }

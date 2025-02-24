@@ -12,6 +12,8 @@ import (
 
 type pathID int64
 
+const invalidPathID pathID = -1
+
 const maxPaths = 3
 
 type path struct {
