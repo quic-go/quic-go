@@ -78,7 +78,7 @@ func TestHTTP3ServerHotswap(t *testing.T) {
 	}
 
 	tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
-	quicLn, err := quic.ListenEarly(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
+	quicLn, err := quic.ListenEarly(newUDPConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	ln := &listenerWrapper{QUICEarlyListener: quicLn}
 	port := strconv.Itoa(ln.Addr().(*net.UDPAddr).Port)

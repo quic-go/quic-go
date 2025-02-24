@@ -26,7 +26,7 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	var statelessResetKey quic.StatelessResetKey
 	rand.Read(statelessResetKey[:])
 
-	c := newUPDConnLocalhost(t)
+	c := newUDPConnLocalhost(t)
 	tr := &quic.Transport{
 		Conn:               c,
 		StatelessResetKey:  &statelessResetKey,
@@ -58,7 +58,7 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 
 	var drop atomic.Bool
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
 		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
@@ -66,7 +66,7 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	defer proxy.Close()
 
 	cl := &quic.Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: connIDLen,
 	}
 	defer cl.Close()

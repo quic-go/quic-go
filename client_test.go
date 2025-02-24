@@ -15,7 +15,7 @@ func TestDial(t *testing.T) {
 	t.Run("Dial", func(t *testing.T) {
 		testDial(t,
 			func(ctx context.Context, addr net.Addr) error {
-				conn := newUPDConnLocalhost(t)
+				conn := newUDPConnLocalhost(t)
 				_, err := Dial(ctx, conn, addr, &tls.Config{}, nil)
 				return err
 			},
@@ -26,7 +26,7 @@ func TestDial(t *testing.T) {
 	t.Run("DialEarly", func(t *testing.T) {
 		testDial(t,
 			func(ctx context.Context, addr net.Addr) error {
-				conn := newUPDConnLocalhost(t)
+				conn := newUDPConnLocalhost(t)
 				_, err := DialEarly(ctx, conn, addr, &tls.Config{}, nil)
 				return err
 			},
@@ -59,7 +59,7 @@ func testDial(t *testing.T,
 	dialFn func(context.Context, net.Addr) error,
 	shouldCloseConn bool,
 ) {
-	server := newUPDConnLocalhost(t)
+	server := newUDPConnLocalhost(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errChan := make(chan error, 1)

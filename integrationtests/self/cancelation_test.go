@@ -187,7 +187,7 @@ func testStreamCancellation(
 ) {
 	const numStreams = 80
 
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -195,7 +195,7 @@ func testStreamCancellation(
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -325,7 +325,7 @@ func testStreamCancellation(
 func TestCancelAcceptStream(t *testing.T) {
 	const numStreams = 30
 
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -333,7 +333,7 @@ func TestCancelAcceptStream(t *testing.T) {
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 3}),
@@ -419,13 +419,13 @@ func TestCancelOpenStreamSync(t *testing.T) {
 		maxIncomingStreams = 4
 	)
 
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
 	conn, err := quic.Dial(
 		context.Background(),
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingUniStreams: maxIncomingStreams}),
@@ -508,7 +508,7 @@ func TestHeavyStreamCancellation(t *testing.T) {
 	const maxIncomingStreams = 500
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{MaxIncomingStreams: maxIncomingStreams, MaxIdleTimeout: 10 * time.Second}),
 	)
@@ -520,7 +520,7 @@ func TestHeavyStreamCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
 	serverConn, err := server.Accept(context.Background())

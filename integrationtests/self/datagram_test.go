@@ -34,7 +34,7 @@ func TestDatagramNegotiation(t *testing.T) {
 
 func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDatagram bool) {
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: serverEnableDatagram}),
 	)
@@ -45,7 +45,7 @@ func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDat
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: clientEnableDatagram}),
@@ -87,7 +87,7 @@ func TestDatagramSizeLimit(t *testing.T) {
 	t.Cleanup(func() { wire.MaxDatagramSize = originalMaxDatagramSize })
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
@@ -98,7 +98,7 @@ func TestDatagramSizeLimit(t *testing.T) {
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
@@ -129,7 +129,7 @@ func TestDatagramLoss(t *testing.T) {
 	const datagramSize = 500
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
@@ -138,7 +138,7 @@ func TestDatagramLoss(t *testing.T) {
 
 	var droppedIncoming, droppedOutgoing, total atomic.Int32
 	proxy := &quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
 		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
@@ -168,7 +168,7 @@ func TestDatagramLoss(t *testing.T) {
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),

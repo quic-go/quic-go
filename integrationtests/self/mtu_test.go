@@ -19,8 +19,8 @@ import (
 )
 
 func TestInitialPacketSize(t *testing.T) {
-	server := newUPDConnLocalhost(t)
-	client := newUPDConnLocalhost(t)
+	server := newUDPConnLocalhost(t)
+	client := newUDPConnLocalhost(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -46,7 +46,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 	const mtu = 1400
 
 	ln, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
 			InitialPacketSize:       1234,
@@ -80,7 +80,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 	var maxPacketSizeServer int
 	var clientPacketSizes []int
 	proxy := &quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
@@ -105,7 +105,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 
 	// Make sure to use v4-only socket here.
 	// We can't reliably set the DF bit on dual-stack sockets on older versions of macOS (before Sequoia).
-	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	defer tr.Close()
 
 	var mtus []logging.ByteCount

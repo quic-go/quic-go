@@ -26,14 +26,14 @@ const mitmTestConnIDLen = 6
 
 func getTransportsForMITMTest(t *testing.T) (serverTransport, clientTransport *quic.Transport) {
 	serverTransport = &quic.Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: mitmTestConnIDLen,
 	}
 	addTracer(serverTransport)
 	t.Cleanup(func() { serverTransport.Close() })
 
 	clientTransport = &quic.Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: mitmTestConnIDLen,
 	}
 	addTracer(clientTransport)
@@ -204,7 +204,7 @@ func runMITMTest(t *testing.T, serverTr, clientTr *quic.Transport, rtt time.Dura
 	defer ln.Close()
 
 	proxy := quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 		DropPacket:  dropCb,
@@ -413,7 +413,7 @@ func runMITMTestSuccessful(t *testing.T, serverTransport, clientTransport *quic.
 	defer ln.Close()
 
 	proxy := quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: delayCb,
 	}
