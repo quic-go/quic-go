@@ -17,11 +17,11 @@ func TestHandshakeContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(20*time.Millisecond))
 	defer cancel()
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 
 	errChan := make(chan error, 1)
 	go func() {
-		_, err := quic.Dial(ctx, newUPDConnLocalhost(t), conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+		_, err := quic.Dial(ctx, newUDPConnLocalhost(t), conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
@@ -31,9 +31,9 @@ func TestHandshakeContextTimeout(t *testing.T) {
 func TestHandshakeCancellationError(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	errChan := make(chan error, 1)
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	go func() {
-		_, err := quic.Dial(ctx, newUPDConnLocalhost(t), conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+		_, err := quic.Dial(ctx, newUDPConnLocalhost(t), conn.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
@@ -49,7 +49,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 	streamContextChan := make(chan context.Context, 1)
 
 	tr := &quic.Transport{
-		Conn: newUPDConnLocalhost(t),
+		Conn: newUDPConnLocalhost(t),
 		ConnContext: func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
 		},
@@ -80,7 +80,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	c, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	c, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
 	serverConn, err := server.Accept(ctx)
@@ -135,7 +135,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 // Users are not supposed to return a fresh context from ConnContext, but we should handle it gracefully.
 func TestConnContextFreshContext(t *testing.T) {
 	tr := &quic.Transport{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ConnContext: func(ctx context.Context) context.Context { return context.Background() },
 	}
 	defer tr.Close()
@@ -155,7 +155,7 @@ func TestConnContextFreshContext(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	c, err := quic.Dial(ctx, newUPDConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	c, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
 	select {
@@ -170,7 +170,7 @@ func TestConnContextFreshContext(t *testing.T) {
 func TestContextOnClientSide(t *testing.T) {
 	tlsServerConf := getTLSConfig()
 	tlsServerConf.ClientAuth = tls.RequestClientCert
-	server, err := quic.Listen(newUPDConnLocalhost(t), tlsServerConf, getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), tlsServerConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -185,7 +185,7 @@ func TestContextOnClientSide(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar")) //nolint:staticcheck
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		tlsConf,
 		getQuicConfig(&quic.Config{

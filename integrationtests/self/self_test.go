@@ -153,7 +153,7 @@ func addTracer(tr *quic.Transport) {
 	)
 }
 
-func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
+func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
 	t.Helper()
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)

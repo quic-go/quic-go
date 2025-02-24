@@ -25,21 +25,21 @@ func TestNATRebinding(t *testing.T) {
 	defer f.Close()
 	tlsConf.KeyLogWriter = f
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		tlsConf,
 		getQuicConfig(&quic.Config{Tracer: newTracer(tracer)}),
 	)
 	require.NoError(t, err)
 	defer server.Close()
 
-	newPath := newUPDConnLocalhost(t)
-	clientUDPConn := newUPDConnLocalhost(t)
+	newPath := newUDPConnLocalhost(t)
+	clientUDPConn := newUDPConnLocalhost(t)
 
 	oldPathRTT := scaleDuration(10 * time.Millisecond)
 	newPathRTT := scaleDuration(20 * time.Millisecond)
 	proxy := quicproxy.Proxy{
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 	}
 	var mx sync.Mutex
 	var switchedPath bool

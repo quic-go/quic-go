@@ -74,7 +74,7 @@ func TestTransportPacketHandling(t *testing.T) {
 	phm := NewMockPacketHandlerManager(mockCtrl)
 
 	tr := &Transport{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		handlerMap: phm,
 	}
 	tr.init(true)
@@ -93,7 +93,7 @@ func TestTransportPacketHandling(t *testing.T) {
 	conn2 := &mockPacketHandler{packets: connChan2}
 	phm.EXPECT().Get(connID2).Return(conn2, true)
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	_, err := conn.WriteTo(getPacket(t, connID1), tr.Conn.LocalAddr())
 	require.NoError(t, err)
 	_, err = conn.WriteTo(getPacket(t, connID2), tr.Conn.LocalAddr())
@@ -120,7 +120,7 @@ func TestTransportPacketHandling(t *testing.T) {
 }
 
 func TestTransportAndListenerConcurrentClose(t *testing.T) {
-	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	ln, err := tr.Listen(&tls.Config{}, nil)
 	require.NoError(t, err)
 	// close transport and listener concurrently
@@ -136,9 +136,9 @@ func TestTransportAndListenerConcurrentClose(t *testing.T) {
 }
 
 func TestTransportAndDialConcurrentClose(t *testing.T) {
-	server := newUPDConnLocalhost(t)
+	server := newUDPConnLocalhost(t)
 
-	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	// close transport and dial concurrently
 	errChan := make(chan error, 1)
 	go func() { errChan <- tr.Close() }()
@@ -193,7 +193,7 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	phm := NewMockPacketHandlerManager(mockCtrl)
 	tr := &Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 4,
 		handlerMap:         phm,
 	}
@@ -217,7 +217,7 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 		phm.EXPECT().GetByResetToken(token).Return(conn1, true),
 	)
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	_, err = conn.WriteTo(b, tr.Conn.LocalAddr())
 	require.NoError(t, err)
 
@@ -234,7 +234,7 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	phm := NewMockPacketHandlerManager(mockCtrl)
 	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	tr := &Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 4,
 		StatelessResetKey:  &StatelessResetKey{1, 2, 3, 4},
 		handlerMap:         phm,
@@ -255,7 +255,7 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	b, err := wire.AppendShortHeader(nil, connID, 1337, 2, protocol.KeyPhaseOne)
 	require.NoError(t, err)
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 
 	// no stateless reset sent for packets smaller than MinStatelessResetSize
 	dropped := make(chan struct{})
@@ -290,7 +290,7 @@ func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	tr := &Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 10,
 		Tracer:             tracer,
 	}
@@ -300,7 +300,7 @@ func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
 		tr.Close()
 	}()
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 
 	dropped := make(chan struct{})
 	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError).Do(
@@ -318,7 +318,7 @@ func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
 func TestTransportListening(t *testing.T) {
 	tracer, mockTracer := mocklogging.NewMockTracer(gomock.NewController(t))
 	tr := &Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 5,
 		Tracer:             tracer,
 	}
@@ -328,7 +328,7 @@ func TestTransportListening(t *testing.T) {
 		tr.Close()
 	}()
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	data := wire.ComposeVersionNegotiation([]byte{1, 2, 3, 4, 5}, []byte{6, 7, 8, 9, 10}, []protocol.Version{protocol.Version1})
 	dropped := make(chan struct{}, 10)
 	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropUnknownConnectionID).Do(
@@ -379,7 +379,7 @@ func TestTransportListening(t *testing.T) {
 }
 
 func TestTransportNonQUICPackets(t *testing.T) {
-	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	defer tr.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(5*time.Millisecond))
@@ -388,7 +388,7 @@ func TestTransportNonQUICPackets(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	data := []byte{0 /* don't set the QUIC bit */, 1, 2, 3}
 	_, err = conn.WriteTo(data, tr.Conn.LocalAddr())
 	require.NoError(t, err)
@@ -430,7 +430,7 @@ type faultySyscallConn struct{ net.PacketConn }
 func (c *faultySyscallConn) SyscallConn() (syscall.RawConn, error) { return nil, errors.New("mocked") }
 
 func TestTransportFaultySyscallConn(t *testing.T) {
-	syscallconn := &faultySyscallConn{PacketConn: newUPDConnLocalhost(t)}
+	syscallconn := &faultySyscallConn{PacketConn: newUDPConnLocalhost(t)}
 
 	tr := &Transport{Conn: syscallconn}
 	_, err := tr.Listen(&tls.Config{}, nil)
@@ -527,7 +527,7 @@ func testTransportDial(t *testing.T, early bool) {
 		return conn
 	}
 
-	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	tr.init(true)
 	defer tr.Close()
 
@@ -607,7 +607,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		return conn2
 	}
 
-	tr := &Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	tr.init(true)
 	defer tr.Close()
 

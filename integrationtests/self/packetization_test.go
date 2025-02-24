@@ -24,7 +24,7 @@ func TestACKBundling(t *testing.T) {
 
 	serverCounter, serverTracer := newPacketTracer()
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
 			DisablePathMTUDiscovery: true,
@@ -35,7 +35,7 @@ func TestACKBundling(t *testing.T) {
 	defer server.Close()
 
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 			return 5 * time.Millisecond
@@ -49,7 +49,7 @@ func TestACKBundling(t *testing.T) {
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -153,7 +153,7 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	rtt := scaleDuration(5 * time.Millisecond)
 
 	ln, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
 			InitialStreamReceiveWindow:     initialStreamWindow,
@@ -164,7 +164,7 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	defer ln.Close()
 
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 			return rtt / 2
@@ -178,7 +178,7 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{

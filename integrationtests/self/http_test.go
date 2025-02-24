@@ -59,7 +59,7 @@ func startHTTPServer(t *testing.T, mux *http.ServeMux, opts ...func(*http3.Serve
 		opt(server)
 	}
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -554,7 +554,7 @@ func TestHTTPDeadlines(t *testing.T) {
 func TestHTTPServeQUICConn(t *testing.T) {
 	tlsConf := getTLSConfig()
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
-	ln, err := quic.Listen(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
+	ln, err := quic.Listen(newUDPConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -593,7 +593,7 @@ func TestHTTPServeQUICConn(t *testing.T) {
 }
 
 func TestHTTPContextFromQUIC(t *testing.T) {
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	tr := &quic.Transport{
 		Conn: conn,
 		ConnContext: func(ctx context.Context) context.Context {
@@ -849,7 +849,7 @@ func TestHTTP0RTT(t *testing.T) {
 
 	var num0RTTPackets atomic.Uint32
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
 		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
 			if contains0RTTPacket(data) {
@@ -927,7 +927,7 @@ func TestHTTPStreamer(t *testing.T) {
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}, tlsConf, getQuicConfig(nil))
+	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}, tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 	tr := http3.Transport{}

@@ -35,7 +35,7 @@ func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dro
 		tlsConf = getTLSConfig()
 	}
 	tr := &quic.Transport{
-		Conn:                newUPDConnLocalhost(t),
+		Conn:                newUDPConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return doRetry },
 	}
 	t.Cleanup(func() { tr.Close() })
@@ -44,7 +44,7 @@ func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dro
 	t.Cleanup(func() { ln.Close() })
 
 	proxy := quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DropPacket:  dropCallback,
 		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
@@ -59,7 +59,7 @@ func dropTestProtocolClientSpeaksFirst(t *testing.T, ln *quic.Listener, addr net
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -95,7 +95,7 @@ func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, addr net
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -153,7 +153,7 @@ func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, addr net.Addr
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{

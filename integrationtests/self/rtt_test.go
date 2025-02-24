@@ -15,7 +15,7 @@ import (
 
 func runServerForRTTTest(t *testing.T) (net.Addr, <-chan error) {
 	ln, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(nil),
 	)
@@ -66,7 +66,7 @@ func TestDownloadWithFixedRTT(t *testing.T) {
 			})
 
 			proxy := quicproxy.Proxy{
-				Conn:        newUPDConnLocalhost(t),
+				Conn:        newUDPConnLocalhost(t),
 				ServerAddr:  &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: addr.(*net.UDPAddr).Port},
 				DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 			}
@@ -77,7 +77,7 @@ func TestDownloadWithFixedRTT(t *testing.T) {
 			defer cancel()
 			conn, err := quic.Dial(
 				ctx,
-				newUPDConnLocalhost(t),
+				newUDPConnLocalhost(t),
 				proxy.LocalAddr(),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
@@ -111,7 +111,7 @@ func TestDownloadWithReordering(t *testing.T) {
 			})
 
 			proxy := quicproxy.Proxy{
-				Conn:       newUPDConnLocalhost(t),
+				Conn:       newUDPConnLocalhost(t),
 				ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: addr.(*net.UDPAddr).Port},
 				DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 					return randomDuration(rtt/2, rtt*3/2) / 2
@@ -124,7 +124,7 @@ func TestDownloadWithReordering(t *testing.T) {
 			defer cancel()
 			conn, err := quic.Dial(
 				ctx,
-				newUPDConnLocalhost(t),
+				newUDPConnLocalhost(t),
 				proxy.LocalAddr(),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
