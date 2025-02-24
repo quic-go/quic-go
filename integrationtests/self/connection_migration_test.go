@@ -104,6 +104,7 @@ func TestConnectionMigration(t *testing.T) {
 	// probing the path causes a few packets to be sent on path 2
 	path, err := conn.AddPath(tr2)
 	require.NoError(t, err)
+	require.ErrorIs(t, path.Switch(), quic.ErrPathNotValidated)
 	require.NoError(t, path.Probe(ctx))
 	c2 := packetsPath2.Load()
 	require.Less(t, int(c2), 5)
