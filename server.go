@@ -426,6 +426,9 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, v) {
 		if s.disableVersionNegotiation {
+			if s.tracer != nil && s.tracer.DroppedPacket != nil {
+				s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedVersion)
+			}
 			return false
 		}
 
