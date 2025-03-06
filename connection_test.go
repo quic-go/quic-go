@@ -81,7 +81,7 @@ func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
 
 type testConnection struct {
 	conn       *connection
-	connRunner *MockConnRunner
+	connRunner *MockPacketHandlerManager
 	sendConn   *MockSendConn
 	packer     *MockPacker
 	destConnID protocol.ConnectionID
@@ -101,7 +101,7 @@ func newServerTestConnection(
 	}
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-	connRunner := NewMockConnRunner(mockCtrl)
+	phm := NewMockPacketHandlerManager(mockCtrl)
 	sendConn := NewMockSendConn(mockCtrl)
 	sendConn.EXPECT().capabilities().Return(connCapabilities{GSO: gso}).AnyTimes()
 	sendConn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
@@ -119,7 +119,7 @@ func newServerTestConnection(
 		ctx,
 		cancel,
 		sendConn,
-		connRunner,
+		&Transport{handlerMap: phm},
 		origDestConnID,
 		nil,
 		protocol.ConnectionID{},
@@ -141,7 +141,7 @@ func newServerTestConnection(
 	}
 	return &testConnection{
 		conn:       conn,
-		connRunner: connRunner,
+		connRunner: phm,
 		sendConn:   sendConn,
 		packer:     packer,
 		destConnID: origDestConnID,
@@ -162,7 +162,7 @@ func newClientTestConnection(
 	}
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-	connRunner := NewMockConnRunner(mockCtrl)
+	phm := NewMockPacketHandlerManager(mockCtrl)
 	sendConn := NewMockSendConn(mockCtrl)
 	sendConn.EXPECT().capabilities().Return(connCapabilities{}).AnyTimes()
 	sendConn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
@@ -178,7 +178,7 @@ func newClientTestConnection(
 	conn := newClientConnection(
 		context.Background(),
 		sendConn,
-		connRunner,
+		&Transport{handlerMap: phm},
 		destConnID,
 		srcConnID,
 		&protocol.DefaultConnectionIDGenerator{},
@@ -198,7 +198,7 @@ func newClientTestConnection(
 	}
 	return &testConnection{
 		conn:       conn,
-		connRunner: connRunner,
+		connRunner: phm,
 		sendConn:   sendConn,
 		packer:     packer,
 		destConnID: destConnID,
@@ -2986,6 +2986,89 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 	}
 
 	// test teardown
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	tc.conn.destroy(nil)
+	select {
+	case <-errChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestConnectionMigrationServer(t *testing.T) {
+	tc := newServerTestConnection(t, nil, nil, false)
+	_, err := tc.conn.AddPath(&Transport{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "server cannot initiate connection migration")
+}
+
+func TestConnectionMigration(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		testConnectionMigration(t, false)
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		testConnectionMigration(t, true)
+	})
+}
+
+func testConnectionMigration(t *testing.T, enabled bool) {
+	tc := newClientTestConnection(t, nil, nil, false, connectionOptHandshakeConfirmed())
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+		DisableActiveMigration:          !enabled,
+	}))
+
+	tr := &Transport{
+		Conn:              newUDPConnLocalhost(t),
+		StatelessResetKey: &StatelessResetKey{},
+	}
+	defer tr.Close()
+	path, err := tc.conn.AddPath(tr)
+	if !enabled {
+		require.Error(t, err)
+		require.ErrorContains(t, err, "server disabled connection migration")
+		return
+	}
+	require.NoError(t, err)
+	require.NotNil(t, path)
+
+	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		shortHeaderPacket{}, errNothingToPack,
+	).AnyTimes()
+	packedProbe := make(chan struct{})
+	tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ protocol.ConnectionID, f ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+			defer close(packedProbe)
+			return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
+		},
+	).AnyTimes()
+	// add a new connection ID, so the path can be probed
+	require.NoError(t, tc.conn.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
+		SequenceNumber: 1,
+		ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+	}))
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
+
+	// Adding the path initialized the transport.
+	// We can test this by triggering a stateless reset.
+	conn := newUDPConnLocalhost(t)
+	_, err = conn.WriteTo(append([]byte{0x40}, make([]byte, 100)...), tr.Conn.LocalAddr())
+	require.NoError(t, err)
+	conn.SetReadDeadline(time.Now().Add(time.Second))
+	_, _, err = conn.ReadFrom(make([]byte, 100))
+	require.NoError(t, err)
+
+	go func() { path.Probe(context.Background()) }()
+	select {
+	case <-packedProbe:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// teardown
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 	tc.conn.destroy(nil)
 	select {
