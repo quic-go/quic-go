@@ -737,10 +737,10 @@ func TestServerClose(t *testing.T) {
 	done := make(chan struct{}, numConns)
 	for range numConns {
 		conn := NewMockQUICConn(mockCtrl)
-		conn.EXPECT().run()
-		conn.EXPECT().handlePacket(gomock.Any())
-		conn.EXPECT().Context().Return(context.Background())
-		conn.EXPECT().HandshakeComplete().Return(make(chan struct{})) // doesn't complete handshake
+		conn.EXPECT().run().MaxTimes(1)
+		conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
+		conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
+		conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1) // doesn't complete handshake
 		conn.EXPECT().closeWithTransportError(ConnectionRefused).Do(func(TransportErrorCode) { done <- struct{}{} })
 		conns = append(conns, conn)
 	}
