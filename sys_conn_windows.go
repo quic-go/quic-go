@@ -28,15 +28,13 @@ const (
 	ecnMask       = 0x3 // Check pending
 	oobBufferSize = 128 // Check pending
 
+	IP_ECN          = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_ECN.html
+	IPV6_ECN        = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_ECN.html
 	IP_RECVTOS      = 0x28 // https://github.com/tpn/winsdk-10/blob/master/Include/10.0.16299.0/shared/ws2ipdef.h
 	IP_RECVECN      = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_RECVECN.html
 	IPV6_RECVECN    = 0x32 // https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_RECVECN.html
 	IPV6_RECVTCLASS = 0x28 // https://github.com/tpn/winsdk-10/blob/master/Include/10.0.14393.0/shared/ws2ipdef.h
 )
-
-type batchConn interface {
-	ReadBatch(ms []ipv4.Message, flags int) (int, error)
-}
 
 func inspectReadBuffer(c syscall.RawConn) (int, error) {
 	var size int
@@ -60,7 +58,6 @@ func inspectWriteBuffer(c syscall.RawConn) (int, error) {
 	return size, serr
 }
 
-// TO DO: Really not sure whether I'm supposed to keep this for windows too or not.
 func isECNDisabledUsingEnv() bool {
 	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_ECN"))
 	return err == nil && disabled
@@ -68,13 +65,6 @@ func isECNDisabledUsingEnv() bool {
 
 type oobConn struct {
 	OOBCapablePacketConn
-	batchConn batchConn
-
-	readPos uint8
-	// Packets received from the kernel, but not yet returned by ReadPacket().
-	messages []ipv4.Message
-	buffers  [batchSize]*packetBuffer
-
 	cap connCapabilities
 }
 
@@ -92,8 +82,8 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	// rawConn may be IPv4, IPv6 or both.
 	var errECNIPv4, errECNIPv6, errPIIPv4, errPIIPv6 error
 	if err := rawConn.Control(func(fd uintptr) {
-		errECNIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_RECVTOS, 1)
-		errECNIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_RECVTCLASS, 1)
+		errECNIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_RECVECN, 1)
+		errECNIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_RECVECN, 1)
 
 		if needsPacketInfo {
 			errPIIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, windows.IP_PKTINFO, 1)
@@ -125,81 +115,35 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		}
 	}
 
-	// Allows callers to pass in a connection that already satisfies batchConn interface
-	// to make use of the optimisation. Otherwise, ipv4.NewPacketConn would unwrap the file descriptor
-	// via SyscallConn(), and read it that way, which might not be what the caller wants.
-	var bc batchConn
-	if ibc, ok := c.(batchConn); ok {
-		bc = ibc
-	} else {
-		bc = ipv4.NewPacketConn(c)
-	}
-
-	msgs := make([]ipv4.Message, batchSize)
-	for i := range msgs {
-		// preallocate the [][]byte
-		msgs[i].Buffers = make([][]byte, 1)
-	}
 	oobConn := &oobConn{
 		OOBCapablePacketConn: c,
-		batchConn:            bc,
-		messages:             msgs,
-		readPos:              batchSize,
 		cap: connCapabilities{
 			DF:  supportsDF,
 			GSO: isGSOEnabled(rawConn),
 			ECN: isECNEnabled(),
 		},
 	}
-	for i := 0; i < batchSize; i++ {
-		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
-	}
+
 	return oobConn, nil
 }
 
 var invalidCmsgOnceV4, invalidCmsgOnceV6 sync.Once
 
 func (c *oobConn) ReadPacket() (receivedPacket, error) {
-	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
-		c.messages = c.messages[:batchSize]
-		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
-		for i := uint8(0); i < c.readPos; i++ {
-			buffer := getPacketBuffer()
-			buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
-			c.buffers[i] = buffer
-			c.messages[i].Buffers[0] = c.buffers[i].Data
-		}
-		c.readPos = 0
-
-		// Windows doesn't support recvmmsg. There might be a workaround. TO DO.
-		// Read packets one by one. Probably shouldn't be doing it like this. I'm guessing I should just get rid of the
-		// batchConn interface. Or I set batchSize to 1. I'm not sure. TO DO.
-		// This will only work because batchSize is 1. TO DO: Check if this is okay.
-		buf := getPacketBuffer()
-		buf.Data = buf.Data[:protocol.MaxPacketBufferSize]
-		n, oobn, flags, addr, err := c.OOBCapablePacketConn.ReadMsgUDP(buf.Data, c.messages[0].OOB)
-		if n == 0 || err != nil {
-			return receivedPacket{}, err
-		}
-		c.buffers[0] = buf
-		c.messages[0].Buffers[0] = buf.Data
-		c.messages[0].Addr = addr
-		c.messages[0].N = n
-		c.messages[0].NN = oobn
-		c.messages[0].Flags = flags
-		c.messages = c.messages[:1]
+	buf := getPacketBuffer()
+	buf.Data = buf.Data[:protocol.MaxPacketBufferSize]
+	oobData := make([]byte, oobBufferSize)
+	n, oobn, _, addr, err := c.OOBCapablePacketConn.ReadMsgUDP(buf.Data, oobData)
+	if n == 0 || err != nil {
+		return receivedPacket{}, err
 	}
 
-	msg := c.messages[c.readPos]
-	buffer := c.buffers[c.readPos]
-	c.readPos++
-
-	data := msg.OOB[:msg.NN]
+	data := oobData[:oobn]
 	p := receivedPacket{
-		remoteAddr: msg.Addr,
+		remoteAddr: addr,
 		rcvTime:    time.Now(),
-		data:       msg.Buffers[0][:msg.N],
-		buffer:     buffer,
+		data:       buf.Data[:n],
+		buffer:     buf,
 	}
 	for len(data) > 0 {
 		hdr, body, remainder, err := ParseOneSocketControlMessage(data)
@@ -208,7 +152,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		}
 		if hdr.Level == windows.IPPROTO_IP {
 			switch hdr.Type {
-			case windows.IP_TOS:
+			case IP_ECN:
 				// TO DO: Check
 				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case windows.IP_PKTINFO:
@@ -226,14 +170,14 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		}
 		if hdr.Level == windows.IPPROTO_IPV6 {
 			switch hdr.Type {
-			case IPV6_RECVTCLASS:
+			case IPV6_ECN:
 				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case windows.IPV6_PKTINFO:
 				// struct in6_pktinfo {
 				// 	IN6_ADDR ipi6_addr;
 				// 	ULONG    ipi6_ifindex;
 				// };
-				if len(body) == 20 { // TO DO: Check if this is correct
+				if len(body) == 20 {
 					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
 					p.info.ifIndex = binary.LittleEndian.Uint32(body[16:])
 				} else {
@@ -256,7 +200,7 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 		if !c.capabilities().GSO {
 			panic("GSO disabled")
 		}
-		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
+		oob = appendUDPSegmentSizeMsg(oob, uint32(gsoSize)) // WritePacket expects uint16, but windows needs uint32
 	}
 	if ecn != protocol.ECNUnsupported {
 		if !c.capabilities().ECN {
@@ -280,31 +224,27 @@ func (c *oobConn) capabilities() connCapabilities {
 
 func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
 	startLen := len(b)
-	const dataLen = 1
-	// works if i use cmsgLen(dataLen)
+	const dataLen = 4 // Expects a c_int, using int32
 	b = append(b, make([]byte, cmsgSpace(dataLen))...)
 	h := (*Cmsghdr)(unsafe.Pointer(&b[startLen]))
 	h.Level = windows.IPPROTO_IP
-	h.Type = windows.IP_TOS // TO DO: DANGER! windows docs said not to use this.
-	// https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
+	h.Type = IP_ECN
 	h.SetLen(cmsgLen(dataLen))
 
 	offset := startLen + int(cmsgLen(0))
-	b[offset] = val.ToHeaderBits()
+	*(*int32)(unsafe.Pointer(&b[offset])) = int32(val.ToHeaderBits())
 	return b
 }
 
 func appendIPv6ECNMsg(b []byte, val protocol.ECN) []byte {
 	startLen := len(b)
-	const dataLen = 1
-	// works if i use cmsgLen(dataLen)
+	const dataLen = 4
 	b = append(b, make([]byte, cmsgSpace(dataLen))...)
 	h := (*Cmsghdr)(unsafe.Pointer(&b[startLen]))
 	h.Level = windows.IPPROTO_IPV6
 
-	// Yeah this is definitely wrong, but I couldn't find the correct value.
-	h.Type = IPV6_RECVTCLASS // TO DO: Check if this is correct
-	h.Len = uint32(cmsgLen(dataLen))
+	h.Type = IPV6_ECN
+	h.Len = cmsgLen(dataLen)
 
 	offset := startLen + int(cmsgLen(0))
 	b[offset] = val.ToHeaderBits()

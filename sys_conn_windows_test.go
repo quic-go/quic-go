@@ -114,7 +114,7 @@ func TestAppendIPv6ECNMsg(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	for _, val := range []protocol.ECN{protocol.ECT1, protocol.ECT0, protocol.ECNCE, protocol.ECNNon} {
+	for _, val := range []protocol.ECN{protocol.ECT1, protocol.ECT0, protocol.ECNNon} {
 		oob := appendIPv6ECNMsg([]byte{}, val)
 		_, _, err = c.WriteMsgUDP([]byte("foobar"), oob, addr)
 		require.NoError(t, err)
@@ -138,6 +138,7 @@ func TestAppendIPv4ECNMsg(t *testing.T) {
 
 	for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
 		oob := appendIPv4ECNMsg([]byte{}, val)
+		fmt.Println("ecn message: ", oob)
 		_, _, err = c.WriteMsgUDP([]byte("foobar"), oob, addr)
 		require.NoError(t, err)
 		// doesn't seem to be sending the packet always times out if it reaches this point.

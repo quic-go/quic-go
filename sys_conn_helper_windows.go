@@ -17,8 +17,6 @@ const (
 	UDP_SEND_MSG_SIZE = windows.UDP_SEND_MSG_SIZE
 )
 
-const batchSize = 1 // TO DO: Check if this is correct.
-
 // TO DO: Check what this option (SNDBUF, RCVBUF) does when I try to set something above "max".
 
 func forceSetReceiveBuffer(c syscall.RawConn, bytes int) error {
@@ -41,9 +39,9 @@ func forceSetSendBuffer(c syscall.RawConn, bytes int) error {
 	return serr
 }
 
-func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
+func appendUDPSegmentSizeMsg(b []byte, size uint32) []byte {
 	startLen := len(b)
-	const dataLen = 2 // payload is a uint16
+	const dataLen = 4 // uint32
 	b = append(b, make([]byte, cmsgSpace(dataLen))...)
 	h := (*Cmsghdr)(unsafe.Pointer(&b[startLen]))
 	h.Level = syscall.IPPROTO_UDP
@@ -52,7 +50,7 @@ func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
 
 	// Calculate the offset where the UDP segment size should be written in the control message.
 	offset := startLen + int(cmsgLen(0))
-	*(*uint16)(unsafe.Pointer(&b[offset])) = size
+	*(*uint32)(unsafe.Pointer(&b[offset])) = size
 	return b
 }
 
@@ -60,31 +58,25 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	// 	struct in_pktinfo {
 	// 		IN_ADDR ipi_addr;
 	// 		ULONG   ipi_ifindex;
-	// 	  } ;
+	// 	};
 
 	// Check if the input byte slice has exactly 8 bytes (size of struct in_pktinfo)
 	if len(body) != 8 {
 		return netip.Addr{}, 0, false
 	}
-	return netip.AddrFrom4(*(*[4]byte)(body[:4])), binary.LittleEndian.Uint32(body), true
+	return netip.AddrFrom4(*(*[4]byte)(body[:4])), binary.LittleEndian.Uint32(body[4:]), true
 }
 
 func isGSOEnabled(conn syscall.RawConn) bool {
 	gsoSegmentSize := getMaxGSOSegments()
-	if gsoSegmentSize == 512 {
-		return true
-	}
+	return gsoSegmentSize == 512
+}
+
+func isECNEnabled() bool {
 	return false
 }
 
-// TO DO: Implement
-// Changing
-func isECNEnabled() bool {
-	return true
-}
-
-// I'm unable to find windows' response upon a failure caused related to GSO. TO DO
-// Quinn just checks for GSO support using isGSOEnabled, nothing else.
+// Windows does not have an error specific to GSO
 func isGSOError(error) bool {
 	return false
 }
@@ -117,7 +109,7 @@ func getMaxGSOSegments() int {
 // https://learn.microsoft.com/en-us/windows/win32/winprog/windows-data-types#uint
 // https://learn.microsoft.com/en-us/windows/win32/api/ws2def/ns-ws2def-wsamsg
 type Cmsghdr struct {
-	Len   uint32
+	Len   uintptr
 	Level int32
 	Type  int32
 }
@@ -146,12 +138,11 @@ func cmsgHdrAlign(len uintptr) uintptr {
 }
 
 func (cmsg *Cmsghdr) SetLen(length uintptr) {
-	cmsg.Len = uint32(length) // TO DO: Check if this is okay. Converting uintptr to uint32
+	cmsg.Len = length
 }
 
 func cmsgDataAlign(len uintptr) uintptr {
-	var uint32var uint32
-	alignPointer := reflect.TypeOf(uint32var).Align()
+	alignPointer := reflect.TypeOf(len).Align()
 	return (len + uintptr(alignPointer) - 1) & ^(uintptr(alignPointer) - 1)
 }
 
@@ -163,7 +154,7 @@ func ParseOneSocketControlMessage(b []byte) (hdr Cmsghdr, data []byte, remainder
 	if err != nil {
 		return Cmsghdr{}, nil, nil, err
 	}
-	if i := int(cmsgDataAlign(uintptr(h.Len))); i < len(b) {
+	if i := cmsgDataAlign(h.Len); i < uintptr(len(b)) {
 		remainder = b[i:]
 	}
 	return *h, dbuf, remainder, nil
@@ -171,7 +162,7 @@ func ParseOneSocketControlMessage(b []byte) (hdr Cmsghdr, data []byte, remainder
 
 func socketControlMessageHeaderAndData(b []byte) (*Cmsghdr, []byte, error) {
 	h := (*Cmsghdr)(unsafe.Pointer(&b[0]))
-	if uintptr(h.Len) < cmsgSize() || uint64(h.Len) > uint64(len(b)) {
+	if h.Len < cmsgSize() || h.Len > uintptr(len(b)) {
 		return nil, nil, syscall.EINVAL
 	}
 	return h, b[cmsgDataAlign(cmsgSize()):h.Len], nil
