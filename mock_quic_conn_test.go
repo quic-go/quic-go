@@ -119,6 +119,45 @@ func (c *MockQUICConnAcceptUniStreamCall) DoAndReturn(f func(context.Context) (R
 	return c
 }
 
+// AddPath mocks base method.
+func (m *MockQUICConn) AddPath(arg0 *Transport) (*Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddPath", arg0)
+	ret0, _ := ret[0].(*Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddPath indicates an expected call of AddPath.
+func (mr *MockQUICConnMockRecorder) AddPath(arg0 any) *MockQUICConnAddPathCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPath", reflect.TypeOf((*MockQUICConn)(nil).AddPath), arg0)
+	return &MockQUICConnAddPathCall{Call: call}
+}
+
+// MockQUICConnAddPathCall wrap *gomock.Call
+type MockQUICConnAddPathCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockQUICConnAddPathCall) Return(arg0 *Path, arg1 error) *MockQUICConnAddPathCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockQUICConnAddPathCall) Do(f func(*Transport) (*Path, error)) *MockQUICConnAddPathCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockQUICConnAddPathCall) DoAndReturn(f func(*Transport) (*Path, error)) *MockQUICConnAddPathCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // CloseWithError mocks base method.
 func (m *MockQUICConn) CloseWithError(arg0 ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()

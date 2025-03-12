@@ -37,7 +37,7 @@ type serverOpts struct {
 		context.Context,
 		context.CancelCauseFunc,
 		sendConn,
-		connRunner,
+		*Transport,
 		protocol.ConnectionID, // original dest connection ID
 		*protocol.ConnectionID, // retry src connection ID
 		protocol.ConnectionID, // client dest connection ID
@@ -63,7 +63,7 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 	config := populateConfig(serverOpts.config)
 	s := newServer(
 		c,
-		newPacketHandlerMap(nil, utils.DefaultLogger),
+		&Transport{handlerMap: newPacketHandlerMap(nil, utils.DefaultLogger)},
 		&protocol.DefaultConnectionIDGenerator{},
 		&statelessResetter{},
 		func(ctx context.Context) context.Context { return ctx },
@@ -623,7 +623,7 @@ func (r *connConstructorRecorder) NewConn(
 	ctx context.Context,
 	_ context.CancelCauseFunc,
 	_ sendConn,
-	_ connRunner,
+	_ *Transport,
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
@@ -863,7 +863,7 @@ func TestServerPacketHandling(t *testing.T) {
 	conn.EXPECT().handlePacket(gomock.Any()).Do(func(p receivedPacket) {
 		handledPacket <- p
 	})
-	server.connHandler.Add(destConnID, conn)
+	server.tr.handlerMap.Add(destConnID, conn)
 
 	server.handlePacket(
 		getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, srcConnID, destConnID),
@@ -889,7 +889,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ context.Context,
 			_ context.CancelCauseFunc,
 			_ sendConn,
-			_ connRunner,
+			_ *Transport,
 			_ protocol.ConnectionID,
 			_ *protocol.ConnectionID,
 			_ protocol.ConnectionID,

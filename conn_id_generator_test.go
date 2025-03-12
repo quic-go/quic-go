@@ -32,6 +32,7 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 		initialClientDestConnID = &connID
 	}
 	g := newConnIDGenerator(
+		1,
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		sr,
@@ -116,6 +117,7 @@ func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool)
 		removed []protocol.ConnectionID
 	)
 	g := newConnIDGenerator(
+		0,
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -166,6 +168,7 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 		replacedWith []byte
 	)
 	g := newConnIDGenerator(
+		1,
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -229,6 +232,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	var queuedFrames []wire.Frame
 
 	g := newConnIDGenerator(
+		1,
 		initialConnID,
 		&clientDestConnID,
 		sr,
@@ -240,7 +244,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	require.Len(t, tracker1.added, 2)
 
 	// add the second runner - it should get all existing connection IDs
-	g.AddConnRunner(runner2)
+	g.AddConnRunner(2, runner2)
 	require.Len(t, tracker1.added, 2) // unchanged
 	require.Len(t, tracker2.added, 4)
 	require.Contains(t, tracker2.added, initialConnID)

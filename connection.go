@@ -112,6 +112,8 @@ func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTr
 
 // A Connection is a QUIC connection
 type connection struct {
+	tr *Transport
+
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
@@ -129,8 +131,9 @@ type connection struct {
 	sendQueue sender
 
 	// lazily initialzed: most connections never migrate
-	pathManager        *pathManager
-	largestRcvdAppData protocol.PacketNumber
+	pathManager         *pathManager
+	largestRcvdAppData  protocol.PacketNumber
+	pathManagerOutgoing atomic.Pointer[pathManagerOutgoing]
 
 	streamsMap      streamManager
 	connIDManager   *connIDManager
@@ -223,7 +226,7 @@ var newConnection = func(
 	ctx context.Context,
 	ctxCancel context.CancelCauseFunc,
 	conn sendConn,
-	runner connRunner,
+	tr *Transport,
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
@@ -242,6 +245,7 @@ var newConnection = func(
 	s := &connection{
 		ctx:                 ctx,
 		ctxCancel:           ctxCancel,
+		tr:                  tr,
 		conn:                conn,
 		config:              conf,
 		handshakeDestConnID: destConnID,
@@ -258,6 +262,7 @@ var newConnection = func(
 	} else {
 		s.logID = destConnID.String()
 	}
+	runner := tr.connRunner()
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
@@ -265,6 +270,7 @@ var newConnection = func(
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
+		tr.id(),
 		srcConnID,
 		&clientDestConnID,
 		statelessResetter,
@@ -301,7 +307,6 @@ var newConnection = func(
 		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:                protocol.AckDelayExponent,
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
-		DisableActiveMigration:          true,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
 		// For interoperability with quic-go versions before May 2023, this value must be set to a value
@@ -344,7 +349,7 @@ var newConnection = func(
 var newClientConnection = func(
 	ctx context.Context,
 	conn sendConn,
-	runner connRunner,
+	tr *Transport,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	connIDGenerator ConnectionIDGenerator,
@@ -359,6 +364,7 @@ var newClientConnection = func(
 	v protocol.Version,
 ) quicConn {
 	s := &connection{
+		tr:                  tr,
 		conn:                conn,
 		config:              conf,
 		origDestConnID:      destConnID,
@@ -371,6 +377,7 @@ var newClientConnection = func(
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
 	}
+	runner := tr.connRunner()
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
@@ -378,6 +385,7 @@ var newClientConnection = func(
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
+		tr.id(),
 		srcConnID,
 		nil,
 		statelessResetter,
@@ -415,7 +423,6 @@ var newClientConnection = func(
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
 		MaxUDPPayloadSize:              protocol.MaxPacketBufferSize,
 		AckDelayExponent:               protocol.AckDelayExponent,
-		DisableActiveMigration:         true,
 		// For interoperability with quic-go versions before May 2023, this value must be set to a value
 		// different from protocol.DefaultActiveConnectionIDLimit.
 		// If set to the default value, it will be omitted from the transport parameters, which will make
@@ -645,6 +652,16 @@ runLoop:
 			}
 		}
 
+		if s.perspective == protocol.PerspectiveClient {
+			pm := s.pathManagerOutgoing.Load()
+			if pm != nil {
+				tr, ok := pm.ShouldSwitchPath()
+				if ok {
+					s.switchToNewPath(tr, now)
+				}
+			}
+		}
+
 		if s.sendQueue.WouldBlock() {
 			// The send queue is still busy sending out packets. Wait until there's space to enqueue new packets.
 			sendQueueAvailable = s.sendQueue.Available()
@@ -757,6 +774,24 @@ func (s *connection) idleTimeoutStartTime() time.Time {
 		startTime = t
 	}
 	return startTime
+}
+
+func (s *connection) switchToNewPath(tr *Transport, now time.Time) {
+	initialPacketSize := protocol.ByteCount(s.config.InitialPacketSize)
+	s.sentPacketHandler.MigratedPath(now, initialPacketSize)
+	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
+	if s.peerParams.MaxUDPPayloadSize > 0 && s.peerParams.MaxUDPPayloadSize < maxPacketSize {
+		maxPacketSize = s.peerParams.MaxUDPPayloadSize
+	}
+	s.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
+	s.conn = newSendConn(tr.conn, s.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
+	s.sendQueue.Close()
+	s.sendQueue = newSendQueue(s.conn)
+	go func() {
+		if err := s.sendQueue.Run(); err != nil {
+			s.destroyImpl(err)
+		}
+	}()
 }
 
 func (s *connection) handleHandshakeComplete(now time.Time) error {
@@ -1642,7 +1677,29 @@ func (s *connection) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
 }
 
 func (s *connection) handlePathResponseFrame(f *wire.PathResponseFrame) error {
-	s.logger.Debugf("received PATH_RESPONSE frame: %v", f.Data)
+	switch s.perspective {
+	case protocol.PerspectiveClient:
+		return s.handlePathResponseFrameClient(f)
+	case protocol.PerspectiveServer:
+		return s.handlePathResponseFrameServer(f)
+	default:
+		panic("unreachable")
+	}
+}
+
+func (s *connection) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
+	pm := s.pathManagerOutgoing.Load()
+	if pm == nil {
+		return &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "unexpected PATH_RESPONSE frame",
+		}
+	}
+	pm.HandlePathResponseFrame(f)
+	return nil
+}
+
+func (s *connection) handlePathResponseFrameServer(f *wire.PathResponseFrame) error {
 	if s.pathManager == nil {
 		// since we didn't send PATH_CHALLENGEs yet, we don't expect PATH_RESPONSEs
 		return &qerr.TransportError{
@@ -2020,6 +2077,25 @@ func (s *connection) triggerSending(now time.Time) error {
 }
 
 func (s *connection) sendPackets(now time.Time) error {
+	if s.perspective == protocol.PerspectiveClient && s.handshakeConfirmed {
+		if pm := s.pathManagerOutgoing.Load(); pm != nil {
+			connID, frame, tr, ok := pm.NextPathToProbe()
+			if ok {
+				probe, buf, err := s.packer.PackPathProbePacket(connID, frame, s.version)
+				if err != nil {
+					return err
+				}
+				s.logger.Debugf("sending path probe packet from %s", s.LocalAddr())
+				s.logShortHeaderPacket(probe.DestConnID, probe.Ack, probe.Frames, probe.StreamFrames, probe.PacketNumber, probe.PacketNumberLen, probe.KeyPhase, protocol.ECNNon, buf.Len(), false)
+				s.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
+				tr.WriteTo(buf.Data, s.conn.RemoteAddr())
+				// There's (likely) more data to send. Loop around again.
+				s.scheduleSending()
+				return nil
+			}
+		}
+	}
+
 	// Path MTU Discovery
 	// Can't use GSO, since we need to send a single packet that's larger than our current maximum size.
 	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
@@ -2526,6 +2602,43 @@ func (s *connection) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 
 func (s *connection) LocalAddr() net.Addr  { return s.conn.LocalAddr() }
 func (s *connection) RemoteAddr() net.Addr { return s.conn.RemoteAddr() }
+
+func (s *connection) getPathManager() *pathManagerOutgoing {
+	s.pathManagerOutgoing.CompareAndSwap(nil,
+		func() *pathManagerOutgoing { // this function is only called if a swap is performed
+			return newPathManagerOutgoing(
+				s.connIDManager.GetConnIDForPath,
+				s.connIDManager.RetireConnIDForPath,
+				s.scheduleSending,
+			)
+		}(),
+	)
+	return s.pathManagerOutgoing.Load()
+}
+
+func (s *connection) AddPath(t *Transport) (*Path, error) {
+	if s.perspective == protocol.PerspectiveServer {
+		return nil, errors.New("server cannot initiate connection migration")
+	}
+	if s.peerParams.DisableActiveMigration {
+		return nil, errors.New("server disabled connection migration")
+	}
+	if err := t.init(false); err != nil {
+		return nil, err
+	}
+	return s.getPathManager().NewPath(t, func() {
+		runner := t.connRunner()
+		s.connIDGenerator.AddConnRunner(
+			t.id(),
+			connRunnerCallbacks{
+				AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
+				RemoveConnectionID: runner.Remove,
+				RetireConnectionID: runner.Retire,
+				ReplaceWithClosed:  runner.ReplaceWithClosed,
+			},
+		)
+	}), nil
+}
 
 func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
 	// The handshake might fail after the server rejected 0-RTT.
