@@ -1052,47 +1052,46 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket) (wasProcessed boo
 	if s.perspective == protocol.PerspectiveClient {
 		return true, nil
 	}
+	if addrsEqual(p.remoteAddr, s.RemoteAddr()) {
+		return true, nil
+	}
 
 	var shouldSwitchPath bool
-	if !addrsEqual(p.remoteAddr, s.RemoteAddr()) {
-		if s.pathManager == nil {
-			s.pathManager = newPathManager(
-				s.connIDManager.GetConnIDForPath,
-				s.connIDManager.RetireConnIDForPath,
-				s.logger,
-			)
-		}
-		var destConnID protocol.ConnectionID
-		var pathChallenge ackhandler.Frame
-		destConnID, pathChallenge, shouldSwitchPath = s.pathManager.HandlePacket(p.remoteAddr, isNonProbing)
-		if pathChallenge.Frame != nil {
-			probe, buf, err := s.packer.PackPathProbePacket(destConnID, []ackhandler.Frame{pathChallenge}, s.version)
-			if err != nil {
-				return false, err
-			}
-			s.logger.Debugf("sending path probe packet to %s", p.remoteAddr)
-			s.logShortHeaderPacket(probe.DestConnID, probe.Ack, probe.Frames, probe.StreamFrames, probe.PacketNumber, probe.PacketNumberLen, probe.KeyPhase, protocol.ECNNon, buf.Len(), false)
-			s.registerPackedShortHeaderPacket(probe, protocol.ECNNon, p.rcvTime)
-			s.sendQueue.SendProbe(buf, p.remoteAddr)
-		}
-		// We only switch paths in response to the highest-numbered non-probing packet,
-		// see section 9.3 of RFC 9000.
-		if !shouldSwitchPath || pn != s.largestRcvdAppData {
-			return true, nil
-		}
-		s.pathManager.SwitchToPath(p.remoteAddr)
-		s.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(s.config.InitialPacketSize))
-		maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
-		if s.peerParams.MaxUDPPayloadSize > 0 && s.peerParams.MaxUDPPayloadSize < maxPacketSize {
-			maxPacketSize = s.peerParams.MaxUDPPayloadSize
-		}
-		s.mtuDiscoverer.Reset(
-			p.rcvTime,
-			protocol.ByteCount(s.config.InitialPacketSize),
-			maxPacketSize,
+	if s.pathManager == nil {
+		s.pathManager = newPathManager(
+			s.connIDManager.GetConnIDForPath,
+			s.connIDManager.RetireConnIDForPath,
+			s.logger,
 		)
-		s.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	}
+	destConnID, pathChallenge, shouldSwitchPath := s.pathManager.HandlePacket(p.remoteAddr, isNonProbing)
+	if pathChallenge.Frame != nil {
+		probe, buf, err := s.packer.PackPathProbePacket(destConnID, []ackhandler.Frame{pathChallenge}, s.version)
+		if err != nil {
+			return true, err
+		}
+		s.logger.Debugf("sending path probe packet to %s", p.remoteAddr)
+		s.logShortHeaderPacket(probe.DestConnID, probe.Ack, probe.Frames, probe.StreamFrames, probe.PacketNumber, probe.PacketNumberLen, probe.KeyPhase, protocol.ECNNon, buf.Len(), false)
+		s.registerPackedShortHeaderPacket(probe, protocol.ECNNon, p.rcvTime)
+		s.sendQueue.SendProbe(buf, p.remoteAddr)
+	}
+	// We only switch paths in response to the highest-numbered non-probing packet,
+	// see section 9.3 of RFC 9000.
+	if !shouldSwitchPath || pn != s.largestRcvdAppData {
+		return true, nil
+	}
+	s.pathManager.SwitchToPath(p.remoteAddr)
+	s.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(s.config.InitialPacketSize))
+	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
+	if s.peerParams.MaxUDPPayloadSize > 0 && s.peerParams.MaxUDPPayloadSize < maxPacketSize {
+		maxPacketSize = s.peerParams.MaxUDPPayloadSize
+	}
+	s.mtuDiscoverer.Reset(
+		p.rcvTime,
+		protocol.ByteCount(s.config.InitialPacketSize),
+		maxPacketSize,
+	)
+	s.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	return true, nil
 }
 
