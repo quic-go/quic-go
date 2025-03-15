@@ -463,10 +463,10 @@ func testTransportParameterPreferredAddress(t *testing.T, hasIPv4, hasIPv6 bool)
 		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 	}
 	if hasIPv4 {
-		pa.IPv4 = &addr4
+		pa.IPv4 = addr4
 	}
 	if hasIPv6 {
-		pa.IPv6 = &addr6
+		pa.IPv6 = addr6
 	}
 
 	data := (&TransportParameters{
@@ -477,16 +477,16 @@ func testTransportParameterPreferredAddress(t *testing.T, hasIPv4, hasIPv6 bool)
 	p := &TransportParameters{}
 	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
 	if hasIPv4 {
-		require.NotNil(t, p.PreferredAddress.IPv4)
-		require.Equal(t, addr4, *p.PreferredAddress.IPv4)
+		require.True(t, p.PreferredAddress.IPv4.IsValid())
+		require.Equal(t, addr4, p.PreferredAddress.IPv4)
 	} else {
-		require.Nil(t, p.PreferredAddress.IPv4)
+		require.False(t, p.PreferredAddress.IPv4.IsValid())
 	}
 	if hasIPv6 {
-		require.NotNil(t, p.PreferredAddress.IPv6)
-		require.Equal(t, addr6, *p.PreferredAddress.IPv6)
+		require.True(t, p.PreferredAddress.IPv6.IsValid())
+		require.Equal(t, addr6, p.PreferredAddress.IPv6)
 	} else {
-		require.Nil(t, p.PreferredAddress.IPv6)
+		require.False(t, p.PreferredAddress.IPv6.IsValid())
 	}
 	require.Equal(t, pa.ConnectionID, p.PreferredAddress.ConnectionID)
 	require.Equal(t, pa.StatelessResetToken, p.PreferredAddress.StatelessResetToken)
@@ -506,11 +506,9 @@ func TestTransportParameterPreferredAddressFromClient(t *testing.T) {
 }
 
 func TestTransportParameterPreferredAddressZeroLengthConnectionID(t *testing.T) {
-	addr4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42)
-	addr6 := netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13)
 	pa := &PreferredAddress{
-		IPv4:                &addr4,
-		IPv6:                &addr6,
+		IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
+		IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
 		ConnectionID:        protocol.ParseConnectionID([]byte{}),
 		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 	}
@@ -860,11 +858,9 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 		var ip6 [16]byte
 		rand.Read(ip4[:])
 		rand.Read(ip6[:])
-		addr4 := netip.AddrPortFrom(netip.AddrFrom4(ip4), 1234)
-		addr6 := netip.AddrPortFrom(netip.AddrFrom16(ip6), 4321)
 		params.PreferredAddress = &PreferredAddress{
-			IPv4:                &addr4,
-			IPv6:                &addr6,
+			IPv4:                netip.AddrPortFrom(netip.AddrFrom4(ip4), 1234),
+			IPv6:                netip.AddrPortFrom(netip.AddrFrom16(ip6), 4321),
 			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 			StatelessResetToken: token2,
 		}
