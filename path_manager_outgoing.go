@@ -12,8 +12,12 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-// ErrPathNotValidated is returned when trying to use a path before path probing has completed.
-var ErrPathNotValidated = errors.New("path not yet validated")
+var (
+	// ErrPathAbandoned is returned when trying to switch to a path that has been abandoned.
+	ErrPathAbandoned = errors.New("path abandoned")
+	// ErrPathNotValidated is returned when trying to use a path before path probing has completed.
+	ErrPathNotValidated = errors.New("path not yet validated")
+)
 
 var errPathDoesNotExist = errors.New("path does not exist")
 
@@ -25,6 +29,7 @@ type Path struct {
 
 	enablePath     func()
 	startedProbing atomic.Bool
+	abandon        chan struct{}
 }
 
 func (p *Path) Probe(ctx context.Context) error {
@@ -35,6 +40,8 @@ func (p *Path) Probe(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return context.Cause(ctx)
+	case <-p.abandon:
+		return ErrPathAbandoned
 	case <-done:
 		return nil
 	}
@@ -44,17 +51,39 @@ func (p *Path) Probe(ctx context.Context) error {
 // It immediately stops sending on the old path, and sends on this new path.
 func (p *Path) Switch() error {
 	if err := p.pathManager.switchToPath(p.id); err != nil {
-		if errors.Is(err, errPathDoesNotExist) && !p.startedProbing.Load() {
+		switch {
+		case errors.Is(err, ErrPathNotValidated):
+			return err
+		case errors.Is(err, errPathDoesNotExist) && !p.startedProbing.Load():
 			return ErrPathNotValidated
+		default:
+			return ErrPathAbandoned
 		}
-		return err
 	}
 	return nil
 }
 
+// Close abandons a path.
+// It is not possible to close the path that’s currently active.
+// After closing, it is not possible to probe this path again by calling Probe.
+func (p *Path) Close() error {
+	select {
+	case <-p.abandon:
+		return ErrPathAbandoned
+	default:
+	}
+
+	if err := p.pathManager.removePath(p.id); err != nil {
+		return err
+	}
+	close(p.abandon)
+	return nil
+}
+
 type pathOutgoing struct {
-	pathChallenge [8]byte
-	tr            *Transport
+	tr *Transport
+
+	pathChallenge *[8]byte
 	isValidated   bool
 	validated     chan<- struct{} // closed when the path the corresponding PATH_RESPONSE is received
 	enablePath    func()
@@ -66,6 +95,7 @@ type pathManagerOutgoing struct {
 	scheduleSending func()
 
 	mx             sync.Mutex
+	activePath     pathID
 	pathsToProbe   []pathID
 	paths          map[pathID]*pathOutgoing
 	nextPathID     pathID
@@ -78,6 +108,8 @@ func newPathManagerOutgoing(
 	scheduleSending func(),
 ) *pathManagerOutgoing {
 	return &pathManagerOutgoing{
+		activePath:      0, // at initialization time, we're guaranteed to be using the handshake path
+		nextPathID:      1,
 		getConnID:       getConnID,
 		retireConnID:    retireConnID,
 		scheduleSending: scheduleSending,
@@ -86,18 +118,41 @@ func newPathManagerOutgoing(
 }
 
 func (pm *pathManagerOutgoing) addPath(p *Path, enablePath func(), done chan<- struct{}) {
-	var b [8]byte
-	_, _ = rand.Read(b[:])
 	pm.mx.Lock()
 	pm.paths[p.id] = &pathOutgoing{
-		pathChallenge: b,
-		tr:            p.tr,
-		validated:     done,
-		enablePath:    enablePath,
+		tr:         p.tr,
+		validated:  done,
+		enablePath: enablePath,
 	}
 	pm.pathsToProbe = append(pm.pathsToProbe, p.id)
 	pm.mx.Unlock()
 	pm.scheduleSending()
+}
+
+func (pm *pathManagerOutgoing) removePath(id pathID) error {
+	if err := pm.removePathImpl(id); err != nil {
+		return err
+	}
+	pm.scheduleSending()
+	return nil
+}
+
+func (pm *pathManagerOutgoing) removePathImpl(id pathID) error {
+	pm.mx.Lock()
+	defer pm.mx.Unlock()
+
+	if id == pm.activePath {
+		return errors.New("cannot remove active path")
+	}
+	p, ok := pm.paths[id]
+	if !ok {
+		return nil
+	}
+	if p.pathChallenge != nil {
+		pm.retireConnID(id)
+	}
+	delete(pm.paths, id)
+	return nil
 }
 
 func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
@@ -126,6 +181,7 @@ func (pm *pathManagerOutgoing) NewPath(t *Transport, enablePath func()) *Path {
 		id:          id,
 		tr:          t,
 		enablePath:  enablePath,
+		abandon:     make(chan struct{}),
 	}
 }
 
@@ -134,21 +190,19 @@ func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ack
 	defer pm.mx.Unlock()
 
 	var p *pathOutgoing
-	var id pathID
-	for {
-		if len(pm.pathsToProbe) == 0 {
-			return protocol.ConnectionID{}, ackhandler.Frame{}, nil, false
-		}
-
-		id = pm.pathsToProbe[0]
-		pm.pathsToProbe = pm.pathsToProbe[1:]
-
+	id := invalidPathID
+	for _, pID := range pm.pathsToProbe {
 		var ok bool
-		// if the path doesn't exist in the map, it might have been abandoned
-		p, ok = pm.paths[id]
+		p, ok = pm.paths[pID]
 		if ok {
+			id = pID
 			break
 		}
+		// if the path doesn't exist in the map, it might have been abandoned
+		pm.pathsToProbe = pm.pathsToProbe[1:]
+	}
+	if id == invalidPathID {
+		return protocol.ConnectionID{}, ackhandler.Frame{}, nil, false
 	}
 
 	connID, ok := pm.getConnID(id)
@@ -157,8 +211,12 @@ func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ack
 	}
 
 	p.enablePath()
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	p.pathChallenge = &b
+	pm.pathsToProbe = pm.pathsToProbe[1:]
 	frame := ackhandler.Frame{
-		Frame:   &wire.PathChallengeFrame{Data: p.pathChallenge},
+		Frame:   &wire.PathChallengeFrame{Data: *p.pathChallenge},
 		Handler: (*pathManagerOutgoingAckHandler)(pm),
 	}
 	return connID, frame, p.tr, true
@@ -169,7 +227,7 @@ func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame
 	defer pm.mx.Unlock()
 
 	for _, p := range pm.paths {
-		if f.Data == p.pathChallenge {
+		if p.pathChallenge != nil && f.Data == *p.pathChallenge {
 			// path validated
 			if !p.isValidated {
 				p.isValidated = true
