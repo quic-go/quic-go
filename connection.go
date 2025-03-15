@@ -1066,7 +1066,7 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket) (wasProcessed boo
 		var pathChallenge ackhandler.Frame
 		destConnID, pathChallenge, shouldSwitchPath = s.pathManager.HandlePacket(p, isNonProbing)
 		if pathChallenge.Frame != nil {
-			probe, buf, err := s.packer.PackPathProbePacket(destConnID, pathChallenge, s.version)
+			probe, buf, err := s.packer.PackPathProbePacket(destConnID, []ackhandler.Frame{pathChallenge}, s.version)
 			if err != nil {
 				return false, err
 			}
@@ -2083,7 +2083,7 @@ func (s *connection) sendPackets(now time.Time) error {
 		if pm := s.pathManagerOutgoing.Load(); pm != nil {
 			connID, frame, tr, ok := pm.NextPathToProbe()
 			if ok {
-				probe, buf, err := s.packer.PackPathProbePacket(connID, frame, s.version)
+				probe, buf, err := s.packer.PackPathProbePacket(connID, []ackhandler.Frame{frame}, s.version)
 				if err != nil {
 					return err
 				}

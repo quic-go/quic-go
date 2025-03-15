@@ -917,14 +917,21 @@ func TestPackPathProbePacket(t *testing.T) {
 
 	p, buf, err := tp.packer.PackPathProbePacket(
 		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-		ackhandler.Frame{Frame: &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
+		[]ackhandler.Frame{
+			{Frame: &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
+			{Frame: &wire.PathResponseFrame{Data: [8]byte{8, 7, 6, 5, 4, 3, 2, 1}}},
+		},
 		protocol.Version1,
 	)
 	require.NoError(t, err)
 	require.Equal(t, protocol.PacketNumber(0x43), p.PacketNumber)
 	require.Nil(t, p.Ack)
 	require.Empty(t, p.StreamFrames)
-	require.Equal(t, &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, p.Frames[0].Frame)
+	require.Len(t, p.Frames, 2)
+	// the frame order is randomized
+	frames := []wire.Frame{p.Frames[0].Frame, p.Frames[1].Frame}
+	require.Contains(t, frames, &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}})
+	require.Contains(t, frames, &wire.PathResponseFrame{Data: [8]byte{8, 7, 6, 5, 4, 3, 2, 1}})
 	require.Len(t, buf.Data, protocol.MinInitialPacketSize)
 	require.True(t, p.IsPathProbePacket)
 	require.False(t, p.IsPathMTUProbePacket)
