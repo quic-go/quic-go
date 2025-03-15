@@ -267,15 +267,32 @@ func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 }
 
 func TestTransportParametersWithPreferredAddress(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.SentTransportParameters(&logging.TransportParameters{
-		PreferredAddress: &logging.PreferredAddress{
-			IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{12, 34, 56, 78}), 123),
-			IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 456),
-			ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
-			StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
-		},
+	t.Run("IPv4 and IPv6", func(t *testing.T) {
+		testTransportParametersWithPreferredAddress(t, true, true)
 	})
+	t.Run("IPv4 only", func(t *testing.T) {
+		testTransportParametersWithPreferredAddress(t, true, false)
+	})
+	t.Run("IPv6 only", func(t *testing.T) {
+		testTransportParametersWithPreferredAddress(t, false, true)
+	})
+}
+
+func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 bool) {
+	addr4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{12, 34, 56, 78}), 123)
+	addr6 := netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 456)
+	tracer, buf := newConnectionTracer()
+	preferredAddress := &logging.PreferredAddress{
+		ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
+		StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+	}
+	if hasIPv4 {
+		preferredAddress.IPv4 = addr4
+	}
+	if hasIPv6 {
+		preferredAddress.IPv6 = addr6
+	}
+	tracer.SentTransportParameters(&logging.TransportParameters{PreferredAddress: preferredAddress})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -284,10 +301,20 @@ func TestTransportParametersWithPreferredAddress(t *testing.T) {
 	require.Equal(t, "local", ev["owner"])
 	require.Contains(t, ev, "preferred_address")
 	pa := ev["preferred_address"].(map[string]interface{})
-	require.Equal(t, "12.34.56.78", pa["ip_v4"])
-	require.Equal(t, float64(123), pa["port_v4"])
-	require.Equal(t, "102:304:506:708:90a:b0c:d0e:f10", pa["ip_v6"])
-	require.Equal(t, float64(456), pa["port_v6"])
+	if hasIPv4 {
+		require.Equal(t, "12.34.56.78", pa["ip_v4"])
+		require.Equal(t, float64(123), pa["port_v4"])
+	} else {
+		require.NotContains(t, pa, "ip_v4")
+		require.NotContains(t, pa, "port_v4")
+	}
+	if hasIPv6 {
+		require.Equal(t, "102:304:506:708:90a:b0c:d0e:f10", pa["ip_v6"])
+		require.Equal(t, float64(456), pa["port_v6"])
+	} else {
+		require.NotContains(t, pa, "ip_v6")
+		require.NotContains(t, pa, "port_v6")
+	}
 	require.Equal(t, "0807060504030201", pa["connection_id"])
 	require.Equal(t, "0f0e0d0c0b0a09080706050403020100", pa["stateless_reset_token"])
 }
