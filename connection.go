@@ -1054,7 +1054,7 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket) (wasProcessed boo
 	}
 
 	var shouldSwitchPath bool
-	if pn == s.largestRcvdAppData && !addrsEqual(p.remoteAddr, s.RemoteAddr()) {
+	if !addrsEqual(p.remoteAddr, s.RemoteAddr()) {
 		if s.pathManager == nil {
 			s.pathManager = newPathManager(
 				s.connIDManager.GetConnIDForPath,
@@ -1075,9 +1075,11 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket) (wasProcessed boo
 			s.registerPackedShortHeaderPacket(probe, protocol.ECNNon, p.rcvTime)
 			s.sendQueue.SendProbe(buf, p.remoteAddr)
 		}
-	}
-
-	if shouldSwitchPath {
+		// We only switch paths in response to the highest-numbered non-probing packet,
+		// see section 9.3 of RFC 9000.
+		if !shouldSwitchPath || pn != s.largestRcvdAppData {
+			return true, nil
+		}
 		s.pathManager.SwitchToPath(p.remoteAddr)
 		s.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(s.config.InitialPacketSize))
 		maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
