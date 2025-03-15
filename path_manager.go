@@ -2,6 +2,7 @@ package quic
 
 import (
 	"crypto/rand"
+	"fmt"
 	"net"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
@@ -46,47 +47,74 @@ func newPathManager(
 
 // Returns a path challenge frame if one should be sent.
 // May return nil.
-func (pm *pathManager) HandlePacket(p receivedPacket, isNonProbing bool) (_ protocol.ConnectionID, _ ackhandler.Frame, shouldSwitch bool) {
-	for _, path := range pm.paths {
-		if addrsEqual(path.addr, p.remoteAddr) {
+func (pm *pathManager) HandlePacket(
+	remoteAddr net.Addr,
+	pathChallenge *wire.PathChallengeFrame, // may be nil if the packet didn't contain a PATH_CHALLENGE
+	isNonProbing bool,
+) (_ protocol.ConnectionID, _ []ackhandler.Frame, shouldSwitch bool) {
+	fmt.Println("HandlePacket", remoteAddr, pathChallenge, isNonProbing)
+	var p *path
+	pathID := pm.nextPathID
+	for id, path := range pm.paths {
+		if addrsEqual(path.addr, remoteAddr) {
+			p = path
+			pathID = id
 			// already sent a PATH_CHALLENGE for this path
 			if isNonProbing {
 				path.rcvdNonProbing = true
 			}
 			if pm.logger.Debug() {
-				pm.logger.Debugf("received packet for path %s that was already probed, validated: %t", p.remoteAddr, path.validated)
+				pm.logger.Debugf("received packet for path %s that was already probed, validated: %t", remoteAddr, path.validated)
 			}
-			return protocol.ConnectionID{}, ackhandler.Frame{}, path.validated && path.rcvdNonProbing
+			shouldSwitch = path.validated && path.rcvdNonProbing
+			if pathChallenge == nil {
+				fmt.Println("skipping validation of path", remoteAddr)
+				return protocol.ConnectionID{}, nil, shouldSwitch
+			}
 		}
 	}
 
 	if len(pm.paths) >= maxPaths {
+		fmt.Println("too many paths")
 		if pm.logger.Debug() {
-			pm.logger.Debugf("received packet for previously unseen path %s, but already have %d paths", p.remoteAddr, len(pm.paths))
+			pm.logger.Debugf("received packet for previously unseen path %s, but already have %d paths", remoteAddr, len(pm.paths))
 		}
-		return protocol.ConnectionID{}, ackhandler.Frame{}, false
+		return protocol.ConnectionID{}, nil, shouldSwitch
 	}
 
 	// previously unseen path, initiate path validation by sending a PATH_CHALLENGE
-	connID, ok := pm.getConnID(pm.nextPathID)
+	connID, ok := pm.getConnID(pathID)
 	if !ok {
-		pm.logger.Debugf("skipping validation of new path %s since no connection ID is available", p.remoteAddr)
-		return protocol.ConnectionID{}, ackhandler.Frame{}, false
+		fmt.Println("no CID available")
+		pm.logger.Debugf("skipping validation of new path %s since no connection ID is available", remoteAddr)
+		return protocol.ConnectionID{}, nil, shouldSwitch
 	}
-	var b [8]byte
-	rand.Read(b[:])
-	pm.paths[pm.nextPathID] = &path{
-		addr:           p.remoteAddr,
-		pathChallenge:  b,
-		rcvdNonProbing: isNonProbing,
+
+	frames := make([]ackhandler.Frame, 0, 2)
+	if p == nil {
+		var pathChallengeData [8]byte
+		rand.Read(pathChallengeData[:])
+		p = &path{
+			addr:           remoteAddr,
+			rcvdNonProbing: isNonProbing,
+			pathChallenge:  pathChallengeData,
+		}
+		frames = append(frames, ackhandler.Frame{
+			Frame:   &wire.PathChallengeFrame{Data: p.pathChallenge},
+			Handler: (*pathManagerAckHandler)(pm),
+		})
+		pm.paths[pm.nextPathID] = p
+		pm.nextPathID++
+		pm.logger.Debugf("enqueueing PATH_CHALLENGE for new path %s", remoteAddr)
 	}
-	pm.nextPathID++
-	frame := ackhandler.Frame{
-		Frame:   &wire.PathChallengeFrame{Data: b},
-		Handler: (*pathManagerAckHandler)(pm),
+	if pathChallenge != nil {
+		frames = append(frames, ackhandler.Frame{
+			Frame:   &wire.PathResponseFrame{Data: pathChallenge.Data},
+			Handler: (*pathManagerAckHandler)(pm),
+		})
 	}
-	pm.logger.Debugf("enqueueing PATH_CHALLENGE for new path %s", p.remoteAddr)
-	return connID, frame, false
+	fmt.Println("sending path validation", connID, len(frames), shouldSwitch)
+	return connID, frames, shouldSwitch
 }
 
 func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame) {
