@@ -1064,7 +1064,7 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket) (wasProcessed boo
 		}
 		var destConnID protocol.ConnectionID
 		var pathChallenge ackhandler.Frame
-		destConnID, pathChallenge, shouldSwitchPath = s.pathManager.HandlePacket(p, isNonProbing)
+		destConnID, pathChallenge, shouldSwitchPath = s.pathManager.HandlePacket(p.remoteAddr, isNonProbing)
 		if pathChallenge.Frame != nil {
 			probe, buf, err := s.packer.PackPathProbePacket(destConnID, []ackhandler.Frame{pathChallenge}, s.version)
 			if err != nil {
