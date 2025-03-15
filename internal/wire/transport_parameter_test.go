@@ -436,12 +436,37 @@ func TestTransportParameterRejectsDuplicateParameters(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("received duplicate transport parameter %#x", initialMaxStreamDataBidiLocalParameterID), transportErr.ErrorMessage)
 }
 
-func TestPreferredAddressMarshalAndUnmarshal(t *testing.T) {
+func TestTransportParameterPreferredAddress(t *testing.T) {
+	testCases := []struct {
+		name    string
+		hasIPv4 bool
+		hasIPv6 bool
+	}{
+		{"IPv4 and IPv6", true, true},
+		{"IPv4 only", true, false},
+		{"IPv6 only", false, true},
+		{"neither IPv4 nor IPv6", false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testTransportParameterPreferredAddress(t, tc.hasIPv4, tc.hasIPv6)
+		})
+	}
+}
+
+func testTransportParameterPreferredAddress(t *testing.T, hasIPv4, hasIPv6 bool) {
+	addr4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42)
+	addr6 := netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13)
 	pa := &PreferredAddress{
-		IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
-		IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
 		ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+	}
+	if hasIPv4 {
+		pa.IPv4 = addr4
+	}
+	if hasIPv6 {
+		pa.IPv6 = addr6
 	}
 
 	data := (&TransportParameters{
@@ -450,15 +475,24 @@ func TestPreferredAddressMarshalAndUnmarshal(t *testing.T) {
 		ActiveConnectionIDLimit: 2,
 	}).Marshal(protocol.PerspectiveServer)
 	p := &TransportParameters{}
-	err := p.Unmarshal(data, protocol.PerspectiveServer)
-	require.NoError(t, err)
-	require.Equal(t, pa.IPv4, p.PreferredAddress.IPv4)
-	require.Equal(t, pa.IPv6, p.PreferredAddress.IPv6)
+	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
+	if hasIPv4 {
+		require.True(t, p.PreferredAddress.IPv4.IsValid())
+		require.Equal(t, addr4, p.PreferredAddress.IPv4)
+	} else {
+		require.False(t, p.PreferredAddress.IPv4.IsValid())
+	}
+	if hasIPv6 {
+		require.True(t, p.PreferredAddress.IPv6.IsValid())
+		require.Equal(t, addr6, p.PreferredAddress.IPv6)
+	} else {
+		require.False(t, p.PreferredAddress.IPv6.IsValid())
+	}
 	require.Equal(t, pa.ConnectionID, p.PreferredAddress.ConnectionID)
 	require.Equal(t, pa.StatelessResetToken, p.PreferredAddress.StatelessResetToken)
 }
 
-func TestPreferredAddressFromClient(t *testing.T) {
+func TestTransportParameterPreferredAddressFromClient(t *testing.T) {
 	b := quicvarint.Append(nil, uint64(preferredAddressParameterID))
 	b = quicvarint.Append(b, 6)
 	b = append(b, []byte("foobar")...)
@@ -471,7 +505,7 @@ func TestPreferredAddressFromClient(t *testing.T) {
 	require.Equal(t, "client sent a preferred_address", transportErr.ErrorMessage)
 }
 
-func TestPreferredAddressZeroLengthConnectionID(t *testing.T) {
+func TestTransportParameterPreferredAddressZeroLengthConnectionID(t *testing.T) {
 	pa := &PreferredAddress{
 		IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
 		IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
