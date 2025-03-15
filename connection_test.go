@@ -2887,8 +2887,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 			protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
 		),
 		tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ protocol.ConnectionID, f ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
-				pathChallenge = f.Frame.(*wire.PathChallengeFrame)
+			func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				pathChallenge = frames[0].Frame.(*wire.PathChallengeFrame)
 				return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
 			},
 		),
@@ -3039,7 +3039,7 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	).AnyTimes()
 	packedProbe := make(chan struct{})
 	tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ protocol.ConnectionID, f ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+		func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
 			defer close(packedProbe)
 			return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
 		},
