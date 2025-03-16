@@ -222,14 +222,17 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		// STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
 		str.EXPECT().handleStreamFrame(f, now)
-		require.NoError(t, tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// RESET_STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
 		str.EXPECT().handleResetStreamFrame(rsf, now)
-		require.NoError(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for closed streams", func(t *testing.T) {
@@ -238,13 +241,16 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
 		// STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// RESET_STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for invalid streams", func(t *testing.T) {
@@ -254,13 +260,16 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		testErr := errors.New("test err")
 		// STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now), testErr)
+		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, testErr)
 		// RESET_STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now), testErr)
+		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, testErr)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now), testErr)
+		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, testErr)
 	})
 }
 
@@ -279,11 +288,13 @@ func TestConnectionHandleSendStreamFrames(t *testing.T) {
 		// STOP_SENDING frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
 		str.EXPECT().handleStopSendingFrame(ss)
-		require.NoError(t, tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// MAX_STREAM_DATA frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
 		str.EXPECT().updateSendWindow(msd.MaximumStreamData)
-		require.NoError(t, tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for closed streams", func(t *testing.T) {
@@ -292,10 +303,12 @@ func TestConnectionHandleSendStreamFrames(t *testing.T) {
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
 		// STOP_SENDING frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// MAX_STREAM_DATA frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for invalid streams", func(t *testing.T) {
@@ -305,10 +318,12 @@ func TestConnectionHandleSendStreamFrames(t *testing.T) {
 		testErr := errors.New("test err")
 		// STOP_SENDING frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now), testErr)
+		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, testErr)
 		// MAX_STREAM_DATA frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now), testErr)
+		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, testErr)
 	})
 }
 
@@ -321,9 +336,11 @@ func TestConnectionHandleStreamNumFrames(t *testing.T) {
 	// MAX_STREAMS frame
 	msf := &wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 10}
 	streamsMap.EXPECT().HandleMaxStreamsFrame(msf)
-	require.NoError(t, tc.conn.handleFrame(msf, protocol.Encryption1RTT, connID, now))
+	_, err := tc.conn.handleFrame(msf, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 	// STREAMS_BLOCKED frame
-	tc.conn.handleFrame(&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 1}, protocol.Encryption1RTT, connID, now)
+	_, err = tc.conn.handleFrame(&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 1}, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 }
 
 func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
@@ -334,9 +351,11 @@ func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	connID := protocol.ConnectionID{}
 	// MAX_DATA frame
 	connFC.EXPECT().UpdateSendWindow(protocol.ByteCount(1337))
-	require.NoError(t, tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now))
+	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 	// DATA_BLOCKED frame
-	require.NoError(t, tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now))
+	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 }
 
 func TestConnectionOpenStreams(t *testing.T) {
@@ -404,10 +423,8 @@ func TestConnectionServerInvalidFrames(t *testing.T) {
 		{Name: "PATH_RESPONSE", Frame: &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
 	} {
 		t.Run(test.Name, func(t *testing.T) {
-			require.ErrorIs(t,
-				tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now()),
-				&qerr.TransportError{ErrorCode: qerr.ProtocolViolation},
-			)
+			_, err := tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now())
+			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
 		})
 	}
 }
@@ -2887,8 +2904,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 			protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
 		),
 		tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ protocol.ConnectionID, f ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
-				pathChallenge = f.Frame.(*wire.PathChallengeFrame)
+			func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				pathChallenge = frames[0].Frame.(*wire.PathChallengeFrame)
 				return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
 			},
 		),
@@ -2960,6 +2977,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 		}
 
 		payload := []byte{1} // PING frame
+		payload, err = (&wire.PathResponseFrame{Data: pathChallenge.Data}).Append(payload, protocol.Version1)
+		require.NoError(t, err)
 		gomock.InOrder(
 			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
 				protocol.PacketNumber(12), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
@@ -3039,7 +3058,7 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	).AnyTimes()
 	packedProbe := make(chan struct{})
 	tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ protocol.ConnectionID, f ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+		func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
 			defer close(packedProbe)
 			return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
 		},

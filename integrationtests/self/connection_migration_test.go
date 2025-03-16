@@ -18,7 +18,7 @@ import (
 )
 
 func TestConnectionMigration(t *testing.T) {
-	ln, err := quic.ListenAddr("localhost:0", tlsConfig, getQuicConfig(nil))
+	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
