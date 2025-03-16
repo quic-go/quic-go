@@ -235,6 +235,18 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError(":protocol must be empty"))
 	})
 
+	It("errors with duplicate pseudo header in request", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":method", Value: "POST"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError("duplicate pseudo header: :method"))
+	})
+
 	Context("regular HTTP CONNECT", func() {
 		It("handles CONNECT method", func() {
 			headers := []qpack.HeaderField{
@@ -431,5 +443,14 @@ var _ = Describe("Response", func() {
 		}
 		_, err := parseTrailers(headers)
 		Expect(err).To(MatchError("http3: received pseudo header in trailer: :status"))
+	})
+
+	It("errors with duplicate status header in response", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "200"},
+			{Name: ":status", Value: "400"},
+		}
+		err := updateResponseFromHeaders(&http.Response{}, headers)
+		Expect(err).To(MatchError("duplicate pseudo header: :status"))
 	})
 })
