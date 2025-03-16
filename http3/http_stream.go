@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"sync"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -149,6 +150,7 @@ type requestStream struct {
 	disableCompression bool
 	response           *http.Response
 	trace              *httptrace.ClientTrace
+	traceTLSOnce       *sync.Once
 
 	sentRequest   bool
 	requestedGzip bool
@@ -167,6 +169,7 @@ func newRequestStream(
 	maxHeaderBytes uint64,
 	rsp *http.Response,
 	trace *httptrace.ClientTrace,
+	traceOnce *sync.Once,
 ) *requestStream {
 	return &requestStream{
 		stream:             str,
@@ -177,6 +180,7 @@ func newRequestStream(
 		maxHeaderBytes:     maxHeaderBytes,
 		response:           rsp,
 		trace:              trace,
+		traceTLSOnce:       traceOnce,
 	}
 }
 
@@ -205,8 +209,13 @@ func (s *requestStream) ReadResponse() (*http.Response, error) {
 		conn: s.conn,
 		r: &tracingReader{
 			Reader: s.Stream,
-			first:  &s.firstByte,
-			trace:  s.trace,
+			traceCallback: func(err error) {
+				if !s.firstByte {
+					traceTLSHandshakeDone(s.trace, s.traceTLSOnce, s.conn.ConnectionState().TLS, err)
+					traceGotFirstResponseByte(s.trace)
+					s.firstByte = true
+				}
+			},
 		},
 	}
 	frame, err := fp.ParseNext()
@@ -280,15 +289,13 @@ func (s *stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 
 type tracingReader struct {
 	io.Reader
-	first *bool
-	trace *httptrace.ClientTrace
+	traceCallback func(error)
 }
 
 func (r *tracingReader) Read(b []byte) (int, error) {
 	n, err := r.Reader.Read(b)
-	if n > 0 && r.first != nil && !*r.first {
-		traceGotFirstResponseByte(r.trace)
-		*r.first = true
+	if n > 0 {
+		r.traceCallback(err)
 	}
 	return n, err
 }
