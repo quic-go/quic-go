@@ -2731,11 +2731,11 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 	newConnID := protocol.ParseConnectionID(b[:11])
 	newConnID2 := protocol.ParseConnectionID(b[11:20])
 
-	errChan := make(chan error, 1)
-	go func() { errChan <- tc.conn.run() }()
-
 	tracer.EXPECT().NegotiatedVersion(gomock.Any(), gomock.Any(), gomock.Any())
 	tc.packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
 
 	require.Equal(t, dstConnID, tc.conn.connIDManager.Get())
 
