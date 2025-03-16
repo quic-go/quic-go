@@ -841,13 +841,13 @@ func TestServerGetConfigForClientReject(t *testing.T) {
 	srcConnID := randConnID(6)
 	destConnID := randConnID(8)
 	p := getValidInitialPacket(t, conn.LocalAddr(), srcConnID, destConnID)
-	server.handlePacket(p)
 	argsChan := make(chan sentPacketCallArgs, 1)
 	mockTracer.EXPECT().SentPacket(p.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(_ net.Addr, hdr *logging.Header, _ logging.ByteCount, frames []logging.Frame) {
 			argsChan <- sentPacketCallArgs{hdr: hdr, frames: frames}
 		},
 	)
+	server.handlePacket(p)
 
 	checkConnectionClose(t, conn, argsChan, destConnID, srcConnID, qerr.ConnectionRefused)
 }
