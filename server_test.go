@@ -786,9 +786,9 @@ func TestServerClose(t *testing.T) {
 func TestServerGetConfigForClientAccept(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	c := NewMockQUICConn(mockCtrl)
-	c.EXPECT().run()
-	c.EXPECT().Context().Return(context.Background())
-	c.EXPECT().HandshakeComplete().Return(make(chan struct{}))
+	c.EXPECT().run().MaxTimes(1)
+	c.EXPECT().Context().Return(context.Background()).MaxTimes(1)
+	c.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
 	recorder := newConnConstructorRecorder(c)
 	server := newTestServer(t, &serverOpts{
 		config: &Config{
@@ -805,7 +805,7 @@ func TestServerGetConfigForClientAccept(t *testing.T) {
 		protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 		protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 	)
-	c.EXPECT().handlePacket(packet)
+	c.EXPECT().handlePacket(packet).MaxTimes(1)
 
 	server.handlePacket(packet)
 
