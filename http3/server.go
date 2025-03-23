@@ -75,6 +75,7 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 	// The tls.Config used to setup the quic.Listener needs to have the GetConfigForClient callback set.
 	// That way, we can get the QUIC version and set the correct ALPN value.
 	return &tls.Config{
+		EncryptedClientHelloKeys: tlsConf.EncryptedClientHelloKeys,
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
 			proto := NextProtoH3
