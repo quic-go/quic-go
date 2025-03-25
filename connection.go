@@ -597,7 +597,7 @@ runLoop:
 		// We don't need to wait for new events if:
 		// * we processed packets: we probably need to send an ACK, and potentially more data
 		// * the pacer allows us to send more packets immediately
-		shouldProceedImmediately := sendQueueAvailable == nil && (processed || s.pacingDeadline == deadlineSendImmediately)
+		shouldProceedImmediately := sendQueueAvailable == nil && (processed || s.pacingDeadline.Equal(deadlineSendImmediately))
 		if !shouldProceedImmediately {
 			// 3rd: wait for something to happen:
 			// * closing of the connection
@@ -2141,10 +2141,11 @@ func (s *connection) sendPackets(now time.Time) error {
 		if err := s.sendPackedCoalescedPacket(packet, s.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket()), now); err != nil {
 			return err
 		}
-		sendMode := s.sentPacketHandler.SendMode(now)
-		if sendMode == ackhandler.SendPacingLimited {
+		//nolint:exhaustive // only need to handle pacing-related events here
+		switch s.sentPacketHandler.SendMode(now) {
+		case ackhandler.SendPacingLimited:
 			s.resetPacingDeadline()
-		} else if sendMode == ackhandler.SendAny {
+		case ackhandler.SendAny:
 			s.pacingDeadline = deadlineSendImmediately
 		}
 		return nil

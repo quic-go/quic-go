@@ -129,7 +129,7 @@ func TestHandshakeTimeoutError(t *testing.T) {
 	require.True(t, errors.Is(&HandshakeTimeoutError{}, &HandshakeTimeoutError{}))
 	require.False(t, errors.Is(&HandshakeTimeoutError{}, &IdleTimeoutError{}))
 
-	//nolint:gosimple // we need to assign to an interface here
+	//nolint:staticcheck // SA1021: we need to assign to an interface here
 	var err error
 	err = &HandshakeTimeoutError{}
 	nerr, ok := err.(net.Error)
@@ -143,7 +143,7 @@ func TestIdleTimeoutError(t *testing.T) {
 	require.True(t, errors.Is(&IdleTimeoutError{}, &IdleTimeoutError{}))
 	require.False(t, errors.Is(&IdleTimeoutError{}, &HandshakeTimeoutError{}))
 
-	//nolint:gosimple // we need to assign to an interface here
+	//nolint:staticcheck // SA1021: we need to assign to an interface here
 	var err error
 	err = &IdleTimeoutError{}
 	nerr, ok := err.(net.Error)
@@ -166,7 +166,7 @@ func TestStatelessResetError(t *testing.T) {
 	require.Equal(t, "received a stateless reset", (&StatelessResetError{}).Error())
 	require.True(t, errors.Is(&StatelessResetError{}, &StatelessResetError{}))
 
-	//nolint:gosimple // we need to assign to an interface here
+	//nolint:staticcheck // SA1021: we need to assign to an interface here
 	var err error
 	err = &StatelessResetError{}
 	nerr, ok := err.(net.Error)
