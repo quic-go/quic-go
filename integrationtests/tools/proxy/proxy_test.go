@@ -79,10 +79,17 @@ func readPacketNumber(t *testing.T, b []byte) protocol.PacketNumber {
 // Set up a dumb UDP server.
 // In production this would be a QUIC server.
 func runServer(t *testing.T) (*net.UDPAddr, chan []byte) {
-	serverConn := newUPDConnLocalhost(t)
-
-	serverReceivedPackets := make(chan []byte, 100)
 	done := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+	})
+
+	serverConn := newUPDConnLocalhost(t)
+	serverReceivedPackets := make(chan []byte, 100)
 	go func() {
 		defer close(done)
 		for {
@@ -99,14 +106,6 @@ func runServer(t *testing.T) (*net.UDPAddr, chan []byte) {
 			}
 		}
 	}()
-
-	t.Cleanup(func() {
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Fatalf("timeout")
-		}
-	})
 
 	return serverConn.LocalAddr().(*net.UDPAddr), serverReceivedPackets
 }
@@ -433,11 +432,8 @@ func TestProxySwitchConn(t *testing.T) {
 		Data []byte
 		Addr *net.UDPAddr
 	}
-
 	serverReceivedPackets := make(chan packet, 1)
-	done := make(chan struct{})
 	go func() {
-		defer close(done)
 		for {
 			buf := make([]byte, 1000)
 			n, addr, err := serverConn.ReadFromUDP(buf)

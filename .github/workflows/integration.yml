@@ -47,7 +47,7 @@ jobs:
         run: echo "GOARCH=386" >> $GITHUB_ENV
       - run: go version
       - name: Run tools tests
-        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools
+        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools/...
       - name: Run version negotiation tests
         run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/versionnegotiation ${{ env.QLOGFLAG }}
       - name: Run self tests, using QUIC v1
