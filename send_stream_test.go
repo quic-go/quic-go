@@ -1012,10 +1012,7 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 	mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) { completed = true })
 
 	received := make([]byte, dataLen)
-	for {
-		if completed {
-			break
-		}
+	for !completed {
 		f, _, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300)+100), protocol.Version1)
 		if f.Frame == nil {
 			continue

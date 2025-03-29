@@ -131,7 +131,7 @@ func newBrokenConn(conn net.PacketConn) *brokenConn {
 	go func() {
 		<-c.broken
 		// make calls to ReadFrom return
-		c.PacketConn.SetDeadline(time.Now())
+		c.SetDeadline(time.Now())
 	}()
 	return c
 }

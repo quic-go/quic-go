@@ -332,7 +332,7 @@ func Test0RTTWaitForHandshakeCompletion(t *testing.T) {
 	// check that 0-RTT packets only contain STREAM frames for the first stream
 	var num0RTT int
 	for _, p := range counter.getRcvdLongHeaderPackets() {
-		if p.hdr.Header.Type != protocol.PacketType0RTT {
+		if p.hdr.Type != protocol.PacketType0RTT {
 			continue
 		}
 		for _, f := range p.frames {
