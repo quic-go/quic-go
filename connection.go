@@ -2636,18 +2636,22 @@ func (s *connection) AddPath(t *Transport) (*Path, error) {
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
-	return s.getPathManager().NewPath(t, func() {
-		runner := t.connRunner()
-		s.connIDGenerator.AddConnRunner(
-			t.id(),
-			connRunnerCallbacks{
-				AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
-				RemoveConnectionID: runner.Remove,
-				RetireConnectionID: runner.Retire,
-				ReplaceWithClosed:  runner.ReplaceWithClosed,
-			},
-		)
-	}), nil
+	return s.getPathManager().NewPath(
+		t,
+		200*time.Millisecond, // initial RTT estimate
+		func() {
+			runner := t.connRunner()
+			s.connIDGenerator.AddConnRunner(
+				t.id(),
+				connRunnerCallbacks{
+					AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
+					RemoveConnectionID: runner.Remove,
+					RetireConnectionID: runner.Retire,
+					ReplaceWithClosed:  runner.ReplaceWithClosed,
+				},
+			)
+		},
+	), nil
 }
 
 func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
