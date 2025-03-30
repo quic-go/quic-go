@@ -352,6 +352,9 @@ type ClientHelloInfo struct {
 	// Note that the Retry mechanism costs one network roundtrip,
 	// and is not performed unless Transport.MaxUnvalidatedHandshakes is surpassed.
 	AddrVerified bool
+	// Context is the context that'll be used to derive all contexts for the connection
+	// See `Transport.ConnContext` for customizing this.
+	Context context.Context
 }
 
 // ConnectionState records basic details about a QUIC connection

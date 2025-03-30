@@ -646,28 +646,6 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		}
 		return nil
 	}
-
-	config := s.config
-	if s.config.GetConfigForClient != nil {
-		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{
-			RemoteAddr:   p.remoteAddr,
-			AddrVerified: clientAddrVerified,
-		})
-		if err != nil {
-			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
-			delete(s.zeroRTTQueues, hdr.DestConnectionID)
-			select {
-			case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
-			default:
-				// drop packet if we can't send out the CONNECTION_REFUSED fast enough
-				p.buffer.Release()
-			}
-			return nil
-		}
-		config = populateConfig(conf)
-	}
-
-	var conn quicConn
 	var cancel context.CancelCauseFunc
 	ctx, cancel1 := context.WithCancelCause(context.Background())
 	if s.connContext != nil {
@@ -687,6 +665,29 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	} else {
 		cancel = cancel1
 	}
+
+	config := s.config
+	if s.config.GetConfigForClient != nil {
+		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{
+			RemoteAddr:   p.remoteAddr,
+			AddrVerified: clientAddrVerified,
+			Context:      ctx,
+		})
+		if err != nil {
+			cancel(err)
+			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
+			delete(s.zeroRTTQueues, hdr.DestConnectionID)
+			select {
+			case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
+			default:
+				// drop packet if we can't send out the CONNECTION_REFUSED fast enough
+				p.buffer.Release()
+			}
+			return nil
+		}
+		config = populateConfig(conf)
+	}
+
 	ctx = context.WithValue(ctx, ConnectionTracingKey, nextConnTracingID())
 	var tracer *logging.ConnectionTracer
 	if config.Tracer != nil {
@@ -702,7 +703,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		return err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
-	conn = s.newConn(
+	conn := s.newConn(
 		ctx,
 		cancel,
 		newSendConn(s.conn, p.remoteAddr, p.info, s.logger),
