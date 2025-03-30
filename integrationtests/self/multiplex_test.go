@@ -326,10 +326,7 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 	minExpected := numPackets * 4 / 5
 	timeout := time.After(time.Second)
 	var counter int
-	for {
-		if counter >= minExpected {
-			break
-		}
+	for counter < minExpected {
 		select {
 		case p := <-rcvdPackets:
 			require.Equal(t, tr1.Conn.LocalAddr(), p.addr, "non-QUIC packet received from wrong address")
