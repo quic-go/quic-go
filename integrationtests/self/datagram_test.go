@@ -131,7 +131,7 @@ func TestDatagramLoss(t *testing.T) {
 	server, err := quic.Listen(
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
-		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, EnableDatagrams: true}),
 	)
 	require.NoError(t, err)
 	defer server.Close()
@@ -140,6 +140,7 @@ func TestDatagramLoss(t *testing.T) {
 	proxy := &quicproxy.Proxy{
 		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
+		// Drop about 10% of Short Header packets with DATAGRAM frames
 		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
 				return false
@@ -164,14 +165,16 @@ func TestDatagramLoss(t *testing.T) {
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))
+	// SendDatagram blocks when the queue is full (maxDatagramSendQueueLen),
+	// add some extra margin for the handshake, networking and ACKs.
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(4*numDatagrams*time.Millisecond))
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
 		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, EnableDatagrams: true}),
 	)
 	require.NoError(t, err)
 	defer clientConn.CloseWithError(0, "")
@@ -231,7 +234,7 @@ func TestDatagramLoss(t *testing.T) {
 	assert.NotZero(t, numDroppedIncoming)
 	assert.NotZero(t, numDroppedOutgoing)
 	t.Logf("server received %d out of %d sent datagrams", serverDatagrams, numDatagrams)
-	assert.InDelta(t, numDatagrams-numDroppedIncoming, serverDatagrams, numDatagrams/20, "datagrams received by the server")
+	assert.EqualValues(t, numDatagrams-numDroppedIncoming, serverDatagrams, "datagrams received by the server")
 	t.Logf("client received %d out of %d sent datagrams", clientDatagrams, numDatagrams)
-	assert.InDelta(t, numDatagrams-numDroppedOutgoing, clientDatagrams, numDatagrams/20, "datagrams received by the client")
+	assert.EqualValues(t, numDatagrams-numDroppedOutgoing, clientDatagrams, "datagrams received by the client")
 }
