@@ -649,7 +649,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 
 	config := s.config
 	if s.config.GetConfigForClient != nil {
-		conf, err := s.config.GetConfigForClient(&ClientHelloInfo{
+		conf, err := s.config.GetConfigForClient(&ClientInfo{
 			RemoteAddr:   p.remoteAddr,
 			AddrVerified: clientAddrVerified,
 		})

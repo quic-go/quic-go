@@ -45,7 +45,7 @@ func TestHandshakeRTTWithoutRetry(t *testing.T) {
 	defer ln.Close()
 
 	clientConfig := getQuicConfig(&quic.Config{
-		GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		GetConfigForClient: func(info *quic.ClientInfo) (*quic.Config, error) {
 			require.False(t, info.AddrVerified)
 			return nil, nil
 		},
@@ -71,7 +71,7 @@ func TestHandshakeRTTWithRetry(t *testing.T) {
 	defer ln.Close()
 
 	clientConfig := getQuicConfig(&quic.Config{
-		GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		GetConfigForClient: func(info *quic.ClientInfo) (*quic.Config, error) {
 			require.True(t, info.AddrVerified)
 			return nil, nil
 		},

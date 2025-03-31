@@ -448,7 +448,7 @@ func TestTokensFromNewTokenFrames(t *testing.T) {
 func testTokensFromNewTokenFrames(t *testing.T, maxTokenAge time.Duration, expectTokenUsed bool) {
 	addrVerifiedChan := make(chan bool, 2)
 	quicConf := getQuicConfig(nil)
-	quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+	quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 		addrVerifiedChan <- info.AddrVerified
 		return quicConf, nil
 	}
@@ -570,7 +570,7 @@ func TestInvalidToken(t *testing.T) {
 func TestGetConfigForClient(t *testing.T) {
 	var calledFrom net.Addr
 	serverConfig := getQuicConfig(&quic.Config{EnableDatagrams: true})
-	serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+	serverConfig.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 		conf := serverConfig.Clone()
 		conf.EnableDatagrams = true
 		calledFrom = info.RemoteAddr
@@ -610,7 +610,7 @@ func TestGetConfigForClientErrorsConnectionRejection(t *testing.T) {
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
-			GetConfigForClient: func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+			GetConfigForClient: func(info *quic.ClientInfo) (*quic.Config, error) {
 				return nil, errors.New("rejected")
 			},
 		}),
