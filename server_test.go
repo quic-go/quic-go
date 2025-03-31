@@ -792,7 +792,7 @@ func TestServerGetConfigForClientAccept(t *testing.T) {
 	recorder := newConnConstructorRecorder(c)
 	server := newTestServer(t, &serverOpts{
 		config: &Config{
-			GetConfigForClient: func(*ClientHelloInfo) (*Config, error) {
+			GetConfigForClient: func(*ClientInfo) (*Config, error) {
 				return &Config{MaxIncomingStreams: 1234}, nil
 			},
 		},
@@ -831,7 +831,7 @@ func TestServerGetConfigForClientReject(t *testing.T) {
 	server := newTestServer(t, &serverOpts{
 		tracer: tracer,
 		config: &Config{
-			GetConfigForClient: func(*ClientHelloInfo) (*Config, error) {
+			GetConfigForClient: func(*ClientInfo) (*Config, error) {
 				return nil, errors.New("rejected")
 			},
 		},

@@ -63,7 +63,7 @@ type ConnectionTracingID uint64
 type connTracingCtxKey struct{}
 
 // QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the
-// context returned by tls.Config.ClientHelloInfo.Context.
+// context returned by tls.Config.ClientInfo.Context.
 var QUICVersionContextKey = handshake.QUICVersionContextKey
 
 // Stream is the interface implemented by QUIC streams
@@ -264,7 +264,7 @@ type ConnectionIDGenerator interface {
 type Config struct {
 	// GetConfigForClient is called for incoming connections.
 	// If the error is not nil, the connection attempt is refused.
-	GetConfigForClient func(info *ClientHelloInfo) (*Config, error)
+	GetConfigForClient func(info *ClientInfo) (*Config, error)
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
 	Versions []Version
@@ -344,7 +344,12 @@ type Config struct {
 }
 
 // ClientHelloInfo contains information about an incoming connection attempt.
-type ClientHelloInfo struct {
+//
+// Deprecated: Use ClientInfo instead.
+type ClientHelloInfo = ClientInfo
+
+// ClientInfo contains information about an incoming connection attempt.
+type ClientInfo struct {
 	// RemoteAddr is the remote address on the Initial packet.
 	// Unless AddrVerified is set, the address is not yet verified, and could be a spoofed IP address.
 	RemoteAddr net.Addr
