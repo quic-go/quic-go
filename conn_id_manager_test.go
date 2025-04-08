@@ -299,6 +299,13 @@ func TestConnIDManagerPathMigration(t *testing.T) {
 	m.RetireConnIDForPath(1)
 	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 4}}, frameQueue)
 	require.Equal(t, []protocol.StatelessResetToken{{16, 15, 14, 13}}, removedTokens)
+	removedTokens = removedTokens[:0]
+
+	m.Close()
+	require.Equal(t, []protocol.StatelessResetToken{
+		{6, 5, 4, 3, 6, 5, 4, 3}, // currently active connection ID
+		{5, 4, 3, 2, 5, 4, 3, 2}, // path 2
+	}, removedTokens)
 }
 
 func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
@@ -309,7 +316,7 @@ func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 		func(f wire.Frame) {},
 	)
 	require.Equal(t, protocol.ConnectionID{}, m.Get())
-	for i := 0; i < 5*protocol.PacketsPerConnectionID; i++ {
+	for range 5 * protocol.PacketsPerConnectionID {
 		m.SentPacket()
 		require.Equal(t, protocol.ConnectionID{}, m.Get())
 	}

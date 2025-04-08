@@ -190,6 +190,11 @@ func (h *connIDManager) Close() {
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}
+	if h.pathProbing != nil {
+		for _, entry := range h.pathProbing {
+			h.removeStatelessResetToken(entry.StatelessResetToken)
+		}
+	}
 }
 
 // is called when the server performs a Retry
