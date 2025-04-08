@@ -329,3 +329,52 @@ func TestConnIDManagerClose(t *testing.T) {
 	require.Panics(t, func() { m.Get() })
 	require.Panics(t, func() { m.SetStatelessResetToken(protocol.StatelessResetToken{}) })
 }
+
+func BenchmarkConnIDManagerReordered(b *testing.B) {
+	benchmarkConnIDManager(b, true)
+}
+
+func BenchmarkConnIDManagerInOrder(b *testing.B) {
+	benchmarkConnIDManager(b, false)
+}
+
+func benchmarkConnIDManager(b *testing.B, reordered bool) {
+	m := newConnIDManager(
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		func(protocol.StatelessResetToken) {},
+		func(protocol.StatelessResetToken) {},
+		func(f wire.Frame) {},
+	)
+	connIDs := make([]protocol.ConnectionID, 0, protocol.MaxActiveConnectionIDs)
+	statelessResetTokens := make([]protocol.StatelessResetToken, 0, protocol.MaxActiveConnectionIDs)
+	for range protocol.MaxActiveConnectionIDs {
+		b := make([]byte, 8)
+		rand.Read(b)
+		connIDs = append(connIDs, protocol.ParseConnectionID(b))
+		var statelessResetToken protocol.StatelessResetToken
+		rand.Read(statelessResetToken[:])
+		statelessResetTokens = append(statelessResetTokens, statelessResetToken)
+	}
+
+	// 1 -> 3
+	// 2 -> 1
+	// 3 -> 2
+	// 4 -> 4
+	offsets := []int{2, -1, -1, 0}
+
+	b.ResetTimer()
+	for i := range b.N {
+		seq := i
+		if reordered {
+			seq += offsets[i%len(offsets)]
+		}
+		m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber:      uint64(seq),
+			ConnectionID:        connIDs[i%len(connIDs)],
+			StatelessResetToken: statelessResetTokens[i%len(statelessResetTokens)],
+		})
+		if i > protocol.MaxActiveConnectionIDs-2 {
+			m.updateConnectionID()
+		}
+	}
+}
