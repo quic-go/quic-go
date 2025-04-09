@@ -3063,6 +3063,7 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 			return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
 		},
 	).AnyTimes()
+	tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any())
 	// add a new connection ID, so the path can be probed
 	require.NoError(t, tc.conn.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
 		SequenceNumber: 1,
@@ -3089,6 +3090,7 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 
 	// teardown
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().RemoveResetToken(gomock.Any()).MaxTimes(1)
 	tc.conn.destroy(nil)
 	select {
 	case <-errChan:

@@ -93,6 +93,7 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 				h.queueControlFrame(&wire.RetireConnectionIDFrame{
 					SequenceNumber: entry.SequenceNumber,
 				})
+				h.removeStatelessResetToken(entry.StatelessResetToken)
 				delete(h.pathProbing, id)
 			}
 		}
@@ -189,6 +190,11 @@ func (h *connIDManager) Close() {
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}
+	if h.pathProbing != nil {
+		for _, entry := range h.pathProbing {
+			h.removeStatelessResetToken(entry.StatelessResetToken)
+		}
+	}
 }
 
 // is called when the server performs a Retry
@@ -266,6 +272,7 @@ func (h *connIDManager) GetConnIDForPath(id pathID) (protocol.ConnectionID, bool
 	h.queue = h.queue[1:]
 	h.pathProbing[id] = front
 	h.highestProbingID = front.SequenceNumber
+	h.addStatelessResetToken(front.StatelessResetToken)
 	return front.ConnectionID, true
 }
 
@@ -283,6 +290,7 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	h.queueControlFrame(&wire.RetireConnectionIDFrame{
 		SequenceNumber: entry.SequenceNumber,
 	})
+	h.removeStatelessResetToken(entry.StatelessResetToken)
 	delete(h.pathProbing, pathID)
 }
 
