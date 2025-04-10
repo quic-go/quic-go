@@ -2,9 +2,9 @@ package tools
 
 import (
 	"crypto"
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -26,11 +26,11 @@ func GenerateCA() (*x509.Certificate, crypto.PrivateKey, error) {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 	}
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, pub, priv)
+	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, priv.Public(), priv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -51,11 +51,11 @@ func GenerateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Cer
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, pub, caPriv)
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, priv.Public(), caPriv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -83,7 +83,7 @@ func GenerateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypt
 
 	lastCA := ca
 	lastCAPrivKey := caPrivateKey
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
 	}

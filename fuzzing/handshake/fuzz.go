@@ -2,8 +2,9 @@ package handshake
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -30,7 +31,7 @@ var (
 )
 
 func init() {
-	priv, err := rsa.GenerateKey(rand.Reader, 1024)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func init() {
 		log.Fatal(err)
 	}
 
-	privClient, err := rsa.GenerateKey(rand.Reader, 1024)
+	privClient, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
