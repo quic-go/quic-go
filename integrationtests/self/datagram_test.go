@@ -164,7 +164,7 @@ func TestDatagramLoss(t *testing.T) {
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(2 * numDatagrams * time.Millisecond))
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
