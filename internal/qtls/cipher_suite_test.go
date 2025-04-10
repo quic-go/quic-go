@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/quic-go/quic-go/internal/fips140"
 	"github.com/quic-go/quic-go/internal/testdata"
 
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,9 @@ func TestCipherSuiteSelection(t *testing.T) {
 }
 
 func testCipherSuiteSelection(t *testing.T, cs uint16) {
+	if cs == tls.TLS_CHACHA20_POLY1305_SHA256 && fips140.Enabled() {
+		t.Skip("TLS_CHACHA20_POLY1305_SHA256 not available in FIPS mode")
+	}
 	reset := SetCipherSuite(cs)
 	defer reset()
 

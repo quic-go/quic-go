@@ -13,6 +13,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/fips140"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/qtls"
@@ -119,6 +120,9 @@ func TestHandshakeCipherSuites(t *testing.T) {
 		tls.TLS_CHACHA20_POLY1305_SHA256,
 	} {
 		t.Run(tls.CipherSuiteName(suiteID), func(t *testing.T) {
+			if suiteID == tls.TLS_CHACHA20_POLY1305_SHA256 && fips140.Enabled() {
+				t.Skip("TLS_CHACHA20_POLY1305_SHA256 not available in FIPS mode")
+			}
 			reset := qtls.SetCipherSuite(suiteID)
 			defer reset()
 
