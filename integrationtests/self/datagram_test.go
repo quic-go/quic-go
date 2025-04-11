@@ -127,6 +127,10 @@ func TestDatagramLoss(t *testing.T) {
 	const rtt = 10 * time.Millisecond
 	const numDatagrams = 100
 	const datagramSize = 500
+	// QUIC DATAGRAM packet with at least 1+1+3+16 bytes framing+encryption
+	// overhead, and optional 5 bytes ACK, for a total of at least 27 bytes.
+	// This skips over 1000+ bytes TLS handshake + NCI, and PADDING + PING.
+	const maxDatagramPacketSize = datagramSize + 50
 
 	server, err := quic.Listen(
 		newUDPConnLocalhost(t),
@@ -140,11 +144,15 @@ func TestDatagramLoss(t *testing.T) {
 	proxy := &quicproxy.Proxy{
 		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
+		// Drop about 10% of Short Header packets with DATAGRAM frames
 		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
 				return false
 			}
 			if len(packet) < datagramSize { // don't drop ACK-only packets
+				return false
+			}
+			if len(packet) > maxDatagramPacketSize { // skip over non-DATAGRAM frames
 				return false
 			}
 			total.Add(1)
@@ -164,7 +172,9 @@ func TestDatagramLoss(t *testing.T) {
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(numDatagrams*time.Millisecond))
+	// SendDatagram blocks when the queue is full (maxDatagramSendQueueLen),
+	// add some extra margin for the handshake, networking and ACKs.
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(4*numDatagrams*time.Millisecond))
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
@@ -231,7 +241,7 @@ func TestDatagramLoss(t *testing.T) {
 	assert.NotZero(t, numDroppedIncoming)
 	assert.NotZero(t, numDroppedOutgoing)
 	t.Logf("server received %d out of %d sent datagrams", serverDatagrams, numDatagrams)
-	assert.InDelta(t, numDatagrams-numDroppedIncoming, serverDatagrams, numDatagrams/20, "datagrams received by the server")
+	assert.EqualValues(t, numDatagrams-numDroppedIncoming, serverDatagrams, "datagrams received by the server")
 	t.Logf("client received %d out of %d sent datagrams", clientDatagrams, numDatagrams)
-	assert.InDelta(t, numDatagrams-numDroppedOutgoing, clientDatagrams, numDatagrams/20, "datagrams received by the client")
+	assert.EqualValues(t, numDatagrams-numDroppedOutgoing, clientDatagrams, "datagrams received by the client")
 }
