@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -47,7 +48,7 @@ func TestConnectionMigration(t *testing.T) {
 			case tr2.Conn.LocalAddr().(*net.UDPAddr).Port:
 				packetsPath2.Add(1)
 			default:
-				fmt.Println("address not found", from)
+				log.Fatalf("address not found: %v", from)
 			}
 			return rtt / 2
 		},
@@ -141,4 +142,54 @@ func TestConnectionMigration(t *testing.T) {
 	// some path probing might have happened
 	require.Less(t, int(packetsPath2.Load()-c2BeforeSwitch), 20)
 	require.Equal(t, tr1.Conn.LocalAddr(), conn.LocalAddr())
+}
+
+func TestConnectionMigrationPaths(t *testing.T) {
+	ln, err := quic.ListenAddr("localhost:0", tlsConfig, getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	origTr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	defer origTr.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := origTr.Dial(ctx, ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	sconn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	defer sconn.CloseWithError(0, "")
+
+	// probe paths until we run out of connection IDs
+	var paths []*quic.Path
+	var lastPath *quic.Path
+	for i := 0; ; i++ {
+		tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+		defer tr.Close()
+		path, err := conn.AddPath(tr)
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(25*time.Millisecond))
+		defer cancel()
+		err = path.Probe(ctx)
+		if err != nil {
+			if i < 2 {
+				require.NoError(t, err, "expected at least 2 paths to be probed successfully")
+			}
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			lastPath = path
+			break
+		}
+		paths = append(paths, path)
+	}
+
+	// now close the first path
+	require.NoError(t, paths[0].Close())
+
+	// now it's possible to probe the last path
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, lastPath.Probe(ctx))
 }
