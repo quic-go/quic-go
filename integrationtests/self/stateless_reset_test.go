@@ -14,7 +14,7 @@ import (
 )
 
 func TestStatelessResets(t *testing.T) {
-	t.Run("0 byte connection IDs", func(t *testing.T) {
+	t.Run("zero-length connection IDs", func(t *testing.T) {
 		testStatelessReset(t, 0)
 	})
 	t.Run("10 byte connection IDs", func(t *testing.T) {
@@ -28,9 +28,8 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 
 	c := newUDPConnLocalhost(t)
 	tr := &quic.Transport{
-		Conn:               c,
-		StatelessResetKey:  &statelessResetKey,
-		ConnectionIDLength: connIDLen,
+		Conn:              c,
+		StatelessResetKey: &statelessResetKey,
 	}
 	defer tr.Close()
 	ln, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
@@ -65,18 +64,31 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
-	cl := &quic.Transport{
-		Conn:               newUDPConnLocalhost(t),
-		ConnectionIDLength: connIDLen,
+	var conn quic.Connection
+	if connIDLen > 0 {
+		cl := &quic.Transport{
+			Conn:               newUDPConnLocalhost(t),
+			ConnectionIDLength: connIDLen,
+		}
+		defer cl.Close()
+		var err error
+		conn, err = cl.Dial(
+			context.Background(),
+			proxy.LocalAddr(),
+			getTLSClientConfig(),
+			getQuicConfig(&quic.Config{MaxIdleTimeout: 2 * time.Second}),
+		)
+		require.NoError(t, err)
+	} else {
+		conn, err = quic.Dial(
+			context.Background(),
+			newUDPConnLocalhost(t),
+			proxy.LocalAddr(),
+			getTLSClientConfig(),
+			getQuicConfig(&quic.Config{MaxIdleTimeout: 2 * time.Second}),
+		)
+		require.NoError(t, err)
 	}
-	defer cl.Close()
-	conn, err := cl.Dial(
-		context.Background(),
-		proxy.LocalAddr(),
-		getTLSClientConfig(),
-		getQuicConfig(&quic.Config{MaxIdleTimeout: 2 * time.Second}),
-	)
-	require.NoError(t, err)
 	str, err := conn.AcceptStream(context.Background())
 	require.NoError(t, err)
 	data := make([]byte, 6)
@@ -94,9 +106,8 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	// We need to create a new Transport here, since the old one is still sending out
 	// CONNECTION_CLOSE packets for (recently) closed connections).
 	tr2 := &quic.Transport{
-		Conn:               c,
-		ConnectionIDLength: connIDLen,
-		StatelessResetKey:  &statelessResetKey,
+		Conn:              c,
+		StatelessResetKey: &statelessResetKey,
 	}
 	defer tr2.Close()
 	ln2, err := tr2.Listen(getTLSConfig(), getQuicConfig(nil))

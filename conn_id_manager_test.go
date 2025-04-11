@@ -154,22 +154,34 @@ func TestConnIDManagerHandshakeCompletion(t *testing.T) {
 }
 
 func TestConnIDManagerConnIDRotation(t *testing.T) {
+	toToken := func(connID protocol.ConnectionID) protocol.StatelessResetToken {
+		var token protocol.StatelessResetToken
+		copy(token[:], connID.Bytes())
+		copy(token[connID.Len():], connID.Bytes())
+		return token
+	}
+
 	var frameQueue []wire.Frame
+	var addedTokens, removedTokens []protocol.StatelessResetToken
 	m := newConnIDManager(
 		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-		func(protocol.StatelessResetToken) {},
-		func(protocol.StatelessResetToken) {},
+		func(token protocol.StatelessResetToken) { addedTokens = append(addedTokens, token) },
+		func(token protocol.StatelessResetToken) { removedTokens = append(removedTokens, token) },
 		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
 	)
 	// the first connection ID is used as soon as the handshake is complete
 	m.SetHandshakeComplete()
+	firstConnID := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
 	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
 		SequenceNumber:      1,
-		ConnectionID:        protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
-		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		ConnectionID:        firstConnID,
+		StatelessResetToken: toToken(protocol.ParseConnectionID([]byte{4, 3, 2, 1})),
 	}))
-	require.Equal(t, protocol.ParseConnectionID([]byte{4, 3, 2, 1}), m.Get())
+	require.Equal(t, firstConnID, m.Get())
 	frameQueue = nil
+	require.True(t, m.IsActiveStatelessResetToken(toToken(firstConnID)))
+	require.Equal(t, addedTokens, []protocol.StatelessResetToken{toToken(firstConnID)})
+	addedTokens = addedTokens[:0]
 
 	// Note that we're missing the connection ID with sequence number 2.
 	// It will be received later.
@@ -182,8 +194,9 @@ func TestConnIDManagerConnIDRotation(t *testing.T) {
 		require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      uint64(3 + i),
 			ConnectionID:        connID,
-			StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+			StatelessResetToken: toToken(connID),
 		}))
+		require.False(t, m.IsActiveStatelessResetToken(toToken(connID)))
 	}
 
 	var counter int
@@ -191,11 +204,19 @@ func TestConnIDManagerConnIDRotation(t *testing.T) {
 		require.Empty(t, frameQueue)
 		m.SentPacket()
 		counter++
-		if m.Get() != protocol.ParseConnectionID([]byte{4, 3, 2, 1}) {
+		if connID := m.Get(); connID != firstConnID {
 			require.Equal(t, queuedConnIDs[0], m.Get())
 			require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 1}}, frameQueue)
+			require.Equal(t, removedTokens, []protocol.StatelessResetToken{toToken(firstConnID)})
+			require.Equal(t, addedTokens, []protocol.StatelessResetToken{toToken(connID)})
+			addedTokens = addedTokens[:0]
+			removedTokens = removedTokens[:0]
+			require.True(t, m.IsActiveStatelessResetToken(toToken(connID)))
+			require.False(t, m.IsActiveStatelessResetToken(toToken(firstConnID)))
 			break
 		}
+		require.True(t, m.IsActiveStatelessResetToken(toToken(firstConnID)))
+		require.Empty(t, addedTokens)
 	}
 	require.GreaterOrEqual(t, counter, protocol.PacketsPerConnectionID/2)
 	require.LessOrEqual(t, counter, protocol.PacketsPerConnectionID*3/2)
@@ -223,7 +244,7 @@ func TestConnIDManagerPathMigration(t *testing.T) {
 	_, ok := m.GetConnIDForPath(1)
 	require.False(t, ok)
 
-	// add a connection ID
+	// add two connection IDs
 	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
 		SequenceNumber:      1,
 		ConnectionID:        protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
@@ -241,11 +262,13 @@ func TestConnIDManagerPathMigration(t *testing.T) {
 	require.Empty(t, removedTokens)
 
 	addedTokens = addedTokens[:0]
+	require.False(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{5, 4, 3, 2, 5, 4, 3, 2}))
 	connID, ok = m.GetConnIDForPath(2)
 	require.True(t, ok)
 	require.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2}), connID)
 	require.Equal(t, []protocol.StatelessResetToken{{5, 4, 3, 2, 5, 4, 3, 2}}, addedTokens)
 	require.Empty(t, removedTokens)
+	require.True(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{5, 4, 3, 2, 5, 4, 3, 2}))
 
 	addedTokens = addedTokens[:0]
 	// asking for the connection for path 1 again returns the same connection ID
@@ -294,12 +317,14 @@ func TestConnIDManagerPathMigration(t *testing.T) {
 	require.Equal(t, protocol.ParseConnectionID([]byte{7, 6, 5, 4}), connID)
 	require.Equal(t, []protocol.StatelessResetToken{{16, 15, 14, 13}}, addedTokens)
 	require.Empty(t, removedTokens)
+	require.True(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{16, 15, 14, 13}))
 
 	// a RETIRE_CONNECTION_ID frame for path 1 is queued when retiring the connection ID
 	m.RetireConnIDForPath(1)
 	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 4}}, frameQueue)
 	require.Equal(t, []protocol.StatelessResetToken{{16, 15, 14, 13}}, removedTokens)
 	removedTokens = removedTokens[:0]
+	require.False(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{16, 15, 14, 13}))
 
 	m.Close()
 	require.Equal(t, []protocol.StatelessResetToken{
