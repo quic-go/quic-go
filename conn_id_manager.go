@@ -294,6 +294,22 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	delete(h.pathProbing, pathID)
 }
 
+func (h *connIDManager) IsActiveStatelessResetToken(token protocol.StatelessResetToken) bool {
+	if h.activeStatelessResetToken != nil {
+		if *h.activeStatelessResetToken == token {
+			return true
+		}
+	}
+	if h.pathProbing != nil {
+		for _, entry := range h.pathProbing {
+			if entry.StatelessResetToken == token {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Using the connIDManager after it has been closed can have disastrous effects:
 // If the connection ID is rotated, a new entry would be inserted into the packet handler map,
 // leading to a memory leak of the connection struct.
