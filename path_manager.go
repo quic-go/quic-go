@@ -3,6 +3,7 @@ package quic
 import (
 	"crypto/rand"
 	"net"
+	"slices"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -17,6 +18,7 @@ const invalidPathID pathID = -1
 const maxPaths = 3
 
 type path struct {
+	id             pathID
 	addr           net.Addr
 	pathChallenge  [8]byte
 	validated      bool
@@ -25,7 +27,7 @@ type path struct {
 
 type pathManager struct {
 	nextPathID pathID
-	paths      map[pathID]*path
+	paths      []*path
 
 	getConnID    func(pathID) (_ protocol.ConnectionID, ok bool)
 	retireConnID func(pathID)
@@ -39,7 +41,7 @@ func newPathManager(
 	logger utils.Logger,
 ) *pathManager {
 	return &pathManager{
-		paths:        make(map[pathID]*path),
+		paths:        make([]*path, 0, maxPaths+1),
 		getConnID:    getConnID,
 		retireConnID: retireConnID,
 		logger:       logger,
@@ -54,11 +56,9 @@ func (pm *pathManager) HandlePacket(
 	isNonProbing bool,
 ) (_ protocol.ConnectionID, _ []ackhandler.Frame, shouldSwitch bool) {
 	var p *path
-	pathID := pm.nextPathID
-	for id, path := range pm.paths {
+	for _, path := range pm.paths {
 		if addrsEqual(path.addr, remoteAddr) {
 			p = path
-			pathID = id
 			// already sent a PATH_CHALLENGE for this path
 			if isNonProbing {
 				path.rcvdNonProbing = true
@@ -80,6 +80,13 @@ func (pm *pathManager) HandlePacket(
 		return protocol.ConnectionID{}, nil, shouldSwitch
 	}
 
+	var pathID pathID
+	if p != nil {
+		pathID = p.id
+	} else {
+		pathID = pm.nextPathID
+	}
+
 	// previously unseen path, initiate path validation by sending a PATH_CHALLENGE
 	connID, ok := pm.getConnID(pathID)
 	if !ok {
@@ -92,16 +99,17 @@ func (pm *pathManager) HandlePacket(
 		var pathChallengeData [8]byte
 		rand.Read(pathChallengeData[:])
 		p = &path{
+			id:             pm.nextPathID,
 			addr:           remoteAddr,
 			rcvdNonProbing: isNonProbing,
 			pathChallenge:  pathChallengeData,
 		}
+		pm.nextPathID++
+		pm.paths = append(pm.paths, p)
 		frames = append(frames, ackhandler.Frame{
 			Frame:   &wire.PathChallengeFrame{Data: p.pathChallenge},
 			Handler: (*pathManagerAckHandler)(pm),
 		})
-		pm.paths[pm.nextPathID] = p
-		pm.nextPathID++
 		pm.logger.Debugf("enqueueing PATH_CHALLENGE for new path %s", remoteAddr)
 	}
 	if pathChallenge != nil {
@@ -127,14 +135,15 @@ func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame) {
 // SwitchToPath is called when the connection switches to a new path
 func (pm *pathManager) SwitchToPath(addr net.Addr) {
 	// retire all other paths
-	for id := range pm.paths {
-		if addrsEqual(pm.paths[id].addr, addr) {
-			pm.logger.Debugf("switching to path %d (%s)", id, addr)
+	for _, path := range pm.paths {
+		if addrsEqual(path.addr, addr) {
+			pm.logger.Debugf("switching to path %d (%s)", path.id, addr)
 			continue
 		}
-		pm.retireConnID(id)
+		pm.retireConnID(path.id)
 	}
 	clear(pm.paths)
+	pm.paths = pm.paths[:0]
 }
 
 type pathManagerAckHandler pathManager
@@ -147,10 +156,10 @@ func (pm *pathManagerAckHandler) OnAcked(f wire.Frame) {}
 func (pm *pathManagerAckHandler) OnLost(f wire.Frame) {
 	// TODO: retransmit the packet the first time it is lost
 	pc := f.(*wire.PathChallengeFrame)
-	for id, path := range pm.paths {
+	for i, path := range pm.paths {
 		if path.pathChallenge == pc.Data {
-			delete(pm.paths, id)
-			pm.retireConnID(id)
+			pm.paths = slices.Delete(pm.paths, i, i+1)
+			pm.retireConnID(path.id)
 			break
 		}
 	}
