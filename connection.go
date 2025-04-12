@@ -1075,7 +1075,7 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket, isCoalesced bool)
 			s.logger,
 		)
 	}
-	destConnID, frames, shouldSwitchPath := s.pathManager.HandlePacket(p.remoteAddr, pathChallenge, isNonProbing)
+	destConnID, frames, shouldSwitchPath := s.pathManager.HandlePacket(p.remoteAddr, p.rcvTime, pathChallenge, isNonProbing)
 	if len(frames) > 0 {
 		probe, buf, err := s.packer.PackPathProbePacket(destConnID, frames, s.version)
 		if err != nil {

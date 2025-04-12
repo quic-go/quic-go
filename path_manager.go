@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"net"
 	"slices"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -20,6 +21,7 @@ const maxPaths = 3
 type path struct {
 	id             pathID
 	addr           net.Addr
+	lastPacketTime time.Time
 	pathChallenge  [8]byte
 	validated      bool
 	rcvdNonProbing bool
@@ -52,6 +54,7 @@ func newPathManager(
 // May return nil.
 func (pm *pathManager) HandlePacket(
 	remoteAddr net.Addr,
+	t time.Time,
 	pathChallenge *wire.PathChallengeFrame, // may be nil if the packet didn't contain a PATH_CHALLENGE
 	isNonProbing bool,
 ) (_ protocol.ConnectionID, _ []ackhandler.Frame, shouldSwitch bool) {
@@ -59,6 +62,7 @@ func (pm *pathManager) HandlePacket(
 	for _, path := range pm.paths {
 		if addrsEqual(path.addr, remoteAddr) {
 			p = path
+			p.lastPacketTime = t
 			// already sent a PATH_CHALLENGE for this path
 			if isNonProbing {
 				path.rcvdNonProbing = true
@@ -101,6 +105,7 @@ func (pm *pathManager) HandlePacket(
 		p = &path{
 			id:             pm.nextPathID,
 			addr:           remoteAddr,
+			lastPacketTime: t,
 			rcvdNonProbing: isNonProbing,
 			pathChallenge:  pathChallengeData,
 		}
