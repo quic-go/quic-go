@@ -1,13 +1,10 @@
 package quic
 
 import (
-	crand "crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -133,7 +130,6 @@ type packetPacker struct {
 	acks                ackFrameSource
 	datagramQueue       *datagramQueue
 	retransmissionQueue *retransmissionQueue
-	rand                rand.Rand
 
 	numNonAckElicitingAcks int
 }
@@ -152,9 +148,6 @@ func newPacketPacker(
 	datagramQueue *datagramQueue,
 	perspective protocol.Perspective,
 ) *packetPacker {
-	var b [8]byte
-	_, _ = crand.Read(b[:])
-
 	return &packetPacker{
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
@@ -166,7 +159,6 @@ func newPacketPacker(
 		perspective:         perspective,
 		framer:              framer,
 		acks:                acks,
-		rand:                *rand.New(rand.NewSource(binary.BigEndian.Uint64(b[:]))),
 		pnManager:           packetNumberManager,
 	}
 }
@@ -948,7 +940,7 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	// Randomize the order of the control frames.
 	// This makes sure that the receiver doesn't rely on the order in which frames are packed.
 	if len(pl.frames) > 1 {
-		p.rand.Shuffle(len(pl.frames), func(i, j int) { pl.frames[i], pl.frames[j] = pl.frames[j], pl.frames[i] })
+		rand.Shuffle(len(pl.frames), func(i, j int) { pl.frames[i], pl.frames[j] = pl.frames[j], pl.frames[i] })
 	}
 	for _, f := range pl.frames {
 		var err error
