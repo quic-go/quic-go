@@ -23,22 +23,6 @@ func newRetransmissionQueue() *retransmissionQueue {
 	return &retransmissionQueue{}
 }
 
-// AddPing queues a ping.
-// It is used when a probe packet needs to be sent
-func (q *retransmissionQueue) AddPing(encLevel protocol.EncryptionLevel) {
-	//nolint:exhaustive // Cannot send probe packets for 0-RTT.
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		q.addInitial(&wire.PingFrame{})
-	case protocol.EncryptionHandshake:
-		q.addHandshake(&wire.PingFrame{})
-	case protocol.Encryption1RTT:
-		q.addAppData(&wire.PingFrame{})
-	default:
-		panic("unexpected encryption level")
-	}
-}
-
 func (q *retransmissionQueue) addInitial(f wire.Frame) {
 	if cf, ok := f.(*wire.CryptoFrame); ok {
 		q.initialCryptoData = append(q.initialCryptoData, cf)

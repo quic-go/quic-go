@@ -21,8 +21,8 @@ var errNothingToPack = errors.New("nothing to pack")
 type packer interface {
 	PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (*coalescedPacket, error)
 	PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, *packetBuffer, error)
-	AppendPacket(buf *packetBuffer, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, error)
-	MaybePackPTOProbePacket(protocol.EncryptionLevel, protocol.ByteCount, time.Time, protocol.Version) (*coalescedPacket, error)
+	AppendPacket(_ *packetBuffer, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, error)
+	PackPTOProbePacket(_ protocol.EncryptionLevel, _ protocol.ByteCount, addPingIfEmpty bool, now time.Time, v protocol.Version) (*coalescedPacket, error)
 	PackConnectionClose(*qerr.TransportError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
 	PackApplicationClose(*qerr.ApplicationError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
 	PackPathProbePacket(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error)
@@ -709,9 +709,10 @@ func (p *packetPacker) composeNextPacket(
 	return pl
 }
 
-func (p *packetPacker) MaybePackPTOProbePacket(
+func (p *packetPacker) PackPTOProbePacket(
 	encLevel protocol.EncryptionLevel,
 	maxPacketSize protocol.ByteCount,
+	addPingIfEmpty bool,
 	now time.Time,
 	v protocol.Version,
 ) (*coalescedPacket, error) {
@@ -726,7 +727,12 @@ func (p *packetPacker) MaybePackPTOProbePacket(
 		hdrLen := wire.ShortHeaderLen(connID, pnLen)
 		pl := p.maybeGetAppDataPacket(maxPacketSize-protocol.ByteCount(s.Overhead())-hdrLen, false, true, now, v)
 		if pl.length == 0 {
-			return nil, nil
+			if !addPingIfEmpty {
+				return nil, nil
+			}
+			ping := &wire.PingFrame{}
+			pl.frames = append(pl.frames, ackhandler.Frame{Frame: ping, Handler: emptyHandler{}})
+			pl.length += ping.Length(v)
 		}
 		buffer := getPacketBuffer()
 		packet := &coalescedPacket{buffer: buffer}
@@ -983,3 +989,10 @@ func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.Pack
 func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
 }
+
+type emptyHandler struct{}
+
+var _ ackhandler.FrameHandler = emptyHandler{}
+
+func (emptyHandler) OnAcked(wire.Frame) {}
+func (emptyHandler) OnLost(wire.Frame)  {}
