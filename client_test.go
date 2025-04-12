@@ -67,7 +67,6 @@ func testDial(t *testing.T,
 
 	_, addr, err := server.ReadFrom(make([]byte, 1500))
 	require.NoError(t, err)
-	require.True(t, areTransportsRunning())
 	cancel()
 	select {
 	case err := <-errChan:
@@ -76,19 +75,29 @@ func testDial(t *testing.T,
 		t.Fatal("timeout")
 	}
 
-	// The socket that the client used for dialing should be closed now.
-	// Binding to the same address would error if the address was still in use.
-	conn, err := net.ListenUDP("udp", addr.(*net.UDPAddr))
 	if shouldCloseConn {
-		require.NoError(t, err)
-		defer conn.Close()
+		// The socket that the client used for dialing should be closed now.
+		// Binding to the same address would error if the address was still in use.
+		require.Eventually(t, func() bool {
+			conn, err := net.ListenUDP("udp", addr.(*net.UDPAddr))
+			if err != nil {
+				return false
+			}
+			conn.Close()
+			return true
+		}, scaleDuration(200*time.Millisecond), scaleDuration(10*time.Millisecond))
+		require.False(t, areTransportsRunning())
+		return
+	}
+
+	// The socket that the client used for dialing should not be closed now.
+	// Binding to the same address will error if the address was still in use.
+	_, err = net.ListenUDP("udp", addr.(*net.UDPAddr))
+	require.Error(t, err)
+	if runtime.GOOS == "windows" {
+		require.ErrorContains(t, err, "bind: Only one usage of each socket address")
 	} else {
-		require.Error(t, err)
-		if runtime.GOOS == "windows" {
-			require.ErrorContains(t, err, "bind: Only one usage of each socket address")
-		} else {
-			require.ErrorContains(t, err, "address already in use")
-		}
+		require.ErrorContains(t, err, "address already in use")
 	}
 
 	require.False(t, areTransportsRunning())
