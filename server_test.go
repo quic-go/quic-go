@@ -1165,12 +1165,13 @@ func TestServer0RTTReordering(t *testing.T) {
 	server.handlePacket(p)
 
 	// now receive the Initial
+	done := make(chan struct{})
 	initial := getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, randConnID(5), connID)
 	packets := make(chan receivedPacket, protocol.Max0RTTQueueLen+1)
 	conn.EXPECT().handlePacket(gomock.Any()).Do(func(p receivedPacket) { packets <- p }).AnyTimes()
 	conn.EXPECT().Context().Return(context.Background())
 	conn.EXPECT().earlyConnReady().Return(make(chan struct{}))
-	conn.EXPECT().run()
+	conn.EXPECT().run().Do(func() error { close(done); return nil })
 	server.handlePacket(initial)
 
 	for i := range protocol.Max0RTTQueueLen + 1 {
@@ -1184,6 +1185,12 @@ func TestServer0RTTReordering(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("timeout")
 		}
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
 
 	// shutdown
