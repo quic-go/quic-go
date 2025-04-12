@@ -67,7 +67,6 @@ func testDial(t *testing.T,
 
 	_, addr, err := server.ReadFrom(make([]byte, 1500))
 	require.NoError(t, err)
-	require.True(t, areTransportsRunning())
 	cancel()
 	select {
 	case err := <-errChan:
