@@ -16,7 +16,16 @@ type pathID int64
 
 const invalidPathID pathID = -1
 
+// Maximum number of paths to keep track of.
+// If the peer probes another path (before the pathTimeout of an existing path expires),
+// this probing attempt is ignored.
 const maxPaths = 3
+
+// If no packet is received for a path for pathTimeout,
+// the path can be evicted when the peer probes another path.
+// This prevents an attacker from churning through paths by duplicating packets and
+// sending them with spoofed source addresses.
+const pathTimeout = 30 * time.Second
 
 type path struct {
 	id             pathID
@@ -29,7 +38,8 @@ type path struct {
 
 type pathManager struct {
 	nextPathID pathID
-	paths      []*path
+	// ordered by lastPacketTime, with the most recently used path at the end
+	paths []*path
 
 	getConnID    func(pathID) (_ protocol.ConnectionID, ok bool)
 	retireConnID func(pathID)
@@ -59,7 +69,7 @@ func (pm *pathManager) HandlePacket(
 	isNonProbing bool,
 ) (_ protocol.ConnectionID, _ []ackhandler.Frame, shouldSwitch bool) {
 	var p *path
-	for _, path := range pm.paths {
+	for i, path := range pm.paths {
 		if addrsEqual(path.addr, remoteAddr) {
 			p = path
 			p.lastPacketTime = t
@@ -71,6 +81,11 @@ func (pm *pathManager) HandlePacket(
 				pm.logger.Debugf("received packet for path %s that was already probed, validated: %t", remoteAddr, path.validated)
 			}
 			shouldSwitch = path.validated && path.rcvdNonProbing
+			if i != len(pm.paths)-1 {
+				// move the path to the end of the list
+				pm.paths = slices.Delete(pm.paths, i, i+1)
+				pm.paths = append(pm.paths, p)
+			}
 			if pathChallenge == nil {
 				return protocol.ConnectionID{}, nil, shouldSwitch
 			}
@@ -78,10 +93,15 @@ func (pm *pathManager) HandlePacket(
 	}
 
 	if len(pm.paths) >= maxPaths {
-		if pm.logger.Debug() {
-			pm.logger.Debugf("received packet for previously unseen path %s, but already have %d paths", remoteAddr, len(pm.paths))
+		if pm.paths[0].lastPacketTime.Add(pathTimeout).After(t) {
+			if pm.logger.Debug() {
+				pm.logger.Debugf("received packet for previously unseen path %s, but already have %d paths", remoteAddr, len(pm.paths))
+			}
+			return protocol.ConnectionID{}, nil, shouldSwitch
 		}
-		return protocol.ConnectionID{}, nil, shouldSwitch
+		// evict the oldest path, if the last packet was received more than pathTimeout ago
+		pm.retireConnID(pm.paths[0].id)
+		pm.paths = pm.paths[1:]
 	}
 
 	var pathID pathID

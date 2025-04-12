@@ -202,7 +202,7 @@ func TestPathManagerNATRebinding(t *testing.T) {
 
 func TestPathManagerLimits(t *testing.T) {
 	var connIDs []protocol.ConnectionID
-	for range 2*maxPaths + 1 {
+	for range 2*maxPaths + 2 {
 		b := make([]byte, 8)
 		rand.Read(b)
 		connIDs = append(connIDs, protocol.ParseConnectionID(b))
@@ -215,15 +215,32 @@ func TestPathManagerLimits(t *testing.T) {
 	)
 
 	now := time.Now()
+	firstPathTime := now
+	var firstPathConnID protocol.ConnectionID
+	require.Greater(t, pathTimeout, maxPaths*5*time.Second)
 	for i := range maxPaths {
 		connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + i}, now, nil, true)
 		require.NotEmpty(t, frames)
 		require.Equal(t, connIDs[i], connID)
+		if i == 0 {
+			firstPathConnID = connID
+		}
+		now = now.Add(5 * time.Second)
 	}
 	// the maximum number of paths is already being probed
+	now = firstPathTime.Add(pathTimeout).Add(-time.Nanosecond)
 	connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
+
+	// receiving another packet after the pathTimeout of the first path evicts the first path
+	now = firstPathTime.Add(pathTimeout)
+	connIDIndex := maxPaths
+	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths}, now, nil, true)
+	require.NotEmpty(t, frames)
+	require.Equal(t, connIDs[connIDIndex], connID)
+	require.Equal(t, []protocol.ConnectionID{firstPathConnID}, retiredConnIDs)
+	connIDIndex++
 
 	// switching to a new path frees is up all paths
 	var f1 []ackhandler.Frame
@@ -234,7 +251,8 @@ func TestPathManagerLimits(t *testing.T) {
 			f1 = frames
 		}
 		require.NotEmpty(t, frames)
-		require.Equal(t, connIDs[maxPaths+i], connID)
+		require.Equal(t, connIDs[connIDIndex], connID)
+		connIDIndex++
 	}
 	// again, the maximum number of paths is already being probed
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
@@ -247,7 +265,7 @@ func TestPathManagerLimits(t *testing.T) {
 	// we can open exactly one more path
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4000}, now, nil, true)
 	require.NotEmpty(t, frames)
-	require.Equal(t, connIDs[2*maxPaths], connID)
+	require.Equal(t, connIDs[connIDIndex], connID)
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4001}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
