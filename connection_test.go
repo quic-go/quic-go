@@ -2988,7 +2988,7 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 			),
 			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 				shortHeaderPacket{}, errNothingToPack,
-			),
+			).MaxTimes(1),
 		)
 		tc.conn.handlePacket(receivedPacket{
 			data:       make([]byte, 100),
