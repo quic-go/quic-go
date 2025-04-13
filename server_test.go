@@ -672,10 +672,17 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 		tokenGeneratorKey: tokenGeneratorKey,
 	})
 
+	done := make(chan struct{}, 3)
 	c := NewMockQUICConn(mockCtrl)
-	c.EXPECT().run()
-	c.EXPECT().Context().Return(context.Background())
-	c.EXPECT().HandshakeComplete().Return(make(chan struct{}))
+	c.EXPECT().run().Do(func() error { done <- struct{}{}; return nil })
+	c.EXPECT().Context().DoAndReturn(func() context.Context {
+		done <- struct{}{}
+		return context.Background()
+	})
+	c.EXPECT().HandshakeComplete().DoAndReturn(func() <-chan struct{} {
+		done <- struct{}{}
+		return make(chan struct{})
+	})
 	recorder := newConnConstructorRecorder(c)
 	server.newConn = recorder.NewConn
 
@@ -723,6 +730,14 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 	} else {
 		assert.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), args.origDestConnID)
 		assert.Zero(t, args.retrySrcConnID)
+	}
+
+	for range 3 {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
 	}
 
 	// shutdown
