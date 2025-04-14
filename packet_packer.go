@@ -5,9 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -152,7 +151,7 @@ func newPacketPacker(
 	datagramQueue *datagramQueue,
 	perspective protocol.Perspective,
 ) *packetPacker {
-	var b [8]byte
+	var b [16]byte
 	_, _ = crand.Read(b[:])
 
 	return &packetPacker{
@@ -166,7 +165,7 @@ func newPacketPacker(
 		perspective:         perspective,
 		framer:              framer,
 		acks:                acks,
-		rand:                *rand.New(rand.NewSource(binary.BigEndian.Uint64(b[:]))),
+		rand:                *rand.New(rand.NewPCG(binary.BigEndian.Uint64(b[:8]), binary.BigEndian.Uint64(b[8:]))),
 		pnManager:           packetNumberManager,
 	}
 }
