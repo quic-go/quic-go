@@ -217,7 +217,7 @@ func TestPathManagerLimits(t *testing.T) {
 	now := time.Now()
 	firstPathTime := now
 	var firstPathConnID protocol.ConnectionID
-	require.Greater(t, pathTimeout, maxPaths*5*time.Second)
+	require.Greater(t, pathTimeout, maxPaths*time.Second)
 	for i := range maxPaths {
 		connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + i}, now, nil, true)
 		require.NotEmpty(t, frames)
@@ -225,7 +225,7 @@ func TestPathManagerLimits(t *testing.T) {
 		if i == 0 {
 			firstPathConnID = connID
 		}
-		now = now.Add(5 * time.Second)
+		now = now.Add(time.Second)
 	}
 	// the maximum number of paths is already being probed
 	now = firstPathTime.Add(pathTimeout).Add(-time.Nanosecond)

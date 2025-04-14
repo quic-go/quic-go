@@ -25,7 +25,7 @@ const maxPaths = 3
 // the path can be evicted when the peer probes another path.
 // This prevents an attacker from churning through paths by duplicating packets and
 // sending them with spoofed source addresses.
-const pathTimeout = 30 * time.Second
+const pathTimeout = 5 * time.Second
 
 type path struct {
 	id             pathID
