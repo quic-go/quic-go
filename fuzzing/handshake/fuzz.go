@@ -11,7 +11,7 @@ import (
 	"io"
 	"log"
 	"math"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"time"
 
@@ -120,13 +120,13 @@ func toEncryptionLevel(n uint8) protocol.EncryptionLevel {
 
 func getTransportParameters(seed uint8) *wire.TransportParameters {
 	const maxVarInt = math.MaxUint64 / 4
-	r := mrand.New(mrand.NewSource(int64(seed)))
+	r := mrand.New(mrand.NewPCG(uint64(seed), uint64(seed)))
 	return &wire.TransportParameters{
 		ActiveConnectionIDLimit:        2,
-		InitialMaxData:                 protocol.ByteCount(r.Int63n(maxVarInt)),
-		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.Int63n(maxVarInt)),
-		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.Int63n(maxVarInt)),
-		InitialMaxStreamDataUni:        protocol.ByteCount(r.Int63n(maxVarInt)),
+		InitialMaxData:                 protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxStreamDataUni:        protocol.ByteCount(r.IntN(maxVarInt)),
 	}
 }
 

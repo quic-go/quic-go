@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"sync"
 	"testing"
 	"time"

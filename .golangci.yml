@@ -17,6 +17,10 @@ linters:
   settings:
     depguard:
       rules:
+        math-rand:
+          deny:
+            - pkg: "math/rand$"
+              desc: use math/rand/v2
         quicvarint:
           list-mode: strict
           files:

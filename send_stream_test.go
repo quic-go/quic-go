@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"os"
 	"testing"
@@ -992,7 +992,7 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 
 	mockSender.EXPECT().onHasStreamData(streamID, str).AnyTimes()
 	mockFC.EXPECT().SendWindowSize().DoAndReturn(func() protocol.ByteCount {
-		return protocol.ByteCount(mrand.Intn(500)) + 50
+		return protocol.ByteCount(mrand.IntN(500)) + 50
 	}).AnyTimes()
 	mockFC.EXPECT().IsNewlyBlocked().Return(false).AnyTimes()
 	mockFC.EXPECT().AddBytesSent(gomock.Any()).AnyTimes()
@@ -1013,14 +1013,14 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 
 	received := make([]byte, dataLen)
 	for !completed {
-		f, _, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300)+100), protocol.Version1)
+		f, _, _ := str.popStreamFrame(protocol.ByteCount(mrand.IntN(300)+100), protocol.Version1)
 		if f.Frame == nil {
 			continue
 		}
 		sf := f.Frame
 		// 50%: acknowledge the frame and save the data
 		// 50%: lose the frame
-		if mrand.Intn(100) < 50 {
+		if mrand.IntN(100) < 50 {
 			copy(received[sf.Offset:sf.Offset+sf.DataLen()], sf.Data)
 			f.Handler.OnAcked(f.Frame)
 		} else {

@@ -1,7 +1,8 @@
 package congestion
 
 import (
-	"math/rand"
+	"math"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestPacerPacing(t *testing.T) {
 	}
 
 	// now packets are being paced
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		require.Zero(t, p.Budget(now))
 		nextPacket := p.TimeUntilSend()
 		require.NotZero(t, nextPacket)
@@ -99,7 +100,7 @@ func TestPacerFastPacing(t *testing.T) {
 	require.Equal(t, 10*initialMaxDatagramSize, p.Budget(now.Add(time.Millisecond)))
 
 	now = now.Add(time.Millisecond)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		require.NotZero(t, p.Budget(now))
 		p.SentPacket(now, initialMaxDatagramSize)
 	}
@@ -111,7 +112,7 @@ func TestPacerNoOverflows(t *testing.T) {
 	p := newPacer(func() Bandwidth { return infBandwidth })
 	now := time.Now()
 	p.SentPacket(now, initialMaxDatagramSize)
-	for i := 0; i < 1e5; i++ {
-		require.NotZero(t, p.Budget(now.Add(time.Duration(rand.Int63()))))
+	for range 100000 {
+		require.NotZero(t, p.Budget(now.Add(time.Duration(rand.Int64N(math.MaxInt64)))))
 	}
 }
