@@ -17,9 +17,11 @@ linters:
   settings:
     depguard:
       rules:
-        math-rand:
+        random:
           deny:
             - pkg: "math/rand$"
+              desc: use math/rand/v2
+            - pkg: "golang.org/x/exp/rand"
               desc: use math/rand/v2
         quicvarint:
           list-mode: strict

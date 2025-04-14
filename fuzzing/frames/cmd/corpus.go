@@ -1,10 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"log"
+	mrand "math/rand/v2"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
@@ -21,15 +21,15 @@ func getRandomData(l int) []byte {
 }
 
 func getRandomNumber() uint64 {
-	switch 1 << uint8(rand.Intn(3)) {
+	switch 1 << uint8(mrand.IntN(3)) {
 	case 1:
-		return uint64(rand.Int63n(64))
+		return uint64(mrand.IntN(64))
 	case 2:
-		return uint64(rand.Int63n(16384))
+		return uint64(mrand.IntN(16384))
 	case 4:
-		return uint64(rand.Int63n(1073741824))
+		return uint64(mrand.IntN(1073741824))
 	case 8:
-		return uint64(rand.Int63n(4611686018427387904))
+		return uint64(mrand.IntN(4611686018427387904))
 	default:
 		panic("unexpected length")
 	}
@@ -39,14 +39,14 @@ func getRandomNumberLowerOrEqual(target uint64) uint64 {
 	if target == 0 {
 		return 0
 	}
-	return uint64(rand.Int63n(int64(target)))
+	return mrand.Uint64N(target)
 }
 
 // returns a *maximum* number of num ACK ranges
 func getAckRanges(num int) []wire.AckRange {
 	var ranges []wire.AckRange
 
-	prevSmallest := uint64(rand.Int63n(4611686018427387904))
+	prevSmallest := uint64(mrand.IntN(4611686018427387904))
 	for i := 0; i < num; i++ {
 		if prevSmallest <= 2 {
 			break
@@ -266,17 +266,17 @@ func main() {
 		frames := getFrames()
 
 		var b []byte
-		for j := 0; j < rand.Intn(30)+2; j++ {
-			if rand.Intn(10) == 0 { // write a PADDING frame
+		for j := 0; j < mrand.IntN(30)+2; j++ {
+			if mrand.IntN(10) == 0 { // write a PADDING frame
 				b = append(b, 0)
 			}
-			f := frames[rand.Intn(len(frames))]
+			f := frames[mrand.IntN(len(frames))]
 			var err error
 			b, err = f.Append(b, version)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if rand.Intn(10) == 0 { // write a PADDING frame
+			if mrand.IntN(10) == 0 { // write a PADDING frame
 				b = append(b, 0)
 			}
 		}

@@ -2,10 +2,9 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"log"
-
-	"golang.org/x/exp/rand"
+	mrand "math/rand/v2"
 
 	"github.com/quic-go/quic-go/fuzzing/header"
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
@@ -22,7 +22,7 @@ func getRandomData(l int) []byte {
 func getVNP(src, dest protocol.ArbitraryLenConnectionID, numVersions int) []byte {
 	versions := make([]protocol.Version, numVersions)
 	for i := 0; i < numVersions; i++ {
-		versions[i] = protocol.Version(rand.Uint32())
+		versions[i] = protocol.Version(mrand.Uint32())
 	}
 	return wire.ComposeVersionNegotiation(src, dest, versions)
 }
@@ -33,20 +33,20 @@ func main() {
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(3)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
-			Length:           protocol.ByteCount(rand.Intn(1000)),
+			Length:           protocol.ByteCount(mrand.IntN(1000)),
 			Version:          version,
 		},
 		{ // Initial without token, with zero-length src conn id
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
-			Length:           protocol.ByteCount(rand.Intn(1000)),
+			Length:           protocol.ByteCount(mrand.IntN(1000)),
 			Version:          version,
 		},
 		{ // Initial with Token
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(10)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(19)),
 			Type:             protocol.PacketTypeInitial,
-			Length:           protocol.ByteCount(rand.Intn(1000)),
+			Length:           protocol.ByteCount(mrand.IntN(1000)),
 			Version:          version,
 			Token:            getRandomData(25),
 		},
@@ -54,20 +54,20 @@ func main() {
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(5)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(10)),
 			Type:             protocol.PacketTypeHandshake,
-			Length:           protocol.ByteCount(rand.Intn(1000)),
+			Length:           protocol.ByteCount(mrand.IntN(1000)),
 			Version:          version,
 		},
 		{ // Handshake packet, with zero-length src conn id
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(12)),
 			Type:             protocol.PacketTypeHandshake,
-			Length:           protocol.ByteCount(rand.Intn(1000)),
+			Length:           protocol.ByteCount(mrand.IntN(1000)),
 			Version:          version,
 		},
 		{ // 0-RTT packet
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketType0RTT,
-			Length:           protocol.ByteCount(rand.Intn(1000)),
+			Length:           protocol.ByteCount(mrand.IntN(1000)),
 			Version:          version,
 		},
 		{ // Retry Packet, with empty orig dest conn id
@@ -82,8 +82,8 @@ func main() {
 	for _, h := range headers {
 		extHdr := &wire.ExtendedHeader{
 			Header:          h,
-			PacketNumberLen: protocol.PacketNumberLen(rand.Intn(4) + 1),
-			PacketNumber:    protocol.PacketNumber(rand.Uint64()),
+			PacketNumberLen: protocol.PacketNumberLen(mrand.IntN(4) + 1),
+			PacketNumber:    protocol.PacketNumber(mrand.Uint64()),
 		}
 		b, err := extHdr.Append(nil, version)
 		if err != nil {

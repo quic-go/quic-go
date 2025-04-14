@@ -1,10 +1,10 @@
 package wire
 
 import (
+	"crypto/rand"
 	"encoding/binary"
+	mrand "math/rand/v2"
 	"testing"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
@@ -19,8 +19,8 @@ func TestParseVersionNegotiationPacket(t *testing.T) {
 		return b
 	}
 
-	srcConnID := randConnID(rand.Intn(255) + 1)
-	destConnID := randConnID(rand.Intn(255) + 1)
+	srcConnID := randConnID(mrand.IntN(255) + 1)
+	destConnID := randConnID(mrand.IntN(255) + 1)
 	versions := []protocol.Version{0x22334455, 0x33445566}
 	data := []byte{0x80, 0, 0, 0, 0}
 	data = append(data, uint8(len(destConnID)))

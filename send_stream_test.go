@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +12,6 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/mocks"
 	"github.com/quic-go/quic-go/internal/protocol"
