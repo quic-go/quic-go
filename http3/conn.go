@@ -191,7 +191,6 @@ func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.Co
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
-				//nolint:staticcheck // SA1019 WebTransport still relies on the ConnectionTracingKey.
 				id := c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
 				if hijack != nil && hijack(StreamType(streamType), id, str, err) {
 					return
@@ -230,7 +229,6 @@ func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.Co
 				if hijack != nil {
 					if hijack(
 						StreamType(streamType),
-						//nolint:staticcheck // SA1019 WebTransport still relies on the ConnectionTracingKey.
 						c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
 						str,
 						nil,
