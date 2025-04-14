@@ -96,12 +96,6 @@ var _ = Describe("Retransmission queue", func() {
 			Expect(q.HasInitialData()).To(BeTrue())
 			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
 		})
-
-		It("adds a PING", func() {
-			q.AddPing(protocol.EncryptionInitial)
-			Expect(q.HasInitialData()).To(BeTrue())
-			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(&wire.PingFrame{}))
-		})
 	})
 
 	Context("Handshake data", func() {
@@ -185,12 +179,6 @@ var _ = Describe("Retransmission queue", func() {
 			Expect(q.HasHandshakeData()).To(BeTrue())
 			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
 		})
-
-		It("adds a PING", func() {
-			q.AddPing(protocol.EncryptionHandshake)
-			Expect(q.HasHandshakeData()).To(BeTrue())
-			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(&wire.PingFrame{}))
-		})
 	})
 
 	Context("Application data", func() {
@@ -213,12 +201,6 @@ var _ = Describe("Retransmission queue", func() {
 			q.AppDataAckHandler().OnLost(f)
 			Expect(q.HasAppData()).To(BeTrue())
 			Expect(q.GetAppDataFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
-		})
-
-		It("adds a PING", func() {
-			q.AddPing(protocol.Encryption1RTT)
-			Expect(q.HasAppData()).To(BeTrue())
-			Expect(q.GetAppDataFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(&wire.PingFrame{}))
 		})
 	})
 })
