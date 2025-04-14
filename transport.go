@@ -17,7 +17,7 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
-// ErrTransportClosed is returned by the Transport's Listen or Dial method after it was closed.
+// ErrTransportClosed is returned by the [Transport]'s Listen or Dial method after it was closed.
 var ErrTransportClosed = &errTransportClosed{}
 
 type errTransportClosed struct {
@@ -49,7 +49,7 @@ var errListenerAlreadySet = errors.New("listener already set")
 // This means that a single UDP socket can be used for listening for incoming connections, as well as
 // for dialing an arbitrary number of outgoing connections.
 // A Transport handles a single net.PacketConn, and offers a range of configuration options
-// compared to the simple helper functions like Listen and Dial that this package provides.
+// compared to the simple helper functions like [Listen] and [Dial] that this package provides.
 type Transport struct {
 	// A single net.PacketConn can only be handled by one Transport.
 	// Bad things will happen if passed to multiple Transports.
@@ -165,7 +165,7 @@ type Transport struct {
 
 // Listen starts listening for incoming QUIC connections.
 // There can only be a single listener on any net.PacketConn.
-// Listen may only be called again after the current Listener was closed.
+// Listen may only be called again after the current listener was closed.
 func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error) {
 	s, err := t.createServer(tlsConf, conf, false)
 	if err != nil {
@@ -176,7 +176,7 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 
 // ListenEarly starts listening for incoming QUIC connections.
 // There can only be a single listener on any net.PacketConn.
-// Listen may only be called again after the current Listener was closed.
+// ListenEarly may only be called again after the current listener was closed.
 func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListener, error) {
 	s, err := t.createServer(tlsConf, conf, true)
 	if err != nil {

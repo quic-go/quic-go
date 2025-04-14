@@ -44,19 +44,22 @@ type TokenStore interface {
 }
 
 // Err0RTTRejected is the returned from:
-// * Open{Uni}Stream{Sync}
-// * Accept{Uni}Stream
-// * Stream.Read and Stream.Write
+//   - Open{Uni}Stream{Sync}
+//   - Accept{Uni}Stream
+//   - Stream.Read and Stream.Write
+//
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// ConnectionTracingKey can be used to associate a ConnectionTracer with a Connection.
+// ConnectionTracingKey can be used to associate a [logging.ConnectionTracer] with a [Connection].
 // It is set on the Connection.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
+//
 // Deprecated: Applications can set their own tracing key using Transport.ConnContext.
 var ConnectionTracingKey = connTracingCtxKey{}
 
 // ConnectionTracingID is the type of the context value saved under the ConnectionTracingKey.
+//
 // Deprecated: Applications can set their own tracing key using Transport.ConnContext.
 type ConnectionTracingID uint64
 
@@ -66,9 +69,9 @@ type connTracingCtxKey struct{}
 // context returned by tls.Config.ClientInfo.Context.
 var QUICVersionContextKey = handshake.QUICVersionContextKey
 
-// Stream is the interface implemented by QUIC streams
-// In addition to the errors listed on the Connection,
-// calls to stream functions can return a StreamError if the stream is canceled.
+// Stream is the interface implemented by QUIC streams.
+// In addition to the errors listed on the [Connection],
+// calls to stream functions can return a [StreamError] if the stream is canceled.
 type Stream interface {
 	ReceiveStream
 	SendStream
@@ -141,12 +144,12 @@ type SendStream interface {
 
 // A Connection is a QUIC connection between two peers.
 // Calls to the connection (and to streams) can return the following types of errors:
-// * ApplicationError: for errors triggered by the application running on top of QUIC
-// * TransportError: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
-// * IdleTimeoutError: when the peer goes away unexpectedly (this is a net.Error timeout error)
-// * HandshakeTimeoutError: when the cryptographic handshake takes too long (this is a net.Error timeout error)
-// * StatelessResetError: when we receive a stateless reset
-// * VersionNegotiationError: returned by the client, when there's no version overlap between the peers
+//   - [ApplicationError]: for errors triggered by the application running on top of QUIC
+//   - [TransportError]: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
+//   - [IdleTimeoutError]: when the peer goes away unexpectedly (this is a [net.Error] timeout error)
+//   - [HandshakeTimeoutError]: when the cryptographic handshake takes too long (this is a net.Error timeout error)
+//   - [StatelessResetError]: when we receive a stateless reset
+//   - [VersionNegotiationError]: returned by the client, when there's no version overlap between the peers
 type Connection interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// If the connection was closed due to a timeout, the error satisfies
@@ -236,7 +239,7 @@ type TokenGeneratorKey = handshake.TokenProtectorKey
 // as they are allowed by RFC 8999.
 type ConnectionID = protocol.ConnectionID
 
-// ConnectionIDFromBytes interprets b as a Connection ID. It panics if b is
+// ConnectionIDFromBytes interprets b as a [ConnectionID]. It panics if b is
 // longer than 20 bytes.
 func ConnectionIDFromBytes(b []byte) ConnectionID {
 	return protocol.ParseConnectionID(b)
@@ -354,7 +357,7 @@ type ClientInfo struct {
 	AddrVerified bool
 }
 
-// ConnectionState records basic details about a QUIC connection
+// ConnectionState records basic details about a QUIC connection.
 type ConnectionState struct {
 	// TLS contains information about the TLS connection state, incl. the tls.ConnectionState.
 	TLS tls.ConnectionState
@@ -367,6 +370,6 @@ type ConnectionState struct {
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.
 	Version Version
-	// GSO says if generic segmentation offload is used
+	// GSO says if generic segmentation offload is used.
 	GSO bool
 }
