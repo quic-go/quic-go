@@ -76,7 +76,9 @@ func newClientConn(
 	conn quic.Connection,
 	enableDatagrams bool,
 	additionalSettings map[uint64]uint64,
+	//nolint:staticcheck // SA1019 WebTransport still relies on the ConnectionTracingKey.
 	streamHijacker func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error),
+	//nolint:staticcheck // SA1019 WebTransport still relies on the ConnectionTracingKey.
 	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool),
 	maxResponseHeaderBytes int64,
 	disableCompression bool,
@@ -138,6 +140,7 @@ func (c *ClientConn) setupConn() error {
 	return err
 }
 
+//nolint:staticcheck // SA1019 WebTransport still relies on the ConnectionTracingKey.
 func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)) {
 	for {
 		str, err := c.AcceptStream(context.Background())
@@ -151,6 +154,7 @@ func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, q
 			r:    str,
 			conn: &c.connection,
 			unknownFrameHandler: func(ft FrameType, e error) (processed bool, err error) {
+				//nolint:staticcheck // SA1019 WebTransport still relies on the ConnectionTracingKey.
 				id := c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
 				return streamHijacker(ft, id, str, e)
 			},
