@@ -2,8 +2,8 @@ package handshake
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	priv, err := rsa.GenerateKey(rand.Reader, 1024)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func init() {
 		log.Fatal(err)
 	}
 
-	privClient, err := rsa.GenerateKey(rand.Reader, 1024)
+	_, privClient, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
