@@ -294,7 +294,7 @@ var newConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.currentMTUEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	s.currentMTUEstimate.Store(uint32(s.config.InitialPacketSize))
 	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -410,7 +410,7 @@ var newClientConnection = func(
 		s.tracer,
 		s.logger,
 	)
-	s.currentMTUEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	s.currentMTUEstimate.Store(uint32(s.config.InitialPacketSize))
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -2596,16 +2596,17 @@ func (s *connection) SendDatagram(p []byte) error {
 		return errors.New("datagram support disabled")
 	}
 
-	f := &wire.DatagramFrame{DataLenPresent: true}
 	// The payload size estimate is conservative.
 	// Under many circumstances we could send a few more bytes.
-	maxDataLen := min(
-		f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version),
-		protocol.ByteCount(s.currentMTUEstimate.Load()),
-	)
-	if protocol.ByteCount(len(p)) > maxDataLen {
-		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
+	maxDataLen := estimateMaxPayloadSize(protocol.ByteCount(s.currentMTUEstimate.Load()))
+
+	f := &wire.DatagramFrame{DataLenPresent: true}
+	maxFrameDataLen := f.MaxDataLen(min(s.peerParams.MaxDatagramFrameSize, maxDataLen), s.version)
+
+	if protocol.ByteCount(len(p)) > maxFrameDataLen {
+		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxFrameDataLen)}
 	}
+
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)
 	return s.datagramQueue.Add(f)
