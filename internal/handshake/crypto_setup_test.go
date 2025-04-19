@@ -380,14 +380,10 @@ func TestSessionResumption(t *testing.T) {
 	clientConf, serverConf := getTLSConfigs()
 	csc := newMockClientSessionCache()
 	clientConf.ClientSessionCache = csc
-	const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
-	const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
-	serverOrigRTTStats := newRTTStatsWithRTT(t, serverRTT)
-	clientOrigRTTStats := newRTTStatsWithRTT(t, clientRTT)
 	client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		clientOrigRTTStats, serverOrigRTTStats,
+		&utils.RTTStats{}, &utils.RTTStats{},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -419,8 +415,6 @@ func TestSessionResumption(t *testing.T) {
 	}
 	require.True(t, server.ConnectionState().DidResume)
 	require.True(t, client.ConnectionState().DidResume)
-	require.Equal(t, clientRTT, clientRTTStats.SmoothedRTT())
-	require.Equal(t, serverRTT, serverRTTStats.SmoothedRTT())
 }
 
 func TestSessionResumptionDisabled(t *testing.T) {
@@ -467,15 +461,11 @@ func Test0RTT(t *testing.T) {
 	clientConf, serverConf := getTLSConfigs()
 	csc := newMockClientSessionCache()
 	clientConf.ClientSessionCache = csc
-	const serverRTT = 25 * time.Millisecond // RTT as measured by the server. Should be restored.
-	const clientRTT = 30 * time.Millisecond // RTT as measured by the client. Should be restored.
-	serverOrigRTTStats := newRTTStatsWithRTT(t, serverRTT)
-	clientOrigRTTStats := newRTTStatsWithRTT(t, clientRTT)
 	const initialMaxData protocol.ByteCount = 1337
 	client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		clientOrigRTTStats, serverOrigRTTStats,
+		&utils.RTTStats{}, &utils.RTTStats{},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 		true,
@@ -490,20 +480,16 @@ func Test0RTT(t *testing.T) {
 	require.False(t, server.ConnectionState().DidResume)
 	require.False(t, client.ConnectionState().DidResume)
 
-	clientRTTStats := &utils.RTTStats{}
-	serverRTTStats := &utils.RTTStats{}
 	client, clientEvents, clientErr, server, serverEvents, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		clientRTTStats, serverRTTStats,
+		&utils.RTTStats{}, &utils.RTTStats{},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 		true,
 	)
 	require.NoError(t, clientErr)
 	require.NoError(t, serverErr)
-	require.Equal(t, clientRTT, clientRTTStats.SmoothedRTT())
-	require.Equal(t, serverRTT, serverRTTStats.SmoothedRTT())
 
 	var tp *wire.TransportParameters
 	var clientReceived0RTTKeys bool

@@ -365,13 +365,9 @@ func decodeDataFromSessionState(b []byte, earlyData bool) (time.Duration, *wire.
 }
 
 func (h *cryptoSetup) getDataForSessionTicket() []byte {
-	ticket := &sessionTicket{
-		RTT: h.rttStats.SmoothedRTT(),
-	}
-	if h.allow0RTT {
-		ticket.Parameters = h.ourParams
-	}
-	return ticket.Marshal()
+	return (&sessionTicket{
+		Parameters: h.ourParams,
+	}).Marshal()
 }
 
 // GetSessionTicket generates a new session ticket.
@@ -409,11 +405,10 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 // A client may use a 0-RTT enabled session to resume a TLS session without using 0-RTT.
 func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEarlyData bool) {
 	var t sessionTicket
-	if err := t.Unmarshal(data, using0RTT); err != nil {
+	if err := t.Unmarshal(data); err != nil {
 		h.logger.Debugf("Unmarshalling session ticket failed: %s", err.Error())
 		return false
 	}
-	h.rttStats.SetInitialRTT(t.RTT)
 	if !using0RTT {
 		return false
 	}
@@ -426,7 +421,6 @@ func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEar
 		h.logger.Debugf("0-RTT not allowed. Rejecting 0-RTT.")
 		return false
 	}
-	h.logger.Debugf("Accepting 0-RTT. Restoring RTT from session ticket: %s", t.RTT)
 	return true
 }
 
