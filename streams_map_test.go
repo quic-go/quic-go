@@ -275,20 +275,20 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 
 	// increase via transport parameters
 	_, err := m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	m.UpdateLimits(&wire.TransportParameters{MaxBidiStreamNum: 1})
 	_, err = m.OpenStream()
 	require.NoError(t, err)
 	_, err = m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 
 	_, err = m.OpenUniStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	m.UpdateLimits(&wire.TransportParameters{MaxUniStreamNum: 1})
 	_, err = m.OpenUniStream()
 	require.NoError(t, err)
 	_, err = m.OpenUniStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 
 	// increase via MAX_STREAMS frames
 	m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
@@ -298,7 +298,7 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 	_, err = m.OpenStream()
 	require.NoError(t, err)
 	_, err = m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 
 	m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
 		Type:         protocol.StreamTypeUni,
@@ -307,12 +307,12 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 	_, err = m.OpenUniStream()
 	require.NoError(t, err)
 	_, err = m.OpenUniStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 
 	// decrease via transport parameters
 	m.UpdateLimits(&wire.TransportParameters{MaxBidiStreamNum: 0})
 	_, err = m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 }
 
 func TestStreamsMapClosing(t *testing.T) {
@@ -411,5 +411,5 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 	m.UseResetMaps()
 	_, err = m.OpenStream()
 	require.Error(t, err)
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 }

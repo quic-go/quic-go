@@ -58,7 +58,7 @@ func (m *outgoingStreamsMap[T]) OpenStream() (T, error) {
 	// if there are OpenStreamSync calls waiting, return an error here
 	if len(m.openQueue) > 0 || m.nextStream > m.maxStream {
 		m.maybeSendBlockedFrame()
-		return *new(T), streamOpenErr{&StreamLimitReachedError{}}
+		return *new(T), &StreamLimitReachedError{}
 	}
 	return m.openStream(), nil
 }
