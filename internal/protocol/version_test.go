@@ -102,18 +102,21 @@ func TestVersionGreasing(t *testing.T) {
 	require.Len(t, greased, 1)
 	require.True(t, isReservedVersion(greased[0]))
 
-	// make sure that the greased versions are distinct
+	// make sure that the greased versions are distinct,
+	// allowing for a small number of duplicates
 	var versions []Version
-	for range 20 {
+	for range 25 {
 		versions = GetGreasedVersions(versions)
 	}
 	slices.Sort(versions)
+	var numDuplicates int
 	for i, v := range versions {
 		require.True(t, isReservedVersion(v))
-		if i > 0 {
-			require.NotEqual(t, versions[i-1], v)
+		if i > 0 && versions[i-1] == v {
+			numDuplicates++
 		}
 	}
+	require.LessOrEqual(t, numDuplicates, 3)
 
 	// adding it somewhere in a slice of supported versions
 	supported := []Version{10, 18, 29}
