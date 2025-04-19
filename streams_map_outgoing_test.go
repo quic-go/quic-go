@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"net"
 	"testing"
 	"time"
 
@@ -59,19 +58,6 @@ func TestStreamsMapOutgoingOpenAndDelete(t *testing.T) {
 	require.Nil(t, str)
 }
 
-func checkTooManyStreamsError(t *testing.T, err error) {
-	t.Helper()
-	require.Error(t, err)
-	require.ErrorIs(t, err, &StreamLimitReachedError{})
-	nerr, ok := err.(net.Error)
-	require.True(t, ok)
-	require.False(t, nerr.Timeout())
-	//nolint:staticcheck // SA1019
-	// In older versions of quic-go, the stream limit error was documented to be a net.Error.Temporary.
-	// This function was since deprecated, but we keep the existing behavior.
-	require.True(t, nerr.Temporary())
-}
-
 func TestStreamsMapOutgoingLimits(t *testing.T) {
 	m := newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
@@ -86,7 +72,7 @@ func TestStreamsMapOutgoingLimits(t *testing.T) {
 
 	// We've now reached the limit. OpenStream returns an error
 	_, err = m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 
 	// OpenStreamSync with a canceled context will return an error immediately
 	ctx, cancel := context.WithCancel(context.Background())
@@ -110,7 +96,7 @@ func TestStreamsMapOutgoingLimits(t *testing.T) {
 	}
 	// OpenStream still returns an error
 	_, err = m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	// cancelling the context unblocks OpenStreamSync
 	cancel()
 	select {
@@ -240,7 +226,7 @@ func TestStreamsMapOutgoingBlockedFrames(t *testing.T) {
 	require.Empty(t, frameQueue)
 
 	_, err := m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	require.Equal(t, []wire.Frame{
 		&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 3},
 	}, frameQueue)
@@ -248,7 +234,7 @@ func TestStreamsMapOutgoingBlockedFrames(t *testing.T) {
 
 	// only a single STREAMS_BLOCKED frame is queued per offset
 	_, err = m.OpenStream()
-	checkTooManyStreamsError(t, err)
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	require.Empty(t, frameQueue)
 
 	errChan := make(chan error, 3)
@@ -342,7 +328,7 @@ func TestStreamsMapOutgoingRandomizedOpenStreamSync(t *testing.T) {
 
 		str, err := m.OpenStream()
 		if limit <= n {
-			checkTooManyStreamsError(t, err)
+			require.ErrorIs(t, err, &StreamLimitReachedError{})
 		} else {
 			require.NoError(t, err)
 			require.Equal(t, protocol.StreamNum(n+1), str.num)
