@@ -208,6 +208,8 @@ func (m *outgoingStreamsMap[T]) maybeUnblockOpenSync() {
 
 func (m *outgoingStreamsMap[T]) CloseWithError(err error) {
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	m.closeErr = err
 	for _, str := range m.streams {
 		str.closeForShutdown(err)
@@ -217,5 +219,5 @@ func (m *outgoingStreamsMap[T]) CloseWithError(err error) {
 			close(c)
 		}
 	}
-	m.mutex.Unlock()
+	m.openQueue = nil
 }

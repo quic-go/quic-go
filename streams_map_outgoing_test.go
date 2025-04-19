@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"testing"
 	"time"
 
 	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -534,3 +538,47 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		})
 	})
 })
+
+func TestStreamsMapConcurrent(t *testing.T) {
+	for i := range 5 {
+		t.Run(fmt.Sprintf("iteration %d", i+1), func(t *testing.T) {
+			testStreamsMapConcurrent(t)
+		})
+	}
+}
+
+func testStreamsMapConcurrent(t *testing.T) {
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) {},
+	)
+
+	const num = 100
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errChan := make(chan error, num)
+	for range num {
+		go func() {
+			_, err := m.OpenStreamSync(ctx)
+			errChan <- err
+		}()
+	}
+
+	time.Sleep(scaleDuration(5 * time.Millisecond))
+	go m.CloseWithError(assert.AnError)
+	go cancel()
+	go m.SetMaxStream(protocol.StreamNum(num / 2))
+
+	for range num {
+		select {
+		case err := <-errChan:
+			if err != nil {
+				require.True(t, errors.Is(err, assert.AnError) || errors.Is(err, context.Canceled))
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for error")
+		}
+	}
+}
