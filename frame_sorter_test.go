@@ -1,11 +1,11 @@
 package quic
 
 import (
+	rand "crypto/rand"
 	"fmt"
 	"math"
+	mrand "math/rand/v2"
 	"testing"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
@@ -90,9 +90,11 @@ func TestFrameSorterSimpleCases(t *testing.T) {
 // in particular when overlapping stream data is received.
 // This also includes returning buffers that are no longer needed.
 func TestFrameSorterGapHandling(t *testing.T) {
+	random := mrand.NewChaCha8([32]byte{'f', 'o', 'o', 'b', 'a', 'r'})
+
 	getData := func(l protocol.ByteCount) []byte {
 		b := make([]byte, l)
-		rand.Read(b)
+		random.Read(b)
 		return b
 	}
 
@@ -1404,7 +1406,10 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 	const num = 1000
 
 	data := make([]byte, num*int(dataLen))
-	rand.Read(data)
+	var seed [32]byte
+	rand.Read(seed[:])
+	random := mrand.NewChaCha8(seed)
+	random.Read(data)
 
 	frames := make([]frame, num)
 	for i := 0; i < num; i++ {
@@ -1416,7 +1421,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 			data:   b,
 		}
 	}
-	rand.Shuffle(len(frames), func(i, j int) { frames[i], frames[j] = frames[j], frames[i] })
+	mrand.Shuffle(len(frames), func(i, j int) { frames[i], frames[j] = frames[j], frames[i] })
 
 	s := newFrameSorter()
 
@@ -1429,7 +1434,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 	if injectDuplicates {
 		for i := 0; i < num/10; i++ {
 			cb, tr := getFrameSorterTestCallback(t)
-			df := frames[rand.Intn(len(frames))]
+			df := frames[mrand.IntN(len(frames))]
 			require.NoError(t, s.Push(df.data, df.offset, cb))
 			callbacks = append(callbacks, tr)
 		}
@@ -1438,8 +1443,8 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 		finalOffset := num * dataLen
 		for i := 0; i < num/3; i++ {
 			cb, tr := getFrameSorterTestCallback(t)
-			startOffset := protocol.ByteCount(rand.Intn(int(finalOffset)))
-			endOffset := startOffset + protocol.ByteCount(rand.Intn(int(finalOffset-startOffset)))
+			startOffset := protocol.ByteCount(mrand.IntN(int(finalOffset)))
+			endOffset := startOffset + protocol.ByteCount(mrand.IntN(int(finalOffset-startOffset)))
 			require.NoError(t, s.Push(data[startOffset:endOffset], startOffset, cb))
 			callbacks = append(callbacks, tr)
 		}

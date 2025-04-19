@@ -2,16 +2,16 @@ package self_test
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"math"
+	mrand "math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
@@ -86,11 +86,11 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 					Type:             hdr.Type,
 					Version:          hdr.Version,
 				},
-				PacketNumber:    protocol.PacketNumber(rand.Int31n(math.MaxInt32 / 4)),
-				PacketNumberLen: protocol.PacketNumberLen(rand.Int31n(4) + 1),
+				PacketNumber:    protocol.PacketNumber(mrand.Int32N(math.MaxInt32 / 4)),
+				PacketNumberLen: protocol.PacketNumberLen(mrand.IntN(4) + 1),
 			}
-			payloadLen := rand.Int31n(100)
-			replyHdr.Length = protocol.ByteCount(rand.Int31n(payloadLen + 1))
+			payloadLen := mrand.IntN(100)
+			replyHdr.Length = protocol.ByteCount(mrand.IntN(payloadLen + 1))
 			data, err := replyHdr.Append(nil, hdr.Version)
 			if err != nil {
 				panic("failed to append header: " + err.Error())
@@ -108,11 +108,11 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 		if err != nil && !errors.Is(err, wire.ErrInvalidReservedBits) { // normally, ParseShortHeader is called after decrypting the header
 			panic("failed to parse short header: " + err.Error())
 		}
-		data, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(rand.Intn(2)))
+		data, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(mrand.IntN(2)))
 		if err != nil {
 			return nil
 		}
-		payloadLen := rand.Int31n(100)
+		payloadLen := mrand.IntN(100)
 		r := make([]byte, payloadLen)
 		rand.Read(r)
 		return append(data, r...)
@@ -128,7 +128,7 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 		go func() {
 			ticker := time.NewTicker(rtt / 10)
 			defer ticker.Stop()
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				switch direction {
 				case quicproxy.DirectionIncoming:
 					clientTransport.WriteTo(createRandomPacketOfSameType(b), serverTransport.Conn.LocalAddr())
@@ -175,15 +175,15 @@ func testMITMCorruptPackets(t *testing.T, direction quicproxy.Direction) {
 		}
 		isLongHeaderPacket := wire.IsLongHeaderPacket(b[0])
 		// corrupt 20% of long header packets and 5% of short header packets
-		if isLongHeaderPacket && rand.Intn(4) != 0 {
+		if isLongHeaderPacket && mrand.IntN(4) != 0 {
 			return false
 		}
-		if !isLongHeaderPacket && rand.Intn(20) != 0 {
+		if !isLongHeaderPacket && mrand.IntN(20) != 0 {
 			return false
 		}
 		numCorrupted.Add(1)
-		pos := rand.Intn(len(b))
-		b[pos] = byte(rand.Intn(256))
+		pos := mrand.IntN(len(b))
+		b[pos] = byte(mrand.IntN(256))
 		switch direction {
 		case quicproxy.DirectionIncoming:
 			clientTransport.WriteTo(b, serverTransport.Conn.LocalAddr())

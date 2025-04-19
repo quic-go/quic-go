@@ -2,9 +2,8 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
@@ -257,11 +256,10 @@ func BenchmarkInitialAEAD(b *testing.B) {
 	clientSealer, _ := NewInitialAEAD(connectionID, protocol.PerspectiveClient, protocol.Version1)
 	_, serverOpener := NewInitialAEAD(connectionID, protocol.PerspectiveServer, protocol.Version1)
 
-	r := rand.New(rand.NewSource(1))
 	packetData := make([]byte, 1200)
-	r.Read(packetData)
+	rand.Read(packetData)
 	hdr := make([]byte, 50)
-	r.Read(hdr)
+	rand.Read(hdr)
 	msg := clientSealer.Seal(nil, packetData, 42, hdr)
 	m, err := serverOpener.Open(nil, msg, 42, hdr)
 	if err != nil {
@@ -271,6 +269,7 @@ func BenchmarkInitialAEAD(b *testing.B) {
 		b.Fatal("decrypted data doesn't match")
 	}
 
+	b.ResetTimer()
 	b.Run("opening 100 bytes", func(b *testing.B) {
 		benchmarkOpen(b, serverOpener, clientSealer.Seal(nil, packetData[:100], 42, hdr), hdr)
 	})

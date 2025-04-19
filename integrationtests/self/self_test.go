@@ -8,7 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"os"
 	"runtime/pprof"
@@ -304,7 +304,7 @@ func (r *readerWithTimeout) Read(p []byte) (n int, err error) {
 }
 
 func randomDuration(min, max time.Duration) time.Duration {
-	return min + time.Duration(rand.Int63n(int64(max-min)))
+	return min + time.Duration(rand.IntN(int(max-min)))
 }
 
 // contains0RTTPacket says if a packet contains a 0-RTT long header packet.

@@ -3,9 +3,8 @@ package quicvarint
 import (
 	"bytes"
 	"io"
+	"math/rand/v2"
 	"testing"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/stretchr/testify/require"
 )
@@ -179,10 +178,10 @@ type benchmarkValue struct {
 }
 
 func randomValues(num int, maxValue uint64) []benchmarkValue {
-	r := rand.New(rand.NewSource(1))
+	r := rand.New(rand.NewPCG(13, 37))
 
 	bv := make([]benchmarkValue, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		v := r.Uint64() % maxValue
 		bv[i].v = v
 		bv[i].b = Append([]byte{}, v)

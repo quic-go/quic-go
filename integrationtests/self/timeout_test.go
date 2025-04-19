@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"runtime"
 	"sync/atomic"
@@ -372,14 +372,14 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 type faultyConn struct {
 	net.PacketConn
 
-	MaxPackets int32
+	MaxPackets int
 	counter    atomic.Int32
 }
 
 func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	n, addr, err := c.PacketConn.ReadFrom(p)
 	counter := c.counter.Add(1)
-	if counter <= c.MaxPackets {
+	if counter <= int32(c.MaxPackets) {
 		return n, addr, err
 	}
 	return 0, nil, io.ErrClosedPipe
@@ -387,7 +387,7 @@ func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
 
 func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	counter := c.counter.Add(1)
-	if counter <= c.MaxPackets {
+	if counter <= int32(c.MaxPackets) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 	return 0, io.ErrClosedPipe
@@ -437,7 +437,7 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 
 	var cconn net.PacketConn = newUDPConnLocalhost(t)
 	var sconn net.PacketConn = newUDPConnLocalhost(t)
-	maxPackets := mrand.Int31n(25)
+	maxPackets := mrand.IntN(25)
 	t.Logf("blocking %s's connection after %d packets", pers, maxPackets)
 	switch pers {
 	case protocol.PerspectiveClient:

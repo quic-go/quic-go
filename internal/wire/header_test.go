@@ -5,9 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"testing"
-	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
@@ -108,8 +107,8 @@ func TestParseArbitraryLengthConnectionIDs(t *testing.T) {
 		return c
 	}
 
-	src := generateConnID(mrand.Intn(255) + 1)
-	dest := generateConnID(mrand.Intn(255) + 1)
+	src := generateConnID(mrand.IntN(255) + 1)
+	dest := generateConnID(mrand.IntN(255) + 1)
 	b := []byte{0x80, 1, 2, 3, 4}
 	b = append(b, uint8(dest.Len()))
 	b = append(b, dest.Bytes()...)
@@ -450,11 +449,12 @@ func TestPacketTypeForLogging(t *testing.T) {
 }
 
 func BenchmarkIs0RTTPacket(b *testing.B) {
-	random := mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	src := mrand.NewChaCha8([32]byte{'f', 'o', 'o', 'b', 'a', 'r'})
+	random := mrand.New(src)
 	packets := make([][]byte, 1024)
 	for i := 0; i < len(packets); i++ {
-		packets[i] = make([]byte, random.Intn(256))
-		random.Read(packets[i])
+		packets[i] = make([]byte, random.IntN(256))
+		src.Read(packets[i])
 	}
 
 	b.ResetTimer()

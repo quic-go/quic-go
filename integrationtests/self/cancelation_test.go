@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -30,7 +30,7 @@ func TestStreamReadCancellation(t *testing.T) {
 
 	t.Run("after reading some data", func(t *testing.T) {
 		testStreamCancellation(t, func(str quic.ReceiveStream) error {
-			length := int(rand.Int31n(int32(len(PRData) - 1)))
+			length := rand.IntN(len(PRData) - 1)
 			if _, err := io.ReadAll(io.LimitReader(str, int64(length))); err != nil {
 				return fmt.Errorf("reading stream data failed: %w", err)
 			}
@@ -88,7 +88,7 @@ func TestStreamWriteCancellation(t *testing.T) {
 
 	t.Run("after writing some data", func(t *testing.T) {
 		testStreamCancellation(t, nil, func(str quic.SendStream) error {
-			length := int(rand.Int31n(int32(len(PRData) - 1)))
+			length := rand.IntN(len(PRData) - 1)
 			if _, err := str.Write(PRData[:length]); err != nil {
 				return fmt.Errorf("writing stream data failed: %w", err)
 			}
@@ -157,7 +157,7 @@ func TestStreamReadWriteCancellation(t *testing.T) {
 	t.Run("after writing some data", func(t *testing.T) {
 		testStreamCancellation(t,
 			func(str quic.ReceiveStream) error {
-				length := int(rand.Int31n(int32(len(PRData) - 1)))
+				length := rand.IntN(len(PRData) - 1)
 				if _, err := io.ReadAll(io.LimitReader(str, int64(length))); err != nil {
 					return fmt.Errorf("reading stream data failed: %w", err)
 				}
@@ -166,7 +166,7 @@ func TestStreamReadWriteCancellation(t *testing.T) {
 				return err
 			},
 			func(str quic.SendStream) error {
-				length := int(rand.Int31n(int32(len(PRData) - 1)))
+				length := rand.IntN(len(PRData) - 1)
 				if _, err := str.Write(PRData[:length]); err != nil {
 					return fmt.Errorf("writing stream data failed: %w", err)
 				}
@@ -214,7 +214,7 @@ func testStreamCancellation(
 	var numCancellations int
 	actions := make([]bool, numStreams)
 	for i := range actions {
-		actions[i] = rand.Intn(2) == 0
+		actions[i] = rand.IntN(2) == 0
 		if actions[i] {
 			numCancellations++
 		}
@@ -374,7 +374,7 @@ func TestCancelAcceptStream(t *testing.T) {
 	for numToAccept < numStreams {
 		ctx, cancel := context.WithCancel(context.Background())
 		// cancel accepting half of the streams
-		if rand.Int31()%2 == 0 {
+		if rand.Int()%2 == 0 {
 			cancel()
 		} else {
 			numToAccept++
@@ -530,15 +530,15 @@ func TestHeavyStreamCancellation(t *testing.T) {
 		str.SetDeadline(time.Now().Add(time.Second))
 		go func() {
 			defer wg.Done()
-			if rand.Int31()%2 == 0 {
+			if rand.Int()%2 == 0 {
 				io.ReadAll(str)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if rand.Int31()%2 == 0 {
+			if rand.Int()%2 == 0 {
 				str.Write([]byte("foobar"))
-				if rand.Int31()%2 == 0 {
+				if rand.Int()%2 == 0 {
 					str.Close()
 				}
 			}
@@ -547,13 +547,13 @@ func TestHeavyStreamCancellation(t *testing.T) {
 			defer wg.Done()
 			// Make sure we at least send out *something* for the last stream,
 			// otherwise the peer might never receive this anything for this stream.
-			if rand.Int31()%2 == 0 || str.StreamID() == 4*(maxIncomingStreams-1) {
+			if rand.Int()%2 == 0 || str.StreamID() == 4*(maxIncomingStreams-1) {
 				str.CancelWrite(1234)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if rand.Int31()%2 == 0 {
+			if rand.Int()%2 == 0 {
 				str.CancelRead(1234)
 			}
 		}()

@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -42,7 +42,7 @@ func randomString(length int) string {
 	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		n := mrand.Intn(len(alphabet))
+		n := mrand.IntN(len(alphabet))
 		b[i] = alphabet[n]
 	}
 	return string(b)

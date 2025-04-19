@@ -3,15 +3,15 @@ package self_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	mrand "math/rand/v2"
 	"net"
 	"runtime"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go"
 
@@ -235,11 +235,14 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 	errChanNonQUIC := make(chan error, 1)
 	sendNonQUICPacket := make(chan struct{}, 1)
 	go func() {
+		var seed [32]byte
+		rand.Read(seed[:])
+		random := mrand.NewChaCha8(seed)
 		defer close(errChanNonQUIC)
 		var sentPackets int
 		for range sendNonQUICPacket {
 			b := make([]byte, packetLen)
-			rand.Read(b[1:]) // keep the first byte set to 0, so it's not classified as a QUIC packet
+			random.Read(b[1:]) // keep the first byte set to 0, so it's not classified as a QUIC packet
 			_, err := tr1.WriteTo(b, tr2.Conn.LocalAddr())
 			// The first sendmsg call on a new UDP socket sometimes errors on Linux.
 			// It's not clear why this happens.
@@ -261,9 +264,13 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 	go func() {
 		defer close(errChanQUIC)
 		defer serverStr.Close()
+
+		var seed [32]byte
+		rand.Read(seed[:])
+		random := mrand.NewChaCha8(seed)
 		for range sendQUICPacket {
 			b := make([]byte, 1024)
-			rand.Read(b)
+			random.Read(b)
 			if _, err := serverStr.Write(b); err != nil {
 				errChanQUIC <- err
 				return

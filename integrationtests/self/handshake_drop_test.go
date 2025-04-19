@@ -3,10 +3,11 @@ package self_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -189,7 +190,7 @@ func dropCallbackDropOneThird(direction quicproxy.Direction) quicproxy.DropCallb
 	var mx sync.Mutex
 	var incoming, outgoing int
 	return func(d quicproxy.Direction, _, _ net.Addr, _ []byte) bool {
-		drop := mrand.Int63n(int64(3)) == 0
+		drop := mrand.IntN(3) == 0
 
 		mx.Lock()
 		defer mx.Unlock()
@@ -274,10 +275,10 @@ func TestPostQuantumClientHello(t *testing.T) {
 	t.Cleanup(func() { wire.AdditionalTransportParametersClient = origAdditionalTransportParametersClient })
 
 	b := make([]byte, 2500) // the ClientHello will now span across 3 packets
-	mrand.New(mrand.NewSource(time.Now().UnixNano())).Read(b)
+	rand.Read(b)
 	wire.AdditionalTransportParametersClient = map[uint64][]byte{
 		// Avoid random collisions with the greased transport parameters.
-		uint64(27+31*(1000+mrand.Int63()/31)) % quicvarint.Max: b,
+		uint64(27+31*(1000+mrand.IntN(31))/31) % quicvarint.Max: b,
 	}
 
 	ln, proxyPort := startDropTestListenerAndProxy(t, 10*time.Millisecond, 20*time.Second, dropCallbackDropOneThird(quicproxy.DirectionIncoming), false, false)
