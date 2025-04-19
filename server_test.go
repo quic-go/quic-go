@@ -512,7 +512,7 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewToken(conn.LocalAddr())
+		token, err := tg.NewToken(conn.LocalAddr(), 10*time.Millisecond)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, mockTracer, conn, token, false, false, true)
@@ -529,7 +529,7 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewToken(conn.LocalAddr())
+		token, err := tg.NewToken(conn.LocalAddr(), 100*time.Millisecond)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, mockTracer, conn, token, false, false, true)

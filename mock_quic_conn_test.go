@@ -13,6 +13,7 @@ import (
 	context "context"
 	net "net"
 	reflect "reflect"
+	time "time"
 
 	gomock "go.uber.org/mock/gomock"
 )
@@ -838,6 +839,42 @@ func (c *MockQUICConnrunCall) Do(f func() error) *MockQUICConnrunCall {
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockQUICConnrunCall) DoAndReturn(f func() error) *MockQUICConnrunCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// setInitalCongestionStats mocks base method.
+func (m *MockQUICConn) setInitalCongestionStats(RTT time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "setInitalCongestionStats", RTT)
+}
+
+// setInitalCongestionStats indicates an expected call of setInitalCongestionStats.
+func (mr *MockQUICConnMockRecorder) setInitalCongestionStats(RTT any) *MockQUICConnsetInitalCongestionStatsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setInitalCongestionStats", reflect.TypeOf((*MockQUICConn)(nil).setInitalCongestionStats), RTT)
+	return &MockQUICConnsetInitalCongestionStatsCall{Call: call}
+}
+
+// MockQUICConnsetInitalCongestionStatsCall wrap *gomock.Call
+type MockQUICConnsetInitalCongestionStatsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockQUICConnsetInitalCongestionStatsCall) Return() *MockQUICConnsetInitalCongestionStatsCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockQUICConnsetInitalCongestionStatsCall) Do(f func(time.Duration)) *MockQUICConnsetInitalCongestionStatsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockQUICConnsetInitalCongestionStatsCall) DoAndReturn(f func(time.Duration)) *MockQUICConnsetInitalCongestionStatsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
