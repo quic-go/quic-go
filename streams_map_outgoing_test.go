@@ -274,16 +274,26 @@ func TestStreamsMapOutgoingBlockedFrames(t *testing.T) {
 		&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 5},
 	}, frameQueue)
 	frameQueue = frameQueue[:0]
+
+	// now accept the last stream
+	m.SetMaxStream(6)
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the stream limit was increased")
+	}
+	require.Empty(t, frameQueue)
 }
 
 func TestStreamsMapOutgoingRandomizedOpenStreamSync(t *testing.T) {
 	const n = 100
 
-	var frameQueue []wire.Frame
+	frameQueue := make(chan wire.Frame, n)
 	m := newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
 		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
-		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+		func(f wire.Frame) { frameQueue <- f },
 	)
 
 	type result struct {
@@ -299,8 +309,16 @@ func TestStreamsMapOutgoingRandomizedOpenStreamSync(t *testing.T) {
 		}()
 	}
 
+	select {
+	case f := <-frameQueue:
+		require.IsType(t, &wire.StreamsBlockedFrame{}, f)
+		require.Zero(t, f.(*wire.StreamsBlockedFrame).StreamLimit)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for STREAMS_BLOCKED frame")
+	}
+
 	var limit int
-	limits := []protocol.StreamNum{0}
+	var limits []protocol.StreamNum
 	seen := make(map[protocol.StreamNum]struct{})
 	for limit < n {
 		add := rand.IntN(n/5) + 1
@@ -333,8 +351,11 @@ func TestStreamsMapOutgoingRandomizedOpenStreamSync(t *testing.T) {
 	require.Len(t, seen, n)
 
 	var blockedAt []protocol.StreamNum
-	for _, f := range frameQueue {
-		blockedAt = append(blockedAt, f.(*wire.StreamsBlockedFrame).StreamLimit)
+	close(frameQueue)
+	for f := range frameQueue {
+		if l := f.(*wire.StreamsBlockedFrame).StreamLimit; l <= n {
+			blockedAt = append(blockedAt, l)
+		}
 	}
 	require.Equal(t, limits, blockedAt)
 }
