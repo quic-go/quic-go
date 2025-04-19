@@ -30,6 +30,11 @@ linters:
             - '!$test'
           allow:
             - $gostd
+        rsa:
+          list-mode: original
+          deny:
+            - pkg: crypto/rsa
+              desc: "use crypto/ed25519 instead"
     misspell:
       ignore-rules:
         - ect
