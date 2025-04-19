@@ -68,7 +68,9 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 	require.False(t, shouldSwitch)
 
 	// acknowledging the PATH_CHALLENGE doesn't confirm the path
-	frames[0].Handler.OnAcked(frames[0].Frame)
+	for _, f := range frames {
+		f.Handler.OnAcked(f.Frame)
+	}
 	connID, frames, shouldSwitch = pm.HandlePacket(
 		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
 		now,
@@ -155,7 +157,7 @@ func TestPathManagerMultipleProbes(t *testing.T) {
 	require.Equal(t, &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, frames[0].Frame)
 	require.False(t, shouldSwitch)
 
-	// now receive an other packet on the same path with a PATH_RESPONSE
+	// now receive another packet on the same path with a PATH_RESPONSE
 	connID, frames, shouldSwitch = pm.HandlePacket(
 		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
 		now,
@@ -166,6 +168,9 @@ func TestPathManagerMultipleProbes(t *testing.T) {
 	require.Len(t, frames, 1)
 	require.Equal(t, &wire.PathResponseFrame{Data: [8]byte{8, 7, 6, 5, 4, 3, 2, 1}}, frames[0].Frame)
 	require.False(t, shouldSwitch)
+
+	// lose the response packet
+	frames[0].Handler.OnLost(frames[0].Frame)
 }
 
 // The first packet received on the new path is already a non-probing packet.
