@@ -47,6 +47,7 @@ type quicConn interface {
 	run() error
 	destroy(error)
 	closeWithTransportError(TransportErrorCode)
+	setInitalCongestionStats(RTT time.Duration)
 }
 
 type zeroRTTQueue struct {
@@ -722,6 +723,9 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		s.logger,
 		hdr.Version,
 	)
+	if token != nil && !token.IsRetryToken {
+		conn.setInitalCongestionStats(token.RTT)
+	}
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
 	// This is very unlikely: Even if an attacker chooses a connection ID that's already in use,

@@ -511,6 +511,10 @@ func (s *connection) preSetup() {
 	s.connState.Version = s.version
 }
 
+func (s *connection) setInitalCongestionStats(RTT time.Duration) {
+	s.rttStats.SetInitialRTT(RTT)
+}
+
 // run the connection main loop
 func (s *connection) run() (err error) {
 	defer func() { s.ctxCancel(err) }()
@@ -829,7 +833,7 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
 		}
 	}
-	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr(), s.rttStats.SmoothedRTT())
 	if err != nil {
 		return err
 	}
