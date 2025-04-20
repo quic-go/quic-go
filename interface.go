@@ -86,12 +86,8 @@ type ReceiveStream interface {
 	// StreamID returns the stream ID.
 	StreamID() StreamID
 	// Read reads data from the stream.
-	// Read can be made to time out and return a net.Error with Timeout() == true
-	// after a fixed time limit; see SetDeadline and SetReadDeadline.
-	// If the stream was canceled by the peer, the error is a StreamError and
-	// Remote == true.
-	// If the connection was closed due to a timeout, the error satisfies
-	// the net.Error interface, and Timeout() will be true.
+	// Read can be made to time out using SetDeadline and SetReadDeadline.
+	// If the stream was canceled, the error is a StreamError.
 	io.Reader
 	// CancelRead aborts receiving on this stream.
 	// It will ask the peer to stop transmitting stream data.
@@ -109,12 +105,8 @@ type SendStream interface {
 	// StreamID returns the stream ID.
 	StreamID() StreamID
 	// Write writes data to the stream.
-	// Write can be made to time out and return a net.Error with Timeout() == true
-	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
-	// If the stream was canceled by the peer, the error is a StreamError and
-	// Remote == true.
-	// If the connection was closed due to a timeout, the error satisfies
-	// the net.Error interface, and Timeout() will be true.
+	// Write can be made to time out using SetDeadline and SetWriteDeadline.
+	// If the stream was canceled, the error is a StreamError.
 	io.Writer
 	// Close closes the write-direction of the stream.
 	// Future calls to Write are not permitted after calling Close.
@@ -147,17 +139,13 @@ type SendStream interface {
 //   - [ApplicationError]: for errors triggered by the application running on top of QUIC
 //   - [TransportError]: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
 //   - [IdleTimeoutError]: when the peer goes away unexpectedly (this is a [net.Error] timeout error)
-//   - [HandshakeTimeoutError]: when the cryptographic handshake takes too long (this is a net.Error timeout error)
+//   - [HandshakeTimeoutError]: when the cryptographic handshake takes too long (this is a [net.Error] timeout error)
 //   - [StatelessResetError]: when we receive a stateless reset
 //   - [VersionNegotiationError]: returned by the client, when there's no version overlap between the peers
 type Connection interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
-	// If the connection was closed due to a timeout, the error satisfies
-	// the net.Error interface, and Timeout() will be true.
 	AcceptStream(context.Context) (Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
-	// If the connection was closed due to a timeout, the error satisfies
-	// the net.Error interface, and Timeout() will be true.
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
