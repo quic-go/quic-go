@@ -142,3 +142,102 @@ func TestConnectionMigration(t *testing.T) {
 	require.Less(t, int(packetsPath2.Load()-c2BeforeSwitch), 20)
 	require.Equal(t, tr1.Conn.LocalAddr(), conn.LocalAddr())
 }
+
+func TestConnectionMigrationDeadPath(t *testing.T) {
+	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	tr1 := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	defer tr1.Close()
+	tr2 := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	defer tr2.Close()
+
+	var drop atomic.Bool
+	const rtt = 5 * time.Millisecond
+	proxy := quicproxy.Proxy{
+		Conn:       newUDPConnLocalhost(t),
+		ServerAddr: ln.Addr().(*net.UDPAddr),
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
+			return rtt / 2
+		},
+		DropPacket: func(dir quicproxy.Direction, from, to net.Addr, _ []byte) bool {
+			var port int
+			switch dir {
+			case quicproxy.DirectionIncoming:
+				port = from.(*net.UDPAddr).Port
+			case quicproxy.DirectionOutgoing:
+				port = to.(*net.UDPAddr).Port
+			}
+			switch port {
+			case tr1.Conn.LocalAddr().(*net.UDPAddr).Port:
+				return drop.Load()
+			case tr2.Conn.LocalAddr().(*net.UDPAddr).Port:
+				return false
+			default:
+				fmt.Println("address not found", from)
+				return false
+			}
+		},
+	}
+	require.NoError(t, proxy.Start())
+	defer proxy.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := tr1.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	sconn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	defer sconn.CloseWithError(0, "")
+
+	sendAndReceiveFile := func(t *testing.T) {
+		t.Helper()
+		str, err := conn.OpenUniStream()
+		require.NoError(t, err)
+
+		errChan := make(chan error, 1)
+		go func() {
+			defer close(errChan)
+			sstr, err := sconn.AcceptUniStream(ctx)
+			if err != nil {
+				errChan <- fmt.Errorf("accepting stream: %w", err)
+				return
+			}
+			data, err := io.ReadAll(sstr)
+			if err != nil {
+				errChan <- fmt.Errorf("reading stream data: %w", err)
+				return
+			}
+			if !bytes.Equal(data, PRData) {
+				errChan <- errors.New("unexpected data")
+			}
+		}()
+
+		_, err = str.Write(PRData)
+		require.NoError(t, err)
+		require.NoError(t, str.Close())
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for data")
+		}
+	}
+
+	sendAndReceiveFile(t) // stream 2
+
+	// disable the original path
+	drop.Store(true)
+
+	// probing the path causes a few packets to be sent on path 2
+	path, err := conn.AddPath(tr2)
+	require.NoError(t, err)
+	require.NoError(t, path.Probe(ctx))
+	require.NoError(t, path.Switch())
+	sendAndReceiveFile(t) // stream 6
+}
