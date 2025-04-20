@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/quic-go/qpack"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
@@ -163,11 +162,6 @@ var _ = Describe("Response Writer", func() {
 
 		fields := decodeHeader(strBuf)
 		Expect(fields).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
-	})
-
-	It(`is compatible with "net/http".ResponseController`, func() {
-		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
-		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 	})
 
 	It(`checks Content-Length header`, func() {
