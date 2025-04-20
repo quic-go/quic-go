@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -426,6 +427,13 @@ func (t *Transport) Close() error {
 		t.transport = nil
 	}
 	return nil
+}
+
+func hostnameFromURL(url *url.URL) string {
+	if url != nil {
+		return url.Host
+	}
+	return ""
 }
 
 func validMethod(method string) bool {
