@@ -179,8 +179,10 @@ var _ ackhandler.FrameHandler = &pathManagerAckHandler{}
 func (pm *pathManagerAckHandler) OnAcked(f wire.Frame) {}
 
 func (pm *pathManagerAckHandler) OnLost(f wire.Frame) {
-	// TODO: retransmit the packet the first time it is lost
-	pc := f.(*wire.PathChallengeFrame)
+	pc, ok := f.(*wire.PathChallengeFrame)
+	if !ok {
+		return
+	}
 	for i, path := range pm.paths {
 		if path.pathChallenge == pc.Data {
 			pm.paths = slices.Delete(pm.paths, i, i+1)
