@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -176,17 +177,16 @@ func TestTransportDialHostname(t *testing.T) {
 func TestTransportDatagrams(t *testing.T) {
 	// if the default quic.Config is used, the transport automatically enables QUIC datagrams
 	t.Run("default quic.Config", func(t *testing.T) {
-		testErr := errors.New("handshake error")
 		tr := &Transport{
 			EnableDatagrams: true,
 			Dial: func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 				require.True(t, quicConf.EnableDatagrams)
-				return nil, testErr
+				return nil, assert.AnError
 			},
 		}
 		req := mustNewRequest(http.MethodGet, "https://example.com", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
-		require.ErrorIs(t, err, testErr)
+		require.ErrorIs(t, err, assert.AnError)
 	})
 
 	// if a custom quic.Config is used, the transport just checks that QUIC datagrams are enabled
@@ -391,12 +391,11 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	close(handshakeChan)
 	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
-	testErr := errors.New("handshake error")
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 			dialCount++
 			if dialCount == 1 {
-				return nil, testErr
+				return nil, assert.AnError
 			}
 			return conn, nil
 		},
@@ -405,7 +404,7 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 
 	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
 	_, err := tr.RoundTrip(req1)
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 	require.Equal(t, 1, dialCount)
 
 	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)

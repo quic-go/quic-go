@@ -3,7 +3,6 @@ package self_test
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -166,8 +166,7 @@ func TestTransportClose(t *testing.T) {
 		t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
 
 		bc := newBrokenConn(newUDPConnLocalhost(t))
-		testErr := errors.New("test error")
-		testTransportClose(t, bc, func() { bc.Break(testErr) }, testErr)
+		testTransportClose(t, bc, func() { bc.Break(assert.AnError) }, assert.AnError)
 	})
 }
 

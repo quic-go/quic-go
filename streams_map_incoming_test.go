@@ -2,13 +2,14 @@ package quic
 
 import (
 	"context"
-	"errors"
 	"math/rand/v2"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
+
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -218,18 +219,17 @@ func TestStreamsMapIncomingClosing(t *testing.T) {
 		errChan <- err
 	}()
 
-	testErr := errors.New("test error")
-	m.CloseWithError(testErr)
+	m.CloseWithError(assert.AnError)
 
 	// accepted streams should be closed
 	for _, str := range streams {
 		require.True(t, str.closed)
-		require.ErrorIs(t, str.closeErr, testErr)
+		require.ErrorIs(t, str.closeErr, assert.AnError)
 	}
 	// AcceptStream should return the error
 	select {
 	case err := <-errChan:
-		require.ErrorIs(t, err, testErr)
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}

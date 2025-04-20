@@ -8,6 +8,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,16 +70,15 @@ func TestCryptoError(t *testing.T) {
 	require.True(t, errors.As(err, &myErr))
 	require.Equal(t, myError(1337), myErr)
 
-	testErr := errors.New("test error")
-	err = NewLocalCryptoError(0x42, testErr)
-	require.True(t, errors.Is(err, testErr))
+	err = NewLocalCryptoError(0x42, assert.AnError)
+	require.True(t, errors.Is(err, assert.AnError))
 	require.True(t, errors.Is(
-		NewLocalCryptoError(0x42, testErr),
-		NewLocalCryptoError(0x42, testErr),
+		NewLocalCryptoError(0x42, assert.AnError),
+		NewLocalCryptoError(0x42, assert.AnError),
 	))
 	require.False(t, errors.Is(
-		NewLocalCryptoError(0x42, testErr),
-		NewLocalCryptoError(0x43, testErr),
+		NewLocalCryptoError(0x42, assert.AnError),
+		NewLocalCryptoError(0x43, assert.AnError),
 	))
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -508,20 +509,19 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 	case <-time.After(scaleDuration(5 * time.Millisecond)): // short wait to ensure write is blocked
 	}
 
-	testErr := errors.New("test error")
-	str.closeForShutdown(testErr)
+	str.closeForShutdown(assert.AnError)
 	require.True(t, mockCtrl.Satisfied())
 
 	select {
 	case err := <-errChan:
-		require.ErrorIs(t, err, testErr)
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
 
 	// future calls to Write should return the error
 	_, err := strWithTimeout.Write([]byte("foobar"))
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 
 	// closing the stream doesn't do anything
 	require.NoError(t, str.Close())
@@ -534,7 +534,7 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 	// canceling the stream doesn't do anything
 	str.CancelWrite(1234)
 	_, err = strWithTimeout.Write([]byte("foobar"))
-	require.ErrorIs(t, err, testErr) // error unchanged
+	require.ErrorIs(t, err, assert.AnError) // error unchanged
 }
 
 func TestSendStreamUpdateSendWindow(t *testing.T) {

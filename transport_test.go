@@ -17,6 +17,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -427,7 +428,7 @@ func TestTransportNonQUICPackets(t *testing.T) {
 
 type faultySyscallConn struct{ net.PacketConn }
 
-func (c *faultySyscallConn) SyscallConn() (syscall.RawConn, error) { return nil, errors.New("mocked") }
+func (c *faultySyscallConn) SyscallConn() (syscall.RawConn, error) { return nil, assert.AnError }
 
 func TestTransportFaultySyscallConn(t *testing.T) {
 	syscallconn := &faultySyscallConn{PacketConn: newUDPConnLocalhost(t)}
@@ -435,7 +436,7 @@ func TestTransportFaultySyscallConn(t *testing.T) {
 	tr := &Transport{Conn: syscallconn}
 	_, err := tr.Listen(&tls.Config{}, nil)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "mocked")
+	require.ErrorIs(t, err, assert.AnError)
 }
 
 func TestTransportSetTLSConfigServerName(t *testing.T) {
@@ -572,7 +573,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 
 	conn2 := NewMockQUICConn(mockCtrl)
 	conn2.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-	conn2.EXPECT().run().Return(errors.New("test done"))
+	conn2.EXPECT().run().Return(assert.AnError)
 
 	type connParams struct {
 		pn                   protocol.PacketNumber
@@ -612,7 +613,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 	defer tr.Close()
 
 	_, err := tr.Dial(context.Background(), nil, &tls.Config{}, nil)
-	require.EqualError(t, err, "test done")
+	require.ErrorIs(t, err, assert.AnError)
 
 	select {
 	case params := <-connChan:

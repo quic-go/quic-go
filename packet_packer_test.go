@@ -341,7 +341,7 @@ func testPackConnectionCloseCoalesced(t *testing.T, pers protocol.Perspective) {
 	}
 	p, err := tp.packer.PackApplicationClose(&qerr.ApplicationError{
 		ErrorCode:    0x1337,
-		ErrorMessage: "test error",
+		ErrorMessage: "foobar",
 	}, maxPacketSize, protocol.Version1)
 	require.NoError(t, err)
 	switch pers {
@@ -388,7 +388,7 @@ func testPackConnectionCloseCoalesced(t *testing.T, pers protocol.Perspective) {
 	}
 	require.True(t, ccf.IsApplicationError)
 	require.Equal(t, uint64(0x1337), ccf.ErrorCode)
-	require.Equal(t, "test error", ccf.ReasonPhrase)
+	require.Equal(t, "foobar", ccf.ReasonPhrase)
 
 	// the client needs to pad this packet to the max packet size
 	switch pers {
@@ -434,7 +434,7 @@ func TestPackConnectionClose1RTT(t *testing.T) {
 	// expect no framer.PopStreamFrames
 	p, err := tp.packer.PackConnectionClose(&qerr.TransportError{
 		ErrorCode:    qerr.CryptoBufferExceeded,
-		ErrorMessage: "test error",
+		ErrorMessage: "foo",
 	}, protocol.MaxByteCount, protocol.Version1)
 	require.NoError(t, err)
 	require.Empty(t, p.longHdrPackets)
@@ -443,7 +443,7 @@ func TestPackConnectionClose1RTT(t *testing.T) {
 	ccf := p.shortHdrPacket.Frames[0].Frame.(*wire.ConnectionCloseFrame)
 	require.False(t, ccf.IsApplicationError)
 	require.Equal(t, uint64(qerr.CryptoBufferExceeded), ccf.ErrorCode)
-	require.Equal(t, "test error", ccf.ReasonPhrase)
+	require.Equal(t, "foo", ccf.ReasonPhrase)
 }
 
 func TestPack1RTTPacketNothingToSend(t *testing.T) {
