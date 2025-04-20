@@ -179,7 +179,6 @@ var _ ackhandler.FrameHandler = &pathManagerAckHandler{}
 func (pm *pathManagerAckHandler) OnAcked(f wire.Frame) {}
 
 func (pm *pathManagerAckHandler) OnLost(f wire.Frame) {
-	// TODO: retransmit the packet the first time it is lost
 	pc, ok := f.(*wire.PathChallengeFrame)
 	if !ok {
 		return
