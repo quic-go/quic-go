@@ -86,10 +86,8 @@ type ReceiveStream interface {
 	// StreamID returns the stream ID.
 	StreamID() StreamID
 	// Read reads data from the stream.
-	// Read can be made to time out and return a net.Error with Timeout() == true
-	// after a fixed time limit; see SetDeadline and SetReadDeadline.
-	// If the stream was canceled by the peer, the error is a StreamError and
-	// Remote == true.
+	// Read can be made to time out using SetDeadline and SetReadDeadline.
+	// If the stream was canceled, the error is a StreamError.
 	io.Reader
 	// CancelRead aborts receiving on this stream.
 	// It will ask the peer to stop transmitting stream data.
@@ -107,9 +105,8 @@ type SendStream interface {
 	// StreamID returns the stream ID.
 	StreamID() StreamID
 	// Write writes data to the stream.
-	// Write can be made to time out and return a net.Error with Timeout() == true
-	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
-	// If the stream was canceled by the peer, the error is a StreamError with the Remote field set.
+	// Write can be made to time out using SetDeadline and SetWriteDeadline.
+	// If the stream was canceled, the error is a StreamError.
 	io.Writer
 	// Close closes the write-direction of the stream.
 	// Future calls to Write are not permitted after calling Close.
