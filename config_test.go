@@ -2,7 +2,6 @@ package quic
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/quic-go/quic-go/logging"
 	"github.com/quic-go/quic-go/quicvarint"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -137,7 +137,7 @@ func TestConfigCloning(t *testing.T) {
 	t.Run("function fields", func(t *testing.T) {
 		var calledAllowConnectionWindowIncrease, calledTracer bool
 		c1 := &Config{
-			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, errors.New("nope") },
+			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, assert.AnError },
 			AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 			Tracer: func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer {
 				calledTracer = true
@@ -148,7 +148,7 @@ func TestConfigCloning(t *testing.T) {
 		c2.AllowConnectionWindowIncrease(nil, 1234)
 		require.True(t, calledAllowConnectionWindowIncrease)
 		_, err := c2.GetConfigForClient(&ClientInfo{})
-		require.EqualError(t, err, "nope")
+		require.ErrorIs(t, err, assert.AnError)
 		c2.Tracer(context.Background(), logging.PerspectiveClient, protocol.ConnectionID{})
 		require.True(t, calledTracer)
 	})
