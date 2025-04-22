@@ -57,6 +57,13 @@ var (
 	_ http.Flusher        = &responseWriter{}
 	_ Hijacker            = &responseWriter{}
 	_ HTTPStreamer        = &responseWriter{}
+	// make sure that we implement (some of the) methods used by the http.ResponseController
+	_ interface {
+		SetReadDeadline(time.Time) error
+		SetWriteDeadline(time.Time) error
+		Flush()
+		FlushError() error
+	} = &responseWriter{}
 )
 
 func newResponseWriter(str *stream, conn Connection, isHead bool, logger *slog.Logger) *responseWriter {
