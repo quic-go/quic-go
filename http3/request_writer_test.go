@@ -7,10 +7,8 @@ import (
 	"testing"
 
 	"github.com/quic-go/qpack"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 func decodeRequest(t *testing.T, str io.Reader) map[string]string {
@@ -49,12 +47,9 @@ func testRequestWriterGzip(t *testing.T, gzip bool) {
 	req.AddCookie(&http.Cookie{Name: "baz", Value: "lorem ipsum"})
 
 	rw := newRequestWriter()
-	strBuf := &bytes.Buffer{}
-	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
-	str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-	require.NoError(t, rw.WriteRequestHeader(str, req, gzip))
-	headerFields := decodeRequest(t, strBuf)
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, gzip))
+	headerFields := decodeRequest(t, buf)
 	require.Equal(t, "quic-go.net", headerFields[":authority"])
 	require.Equal(t, http.MethodGet, headerFields[":method"])
 	require.Equal(t, "/index.html?foo=bar", headerFields[":path"])
@@ -73,12 +68,8 @@ func TestRequestWriterInvalidHostHeader(t *testing.T) {
 	require.NoError(t, err)
 	req.Host = "foo@bar" // @ is invalid
 	rw := newRequestWriter()
-	strBuf := &bytes.Buffer{}
-	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
-	str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
 	require.EqualError(t,
-		rw.WriteRequestHeader(str, req, false),
+		rw.WriteRequestHeader(&bytes.Buffer{}, req, false),
 		"http3: invalid Host header",
 	)
 }
@@ -87,12 +78,9 @@ func TestRequestWriterConnect(t *testing.T) {
 	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
 	require.NoError(t, err)
 	rw := newRequestWriter()
-	strBuf := &bytes.Buffer{}
-	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
-	str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-	require.NoError(t, rw.WriteRequestHeader(str, req, false))
-	headerFields := decodeRequest(t, strBuf)
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false))
+	headerFields := decodeRequest(t, buf)
 	require.Equal(t, http.MethodConnect, headerFields[":method"])
 	require.Equal(t, "quic-go.net", headerFields[":authority"])
 	require.NotContains(t, headerFields, ":path")
@@ -105,12 +93,9 @@ func TestRequestWriterExtendedConnect(t *testing.T) {
 	require.NoError(t, err)
 	req.Proto = "webtransport"
 	rw := newRequestWriter()
-	strBuf := &bytes.Buffer{}
-	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
-	str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-	require.NoError(t, rw.WriteRequestHeader(str, req, false))
-	headerFields := decodeRequest(t, strBuf)
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false))
+	headerFields := decodeRequest(t, buf)
 	require.Equal(t, "quic-go.net", headerFields[":authority"])
 	require.Equal(t, http.MethodConnect, headerFields[":method"])
 	require.Equal(t, "/", headerFields[":path"])
