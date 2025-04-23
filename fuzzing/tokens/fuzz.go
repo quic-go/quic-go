@@ -56,6 +56,10 @@ func newToken(tg *handshake.TokenGenerator, data []byte) int {
 			IP:   net.IP(data[2:]),
 		}
 	}
+	data = data[18:]
+	if len(data) < 1 {
+		return -1
+	}
 	start := time.Now()
 	encrypted, err := tg.NewToken(addr, time.Duration(data[0])*time.Millisecond)
 	if err != nil {

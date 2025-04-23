@@ -36,7 +36,7 @@ type token struct {
 	IsRetryToken             bool
 	RemoteAddr               []byte
 	Timestamp                int64
-	RTT                      int64 // in ms
+	RTT                      int64 // in mus
 	OriginalDestConnectionID []byte
 	RetrySrcConnectionID     []byte
 }
@@ -75,7 +75,7 @@ func (g *TokenGenerator) NewToken(raddr net.Addr, RTT time.Duration) ([]byte, er
 	data, err := asn1.Marshal(token{
 		RemoteAddr: encodeRemoteAddr(raddr),
 		Timestamp:  time.Now().UnixNano(),
-		RTT:        RTT.Milliseconds(),
+		RTT:        RTT.Microseconds(),
 	})
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 		token.OriginalDestConnectionID = protocol.ParseConnectionID(t.OriginalDestConnectionID)
 		token.RetrySrcConnectionID = protocol.ParseConnectionID(t.RetrySrcConnectionID)
 	} else {
-		token.RTT = time.Duration(t.RTT * int64(time.Millisecond))
+		token.RTT = time.Duration(t.RTT * int64(time.Microsecond))
 	}
 	return token, nil
 }

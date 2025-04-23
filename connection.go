@@ -285,6 +285,7 @@ var newConnection = func(
 		connIDGenerator,
 	)
 	s.preSetup()
+	s.rttStats.SetInitialRTT(RTT)
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
 		protocol.ByteCount(s.config.InitialPacketSize),

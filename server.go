@@ -649,9 +649,9 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	}
 
 	// restore RTT from token
-	var RTT time.Duration
-	if (token != nil) && !token.IsRetryToken {
-		RTT = token.RTT
+	var rtt time.Duration
+	if token != nil && !token.IsRetryToken {
+		rtt = token.RTT
 	}
 
 	config := s.config
@@ -728,7 +728,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		tracer,
 		s.logger,
 		hdr.Version,
-		RTT,
+		rtt,
 	)
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
