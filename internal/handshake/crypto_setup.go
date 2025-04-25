@@ -22,7 +22,7 @@ type quicVersionContextKey struct{}
 
 var QUICVersionContextKey = &quicVersionContextKey{}
 
-const clientSessionStateRevision = 4
+const clientSessionStateRevision = 5
 
 type cryptoSetup struct {
 	tlsConf *tls.Config
@@ -314,7 +314,6 @@ func (h *cryptoSetup) handleTransportParameters(data []byte) error {
 func (h *cryptoSetup) marshalDataForSessionState(earlyData bool) []byte {
 	b := make([]byte, 0, 256)
 	b = quicvarint.Append(b, clientSessionStateRevision)
-	b = quicvarint.Append(b, uint64(h.rttStats.SmoothedRTT().Microseconds()))
 	if earlyData {
 		// only save the transport parameters for 0-RTT enabled session tickets
 		return h.peerParams.MarshalForSessionTicket(b)
@@ -323,12 +322,11 @@ func (h *cryptoSetup) marshalDataForSessionState(earlyData bool) []byte {
 }
 
 func (h *cryptoSetup) handleDataFromSessionState(data []byte, earlyData bool) (allowEarlyData bool) {
-	rtt, tp, err := decodeDataFromSessionState(data, earlyData)
+	tp, err := decodeDataFromSessionState(data, earlyData)
 	if err != nil {
 		h.logger.Debugf("Restoring of transport parameters from session ticket failed: %s", err.Error())
 		return
 	}
-	h.rttStats.SetInitialRTT(rtt)
 	// The session ticket might have been saved from a connection that allowed 0-RTT,
 	// and therefore contain transport parameters.
 	// Only use them if 0-RTT is actually used on the new connection.
@@ -339,29 +337,23 @@ func (h *cryptoSetup) handleDataFromSessionState(data []byte, earlyData bool) (a
 	return false
 }
 
-func decodeDataFromSessionState(b []byte, earlyData bool) (time.Duration, *wire.TransportParameters, error) {
+func decodeDataFromSessionState(b []byte, earlyData bool) (*wire.TransportParameters, error) {
 	ver, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 	b = b[l:]
 	if ver != clientSessionStateRevision {
-		return 0, nil, fmt.Errorf("mismatching version. Got %d, expected %d", ver, clientSessionStateRevision)
+		return nil, fmt.Errorf("mismatching version. Got %d, expected %d", ver, clientSessionStateRevision)
 	}
-	rttEncoded, l, err := quicvarint.Parse(b)
-	if err != nil {
-		return 0, nil, err
-	}
-	b = b[l:]
-	rtt := time.Duration(rttEncoded) * time.Microsecond
 	if !earlyData {
-		return rtt, nil, nil
+		return nil, nil
 	}
 	var tp wire.TransportParameters
 	if err := tp.UnmarshalFromSessionTicket(b); err != nil {
-		return 0, nil, err
+		return nil, err
 	}
-	return rtt, &tp, nil
+	return &tp, nil
 }
 
 func (h *cryptoSetup) getDataForSessionTicket() []byte {

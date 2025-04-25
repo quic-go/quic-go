@@ -3,11 +3,14 @@ package quic
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func mockToken(num int) *ClientToken { return &ClientToken{data: []byte(fmt.Sprintf("%d", num))} }
+func mockToken(num int) *ClientToken {
+	return &ClientToken{data: []byte(fmt.Sprintf("%d", num)), rtt: 1337 * time.Millisecond}
+}
 
 func TestTokenStoreSingleOrigin(t *testing.T) {
 	const origin = "localhost"

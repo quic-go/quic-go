@@ -463,6 +463,7 @@ var newClientConnection = func(
 	if s.config.TokenStore != nil {
 		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil {
 			s.packer.SetToken(token.data)
+			s.rttStats.SetInitialRTT(token.rtt)
 		}
 	}
 	return s
@@ -1742,7 +1743,7 @@ func (s *connection) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 		}
 	}
 	if s.config.TokenStore != nil {
-		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token})
+		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token, rtt: s.rttStats.SmoothedRTT()})
 	}
 	return nil
 }
