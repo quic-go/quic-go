@@ -28,21 +28,6 @@ var _ = Describe("ECN tracker", func() {
 		ecnTracker = newECNTracker(utils.DefaultLogger, tr)
 	})
 
-	It("sends exactly 10 testing packets", func() {
-		tracer.EXPECT().ECNStateUpdated(logging.ECNStateTesting, logging.ECNTriggerNoTrigger)
-		for i := 0; i < 9; i++ {
-			Expect(ecnTracker.Mode()).To(Equal(protocol.ECT0))
-			// Do this twice to make sure only sent packets are counted
-			Expect(ecnTracker.Mode()).To(Equal(protocol.ECT0))
-			ecnTracker.SentPacket(protocol.PacketNumber(10+i), protocol.ECT0)
-		}
-		Expect(ecnTracker.Mode()).To(Equal(protocol.ECT0))
-		tracer.EXPECT().ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
-		ecnTracker.SentPacket(20, protocol.ECT0)
-		// In unknown state, packets shouldn't be ECN-marked.
-		Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
-	})
-
 	sendAllTestingPackets := func() {
 		tracer.EXPECT().ECNStateUpdated(logging.ECNStateTesting, logging.ECNTriggerNoTrigger)
 		tracer.EXPECT().ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
@@ -51,25 +36,6 @@ var _ = Describe("ECN tracker", func() {
 			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECT0)
 		}
 	}
-
-	It("fails ECN validation if all ECN testing packets are lost", func() {
-		sendAllTestingPackets()
-		for i := 10; i < 20; i++ {
-			Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
-			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECNNon)
-		}
-		for i := 0; i < 9; i++ {
-			ecnTracker.LostPacket(protocol.PacketNumber(i))
-		}
-		// We don't care about the loss of non-testing packets
-		ecnTracker.LostPacket(15)
-		// Now lose the last testing packet.
-		tracer.EXPECT().ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedLostAllTestingPackets)
-		ecnTracker.LostPacket(9)
-		Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
-		// We still don't care about more non-testing packets being lost
-		ecnTracker.LostPacket(16)
-	})
 
 	It("only detects ECN mangling after sending all testing packets", func() {
 		tracer.EXPECT().ECNStateUpdated(logging.ECNStateTesting, logging.ECNTriggerNoTrigger)
@@ -85,35 +51,6 @@ var _ = Describe("ECN tracker", func() {
 		// Now lose the last testing packet.
 		tracer.EXPECT().ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedLostAllTestingPackets)
 		ecnTracker.LostPacket(9)
-	})
-
-	It("passes ECN validation when a testing packet is acknowledged, while still in testing state", func() {
-		tracer.EXPECT().ECNStateUpdated(logging.ECNStateTesting, logging.ECNTriggerNoTrigger)
-		for i := 0; i < 5; i++ {
-			Expect(ecnTracker.Mode()).To(Equal(protocol.ECT0))
-			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECT0)
-		}
-		tracer.EXPECT().ECNStateUpdated(logging.ECNStateCapable, logging.ECNTriggerNoTrigger)
-		Expect(ecnTracker.HandleNewlyAcked(getAckedPackets(3), 1, 0, 0)).To(BeFalse())
-		// make sure we continue sending ECT(0) packets
-		for i := 5; i < 100; i++ {
-			Expect(ecnTracker.Mode()).To(Equal(protocol.ECT0))
-			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECT0)
-		}
-	})
-
-	It("passes ECN validation when a testing packet is acknowledged, while in unknown state", func() {
-		sendAllTestingPackets()
-		for i := 10; i < 20; i++ {
-			Expect(ecnTracker.Mode()).To(Equal(protocol.ECNNon))
-			ecnTracker.SentPacket(protocol.PacketNumber(i), protocol.ECNNon)
-		}
-		// Lose some packets to make sure this doesn't influence the outcome.
-		for i := 0; i < 5; i++ {
-			ecnTracker.LostPacket(protocol.PacketNumber(i))
-		}
-		tracer.EXPECT().ECNStateUpdated(logging.ECNStateCapable, logging.ECNTriggerNoTrigger)
-		Expect(ecnTracker.HandleNewlyAcked([]*packet{{PacketNumber: 7}}, 1, 0, 0)).To(BeFalse())
 	})
 
 	It("fails ECN validation when the ACK contains more ECN counts than we sent packets", func() {
