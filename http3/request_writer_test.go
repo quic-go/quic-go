@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/quic-go/qpack"
@@ -41,8 +42,7 @@ func TestRequestWriterGetRequestGzip(t *testing.T) {
 }
 
 func testRequestWriterGzip(t *testing.T, gzip bool) {
-	req, err := http.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
-	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
 	req.AddCookie(&http.Cookie{Name: "foo", Value: "bar"})
 	req.AddCookie(&http.Cookie{Name: "baz", Value: "lorem ipsum"})
 
@@ -64,8 +64,7 @@ func testRequestWriterGzip(t *testing.T, gzip bool) {
 }
 
 func TestRequestWriterInvalidHostHeader(t *testing.T) {
-	req, err := http.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
-	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
 	req.Host = "foo@bar" // @ is invalid
 	rw := newRequestWriter()
 	require.EqualError(t,
@@ -75,6 +74,7 @@ func TestRequestWriterInvalidHostHeader(t *testing.T) {
 }
 
 func TestRequestWriterConnect(t *testing.T) {
+	// httptest.NewRequest does not properly support the CONNECT method
 	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
 	require.NoError(t, err)
 	rw := newRequestWriter()
@@ -89,6 +89,7 @@ func TestRequestWriterConnect(t *testing.T) {
 }
 
 func TestRequestWriterExtendedConnect(t *testing.T) {
+	// httptest.NewRequest does not properly support the CONNECT method
 	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
 	require.NoError(t, err)
 	req.Proto = "webtransport"
