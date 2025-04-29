@@ -102,10 +102,10 @@ var ServerContextKey = &contextKey{"http3-server"}
 // than its string representation.
 var RemoteAddrContextKey = &contextKey{"remote-addr"}
 
-// listenerInfo contains info about specific listener added with addListener
-type listenerInfo struct {
-	listener *QUICEarlyListener
-	port     int // 0 means that no info about port is available
+// listener contains info about specific listener added with addListener
+type listener struct {
+	ln   *QUICEarlyListener
+	port int // 0 means that no info about port is available
 }
 
 // Server is a HTTP/3 server.
@@ -185,7 +185,7 @@ type Server struct {
 	Logger *slog.Logger
 
 	mutex     sync.RWMutex
-	listeners []listenerInfo
+	listeners []listener
 
 	closed           bool
 	closeCtx         context.Context    // canceled when the server is closed
@@ -416,14 +416,14 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
-		s.listeners = append(s.listeners, listenerInfo{listener: l, port: port})
+		s.listeners = append(s.listeners, listener{ln: l, port: port})
 	} else {
 		logger := s.Logger
 		if logger == nil {
 			logger = slog.Default()
 		}
 		logger.Error("Unable to extract port from listener, will not be announced using SetQUICHeaders", "local addr", laddr, "error", err)
-		s.listeners = append(s.listeners, listenerInfo{listener: l, port: 0})
+		s.listeners = append(s.listeners, listener{ln: l, port: 0})
 	}
 	s.generateAltSvcHeader()
 	return nil
@@ -433,8 +433,8 @@ func (s *Server) removeListener(l *QUICEarlyListener) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.listeners = slices.DeleteFunc(s.listeners, func(info listenerInfo) bool {
-		return info.listener == l
+	s.listeners = slices.DeleteFunc(s.listeners, func(info listener) bool {
+		return info.ln == l
 	})
 	s.generateAltSvcHeader()
 }
@@ -681,7 +681,7 @@ func (s *Server) Close() error {
 
 	var err error
 	for _, info := range s.listeners {
-		if cerr := (*info.listener).Close(); cerr != nil && err == nil {
+		if cerr := (*info.ln).Close(); cerr != nil && err == nil {
 			err = cerr
 		}
 	}
