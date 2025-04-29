@@ -14,8 +14,7 @@ import (
 	"golang.org/x/net/http/httpguts"
 )
 
-// The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented the http.Response.Body.
-// On the client side, the stream will be closed for writing, unless the DontCloseRequestStream RoundTripOpt was set.
+// The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented by the http.ResponseWriter.
 // When a stream is taken over, it's the caller's responsibility to close the stream.
 type HTTPStreamer interface {
 	HTTPStream() Stream
