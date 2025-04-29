@@ -883,6 +883,7 @@ var _ = Describe("Server", func() {
 		serv := &Server{}
 		Expect(serv.Close()).To(Succeed())
 		Expect(serv.ListenAndServeTLS(testdata.GetCertificatePaths())).To(MatchError(http.ErrServerClosed))
+		Expect(serv.ServeQUICConn(nil)).To(MatchError(http.ErrServerClosed))
 	})
 
 	It("handles concurrent Serve and Close", func() {

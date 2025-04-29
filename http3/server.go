@@ -264,6 +264,11 @@ func (s *Server) decreaseConnCount() {
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
+	if s.closed {
+		s.mutex.Unlock()
+		return http.ErrServerClosed
+	}
+
 	s.init()
 	s.mutex.Unlock()
 
