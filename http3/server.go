@@ -206,9 +206,9 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	defer s.removeListener(&ln)
+	defer s.removeListener(ln)
 
-	return s.serveListener(ln)
+	return s.serveListener(*ln)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -227,9 +227,9 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
-	defer s.removeListener(&ln)
+	defer s.removeListener(ln)
 
-	return s.serveListener(ln)
+	return s.serveListener(*ln)
 }
 
 // Serve an existing UDP connection.
@@ -240,9 +240,9 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	if err != nil {
 		return err
 	}
-	defer s.removeListener(&ln)
+	defer s.removeListener(ln)
 
-	return s.serveListener(ln)
+	return s.serveListener(*ln)
 }
 
 // init initializes the contexts used for shutting down the server.
@@ -314,7 +314,7 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 
 var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
 
-func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (QUICEarlyListener, error) {
+func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (*QUICEarlyListener, error) {
 	if tlsConf == nil {
 		return nil, errServerWithoutTLSConfig
 	}
@@ -354,7 +354,7 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 	if err := s.addListener(&ln); err != nil {
 		return nil, err
 	}
-	return ln, nil
+	return &ln, nil
 }
 
 func extractPort(addr string) (int, error) {
