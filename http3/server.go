@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,8 +102,9 @@ var ServerContextKey = &contextKey{"http3-server"}
 // than its string representation.
 var RemoteAddrContextKey = &contextKey{"remote-addr"}
 
-// listenerInfo contains info about specific listener added with addListener
-type listenerInfo struct {
+// listener contains info about specific listener added with addListener
+type listener struct {
+	ln   *QUICEarlyListener
 	port int // 0 means that no info about port is available
 }
 
@@ -183,7 +185,7 @@ type Server struct {
 	Logger *slog.Logger
 
 	mutex     sync.RWMutex
-	listeners map[*QUICEarlyListener]listenerInfo
+	listeners []listener
 
 	closed           bool
 	closeCtx         context.Context    // canceled when the server is closed
@@ -406,28 +408,22 @@ func (s *Server) generateAltSvcHeader() {
 	s.altSvcHeader = strings.Join(altSvc, ",")
 }
 
-// We store a pointer to interface in the map set. This is safe because we only
-// call trackListener via Serve and can track+defer untrack the same pointer to
-// local variable there. We never need to compare a Listener from another caller.
 func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.closed {
 		return http.ErrServerClosed
-	}
-	if s.listeners == nil {
-		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
 	s.init()
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
-		s.listeners[l] = listenerInfo{port}
+		s.listeners = append(s.listeners, listener{ln: l, port: port})
 	} else {
 		logger := s.Logger
 		if logger == nil {
 			logger = slog.Default()
 		}
 		logger.Error("Unable to extract port from listener, will not be announced using SetQUICHeaders", "local addr", laddr, "error", err)
-		s.listeners[l] = listenerInfo{}
+		s.listeners = append(s.listeners, listener{ln: l, port: 0})
 	}
 	s.generateAltSvcHeader()
 	return nil
@@ -436,7 +432,10 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 func (s *Server) removeListener(l *QUICEarlyListener) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	delete(s.listeners, l)
+
+	s.listeners = slices.DeleteFunc(s.listeners, func(info listener) bool {
+		return info.ln == l
+	})
 	s.generateAltSvcHeader()
 }
 
@@ -681,8 +680,8 @@ func (s *Server) Close() error {
 	s.closeCancel()
 
 	var err error
-	for ln := range s.listeners {
-		if cerr := (*ln).Close(); cerr != nil && err == nil {
+	for _, info := range s.listeners {
+		if cerr := (*info.ln).Close(); cerr != nil && err == nil {
 			err = cerr
 		}
 	}
