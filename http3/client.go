@@ -32,6 +32,8 @@ const (
 	defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 )
 
+const max1xxResponses = 5 // arbitrary bound on number of informational responses
+
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams
 	KeepAlivePeriod:    10 * time.Second,
@@ -323,9 +325,7 @@ func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Res
 	}
 
 	// copy from net/http: support 1xx responses
-	num1xx := 0               // number of informational 1xx headers received
-	const max1xxResponses = 5 // arbitrary bound on number of informational responses
-
+	var num1xx int // number of informational 1xx headers received
 	var res *http.Response
 	for {
 		var err error
@@ -340,10 +340,10 @@ func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Res
 		if is1xxNonTerminal {
 			num1xx++
 			if num1xx > max1xxResponses {
-				return nil, errors.New("http: too many 1xx informational responses")
+				return nil, errors.New("http3: too many 1xx informational responses")
 			}
 			traceGot1xxResponse(trace, resCode, textproto.MIMEHeader(res.Header))
-			if resCode == 100 {
+			if resCode == http.StatusContinue {
 				traceGot100Continue(trace)
 			}
 			continue
