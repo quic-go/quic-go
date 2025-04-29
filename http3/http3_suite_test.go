@@ -1,8 +1,6 @@
 package http3
 
 import (
-	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"testing"
@@ -16,14 +14,6 @@ import (
 func TestHttp3(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "HTTP/3 Suite")
-}
-
-func mustNewRequest(method, url string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		panic(err)
-	}
-	return req
 }
 
 var mockCtrl *gomock.Controller
