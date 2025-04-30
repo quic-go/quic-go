@@ -24,16 +24,6 @@ import (
 	"github.com/quic-go/qpack"
 )
 
-// allows mocking of quic.Listen and quic.ListenAddr
-var (
-	quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
-		return quic.ListenEarly(conn, tlsConf, config)
-	}
-	quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
-		return quic.ListenAddrEarly(addr, tlsConf, config)
-	}
-)
-
 // NextProtoH3 is the ALPN protocol negotiated during the TLS handshake, for QUIC v1 and v2.
 const NextProtoH3 = "h3"
 
@@ -349,9 +339,9 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 		if addr == "" {
 			addr = ":https"
 		}
-		ln, err = quicListenAddr(addr, baseConf, quicConf)
+		ln, err = quic.ListenAddrEarly(addr, baseConf, quicConf)
 	} else {
-		ln, err = quicListen(conn, baseConf, quicConf)
+		ln, err = quic.ListenEarly(conn, baseConf, quicConf)
 	}
 	if err != nil {
 		return nil, err

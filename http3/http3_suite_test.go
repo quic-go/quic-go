@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"net"
 	"os"
 	"strconv"
 	"testing"
@@ -8,12 +9,21 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
 func TestHttp3(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "HTTP/3 Suite")
+}
+
+func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
+	t.Helper()
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 var mockCtrl *gomock.Controller
