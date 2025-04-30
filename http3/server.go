@@ -719,7 +719,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	s.graceCancel()
+
+	// close all listeners
+	var closeErrs []error
+	for _, l := range s.listeners {
+		if l.createdLocally {
+			if err := (*l.ln).Close(); err != nil {
+				closeErrs = append(closeErrs, err)
+			}
+		}
+	}
 	s.mutex.Unlock()
+	if len(closeErrs) > 0 {
+		return errors.Join(closeErrs...)
+	}
 
 	if s.connCount.Load() == 0 {
 		return s.Close()
