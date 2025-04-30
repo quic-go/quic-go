@@ -66,6 +66,67 @@ func TestConfigureTLSConfig(t *testing.T) {
 	})
 }
 
+func TestServerSettings(t *testing.T) {
+	t.Run("enable datagrams", func(t *testing.T) {
+		testServerSettings(t, true, nil)
+	})
+	t.Run("additional settings", func(t *testing.T) {
+		testServerSettings(t, false, map[uint64]uint64{13: 37})
+	})
+}
+
+func testServerSettings(t *testing.T, enableDatagrams bool, other map[uint64]uint64) {
+	s := Server{
+		EnableDatagrams:    enableDatagrams,
+		AdditionalSettings: other,
+	}
+	s.init()
+
+	testDone := make(chan struct{})
+	defer close(testDone)
+	settingsChan := make(chan []byte)
+	mockCtrl := gomock.NewController(t)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		settingsChan <- b
+		return len(b), nil
+	})
+
+	conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+	conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+		<-testDone
+		return nil, assert.AnError
+	}).MaxTimes(1)
+	conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(ctx context.Context) (quic.Stream, error) {
+		<-testDone
+		return nil, assert.AnError
+	}).MaxTimes(1)
+	conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+	conn.EXPECT().LocalAddr().AnyTimes()
+	conn.EXPECT().Context().Return(context.Background()).AnyTimes()
+
+	go s.handleConn(conn)
+
+	select {
+	case b := <-settingsChan:
+		typ, l, err := quicvarint.Parse(b)
+		require.NoError(t, err)
+		require.EqualValues(t, streamTypeControlStream, typ)
+		fp := (&frameParser{r: bytes.NewReader(b[l:])})
+		f, err := fp.ParseNext()
+		require.NoError(t, err)
+		require.IsType(t, &settingsFrame{}, f)
+		settingsFrame := f.(*settingsFrame)
+		// Extended CONNECT is always supported
+		require.True(t, settingsFrame.ExtendedConnect)
+		require.Equal(t, settingsFrame.Datagram, enableDatagrams)
+		require.Equal(t, settingsFrame.Other, other)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func decodeHeader(t *testing.T, r io.Reader) map[string][]string {
 	fields := make(map[string][]string)
 	decoder := qpack.NewDecoder(nil)
