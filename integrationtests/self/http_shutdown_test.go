@@ -6,9 +6,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 
@@ -194,5 +196,120 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 	case <-time.After(time.Second):
 		t.Fatal("shutdown did not complete")
+	}
+}
+
+func TestHTTP3ListenerClosing(t *testing.T) {
+	t.Run("application listener", func(t *testing.T) {
+		testHTTP3ListenerClosing(t, true)
+	})
+	t.Run("listener created by the http3.Server", func(t *testing.T) {
+		testHTTP3ListenerClosing(t, false)
+	})
+}
+
+func testHTTP3ListenerClosing(t *testing.T, useApplicationListener bool) {
+	dial := func(t *testing.T, ctx context.Context, u *url.URL) error {
+		t.Helper()
+		tlsConf := getTLSClientConfig()
+		tlsConf.NextProtos = []string{http3.NextProtoH3}
+		tr := &http3.Transport{TLSClientConfig: tlsConf}
+		defer tr.Close()
+		cl := &http.Client{Transport: tr}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		require.NoError(t, err)
+		resp, err := cl.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		return nil
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
+	server := &http3.Server{
+		Handler: mux,
+		// the following values will be ignored when using ServeListener
+		TLSConfig:  tlsConf,
+		QUICConfig: getQuicConfig(nil),
+		Addr:       "127.0.0.1:47283",
+	}
+
+	serveChan := make(chan error, 1)
+	var host string
+	var ln *quic.EarlyListener // only set when using application listener
+	if useApplicationListener {
+		var err error
+		ln, err = quic.ListenEarly(newUDPConnLocalhost(t), tlsConf, getQuicConfig(nil))
+		require.NoError(t, err)
+		defer ln.Close()
+		host = ln.Addr().String()
+		go func() { serveChan <- server.ServeListener(ln) }()
+	} else {
+		go func() { serveChan <- server.ListenAndServe() }()
+		host = server.Addr
+	}
+
+	u := &url.URL{Scheme: "https", Host: host, Path: "/ok"}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, dial(t, ctx, u))
+
+	// close the server
+	require.NoError(t, server.Close())
+
+	select {
+	case err := <-serveChan:
+		require.ErrorIs(t, err, http.ErrServerClosed)
+	case <-time.After(time.Second):
+		t.Fatal("server did not stop")
+	}
+
+	// If the listener was created by the http3.Server, it will now be closed.
+	if !useApplicationListener {
+		ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(10*time.Millisecond))
+		defer cancel()
+		require.ErrorIs(t, dial(t, ctx, u), context.DeadlineExceeded)
+		return
+	}
+
+	// If the listener was created by the application, it will not be closed,
+	// and it can be used to accept new connections.
+	errChan := make(chan error, 1)
+	go func() {
+		for {
+			conn, err := ln.Accept(context.Background())
+			if err != nil {
+				errChan <- err
+				return
+			}
+			select {
+			case <-conn.HandshakeComplete():
+				conn.CloseWithError(1337, "")
+			case <-time.After(time.Second):
+				errChan <- fmt.Errorf("connection did not complete handshake")
+			}
+			errChan <- nil
+		}
+	}()
+
+	for range 3 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		err := dial(t, ctx, u)
+		var h3Err *http3.Error
+		require.ErrorAs(t, err, &h3Err)
+		require.Equal(t, http3.ErrCode(1337), h3Err.ErrorCode)
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("server did not accept connection")
+		}
 	}
 }
