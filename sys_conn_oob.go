@@ -222,7 +222,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				// };
 				if len(body) == 20 {
 					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
-					p.info.ifIndex = binary.LittleEndian.Uint32(body[16:])
+					p.info.ifIndex = binary.NativeEndian.Uint32(body[16:])
 				} else {
 					invalidCmsgOnceV6.Do(func() {
 						log.Printf("Received invalid IPv6 packet info control message: %+x. "+
