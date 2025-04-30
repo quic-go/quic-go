@@ -474,7 +474,8 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	go hconn.handleUnidirectionalStreams(s.UniStreamHijacker)
 
 	var nextStreamID quic.StreamID
-	var wg sync.WaitGroup
+	var activeRequests atomic.Int64
+	requestHandledChan := make(chan struct{}, 1)
 	var handleErr error
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -502,9 +503,12 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				case <-s.closeCtx.Done():
 					// close the connection after graceful period
 					conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+				case <-requestHandledChan:
+					// if there are no active requests, close the connection
+					if activeRequests.Load() == 0 {
+						conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+					}
 				}
-				handleErr = http.ErrServerClosed
-				break
 			}
 
 			var appErr *quic.ApplicationError
@@ -515,15 +519,23 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		}
 
 		nextStreamID = str.StreamID() + 4
-		wg.Add(1)
+		activeRequests.Add(1)
 		go func() {
 			// handleRequest will return once the request has been handled,
 			// or the underlying connection is closed
-			defer wg.Done()
+			defer func() {
+				activeRequests.Add(-1)
+				select {
+				case requestHandledChan <- struct{}{}:
+				default:
+				}
+			}()
 			s.handleRequest(hconn, str, datagrams, hconn.decoder)
 		}()
 	}
-	wg.Wait()
+	for activeRequests.Load() > 0 {
+		<-requestHandledChan
+	}
 	return handleErr
 }
 
