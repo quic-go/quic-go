@@ -1,4 +1,4 @@
-package handshake
+package quic
 
 import (
 	"encoding/binary"
@@ -11,12 +11,12 @@ const (
 	extTypeECH = 0xfe0d
 )
 
-// FindSNIAndECH parses the given byte slice as a ClientHello, and locates:
+// findSNIAndECH parses the given byte slice as a ClientHello, and locates:
 // - the position and length of the Server Name Indication (SNI) extension,
 // - the position of the Encrypted Client Hello (ECH) extension.
 // If no SNI extension is found, it returns -1 for the SNI position.
 // If no ECH extension is found, it returns -1 for the ECH position.
-func FindSNIAndECH(data []byte) (sniPos, sniLen, echPos int, err error) {
+func findSNIAndECH(data []byte) (sniPos, sniLen, echPos int, err error) {
 	if len(data) < 4 {
 		return 0, 0, 0, io.ErrUnexpectedEOF
 	}

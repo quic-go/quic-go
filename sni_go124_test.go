@@ -1,6 +1,6 @@
 //go:build go1.24
 
-package handshake
+package quic
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func TestFindSNIWithECH(t *testing.T) {
 	ev := c.NextEvent()
 	require.Equal(t, tls.QUICWriteData, ev.Kind)
 	clientHello := ev.Data
-	sniPos, sniLen, echPos, err := FindSNIAndECH(clientHello)
+	sniPos, sniLen, echPos, err := findSNIAndECH(clientHello)
 	require.NoError(t, err)
 	require.NotEqual(t, -1, echPos)
 	require.Equal(t, uint16(extTypeECH), binary.BigEndian.Uint16(clientHello[echPos:echPos+2]))
@@ -79,7 +79,7 @@ func TestFindSNIWithECH(t *testing.T) {
 	require.Equal(t, serverName, string(clientHello[sniPos:sniPos+sniLen]))
 
 	for i := range clientHello {
-		_, _, _, err := FindSNIAndECH(clientHello[:i])
+		_, _, _, err := findSNIAndECH(clientHello[:i])
 		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	}
 }
