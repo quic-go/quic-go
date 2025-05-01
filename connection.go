@@ -468,7 +468,7 @@ var newClientConnection = func(
 
 func (s *connection) preSetup() {
 	s.largestRcvdAppData = protocol.InvalidPacketNumber
-	s.initialStream = newInitialCryptoStream()
+	s.initialStream = newInitialCryptoStream(s.perspective == protocol.PerspectiveClient)
 	s.handshakeStream = newCryptoStream()
 	s.sendQueue = newSendQueue(s.conn)
 	s.retransmissionQueue = newRetransmissionQueue()

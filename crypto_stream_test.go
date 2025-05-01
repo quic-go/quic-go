@@ -1,6 +1,9 @@
 package quic
 
 import (
+	"fmt"
+	mrand "math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -73,12 +76,12 @@ func TestCryptoStreamReceiveDataAfterFinish(t *testing.T) {
 	)
 }
 
-func TestCryptoStreamWrite(t *testing.T) {
-	expectedCryptoFrameLen := func(offset protocol.ByteCount) protocol.ByteCount {
-		f := &wire.CryptoFrame{Offset: offset}
-		return f.Length(protocol.Version1)
-	}
+func expectedCryptoFrameLen(offset protocol.ByteCount) protocol.ByteCount {
+	f := &wire.CryptoFrame{Offset: offset}
+	return f.Length(protocol.Version1)
+}
 
+func TestCryptoStreamWrite(t *testing.T) {
 	str := newCryptoStream()
 
 	require.False(t, str.HasData())
@@ -104,4 +107,123 @@ func TestCryptoStreamWrite(t *testing.T) {
 	f = str.PopCryptoFrame(protocol.MaxByteCount)
 	require.Equal(t, &wire.CryptoFrame{Offset: 4, Data: []byte("arbaz")}, f)
 	require.False(t, str.HasData())
+}
+
+func TestInitialCryptoStreamServer(t *testing.T) {
+	str := newInitialCryptoStream(false)
+	_, err := str.Write([]byte("foobar"))
+	require.NoError(t, err)
+
+	f := str.PopCryptoFrame(expectedCryptoFrameLen(0) + 3)
+	require.Equal(t, &wire.CryptoFrame{Offset: 0, Data: []byte("foo")}, f)
+	require.True(t, str.HasData())
+
+	// append another CRYPTO frame to the existing slice
+	f = str.PopCryptoFrame(expectedCryptoFrameLen(3) + 3)
+	require.Equal(t, &wire.CryptoFrame{Offset: 3, Data: []byte("bar")}, f)
+	require.False(t, str.HasData())
+}
+
+func reassembleCryptoData(t *testing.T, segments map[protocol.ByteCount][]byte) []byte {
+	t.Helper()
+
+	var reassembled []byte
+	var offset protocol.ByteCount
+	for len(segments) > 0 {
+		b, ok := segments[offset]
+		if !ok {
+			break
+		}
+		reassembled = append(reassembled, b...)
+		delete(segments, offset)
+		offset = protocol.ByteCount(len(reassembled))
+	}
+	require.Empty(t, segments)
+	return reassembled
+}
+
+func TestInitialCryptoStreamClient(t *testing.T) {
+	str := newInitialCryptoStream(true)
+	_, err := str.Write(clientHello)
+	require.NoError(t, err)
+	require.True(t, str.HasData())
+	_, err = str.Write([]byte("foobar"))
+	require.NoError(t, err)
+
+	segments := make(map[protocol.ByteCount][]byte)
+
+	f1 := str.PopCryptoFrame(protocol.MaxByteCount)
+	require.NotNil(t, f1)
+	segments[f1.Offset] = f1.Data
+	require.True(t, str.HasData())
+
+	f2 := str.PopCryptoFrame(protocol.MaxByteCount)
+	require.NotNil(t, f2)
+	require.NotContains(t, segments, f2.Offset)
+	segments[f2.Offset] = f2.Data
+	require.True(t, str.HasData())
+
+	f3 := str.PopCryptoFrame(protocol.MaxByteCount)
+	require.NotNil(t, f2)
+	require.NotContains(t, segments, f3.Offset)
+	segments[f3.Offset] = f3.Data
+	require.True(t, str.HasData())
+
+	f4 := str.PopCryptoFrame(protocol.MaxByteCount)
+	require.NotNil(t, f4)
+	require.NotContains(t, segments, f4.Offset)
+	segments[f4.Offset] = f4.Data
+	require.Equal(t, []byte("foobar"), f4.Data)
+	require.False(t, str.HasData())
+
+	reassembled := reassembleCryptoData(t, segments)
+	require.Equal(t, append(clientHello, []byte("foobar")...), reassembled)
+}
+
+func TestInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
+	for i := range 5 {
+		t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
+			testInitialCryptoStreamClientRandomizedSizes(t)
+		})
+	}
+}
+
+func testInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
+	str := newInitialCryptoStream(true)
+
+	b := slices.Clone(clientHello)
+	for len(b) > 0 {
+		n := min(len(b), mrand.IntN(2*len(b)))
+		_, err := str.Write(b[:n])
+		require.NoError(t, err)
+		b = b[n:]
+	}
+
+	require.True(t, str.HasData())
+	_, err := str.Write([]byte("foobar"))
+	require.NoError(t, err)
+
+	segments := make(map[protocol.ByteCount][]byte)
+
+	var frames []*wire.CryptoFrame
+	for str.HasData() {
+		maxSize := protocol.ByteCount(mrand.IntN(128) + 1)
+		f := str.PopCryptoFrame(maxSize)
+		if f == nil {
+			continue
+		}
+		frames = append(frames, f)
+		require.LessOrEqual(t, f.Length(protocol.Version1), maxSize)
+	}
+	t.Logf("received %d frames", len(frames))
+
+	for _, f := range frames {
+		// require.NotContains(t, cf.Data, []byte("google.com"))
+		t.Logf("received frame (%d bytes) at offset %d", len(f.Data), f.Offset)
+		segments[f.Offset] = f.Data
+	}
+
+	reassembled := reassembleCryptoData(t, segments)
+	require.Equal(t, append(clientHello, []byte("foobar")...), reassembled)
+	// require.Contains(t, reassembled, []byte("google.com"))
 }

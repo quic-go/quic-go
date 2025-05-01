@@ -513,15 +513,15 @@ func (p *packetPacker) maybeGetCryptoPacket(
 		return nil, payload{}
 	}
 
-	var hasData bool
+	var hasCryptoData func() bool
 	var popCryptoFrame func(maxLen protocol.ByteCount) *wire.CryptoFrame
 	//nolint:exhaustive // Initial and Handshake are the only two encryption levels here.
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		hasData = p.initialStream.HasData()
+		hasCryptoData = p.initialStream.HasData
 		popCryptoFrame = p.initialStream.PopCryptoFrame
 	case protocol.EncryptionHandshake:
-		hasData = p.handshakeStream.HasData()
+		hasCryptoData = p.handshakeStream.HasData
 		popCryptoFrame = p.handshakeStream.PopCryptoFrame
 	}
 	handler := p.retransmissionQueue.AckHandler(encLevel)
@@ -529,10 +529,10 @@ func (p *packetPacker) maybeGetCryptoPacket(
 
 	var ack *wire.AckFrame
 	if ackAllowed {
-		ack = p.acks.GetAckFrame(encLevel, now, !hasRetransmission && !hasData)
+		ack = p.acks.GetAckFrame(encLevel, now, !hasRetransmission && !hasCryptoData())
 	}
 	var pl payload
-	if !hasData && !hasRetransmission && ack == nil {
+	if !hasCryptoData() && !hasRetransmission && ack == nil {
 		if !addPingIfEmpty {
 			// nothing to send
 			return nil, payload{}
@@ -563,10 +563,16 @@ func (p *packetPacker) maybeGetCryptoPacket(
 			pl.length += frameLen
 			maxPacketSize -= frameLen
 		}
-	} else if hasData {
-		if cf := popCryptoFrame(maxPacketSize); cf != nil {
+		return hdr, pl
+	} else {
+		for hasCryptoData() {
+			cf := popCryptoFrame(maxPacketSize)
+			if cf == nil {
+				break
+			}
 			pl.frames = append(pl.frames, ackhandler.Frame{Frame: cf, Handler: handler})
 			pl.length += cf.Length(v)
+			maxPacketSize -= cf.Length(v)
 		}
 	}
 	return hdr, pl
