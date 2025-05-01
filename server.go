@@ -148,9 +148,7 @@ func (l *Listener) Accept(ctx context.Context) (Connection, error) {
 // Close closes the listener.
 // Accept will return [ErrServerClosed] as soon as all connections in the accept queue have been accepted.
 // QUIC handshakes that are still in flight will be rejected with a CONNECTION_REFUSED error.
-// The effect of closing the listener depends on how it was created:
-//   - if it was created using [Transport.Listen], already established connections will be unaffected
-//   - if it was created using the [Listen] convenience method, all established connection will be closed immediately
+// Already established (accepted)connections will be unaffected.
 func (l *Listener) Close() error {
 	return l.baseServer.Close()
 }
