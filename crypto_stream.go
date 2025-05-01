@@ -76,6 +76,9 @@ func (s *cryptoStream) HasData() bool {
 func (s *cryptoStream) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFrame {
 	f := &wire.CryptoFrame{Offset: s.writeOffset}
 	n := min(f.MaxDataLen(maxLen), protocol.ByteCount(len(s.writeBuf)))
+	if n == 0 {
+		return nil
+	}
 	f.Data = s.writeBuf[:n]
 	s.writeBuf = s.writeBuf[n:]
 	s.writeOffset += n

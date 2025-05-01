@@ -561,9 +561,10 @@ func (p *packetPacker) maybeGetCryptoPacket(
 			maxPacketSize -= frameLen
 		}
 	} else if s.HasData() {
-		cf := s.PopCryptoFrame(maxPacketSize)
-		pl.frames = append(pl.frames, ackhandler.Frame{Frame: cf, Handler: handler})
-		pl.length += cf.Length(v)
+		if cf := s.PopCryptoFrame(maxPacketSize); cf != nil {
+			pl.frames = append(pl.frames, ackhandler.Frame{Frame: cf, Handler: handler})
+			pl.length += cf.Length(v)
+		}
 	}
 	return hdr, pl
 }

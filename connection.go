@@ -826,7 +826,9 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 	if ticket != nil { // may be nil if session tickets are disabled via tls.Config.SessionTicketsDisabled
 		s.oneRTTStream.Write(ticket)
 		for s.oneRTTStream.HasData() {
-			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
+			if cf := s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
+				s.queueControlFrame(cf)
+			}
 		}
 	}
 	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
