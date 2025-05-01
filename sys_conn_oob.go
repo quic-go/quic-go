@@ -317,8 +317,8 @@ func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
 	h.SetLen(unix.CmsgLen(ecnIPv4DataLen))
 
 	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
-	dataPtr := unsafe.Pointer(uintptr(unsafe.Pointer(h)) + uintptr(unix.CmsgSpace(0)))
-	*(*int32)(dataPtr) = int32(val.ToHeaderBits())
+	offset := startLen + unix.CmsgSpace(0)
+	b[offset] = val.ToHeaderBits()
 	return b
 }
 
