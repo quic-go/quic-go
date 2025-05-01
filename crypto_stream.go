@@ -8,7 +8,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-type cryptoStream struct {
+type baseCryptoStream struct {
 	queue frameSorter
 
 	highestOffset protocol.ByteCount
@@ -19,10 +19,10 @@ type cryptoStream struct {
 }
 
 func newCryptoStream() *cryptoStream {
-	return &cryptoStream{queue: *newFrameSorter()}
+	return &cryptoStream{baseCryptoStream{queue: *newFrameSorter()}}
 }
 
-func (s *cryptoStream) HandleCryptoFrame(f *wire.CryptoFrame) error {
+func (s *baseCryptoStream) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	highestOffset := f.Offset + protocol.ByteCount(len(f.Data))
 	if maxOffset := highestOffset; maxOffset > protocol.MaxCryptoStreamOffset {
 		return &qerr.TransportError{
@@ -47,12 +47,12 @@ func (s *cryptoStream) HandleCryptoFrame(f *wire.CryptoFrame) error {
 }
 
 // GetCryptoData retrieves data that was received in CRYPTO frames
-func (s *cryptoStream) GetCryptoData() []byte {
+func (s *baseCryptoStream) GetCryptoData() []byte {
 	_, data, _ := s.queue.Pop()
 	return data
 }
 
-func (s *cryptoStream) Finish() error {
+func (s *baseCryptoStream) Finish() error {
 	if s.queue.HasMoreData() {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
@@ -64,16 +64,16 @@ func (s *cryptoStream) Finish() error {
 }
 
 // Writes writes data that should be sent out in CRYPTO frames
-func (s *cryptoStream) Write(p []byte) (int, error) {
+func (s *baseCryptoStream) Write(p []byte) (int, error) {
 	s.writeBuf = append(s.writeBuf, p...)
 	return len(p), nil
 }
 
-func (s *cryptoStream) HasData() bool {
+func (s *baseCryptoStream) HasData() bool {
 	return len(s.writeBuf) > 0
 }
 
-func (s *cryptoStream) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFrame {
+func (s *baseCryptoStream) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFrame {
 	f := &wire.CryptoFrame{Offset: s.writeOffset}
 	n := min(f.MaxDataLen(maxLen), protocol.ByteCount(len(s.writeBuf)))
 	if n == 0 {
@@ -83,4 +83,16 @@ func (s *cryptoStream) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFra
 	s.writeBuf = s.writeBuf[n:]
 	s.writeOffset += n
 	return f
+}
+
+type cryptoStream struct {
+	baseCryptoStream
+}
+
+type initialCryptoStream struct {
+	baseCryptoStream
+}
+
+func newInitialCryptoStream() *initialCryptoStream {
+	return &initialCryptoStream{baseCryptoStream{queue: *newFrameSorter()}}
 }

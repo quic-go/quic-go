@@ -23,20 +23,21 @@ import (
 const testPackerConnIDLen = 4
 
 type testPacketPacker struct {
-	packer                         *packetPacker
-	initialStream, handshakeStream *cryptoStream
-	datagramQueue                  *datagramQueue
-	pnManager                      *mockackhandler.MockSentPacketHandler
-	sealingManager                 *MockSealingManager
-	framer                         *MockFrameSource
-	ackFramer                      *MockAckFrameSource
-	retransmissionQueue            *retransmissionQueue
+	packer              *packetPacker
+	initialStream       *initialCryptoStream
+	handshakeStream     *cryptoStream
+	datagramQueue       *datagramQueue
+	pnManager           *mockackhandler.MockSentPacketHandler
+	sealingManager      *MockSealingManager
+	framer              *MockFrameSource
+	ackFramer           *MockAckFrameSource
+	retransmissionQueue *retransmissionQueue
 }
 
 func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protocol.Perspective) *testPacketPacker {
 	destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 	require.Equal(t, testPackerConnIDLen, destConnID.Len())
-	initialStream := newCryptoStream()
+	initialStream := newInitialCryptoStream()
 	handshakeStream := newCryptoStream()
 	pnManager := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 	framer := NewMockFrameSource(mockCtrl)
