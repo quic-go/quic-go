@@ -3,18 +3,20 @@ package http3
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
-	"github.com/Noooste/fhttp"
-	"github.com/Noooste/utls"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go"
+	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -56,13 +58,13 @@ func TestRequestValidation(t *testing.T) {
 	}{
 		{
 			name:        "plain HTTP",
-			req:         mustNewRequest(http.MethodGet, "http://www.example.org/", nil),
+			req:         httptest.NewRequest(http.MethodGet, "http://www.example.org/", nil),
 			expectedErr: "http3: unsupported protocol scheme: http",
 		},
 		{
 			name: "missing URL",
 			req: func() *http.Request {
-				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
 				r.URL = nil
 				return r
 			}(),
@@ -71,7 +73,7 @@ func TestRequestValidation(t *testing.T) {
 		{
 			name: "missing URL Host",
 			req: func() *http.Request {
-				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
 				r.URL.Host = ""
 				return r
 			}(),
@@ -80,7 +82,7 @@ func TestRequestValidation(t *testing.T) {
 		{
 			name: "missing header",
 			req: func() *http.Request {
-				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
 				r.Header = nil
 				return r
 			}(),
@@ -89,7 +91,7 @@ func TestRequestValidation(t *testing.T) {
 		{
 			name: "invalid header name",
 			req: func() *http.Request {
-				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
 				r.Header.Add("foobär", "value")
 				return r
 			}(),
@@ -98,7 +100,7 @@ func TestRequestValidation(t *testing.T) {
 		{
 			name: "invalid header value",
 			req: func() *http.Request {
-				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
 				r.Header.Add("foo", string([]byte{0x7}))
 				return r
 			}(),
@@ -107,7 +109,7 @@ func TestRequestValidation(t *testing.T) {
 		{
 			name: "invalid method",
 			req: func() *http.Request {
-				r := mustNewRequest(http.MethodGet, "https://www.example.org/", nil)
+				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
 				r.Method = "foobär"
 				return r
 			}(),
@@ -146,7 +148,7 @@ func TestTransportDialHostname(t *testing.T) {
 	}
 
 	t.Run("port set", func(t *testing.T) {
-		req := mustNewRequest(http.MethodGet, "https://quic-go.net:1234", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://quic-go.net:1234", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
 		require.EqualError(t, err, "test done")
 		select {
@@ -160,7 +162,7 @@ func TestTransportDialHostname(t *testing.T) {
 
 	// if the request doesn't have a port, the default port is used
 	t.Run("port not set", func(t *testing.T) {
-		req := mustNewRequest(http.MethodGet, "https://quic-go.net", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
 		require.EqualError(t, err, "test done")
 		select {
@@ -176,17 +178,16 @@ func TestTransportDialHostname(t *testing.T) {
 func TestTransportDatagrams(t *testing.T) {
 	// if the default quic.Config is used, the transport automatically enables QUIC datagrams
 	t.Run("default quic.Config", func(t *testing.T) {
-		testErr := errors.New("handshake error")
 		tr := &Transport{
 			EnableDatagrams: true,
 			Dial: func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 				require.True(t, quicConf.EnableDatagrams)
-				return nil, testErr
+				return nil, assert.AnError
 			},
 		}
-		req := mustNewRequest(http.MethodGet, "https://example.com", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://example.com", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
-		require.ErrorIs(t, err, testErr)
+		require.ErrorIs(t, err, assert.AnError)
 	})
 
 	// if a custom quic.Config is used, the transport just checks that QUIC datagrams are enabled
@@ -199,7 +200,7 @@ func TestTransportDatagrams(t *testing.T) {
 				return nil, nil
 			},
 		}
-		req := mustNewRequest(http.MethodGet, "https://example.com", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://example.com", nil)
 		_, err := tr.RoundTripOpt(req, RoundTripOpt{})
 		require.EqualError(t, err, "HTTP Datagrams enabled, but QUIC Datagrams disabled")
 	})
@@ -210,7 +211,7 @@ func TestTransportMultipleQUICVersions(t *testing.T) {
 		Versions: []quic.Version{protocol.Version2, protocol.Version1},
 	}
 	tr := &Transport{QUICConfig: qconf}
-	req := mustNewRequest(http.MethodGet, "https://example.com", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://example.com", nil)
 	_, err := tr.RoundTrip(req)
 	require.EqualError(t, err, "can only use a single QUIC version for dialing a HTTP/3 connection")
 }
@@ -231,7 +232,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
-	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
 	// if OnlyCachedConn is set, no connection is dialed
 	_, err := tr.RoundTripOpt(req1, RoundTripOpt{OnlyCachedConn: true})
 	require.ErrorIs(t, err, ErrNoCachedConn)
@@ -245,7 +246,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 	require.Equal(t, 1, dialCount)
 
 	// ... which is then used for the second request
-	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
 	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 	rsp, err = tr.RoundTrip(req2)
 	require.NoError(t, err)
@@ -294,7 +295,7 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 	}
 
 	// the first request succeeds
-	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
 	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 	rsp, err := tr.RoundTrip(req1)
 	require.NoError(t, err)
@@ -302,7 +303,7 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 	require.Equal(t, 1, dialCount)
 
 	// the second request reuses the QUIC connection, and encounters an error
-	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if connClosed {
@@ -328,7 +329,7 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 		return
 	}
 	currentDialCount := dialCount
-	req3 := mustNewRequest("GET", "https://quic-go.net/file3.html", nil)
+	req3 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file3.html", nil)
 	cl.EXPECT().RoundTrip(req3).Return(&http.Response{Request: req3}, nil)
 	rsp, err = tr.RoundTrip(req3)
 	require.NoError(t, err)
@@ -353,7 +354,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	}
 
 	// the first request succeeds
-	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
 	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 	rsp, err := tr.RoundTrip(req1)
 	require.NoError(t, err)
@@ -361,7 +362,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	require.Equal(t, 1, dialCount)
 
 	// the second request reuses the QUIC connection, and runs into the cancelled context
-	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	req2 = req2.WithContext(ctx)
 	cl.EXPECT().RoundTrip(req2).DoAndReturn(
@@ -375,7 +376,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	require.Equal(t, 1, dialCount)
 
 	// the next request reuses the QUIC connection
-	req3 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	req3 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
 	cl.EXPECT().RoundTrip(req3).Return(&http.Response{Request: req3}, nil)
 	rsp, err = tr.RoundTrip(req3)
 	require.NoError(t, err)
@@ -391,24 +392,23 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	close(handshakeChan)
 	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
-	testErr := errors.New("handshake error")
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 			dialCount++
 			if dialCount == 1 {
-				return nil, testErr
+				return nil, assert.AnError
 			}
 			return conn, nil
 		},
 		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
-	req1 := mustNewRequest("GET", "https://quic-go.net/file1.html", nil)
+	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
 	_, err := tr.RoundTrip(req1)
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 	require.Equal(t, 1, dialCount)
 
-	req2 := mustNewRequest("GET", "https://quic-go.net/file2.html", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
 	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 	rsp, err := tr.RoundTrip(req2)
 	require.NoError(t, err)
@@ -429,7 +429,7 @@ func TestTransportCloseEstablishedConnections(t *testing.T) {
 			return cl
 		},
 	}
-	req := mustNewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
 	_, err := tr.RoundTrip(req)
 	require.NoError(t, err)
 	conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(0), "")
@@ -449,7 +449,7 @@ func TestTransportCloseInFlightDials(t *testing.T) {
 			return nil, err
 		},
 	}
-	req := mustNewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
 
 	errChan := make(chan error, 1)
 	go func() {
@@ -499,8 +499,8 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 			return cl
 		},
 	}
-	req1 := mustNewRequest(http.MethodGet, "https://site1.com", nil)
-	req2 := mustNewRequest(http.MethodGet, "https://site2.com", nil)
+	req1 := httptest.NewRequest(http.MethodGet, "https://site1.com", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "https://site2.com", nil)
 	require.NotEqual(t, req1.Host, req2.Host)
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	ctx2, cancel2 := context.WithCancel(context.Background())

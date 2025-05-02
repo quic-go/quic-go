@@ -17,6 +17,7 @@ type mtuDiscoverer interface {
 	ShouldSendProbe(now time.Time) bool
 	CurrentSize() protocol.ByteCount
 	GetPing(now time.Time) (ping ackhandler.Frame, datagramSize protocol.ByteCount)
+	Reset(now time.Time, start, max protocol.ByteCount)
 }
 
 const (
@@ -98,6 +99,11 @@ type mtuFinder struct {
 	lost             [maxLostMTUProbes]protocol.ByteCount
 	lastProbeWasLost bool
 
+	// The generation is used to ignore ACKs / losses for probe packets sent before a reset.
+	// Resets happen when the connection is migrated to a new path.
+	// We're therefore not concerned about overflows of this counter.
+	generation uint8
+
 	tracer *logging.ConnectionTracer
 }
 
@@ -110,10 +116,15 @@ func newMTUDiscoverer(
 ) *mtuFinder {
 	f := &mtuFinder{
 		inFlight: protocol.InvalidByteCount,
-		min:      start,
 		rttStats: rttStats,
 		tracer:   tracer,
 	}
+	f.init(start, max)
+	return f
+}
+
+func (f *mtuFinder) init(start, max protocol.ByteCount) {
+	f.min = start
 	for i := range f.lost {
 		if i == 0 {
 			f.lost[i] = max
@@ -121,7 +132,6 @@ func newMTUDiscoverer(
 		}
 		f.lost[i] = protocol.InvalidByteCount
 	}
-	return f
 }
 
 func (f *mtuFinder) done() bool {
@@ -162,7 +172,7 @@ func (f *mtuFinder) GetPing(now time.Time) (ackhandler.Frame, protocol.ByteCount
 	f.inFlight = size
 	return ackhandler.Frame{
 		Frame:   &wire.PingFrame{},
-		Handler: &mtuFinderAckHandler{f},
+		Handler: &mtuFinderAckHandler{mtuFinder: f, generation: f.generation},
 	}, size
 }
 
@@ -170,13 +180,26 @@ func (f *mtuFinder) CurrentSize() protocol.ByteCount {
 	return f.min
 }
 
+func (f *mtuFinder) Reset(now time.Time, start, max protocol.ByteCount) {
+	f.generation++
+	f.lastProbeTime = now
+	f.lastProbeWasLost = false
+	f.inFlight = protocol.InvalidByteCount
+	f.init(start, max)
+}
+
 type mtuFinderAckHandler struct {
 	*mtuFinder
+	generation uint8
 }
 
 var _ ackhandler.FrameHandler = &mtuFinderAckHandler{}
 
 func (h *mtuFinderAckHandler) OnAcked(wire.Frame) {
+	if h.generation != h.mtuFinder.generation {
+		// ACK for probe sent before reset
+		return
+	}
 	size := h.inFlight
 	if size == protocol.InvalidByteCount {
 		panic("OnAcked callback called although there's no MTU probe packet in flight")
@@ -207,6 +230,10 @@ func (h *mtuFinderAckHandler) OnAcked(wire.Frame) {
 }
 
 func (h *mtuFinderAckHandler) OnLost(wire.Frame) {
+	if h.generation != h.mtuFinder.generation {
+		// probe sent before reset received
+		return
+	}
 	size := h.inFlight
 	if size == protocol.InvalidByteCount {
 		panic("OnLost callback called although there's no MTU probe packet in flight")

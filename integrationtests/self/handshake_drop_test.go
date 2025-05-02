@@ -3,20 +3,21 @@ package self_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/tls"
 	"fmt"
-	"github.com/Noooste/utls"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
-	"github.com/Noooste/quic-go/internal/wire"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/quic-go/quic-go"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dro
 		tlsConf = getTLSConfig()
 	}
 	tr := &quic.Transport{
-		Conn:                newUPDConnLocalhost(t),
+		Conn:                newUDPConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return doRetry },
 	}
 	t.Cleanup(func() { tr.Close() })
@@ -44,10 +45,10 @@ func startDropTestListenerAndProxy(t *testing.T, rtt, timeout time.Duration, dro
 	t.Cleanup(func() { ln.Close() })
 
 	proxy := quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DropPacket:  dropCallback,
-		DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 	}
 	require.NoError(t, proxy.Start())
 	t.Cleanup(func() { proxy.Close() })
@@ -59,7 +60,7 @@ func dropTestProtocolClientSpeaksFirst(t *testing.T, ln *quic.Listener, addr net
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -95,7 +96,7 @@ func dropTestProtocolServerSpeaksFirst(t *testing.T, ln *quic.Listener, addr net
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -153,7 +154,7 @@ func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, addr net.Addr
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		addr,
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -172,7 +173,7 @@ func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, addr net.Addr
 
 func dropCallbackDropNthPacket(direction quicproxy.Direction, n int) quicproxy.DropCallback {
 	var incoming, outgoing atomic.Int32
-	return func(d quicproxy.Direction, packet []byte) bool {
+	return func(d quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 		var p int32
 		switch d {
 		case quicproxy.DirectionIncoming:
@@ -188,8 +189,8 @@ func dropCallbackDropOneThird(direction quicproxy.Direction) quicproxy.DropCallb
 	const maxSequentiallyDropped = 10
 	var mx sync.Mutex
 	var incoming, outgoing int
-	return func(d quicproxy.Direction, _ []byte) bool {
-		drop := mrand.Int63n(int64(3)) == 0
+	return func(d quicproxy.Direction, _, _ net.Addr, _ []byte) bool {
+		drop := mrand.IntN(3) == 0
 
 		mx.Lock()
 		defer mx.Unlock()
@@ -274,10 +275,10 @@ func TestPostQuantumClientHello(t *testing.T) {
 	t.Cleanup(func() { wire.AdditionalTransportParametersClient = origAdditionalTransportParametersClient })
 
 	b := make([]byte, 2500) // the ClientHello will now span across 3 packets
-	mrand.New(mrand.NewSource(time.Now().UnixNano())).Read(b)
+	rand.Read(b)
 	wire.AdditionalTransportParametersClient = map[uint64][]byte{
 		// Avoid random collisions with the greased transport parameters.
-		uint64(27+31*(1000+mrand.Int63()/31)) % quicvarint.Max: b,
+		uint64(27+31*(1000+mrand.IntN(31))/31) % quicvarint.Max: b,
 	}
 
 	ln, proxyPort := startDropTestListenerAndProxy(t, 10*time.Millisecond, 20*time.Second, dropCallbackDropOneThird(quicproxy.DirectionIncoming), false, false)

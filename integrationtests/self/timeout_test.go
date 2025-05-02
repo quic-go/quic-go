@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"runtime"
 	"sync/atomic"
@@ -35,10 +35,10 @@ func requireIdleTimeoutError(t *testing.T, err error) {
 func TestHandshakeIdleTimeout(t *testing.T) {
 	errChan := make(chan error, 1)
 	go func() {
-		conn := newUPDConnLocalhost(t)
+		conn := newUDPConnLocalhost(t)
 		_, err := quic.Dial(
 			context.Background(),
-			newUPDConnLocalhost(t),
+			newUDPConnLocalhost(t),
 			conn.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{HandshakeIdleTimeout: scaleDuration(50 * time.Millisecond)}),
@@ -58,10 +58,10 @@ func TestHandshakeTimeoutContext(t *testing.T) {
 	defer cancel()
 	errChan := make(chan error)
 	go func() {
-		conn := newUPDConnLocalhost(t)
+		conn := newUDPConnLocalhost(t)
 		_, err := quic.Dial(
 			ctx,
-			newUPDConnLocalhost(t),
+			newUDPConnLocalhost(t),
 			conn.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -81,10 +81,10 @@ func TestHandshakeTimeout0RTTContext(t *testing.T) {
 	defer cancel()
 	errChan := make(chan error)
 	go func() {
-		conn := newUPDConnLocalhost(t)
+		conn := newUDPConnLocalhost(t)
 		_, err := quic.DialEarly(
 			ctx,
-			newUPDConnLocalhost(t),
+			newUDPConnLocalhost(t),
 			conn.LocalAddr(),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -103,7 +103,7 @@ func TestIdleTimeout(t *testing.T) {
 	idleTimeout := scaleDuration(200 * time.Millisecond)
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -112,16 +112,16 @@ func TestIdleTimeout(t *testing.T) {
 
 	var drop atomic.Bool
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
 	conn, err := quic.Dial(
 		context.Background(),
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, MaxIdleTimeout: idleTimeout}),
@@ -170,7 +170,7 @@ func TestKeepAlive(t *testing.T) {
 	}
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -179,9 +179,9 @@ func TestKeepAlive(t *testing.T) {
 
 	var drop atomic.Bool
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
@@ -190,7 +190,7 @@ func TestKeepAlive(t *testing.T) {
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -239,7 +239,7 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 	}
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -251,7 +251,7 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 	counter, tr := newPacketTracer()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
@@ -312,7 +312,7 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 	}
 
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -321,9 +321,9 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 
 	var drop atomic.Bool
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DropPacket: func(_ quicproxy.Direction, _ []byte) bool { return drop.Load() },
+		DropPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) bool { return drop.Load() },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
@@ -332,7 +332,7 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 	defer cancel()
 	conn, err := quic.Dial(
 		ctx,
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout, DisablePathMTUDiscovery: true}),
@@ -372,14 +372,14 @@ func TestTimeoutAfterSendingPacket(t *testing.T) {
 type faultyConn struct {
 	net.PacketConn
 
-	MaxPackets int32
+	MaxPackets int
 	counter    atomic.Int32
 }
 
 func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	n, addr, err := c.PacketConn.ReadFrom(p)
 	counter := c.counter.Add(1)
-	if counter <= c.MaxPackets {
+	if counter <= int32(c.MaxPackets) {
 		return n, addr, err
 	}
 	return 0, nil, io.ErrClosedPipe
@@ -387,7 +387,7 @@ func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
 
 func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	counter := c.counter.Add(1)
-	if counter <= c.MaxPackets {
+	if counter <= int32(c.MaxPackets) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 	return 0, io.ErrClosedPipe
@@ -435,9 +435,9 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 		return conn.CloseWithError(0, "done")
 	}
 
-	var cconn net.PacketConn = newUPDConnLocalhost(t)
-	var sconn net.PacketConn = newUPDConnLocalhost(t)
-	maxPackets := mrand.Int31n(25)
+	var cconn net.PacketConn = newUDPConnLocalhost(t)
+	var sconn net.PacketConn = newUDPConnLocalhost(t)
+	maxPackets := mrand.IntN(25)
 	t.Logf("blocking %s's connection after %d packets", pers, maxPackets)
 	switch pers {
 	case protocol.PerspectiveClient:

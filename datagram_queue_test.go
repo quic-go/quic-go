@@ -2,13 +2,13 @@ package quic
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/Noooste/quic-go/internal/utils"
 	"github.com/Noooste/quic-go/internal/wire"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -143,18 +143,18 @@ func TestDatagramQueueClose(t *testing.T) {
 		errChan2 <- err
 	}()
 
-	queue.CloseWithError(errors.New("test error"))
+	queue.CloseWithError(assert.AnError)
 
 	select {
 	case err := <-errChan1:
-		require.EqualError(t, err, "test error")
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
 
 	select {
 	case err := <-errChan2:
-		require.EqualError(t, err, "test error")
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}

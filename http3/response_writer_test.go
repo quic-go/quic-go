@@ -2,248 +2,224 @@ package http3
 
 import (
 	"bytes"
-	"github.com/Noooste/fhttp"
 	"io"
-	"time"
+	"net/http"
+	"testing"
 
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
+
 	"github.com/quic-go/qpack"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-var _ = Describe("Response Writer", func() {
-	var (
-		rw     *responseWriter
-		strBuf *bytes.Buffer
+type testResponseWriter struct {
+	*responseWriter
+	buf *bytes.Buffer
+}
+
+func (rw *testResponseWriter) DecodeHeaders(t *testing.T) map[string][]string {
+	t.Helper()
+
+	rw.Flush()
+	rw.flushTrailers()
+	fields := make(map[string][]string)
+	decoder := qpack.NewDecoder(nil)
+
+	frame, err := (&frameParser{r: rw.buf}).ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &headersFrame{}, frame)
+	data := make([]byte, frame.(*headersFrame).Length)
+	_, err = io.ReadFull(rw.buf, data)
+	require.NoError(t, err)
+	hfs, err := decoder.DecodeFull(data)
+	require.NoError(t, err)
+	for _, p := range hfs {
+		fields[p.Name] = append(fields[p.Name], p.Value)
+	}
+	return fields
+}
+
+func (rw *testResponseWriter) DecodeBody(t *testing.T) []byte {
+	t.Helper()
+
+	frame, err := (&frameParser{r: rw.buf}).ParseNext()
+	if err == io.EOF {
+		return nil
+	}
+	require.NoError(t, err)
+	require.IsType(t, &dataFrame{}, frame)
+	body := make([]byte, frame.(*dataFrame).Length)
+	_, err = io.ReadFull(rw.buf, body)
+	require.NoError(t, err)
+	return body
+}
+
+func newTestResponseWriter(t *testing.T) *testResponseWriter {
+	buf := &bytes.Buffer{}
+	mockCtrl := gomock.NewController(t)
+	str := mockquic.NewMockStream(mockCtrl)
+	str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+	str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
+	str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
+	rw := newResponseWriter(newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
+	return &testResponseWriter{responseWriter: rw, buf: buf}
+}
+
+func TestResponseWriterInvalidStatus(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	require.Panics(t, func() { rw.WriteHeader(99) })
+	require.Panics(t, func() { rw.WriteHeader(1000) })
+}
+
+func TestResponseWriterHeader(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Header().Add("Content-Length", "42")
+	rw.WriteHeader(http.StatusTeapot) // 418
+	// repeated WriteHeader calls are ignored
+	rw.WriteHeader(http.StatusInternalServerError)
+
+	// set cookies
+	http.SetCookie(rw, &http.Cookie{Name: "foo", Value: "bar"})
+	http.SetCookie(rw, &http.Cookie{Name: "baz", Value: "lorem ipsum"})
+	// write some data
+	rw.Write([]byte("foobar"))
+
+	fields := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"418"}, fields[":status"])
+	require.Equal(t, []string{"42"}, fields["content-length"])
+	require.Equal(t,
+		[]string{"foo=bar", `baz="lorem ipsum"`},
+		fields["set-cookie"],
+	)
+	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
+}
+
+func TestResponseWriterDataWithoutHeader(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Write([]byte("foobar"))
+
+	fields := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"200"}, fields[":status"])
+	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
+}
+
+func TestResponseWriterDataStatusWithoutBody(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.WriteHeader(http.StatusNotModified)
+	n, err := rw.Write([]byte("foobar"))
+	require.Zero(t, n)
+	require.ErrorIs(t, err, http.ErrBodyNotAllowed)
+
+	fields := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"304"}, fields[":status"])
+	require.Empty(t, rw.DecodeBody(t))
+}
+
+func TestResponseWriterContentLength(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Header().Set("Content-Length", "6")
+	n, err := rw.Write([]byte("foobar"))
+	require.Equal(t, 6, n)
+	require.NoError(t, err)
+
+	n, err = rw.Write([]byte{0x42})
+	require.Zero(t, n)
+	require.ErrorIs(t, err, http.ErrContentLength)
+
+	fields := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"200"}, fields[":status"])
+	require.Equal(t, []string{"6"}, fields["content-length"])
+	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
+}
+
+func TestResponseWriterContentTypeSniffing(t *testing.T) {
+	t.Run("no content type", func(t *testing.T) {
+		testContentTypeSniffing(t, map[string]string{}, "text/html; charset=utf-8")
+	})
+
+	t.Run("explicit content type", func(t *testing.T) {
+		testContentTypeSniffing(t, map[string]string{"Content-Type": "text/plain"}, "text/plain")
+	})
+
+	t.Run("with content encoding", func(t *testing.T) {
+		testContentTypeSniffing(t, map[string]string{"Content-Encoding": "gzip"}, "")
+	})
+}
+
+func testContentTypeSniffing(t *testing.T, hdrs map[string]string, expectedContentType string) {
+	rw := newTestResponseWriter(t)
+	for k, v := range hdrs {
+		rw.Header().Set(k, v)
+	}
+	rw.Write([]byte("<html></html>"))
+
+	fields := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"200"}, fields[":status"])
+	if expectedContentType == "" {
+		require.NotContains(t, fields, "content-type")
+	} else {
+		require.Equal(t, []string{expectedContentType}, fields["content-type"])
+	}
+}
+
+func TestResponseWriterEarlyHints(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Header().Add("Link", "</style.css>; rel=preload; as=style")
+	rw.Header().Add("Link", "</script.js>; rel=preload; as=script")
+	rw.WriteHeader(http.StatusEarlyHints) // status 103
+
+	n, err := rw.Write([]byte("foobar"))
+	require.Equal(t, 6, n)
+	require.NoError(t, err)
+
+	// Early Hints must have been received
+	fields := rw.DecodeHeaders(t)
+	require.Equal(t, 2, len(fields))
+	require.Equal(t, []string{"103"}, fields[":status"])
+	require.Equal(t,
+		[]string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"},
+		fields["link"],
 	)
 
-	BeforeEach(func() {
-		strBuf = &bytes.Buffer{}
-		str := mockquic.NewMockStream(mockCtrl)
-		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-		str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
-		str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
-		rw = newResponseWriter(newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
-	})
+	// headers sent in the informational response must also be included in the final response
+	fields = rw.DecodeHeaders(t)
+	require.Equal(t, 4, len(fields))
+	require.Equal(t, []string{"200"}, fields[":status"])
+	require.Contains(t, fields, "date")
+	require.Contains(t, fields, "content-type")
+	require.Equal(t,
+		[]string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"},
+		fields["link"],
+	)
 
-	decodeHeader := func(str io.Reader) map[string][]string {
-		rw.Flush()
-		rw.flushTrailers()
-		fields := make(map[string][]string)
-		decoder := qpack.NewDecoder(nil)
+	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
+}
 
-		fp := frameParser{r: str}
-		frame, err := fp.ParseNext()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
-		headersFrame := frame.(*headersFrame)
-		data := make([]byte, headersFrame.Length)
-		_, err = io.ReadFull(str, data)
-		Expect(err).ToNot(HaveOccurred())
-		hfs, err := decoder.DecodeFull(data)
-		Expect(err).ToNot(HaveOccurred())
-		for _, p := range hfs {
-			fields[p.Name] = append(fields[p.Name], p.Value)
-		}
-		return fields
-	}
+func TestResponseWriterTrailers(t *testing.T) {
+	rw := newTestResponseWriter(t)
 
-	getData := func(str io.Reader) []byte {
-		fp := frameParser{r: str}
-		frame, err := fp.ParseNext()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		df := frame.(*dataFrame)
-		data := make([]byte, df.Length)
-		_, err = io.ReadFull(str, data)
-		Expect(err).ToNot(HaveOccurred())
-		return data
-	}
+	rw.Header().Add("Trailer", "key")
+	n, err := rw.Write([]byte("foobar"))
+	require.Equal(t, 6, n)
+	require.NoError(t, err)
 
-	It("writes status", func() {
-		rw.WriteHeader(http.StatusTeapot)
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(2))
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"418"}))
-		Expect(fields).To(HaveKey("date"))
-	})
+	// writeTrailers needs to be called after writing the full body
+	headers := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"key"}, headers["trailer"])
+	require.NotContains(t, headers, "foo")
+	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 
-	It("writes headers", func() {
-		rw.Header().Add("content-length", "42")
-		rw.WriteHeader(http.StatusTeapot)
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveKeyWithValue("content-length", []string{"42"}))
-	})
+	// headers set after writing the body are trailers
+	rw.Header().Set("key", "value")                      // announced trailer
+	rw.Header().Set("foo", "bar")                        // this trailer was not announced, and will therefore be ignored
+	rw.Header().Set(http.TrailerPrefix+"lorem", "ipsum") // unannounced trailer with trailer prefix
+	require.NoError(t, rw.writeTrailers())
 
-	It("writes multiple headers with the same name", func() {
-		const cookie1 = "test1=1; Max-Age=7200; path=/"
-		const cookie2 = "test2=2; Max-Age=7200; path=/"
-		rw.Header().Add("set-cookie", cookie1)
-		rw.Header().Add("set-cookie", cookie2)
-		rw.WriteHeader(http.StatusTeapot)
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveKey("set-cookie"))
-		cookies := fields["set-cookie"]
-		Expect(cookies).To(ContainElement(cookie1))
-		Expect(cookies).To(ContainElement(cookie2))
-	})
-
-	It("writes data", func() {
-		n, err := rw.Write([]byte("foobar"))
-		Expect(n).To(Equal(6))
-		Expect(err).ToNot(HaveOccurred())
-		// Should have written 200 on the header stream
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
-		// And foobar on the data stream
-		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
-	})
-
-	It("writes data after WriteHeader is called", func() {
-		rw.WriteHeader(http.StatusTeapot)
-		n, err := rw.Write([]byte("foobar"))
-		Expect(n).To(Equal(6))
-		Expect(err).ToNot(HaveOccurred())
-		// Should have written 418 on the header stream
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"418"}))
-		// And foobar on the data stream
-		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
-	})
-
-	It("does not WriteHeader() twice", func() {
-		rw.WriteHeader(http.StatusOK)
-		rw.WriteHeader(http.StatusInternalServerError)
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(2))
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
-		Expect(fields).To(HaveKey("date"))
-	})
-
-	It("allows calling WriteHeader() several times when using the 103 status code", func() {
-		rw.Header().Add("Link", "</style.css>; rel=preload; as=style")
-		rw.Header().Add("Link", "</script.js>; rel=preload; as=script")
-		rw.WriteHeader(http.StatusEarlyHints)
-
-		n, err := rw.Write([]byte("foobar"))
-		Expect(n).To(Equal(6))
-		Expect(err).ToNot(HaveOccurred())
-
-		// Early Hints must have been received
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(2))
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"103"}))
-		Expect(fields).To(HaveKeyWithValue("link", []string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"}))
-
-		// According to the spec, headers sent in the informational response must also be included in the final response
-		fields = decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(4))
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
-		Expect(fields).To(HaveKey("date"))
-		Expect(fields).To(HaveKey("content-type"))
-		Expect(fields).To(HaveKeyWithValue("link", []string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"}))
-
-		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
-	})
-
-	It("doesn't allow writes if the status code doesn't allow a body", func() {
-		rw.WriteHeader(304)
-		n, err := rw.Write([]byte("foobar"))
-		Expect(n).To(BeZero())
-		Expect(err).To(MatchError(http.ErrBodyNotAllowed))
-	})
-
-	It("first call to Write sniffs if Content-Type is not set", func() {
-		n, err := rw.Write([]byte("<html></html>"))
-		Expect(n).To(Equal(13))
-		Expect(err).ToNot(HaveOccurred())
-
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
-	})
-
-	It(`is compatible with "github.com/Noooste/fhttp".ResponseController`, func() {
-		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
-		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
-	})
-
-	It(`checks Content-Length header`, func() {
-		rw.Header().Set("Content-Length", "6")
-		n, err := rw.Write([]byte("foobar"))
-		Expect(n).To(Equal(6))
-		Expect(err).To(BeNil())
-
-		n, err = rw.Write([]byte("foobar"))
-		Expect(n).To(Equal(0))
-		Expect(err).To(Equal(http.ErrContentLength))
-	})
-
-	It(`panics when writing invalid status`, func() {
-		Expect(func() { rw.WriteHeader(99) }).To(Panic())
-		Expect(func() { rw.WriteHeader(1000) }).To(Panic())
-	})
-
-	It("write announced trailer", func() {
-		rw.Header().Add("Trailer", "Key")
-		rw.WriteHeader(http.StatusTeapot)
-		n, err := rw.Write([]byte("foobar"))
-		Expect(n).To(Equal(6))
-		Expect(err).ToNot(HaveOccurred())
-		rw.Header().Set("Key", "Value")
-
-		// writeTrailers needs to be called after writing the full body
-		Expect(rw.writeTrailers()).ToNot(HaveOccurred())
-
-		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveKeyWithValue(":status", []string{"418"}))
-		Expect(fields).To(HaveKeyWithValue("trailer", []string{"Key"}))
-		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
-
-		fields = decodeHeader(strBuf)
-		Expect(fields).To(HaveKeyWithValue("key", []string{"Value"}))
-	})
-
-	It("ignore non-announced trailer (without trailer prefix)", func() {
-		rw.Header().Set("Trailer", "Key")
-		rw.WriteHeader(200)
-		rw.Write([]byte("foobar"))
-		rw.Header().Set("UnknownKey", "Value")
-		rw.Header().Set("Key", "Value")
-
-		// Needs to call writeTrailers to simulate the end of the handler
-		Expect(rw.writeTrailers()).ToNot(HaveOccurred())
-		headers := decodeHeader(strBuf)
-		Expect(headers).To(HaveKeyWithValue(":status", []string{"200"}))
-		Expect(headers).To(HaveKeyWithValue("trailer", []string{"Key"}))
-
-		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
-
-		trailers := decodeHeader(strBuf)
-		Expect(trailers).To(HaveKeyWithValue("key", []string{"Value"}))
-		Expect(trailers).To(Not(HaveKeyWithValue("unknownkey", []string{"Value"})))
-	})
-
-	It("write non-announced trailer (with trailer prefix)", func() {
-		rw.Header().Set("Trailer", "Key")
-		rw.WriteHeader(200)
-		rw.Write([]byte("foobar"))
-		rw.Header().Set("Key", "Value")
-		rw.Header().Set(http.TrailerPrefix+"Key2", "Value")
-		rw.Flush()
-
-		// Needs to call writeTrailers to simulate the end of the handler
-		Expect(rw.writeTrailers()).ToNot(HaveOccurred())
-		headers := decodeHeader(strBuf)
-		Expect(headers).To(HaveKeyWithValue(":status", []string{"200"}))
-		Expect(headers).To(HaveKeyWithValue("trailer", []string{"Key"}))
-
-		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
-
-		trailers := decodeHeader(strBuf)
-		Expect(trailers).To(HaveKeyWithValue("key", []string{"Value"}))
-		Expect(trailers).To(HaveKeyWithValue("key2", []string{"Value"}))
-	})
-})
+	trailers := rw.DecodeHeaders(t)
+	require.Equal(t, []string{"value"}, trailers["key"])
+	require.Equal(t, []string{"ipsum"}, trailers["lorem"])
+	// trailers without the trailer prefix that were not announced are ignored
+	require.NotContains(t, trailers, "foo")
+}

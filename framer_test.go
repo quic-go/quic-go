@@ -2,15 +2,15 @@ package quic
 
 import (
 	"bytes"
+	"encoding/binary"
+	"math/rand/v2"
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
-
-	"github.com/Noooste/quic-go/internal/ackhandler"
-	"github.com/Noooste/quic-go/internal/flowcontrol"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/ackhandler"
+	"github.com/quic-go/quic-go/internal/flowcontrol"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -232,7 +232,7 @@ func TestFramerDetectsFramePathResponseDoS(t *testing.T) {
 	var pathResponses []*wire.PathResponseFrame
 	for i := 0; i < 2*maxPathResponses; i++ {
 		var f wire.PathResponseFrame
-		rand.Read(f.Data[:])
+		binary.BigEndian.PutUint64(f.Data[:], rand.Uint64())
 		pathResponses = append(pathResponses, &f)
 		framer.QueueControlFrame(&f)
 	}

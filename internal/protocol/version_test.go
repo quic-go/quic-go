@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -95,21 +96,36 @@ func TestVersionSelection(t *testing.T) {
 
 func isReservedVersion(v Version) bool { return v&0x0f0f0f0f == 0x0a0a0a0a }
 
-func TestAddGreasedVersionToEmptySlice(t *testing.T) {
+func TestVersionGreasing(t *testing.T) {
+	// adding to an empty slice
 	greased := GetGreasedVersions([]Version{})
 	require.Len(t, greased, 1)
 	require.True(t, isReservedVersion(greased[0]))
-}
 
-func TestAddGreasedVersion(t *testing.T) {
+	// make sure that the greased versions are distinct,
+	// allowing for a small number of duplicates
+	var versions []Version
+	for range 25 {
+		versions = GetGreasedVersions(versions)
+	}
+	slices.Sort(versions)
+	var numDuplicates int
+	for i, v := range versions {
+		require.True(t, isReservedVersion(v))
+		if i > 0 && versions[i-1] == v {
+			numDuplicates++
+		}
+	}
+	require.LessOrEqual(t, numDuplicates, 3)
+
+	// adding it somewhere in a slice of supported versions
 	supported := []Version{10, 18, 29}
 	for _, v := range supported {
 		require.False(t, isReservedVersion(v))
 	}
 
 	var greasedVersionFirst, greasedVersionLast, greasedVersionMiddle int
-
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		greased := GetGreasedVersions(supported)
 		require.Len(t, greased, 4)
 
@@ -129,7 +145,6 @@ func TestAddGreasedVersion(t *testing.T) {
 			j++
 		}
 	}
-
 	require.NotZero(t, greasedVersionFirst)
 	require.NotZero(t, greasedVersionLast)
 	require.NotZero(t, greasedVersionMiddle)

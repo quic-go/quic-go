@@ -2,25 +2,25 @@ package handshake
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"github.com/Noooste/utls"
 	"io"
 	"log"
 	"math"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"time"
 
-	"github.com/Noooste/quic-go/fuzzing/internal/helper"
-	"github.com/Noooste/quic-go/internal/handshake"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qtls"
-	"github.com/Noooste/quic-go/internal/utils"
-	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/fuzzing/internal/helper"
+	"github.com/quic-go/quic-go/internal/handshake"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qtls"
+	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 var (
@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	priv, err := rsa.GenerateKey(rand.Reader, 1024)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func init() {
 		log.Fatal(err)
 	}
 
-	privClient, err := rsa.GenerateKey(rand.Reader, 1024)
+	_, privClient, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,13 +120,13 @@ func toEncryptionLevel(n uint8) protocol.EncryptionLevel {
 
 func getTransportParameters(seed uint8) *wire.TransportParameters {
 	const maxVarInt = math.MaxUint64 / 4
-	r := mrand.New(mrand.NewSource(int64(seed)))
+	r := mrand.New(mrand.NewPCG(uint64(seed), uint64(seed)))
 	return &wire.TransportParameters{
 		ActiveConnectionIDLimit:        2,
-		InitialMaxData:                 protocol.ByteCount(r.Int63n(maxVarInt)),
-		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.Int63n(maxVarInt)),
-		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.Int63n(maxVarInt)),
-		InitialMaxStreamDataUni:        protocol.ByteCount(r.Int63n(maxVarInt)),
+		InitialMaxData:                 protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxStreamDataUni:        protocol.ByteCount(r.IntN(maxVarInt)),
 	}
 }
 
@@ -183,7 +183,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	}
 
 	// This sets the cipher suite for both client and server.
-	// The way github.com/Noooste/utls is designed doesn't allow us to set different cipher suites for client and server.
+	// The way crypto/tls is designed doesn't allow us to set different cipher suites for client and server.
 	resetCipherSuite := func() {}
 	switch (runConfig[0] >> 6) % 4 {
 	case 0:

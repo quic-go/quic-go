@@ -492,10 +492,14 @@ var _ gojay.MarshalerJSONObject = &preferredAddress{}
 
 func (a preferredAddress) IsNil() bool { return false }
 func (a preferredAddress) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("ip_v4", a.IPv4.Addr().String())
-	enc.Uint16Key("port_v4", a.IPv4.Port())
-	enc.StringKey("ip_v6", a.IPv6.Addr().String())
-	enc.Uint16Key("port_v6", a.IPv6.Port())
+	if a.IPv4.IsValid() {
+		enc.StringKey("ip_v4", a.IPv4.Addr().String())
+		enc.Uint16Key("port_v4", a.IPv4.Port())
+	}
+	if a.IPv6.IsValid() {
+		enc.StringKey("ip_v6", a.IPv6.Addr().String())
+		enc.Uint16Key("port_v6", a.IPv6.Port())
+	}
 	enc.StringKey("connection_id", a.ConnectionID.String())
 	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", a.StatelessResetToken))
 }

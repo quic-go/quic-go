@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
-	"github.com/Noooste/utls"
 	"io"
 	"log"
 	"math/big"
 
-	"github.com/Noooste/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 const addr = "localhost:4242"
@@ -24,8 +23,7 @@ const message = "foobar"
 func main() {
 	go func() { log.Fatal(echoServer()) }()
 
-	err := clientMain()
-	if err != nil {
+	if err := clientMain(); err != nil {
 		panic(err)
 	}
 }
@@ -72,14 +70,12 @@ func clientMain() error {
 	defer stream.Close()
 
 	fmt.Printf("Client: Sending '%s'\n", message)
-	_, err = stream.Write([]byte(message))
-	if err != nil {
+	if _, err := stream.Write([]byte(message)); err != nil {
 		return err
 	}
 
 	buf := make([]byte, len(message))
-	_, err = io.ReadFull(stream, buf)
-	if err != nil {
+	if _, err := io.ReadFull(stream, buf); err != nil {
 		return err
 	}
 	fmt.Printf("Client: Got '%s'\n", buf)
@@ -97,24 +93,21 @@ func (w loggingWriter) Write(b []byte) (int, error) {
 
 // Setup a bare-bones TLS config for the server
 func generateTLSConfig() *tls.Config {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		panic(err)
 	}
 	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.Public(), priv)
 	if err != nil {
 		panic(err)
 	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		panic(err)
-	}
 	return &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		NextProtos:   []string{"quic-echo-example"},
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{certDER},
+			PrivateKey:  priv,
+		}},
+		NextProtos: []string{"quic-echo-example"},
 	}
 }

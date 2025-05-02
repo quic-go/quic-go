@@ -297,7 +297,7 @@ func (c *mockBatchConn) ReadBatch(ms []ipv4.Message, _ int) (int, error) {
 func TestReadsMultipleMessagesInOneBatch(t *testing.T) {
 	bc := &mockBatchConn{t: t, numMsgRead: batchSize/2 + 1}
 
-	udpConn := newUPDConnLocalhost(t)
+	udpConn := newUDPConnLocalhost(t)
 	oobConn, err := newConn(udpConn, true)
 	require.NoError(t, err)
 	oobConn.batchConn = bc

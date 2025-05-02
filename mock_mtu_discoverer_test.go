@@ -119,6 +119,42 @@ func (c *MockMTUDiscovererGetPingCall) DoAndReturn(f func(time.Time) (ackhandler
 	return c
 }
 
+// Reset mocks base method.
+func (m *MockMTUDiscoverer) Reset(now time.Time, start, max protocol.ByteCount) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Reset", now, start, max)
+}
+
+// Reset indicates an expected call of Reset.
+func (mr *MockMTUDiscovererMockRecorder) Reset(now, start, max any) *MockMTUDiscovererResetCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockMTUDiscoverer)(nil).Reset), now, start, max)
+	return &MockMTUDiscovererResetCall{Call: call}
+}
+
+// MockMTUDiscovererResetCall wrap *gomock.Call
+type MockMTUDiscovererResetCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockMTUDiscovererResetCall) Return() *MockMTUDiscovererResetCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockMTUDiscovererResetCall) Do(f func(time.Time, protocol.ByteCount, protocol.ByteCount)) *MockMTUDiscovererResetCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockMTUDiscovererResetCall) DoAndReturn(f func(time.Time, protocol.ByteCount, protocol.ByteCount)) *MockMTUDiscovererResetCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // ShouldSendProbe mocks base method.
 func (m *MockMTUDiscoverer) ShouldSendProbe(now time.Time) bool {
 	m.ctrl.T.Helper()

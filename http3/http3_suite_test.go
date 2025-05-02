@@ -1,8 +1,7 @@
 package http3
 
 import (
-	"github.com/Noooste/fhttp"
-	"io"
+	"net"
 	"os"
 	"strconv"
 	"testing"
@@ -10,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -18,12 +18,12 @@ func TestHttp3(t *testing.T) {
 	RunSpecs(t, "HTTP/3 Suite")
 }
 
-func mustNewRequest(method, url string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		panic(err)
-	}
-	return req
+func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
+	t.Helper()
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 var mockCtrl *gomock.Controller

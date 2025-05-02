@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/Noooste/quic-go/internal/ackhandler"
 	"github.com/Noooste/quic-go/internal/protocol"
@@ -28,65 +29,148 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 		func(id pathID) { retiredConnIDs = append(retiredConnIDs, connIDs[id]) },
 		utils.DefaultLogger,
 	)
-	connID, f1, shouldSwitch := pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, false)
+	now := time.Now()
+	connID, frames, shouldSwitch := pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		&wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+		false,
+	)
 	require.Equal(t, connIDs[0], connID)
-	require.NotNil(t, f1.Frame)
-	pc1 := f1.Frame.(*wire.PathChallengeFrame)
+	require.Len(t, frames, 2)
+	require.IsType(t, &wire.PathChallengeFrame{}, frames[0].Frame)
+	pc1 := frames[0].Frame.(*wire.PathChallengeFrame)
 	require.NotZero(t, pc1.Data)
+	require.NotEqual(t, [8]byte{1, 2, 3, 4, 5, 6, 7, 8}, pc1.Data)
+	require.IsType(t, &wire.PathResponseFrame{}, frames[1].Frame)
+	require.Equal(t, [8]byte{1, 2, 3, 4, 5, 6, 7, 8}, frames[1].Frame.(*wire.PathResponseFrame).Data)
 	require.False(t, shouldSwitch)
 
 	// receiving another packet for the same path doesn't trigger another PATH_CHALLENGE
-	connID, f, shouldSwitch := pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, false)
+	connID, frames, shouldSwitch = pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		nil,
+		false,
+	)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Len(t, frames, 0)
 	require.False(t, shouldSwitch)
 
 	// receiving a packet for a different path triggers another PATH_CHALLENGE
 	addr2 := &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000}
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: addr2}, false)
+	connID, frames, shouldSwitch = pm.HandlePacket(addr2, now, nil, false)
 	require.Equal(t, connIDs[1], connID)
-	require.NotNil(t, f.Frame)
-	pc2 := f.Frame.(*wire.PathChallengeFrame)
+	require.Len(t, frames, 1)
+	require.IsType(t, &wire.PathChallengeFrame{}, frames[0].Frame)
+	pc2 := frames[0].Frame.(*wire.PathChallengeFrame)
 	require.NotEqual(t, pc1.Data, pc2.Data)
 	require.False(t, shouldSwitch)
 
 	// acknowledging the PATH_CHALLENGE doesn't confirm the path
-	f1.Handler.OnAcked(f1.Frame)
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, false)
+	for _, f := range frames {
+		f.Handler.OnAcked(f.Frame)
+	}
+	connID, frames, shouldSwitch = pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		nil,
+		false,
+	)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 	require.False(t, shouldSwitch)
 
 	// receiving a PATH_RESPONSE for the second path confirms the path
 	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc2.Data})
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: addr2}, false)
+	connID, frames, shouldSwitch = pm.HandlePacket(addr2, now, nil, false)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 	require.False(t, shouldSwitch) // no non-probing packet received yet
 	require.Empty(t, retiredConnIDs)
 
 	// confirming the path doesn't remove other paths
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, false)
+	connID, frames, shouldSwitch = pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		nil,
+		false,
+	)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 	require.False(t, shouldSwitch)
 
 	// now receive a non-probing packet for the new path
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000}}, true)
+	connID, frames, shouldSwitch = pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000},
+		now,
+		nil,
+		true,
+	)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 	require.True(t, shouldSwitch)
 
 	// now switch to the new path
 	pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000})
 
 	// switching to the path removes other paths
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, false)
+	connID, frames, shouldSwitch = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, false)
 	require.Equal(t, connIDs[2], connID)
-	require.NotNil(t, f.Frame)
-	require.NotEqual(t, f.Frame.(*wire.PathChallengeFrame).Data, pc1.Data)
+	require.NotEmpty(t, frames)
+	require.NotEqual(t, frames[0].Frame.(*wire.PathChallengeFrame).Data, pc1.Data)
 	require.False(t, shouldSwitch)
 	require.Equal(t, []protocol.ConnectionID{connIDs[0]}, retiredConnIDs)
+}
+
+func TestPathManagerMultipleProbes(t *testing.T) {
+	connIDs := []protocol.ConnectionID{
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+	}
+	pm := newPathManager(
+		func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
+		func(id pathID) {},
+		utils.DefaultLogger,
+	)
+	now := time.Now()
+	// first receive a packet without a PATH_CHALLENGE
+	connID, frames, shouldSwitch := pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		nil,
+		false,
+	)
+	require.Equal(t, connIDs[0], connID)
+	require.Len(t, frames, 1)
+	require.IsType(t, &wire.PathChallengeFrame{}, frames[0].Frame)
+	require.False(t, shouldSwitch)
+
+	// now receive a packet on the same path with a PATH_CHALLENGE
+	connID, frames, shouldSwitch = pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		&wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+		false,
+	)
+	require.Equal(t, connIDs[0], connID)
+	require.Len(t, frames, 1)
+	require.Equal(t, &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, frames[0].Frame)
+	require.False(t, shouldSwitch)
+
+	// now receive another packet on the same path with a PATH_RESPONSE
+	connID, frames, shouldSwitch = pm.HandlePacket(
+		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
+		now,
+		&wire.PathChallengeFrame{Data: [8]byte{8, 7, 6, 5, 4, 3, 2, 1}},
+		false,
+	)
+	require.Equal(t, connIDs[0], connID)
+	require.Len(t, frames, 1)
+	require.Equal(t, &wire.PathResponseFrame{Data: [8]byte{8, 7, 6, 5, 4, 3, 2, 1}}, frames[0].Frame)
+	require.False(t, shouldSwitch)
+
+	// lose the response packet
+	frames[0].Handler.OnLost(frames[0].Frame)
 }
 
 // The first packet received on the new path is already a non-probing packet.
@@ -103,25 +187,27 @@ func TestPathManagerNATRebinding(t *testing.T) {
 		utils.DefaultLogger,
 	)
 
-	connID, f, shouldSwitch := pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, true)
+	now := time.Now()
+	connID, frames, shouldSwitch := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, true)
 	require.Equal(t, connIDs[0], connID)
-	require.NotNil(t, f.Frame)
-	pc1 := f.Frame.(*wire.PathChallengeFrame)
+	require.Len(t, frames, 1)
+	require.IsType(t, &wire.PathChallengeFrame{}, frames[0].Frame)
+	pc1 := frames[0].Frame.(*wire.PathChallengeFrame)
 	require.NotZero(t, pc1.Data)
 	require.False(t, shouldSwitch)
 
 	// receiving a PATH_RESPONSE for the second path confirms the path
 	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc1.Data})
 	// we now switch to the new path, as soon as the next packet on that path is received
-	connID, f, shouldSwitch = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}}, false)
+	connID, frames, shouldSwitch = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, false)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 	require.True(t, shouldSwitch)
 }
 
 func TestPathManagerLimits(t *testing.T) {
 	var connIDs []protocol.ConnectionID
-	for range 2*maxPaths + 1 {
+	for range 2*maxPaths + 2 {
 		b := make([]byte, 8)
 		rand.Read(b)
 		connIDs = append(connIDs, protocol.ParseConnectionID(b))
@@ -133,42 +219,61 @@ func TestPathManagerLimits(t *testing.T) {
 		utils.DefaultLogger,
 	)
 
+	now := time.Now()
+	firstPathTime := now
+	var firstPathConnID protocol.ConnectionID
+	require.Greater(t, pathTimeout, maxPaths*time.Second)
 	for i := range maxPaths {
-		connID, f, _ := pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + i}}, true)
-		require.NotNil(t, f.Frame)
+		connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + i}, now, nil, true)
+		require.NotEmpty(t, frames)
 		require.Equal(t, connIDs[i], connID)
+		if i == 0 {
+			firstPathConnID = connID
+		}
+		now = now.Add(time.Second)
 	}
 	// the maximum number of paths is already being probed
-	connID, f, _ := pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}}, true)
+	now = firstPathTime.Add(pathTimeout).Add(-time.Nanosecond)
+	connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
+
+	// receiving another packet after the pathTimeout of the first path evicts the first path
+	now = firstPathTime.Add(pathTimeout)
+	connIDIndex := maxPaths
+	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths}, now, nil, true)
+	require.NotEmpty(t, frames)
+	require.Equal(t, connIDs[connIDIndex], connID)
+	require.Equal(t, []protocol.ConnectionID{firstPathConnID}, retiredConnIDs)
+	connIDIndex++
 
 	// switching to a new path frees is up all paths
-	var f1 ackhandler.Frame
+	var f1 []ackhandler.Frame
 	pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000})
 	for i := range maxPaths {
-		connID, f, _ := pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3000 + i}}, true)
+		connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3000 + i}, now, nil, true)
 		if i == 0 {
-			f1 = f
+			f1 = frames
 		}
-		require.NotNil(t, f.Frame)
-		require.Equal(t, connIDs[maxPaths+i], connID)
+		require.NotEmpty(t, frames)
+		require.Equal(t, connIDs[connIDIndex], connID)
+		connIDIndex++
 	}
 	// again, the maximum number of paths is already being probed
-	connID, f, _ = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}}, true)
+	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 
 	// losing the frame removes this path
-	f1.Handler.OnLost(f1.Frame)
+	f1[0].Handler.OnLost(f1[0].Frame)
 
 	// we can open exactly one more path
-	connID, f, _ = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4000}}, true)
-	require.NotNil(t, f.Frame)
-	require.Equal(t, connIDs[2*maxPaths], connID)
-	connID, f, _ = pm.HandlePacket(receivedPacket{remoteAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4001}}, true)
+	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4000}, now, nil, true)
+	require.NotEmpty(t, frames)
+	require.Equal(t, connIDs[connIDIndex], connID)
+	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4001}, now, nil, true)
 	require.Zero(t, connID)
-	require.Nil(t, f.Frame)
+	require.Empty(t, frames)
 }
 
 type mockAddr struct {

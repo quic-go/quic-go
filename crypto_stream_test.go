@@ -91,11 +91,17 @@ func TestCryptoStreamWrite(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, str.HasData())
 
-	f := str.PopCryptoFrame(expectedCryptoFrameLen(0) + 3)
-	require.Equal(t, &wire.CryptoFrame{Data: []byte("foo")}, f)
+	for i := range expectedCryptoFrameLen(0) {
+		require.Nil(t, str.PopCryptoFrame(i))
+	}
+
+	f := str.PopCryptoFrame(expectedCryptoFrameLen(0) + 1)
+	require.Equal(t, &wire.CryptoFrame{Data: []byte("f")}, f)
 	require.True(t, str.HasData())
+	f = str.PopCryptoFrame(expectedCryptoFrameLen(1) + 3)
+	// the three write calls were coalesced into a single frame
+	require.Equal(t, &wire.CryptoFrame{Offset: 1, Data: []byte("oob")}, f)
 	f = str.PopCryptoFrame(protocol.MaxByteCount)
-	// the two write calls were coalesced into a single frame
-	require.Equal(t, &wire.CryptoFrame{Offset: 3, Data: []byte("barbaz")}, f)
+	require.Equal(t, &wire.CryptoFrame{Offset: 4, Data: []byte("arbaz")}, f)
 	require.False(t, str.HasData())
 }

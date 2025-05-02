@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"fmt"
+	"iter"
 
 	"github.com/Noooste/quic-go/internal/protocol"
 )
@@ -68,23 +69,25 @@ func (h *sentPacketHistory) SentPathProbePacket(p *packet) {
 	h.pathProbePackets = append(h.pathProbePackets, p)
 }
 
-// Iterate iterates through all packets.
-func (h *sentPacketHistory) Iterate(cb func(*packet) (cont bool)) {
-	for _, p := range h.packets {
-		if p == nil {
-			continue
-		}
-		if cont := cb(p); !cont {
-			return
+func (h *sentPacketHistory) Packets() iter.Seq[*packet] {
+	return func(yield func(*packet) bool) {
+		for _, p := range h.packets {
+			if p == nil {
+				continue
+			}
+			if !yield(p) {
+				return
+			}
 		}
 	}
 }
 
-// IteratePathProbes iterates through all packets.
-func (h *sentPacketHistory) IteratePathProbes(cb func(*packet) (cont bool)) {
-	for _, p := range h.pathProbePackets {
-		if cont := cb(p); !cont {
-			return
+func (h *sentPacketHistory) PathProbes() iter.Seq[*packet] {
+	return func(yield func(*packet) bool) {
+		for _, p := range h.pathProbePackets {
+			if !yield(p) {
+				return
+			}
 		}
 	}
 }

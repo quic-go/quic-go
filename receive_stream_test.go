@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"github.com/Noooste/quic-go/internal/protocol"
 	"github.com/Noooste/quic-go/internal/wire"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -349,11 +349,10 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 	case <-time.After(scaleDuration(5 * time.Millisecond)): // short wait to ensure read is blocked
 	}
 
-	testErr := errors.New("test error")
-	str.closeForShutdown(testErr)
+	str.closeForShutdown(assert.AnError)
 	select {
 	case err := <-errChan:
-		require.ErrorIs(t, err, testErr)
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("read did not return after closeForShutdown")
 	}
@@ -361,19 +360,19 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 	// following calls to Read should return the error
 	n, err := strWithTimeout.Read([]byte{0})
 	require.Zero(t, n)
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 
 	// receiving a RESET_STREAM frame after closeForShutdown does nothing
 	require.NoError(t, str.handleResetStreamFrame(&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 1234, FinalSize: 42}, time.Now()))
 	n, err = strWithTimeout.Read([]byte{0})
 	require.Zero(t, n)
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 
 	// calling CancelRead after closeForShutdown does nothing
 	str.CancelRead(1234)
 	n, err = strWithTimeout.Read([]byte{0})
 	require.Zero(t, n)
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 }
 
 func TestReceiveStreamCancellation(t *testing.T) {

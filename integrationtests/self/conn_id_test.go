@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"testing"
 	"time"
 
@@ -33,7 +33,7 @@ func (c *connIDGenerator) GenerateConnectionID() (quic.ConnectionID, error) {
 
 func (c *connIDGenerator) ConnectionIDLen() int { return c.Length }
 
-func randomConnIDLen() int { return 2 + int(mrand.Int31n(19)) }
+func randomConnIDLen() int { return 2 + mrand.IntN(19) }
 
 func TestConnectionIDsZeroLength(t *testing.T) {
 	testTransferWithConnectionIDs(t, randomConnIDLen(), 0, nil, nil)
@@ -71,7 +71,7 @@ func testTransferWithConnectionIDs(
 
 	// setup server
 	serverTr := &quic.Transport{
-		Conn:                  newUPDConnLocalhost(t),
+		Conn:                  newUDPConnLocalhost(t),
 		ConnectionIDLength:    serverConnIDLen,
 		ConnectionIDGenerator: serverConnIDGenerator,
 	}
@@ -99,11 +99,11 @@ func testTransferWithConnectionIDs(
 		},
 	})
 	if clientConnIDGenerator == nil && clientConnIDLen == 0 {
-		conn, err = quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), clientQUICConf)
+		conn, err = quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), clientQUICConf)
 		require.NoError(t, err)
 	} else {
 		clientTr := &quic.Transport{
-			Conn:                  newUPDConnLocalhost(t),
+			Conn:                  newUDPConnLocalhost(t),
 			ConnectionIDLength:    clientConnIDLen,
 			ConnectionIDGenerator: clientConnIDGenerator,
 		}

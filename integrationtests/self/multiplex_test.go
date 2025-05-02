@@ -3,17 +3,17 @@ package self_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	mrand "math/rand/v2"
 	"net"
 	"runtime"
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
-
-	"github.com/Noooste/quic-go"
+	"github.com/quic-go/quic-go"
 
 	"github.com/stretchr/testify/require"
 )
@@ -59,12 +59,12 @@ func dialAndReceiveData(tr *quic.Transport, addr net.Addr) error {
 }
 
 func TestMultiplexesConnectionsToSameServer(t *testing.T) {
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 	go runMultiplexTestServer(t, server)
 
-	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -88,17 +88,17 @@ func TestMultiplexesConnectionsToSameServer(t *testing.T) {
 }
 
 func TestMultiplexingToDifferentServers(t *testing.T) {
-	server1, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server1, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server1.Close()
 	go runMultiplexTestServer(t, server1)
 
-	server2, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server2, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server2.Close()
 	go runMultiplexTestServer(t, server2)
 
-	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -122,7 +122,7 @@ func TestMultiplexingToDifferentServers(t *testing.T) {
 }
 
 func TestMultiplexingConnectToSelf(t *testing.T) {
-	tr := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	addTracer(tr)
 	defer tr.Close()
 
@@ -147,14 +147,14 @@ func TestMultiplexingServerAndClientOnSameConn(t *testing.T) {
 		t.Skip("This test requires setting of iptables rules on Linux, see https://stackoverflow.com/questions/23859164/linux-udp-socket-sendto-operation-not-permitted.")
 	}
 
-	tr1 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr1 := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	addTracer(tr1)
 	defer tr1.Close()
 	server1, err := tr1.Listen(getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server1.Close()
 
-	tr2 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr2 := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	addTracer(tr2)
 	defer tr2.Close()
 	server2, err := tr2.Listen(getTLSConfig(), getQuicConfig(nil))
@@ -188,14 +188,14 @@ func TestMultiplexingServerAndClientOnSameConn(t *testing.T) {
 func TestMultiplexingNonQUICPackets(t *testing.T) {
 	const numPackets = 100
 
-	tr1 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr1 := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	defer tr1.Close()
 	addTracer(tr1)
 	server, err := tr1.Listen(getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	tr2 := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	tr2 := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	defer tr2.Close()
 	addTracer(tr2)
 
@@ -235,11 +235,14 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 	errChanNonQUIC := make(chan error, 1)
 	sendNonQUICPacket := make(chan struct{}, 1)
 	go func() {
+		var seed [32]byte
+		rand.Read(seed[:])
+		random := mrand.NewChaCha8(seed)
 		defer close(errChanNonQUIC)
 		var sentPackets int
 		for range sendNonQUICPacket {
 			b := make([]byte, packetLen)
-			rand.Read(b[1:]) // keep the first byte set to 0, so it's not classified as a QUIC packet
+			random.Read(b[1:]) // keep the first byte set to 0, so it's not classified as a QUIC packet
 			_, err := tr1.WriteTo(b, tr2.Conn.LocalAddr())
 			// The first sendmsg call on a new UDP socket sometimes errors on Linux.
 			// It's not clear why this happens.
@@ -261,9 +264,13 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 	go func() {
 		defer close(errChanQUIC)
 		defer serverStr.Close()
+
+		var seed [32]byte
+		rand.Read(seed[:])
+		random := mrand.NewChaCha8(seed)
 		for range sendQUICPacket {
 			b := make([]byte, 1024)
-			rand.Read(b)
+			random.Read(b)
 			if _, err := serverStr.Write(b); err != nil {
 				errChanQUIC <- err
 				return
@@ -326,10 +333,7 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 	minExpected := numPackets * 4 / 5
 	timeout := time.After(time.Second)
 	var counter int
-	for {
-		if counter >= minExpected {
-			break
-		}
+	for counter < minExpected {
 		select {
 		case p := <-rcvdPackets:
 			require.Equal(t, tr1.Conn.LocalAddr(), p.addr, "non-QUIC packet received from wrong address")

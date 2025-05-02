@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"sync"
 	"testing"
 	"time"
@@ -70,7 +70,7 @@ func TestTracerHandshake(t *testing.T) {
 			quicClientConf := addTracers(protocol.PerspectiveClient, getQuicConfig(nil))
 			quicServerConf := addTracers(protocol.PerspectiveServer, getQuicConfig(nil))
 
-			ln, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), quicServerConf)
+			ln, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), quicServerConf)
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, ln.Close()) })
 
@@ -81,7 +81,7 @@ func TestTracerHandshake(t *testing.T) {
 					defer wg.Done()
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
-					conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), ln.Addr(), getTLSClientConfig(), quicClientConf)
+					conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), quicClientConf)
 					require.NoError(t, err)
 					defer conn.CloseWithError(0, "")
 

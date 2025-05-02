@@ -4,533 +4,468 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
-	"sync"
+	"math/rand/v2"
+	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/wire"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Streams Map (outgoing)", func() {
-	var (
-		m                   *outgoingStreamsMap[*mockGenericStream]
-		newStr              func(num protocol.StreamNum) *mockGenericStream
-		queuedControlFrames []wire.Frame
+func TestStreamsMapOutgoingOpenAndDelete(t *testing.T) {
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) {},
 	)
+	m.SetMaxStream(protocol.MaxStreamCount)
 
-	const streamType = 42
+	_, err := m.GetStream(1)
+	require.Error(t, err)
+	require.ErrorContains(t, err.(streamError).TestError(), "peer attempted to open stream 1")
 
-	// waitForEnqueued waits until there are n go routines waiting on OpenStreamSync()
-	waitForEnqueued := func(n int) {
-		Eventually(func() int {
-			m.mutex.Lock()
-			defer m.mutex.Unlock()
-			return len(m.openQueue)
-		}, scaleDuration(100*time.Millisecond), scaleDuration(10*time.Microsecond)).Should(Equal(n))
+	str1, err := m.OpenStream()
+	require.NoError(t, err)
+	require.Equal(t, protocol.StreamNum(1), str1.num)
+	s, err := m.GetStream(1)
+	require.NoError(t, err)
+	require.Equal(t, s, str1)
+
+	str2, err := m.OpenStream()
+	require.NoError(t, err)
+	require.Equal(t, protocol.StreamNum(2), str2.num)
+
+	// update send window
+	m.UpdateSendWindow(1000)
+	require.Equal(t, protocol.ByteCount(1000), str1.sendWindow)
+	require.Equal(t, protocol.ByteCount(1000), str2.sendWindow)
+
+	err = m.DeleteStream(1337)
+	require.Error(t, err)
+	require.ErrorContains(t, err.(streamError).TestError(), "tried to delete unknown outgoing stream 1337")
+
+	require.NoError(t, m.DeleteStream(1))
+	// deleting the same stream twice will fail
+	err = m.DeleteStream(1)
+	require.Error(t, err)
+	require.ErrorContains(t, err.(streamError).TestError(), "tried to delete unknown outgoing stream 1")
+	// after deleting the stream it's not available anymore
+	str, err := m.GetStream(1)
+	require.NoError(t, err)
+	require.Nil(t, str)
+}
+
+func TestStreamsMapOutgoingLimits(t *testing.T) {
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) {},
+	)
+	m.SetMaxStream(1)
+
+	str, err := m.OpenStream()
+	require.NoError(t, err)
+	require.Equal(t, protocol.StreamNum(1), str.num)
+
+	// We've now reached the limit. OpenStream returns an error
+	_, err = m.OpenStream()
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
+
+	// OpenStreamSync with a canceled context will return an error immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = m.OpenStreamSync(ctx)
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
+
+	// OpenStreamSync blocks until the context is canceled...
+	ctx, cancel = context.WithCancel(context.Background())
+	errChan := make(chan error, 1)
+	go func() {
+		_, err := m.OpenStreamSync(ctx)
+		errChan <- err
+	}()
+
+	select {
+	case <-errChan:
+		t.Fatal("didn't expect OpenStreamSync to return")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+	// OpenStream still returns an error
+	_, err = m.OpenStream()
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
+	// cancelling the context unblocks OpenStreamSync
+	cancel()
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the context was canceled")
 	}
 
-	BeforeEach(func() {
-		queuedControlFrames = []wire.Frame{}
-		newStr = func(num protocol.StreamNum) *mockGenericStream {
-			return &mockGenericStream{num: num}
+	// ... or until it's possible to open a new stream
+	var openedStream *mockGenericStream
+	go func() {
+		str, err := m.OpenStreamSync(context.Background())
+		openedStream = str
+		errChan <- err
+	}()
+	m.SetMaxStream(2)
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+		require.Equal(t, protocol.StreamNum(2), openedStream.num)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the stream limit was increased")
+	}
+}
+
+func TestStreamsMapOutgoingConcurrentOpenStreamSync(t *testing.T) {
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) {},
+	)
+
+	type result struct {
+		index  int
+		stream *mockGenericStream
+		err    error
+	}
+
+	results := make(chan result, 3)
+	for i := range 3 {
+		go func(i int) {
+			str, err := m.OpenStreamSync(context.Background())
+			results <- result{index: i + 1, stream: str, err: err}
+		}(i)
+		time.Sleep(scaleDuration(10 * time.Millisecond))
+	}
+
+	m.SetMaxStream(2)
+	received := make(map[protocol.StreamNum]struct{})
+	for range 2 {
+		select {
+		case res := <-results:
+			require.NoError(t, res.err)
+			require.Equal(t, res.index, int(res.stream.num))
+			received[res.stream.num] = struct{}{}
+		case <-time.After(time.Second):
+			t.Fatal("OpenStreamSync did not return after the stream limit was increased")
 		}
-		m = newOutgoingStreamsMap[*mockGenericStream](
-			streamType,
-			newStr,
-			func(f wire.Frame) { queuedControlFrames = append(queuedControlFrames, f) },
-		)
-	})
+	}
+	require.Contains(t, received, protocol.StreamNum(1))
+	require.Contains(t, received, protocol.StreamNum(2))
 
-	Context("no stream ID limit", func() {
-		BeforeEach(func() {
-			m.SetMaxStream(0xffffffff)
-		})
+	// the call to stream 3 is still blocked
+	select {
+	case <-results:
+		t.Fatal("expected OpenStreamSync to be blocked")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+	m.SetMaxStream(3)
+	select {
+	case res := <-results:
+		require.NoError(t, res.err)
+		require.Equal(t, protocol.StreamNum(3), res.stream.num)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the stream limit was increased")
+	}
+}
 
-		It("opens streams", func() {
-			str, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.num).To(Equal(protocol.StreamNum(1)))
-			str, err = m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.num).To(Equal(protocol.StreamNum(2)))
-		})
+func TestStreamsMapOutgoingClosing(t *testing.T) {
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) {},
+	)
 
-		It("doesn't open streams after it has been closed", func() {
-			testErr := errors.New("close")
-			m.CloseWithError(testErr)
-			_, err := m.OpenStream()
-			Expect(err).To(MatchError(testErr))
-		})
+	m.SetMaxStream(2)
+	str1, err := m.OpenStream()
+	require.NoError(t, err)
+	str2, err := m.OpenStream()
+	require.NoError(t, err)
 
-		It("gets streams", func() {
-			_, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			str, err := m.GetStream(1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.num).To(Equal(protocol.StreamNum(1)))
-		})
+	errChan := make(chan error, 1)
+	go func() {
+		_, err := m.OpenStreamSync(context.Background())
+		errChan <- err
+	}()
 
-		It("errors when trying to get a stream that has not yet been opened", func() {
-			_, err := m.GetStream(1)
-			Expect(err).To(HaveOccurred())
-			Expect(err.(streamError).TestError()).To(MatchError("peer attempted to open stream 1"))
-		})
+	m.CloseWithError(assert.AnError)
+	// both stream should be closed
+	assert.True(t, str1.closed)
+	assert.Equal(t, assert.AnError, str1.closeErr)
+	assert.True(t, str2.closed)
+	assert.Equal(t, assert.AnError, str2.closeErr)
 
-		It("deletes streams", func() {
-			_, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(m.DeleteStream(1)).To(Succeed())
-			Expect(err).ToNot(HaveOccurred())
-			str, err := m.GetStream(1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(BeNil())
-		})
+	select {
+	case err := <-errChan:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the stream was closed")
+	}
+}
 
-		It("errors when deleting a non-existing stream", func() {
-			err := m.DeleteStream(1337)
-			Expect(err).To(HaveOccurred())
-			Expect(err.(streamError).TestError()).To(MatchError("tried to delete unknown outgoing stream 1337"))
-		})
+func TestStreamsMapOutgoingBlockedFrames(t *testing.T) {
+	var frameQueue []wire.Frame
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+	)
 
-		It("errors when deleting a stream twice", func() {
-			_, err := m.OpenStream() // opens firstNewStream
-			Expect(err).ToNot(HaveOccurred())
-			Expect(m.DeleteStream(1)).To(Succeed())
-			err = m.DeleteStream(1)
-			Expect(err).To(HaveOccurred())
-			Expect(err.(streamError).TestError()).To(MatchError("tried to delete unknown outgoing stream 1"))
-		})
+	m.SetMaxStream(3)
+	for range 3 {
+		_, err := m.OpenStream()
+		require.NoError(t, err)
+	}
+	require.Empty(t, frameQueue)
 
-		It("closes all streams when CloseWithError is called", func() {
-			str1, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			str2, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			testErr := errors.New("test err")
-			m.CloseWithError(testErr)
-			Expect(str1.closed).To(BeTrue())
-			Expect(str1.closeErr).To(MatchError(testErr))
-			Expect(str2.closed).To(BeTrue())
-			Expect(str2.closeErr).To(MatchError(testErr))
-		})
+	_, err := m.OpenStream()
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
+	require.Equal(t, []wire.Frame{
+		&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 3},
+	}, frameQueue)
+	frameQueue = frameQueue[:0]
 
-		It("updates the send window", func() {
-			str1, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			str2, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			m.UpdateSendWindow(1337)
-			Expect(str1.sendWindow).To(BeEquivalentTo(1337))
-			Expect(str2.sendWindow).To(BeEquivalentTo(1337))
-		})
-	})
+	// only a single STREAMS_BLOCKED frame is queued per offset
+	_, err = m.OpenStream()
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
+	require.Empty(t, frameQueue)
 
-	Context("with stream ID limits", func() {
-		It("errors when no stream can be opened immediately", func() {
-			_, err := m.OpenStream()
-			expectTooManyStreamsError(err)
-		})
+	errChan := make(chan error, 3)
+	for range 3 {
+		go func() {
+			_, err := m.OpenStreamSync(context.Background())
+			errChan <- err
+		}()
+	}
+	time.Sleep(scaleDuration(10 * time.Millisecond))
 
-		It("returns immediately when called with a canceled context", func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			_, err := m.OpenStreamSync(ctx)
-			Expect(err).To(MatchError("context canceled"))
-		})
+	// allow 2 more streams
+	m.SetMaxStream(5)
+	for range 2 {
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("OpenStreamSync did not return after the stream limit was increased")
+		}
+	}
+	require.Equal(t, []wire.Frame{
+		&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 5},
+	}, frameQueue)
+	frameQueue = frameQueue[:0]
 
-		It("blocks until a stream can be opened synchronously", func() {
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				str, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.num).To(Equal(protocol.StreamNum(1)))
-				close(done)
-			}()
-			waitForEnqueued(1)
+	// now accept the last stream
+	m.SetMaxStream(6)
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the stream limit was increased")
+	}
+	require.Empty(t, frameQueue)
+}
 
-			m.SetMaxStream(1)
-			Eventually(done).Should(BeClosed())
-		})
+func TestStreamsMapOutgoingRandomizedOpenStreamSync(t *testing.T) {
+	const n = 100
 
-		It("unblocks when the context is canceled", func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(ctx)
-				Expect(err).To(MatchError("context canceled"))
-				close(done)
-			}()
-			waitForEnqueued(1)
+	frameQueue := make(chan wire.Frame, n)
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) { frameQueue <- f },
+	)
 
-			cancel()
-			Eventually(done).Should(BeClosed())
+	type result struct {
+		num protocol.StreamNum
+		err error
+	}
 
-			// make sure that the next stream opened is stream 1
-			m.SetMaxStream(1000)
-			str, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.num).To(Equal(protocol.StreamNum(1)))
-		})
+	resultChan := make(chan result, n)
+	for range n {
+		go func() {
+			str, err := m.OpenStreamSync(context.Background())
+			resultChan <- result{num: str.num, err: err}
+		}()
+	}
 
-		It("opens streams in the right order", func() {
-			done1 := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				str, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.num).To(Equal(protocol.StreamNum(1)))
-				close(done1)
-			}()
-			waitForEnqueued(1)
+	select {
+	case f := <-frameQueue:
+		require.IsType(t, &wire.StreamsBlockedFrame{}, f)
+		require.Zero(t, f.(*wire.StreamsBlockedFrame).StreamLimit)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for STREAMS_BLOCKED frame")
+	}
 
-			done2 := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				str, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.num).To(Equal(protocol.StreamNum(2)))
-				close(done2)
-			}()
-			waitForEnqueued(2)
+	var limit int
+	var limits []protocol.StreamNum
+	seen := make(map[protocol.StreamNum]struct{})
+	for limit < n {
+		add := rand.IntN(n/5) + 1
+		limit += add
+		if limit <= n {
+			limits = append(limits, protocol.StreamNum(limit))
+		}
+		t.Logf("setting stream limit to %d", limit)
+		m.SetMaxStream(protocol.StreamNum(limit))
 
-			m.SetMaxStream(1)
-			Eventually(done1).Should(BeClosed())
-			Consistently(done2).ShouldNot(BeClosed())
-			m.SetMaxStream(2)
-			Eventually(done2).Should(BeClosed())
-		})
-
-		It("opens streams in the right order, when one of the contexts is canceled", func() {
-			done1 := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				str, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.num).To(Equal(protocol.StreamNum(1)))
-				close(done1)
-			}()
-			waitForEnqueued(1)
-
-			done2 := make(chan struct{})
-			ctx, cancel := context.WithCancel(context.Background())
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(ctx)
-				Expect(err).To(MatchError(context.Canceled))
-				close(done2)
-			}()
-			waitForEnqueued(2)
-
-			done3 := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				str, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.num).To(Equal(protocol.StreamNum(2)))
-				close(done3)
-			}()
-			waitForEnqueued(3)
-
-			cancel()
-			Eventually(done2).Should(BeClosed())
-			m.SetMaxStream(1000)
-			Eventually(done1).Should(BeClosed())
-			Eventually(done3).Should(BeClosed())
-		})
-
-		It("unblocks multiple OpenStreamSync calls at the same time", func() {
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				done <- struct{}{}
-			}()
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				done <- struct{}{}
-			}()
-			waitForEnqueued(2)
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(context.Background())
-				Expect(err).To(MatchError("test done"))
-				done <- struct{}{}
-			}()
-			waitForEnqueued(3)
-
-			m.SetMaxStream(2)
-			Eventually(done).Should(Receive())
-			Eventually(done).Should(Receive())
-			Consistently(done).ShouldNot(Receive())
-
-			m.CloseWithError(errors.New("test done"))
-			Eventually(done).Should(Receive())
-		})
-
-		It("returns an error for OpenStream while an OpenStreamSync call is blocking", func() {
-			openedSync := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				str, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(str.num).To(Equal(protocol.StreamNum(1)))
-				close(openedSync)
-			}()
-			waitForEnqueued(1)
-
-			start := make(chan struct{})
-			openend := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				var hasStarted bool
-				for {
-					str, err := m.OpenStream()
-					if err == nil {
-						Expect(str.num).To(Equal(protocol.StreamNum(2)))
-						close(openend)
-						return
-					}
-					expectTooManyStreamsError(err)
-					if !hasStarted {
-						close(start)
-						hasStarted = true
-					}
-				}
-			}()
-
-			Eventually(start).Should(BeClosed())
-			m.SetMaxStream(1)
-			Eventually(openedSync).Should(BeClosed())
-			Consistently(openend).ShouldNot(BeClosed())
-			m.SetMaxStream(2)
-			Eventually(openend).Should(BeClosed())
-		})
-
-		It("stops opening synchronously when it is closed", func() {
-			testErr := errors.New("test error")
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(context.Background())
-				Expect(err).To(MatchError(testErr))
-				close(done)
-			}()
-
-			Consistently(done).ShouldNot(BeClosed())
-			m.CloseWithError(testErr)
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("doesn't reduce the stream limit", func() {
-			m.SetMaxStream(2)
-			m.SetMaxStream(1)
-			_, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			str, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.num).To(Equal(protocol.StreamNum(2)))
-		})
-
-		It("queues a STREAMS_BLOCKED frame if no stream can be opened", func() {
-			m.SetMaxStream(6)
-			// open the 6 allowed streams
-			for i := 0; i < 6; i++ {
-				_, err := m.OpenStream()
-				Expect(err).ToNot(HaveOccurred())
+		for range min(add, n-(limit-add)) {
+			select {
+			case res := <-resultChan:
+				require.NoError(t, res.err)
+				require.NotContains(t, seen, res.num)
+				seen[res.num] = struct{}{}
+			case <-time.After(time.Second):
+				t.Fatalf("timed out waiting for stream to open")
 			}
+		}
 
-			Expect(queuedControlFrames).To(BeEmpty())
-			_, err := m.OpenStream()
-			Expect(err).To(MatchError(&StreamLimitReachedError{}))
-			Expect(queuedControlFrames).To(HaveLen(1))
-			bf := queuedControlFrames[0].(*wire.StreamsBlockedFrame)
-			Expect(bf.Type).To(BeEquivalentTo(streamType))
-			Expect(bf.StreamLimit).To(BeEquivalentTo(6))
-		})
+		str, err := m.OpenStream()
+		if limit <= n {
+			require.ErrorIs(t, err, &StreamLimitReachedError{})
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, protocol.StreamNum(n+1), str.num)
+		}
+	}
+	require.Len(t, seen, n)
 
-		It("only sends one STREAMS_BLOCKED frame for one stream ID", func() {
-			m.SetMaxStream(1)
-			_, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(queuedControlFrames).To(BeEmpty())
-			// try to open a stream twice, but expect only one STREAMS_BLOCKED to be sent
-			_, err = m.OpenStream()
-			expectTooManyStreamsError(err)
-			Expect(queuedControlFrames).To(HaveLen(1))
-			Expect(queuedControlFrames[0].(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(1))
-			_, err = m.OpenStream()
-			expectTooManyStreamsError(err)
-			Expect(queuedControlFrames).To(HaveLen(1))
-		})
+	var blockedAt []protocol.StreamNum
+	close(frameQueue)
+	for f := range frameQueue {
+		if l := f.(*wire.StreamsBlockedFrame).StreamLimit; l <= n {
+			blockedAt = append(blockedAt, l)
+		}
+	}
+	require.Equal(t, limits, blockedAt)
+}
 
-		It("queues a STREAMS_BLOCKED frame when there more streams waiting for OpenStreamSync than MAX_STREAMS allows", func() {
-			done := make(chan struct{}, 2)
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				done <- struct{}{}
-			}()
-			go func() {
-				defer GinkgoRecover()
-				_, err := m.OpenStreamSync(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				done <- struct{}{}
-			}()
-			waitForEnqueued(2)
-			Expect(queuedControlFrames).To(HaveLen(1))
-			Expect(queuedControlFrames[0].(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(0))
+func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
+	const n = 100
 
-			m.SetMaxStream(1)
-			Eventually(done).Should(Receive())
-			Consistently(done).ShouldNot(Receive())
-			Expect(queuedControlFrames).To(HaveLen(2))
-			Expect(queuedControlFrames[1].(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(1))
-			m.SetMaxStream(2)
-			Eventually(done).Should(Receive())
-		})
-	})
+	var frameQueue []wire.Frame
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+	)
 
-	Context("randomized tests", func() {
-		It("opens streams", func() {
-			rand.Seed(uint64(GinkgoRandomSeed()))
-			const n = 100
-			fmt.Fprintf(GinkgoWriter, "Opening %d streams concurrently.\n", n)
+	type result struct {
+		str *mockGenericStream
+		err error
+	}
 
-			done := make(map[int]chan struct{})
-			for i := 1; i <= n; i++ {
-				c := make(chan struct{})
-				done[i] = c
-
-				go func(doneChan chan struct{}, id protocol.StreamNum) {
-					defer GinkgoRecover()
-					defer close(doneChan)
-					str, err := m.OpenStreamSync(context.Background())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(str.num).To(Equal(id))
-				}(c, protocol.StreamNum(i))
-				waitForEnqueued(i)
+	ctx, cancel := context.WithCancel(context.Background())
+	resultChan := make(chan result, 10*n)
+	var count int
+	var numCancelled int
+	for count < n {
+		shouldCancel := rand.IntN(n)%5 == 0
+		if shouldCancel {
+			numCancelled++
+		} else {
+			count++
+		}
+		go func() {
+			var str *mockGenericStream
+			var err error
+			if shouldCancel {
+				str, err = m.OpenStreamSync(ctx)
+			} else {
+				str, err = m.OpenStreamSync(context.Background())
 			}
+			resultChan <- result{str: str, err: err}
+		}()
+	}
 
-			var limit int
-			limits := []protocol.StreamNum{0}
-			for limit < n {
-				limit += rand.Intn(n/5) + 1
-				if limit <= n {
-					limits = append(limits, protocol.StreamNum(limit))
-				}
-				fmt.Fprintf(GinkgoWriter, "Setting stream limit to %d.\n", limit)
-				m.SetMaxStream(protocol.StreamNum(limit))
-				for i := 1; i <= n; i++ {
-					if i <= limit {
-						Eventually(done[i]).Should(BeClosed())
-					} else {
-						Expect(done[i]).ToNot(BeClosed())
-					}
-				}
-				str, err := m.OpenStream()
-				if limit <= n {
-					Expect(err).To(MatchError(&StreamLimitReachedError{}))
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+	cancel()
+
+	var limit int
+	limits := []protocol.StreamNum{0}
+	seen := make(map[protocol.StreamNum]struct{})
+	var lastStreamSeen protocol.StreamNum
+	var numCancelledSeen int
+	for limit < n {
+		limit += rand.IntN(n/5) + 1
+		if limit < n {
+			limits = append(limits, protocol.StreamNum(limit))
+		}
+		t.Logf("setting stream limit to %d", limit)
+		m.SetMaxStream(protocol.StreamNum(limit))
+
+		for lastStreamSeen < min(n, protocol.StreamNum(limit)) {
+			select {
+			case res := <-resultChan:
+				if errors.Is(res.err, context.Canceled) {
+					numCancelledSeen++
 				} else {
-					Expect(str.num).To(Equal(protocol.StreamNum(n + 1)))
+					require.NoError(t, res.err)
+					require.NotContains(t, seen, res.str.num)
+					seen[res.str.num] = struct{}{}
+					lastStreamSeen = res.str.num
 				}
+			case <-time.After(time.Second):
+				t.Fatalf("timed out waiting for stream to open")
 			}
-			var blockedAt []protocol.StreamNum
-			for _, f := range queuedControlFrames {
-				blockedAt = append(blockedAt, f.(*wire.StreamsBlockedFrame).StreamLimit)
-			}
-			Expect(blockedAt).To(Equal(limits))
+		}
+	}
+	require.Len(t, seen, n)
+	require.Equal(t, numCancelled, numCancelledSeen)
+
+	var blockedAt []protocol.StreamNum
+	for _, f := range frameQueue {
+		blockedAt = append(blockedAt, f.(*wire.StreamsBlockedFrame).StreamLimit)
+	}
+	require.Equal(t, limits, blockedAt)
+}
+
+func TestStreamsMapConcurrent(t *testing.T) {
+	for i := range 5 {
+		t.Run(fmt.Sprintf("iteration %d", i+1), func(t *testing.T) {
+			testStreamsMapConcurrent(t)
 		})
+	}
+}
 
-		It("opens streams, when some of them are getting canceled", func() {
-			rand.Seed(uint64(GinkgoRandomSeed()))
-			const n = 100
-			fmt.Fprintf(GinkgoWriter, "Opening %d streams concurrently.\n", n)
+func testStreamsMapConcurrent(t *testing.T) {
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(n protocol.StreamNum) *mockGenericStream { return &mockGenericStream{num: n} },
+		func(f wire.Frame) {},
+	)
 
-			ctx, cancel := context.WithCancel(context.Background())
-			streamsToCancel := make(map[protocol.StreamNum]struct{}) // used as a set
-			for i := 0; i < 10; i++ {
-				id := protocol.StreamNum(rand.Intn(n) + 1)
-				fmt.Fprintf(GinkgoWriter, "Canceling stream %d.\n", id)
-				streamsToCancel[id] = struct{}{}
-			}
+	const num = 100
 
-			streamWillBeCanceled := func(id protocol.StreamNum) bool {
-				_, ok := streamsToCancel[id]
-				return ok
-			}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errChan := make(chan error, num)
+	for range num {
+		go func() {
+			_, err := m.OpenStreamSync(ctx)
+			errChan <- err
+		}()
+	}
 
-			var streamIDs []int
-			var mutex sync.Mutex
-			done := make(map[int]chan struct{})
-			for i := 1; i <= n; i++ {
-				c := make(chan struct{})
-				done[i] = c
+	time.Sleep(scaleDuration(5 * time.Millisecond))
+	go m.CloseWithError(assert.AnError)
+	go cancel()
+	go m.SetMaxStream(protocol.StreamNum(num / 2))
 
-				go func(doneChan chan struct{}, id protocol.StreamNum) {
-					defer GinkgoRecover()
-					defer close(doneChan)
-					cont := context.Background()
-					if streamWillBeCanceled(id) {
-						cont = ctx
-					}
-					str, err := m.OpenStreamSync(cont)
-					if streamWillBeCanceled(id) {
-						Expect(err).To(MatchError(context.Canceled))
-						return
-					}
-					Expect(err).ToNot(HaveOccurred())
-					mutex.Lock()
-					streamIDs = append(streamIDs, int(str.num))
-					mutex.Unlock()
-				}(c, protocol.StreamNum(i))
-				waitForEnqueued(i)
+	for range num {
+		select {
+		case err := <-errChan:
+			if err != nil {
+				require.True(t, errors.Is(err, assert.AnError) || errors.Is(err, context.Canceled))
 			}
-
-			cancel()
-			for id := range streamsToCancel {
-				Eventually(done[int(id)]).Should(BeClosed())
-			}
-			var limit int
-			numStreams := n - len(streamsToCancel)
-			var limits []protocol.StreamNum
-			for limit < numStreams {
-				limits = append(limits, protocol.StreamNum(limit))
-				limit += rand.Intn(n/5) + 1
-				fmt.Fprintf(GinkgoWriter, "Setting stream limit to %d.\n", limit)
-				m.SetMaxStream(protocol.StreamNum(limit))
-				l := limit
-				if l > numStreams {
-					l = numStreams
-				}
-				Eventually(func() int {
-					mutex.Lock()
-					defer mutex.Unlock()
-					return len(streamIDs)
-				}).Should(Equal(l))
-				// check that all stream IDs were used
-				Expect(streamIDs).To(HaveLen(l))
-				sort.Ints(streamIDs)
-				for i := 0; i < l; i++ {
-					Expect(streamIDs[i]).To(Equal(i + 1))
-				}
-			}
-			var blockedAt []protocol.StreamNum
-			for _, f := range queuedControlFrames {
-				blockedAt = append(blockedAt, f.(*wire.StreamsBlockedFrame).StreamLimit)
-			}
-			Expect(blockedAt).To(Equal(limits))
-		})
-	})
-})
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for error")
+		}
+	}
+}

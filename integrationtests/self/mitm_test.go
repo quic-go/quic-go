@@ -2,22 +2,22 @@ package self_test
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"math"
+	mrand "math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
-
-	"github.com/Noooste/quic-go"
-	quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/wire"
-	"github.com/Noooste/quic-go/testutils"
+	"github.com/quic-go/quic-go"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/testutils"
 
 	"github.com/stretchr/testify/require"
 )
@@ -26,14 +26,14 @@ const mitmTestConnIDLen = 6
 
 func getTransportsForMITMTest(t *testing.T) (serverTransport, clientTransport *quic.Transport) {
 	serverTransport = &quic.Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: mitmTestConnIDLen,
 	}
 	addTracer(serverTransport)
 	t.Cleanup(func() { serverTransport.Close() })
 
 	clientTransport = &quic.Transport{
-		Conn:               newUPDConnLocalhost(t),
+		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: mitmTestConnIDLen,
 	}
 	addTracer(clientTransport)
@@ -86,11 +86,11 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 					Type:             hdr.Type,
 					Version:          hdr.Version,
 				},
-				PacketNumber:    protocol.PacketNumber(rand.Int31n(math.MaxInt32 / 4)),
-				PacketNumberLen: protocol.PacketNumberLen(rand.Int31n(4) + 1),
+				PacketNumber:    protocol.PacketNumber(mrand.Int32N(math.MaxInt32 / 4)),
+				PacketNumberLen: protocol.PacketNumberLen(mrand.IntN(4) + 1),
 			}
-			payloadLen := rand.Int31n(100)
-			replyHdr.Length = protocol.ByteCount(rand.Int31n(payloadLen + 1))
+			payloadLen := mrand.IntN(100)
+			replyHdr.Length = protocol.ByteCount(mrand.IntN(payloadLen + 1))
 			data, err := replyHdr.Append(nil, hdr.Version)
 			if err != nil {
 				panic("failed to append header: " + err.Error())
@@ -108,11 +108,11 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 		if err != nil && !errors.Is(err, wire.ErrInvalidReservedBits) { // normally, ParseShortHeader is called after decrypting the header
 			panic("failed to parse short header: " + err.Error())
 		}
-		data, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(rand.Intn(2)))
+		data, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(mrand.IntN(2)))
 		if err != nil {
 			return nil
 		}
-		payloadLen := rand.Int31n(100)
+		payloadLen := mrand.IntN(100)
 		r := make([]byte, payloadLen)
 		rand.Read(r)
 		return append(data, r...)
@@ -121,14 +121,14 @@ func testMITMInjectRandomPackets(t *testing.T, direction quicproxy.Direction) {
 	rtt := scaleDuration(10 * time.Millisecond)
 	serverTransport, clientTransport := getTransportsForMITMTest(t)
 
-	dropCallback := func(dir quicproxy.Direction, b []byte) bool {
+	dropCallback := func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 		if dir != direction {
 			return false
 		}
 		go func() {
 			ticker := time.NewTicker(rtt / 10)
 			defer ticker.Stop()
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				switch direction {
 				case quicproxy.DirectionIncoming:
 					clientTransport.WriteTo(createRandomPacketOfSameType(b), serverTransport.Conn.LocalAddr())
@@ -148,7 +148,7 @@ func testMITMDuplicatePackets(t *testing.T, direction quicproxy.Direction) {
 	serverTransport, clientTransport := getTransportsForMITMTest(t)
 	rtt := scaleDuration(10 * time.Millisecond)
 
-	dropCallback := func(dir quicproxy.Direction, b []byte) bool {
+	dropCallback := func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 		if dir != direction {
 			return false
 		}
@@ -169,21 +169,21 @@ func testMITMCorruptPackets(t *testing.T, direction quicproxy.Direction) {
 	rtt := scaleDuration(5 * time.Millisecond)
 
 	var numCorrupted atomic.Int32
-	dropCallback := func(dir quicproxy.Direction, b []byte) bool {
+	dropCallback := func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 		if dir != direction {
 			return false
 		}
 		isLongHeaderPacket := wire.IsLongHeaderPacket(b[0])
 		// corrupt 20% of long header packets and 5% of short header packets
-		if isLongHeaderPacket && rand.Intn(4) != 0 {
+		if isLongHeaderPacket && mrand.IntN(4) != 0 {
 			return false
 		}
-		if !isLongHeaderPacket && rand.Intn(20) != 0 {
+		if !isLongHeaderPacket && mrand.IntN(20) != 0 {
 			return false
 		}
 		numCorrupted.Add(1)
-		pos := rand.Intn(len(b))
-		b[pos] = byte(rand.Intn(256))
+		pos := mrand.IntN(len(b))
+		b[pos] = byte(mrand.IntN(256))
 		switch direction {
 		case quicproxy.DirectionIncoming:
 			clientTransport.WriteTo(b, serverTransport.Conn.LocalAddr())
@@ -204,9 +204,9 @@ func runMITMTest(t *testing.T, serverTr, clientTr *quic.Transport, rtt time.Dura
 	defer ln.Close()
 
 	proxy := quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, b []byte) time.Duration { return rtt / 2 },
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
 		DropPacket:  dropCb,
 	}
 	require.NoError(t, proxy.Start())
@@ -269,7 +269,7 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 	const supportedVersion protocol.Version = 42
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		if dir != quicproxy.DirectionIncoming {
 			return rtt / 2
 		}
@@ -306,7 +306,7 @@ func TestMITMForgedRetryPacket(t *testing.T) {
 	rtt := scaleDuration(10 * time.Millisecond)
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		hdr, _, _, err := wire.ParsePacket(raw)
 		if err != nil {
 			panic("failed to parse packet: " + err.Error())
@@ -333,7 +333,7 @@ func TestMITMForgedInitialPacket(t *testing.T) {
 	rtt := scaleDuration(10 * time.Millisecond)
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		if dir == quicproxy.DirectionIncoming {
 			hdr, _, _, err := wire.ParsePacket(raw)
 			if err != nil {
@@ -370,7 +370,7 @@ func TestMITMForgedInitialPacketWithAck(t *testing.T) {
 	rtt := scaleDuration(10 * time.Millisecond)
 
 	var once sync.Once
-	delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+	delayCb := func(dir quicproxy.Direction, _, _ net.Addr, raw []byte) time.Duration {
 		if dir == quicproxy.DirectionIncoming {
 			hdr, _, _, err := wire.ParsePacket(raw)
 			if err != nil {
@@ -413,7 +413,7 @@ func runMITMTestSuccessful(t *testing.T, serverTransport, clientTransport *quic.
 	defer ln.Close()
 
 	proxy := quicproxy.Proxy{
-		Conn:        newUPDConnLocalhost(t),
+		Conn:        newUDPConnLocalhost(t),
 		ServerAddr:  ln.Addr().(*net.UDPAddr),
 		DelayPacket: delayCb,
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/Noooste/quic-go/internal/protocol"
 	"github.com/Noooste/quic-go/internal/utils"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -146,7 +147,6 @@ func TestPacketHandlerMapReplaceWithRemoteClosed(t *testing.T) {
 
 func TestPacketHandlerMapClose(t *testing.T) {
 	m := newPacketHandlerMap(nil, utils.DefaultLogger)
-	testErr := errors.New("shutdown")
 	const numConns = 10
 	destroyChan := make(chan error, 2*numConns)
 	for i := 0; i < numConns; i++ {
@@ -155,14 +155,14 @@ func TestPacketHandlerMapClose(t *testing.T) {
 		rand.Read(b)
 		m.Add(protocol.ParseConnectionID(b), conn)
 	}
-	m.Close(testErr)
+	m.Close(assert.AnError)
 	// check that Close can be called multiple times
 	m.Close(errors.New("close"))
 
 	for i := 0; i < numConns; i++ {
 		select {
 		case err := <-destroyChan:
-			require.Equal(t, testErr, err)
+			require.ErrorIs(t, err, assert.AnError)
 		default:
 			t.Fatalf("connection not destroyed")
 		}

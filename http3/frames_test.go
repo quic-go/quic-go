@@ -2,39 +2,36 @@ package http3
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
+	"testing"
 
 	"github.com/Noooste/quic-go"
 	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
 	"github.com/Noooste/quic-go/quicvarint"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-type errReader struct{ err error }
+func testFrameParserEOF(t *testing.T, data []byte) {
+	t.Helper()
+	for i := range data {
+		b := make([]byte, i)
+		copy(b, data[:i])
+		fp := frameParser{r: bytes.NewReader(b)}
+		_, err := fp.ParseNext()
+		require.Error(t, err)
+		require.ErrorIs(t, err, io.EOF)
+	}
+}
 
-func (e errReader) Read([]byte) (int, error) { return 0, e.err }
-
-var _ = Describe("Frames", func() {
-	It("skips unknown frames", func() {
-		data := quicvarint.Append(nil, 0xdeadbeef) // type byte
-		data = quicvarint.Append(data, 0x42)
-		data = append(data, make([]byte, 0x42)...)
-		data = (&dataFrame{Length: 0x1234}).Append(data)
-		fp := frameParser{r: bytes.NewReader(data)}
-		frame, err := fp.ParseNext()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		Expect(frame.(*dataFrame).Length).To(Equal(uint64(0x1234)))
-	})
-
-	It("closes the connection when encountering a reserved frame type", func() {
-		conn := mockquic.NewMockEarlyConnection(mockCtrl)
-		for _, ft := range []uint64{0x2, 0x6, 0x8, 0x9} {
+func TestParserReservedFrameType(t *testing.T) {
+	for _, ft := range []uint64{0x2, 0x6, 0x8, 0x9} {
+		t.Run(fmt.Sprintf("type %#x", ft), func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
 			data := quicvarint.Append(nil, ft)
 			data = quicvarint.Append(data, 6)
 			data = append(data, []byte("foobar")...)
@@ -45,320 +42,331 @@ var _ = Describe("Frames", func() {
 				conn: conn,
 			}
 			_, err := fp.ParseNext()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("http3: reserved frame type"))
-		}
-	})
-
-	Context("DATA frames", func() {
-		It("parses", func() {
-			data := quicvarint.Append(nil, 0) // type byte
-			data = quicvarint.Append(data, 0x1337)
-			fp := frameParser{r: bytes.NewReader(data)}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-			Expect(frame.(*dataFrame).Length).To(Equal(uint64(0x1337)))
+			require.Error(t, err)
+			require.ErrorContains(t, err, "http3: reserved frame type")
 		})
+	}
+}
 
-		It("writes", func() {
-			fp := frameParser{r: bytes.NewReader((&dataFrame{Length: 0xdeadbeef}).Append(nil))}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-			Expect(frame.(*dataFrame).Length).To(Equal(uint64(0xdeadbeef)))
-		})
-	})
+func TestParserUnknownFrameType(t *testing.T) {
+	data := quicvarint.Append(nil, 0xdead)
+	data = quicvarint.Append(data, 6)
+	data = append(data, []byte("foobar")...)
+	data = quicvarint.Append(data, 0xbeef)
+	data = quicvarint.Append(data, 3)
+	data = append(data, []byte("baz")...)
+	hf := &headersFrame{Length: 3}
+	data = hf.Append(data)
+	data = append(data, []byte("foo")...)
 
-	Context("HEADERS frames", func() {
-		It("parses", func() {
-			data := quicvarint.Append(nil, 1) // type byte
-			data = quicvarint.Append(data, 0x1337)
-			fp := frameParser{r: bytes.NewReader(data)}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
-			Expect(frame.(*headersFrame).Length).To(Equal(uint64(0x1337)))
-		})
+	r := bytes.NewReader(data)
+	fp := frameParser{r: r}
+	f, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &headersFrame{}, f)
+	hf = f.(*headersFrame)
+	require.Equal(t, uint64(3), hf.Length)
+	payload := make([]byte, 3)
+	_, err = io.ReadFull(r, payload)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), payload)
+}
 
-		It("writes", func() {
-			data := (&headersFrame{Length: 0xdeadbeef}).Append(nil)
-			fp := frameParser{r: bytes.NewReader(data)}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
-			Expect(frame.(*headersFrame).Length).To(Equal(uint64(0xdeadbeef)))
-		})
-	})
+func TestParserHeadersFrame(t *testing.T) {
+	data := quicvarint.Append(nil, 1) // type byte
+	data = quicvarint.Append(data, 0x1337)
+	fp := frameParser{r: bytes.NewReader(data)}
 
-	Context("SETTINGS frames", func() {
-		It("parses", func() {
-			settings := quicvarint.Append(nil, 13)
-			settings = quicvarint.Append(settings, 37)
-			settings = quicvarint.Append(settings, 0xdead)
-			settings = quicvarint.Append(settings, 0xbeef)
+	// incomplete data results in an io.EOF
+	testFrameParserEOF(t, data)
+
+	// parse
+	f1, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &headersFrame{}, f1)
+	require.Equal(t, uint64(0x1337), f1.(*headersFrame).Length)
+
+	// write and parse
+	fp = frameParser{r: bytes.NewReader(f1.(*headersFrame).Append(nil))}
+	f2, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, f1, f2)
+}
+
+func TestDataFrame(t *testing.T) {
+	data := quicvarint.Append(nil, 0) // type byte
+	data = quicvarint.Append(data, 0x1337)
+	fp := frameParser{r: bytes.NewReader(data)}
+
+	// incomplete data results in an io.EOF
+	testFrameParserEOF(t, data)
+
+	// parse
+	f1, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &dataFrame{}, f1)
+	require.Equal(t, uint64(0x1337), f1.(*dataFrame).Length)
+
+	// write and parse
+	fp = frameParser{r: bytes.NewReader(f1.(*dataFrame).Append(nil))}
+	f2, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, f1, f2)
+}
+
+func appendSetting(b []byte, key, value uint64) []byte {
+	b = quicvarint.Append(b, key)
+	b = quicvarint.Append(b, value)
+	return b
+}
+
+func TestParserSettingsFrame(t *testing.T) {
+	settings := appendSetting(nil, 13, 37)
+	settings = appendSetting(settings, 0xdead, 0xbeef)
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
+
+	// incomplete data results in an io.EOF
+	testFrameParserEOF(t, data)
+
+	fp := frameParser{r: bytes.NewReader(data)}
+	frame, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &settingsFrame{}, frame)
+	sf := frame.(*settingsFrame)
+	require.Len(t, sf.Other, 2)
+	require.Equal(t, uint64(37), sf.Other[uint64(13)])
+	require.Equal(t, uint64(0xbeef), sf.Other[uint64(0xdead)])
+
+	// write and parse
+	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
+	f2, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &settingsFrame{}, f2)
+	sf2 := f2.(*settingsFrame)
+	require.Len(t, sf2.Other, len(sf.Other))
+	require.Equal(t, sf.Other, sf2.Other)
+}
+
+func TestParserSettingsFrameDuplicateSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		num  uint64
+		val  uint64
+	}{
+		{
+			name: "other setting",
+			num:  13,
+			val:  37,
+		},
+		{
+			name: "extended connect",
+			num:  settingExtendedConnect,
+			val:  1,
+		},
+		{
+			name: "datagram",
+			num:  settingDatagram,
+			val:  1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := appendSetting(nil, tc.num, tc.val)
+			settings = appendSetting(settings, tc.num, tc.val)
 			data := quicvarint.Append(nil, 4) // type byte
 			data = quicvarint.Append(data, uint64(len(settings)))
 			data = append(data, settings...)
 			fp := frameParser{r: bytes.NewReader(data)}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&settingsFrame{}))
-			sf := frame.(*settingsFrame)
-			Expect(sf.Other).To(HaveKeyWithValue(uint64(13), uint64(37)))
-			Expect(sf.Other).To(HaveKeyWithValue(uint64(0xdead), uint64(0xbeef)))
-		})
-
-		It("rejects duplicate settings", func() {
-			settings := quicvarint.Append(nil, 13)
-			settings = quicvarint.Append(settings, 37)
-			settings = quicvarint.Append(settings, 13)
-			settings = quicvarint.Append(settings, 38)
-			data := quicvarint.Append(nil, 4) // type byte
-			data = quicvarint.Append(data, uint64(len(settings)))
-			data = append(data, settings...)
-			fp := frameParser{r: bytes.NewReader(data)}
 			_, err := fp.ParseNext()
-			Expect(err).To(MatchError("duplicate setting: 13"))
+			require.Error(t, err)
+			require.EqualError(t, err, fmt.Sprintf("duplicate setting: %d", tc.num))
 		})
+	}
+}
 
-		It("writes", func() {
-			sf := &settingsFrame{Other: map[uint64]uint64{
-				1:  2,
-				99: 999,
-				13: 37,
-			}}
-			fp := frameParser{r: bytes.NewReader(sf.Append(nil))}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(Equal(sf))
-		})
-
-		It("errors on EOF", func() {
-			sf := &settingsFrame{Other: map[uint64]uint64{
-				13:         37,
-				0xdeadbeef: 0xdecafbad,
-			}}
-			data := sf.Append(nil)
-			fp := frameParser{r: bytes.NewReader(data)}
-			_, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-
-			for i := range data {
-				b := make([]byte, i)
-				copy(b, data[:i])
-				fp := frameParser{r: bytes.NewReader(b)}
-				_, err := fp.ParseNext()
-				Expect(err).To(MatchError(io.EOF))
-			}
-		})
-
-		Context("HTTP Datagrams", func() {
-			It("reads the SETTINGS_H3_DATAGRAM value", func() {
-				settings := quicvarint.Append(nil, settingDatagram)
-				settings = quicvarint.Append(settings, 1)
-				data := quicvarint.Append(nil, 4) // type byte
-				data = quicvarint.Append(data, uint64(len(settings)))
-				data = append(data, settings...)
-				fp := frameParser{r: bytes.NewReader(data)}
-				f, err := fp.ParseNext()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(f).To(BeAssignableToTypeOf(&settingsFrame{}))
-				sf := f.(*settingsFrame)
-				Expect(sf.Datagram).To(BeTrue())
-			})
-
-			It("rejects duplicate SETTINGS_H3_DATAGRAM entries", func() {
-				settings := quicvarint.Append(nil, settingDatagram)
-				settings = quicvarint.Append(settings, 1)
-				settings = quicvarint.Append(settings, settingDatagram)
-				settings = quicvarint.Append(settings, 1)
-				data := quicvarint.Append(nil, 4) // type byte
-				data = quicvarint.Append(data, uint64(len(settings)))
-				data = append(data, settings...)
-				fp := frameParser{r: bytes.NewReader(data)}
-				_, err := fp.ParseNext()
-				Expect(err).To(MatchError(fmt.Sprintf("duplicate setting: %d", settingDatagram)))
-			})
-
-			It("rejects invalid values for the SETTINGS_H3_DATAGRAM entry", func() {
-				settings := quicvarint.Append(nil, settingDatagram)
-				settings = quicvarint.Append(settings, 1337)
-				data := quicvarint.Append(nil, 4) // type byte
-				data = quicvarint.Append(data, uint64(len(settings)))
-				data = append(data, settings...)
-				fp := frameParser{r: bytes.NewReader(data)}
-				_, err := fp.ParseNext()
-				Expect(err).To(MatchError("invalid value for SETTINGS_H3_DATAGRAM: 1337"))
-			})
-
-			It("writes the SETTINGS_H3_DATAGRAM setting", func() {
-				sf := &settingsFrame{Datagram: true}
-				fp := frameParser{r: bytes.NewReader(sf.Append(nil))}
-				frame, err := fp.ParseNext()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).To(Equal(sf))
-			})
-		})
-
-		Context("Extended Connect", func() {
-			It("reads the SETTINGS_ENABLE_CONNECT_PROTOCOL value", func() {
-				settings := quicvarint.Append(nil, settingExtendedConnect)
-				settings = quicvarint.Append(settings, 1)
-				data := quicvarint.Append(nil, 4) // type byte
-				data = quicvarint.Append(data, uint64(len(settings)))
-				data = append(data, settings...)
-				fp := frameParser{r: bytes.NewReader(data)}
-				f, err := fp.ParseNext()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(f).To(BeAssignableToTypeOf(&settingsFrame{}))
-				sf := f.(*settingsFrame)
-				Expect(sf.ExtendedConnect).To(BeTrue())
-			})
-
-			It("rejects duplicate SETTINGS_ENABLE_CONNECT_PROTOCOL entries", func() {
-				settings := quicvarint.Append(nil, settingExtendedConnect)
-				settings = quicvarint.Append(settings, 1)
-				settings = quicvarint.Append(settings, settingExtendedConnect)
-				settings = quicvarint.Append(settings, 1)
-				data := quicvarint.Append(nil, 4) // type byte
-				data = quicvarint.Append(data, uint64(len(settings)))
-				data = append(data, settings...)
-				fp := frameParser{r: bytes.NewReader(data)}
-				_, err := fp.ParseNext()
-				Expect(err).To(MatchError(fmt.Sprintf("duplicate setting: %d", settingExtendedConnect)))
-			})
-
-			It("rejects invalid values for the SETTINGS_ENABLE_CONNECT_PROTOCOL entry", func() {
-				settings := quicvarint.Append(nil, settingExtendedConnect)
-				settings = quicvarint.Append(settings, 1337)
-				data := quicvarint.Append(nil, 4) // type byte
-				data = quicvarint.Append(data, uint64(len(settings)))
-				data = append(data, settings...)
-				fp := frameParser{r: bytes.NewReader(data)}
-				_, err := fp.ParseNext()
-				Expect(err).To(MatchError("invalid value for SETTINGS_ENABLE_CONNECT_PROTOCOL: 1337"))
-			})
-
-			It("writes the SETTINGS_ENABLE_CONNECT_PROTOCOL setting", func() {
-				sf := &settingsFrame{ExtendedConnect: true}
-				fp := frameParser{r: bytes.NewReader(sf.Append(nil))}
-				frame, err := fp.ParseNext()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).To(Equal(sf))
-			})
-		})
+func TestParserSettingsFrameDatagram(t *testing.T) {
+	t.Run("enabled", func(t *testing.T) {
+		testParserSettingsFrameDatagram(t, true)
 	})
-
-	Context("GOAWAY frames", func() {
-		It("parses", func() {
-			data := quicvarint.Append(nil, 0x7) // type byte
-			data = quicvarint.Append(data, uint64(quicvarint.Len(100)))
-			data = quicvarint.Append(data, 100)
-			fp := frameParser{r: bytes.NewReader(data)}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&goAwayFrame{}))
-			Expect(frame.(*goAwayFrame).StreamID).To(Equal(quic.StreamID(100)))
-		})
-
-		It("errors on inconsistent lengths", func() {
-			data := quicvarint.Append(nil, 0x7) // type byte
-			data = quicvarint.Append(data, uint64(quicvarint.Len(100))+1)
-			data = quicvarint.Append(data, 100)
-			fp := frameParser{r: bytes.NewReader(data)}
-			_, err := fp.ParseNext()
-			Expect(err).To(MatchError("GOAWAY frame: inconsistent length"))
-		})
-
-		It("writes", func() {
-			data := (&goAwayFrame{StreamID: 200}).Append(nil)
-			fp := frameParser{r: bytes.NewReader(data)}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&goAwayFrame{}))
-			Expect(frame.(*goAwayFrame).StreamID).To(Equal(quic.StreamID(200)))
-		})
-
-		It("errors on EOF", func() {
-			data := (&goAwayFrame{StreamID: 1337}).Append(nil)
-			fp := frameParser{r: bytes.NewReader(data)}
-			_, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			for i := range data {
-				fp := frameParser{r: bytes.NewReader(data[:i])}
-				_, err := fp.ParseNext()
-				Expect(err).To(MatchError(io.EOF))
-			}
-		})
+	t.Run("disabled", func(t *testing.T) {
+		testParserSettingsFrameDatagram(t, false)
 	})
+}
 
-	Context("hijacking", func() {
-		It("reads a frame without hijacking the stream", func() {
-			buf := bytes.NewBuffer(quicvarint.Append(nil, 1337))
-			customFrameContents := []byte("foobar")
-			buf.Write(customFrameContents)
+func testParserSettingsFrameDatagram(t *testing.T, enabled bool) {
+	var settings []byte
+	switch enabled {
+	case true:
+		settings = appendSetting(nil, settingDatagram, 1)
+	case false:
+		settings = appendSetting(nil, settingDatagram, 0)
+	}
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
 
-			var called bool
-			fp := frameParser{
-				r: buf,
-				unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
-					Expect(e).ToNot(HaveOccurred())
-					Expect(ft).To(BeEquivalentTo(1337))
-					called = true
-					b := make([]byte, 3)
-					_, err = io.ReadFull(buf, b)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(string(b)).To(Equal("foo"))
-					return true, nil
-				},
-			}
-			_, err := fp.ParseNext()
-			Expect(err).To(MatchError(errHijacked))
-			Expect(called).To(BeTrue())
-		})
+	fp := frameParser{r: bytes.NewReader(data)}
+	f, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &settingsFrame{}, f)
+	sf := f.(*settingsFrame)
+	require.Equal(t, enabled, sf.Datagram)
 
-		It("passes on errors that occur when reading the frame type", func() {
-			testErr := errors.New("test error")
-			var called bool
-			fp := frameParser{
-				r: errReader{err: testErr},
-				unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
-					Expect(e).To(MatchError(testErr))
-					Expect(ft).To(BeZero())
-					called = true
-					return true, nil
-				},
-			}
-			_, err := fp.ParseNext()
-			Expect(err).To(MatchError(errHijacked))
-			Expect(called).To(BeTrue())
-		})
+	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
+	f2, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, sf, f2)
+}
 
-		It("reads a frame without hijacking the stream", func() {
-			b := quicvarint.Append(nil, 1337)
-			customFrameContents := []byte("custom frame")
-			b = quicvarint.Append(b, uint64(len(customFrameContents)))
-			b = append(b, customFrameContents...)
-			b = (&dataFrame{Length: 6}).Append(b)
-			b = append(b, []byte("foobar")...)
+func TestParserSettingsFrameDatagramInvalidValue(t *testing.T) {
+	settings := quicvarint.Append(nil, settingDatagram)
+	settings = quicvarint.Append(settings, 1337)
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
+	fp := frameParser{r: bytes.NewReader(data)}
+	_, err := fp.ParseNext()
+	require.EqualError(t, err, "invalid value for SETTINGS_H3_DATAGRAM: 1337")
+}
 
-			var called bool
-			fp := frameParser{
-				r: bytes.NewReader(b),
-				unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
-					Expect(e).ToNot(HaveOccurred())
-					Expect(ft).To(BeEquivalentTo(1337))
-					called = true
-					return false, nil
-				},
-			}
-			frame, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(Equal(&dataFrame{Length: 6}))
-			Expect(called).To(BeTrue())
-		})
+func TestParserSettingsFrameExtendedConnect(t *testing.T) {
+	t.Run("enabled", func(t *testing.T) {
+		testParserSettingsFrameExtendedConnect(t, true)
 	})
-})
+	t.Run("disabled", func(t *testing.T) {
+		testParserSettingsFrameExtendedConnect(t, false)
+	})
+}
+
+func testParserSettingsFrameExtendedConnect(t *testing.T, enabled bool) {
+	var settings []byte
+	switch enabled {
+	case true:
+		settings = appendSetting(nil, settingExtendedConnect, 1)
+	case false:
+		settings = appendSetting(nil, settingExtendedConnect, 0)
+	}
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
+
+	fp := frameParser{r: bytes.NewReader(data)}
+	f, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &settingsFrame{}, f)
+	sf := f.(*settingsFrame)
+	require.Equal(t, enabled, sf.ExtendedConnect)
+
+	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
+	f2, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, sf, f2)
+}
+
+func TestParserSettingsFrameExtendedConnectInvalidValue(t *testing.T) {
+	settings := quicvarint.Append(nil, settingExtendedConnect)
+	settings = quicvarint.Append(settings, 1337)
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
+	fp := frameParser{r: bytes.NewReader(data)}
+	_, err := fp.ParseNext()
+	require.EqualError(t, err, "invalid value for SETTINGS_ENABLE_CONNECT_PROTOCOL: 1337")
+}
+
+func TestParserGoAwayFrame(t *testing.T) {
+	data := quicvarint.Append(nil, 7) // type byte
+	data = quicvarint.Append(data, uint64(quicvarint.Len(100)))
+	data = quicvarint.Append(data, 100)
+
+	// incomplete data results in an io.EOF
+	testFrameParserEOF(t, data)
+
+	fp := frameParser{r: bytes.NewReader(data)}
+	f, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &goAwayFrame{}, f)
+	require.Equal(t, quic.StreamID(100), f.(*goAwayFrame).StreamID)
+
+	// write and parse
+	fp = frameParser{r: bytes.NewReader(f.(*goAwayFrame).Append(nil))}
+	f2, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, f, f2)
+}
+
+func TestParserHijacking(t *testing.T) {
+	t.Run("hijacking", func(t *testing.T) {
+		testParserHijacking(t, true)
+	})
+	t.Run("not hijacking", func(t *testing.T) {
+		testParserHijacking(t, false)
+	})
+}
+
+func testParserHijacking(t *testing.T, hijack bool) {
+	b := quicvarint.Append(nil, 1337)
+	if hijack {
+		b = append(b, "foobar"...)
+	} else {
+		// if the stream is not hijacked, this will be treated as an unknown frame
+		b = quicvarint.Append(b, 11)
+		b = append(b, []byte("lorem ipsum")...)
+		b = (&dataFrame{Length: 6}).Append(b)
+		b = append(b, []byte("foobar")...)
+	}
+
+	var called bool
+	r := bytes.NewReader(b)
+	fp := frameParser{
+		r: r,
+		unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
+			called = true
+			require.NoError(t, e)
+			require.Equal(t, FrameType(1337), ft)
+			if !hijack {
+				return false, nil
+			}
+			b := make([]byte, 6)
+			_, err = io.ReadFull(r, b)
+			require.NoError(t, err)
+			require.Equal(t, "foobar", string(b))
+			return true, nil
+		},
+	}
+	f, err := fp.ParseNext()
+	require.True(t, called)
+	if hijack {
+		require.ErrorIs(t, err, errHijacked)
+		return
+	}
+	require.NoError(t, err)
+	require.IsType(t, &dataFrame{}, f)
+	df := f.(*dataFrame)
+	require.Equal(t, uint64(6), df.Length)
+	payload := make([]byte, 6)
+	_, err = io.ReadFull(r, payload)
+	require.NoError(t, err)
+	require.Equal(t, "foobar", string(payload))
+}
+
+type errReader struct{ err error }
+
+func (e errReader) Read([]byte) (int, error) { return 0, e.err }
+
+func TestParserHijackError(t *testing.T) {
+	var called bool
+	fp := frameParser{
+		r: errReader{err: assert.AnError},
+		unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
+			require.EqualError(t, e, assert.AnError.Error())
+			require.Zero(t, ft)
+			called = true
+			return true, nil
+		},
+	}
+	_, err := fp.ParseNext()
+	require.ErrorIs(t, err, errHijacked)
+	require.True(t, called)
+}

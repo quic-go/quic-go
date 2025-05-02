@@ -1,24 +1,22 @@
 package http3
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/Noooste/quic-go"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestErrorConversion(t *testing.T) {
-	regularErr := errors.New("foobar")
-
 	tests := []struct {
 		name     string
 		input    error
 		expected error
 	}{
 		{name: "nil error", input: nil, expected: nil},
-		{name: "regular error", input: regularErr, expected: regularErr},
+		{name: "regular error", input: assert.AnError, expected: assert.AnError},
 		{
 			name:     "stream error",
 			input:    &quic.StreamError{ErrorCode: 1337, Remote: true},

@@ -2,112 +2,115 @@ package http3
 
 import (
 	"bytes"
-	"errors"
 	"io"
+	"testing"
+	"time"
 
 	"github.com/Noooste/quic-go"
 	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-var _ = Describe("Response Body", func() {
-	var reqDone chan struct{}
+func TestResponseBodyReading(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	var buf bytes.Buffer
+	buf.Write(getDataFrame([]byte("foobar")))
+	str := mockquic.NewMockStream(mockCtrl)
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	reqDone := make(chan struct{})
+	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
 
-	BeforeEach(func() { reqDone = make(chan struct{}) })
+	data, err := io.ReadAll(rb)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foobar"), data)
+}
 
-	It("closes the reqDone channel when Read errors", func() {
-		str := mockquic.NewMockStream(mockCtrl)
-		str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test error"))
-		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
-		_, err := rb.Read([]byte{0})
-		Expect(err).To(MatchError("test error"))
-		Expect(reqDone).To(BeClosed())
+func TestResponseBodyReadError(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := mockquic.NewMockStream(mockCtrl)
+	str.EXPECT().Read(gomock.Any()).Return(0, assert.AnError).Times(2)
+	reqDone := make(chan struct{})
+	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+
+	_, err := rb.Read([]byte{0})
+	require.ErrorIs(t, err, assert.AnError)
+	// repeated calls to Read should return the same error
+	_, err = rb.Read([]byte{0})
+	require.ErrorIs(t, err, assert.AnError)
+	select {
+	case <-reqDone:
+	default:
+		t.Fatal("reqDone should be closed")
+	}
+}
+
+func TestResponseBodyClose(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := mockquic.NewMockStream(mockCtrl)
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
+	reqDone := make(chan struct{})
+	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+	require.NoError(t, rb.Close())
+	select {
+	case <-reqDone:
+	default:
+		t.Fatal("reqDone should be closed")
+	}
+
+	// multiple calls to Close should be a no-op
+	require.NoError(t, rb.Close())
+}
+
+func TestResponseBodyConcurrentClose(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := mockquic.NewMockStream(mockCtrl)
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(3)
+	reqDone := make(chan struct{})
+	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+
+	for range 3 {
+		go rb.Close()
+	}
+	select {
+	case <-reqDone:
+	case <-time.After(time.Second):
+		t.Fatal("reqDone should be closed")
+	}
+}
+
+func TestResponseBodyLengthLimiting(t *testing.T) {
+	t.Run("along frame boundary", func(t *testing.T) {
+		testResponseBodyLengthLimiting(t, true)
 	})
 
-	It("allows multiple calls to Read, when Read errors", func() {
-		str := mockquic.NewMockStream(mockCtrl)
-		str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test error")).Times(2)
-		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
-		_, err := rb.Read([]byte{0})
-		Expect(err).To(HaveOccurred())
-		Expect(reqDone).To(BeClosed())
-		_, err = rb.Read([]byte{0})
-		Expect(err).To(HaveOccurred())
+	t.Run("in the middle of a frame", func(t *testing.T) {
+		testResponseBodyLengthLimiting(t, false)
 	})
+}
 
-	It("closes responses", func() {
-		str := mockquic.NewMockStream(mockCtrl)
-		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
-		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
-		Expect(rb.Close()).To(Succeed())
-	})
+func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
+	var buf bytes.Buffer
+	buf.Write(getDataFrame([]byte("foo")))
+	buf.Write(getDataFrame([]byte("bar")))
 
-	It("allows multiple calls to Close", func() {
-		str := mockquic.NewMockStream(mockCtrl)
-		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
-		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(2)
-		Expect(rb.Close()).To(Succeed())
-		Expect(reqDone).To(BeClosed())
-		Expect(rb.Close()).To(Succeed())
-	})
-
-	It("allows concurrent calls to Close", func() {
-		str := mockquic.NewMockStream(mockCtrl)
-		rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
-		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(2)
-		go func() {
-			defer GinkgoRecover()
-			Expect(rb.Close()).To(Succeed())
-		}()
-		Expect(rb.Close()).To(Succeed())
-		Expect(reqDone).To(BeClosed())
-	})
-
-	Context("length limiting", func() {
-		It("reads all frames", func() {
-			var buf bytes.Buffer
-			buf.Write(getDataFrame([]byte("foobar")))
-			str := mockquic.NewMockStream(mockCtrl)
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			rb := newResponseBody(&stream{Stream: str}, 6, reqDone)
-			data, err := io.ReadAll(rb)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(data).To(Equal([]byte("foobar")))
-		})
-
-		It("errors if more data than the maximum length is sent, in the middle of a frame", func() {
-			var buf bytes.Buffer
-			buf.Write(getDataFrame([]byte("foo")))
-			buf.Write(getDataFrame([]byte("bar")))
-			str := mockquic.NewMockStream(mockCtrl)
-			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			rb := newResponseBody(&stream{Stream: str}, 4, reqDone)
-			data, err := io.ReadAll(rb)
-			Expect(data).To(Equal([]byte("foob")))
-			Expect(err).To(MatchError(errTooMuchData))
-			// check that repeated calls to Read also return the right error
-			n, err := rb.Read([]byte{0})
-			Expect(n).To(BeZero())
-			Expect(err).To(MatchError(errTooMuchData))
-		})
-
-		It("errors if more data than the maximum length is sent, as an additional frame", func() {
-			var buf bytes.Buffer
-			buf.Write(getDataFrame([]byte("foo")))
-			buf.Write(getDataFrame([]byte("bar")))
-			str := mockquic.NewMockStream(mockCtrl)
-			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-			str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			rb := newResponseBody(&stream{Stream: str}, 3, reqDone)
-			data, err := io.ReadAll(rb)
-			Expect(err).To(MatchError(errTooMuchData))
-			Expect(data).To(Equal([]byte("foo")))
-		})
-	})
-})
+	l := int64(4)
+	if alongFrameBoundary {
+		l = 3
+	}
+	mockCtrl := gomock.NewController(t)
+	str := mockquic.NewMockStream(mockCtrl)
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
+	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	rb := newResponseBody(&stream{Stream: str}, l, make(chan struct{}))
+	data, err := io.ReadAll(rb)
+	require.Equal(t, []byte("foobar")[:l], data)
+	require.ErrorIs(t, err, errTooMuchData)
+	// check that repeated calls to Read also return the right error
+	n, err := rb.Read([]byte{0})
+	require.Zero(t, n)
+	require.ErrorIs(t, err, errTooMuchData)
+}

@@ -249,7 +249,7 @@ func TestUnpackHeaderSampleLongHeader(t *testing.T) {
 		cs.EXPECT().GetHandshakeOpener().Return(mocks.NewMockLongHeaderOpener(mockCtrl), nil)
 		_, err = unpacker.UnpackLongHeader(hdr, data[:len(data)-1])
 		require.IsType(t, &headerParseError{}, err)
-		require.ErrorContains(t, err, "Packet too small. Expected at least 20 bytes after the header, got 19")
+		require.ErrorContains(t, err, "packet too small, expected at least 20 bytes after the header, got 19")
 	})
 
 	t.Run("minimal size", func(t *testing.T) {

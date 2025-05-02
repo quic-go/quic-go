@@ -1,7 +1,7 @@
 package ackhandler
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"slices"
 	"testing"
 
@@ -174,7 +174,7 @@ func TestReceivedPacketHistoryRandomized(t *testing.T) {
 	hist := newReceivedPacketHistory()
 	packets := make(map[protocol.PacketNumber]int)
 	const num = 2 * protocol.MaxNumAckRanges
-	numLostPackets := rand.Intn(protocol.MaxNumAckRanges)
+	numLostPackets := rand.IntN(protocol.MaxNumAckRanges)
 	numRcvdPackets := num - numLostPackets
 
 	for i := 0; i < num; i++ {
@@ -182,7 +182,7 @@ func TestReceivedPacketHistoryRandomized(t *testing.T) {
 	}
 	lostPackets := make([]protocol.PacketNumber, 0, numLostPackets)
 	for len(lostPackets) < numLostPackets {
-		p := protocol.PacketNumber(rand.Intn(num))
+		p := protocol.PacketNumber(rand.IntN(num))
 		if _, ok := packets[p]; ok {
 			lostPackets = append(lostPackets, p)
 			delete(packets, p)
@@ -202,7 +202,7 @@ func TestReceivedPacketHistoryRandomized(t *testing.T) {
 		require.True(t, hist.ReceivedPacket(p))
 		// sometimes receive a duplicate
 		if i > 0 && rand.Int()%5 == 0 {
-			require.False(t, hist.ReceivedPacket(ordered[rand.Intn(i)]))
+			require.False(t, hist.ReceivedPacket(ordered[rand.IntN(i)]))
 		}
 	}
 	var counter int

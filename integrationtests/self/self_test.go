@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"github.com/Noooste/utls"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"os"
 	"runtime/pprof"
@@ -153,7 +153,7 @@ func addTracer(tr *quic.Transport) {
 	)
 }
 
-func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
+func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
 	t.Helper()
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
@@ -304,7 +304,7 @@ func (r *readerWithTimeout) Read(p []byte) (n int, err error) {
 }
 
 func randomDuration(min, max time.Duration) time.Duration {
-	return min + time.Duration(rand.Int63n(int64(max-min)))
+	return min + time.Duration(rand.IntN(int(max-min)))
 }
 
 // contains0RTTPacket says if a packet contains a 0-RTT long header packet.

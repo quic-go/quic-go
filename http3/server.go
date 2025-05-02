@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,16 +22,6 @@ import (
 	"github.com/Noooste/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
-)
-
-// allows mocking of quic.Listen and quic.ListenAddr
-var (
-	quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
-		return quic.ListenEarly(conn, tlsConf, config)
-	}
-	quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
-		return quic.ListenAddrEarly(addr, tlsConf, config)
-	}
 )
 
 // NextProtoH3 is the ALPN protocol negotiated during the TLS handshake, for QUIC v1 and v2.
@@ -57,55 +48,24 @@ type QUICEarlyListener interface {
 
 var _ QUICEarlyListener = &quic.EarlyListener{}
 
-func versionToALPN(v protocol.Version) string {
-	//nolint:exhaustive // These are all the versions we care about.
-	switch v {
-	case protocol.Version1, protocol.Version2:
-		return NextProtoH3
-	default:
-		return ""
-	}
-}
-
 // ConfigureTLSConfig creates a new tls.Config which can be used
-// to create a quic.Listener meant for serving http3. The created
-// tls.Config adds the functionality of detecting the used QUIC version
-// in order to set the correct ALPN value for the http3 connection.
+// to create a quic.Listener meant for serving HTTP/3.
 func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
-	// The tls.Config used to setup the quic.Listener needs to have the GetConfigForClient callback set.
-	// That way, we can get the QUIC version and set the correct ALPN value.
-	return &tls.Config{
-		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
-			// determine the ALPN from the QUIC version used
-			proto := NextProtoH3
-			val := ch.Context().Value(quic.QUICVersionContextKey)
-			if v, ok := val.(quic.Version); ok {
-				proto = versionToALPN(v)
+	// Workaround for https://github.com/golang/go/issues/60506.
+	// This initializes the session tickets _before_ cloning the config.
+	_, _ = tlsConf.DecryptTicket(nil, tls.ConnectionState{})
+	config := tlsConf.Clone()
+	config.NextProtos = []string{NextProtoH3}
+	if gfc := config.GetConfigForClient; gfc != nil {
+		config.GetConfigForClient = func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+			conf, err := gfc(ch)
+			if conf == nil || err != nil {
+				return conf, err
 			}
-			config := tlsConf
-			if tlsConf.GetConfigForClient != nil {
-				getConfigForClient := tlsConf.GetConfigForClient
-				var err error
-				conf, err := getConfigForClient(ch)
-				if err != nil {
-					return nil, err
-				}
-				if conf != nil {
-					config = conf
-				}
-			}
-			if config == nil {
-				return nil, nil
-			}
-			// Workaround for https://github.com/golang/go/issues/60506.
-			// This initializes the session tickets _before_ cloning the config.
-			_, _ = config.DecryptTicket(nil, tls.ConnectionState{})
-
-			config = config.Clone()
-			config.NextProtos = []string{proto}
-			return config, nil
-		},
+			return ConfigureTLSConfig(conf), nil
+		}
 	}
+	return config
 }
 
 // contextKey is a value for use with context.WithValue. It's used as
@@ -132,8 +92,9 @@ var ServerContextKey = &contextKey{"http3-server"}
 // than its string representation.
 var RemoteAddrContextKey = &contextKey{"remote-addr"}
 
-// listenerInfo contains info about specific listener added with addListener
-type listenerInfo struct {
+// listener contains info about specific listener added with addListener
+type listener struct {
+	ln   *QUICEarlyListener
 	port int // 0 means that no info about port is available
 }
 
@@ -214,7 +175,7 @@ type Server struct {
 	Logger *slog.Logger
 
 	mutex     sync.RWMutex
-	listeners map[*QUICEarlyListener]listenerInfo
+	listeners []listener
 
 	closed           bool
 	closeCtx         context.Context    // canceled when the server is closed
@@ -235,9 +196,9 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	defer s.removeListener(&ln)
+	defer s.removeListener(ln)
 
-	return s.serveListener(ln)
+	return s.serveListener(*ln)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -256,9 +217,9 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
-	defer s.removeListener(&ln)
+	defer s.removeListener(ln)
 
-	return s.serveListener(ln)
+	return s.serveListener(*ln)
 }
 
 // Serve an existing UDP connection.
@@ -269,9 +230,9 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	if err != nil {
 		return err
 	}
-	defer s.removeListener(&ln)
+	defer s.removeListener(ln)
 
-	return s.serveListener(ln)
+	return s.serveListener(*ln)
 }
 
 // init initializes the contexts used for shutting down the server.
@@ -293,6 +254,11 @@ func (s *Server) decreaseConnCount() {
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn quic.Connection) error {
 	s.mutex.Lock()
+	if s.closed {
+		s.mutex.Unlock()
+		return http.ErrServerClosed
+	}
+
 	s.init()
 	s.mutex.Unlock()
 
@@ -343,7 +309,7 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 
 var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
 
-func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (QUICEarlyListener, error) {
+func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (*QUICEarlyListener, error) {
 	if tlsConf == nil {
 		return nil, errServerWithoutTLSConfig
 	}
@@ -373,9 +339,9 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 		if addr == "" {
 			addr = ":https"
 		}
-		ln, err = quicListenAddr(addr, baseConf, quicConf)
+		ln, err = quic.ListenAddrEarly(addr, baseConf, quicConf)
 	} else {
-		ln, err = quicListen(conn, baseConf, quicConf)
+		ln, err = quic.ListenEarly(conn, baseConf, quicConf)
 	}
 	if err != nil {
 		return nil, err
@@ -383,7 +349,7 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 	if err := s.addListener(&ln); err != nil {
 		return nil, err
 	}
-	return ln, nil
+	return &ln, nil
 }
 
 func extractPort(addr string) (int, error) {
@@ -407,28 +373,10 @@ func (s *Server) generateAltSvcHeader() {
 	}
 
 	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
-	supportedVersions := protocol.SupportedVersions
-	if s.QUICConfig != nil && len(s.QUICConfig.Versions) > 0 {
-		supportedVersions = s.QUICConfig.Versions
-	}
-
-	// keep track of which have been seen so we don't yield duplicate values
-	seen := make(map[string]struct{}, len(supportedVersions))
-	var versionStrings []string
-	for _, version := range supportedVersions {
-		if v := versionToALPN(version); len(v) > 0 {
-			if _, ok := seen[v]; !ok {
-				versionStrings = append(versionStrings, v)
-				seen[v] = struct{}{}
-			}
-		}
-	}
 
 	var altSvc []string
 	addPort := func(port int) {
-		for _, v := range versionStrings {
-			altSvc = append(altSvc, fmt.Sprintf(`%s=":%d"; ma=2592000`, v, port))
-		}
+		altSvc = append(altSvc, fmt.Sprintf(`%s=":%d"; ma=2592000`, NextProtoH3, port))
 	}
 
 	if s.Port != 0 {
@@ -455,28 +403,22 @@ func (s *Server) generateAltSvcHeader() {
 	s.altSvcHeader = strings.Join(altSvc, ",")
 }
 
-// We store a pointer to interface in the map set. This is safe because we only
-// call trackListener via Serve and can track+defer untrack the same pointer to
-// local variable there. We never need to compare a Listener from another caller.
 func (s *Server) addListener(l *QUICEarlyListener) error {
 	if s.closed {
 		return http.ErrServerClosed
-	}
-	if s.listeners == nil {
-		s.listeners = make(map[*QUICEarlyListener]listenerInfo)
 	}
 	s.init()
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
-		s.listeners[l] = listenerInfo{port}
+		s.listeners = append(s.listeners, listener{ln: l, port: port})
 	} else {
 		logger := s.Logger
 		if logger == nil {
 			logger = slog.Default()
 		}
 		logger.Error("Unable to extract port from listener, will not be announced using SetQUICHeaders", "local addr", laddr, "error", err)
-		s.listeners[l] = listenerInfo{}
+		s.listeners = append(s.listeners, listener{ln: l, port: 0})
 	}
 	s.generateAltSvcHeader()
 	return nil
@@ -485,7 +427,10 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 func (s *Server) removeListener(l *QUICEarlyListener) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	delete(s.listeners, l)
+
+	s.listeners = slices.DeleteFunc(s.listeners, func(info listener) bool {
+		return info.ln == l
+	})
 	s.generateAltSvcHeader()
 }
 
@@ -730,8 +675,8 @@ func (s *Server) Close() error {
 	s.closeCancel()
 
 	var err error
-	for ln := range s.listeners {
-		if cerr := (*ln).Close(); cerr != nil && err == nil {
+	for _, info := range s.listeners {
+		if cerr := (*info.ln).Close(); cerr != nil && err == nil {
 			err = cerr
 		}
 	}

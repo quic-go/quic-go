@@ -8,7 +8,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version: "1.24.x"
       - name: Check that no non-test files import Ginkgo or Gomega
         run: .github/workflows/no_ginkgo.sh
       - name: Check for //go:build ignore in .go files
@@ -39,9 +39,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [  "1.22.x", "1.23.x" ]
+        go: [  "1.23.x", "1.24.x" ]
     env:
-      GOLANGCI_LINT_VERSION: v1.62.0
+      GOLANGCI_LINT_VERSION: v2.0.2
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
@@ -49,13 +49,13 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint (Linux)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (Windows)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         env:
           GOOS: "windows"
         with:
@@ -63,7 +63,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (OSX)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         env:
           GOOS: "darwin"
         with:
@@ -71,7 +71,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (FreeBSD)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         env:
           GOOS: "freebsd"
         with:
@@ -79,7 +79,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (others)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         env:
           GOOS: "solaris" # some OS that we don't have any build tags for
         with:

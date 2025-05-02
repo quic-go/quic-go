@@ -50,7 +50,7 @@ func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection
 func (ln *fakeClosingListener) Close() error {
 	if ln.closed.CompareAndSwap(false, true) {
 		ln.cancel()
-		if ln.listenerWrapper.count.Add(-1) == 0 {
+		if ln.count.Add(-1) == 0 {
 			ln.listenerWrapper.Close()
 		}
 	}
@@ -78,7 +78,7 @@ func TestHTTP3ServerHotswap(t *testing.T) {
 	}
 
 	tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
-	quicLn, err := quic.ListenEarly(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
+	quicLn, err := quic.ListenEarly(newUDPConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	ln := &listenerWrapper{QUICEarlyListener: quicLn}
 	port := strconv.Itoa(ln.Addr().(*net.UDPAddr).Port)

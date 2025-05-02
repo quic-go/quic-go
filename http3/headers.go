@@ -55,23 +55,33 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 				// all pseudo headers must appear before regular header fields, see section 4.3 of RFC 9114
 				return header{}, fmt.Errorf("received pseudo header %s after a regular header field", h.Name)
 			}
-			var isResponsePseudoHeader bool // pseudo headers are either valid for requests or for responses
+			var isResponsePseudoHeader bool  // pseudo headers are either valid for requests or for responses
+			var isDuplicatePseudoHeader bool // pseudo headers are allowed to appear exactly once
 			switch h.Name {
 			case ":path":
+				isDuplicatePseudoHeader = hdr.Path != ""
 				hdr.Path = h.Value
 			case ":method":
+				isDuplicatePseudoHeader = hdr.Method != ""
 				hdr.Method = h.Value
 			case ":authority":
+				isDuplicatePseudoHeader = hdr.Authority != ""
 				hdr.Authority = h.Value
 			case ":protocol":
+				isDuplicatePseudoHeader = hdr.Protocol != ""
 				hdr.Protocol = h.Value
 			case ":scheme":
+				isDuplicatePseudoHeader = hdr.Scheme != ""
 				hdr.Scheme = h.Value
 			case ":status":
+				isDuplicatePseudoHeader = hdr.Status != ""
 				hdr.Status = h.Value
 				isResponsePseudoHeader = true
 			default:
 				return header{}, fmt.Errorf("unknown pseudo header: %s", h.Name)
+			}
+			if isDuplicatePseudoHeader {
+				return header{}, fmt.Errorf("duplicate pseudo header: %s", h.Name)
 			}
 			if isRequest && isResponsePseudoHeader {
 				return header{}, fmt.Errorf("invalid request pseudo header: %s", h.Name)
@@ -201,13 +211,6 @@ func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error)
 	}, nil
 }
 
-func hostnameFromURL(url *url.URL) string {
-	if url != nil {
-		return url.Host
-	}
-	return ""
-}
-
 // updateResponseFromHeaders sets up http.Response as an HTTP/3 response,
 // using the decoded qpack header filed.
 // It is only called for the HTTP header (and not the HTTP trailer).
@@ -218,7 +221,7 @@ func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderFi
 		return err
 	}
 	if hdr.Status == "" {
-		return errors.New("missing status field")
+		return errors.New("missing :status field")
 	}
 	rsp.Proto = "HTTP/3.0"
 	rsp.ProtoMajor = 3

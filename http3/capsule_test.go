@@ -3,62 +3,55 @@ package http3
 import (
 	"bytes"
 	"io"
+	"testing"
 
 	"github.com/Noooste/quic-go/quicvarint"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Capsule", func() {
-	It("parses Capsules", func() {
-		b := quicvarint.Append(nil, 1337)
-		b = quicvarint.Append(b, 6)
-		b = append(b, []byte("foobar")...)
+func TestCapsuleParsing(t *testing.T) {
+	b := quicvarint.Append(nil, 1337)
+	b = quicvarint.Append(b, 6)
+	b = append(b, []byte("foobar")...)
 
-		ct, r, err := ParseCapsule(bytes.NewReader(b))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(ct).To(BeEquivalentTo(1337))
-		buf := make([]byte, 3)
-		n, err := r.Read(buf)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(3))
-		Expect(buf).To(Equal([]byte("foo")))
-		data, err := io.ReadAll(r)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(data).To(Equal([]byte("bar")))
-	})
+	ct, r, err := ParseCapsule(bytes.NewReader(b))
+	require.NoError(t, err)
+	require.Equal(t, CapsuleType(1337), ct)
+	buf := make([]byte, 3)
+	n, err := r.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	require.Equal(t, []byte("foo"), buf)
+	data, err := io.ReadAll(r) // reads until EOF
+	require.NoError(t, err)
+	require.Equal(t, []byte("bar"), data)
 
-	It("writes capsules", func() {
-		var buf bytes.Buffer
-		Expect(WriteCapsule(&buf, 1337, []byte("foobar"))).To(Succeed())
-
-		ct, r, err := ParseCapsule(&buf)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(ct).To(BeEquivalentTo(1337))
-		val, err := io.ReadAll(r)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(string(val)).To(Equal("foobar"))
-	})
-
-	It("errors on EOF", func() {
-		b := quicvarint.Append(nil, 1337)
-		b = quicvarint.Append(b, 6)
-		b = append(b, []byte("foobar")...)
-
-		for i := range b {
-			ct, r, err := ParseCapsule(bytes.NewReader(b[:i]))
-			if err != nil {
-				if i == 0 {
-					Expect(err).To(MatchError(io.EOF))
-				} else {
-					Expect(err).To(MatchError(io.ErrUnexpectedEOF))
-				}
-				continue
+	// test EOF vs ErrUnexpectedEOF
+	for i := range b {
+		ct, r, err := ParseCapsule(bytes.NewReader(b[:i]))
+		if err != nil {
+			if i == 0 {
+				require.ErrorIs(t, err, io.EOF)
+			} else {
+				require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 			}
-			Expect(ct).To(BeEquivalentTo(1337))
-			_, err = io.ReadAll(r)
-			Expect(err).To(Equal(io.ErrUnexpectedEOF))
+			continue
 		}
-	})
-})
+		require.Equal(t, CapsuleType(1337), ct)
+		_, err = io.ReadAll(r)
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	}
+}
+
+func TestCapsuleWriting(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, WriteCapsule(&buf, 1337, []byte("foobar")))
+
+	ct, r, err := ParseCapsule(&buf)
+	require.NoError(t, err)
+	require.Equal(t, CapsuleType(1337), ct)
+	val, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.Equal(t, "foobar", string(val))
+}

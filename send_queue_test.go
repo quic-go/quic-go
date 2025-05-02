@@ -1,14 +1,14 @@
 package quic
 
 import (
-	"errors"
 	"net"
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/stretchr/testify/require"
+	"github.com/quic-go/quic-go/internal/protocol"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -143,7 +143,7 @@ func TestSendQueueWriteError(t *testing.T) {
 	c := NewMockSendConn(mockCtrl)
 	q := newSendQueue(c)
 
-	c.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("test error"))
+	c.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Return(assert.AnError)
 	q.Send(getPacketWithContents([]byte("foobar")), 6, protocol.ECNNon)
 
 	errChan := make(chan error, 1)
@@ -151,7 +151,7 @@ func TestSendQueueWriteError(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		require.EqualError(t, err, "test error")
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}

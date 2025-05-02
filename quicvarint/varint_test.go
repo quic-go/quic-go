@@ -3,9 +3,8 @@ package quicvarint
 import (
 	"bytes"
 	"io"
+	"math/rand/v2"
 	"testing"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/stretchr/testify/require"
 )
@@ -179,10 +178,10 @@ type benchmarkValue struct {
 }
 
 func randomValues(num int, maxValue uint64) []benchmarkValue {
-	r := rand.New(rand.NewSource(1))
+	r := rand.New(rand.NewPCG(13, 37))
 
 	bv := make([]benchmarkValue, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		v := r.Uint64() % maxValue
 		bv[i].v = v
 		bv[i].b = Append([]byte{}, v)
@@ -253,7 +252,28 @@ func benchmarkAppend(b *testing.B, inputs []benchmarkValue) {
 		buf = Append(buf, inputs[index].v)
 
 		if !bytes.Equal(buf, inputs[index].b) {
-			b.Fatalf("expected to write %v, wrote %v", inputs[i].b, buf)
+			b.Fatalf("expected to write %v, wrote %v", inputs[index].b, buf)
+		}
+	}
+}
+
+func BenchmarkAppendWithLen(b *testing.B) {
+	b.Run("1-byte", func(b *testing.B) { benchmarkAppendWithLen(b, randomValues(min(b.N, 1024), maxVarInt1)) })
+	b.Run("2-byte", func(b *testing.B) { benchmarkAppendWithLen(b, randomValues(min(b.N, 1024), maxVarInt2)) })
+	b.Run("4-byte", func(b *testing.B) { benchmarkAppendWithLen(b, randomValues(min(b.N, 1024), maxVarInt4)) })
+	b.Run("8-byte", func(b *testing.B) { benchmarkAppendWithLen(b, randomValues(min(b.N, 1024), maxVarInt8)) })
+}
+
+func benchmarkAppendWithLen(b *testing.B, inputs []benchmarkValue) {
+	buf := make([]byte, 8)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf = buf[:0]
+		index := i % 1024
+		buf = AppendWithLen(buf, inputs[index].v, len(inputs[index].b))
+
+		if !bytes.Equal(buf, inputs[index].b) {
+			b.Fatalf("expected to write %v, wrote %v", inputs[index].b, buf)
 		}
 	}
 }

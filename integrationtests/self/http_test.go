@@ -5,29 +5,31 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/Noooste/fhttp"
-	"github.com/Noooste/utls"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
-"github.com/Noooste/fhttp/httptrace"
-"net/textproto"
-"os"
-"strconv"
-"sync/atomic"
-"testing"
-"time"
+	"net/http"
+	"net/http/httptrace"
+	"net/textproto"
+	"os"
+	"strconv"
+	"sync/atomic"
+	"testing"
+	"time"
 
-"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/errgroup"
 
-"github.com/Noooste/quic-go"
-"github.com/Noooste/quic-go/http3"
-quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 
-"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
 type neverEnding byte
 
 func (b neverEnding) Read(p []byte) (n int, err error) {
@@ -41,7 +43,7 @@ func randomString(length int) string {
 	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		n := mrand.Intn(len(alphabet))
+		n := mrand.IntN(len(alphabet))
 		b[i] = alphabet[n]
 	}
 	return string(b)
@@ -58,7 +60,7 @@ func startHTTPServer(t *testing.T, mux *http.ServeMux, opts ...func(*http3.Serve
 		opt(server)
 	}
 
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -395,14 +397,13 @@ func TestHTTPReestablishConnectionAfterDialError(t *testing.T) {
 	port := startHTTPServer(t, mux)
 
 	var dialCounter int
-	testErr := errors.New("test error")
 	cl := http.Client{
 		Transport: &http3.Transport{
 			TLSClientConfig: getTLSClientConfig(),
 			Dial: func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
 				dialCounter++
 				if dialCounter == 1 { // make the first dial fail
-					return nil, testErr
+					return nil, assert.AnError
 				}
 				return quic.DialAddrEarly(ctx, addr, tlsConf, conf)
 			},
@@ -411,7 +412,7 @@ func TestHTTPReestablishConnectionAfterDialError(t *testing.T) {
 	defer cl.Transport.(io.Closer).Close()
 
 	_, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -553,7 +554,7 @@ func TestHTTPDeadlines(t *testing.T) {
 func TestHTTPServeQUICConn(t *testing.T) {
 	tlsConf := getTLSConfig()
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
-	ln, err := quic.Listen(newUPDConnLocalhost(t), tlsConf, getQuicConfig(nil))
+	ln, err := quic.Listen(newUDPConnLocalhost(t), tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -592,7 +593,7 @@ func TestHTTPServeQUICConn(t *testing.T) {
 }
 
 func TestHTTPContextFromQUIC(t *testing.T) {
-	conn := newUPDConnLocalhost(t)
+	conn := newUDPConnLocalhost(t)
 	tr := &quic.Transport{
 		Conn: conn,
 		ConnContext: func(ctx context.Context) context.Context {
@@ -848,9 +849,9 @@ func TestHTTP0RTT(t *testing.T) {
 
 	var num0RTTPackets atomic.Uint32
 	proxy := quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
-		DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
+		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
 			if contains0RTTPacket(data) {
 				num0RTTPackets.Add(1)
 			}
@@ -926,7 +927,7 @@ func TestHTTPStreamer(t *testing.T) {
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}, tlsConf, getQuicConfig(nil))
+	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}, tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 	tr := http3.Transport{}

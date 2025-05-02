@@ -81,11 +81,12 @@ func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
 
 type testConnection struct {
 	conn       *connection
-	connRunner *MockConnRunner
+	connRunner *MockPacketHandlerManager
 	sendConn   *MockSendConn
 	packer     *MockPacker
 	destConnID protocol.ConnectionID
 	srcConnID  protocol.ConnectionID
+	remoteAddr *net.UDPAddr
 }
 
 func newServerTestConnection(
@@ -100,7 +101,7 @@ func newServerTestConnection(
 	}
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-	connRunner := NewMockConnRunner(mockCtrl)
+	phm := NewMockPacketHandlerManager(mockCtrl)
 	sendConn := NewMockSendConn(mockCtrl)
 	sendConn.EXPECT().capabilities().Return(connCapabilities{GSO: gso}).AnyTimes()
 	sendConn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
@@ -118,7 +119,7 @@ func newServerTestConnection(
 		ctx,
 		cancel,
 		sendConn,
-		connRunner,
+		&Transport{handlerMap: phm},
 		origDestConnID,
 		nil,
 		protocol.ConnectionID{},
@@ -140,11 +141,12 @@ func newServerTestConnection(
 	}
 	return &testConnection{
 		conn:       conn,
-		connRunner: connRunner,
+		connRunner: phm,
 		sendConn:   sendConn,
 		packer:     packer,
 		destConnID: origDestConnID,
 		srcConnID:  srcConnID,
+		remoteAddr: remoteAddr,
 	}
 }
 
@@ -160,7 +162,7 @@ func newClientTestConnection(
 	}
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-	connRunner := NewMockConnRunner(mockCtrl)
+	phm := NewMockPacketHandlerManager(mockCtrl)
 	sendConn := NewMockSendConn(mockCtrl)
 	sendConn.EXPECT().capabilities().Return(connCapabilities{}).AnyTimes()
 	sendConn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
@@ -176,7 +178,7 @@ func newClientTestConnection(
 	conn := newClientConnection(
 		context.Background(),
 		sendConn,
-		connRunner,
+		&Transport{handlerMap: phm},
 		destConnID,
 		srcConnID,
 		&protocol.DefaultConnectionIDGenerator{},
@@ -196,7 +198,7 @@ func newClientTestConnection(
 	}
 	return &testConnection{
 		conn:       conn,
-		connRunner: connRunner,
+		connRunner: phm,
 		sendConn:   sendConn,
 		packer:     packer,
 		destConnID: destConnID,
@@ -220,14 +222,17 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		// STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
 		str.EXPECT().handleStreamFrame(f, now)
-		require.NoError(t, tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// RESET_STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
 		str.EXPECT().handleResetStreamFrame(rsf, now)
-		require.NoError(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for closed streams", func(t *testing.T) {
@@ -236,29 +241,34 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
 		// STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// RESET_STREAM frame
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for invalid streams", func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		streamsMap := NewMockStreamManager(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		testErr := errors.New("test err")
 		// STREAM frame
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now), testErr)
+		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, assert.AnError)
+		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, assert.AnError)
 		// RESET_STREAM frame
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now), testErr)
+		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, assert.AnError)
+		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, assert.AnError)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now), testErr)
+		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, assert.AnError)
+		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, assert.AnError)
 	})
 }
 
@@ -277,11 +287,13 @@ func TestConnectionHandleSendStreamFrames(t *testing.T) {
 		// STOP_SENDING frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
 		str.EXPECT().handleStopSendingFrame(ss)
-		require.NoError(t, tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// MAX_STREAM_DATA frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
 		str.EXPECT().updateSendWindow(msd.MaximumStreamData)
-		require.NoError(t, tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for closed streams", func(t *testing.T) {
@@ -290,23 +302,26 @@ func TestConnectionHandleSendStreamFrames(t *testing.T) {
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
 		// STOP_SENDING frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now))
+		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 		// MAX_STREAM_DATA frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, nil)
-		require.NoError(t, tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now))
+		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
+		require.NoError(t, err)
 	})
 
 	t.Run("for invalid streams", func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		streamsMap := NewMockStreamManager(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		testErr := errors.New("test err")
 		// STOP_SENDING frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now), testErr)
+		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, assert.AnError)
+		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, assert.AnError)
 		// MAX_STREAM_DATA frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, testErr)
-		require.ErrorIs(t, tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now), testErr)
+		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, assert.AnError)
+		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
+		require.ErrorIs(t, err, assert.AnError)
 	})
 }
 
@@ -319,9 +334,11 @@ func TestConnectionHandleStreamNumFrames(t *testing.T) {
 	// MAX_STREAMS frame
 	msf := &wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 10}
 	streamsMap.EXPECT().HandleMaxStreamsFrame(msf)
-	require.NoError(t, tc.conn.handleFrame(msf, protocol.Encryption1RTT, connID, now))
+	_, err := tc.conn.handleFrame(msf, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 	// STREAMS_BLOCKED frame
-	tc.conn.handleFrame(&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 1}, protocol.Encryption1RTT, connID, now)
+	_, err = tc.conn.handleFrame(&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 1}, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 }
 
 func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
@@ -332,9 +349,11 @@ func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	connID := protocol.ConnectionID{}
 	// MAX_DATA frame
 	connFC.EXPECT().UpdateSendWindow(protocol.ByteCount(1337))
-	require.NoError(t, tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now))
+	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 	// DATA_BLOCKED frame
-	require.NoError(t, tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now))
+	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	require.NoError(t, err)
 }
 
 func TestConnectionOpenStreams(t *testing.T) {
@@ -402,10 +421,8 @@ func TestConnectionServerInvalidFrames(t *testing.T) {
 		{Name: "PATH_RESPONSE", Frame: &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
 	} {
 		t.Run(test.Name, func(t *testing.T) {
-			require.ErrorIs(t,
-				tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now()),
-				&qerr.TransportError{ErrorCode: qerr.ProtocolViolation},
-			)
+			_, err := tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now())
+			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
 		})
 	}
 }
@@ -418,7 +435,7 @@ func TestConnectionTransportError(t *testing.T) {
 	expectedErr := &qerr.TransportError{
 		ErrorCode:    1337,
 		FrameType:    42,
-		ErrorMessage: "test error",
+		ErrorMessage: "foobar",
 	}
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 	b := getPacketBuffer()
@@ -452,7 +469,7 @@ func TestConnectionApplicationClose(t *testing.T) {
 	errChan := make(chan error, 1)
 	expectedErr := &qerr.ApplicationError{
 		ErrorCode:    1337,
-		ErrorMessage: "test error",
+		ErrorMessage: "foobar",
 	}
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 	b := getPacketBuffer()
@@ -466,7 +483,7 @@ func TestConnectionApplicationClose(t *testing.T) {
 	)
 
 	go func() { errChan <- tc.conn.run() }()
-	tc.conn.CloseWithError(1337, "test error")
+	tc.conn.CloseWithError(1337, "foobar")
 
 	select {
 	case err := <-errChan:
@@ -501,25 +518,27 @@ func TestConnectionStatelessReset(t *testing.T) {
 	}
 }
 
-func getLongHeaderPacket(t *testing.T, extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
+func getLongHeaderPacket(t *testing.T, remoteAddr net.Addr, extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
 	t.Helper()
 	b, err := extHdr.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	return receivedPacket{
-		data:    append(b, data...),
-		buffer:  getPacketBuffer(),
-		rcvTime: time.Now(),
+		remoteAddr: remoteAddr,
+		data:       append(b, data...),
+		buffer:     getPacketBuffer(),
+		rcvTime:    time.Now(),
 	}
 }
 
-func getShortHeaderPacket(t *testing.T, connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) receivedPacket {
+func getShortHeaderPacket(t *testing.T, remoteAddr net.Addr, connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) receivedPacket {
 	t.Helper()
 	b, err := wire.AppendShortHeader(nil, connID, pn, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 	require.NoError(t, err)
 	return receivedPacket{
-		data:    append(b, data...),
-		buffer:  getPacketBuffer(),
-		rcvTime: time.Now(),
+		remoteAddr: remoteAddr,
+		data:       append(b, data...),
+		buffer:     getPacketBuffer(),
+		rcvTime:    time.Now(),
 	}
 }
 
@@ -529,13 +548,17 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-		p := getLongHeaderPacket(t, &wire.ExtendedHeader{Header: wire.Header{
-			Type:             protocol.PacketTypeRetry,
-			DestConnectionID: tc.conn.origDestConnID,
-			SrcConnectionID:  tc.srcConnID,
-			Version:          tc.conn.version,
-			Token:            []byte("foobar"),
-		}}, make([]byte, 16) /* Retry integrity tag */)
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{Header: wire.Header{
+				Type:             protocol.PacketTypeRetry,
+				DestConnectionID: tc.conn.origDestConnID,
+				SrcConnectionID:  tc.srcConnID,
+				Version:          tc.conn.version,
+				Token:            []byte("foobar"),
+			}},
+			make([]byte, 16), /* Retry integrity tag */
+		)
 		tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 		wasProcessed, err := tc.conn.handleOnePacket(p)
 		require.NoError(t, err)
@@ -563,10 +586,14 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-		p := getLongHeaderPacket(t, &wire.ExtendedHeader{
-			Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: 1234},
-			PacketNumberLen: protocol.PacketNumberLen2,
-		}, nil)
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{
+				Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: 1234},
+				PacketNumberLen: protocol.PacketNumberLen2,
+			},
+			nil,
+		)
 		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnsupportedVersion)
 		wasProcessed, err := tc.conn.handleOnePacket(p)
 		require.NoError(t, err)
@@ -578,10 +605,14 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-		p := getLongHeaderPacket(t, &wire.ExtendedHeader{
-			Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: Version1},
-			PacketNumberLen: protocol.PacketNumberLen2,
-		}, nil)
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{
+				Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: Version1},
+				PacketNumberLen: protocol.PacketNumberLen2,
+			},
+			nil,
+		)
 		p.data[0] ^= 0x40 // unset the QUIC bit
 		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropHeaderParseError)
 		wasProcessed, err := tc.conn.handleOnePacket(p)
@@ -595,10 +626,14 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 	tc := newClientTestConnection(t, mockCtrl, nil, false, connectionOptTracer(tr))
 
-	p := getLongHeaderPacket(t, &wire.ExtendedHeader{
-		Header:          wire.Header{Type: protocol.PacketType0RTT, Length: 2, Version: protocol.Version1},
-		PacketNumberLen: protocol.PacketNumberLen2,
-	}, nil)
+	p := getLongHeaderPacket(t,
+		tc.remoteAddr,
+		&wire.ExtendedHeader{
+			Header:          wire.Header{Type: protocol.PacketType0RTT, Length: 2, Version: protocol.Version1},
+			PacketNumberLen: protocol.PacketNumberLen2,
+		},
+		nil,
+	)
 	tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedPacket)
 	wasProcessed, err := tc.conn.handleOnePacket(p)
 	require.NoError(t, err)
@@ -632,7 +667,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	}
 	unpackedHdr := *hdr
 	unpackedHdr.PacketNumber = 0x1337
-	packet := getLongHeaderPacket(t, hdr, nil)
+	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	packet.ecn = protocol.ECNCE
 	rcvTime := time.Now().Add(-10 * time.Second)
 	packet.rcvTime = rcvTime
@@ -655,7 +690,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// receive a duplicate of this packet
-	packet = getLongHeaderPacket(t, hdr, nil)
+	packet = getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.EncryptionInitial).Return(true)
 	unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 		encryptionLevel: protocol.EncryptionInitial,
@@ -669,7 +704,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// receive a short header packet
-	packet = getShortHeaderPacket(t, tc.srcConnID, 0x37, nil)
+	packet = getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x37, nil)
 	packet.ecn = protocol.ECT1
 	packet.rcvTime = rcvTime
 	gomock.InOrder(
@@ -735,9 +770,9 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 	unpackedHdr2 := *hdr2
 	unpackedHdr2.PacketNumber = 1338
 
-	packet := getLongHeaderPacket(t, hdr1, nil)
-	packet2 := getLongHeaderPacket(t, hdr2, nil)
-	packet3 := getLongHeaderPacket(t, hdr3, nil)
+	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr1, nil)
+	packet2 := getLongHeaderPacket(t, tc.remoteAddr, hdr2, nil)
+	packet3 := getLongHeaderPacket(t, tc.remoteAddr, hdr3, nil)
 	packet.data = append(packet.data, packet2.data...)
 	packet.data = append(packet.data, packet3.data...)
 	packet.ecn = protocol.ECT1
@@ -807,7 +842,7 @@ func testConnectionUnpackFailureFatal(t *testing.T, unpackErr error) error {
 	go func() { errChan <- tc.conn.run() }()
 
 	tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any())
-	tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, 0x42, nil))
+	tc.conn.handlePacket(getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x42, nil))
 
 	select {
 	case err := <-errChan:
@@ -829,8 +864,7 @@ func TestConnectionUnpackFailureDropped(t *testing.T) {
 	})
 
 	t.Run("header parse error", func(t *testing.T) {
-		testErr := errors.New("foo")
-		testConnectionUnpackFailureDropped(t, &headerParseError{err: testErr}, logging.PacketDropHeaderParseError)
+		testConnectionUnpackFailureDropped(t, &headerParseError{err: assert.AnError}, logging.PacketDropHeaderParseError)
 	})
 }
 
@@ -856,7 +890,7 @@ func testConnectionUnpackFailureDropped(t *testing.T, unpackErr error, packetDro
 			close(done)
 		},
 	)
-	tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, 0x42, nil))
+	tc.conn.handlePacket(getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x42, nil))
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -928,7 +962,7 @@ func TestConnectionRemoteClose(t *testing.T) {
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
 
-	p := getShortHeaderPacket(t, tc.srcConnID, 1, []byte("encrypted"))
+	p := getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 1, []byte("encrypted"))
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1146,7 +1180,7 @@ func TestConnectionHandshakeServer(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
-	p := getLongHeaderPacket(t, hdr, nil)
+	p := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1258,7 +1292,7 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 		t.Fatal("timeout")
 	}
 
-	p := getLongHeaderPacket(t, hdr, nil)
+	p := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1289,7 +1323,7 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 		),
 	)
 	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shortHeaderPacket{}, errNothingToPack).AnyTimes()
-	p = getLongHeaderPacket(t, hdr, nil)
+	p = getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1385,7 +1419,7 @@ func TestConnection0RTTTransportParameters(t *testing.T) {
 		t.Fatal("timeout")
 	}
 
-	p := getLongHeaderPacket(t, hdr, nil)
+	p := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
 	tc.conn.handlePacket(receivedPacket{data: p.data, buffer: p.buffer, rcvTime: time.Now()})
 
 	select {
@@ -1463,7 +1497,7 @@ func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool, n
 	}
 
 	for i := range numPackets {
-		tc.conn.handlePacket(getShortHeaderPacket(t, tc.srcConnID, protocol.PacketNumber(i), []byte("foobar")))
+		tc.conn.handlePacket(getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, protocol.PacketNumber(i), []byte("foobar")))
 	}
 
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
@@ -1532,8 +1566,8 @@ func TestConnectionPacketBuffering(t *testing.T) {
 		),
 	)
 
-	tc.conn.handlePacket(getLongHeaderPacket(t, &hdr1, []byte("packet1")))
-	tc.conn.handlePacket(getLongHeaderPacket(t, &hdr2, []byte("packet2")))
+	tc.conn.handlePacket(getLongHeaderPacket(t, tc.remoteAddr, &hdr1, []byte("packet1")))
+	tc.conn.handlePacket(getLongHeaderPacket(t, tc.remoteAddr, &hdr2, []byte("packet2")))
 
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
@@ -1586,7 +1620,7 @@ func TestConnectionPacketBuffering(t *testing.T) {
 		tr.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 	)
 
-	tc.conn.handlePacket(getLongHeaderPacket(t, &hdr3, []byte("packet3")))
+	tc.conn.handlePacket(getLongHeaderPacket(t, tc.remoteAddr, &hdr3, []byte("packet3")))
 
 	select {
 	case <-unpacked:
@@ -1892,7 +1926,7 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 				return shortHeaderPacket{}, errNothingToPack
 			},
 		)
-		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now()})
+		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 		select {
 		case <-done:
 			// the keep-alive packet should be sent after half the idle timeout
@@ -1903,7 +1937,7 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 		}
 	case false: // if keep-alives are disabled, the connection will run into an idle timeout
 		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
-		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now()})
+		tc.conn.handlePacket(receivedPacket{data: buf.Data, buffer: buf, rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 		select {
 		case <-time.After(3 * time.Second):
 			t.Fatal("timeout")
@@ -2258,8 +2292,8 @@ func testConnectionPTOProbePackets(t *testing.T, encLevel protocol.EncryptionLev
 	sph.EXPECT().QueueProbePacket(encLevel).Return(false)
 	sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
-	tc.packer.EXPECT().MaybePackPTOProbePacket(encLevel, gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(
-		func(encLevel protocol.EncryptionLevel, maxSize protocol.ByteCount, t time.Time, version protocol.Version) (*coalescedPacket, error) {
+	tc.packer.EXPECT().PackPTOProbePacket(encLevel, gomock.Any(), true, gomock.Any(), protocol.Version1).DoAndReturn(
+		func(protocol.EncryptionLevel, protocol.ByteCount, bool, time.Time, protocol.Version) (*coalescedPacket, error) {
 			return &coalescedPacket{
 				buffer:         getPacketBuffer(),
 				shortHdrPacket: &shortHeaderPacket{PacketNumber: 1},
@@ -2643,9 +2677,10 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 		}, nil,
 	)
 	wasProcessed, err := tc.conn.handleOnePacket(receivedPacket{
-		data:    regular,
-		buffer:  getPacketBuffer(),
-		rcvTime: time.Now(),
+		data:       regular,
+		buffer:     getPacketBuffer(),
+		rcvTime:    time.Now(),
+		remoteAddr: tc.remoteAddr,
 	})
 	require.NoError(t, err)
 	require.True(t, wasProcessed)
@@ -2693,11 +2728,11 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 	newConnID := protocol.ParseConnectionID(b[:11])
 	newConnID2 := protocol.ParseConnectionID(b[11:20])
 
-	errChan := make(chan error, 1)
-	go func() { errChan <- tc.conn.run() }()
-
 	tracer.EXPECT().NegotiatedVersion(gomock.Any(), gomock.Any(), gomock.Any())
 	tc.packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
 
 	require.Equal(t, dstConnID, tc.conn.connIDManager.Get())
 
@@ -2747,7 +2782,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 		),
 	)
 
-	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr1), buffer: getPacketBuffer(), rcvTime: time.Now()})
+	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr1), buffer: getPacketBuffer(), rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 
 	select {
 	case <-receivedFirst:
@@ -2764,7 +2799,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 		},
 	)
 
-	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr2), buffer: getPacketBuffer(), rcvTime: time.Now()})
+	tc.conn.handlePacket(receivedPacket{data: makeInitialPacket(t, &hdr2), buffer: getPacketBuffer(), rcvTime: time.Now(), remoteAddr: tc.remoteAddr})
 	select {
 	case <-dropped:
 		// the connection ID should not have changed
@@ -2820,6 +2855,242 @@ func TestConnectionEarlyClose(t *testing.T) {
 	case err := <-errChan:
 		require.Error(t, err)
 		require.ErrorContains(t, err, "early error")
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestConnectionPathValidation(t *testing.T) {
+	t.Run("NAT rebinding", func(t *testing.T) {
+		testConnectionPathValidation(t, true)
+	})
+
+	t.Run("intentional migration", func(t *testing.T) {
+		testConnectionPathValidation(t, false)
+	})
+}
+
+func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
+	mockCtrl := gomock.NewController(t)
+	unpacker := NewMockUnpacker(mockCtrl)
+	tc := newServerTestConnection(
+		t,
+		mockCtrl,
+		nil,
+		false,
+		connectionOptUnpacker(unpacker),
+		connectionOptHandshakeConfirmed(),
+		connectionOptRTT(time.Second),
+	)
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{MaxUDPPayloadSize: 1456}))
+
+	newRemoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 1), Port: 1234}
+	require.NotEqual(t, tc.remoteAddr, newRemoteAddr)
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
+
+	probeSent := make(chan struct{})
+	var pathChallenge *wire.PathChallengeFrame
+	payload := []byte{0} // PADDING frame
+	if isNATRebinding {
+		payload = []byte{1} // PING frame
+	}
+	gomock.InOrder(
+		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+			protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
+		),
+		tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				pathChallenge = frames[0].Frame.(*wire.PathChallengeFrame)
+				return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
+			},
+		),
+		tc.sendConn.EXPECT().WriteTo(gomock.Any(), newRemoteAddr).DoAndReturn(
+			func([]byte, net.Addr) error { close(probeSent); return nil },
+		),
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{}, errNothingToPack,
+		),
+	)
+
+	tc.conn.handlePacket(receivedPacket{
+		data:       make([]byte, 10),
+		buffer:     getPacketBuffer(),
+		remoteAddr: newRemoteAddr,
+		rcvTime:    time.Now(),
+	})
+
+	select {
+	case <-probeSent:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// Receive a packed containing a PATH_RESPONSE frame.
+	// Only if the first packet received on the path was a probing packet
+	// (i.e. we're dealing with a NAT rebinding), this makes us switch to the new path.
+	migrated := make(chan struct{})
+	data, err := (&wire.PathResponseFrame{Data: pathChallenge.Data}).Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	calls := []any{
+		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+			protocol.PacketNumber(11), protocol.PacketNumberLen2, protocol.KeyPhaseZero, data, nil,
+		),
+	}
+	if isNATRebinding {
+		calls = append(calls,
+			tc.sendConn.EXPECT().ChangeRemoteAddr(newRemoteAddr, gomock.Any()).Do(
+				func(net.Addr, packetInfo) { close(migrated) },
+			),
+		)
+	}
+	calls = append(calls,
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{}, errNothingToPack,
+		),
+	)
+	gomock.InOrder(calls...)
+	require.Equal(t, tc.remoteAddr, tc.conn.RemoteAddr())
+	// the PATH_RESPONSE can be sent on the old path, if the client is just probing the new path
+	addr := tc.remoteAddr
+	if isNATRebinding {
+		addr = newRemoteAddr
+	}
+	tc.conn.handlePacket(receivedPacket{
+		data:       make([]byte, 100),
+		buffer:     getPacketBuffer(),
+		remoteAddr: addr,
+		rcvTime:    time.Now(),
+	})
+
+	if !isNATRebinding {
+		// If the first packet was a probing packet, we only switch to the new path when we
+		// receive a non-probing packet on that path.
+		select {
+		case <-migrated:
+			t.Fatal("didn't expect a migration yet")
+		case <-time.After(scaleDuration(10 * time.Millisecond)):
+		}
+
+		payload := []byte{1} // PING frame
+		payload, err = (&wire.PathResponseFrame{Data: pathChallenge.Data}).Append(payload, protocol.Version1)
+		require.NoError(t, err)
+		gomock.InOrder(
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+				protocol.PacketNumber(12), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
+			),
+			tc.sendConn.EXPECT().ChangeRemoteAddr(newRemoteAddr, gomock.Any()).Do(
+				func(net.Addr, packetInfo) { close(migrated) },
+			),
+			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				shortHeaderPacket{}, errNothingToPack,
+			).MaxTimes(1),
+		)
+		tc.conn.handlePacket(receivedPacket{
+			data:       make([]byte, 100),
+			buffer:     getPacketBuffer(),
+			remoteAddr: newRemoteAddr,
+			rcvTime:    time.Now(),
+		})
+	}
+
+	select {
+	case <-migrated:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// test teardown
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	tc.conn.destroy(nil)
+	select {
+	case <-errChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestConnectionMigrationServer(t *testing.T) {
+	tc := newServerTestConnection(t, nil, nil, false)
+	_, err := tc.conn.AddPath(&Transport{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "server cannot initiate connection migration")
+}
+
+func TestConnectionMigration(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		testConnectionMigration(t, false)
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		testConnectionMigration(t, true)
+	})
+}
+
+func testConnectionMigration(t *testing.T, enabled bool) {
+	tc := newClientTestConnection(t, nil, nil, false, connectionOptHandshakeConfirmed())
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+		DisableActiveMigration:          !enabled,
+	}))
+
+	tr := &Transport{
+		Conn:              newUDPConnLocalhost(t),
+		StatelessResetKey: &StatelessResetKey{},
+	}
+	defer tr.Close()
+	path, err := tc.conn.AddPath(tr)
+	if !enabled {
+		require.Error(t, err)
+		require.ErrorContains(t, err, "server disabled connection migration")
+		return
+	}
+	require.NoError(t, err)
+	require.NotNil(t, path)
+
+	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		shortHeaderPacket{}, errNothingToPack,
+	).AnyTimes()
+	packedProbe := make(chan struct{})
+	tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+			defer close(packedProbe)
+			return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
+		},
+	).AnyTimes()
+	tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any())
+	// add a new connection ID, so the path can be probed
+	require.NoError(t, tc.conn.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
+		SequenceNumber: 1,
+		ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+	}))
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
+
+	// Adding the path initialized the transport.
+	// We can test this by triggering a stateless reset.
+	conn := newUDPConnLocalhost(t)
+	_, err = conn.WriteTo(append([]byte{0x40}, make([]byte, 100)...), tr.Conn.LocalAddr())
+	require.NoError(t, err)
+	conn.SetReadDeadline(time.Now().Add(time.Second))
+	_, _, err = conn.ReadFrom(make([]byte, 100))
+	require.NoError(t, err)
+
+	go func() { path.Probe(context.Background()) }()
+	select {
+	case <-packedProbe:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// teardown
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().RemoveResetToken(gomock.Any()).MaxTimes(1)
+	tc.conn.destroy(nil)
+	select {
+	case <-errChan:
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}

@@ -2,28 +2,24 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"math"
+	mrand "math/rand/v2"
 	"net/netip"
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
-
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
 )
 
-func getRandomValueUpTo(max int64) uint64 {
-	maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
-	m := maxVals[int(rand.Int31n(4))]
-	if m > max {
-		m = max
-	}
-	return uint64(rand.Int63n(m))
+func getRandomValueUpTo(max uint64) uint64 {
+	maxVals := []uint64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
+	return mrand.Uint64N(min(max, maxVals[mrand.IntN(4)]))
 }
 
 func getRandomValue() uint64 { return getRandomValueUpTo(quicvarint.Max) }
@@ -87,8 +83,8 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 		InitialMaxStreamDataUni:         protocol.ByteCount(getRandomValue()),
 		InitialMaxData:                  protocol.ByteCount(getRandomValue()),
 		MaxIdleTimeout:                  0xcafe * time.Second,
-		MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
-		MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+		MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
+		MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
 		DisableActiveMigration:          true,
 		StatelessResetToken:             &token,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -436,12 +432,37 @@ func TestTransportParameterRejectsDuplicateParameters(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("received duplicate transport parameter %#x", initialMaxStreamDataBidiLocalParameterID), transportErr.ErrorMessage)
 }
 
-func TestPreferredAddressMarshalAndUnmarshal(t *testing.T) {
+func TestTransportParameterPreferredAddress(t *testing.T) {
+	testCases := []struct {
+		name    string
+		hasIPv4 bool
+		hasIPv6 bool
+	}{
+		{"IPv4 and IPv6", true, true},
+		{"IPv4 only", true, false},
+		{"IPv6 only", false, true},
+		{"neither IPv4 nor IPv6", false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testTransportParameterPreferredAddress(t, tc.hasIPv4, tc.hasIPv6)
+		})
+	}
+}
+
+func testTransportParameterPreferredAddress(t *testing.T, hasIPv4, hasIPv6 bool) {
+	addr4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42)
+	addr6 := netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13)
 	pa := &PreferredAddress{
-		IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
-		IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
 		ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+	}
+	if hasIPv4 {
+		pa.IPv4 = addr4
+	}
+	if hasIPv6 {
+		pa.IPv6 = addr6
 	}
 
 	data := (&TransportParameters{
@@ -450,15 +471,24 @@ func TestPreferredAddressMarshalAndUnmarshal(t *testing.T) {
 		ActiveConnectionIDLimit: 2,
 	}).Marshal(protocol.PerspectiveServer)
 	p := &TransportParameters{}
-	err := p.Unmarshal(data, protocol.PerspectiveServer)
-	require.NoError(t, err)
-	require.Equal(t, pa.IPv4, p.PreferredAddress.IPv4)
-	require.Equal(t, pa.IPv6, p.PreferredAddress.IPv6)
+	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
+	if hasIPv4 {
+		require.True(t, p.PreferredAddress.IPv4.IsValid())
+		require.Equal(t, addr4, p.PreferredAddress.IPv4)
+	} else {
+		require.False(t, p.PreferredAddress.IPv4.IsValid())
+	}
+	if hasIPv6 {
+		require.True(t, p.PreferredAddress.IPv6.IsValid())
+		require.Equal(t, addr6, p.PreferredAddress.IPv6)
+	} else {
+		require.False(t, p.PreferredAddress.IPv6.IsValid())
+	}
 	require.Equal(t, pa.ConnectionID, p.PreferredAddress.ConnectionID)
 	require.Equal(t, pa.StatelessResetToken, p.PreferredAddress.StatelessResetToken)
 }
 
-func TestPreferredAddressFromClient(t *testing.T) {
+func TestTransportParameterPreferredAddressFromClient(t *testing.T) {
 	b := quicvarint.Append(nil, uint64(preferredAddressParameterID))
 	b = quicvarint.Append(b, 6)
 	b = append(b, []byte("foobar")...)
@@ -471,7 +501,7 @@ func TestPreferredAddressFromClient(t *testing.T) {
 	require.Equal(t, "client sent a preferred_address", transportErr.ErrorMessage)
 }
 
-func TestPreferredAddressZeroLengthConnectionID(t *testing.T) {
+func TestTransportParameterPreferredAddressZeroLengthConnectionID(t *testing.T) {
 	pa := &PreferredAddress{
 		IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
 		IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
@@ -516,10 +546,10 @@ func TestTransportParametersFromSessionTicket(t *testing.T) {
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
 		InitialMaxStreamDataUni:        protocol.ByteCount(getRandomValue()),
 		InitialMaxData:                 protocol.ByteCount(getRandomValue()),
-		MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
-		MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+		MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
+		MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
 		ActiveConnectionIDLimit:        2 + getRandomValueUpTo(quicvarint.Max-2),
-		MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(int64(MaxDatagramSize))),
+		MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(uint64(MaxDatagramSize))),
 	}
 	require.True(t, params.ValidFor0RTT(params))
 	b := params.MarshalForSessionTicket(nil)
@@ -805,8 +835,8 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 		InitialMaxStreamDataUni:         protocol.ByteCount(getRandomValue()),
 		InitialMaxData:                  protocol.ByteCount(getRandomValue()),
 		MaxIdleTimeout:                  0xcafe * time.Second,
-		MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
-		MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+		MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
+		MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
 		DisableActiveMigration:          true,
 		StatelessResetToken:             &token,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),

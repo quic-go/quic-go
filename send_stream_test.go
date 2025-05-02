@@ -3,21 +3,21 @@ package quic
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"net"
 	"os"
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
+	"github.com/quic-go/quic-go/internal/mocks"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 
-	"github.com/Noooste/quic-go/internal/mocks"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/wire"
-
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -509,20 +509,19 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 	case <-time.After(scaleDuration(5 * time.Millisecond)): // short wait to ensure write is blocked
 	}
 
-	testErr := errors.New("test error")
-	str.closeForShutdown(testErr)
+	str.closeForShutdown(assert.AnError)
 	require.True(t, mockCtrl.Satisfied())
 
 	select {
 	case err := <-errChan:
-		require.ErrorIs(t, err, testErr)
+		require.ErrorIs(t, err, assert.AnError)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
 
 	// future calls to Write should return the error
 	_, err := strWithTimeout.Write([]byte("foobar"))
-	require.ErrorIs(t, err, testErr)
+	require.ErrorIs(t, err, assert.AnError)
 
 	// closing the stream doesn't do anything
 	require.NoError(t, str.Close())
@@ -535,7 +534,7 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 	// canceling the stream doesn't do anything
 	str.CancelWrite(1234)
 	_, err = strWithTimeout.Write([]byte("foobar"))
-	require.ErrorIs(t, err, testErr) // error unchanged
+	require.ErrorIs(t, err, assert.AnError) // error unchanged
 }
 
 func TestSendStreamUpdateSendWindow(t *testing.T) {
@@ -992,7 +991,7 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 
 	mockSender.EXPECT().onHasStreamData(streamID, str).AnyTimes()
 	mockFC.EXPECT().SendWindowSize().DoAndReturn(func() protocol.ByteCount {
-		return protocol.ByteCount(mrand.Intn(500)) + 50
+		return protocol.ByteCount(mrand.IntN(500)) + 50
 	}).AnyTimes()
 	mockFC.EXPECT().IsNewlyBlocked().Return(false).AnyTimes()
 	mockFC.EXPECT().AddBytesSent(gomock.Any()).AnyTimes()
@@ -1012,18 +1011,15 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 	mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) { completed = true })
 
 	received := make([]byte, dataLen)
-	for {
-		if completed {
-			break
-		}
-		f, _, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300)+100), protocol.Version1)
+	for !completed {
+		f, _, _ := str.popStreamFrame(protocol.ByteCount(mrand.IntN(300)+100), protocol.Version1)
 		if f.Frame == nil {
 			continue
 		}
 		sf := f.Frame
 		// 50%: acknowledge the frame and save the data
 		// 50%: lose the frame
-		if mrand.Intn(100) < 50 {
+		if mrand.IntN(100) < 50 {
 			copy(received[sf.Offset:sf.Offset+sf.DataLen()], sf.Data)
 			f.Handler.OnAcked(f.Frame)
 		} else {

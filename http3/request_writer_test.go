@@ -2,118 +2,104 @@ package http3
 
 import (
 	"bytes"
-	"github.com/Noooste/fhttp"
 	"io"
-
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
 	"github.com/quic-go/qpack"
-	"go.uber.org/mock/gomock"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Request Writer", func() {
-	var (
-		rw     *requestWriter
-		str    *mockquic.MockStream
-		strBuf *bytes.Buffer
-	)
-
-	decode := func(str io.Reader) map[string]string {
-		fp := frameParser{r: str}
-		frame, err := fp.ParseNext()
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
-		headersFrame := frame.(*headersFrame)
-		data := make([]byte, headersFrame.Length)
-		_, err = io.ReadFull(str, data)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		decoder := qpack.NewDecoder(nil)
-		hfs, err := decoder.DecodeFull(data)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		values := make(map[string]string)
-		for _, hf := range hfs {
-			values[hf.Name] = hf.Value
-		}
-		return values
+func decodeRequest(t *testing.T, str io.Reader) map[string]string {
+	t.Helper()
+	fp := frameParser{r: str}
+	frame, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.IsType(t, &headersFrame{}, frame)
+	headersFrame := frame.(*headersFrame)
+	data := make([]byte, headersFrame.Length)
+	_, err = io.ReadFull(str, data)
+	require.NoError(t, err)
+	decoder := qpack.NewDecoder(nil)
+	hfs, err := decoder.DecodeFull(data)
+	require.NoError(t, err)
+	values := make(map[string]string)
+	for _, hf := range hfs {
+		values[hf.Name] = hf.Value
 	}
+	return values
+}
 
-	BeforeEach(func() {
-		rw = newRequestWriter()
-		strBuf = &bytes.Buffer{}
-		str = mockquic.NewMockStream(mockCtrl)
-		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
+func TestRequestWriterGetRequestGzip(t *testing.T) {
+	t.Run("gzip", func(t *testing.T) {
+		testRequestWriterGzip(t, true)
 	})
+	t.Run("no gzip", func(t *testing.T) {
+		testRequestWriterGzip(t, false)
+	})
+}
 
-	It("writes a GET request", func() {
-		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/index.html?foo=bar", nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
-		headerFields := decode(strBuf)
-		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
-		Expect(headerFields).To(HaveKeyWithValue(":method", "GET"))
-		Expect(headerFields).To(HaveKeyWithValue(":path", "/index.html?foo=bar"))
-		Expect(headerFields).To(HaveKeyWithValue(":scheme", "https"))
-		Expect(headerFields).ToNot(HaveKey("accept-encoding"))
-	})
+func testRequestWriterGzip(t *testing.T, gzip bool) {
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
+	req.AddCookie(&http.Cookie{Name: "foo", Value: "bar"})
+	req.AddCookie(&http.Cookie{Name: "baz", Value: "lorem ipsum"})
 
-	It("rejects invalid host headers", func() {
-		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/index.html?foo=bar", nil)
-		Expect(err).ToNot(HaveOccurred())
-		req.Host = "foo@bar" // @ is invalid
-		Expect(rw.WriteRequestHeader(str, req, false)).To(MatchError("http3: invalid Host header"))
-	})
+	rw := newRequestWriter()
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, gzip))
+	headerFields := decodeRequest(t, buf)
+	require.Equal(t, "quic-go.net", headerFields[":authority"])
+	require.Equal(t, http.MethodGet, headerFields[":method"])
+	require.Equal(t, "/index.html?foo=bar", headerFields[":path"])
+	require.Equal(t, "https", headerFields[":scheme"])
+	require.Equal(t, `foo=bar; baz="lorem ipsum"`, headerFields["cookie"])
+	switch gzip {
+	case true:
+		require.Equal(t, "gzip", headerFields["accept-encoding"])
+	case false:
+		require.NotContains(t, headerFields, "accept-encoding")
+	}
+}
 
-	It("sends cookies", func() {
-		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/", nil)
-		Expect(err).ToNot(HaveOccurred())
-		cookie1 := &http.Cookie{
-			Name:  "Cookie #1",
-			Value: "Value #1",
-		}
-		cookie2 := &http.Cookie{
-			Name:  "Cookie #2",
-			Value: "Value #2",
-		}
-		req.AddCookie(cookie1)
-		req.AddCookie(cookie2)
-		Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
-		headerFields := decode(strBuf)
-		Expect(headerFields).To(HaveKeyWithValue("cookie", `Cookie #1="Value #1"; Cookie #2="Value #2"`))
-	})
+func TestRequestWriterInvalidHostHeader(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
+	req.Host = "foo@bar" // @ is invalid
+	rw := newRequestWriter()
+	require.EqualError(t,
+		rw.WriteRequestHeader(&bytes.Buffer{}, req, false),
+		"http3: invalid Host header",
+	)
+}
 
-	It("adds the header for gzip support", func() {
-		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/", nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequestHeader(str, req, true)).To(Succeed())
-		headerFields := decode(strBuf)
-		Expect(headerFields).To(HaveKeyWithValue("accept-encoding", "gzip"))
-	})
+func TestRequestWriterConnect(t *testing.T) {
+	// httptest.NewRequest does not properly support the CONNECT method
+	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
+	require.NoError(t, err)
+	rw := newRequestWriter()
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false))
+	headerFields := decodeRequest(t, buf)
+	require.Equal(t, http.MethodConnect, headerFields[":method"])
+	require.Equal(t, "quic-go.net", headerFields[":authority"])
+	require.NotContains(t, headerFields, ":path")
+	require.NotContains(t, headerFields, ":scheme")
+	require.NotContains(t, headerFields, ":protocol")
+}
 
-	It("writes a CONNECT request", func() {
-		req, err := http.NewRequest(http.MethodConnect, "https://quic.clemente.io/", nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
-		headerFields := decode(strBuf)
-		Expect(headerFields).To(HaveKeyWithValue(":method", "CONNECT"))
-		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
-		Expect(headerFields).ToNot(HaveKey(":path"))
-		Expect(headerFields).ToNot(HaveKey(":scheme"))
-		Expect(headerFields).ToNot(HaveKey(":protocol"))
-	})
-
-	It("writes an Extended CONNECT request", func() {
-		req, err := http.NewRequest(http.MethodConnect, "https://quic.clemente.io/foobar", nil)
-		Expect(err).ToNot(HaveOccurred())
-		req.Proto = "webtransport"
-		Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
-		headerFields := decode(strBuf)
-		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
-		Expect(headerFields).To(HaveKeyWithValue(":method", "CONNECT"))
-		Expect(headerFields).To(HaveKeyWithValue(":path", "/foobar"))
-		Expect(headerFields).To(HaveKeyWithValue(":scheme", "https"))
-		Expect(headerFields).To(HaveKeyWithValue(":protocol", "webtransport"))
-	})
-})
+func TestRequestWriterExtendedConnect(t *testing.T) {
+	// httptest.NewRequest does not properly support the CONNECT method
+	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
+	require.NoError(t, err)
+	req.Proto = "webtransport"
+	rw := newRequestWriter()
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false))
+	headerFields := decodeRequest(t, buf)
+	require.Equal(t, "quic-go.net", headerFields[":authority"])
+	require.Equal(t, http.MethodConnect, headerFields[":method"])
+	require.Equal(t, "/", headerFields[":path"])
+	require.Equal(t, "https", headerFields[":scheme"])
+	require.Equal(t, "webtransport", headerFields[":protocol"])
+}

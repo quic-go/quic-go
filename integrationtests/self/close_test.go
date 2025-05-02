@@ -2,23 +2,23 @@ package self_test
 
 import (
 	"context"
-	"errors"
-	"github.com/Noooste/utls"
+	"crypto/tls"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestConnectionCloseRetransmission(t *testing.T) {
 	server, err := quic.Listen(
-		newUPDConnLocalhost(t),
+		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 	)
@@ -28,12 +28,12 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 	var drop atomic.Bool
 	dropped := make(chan []byte, 100)
 	proxy := &quicproxy.Proxy{
-		Conn:       newUPDConnLocalhost(t),
+		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration {
+		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
 			return 5 * time.Millisecond // 10ms RTT
 		},
-		DropPacket: func(dir quicproxy.Direction, b []byte) bool {
+		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 			if drop := drop.Load(); drop && dir == quicproxy.DirectionOutgoing {
 				dropped <- b
 				return true
@@ -46,7 +46,7 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := quic.Dial(ctx, newUPDConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 
@@ -84,11 +84,11 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 }
 
 func TestDrainServerAcceptQueue(t *testing.T) {
-	server, err := quic.Listen(newUPDConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer server.Close()
 
-	dialer := &quic.Transport{Conn: newUPDConnLocalhost(t)}
+	dialer := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	defer dialer.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -131,7 +131,7 @@ func newBrokenConn(conn net.PacketConn) *brokenConn {
 	go func() {
 		<-c.broken
 		// make calls to ReadFrom return
-		c.PacketConn.SetDeadline(time.Now())
+		c.SetDeadline(time.Now())
 	}()
 	return c
 }
@@ -158,21 +158,20 @@ func (c *brokenConn) Break(e error) {
 
 func TestTransportClose(t *testing.T) {
 	t.Run("Close", func(t *testing.T) {
-		conn := newUPDConnLocalhost(t)
+		conn := newUDPConnLocalhost(t)
 		testTransportClose(t, conn, func() { conn.Close() }, nil)
 	})
 
 	t.Run("connection error", func(t *testing.T) {
 		t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
 
-		bc := newBrokenConn(newUPDConnLocalhost(t))
-		testErr := errors.New("test error")
-		testTransportClose(t, bc, func() { bc.Break(testErr) }, testErr)
+		bc := newBrokenConn(newUDPConnLocalhost(t))
+		testTransportClose(t, bc, func() { bc.Break(assert.AnError) }, assert.AnError)
 	})
 }
 
 func testTransportClose(t *testing.T, conn net.PacketConn, closeFn func(), expectedErr error) {
-	server := newUPDConnLocalhost(t)
+	server := newUDPConnLocalhost(t)
 	tr := &quic.Transport{Conn: conn}
 
 	errChan := make(chan error, 1)

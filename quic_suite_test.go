@@ -48,7 +48,7 @@ func scaleDuration(t time.Duration) time.Duration {
 	return time.Duration(scaleFactor) * t
 }
 
-func newUPDConnLocalhost(t testing.TB) *net.UDPConn {
+func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
 	t.Helper()
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)

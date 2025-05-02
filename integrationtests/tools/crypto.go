@@ -4,10 +4,9 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"github.com/Noooste/utls"
 	"math/big"
 	"net"
 	"time"
@@ -69,7 +68,7 @@ func GenerateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Cer
 // GenerateTLSConfigWithLongCertChain generates a tls.Config that uses a long certificate chain.
 // The Root CA used is the same as for the config returned from getTLSConfig().
 func GenerateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypto.PrivateKey) (*tls.Config, error) {
-	const chainLen = 7
+	const chainLen = 16
 	certTempl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2019),
 		Subject:               pkix.Name{},
@@ -83,13 +82,13 @@ func GenerateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypt
 
 	lastCA := ca
 	lastCAPrivKey := caPrivateKey
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 	certs := make([]*x509.Certificate, chainLen)
-	for i := 0; i < chainLen; i++ {
-		caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, lastCA, &privKey.PublicKey, lastCAPrivKey)
+	for i := range chainLen {
+		caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, lastCA, priv.Public(), lastCAPrivKey)
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +98,7 @@ func GenerateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypt
 		}
 		certs[i] = ca
 		lastCA = ca
-		lastCAPrivKey = privKey
+		lastCAPrivKey = priv
 	}
 	leafCert, leafPrivateKey, err := GenerateLeafCert(lastCA, lastCAPrivKey)
 	if err != nil {
