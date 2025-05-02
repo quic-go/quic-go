@@ -4,12 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"slices"
+	"strconv"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+const disableClientHelloScramblingEnv = "QUIC_GO_DISABLE_CLIENTHELLO_SCRAMBLING"
+
+// The baseCryptoStream is used by the cryptoStream and the initialCryptoStream.
+// This allows us to implement different logic for PopCryptoFrame for the two streams.
 type baseCryptoStream struct {
 	queue frameSorter
 
@@ -78,7 +85,7 @@ func (s *baseCryptoStream) HasData() bool {
 func (s *baseCryptoStream) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFrame {
 	f := &wire.CryptoFrame{Offset: s.writeOffset}
 	n := min(f.MaxDataLen(maxLen), protocol.ByteCount(len(s.writeBuf)))
-	if n == 0 {
+	if n <= 0 {
 		return nil
 	}
 	f.Data = s.writeBuf[:n]
@@ -91,28 +98,40 @@ type cryptoStream struct {
 	baseCryptoStream
 }
 
+type clientHelloCut struct {
+	start protocol.ByteCount
+	end   protocol.ByteCount
+}
+
 type initialCryptoStream struct {
 	baseCryptoStream
 
-	scramble             bool
-	sentPart1, sentPart2 bool
-	cut1, cut2, end      protocol.ByteCount
+	scramble bool
+	end      protocol.ByteCount
+	cuts     [2]clientHelloCut
 }
 
 func newInitialCryptoStream(isClient bool) *initialCryptoStream {
-	return &initialCryptoStream{
-		baseCryptoStream: baseCryptoStream{queue: *newFrameSorter()},
-		scramble:         isClient,
-		cut1:             protocol.InvalidByteCount,
-		cut2:             protocol.InvalidByteCount,
+	var scramble bool
+	if isClient {
+		disabled, err := strconv.ParseBool(os.Getenv(disableClientHelloScramblingEnv))
+		scramble = err != nil || !disabled
 	}
+	s := &initialCryptoStream{
+		baseCryptoStream: baseCryptoStream{queue: *newFrameSorter()},
+		scramble:         scramble,
+	}
+	for i := range len(s.cuts) {
+		s.cuts[i].start = protocol.InvalidByteCount
+		s.cuts[i].end = protocol.InvalidByteCount
+	}
+	return s
 }
 
 func (s *initialCryptoStream) HasData() bool {
 	// The ClientHello might be written in multiple parts.
 	// In order to correctly split the ClientHello, we need the entire ClientHello has been queued.
-	if s.scramble && s.writeOffset == 0 &&
-		s.cut1 == protocol.InvalidByteCount && s.cut2 == protocol.InvalidByteCount {
+	if s.scramble && s.writeOffset == 0 && s.cuts[0].start == protocol.InvalidByteCount {
 		return false
 	}
 	return s.baseCryptoStream.HasData()
@@ -120,7 +139,10 @@ func (s *initialCryptoStream) HasData() bool {
 
 func (s *initialCryptoStream) Write(p []byte) (int, error) {
 	s.writeBuf = append(s.writeBuf, p...)
-	if s.scramble && s.cut1 == protocol.InvalidByteCount && s.cut2 == protocol.InvalidByteCount {
+	if !s.scramble {
+		return len(p), nil
+	}
+	if s.cuts[0].start == protocol.InvalidByteCount {
 		sniPos, sniLen, echPos, err := findSNIAndECH(s.writeBuf)
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			return len(p), nil
@@ -134,18 +156,25 @@ func (s *initialCryptoStream) Write(p []byte) (int, error) {
 			s.scramble = false
 			return len(p), nil
 		}
-		sniCut := protocol.ByteCount(sniPos + sniLen/2) // right in the middle
-		if echPos <= 0 {
-			// no ECH extension found, just cut somewhere closely after the SNI start
-			s.cut1 = sniCut
-			s.cut2 = sniCut + min(20, protocol.ByteCount(len(s.writeBuf))-sniCut)
-		} else {
-			// ECH extension found, cut the ECH extension type value (a uint16) in half
-			echCut := protocol.ByteCount(echPos + 1)
-			s.cut1 = min(sniCut, echCut)
-			s.cut2 = max(sniCut, echCut)
-		}
 		s.end = protocol.ByteCount(len(s.writeBuf))
+		s.cuts[0].start = protocol.ByteCount(sniPos + sniLen/2) // right in the middle
+		s.cuts[0].end = protocol.ByteCount(sniPos + sniLen)
+		if echPos > 0 {
+			// ECH extension found, cut the ECH extension type value (a uint16) in half
+			start := protocol.ByteCount(echPos + 1)
+			s.cuts[1].start = start
+			// cut somewhere (16 bytes), most likely in the ECH extension value
+			s.cuts[1].end = min(start+16, s.end)
+		}
+		slices.SortFunc(s.cuts[:], func(a, b clientHelloCut) int {
+			if a.start == protocol.InvalidByteCount {
+				return 1
+			}
+			if a.start > b.start {
+				return 1
+			}
+			return -1
+		})
 	}
 	return len(p), nil
 }
@@ -155,56 +184,66 @@ func (s *initialCryptoStream) PopCryptoFrame(maxLen protocol.ByteCount) *wire.Cr
 		return s.baseCryptoStream.PopCryptoFrame(maxLen)
 	}
 
-	// part 1 first
-	if s.writeOffset < s.cut1 {
-		f := &wire.CryptoFrame{Offset: s.writeOffset}
-		n := min(f.MaxDataLen(maxLen), s.cut1-s.writeOffset)
-		if n == 0 {
-			return nil
+	// send out the skipped parts
+	if s.writeOffset == s.end {
+		var foundCuts bool
+		var f *wire.CryptoFrame
+		for i, c := range s.cuts {
+			if c.start == protocol.InvalidByteCount {
+				continue
+			}
+			foundCuts = true
+			if f != nil {
+				break
+			}
+			f = &wire.CryptoFrame{Offset: c.start}
+			n := min(f.MaxDataLen(maxLen), c.end-c.start)
+			if n <= 0 {
+				return nil
+			}
+			f.Data = s.writeBuf[c.start : c.start+n]
+			s.cuts[i].start += n
+			if s.cuts[i].start == c.end {
+				s.cuts[i].start = protocol.InvalidByteCount
+				s.cuts[i].end = protocol.InvalidByteCount
+				foundCuts = false
+			}
 		}
-		f.Data = s.writeBuf[:n]
-		s.writeBuf = s.writeBuf[n:]
-		s.writeOffset += n
-		// once the first part is sent, switch to the third part
-		if s.writeOffset >= s.cut1 {
-			s.writeOffset = s.cut2
-		}
-		return f
-	}
-
-	// then part 3
-	// absolute offset of the last byte written so far
-	if s.writeOffset >= s.cut2 && s.writeOffset < s.end {
-		f := &wire.CryptoFrame{Offset: s.writeOffset}
-		n := min(f.MaxDataLen(maxLen), s.end-s.writeOffset)
-		if n == 0 {
-			return nil
-		}
-		start := s.writeOffset - s.cut1
-		f.Data = s.writeBuf[start : start+n]
-		// don't reslice the writeBuf, part 2 is not sent yet
-		s.writeOffset += n
-		// once the third part is sent, switch to the second part
-		if s.writeOffset >= s.end {
-			s.writeOffset = s.cut1
+		if !foundCuts {
+			// no more cuts found, we're done sending out everything up until s.end
+			s.writeBuf = s.writeBuf[s.end:]
+			s.end = protocol.InvalidByteCount
+			s.scramble = false
 		}
 		return f
 	}
 
-	// and part 2 last
+	nextCut := clientHelloCut{start: protocol.InvalidByteCount, end: protocol.InvalidByteCount}
+	for _, c := range s.cuts {
+		if c.start == protocol.InvalidByteCount {
+			continue
+		}
+		if c.start > s.writeOffset {
+			nextCut = c
+			break
+		}
+	}
 	f := &wire.CryptoFrame{Offset: s.writeOffset}
-	n := min(f.MaxDataLen(maxLen), s.cut2-s.writeOffset)
-	if n == 0 {
+	maxOffset := nextCut.start
+	if maxOffset == protocol.InvalidByteCount {
+		maxOffset = s.end
+	}
+	n := min(f.MaxDataLen(maxLen), maxOffset-s.writeOffset)
+	if n <= 0 {
 		return nil
 	}
-	f.Data = s.writeBuf[:n]
-	s.writeBuf = s.writeBuf[n:]
+	f.Data = s.writeBuf[s.writeOffset : s.writeOffset+n]
+	// Don't reslice the writeBuf yet.
+	// This is done once all parts have been sent out.
 	s.writeOffset += n
-	// once the second part is sent we're done with sending split data
-	if s.writeOffset >= s.cut2 {
-		s.writeBuf = s.writeBuf[s.end-s.writeOffset:]
-		s.writeOffset = s.end
-		s.scramble = false
+	if s.writeOffset == nextCut.start {
+		s.writeOffset = nextCut.end
 	}
+
 	return f
 }

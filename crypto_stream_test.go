@@ -207,7 +207,12 @@ func testInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
 
 	var frames []*wire.CryptoFrame
 	for str.HasData() {
-		maxSize := protocol.ByteCount(mrand.IntN(128) + 1)
+		var maxSize protocol.ByteCount
+		if mrand.Int()%4 == 0 {
+			maxSize = protocol.ByteCount(mrand.IntN(512) + 1)
+		} else {
+			maxSize = protocol.ByteCount(mrand.IntN(32) + 1)
+		}
 		f := str.PopCryptoFrame(maxSize)
 		if f == nil {
 			continue
