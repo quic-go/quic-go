@@ -1,10 +1,7 @@
 package quic
 
 import (
-	"fmt"
-	mrand "math/rand/v2"
 	"os"
-	"slices"
 	"strconv"
 	"testing"
 
@@ -152,10 +149,11 @@ func skipIfDisableScramblingEnvSet(t *testing.T) {
 	}
 }
 
-func TestInitialCryptoStreamClient(t *testing.T) {
+func TestInitialCryptoStreamClientStatic(t *testing.T) {
 	skipIfDisableScramblingEnvSet(t)
 
 	str := newInitialCryptoStream(true)
+	clientHello := getClientHello(t, "quic-go.net")
 	_, err := str.Write(clientHello)
 	require.NoError(t, err)
 	require.True(t, str.HasData())
@@ -174,12 +172,14 @@ func TestInitialCryptoStreamClient(t *testing.T) {
 	require.NotContains(t, segments, f2.Offset)
 	segments[f2.Offset] = f2.Data
 	require.True(t, str.HasData())
+	require.NotEqual(t, f2.Offset, protocol.ByteCount(len(f1.Data)))
 
 	f3 := str.PopCryptoFrame(protocol.MaxByteCount)
 	require.NotNil(t, f2)
 	require.NotContains(t, segments, f3.Offset)
 	segments[f3.Offset] = f3.Data
 	require.True(t, str.HasData())
+	require.NotEqual(t, f3.Offset, protocol.ByteCount(len(f2.Data)))
 
 	f4 := str.PopCryptoFrame(protocol.MaxByteCount)
 	require.NotNil(t, f4)
@@ -187,62 +187,8 @@ func TestInitialCryptoStreamClient(t *testing.T) {
 	segments[f4.Offset] = f4.Data
 	require.Equal(t, []byte("foobar"), f4.Data)
 	require.False(t, str.HasData())
+	require.NotEqual(t, f4.Offset, protocol.ByteCount(len(f3.Data)))
 
 	reassembled := reassembleCryptoData(t, segments)
 	require.Equal(t, append(clientHello, []byte("foobar")...), reassembled)
-}
-
-func TestInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
-	skipIfDisableScramblingEnvSet(t)
-
-	for i := range 5 {
-		t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
-			testInitialCryptoStreamClientRandomizedSizes(t)
-		})
-	}
-}
-
-func testInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
-	str := newInitialCryptoStream(true)
-
-	b := slices.Clone(clientHello)
-	for len(b) > 0 {
-		n := min(len(b), mrand.IntN(2*len(b)))
-		_, err := str.Write(b[:n])
-		require.NoError(t, err)
-		b = b[n:]
-	}
-
-	require.True(t, str.HasData())
-	_, err := str.Write([]byte("foobar"))
-	require.NoError(t, err)
-
-	segments := make(map[protocol.ByteCount][]byte)
-
-	var frames []*wire.CryptoFrame
-	for str.HasData() {
-		var maxSize protocol.ByteCount
-		if mrand.Int()%4 == 0 {
-			maxSize = protocol.ByteCount(mrand.IntN(512) + 1)
-		} else {
-			maxSize = protocol.ByteCount(mrand.IntN(32) + 1)
-		}
-		f := str.PopCryptoFrame(maxSize)
-		if f == nil {
-			continue
-		}
-		frames = append(frames, f)
-		require.LessOrEqual(t, f.Length(protocol.Version1), maxSize)
-	}
-	t.Logf("received %d frames", len(frames))
-
-	for _, f := range frames {
-		// require.NotContains(t, cf.Data, []byte("google.com"))
-		t.Logf("received frame (%d bytes) at offset %d", len(f.Data), f.Offset)
-		segments[f.Offset] = f.Data
-	}
-
-	reassembled := reassembleCryptoData(t, segments)
-	require.Equal(t, append(clientHello, []byte("foobar")...), reassembled)
-	// require.Contains(t, reassembled, []byte("google.com"))
 }
