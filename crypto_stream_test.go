@@ -3,7 +3,9 @@ package quic
 import (
 	"fmt"
 	mrand "math/rand/v2"
+	"os"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -142,7 +144,17 @@ func reassembleCryptoData(t *testing.T, segments map[protocol.ByteCount][]byte) 
 	return reassembled
 }
 
+func skipIfDisableScramblingEnvSet(t *testing.T) {
+	t.Helper()
+	disabled, err := strconv.ParseBool(os.Getenv(disableClientHelloScramblingEnv))
+	if err == nil && disabled {
+		t.Skip("ClientHello scrambling disabled via " + disableClientHelloScramblingEnv)
+	}
+}
+
 func TestInitialCryptoStreamClient(t *testing.T) {
+	skipIfDisableScramblingEnvSet(t)
+
 	str := newInitialCryptoStream(true)
 	_, err := str.Write(clientHello)
 	require.NoError(t, err)
@@ -181,6 +193,8 @@ func TestInitialCryptoStreamClient(t *testing.T) {
 }
 
 func TestInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
+	skipIfDisableScramblingEnvSet(t)
+
 	for i := range 5 {
 		t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
 			testInitialCryptoStreamClientRandomizedSizes(t)

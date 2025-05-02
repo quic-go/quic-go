@@ -122,6 +122,8 @@ func expectAppendFrames(framer *MockFrameSource, controlFrames []ackhandler.Fram
 }
 
 func TestPackLongHeaders(t *testing.T) {
+	t.Setenv(disableClientHelloScramblingEnv, "true")
+
 	const maxPacketSize protocol.ByteCount = 1234
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
@@ -149,8 +151,8 @@ func TestPackLongHeaders(t *testing.T) {
 	require.Len(t, p.longHdrPackets, 2)
 	require.Nil(t, p.shortHdrPacket)
 	require.Equal(t, protocol.EncryptionInitial, p.longHdrPackets[0].EncryptionLevel())
-	require.GreaterOrEqual(t, len(p.longHdrPackets[0].frames), 1)
-	// require.Equal(t, clientHello, p.longHdrPackets[0].frames[0].Frame.(*wire.CryptoFrame).Data)
+	require.Len(t, p.longHdrPackets[0].frames, 1)
+	require.Equal(t, clientHello, p.longHdrPackets[0].frames[0].Frame.(*wire.CryptoFrame).Data)
 	require.Equal(t, protocol.EncryptionHandshake, p.longHdrPackets[1].EncryptionLevel())
 	require.Len(t, p.longHdrPackets[1].frames, 1)
 	require.IsType(t, &wire.PingFrame{}, p.longHdrPackets[1].frames[0].Frame)
@@ -777,6 +779,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 
 func TestPackInitialProbePacket(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
+		t.Setenv(disableClientHelloScramblingEnv, "true")
 		testPackProbePacket(t, protocol.EncryptionInitial, protocol.PerspectiveClient)
 	})
 	t.Run("server", func(t *testing.T) {
@@ -823,8 +826,8 @@ func testPackProbePacket(t *testing.T, encLevel protocol.EncryptionLevel, perspe
 		require.GreaterOrEqual(t, p.buffer.Len(), protocol.ByteCount(protocol.MinInitialPacketSize))
 		require.Equal(t, maxPacketSize, p.buffer.Len())
 	}
-	require.GreaterOrEqual(t, len(packet.frames), 1)
-	// require.Equal(t, &wire.CryptoFrame{Data: cryptoData}, packet.frames[0].Frame)
+	require.Len(t, packet.frames, 1)
+	require.Equal(t, &wire.CryptoFrame{Data: cryptoData}, packet.frames[0].Frame)
 	hdrs, more := parsePacket(t, p.buffer.Data)
 	require.Len(t, hdrs, 1)
 	switch encLevel {
