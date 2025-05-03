@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"io"
 	"log"
 	"net"
 	"os"
@@ -25,6 +26,30 @@ type OOBCapablePacketConn interface {
 }
 
 var _ OOBCapablePacketConn = &net.UDPConn{}
+
+type connCapabilities struct {
+	// This connection has the Don't Fragment (DF) bit set.
+	// This means it makes to run DPLPMTUD.
+	DF bool
+	// GSO (Generic Segmentation Offload) supported
+	GSO bool
+	// ECN (Explicit Congestion Notifications) supported
+	ECN bool
+}
+
+// rawConn is a connection that allow reading of a receivedPackeh.
+type rawConn interface {
+	ReadPacket() (receivedPacket, error)
+	// WritePacket writes a packet on the wire.
+	// gsoSize is the size of a single packet, or 0 to disable GSO.
+	// It is invalid to set gsoSize if capabilities.GSO is not set.
+	WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error)
+	LocalAddr() net.Addr
+	SetReadDeadline(time.Time) error
+	io.Closer
+
+	capabilities() connCapabilities
+}
 
 func wrapConn(pc net.PacketConn) (rawConn, error) {
 	if err := setReceiveBuffer(pc); err != nil {

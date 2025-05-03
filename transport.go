@@ -20,9 +20,7 @@ import (
 // ErrTransportClosed is returned by the [Transport]'s Listen or Dial method after it was closed.
 var ErrTransportClosed = &errTransportClosed{}
 
-type errTransportClosed struct {
-	err error
-}
+type errTransportClosed struct{ err error }
 
 func (e *errTransportClosed) Unwrap() []error { return []error{net.ErrClosed, e.err} }
 
@@ -43,6 +41,12 @@ type transportID uint64
 var transportIDCounter atomic.Uint64
 
 var errListenerAlreadySet = errors.New("listener already set")
+
+type closePacket struct {
+	payload []byte
+	addr    net.Addr
+	info    packetInfo
+}
 
 // The Transport is the central point to manage incoming and outgoing QUIC connections.
 // QUIC demultiplexes connections based on their QUIC Connection IDs, not based on the 4-tuple.
