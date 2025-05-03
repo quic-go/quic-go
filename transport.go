@@ -422,7 +422,14 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 		}
 		t.statelessResetter = newStatelessResetter(t.StatelessResetKey)
 
-		go t.listen(conn)
+		go func() {
+			defer close(t.listening)
+			t.listen(conn)
+
+			if t.createdConn {
+				conn.Close()
+			}
+		}()
 		go t.runSendQueue()
 	})
 	return t.initErr
@@ -473,18 +480,17 @@ func (t *Transport) Close() error {
 
 func (t *Transport) closeServer() {
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	t.server = nil
 	if t.isSingleUse {
 		t.closeErr = ErrServerClosed
 	}
-	t.mutex.Unlock()
-	if t.createdConn {
-		t.Conn.Close()
-	}
-	if t.isSingleUse {
-		t.conn.SetReadDeadline(time.Now())
-		defer func() { t.conn.SetReadDeadline(time.Time{}) }()
-		<-t.listening // wait until listening returns
+
+	t.connMx.Lock()
+	defer t.connMx.Unlock()
+	if len(t.handlers) == 0 {
+		t.maybeStopListening()
 	}
 }
 
@@ -523,8 +529,6 @@ func (t *Transport) close(e error) {
 var setBufferWarningOnce sync.Once
 
 func (t *Transport) listen(conn rawConn) {
-	defer close(t.listening)
-
 	for {
 		p, err := conn.ReadPacket()
 		//nolint:staticcheck // SA1019 ignore this!
@@ -550,6 +554,12 @@ func (t *Transport) listen(conn rawConn) {
 			return
 		}
 		t.handlePacket(p)
+	}
+}
+
+func (t *Transport) maybeStopListening() {
+	if t.isSingleUse && t.closeErr != nil {
+		t.conn.SetReadDeadline(time.Now())
 	}
 }
 
@@ -818,6 +828,12 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connCl
 		h.connMx.Lock()
 		for _, id := range ids {
 			delete(h.handlers, id)
+		}
+		if len(h.handlers) == 0 {
+			t := (*Transport)(h)
+			t.mutex.Lock()
+			t.maybeStopListening()
+			t.mutex.Unlock()
 		}
 		h.connMx.Unlock()
 		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
