@@ -54,28 +54,6 @@ func TestPacketHandlerMapAddWithClientChosenConnID(t *testing.T) {
 	require.Equal(t, h, got)
 }
 
-func TestPacketHandlerMapRetire(t *testing.T) {
-	m := newPacketHandlerMap(nil, utils.DefaultLogger)
-	dur := scaleDuration(10 * time.Millisecond)
-	m.deleteRetiredConnsAfter = dur
-	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-	h := &mockPacketHandler{}
-	require.True(t, m.Add(connID, h))
-	m.Retire(connID)
-
-	// immediately after retiring, the handler should still be there
-	got, ok := m.Get(connID)
-	require.True(t, ok)
-	require.Equal(t, h, got)
-
-	// after the timeout, the handler should be removed
-	time.Sleep(dur)
-	require.Eventually(t, func() bool {
-		_, ok := m.Get(connID)
-		return !ok
-	}, dur, dur/10)
-}
-
 func TestPacketHandlerMapAddGetRemoveResetTokens(t *testing.T) {
 	m := newPacketHandlerMap(nil, utils.DefaultLogger)
 	token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}

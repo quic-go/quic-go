@@ -1163,7 +1163,6 @@ func TestConnectionHandshakeServer(t *testing.T) {
 	require.NoError(t, err)
 
 	cs.EXPECT().DiscardInitialKeys()
-	tc.connRunner.EXPECT().Retire(gomock.Any())
 	gomock.InOrder(
 		cs.EXPECT().StartHandshake(gomock.Any()),
 		cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent}),

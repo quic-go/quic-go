@@ -373,39 +373,3 @@ func (c *MockPacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]pro
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
-
-// Retire mocks base method.
-func (m *MockPacketHandlerManager) Retire(arg0 protocol.ConnectionID) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Retire", arg0)
-}
-
-// Retire indicates an expected call of Retire.
-func (mr *MockPacketHandlerManagerMockRecorder) Retire(arg0 any) *MockPacketHandlerManagerRetireCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockPacketHandlerManager)(nil).Retire), arg0)
-	return &MockPacketHandlerManagerRetireCall{Call: call}
-}
-
-// MockPacketHandlerManagerRetireCall wrap *gomock.Call
-type MockPacketHandlerManagerRetireCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockPacketHandlerManagerRetireCall) Return() *MockPacketHandlerManagerRetireCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockPacketHandlerManagerRetireCall) Do(f func(protocol.ConnectionID)) *MockPacketHandlerManagerRetireCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPacketHandlerManagerRetireCall) DoAndReturn(f func(protocol.ConnectionID)) *MockPacketHandlerManagerRetireCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}

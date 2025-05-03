@@ -221,39 +221,3 @@ func (c *MockConnRunnerReplaceWithClosedCall) DoAndReturn(f func([]protocol.Conn
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
-
-// Retire mocks base method.
-func (m *MockConnRunner) Retire(arg0 protocol.ConnectionID) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Retire", arg0)
-}
-
-// Retire indicates an expected call of Retire.
-func (mr *MockConnRunnerMockRecorder) Retire(arg0 any) *MockConnRunnerRetireCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockConnRunner)(nil).Retire), arg0)
-	return &MockConnRunnerRetireCall{Call: call}
-}
-
-// MockConnRunnerRetireCall wrap *gomock.Call
-type MockConnRunnerRetireCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockConnRunnerRetireCall) Return() *MockConnRunnerRetireCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockConnRunnerRetireCall) Do(f func(protocol.ConnectionID)) *MockConnRunnerRetireCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockConnRunnerRetireCall) DoAndReturn(f func(protocol.ConnectionID)) *MockConnRunnerRetireCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
