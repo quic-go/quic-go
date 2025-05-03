@@ -86,7 +86,6 @@ func (p *receivedPacket) Clone() *receivedPacket {
 
 type connRunner interface {
 	Add(protocol.ConnectionID, packetHandler) bool
-	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
 	ReplaceWithClosed([]protocol.ConnectionID, []byte)
 	AddResetToken(protocol.StatelessResetToken, packetHandler)
@@ -277,7 +276,6 @@ var newConnection = func(
 		connRunnerCallbacks{
 			AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 			RemoveConnectionID: runner.Remove,
-			RetireConnectionID: runner.Retire,
 			ReplaceWithClosed:  runner.ReplaceWithClosed,
 		},
 		s.queueControlFrame,
@@ -392,7 +390,6 @@ var newClientConnection = func(
 		connRunnerCallbacks{
 			AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 			RemoveConnectionID: runner.Remove,
-			RetireConnectionID: runner.Retire,
 			ReplaceWithClosed:  runner.ReplaceWithClosed,
 		},
 		s.queueControlFrame,
@@ -652,6 +649,8 @@ runLoop:
 			}
 		}
 
+		s.connIDGenerator.RemoveRetiredConnIDs(now)
+
 		if s.perspective == protocol.PerspectiveClient {
 			pm := s.pathManagerOutgoing.Load()
 			if pm != nil {
@@ -762,6 +761,7 @@ func (s *connection) maybeResetTimer() {
 
 	s.timer.SetTimer(
 		deadline,
+		s.connIDGenerator.NextRetireTime(),
 		s.receivedPacketHandler.GetAlarmTimeout(),
 		s.sentPacketHandler.GetLossDetectionTimeout(),
 		s.pacingDeadline,
@@ -801,7 +801,7 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 	s.undecryptablePackets = nil
 
 	s.connIDManager.SetHandshakeComplete()
-	s.connIDGenerator.SetHandshakeComplete()
+	s.connIDGenerator.SetHandshakeComplete(now.Add(3 * s.rttStats.PTO(false)))
 
 	if s.tracer != nil && s.tracer.ChoseALPN != nil {
 		s.tracer.ChoseALPN(s.cryptoStreamHandler.ConnectionState().NegotiatedProtocol)
@@ -1532,7 +1532,7 @@ func (s *connection) handleFrame(
 	case *wire.NewConnectionIDFrame:
 		err = s.handleNewConnectionIDFrame(frame)
 	case *wire.RetireConnectionIDFrame:
-		err = s.handleRetireConnectionIDFrame(frame, destConnID)
+		err = s.handleRetireConnectionIDFrame(rcvTime, frame, destConnID)
 	case *wire.HandshakeDoneFrame:
 		err = s.handleHandshakeDoneFrame(rcvTime)
 	case *wire.DatagramFrame:
@@ -1751,8 +1751,8 @@ func (s *connection) handleNewConnectionIDFrame(f *wire.NewConnectionIDFrame) er
 	return s.connIDManager.Add(f)
 }
 
-func (s *connection) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame, destConnID protocol.ConnectionID) error {
-	return s.connIDGenerator.Retire(f.SequenceNumber, destConnID)
+func (s *connection) handleRetireConnectionIDFrame(now time.Time, f *wire.RetireConnectionIDFrame, destConnID protocol.ConnectionID) error {
+	return s.connIDGenerator.Retire(f.SequenceNumber, destConnID, now.Add(3*s.rttStats.PTO(false)))
 }
 
 func (s *connection) handleHandshakeDoneFrame(rcvTime time.Time) error {
@@ -2656,7 +2656,6 @@ func (s *connection) AddPath(t *Transport) (*Path, error) {
 				connRunnerCallbacks{
 					AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 					RemoveConnectionID: runner.Remove,
-					RetireConnectionID: runner.Retire,
 					ReplaceWithClosed:  runner.ReplaceWithClosed,
 				},
 			)

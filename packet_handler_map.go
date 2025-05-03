@@ -108,16 +108,6 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	h.logger.Debugf("Removing connection ID %s.", id)
 }
 
-func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
-	h.logger.Debugf("Retiring connection ID %s in %s.", id, h.deleteRetiredConnsAfter)
-	time.AfterFunc(h.deleteRetiredConnsAfter, func() {
-		h.mutex.Lock()
-		delete(h.handlers, id)
-		h.mutex.Unlock()
-		h.logger.Debugf("Removing connection ID %s after it has been retired.", id)
-	})
-}
-
 // ReplaceWithClosed is called when a connection is closed.
 // Depending on which side closed the connection, we need to:
 // * remote close: absorb delayed packets
