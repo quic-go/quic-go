@@ -269,7 +269,7 @@ var newConnection = func(
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
-		tr.id(),
+		tr,
 		srcConnID,
 		&clientDestConnID,
 		statelessResetter,
@@ -383,7 +383,7 @@ var newClientConnection = func(
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
-		tr.id(),
+		tr,
 		srcConnID,
 		nil,
 		statelessResetter,
@@ -2652,7 +2652,7 @@ func (s *connection) AddPath(t *Transport) (*Path, error) {
 		func() {
 			runner := t.connRunner()
 			s.connIDGenerator.AddConnRunner(
-				t.id(),
+				t,
 				connRunnerCallbacks{
 					AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 					RemoveConnectionID: runner.Remove,
