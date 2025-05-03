@@ -45,8 +45,7 @@ type packetHandlerMap struct {
 	handlers    map[protocol.ConnectionID]packetHandler
 	resetTokens map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
 
-	closed    bool
-	closeChan chan struct{}
+	closed bool
 
 	enqueueClosePacket func(closePacket)
 
@@ -58,43 +57,12 @@ type packetHandlerMap struct {
 var _ packetHandlerManager = &packetHandlerMap{}
 
 func newPacketHandlerMap(enqueueClosePacket func(closePacket), logger utils.Logger) *packetHandlerMap {
-	h := &packetHandlerMap{
-		closeChan:               make(chan struct{}),
+	return &packetHandlerMap{
 		handlers:                make(map[protocol.ConnectionID]packetHandler),
 		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		enqueueClosePacket:      enqueueClosePacket,
 		logger:                  logger,
-	}
-	if h.logger.Debug() {
-		go h.logUsage()
-	}
-	return h
-}
-
-func (h *packetHandlerMap) logUsage() {
-	ticker := time.NewTicker(2 * time.Second)
-	var printedZero bool
-	for {
-		select {
-		case <-h.closeChan:
-			return
-		case <-ticker.C:
-		}
-
-		h.mutex.Lock()
-		numHandlers := len(h.handlers)
-		numTokens := len(h.resetTokens)
-		h.mutex.Unlock()
-		// If the number tracked handlers and tokens is zero, only print it a single time.
-		hasZero := numHandlers == 0 && numTokens == 0
-		if !hasZero || (hasZero && !printedZero) {
-			h.logger.Debugf("Tracking %d connection IDs and %d reset tokens.\n", numHandlers, numTokens)
-			printedZero = false
-			if hasZero {
-				printedZero = true
-			}
-		}
 	}
 }
 
@@ -206,13 +174,10 @@ func (h *packetHandlerMap) GetByResetToken(token protocol.StatelessResetToken) (
 
 func (h *packetHandlerMap) Close(e error) {
 	h.mutex.Lock()
-
 	if h.closed {
 		h.mutex.Unlock()
 		return
 	}
-
-	close(h.closeChan)
 
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
