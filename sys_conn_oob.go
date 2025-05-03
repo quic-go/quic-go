@@ -220,7 +220,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				if len(body) != 4 {
 					return receivedPacket{}, errors.New("invalid IPV6_TCLASS size")
 				}
-				bits := byte(binary.NativeEndian.Uint32(body) & ecnMask)
+				bits := uint8(binary.NativeEndian.Uint32(body)) & ecnMask
 				p.ecn = protocol.ParseECNHeaderBits(bits)
 			case unix.IPV6_PKTINFO:
 				// struct in6_pktinfo {
