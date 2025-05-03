@@ -1,0 +1,28 @@
+name: run-interop-tests
+on:
+  pull_request:
+
+jobs:
+  run-interop-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        id: docker_build_and_push
+        with:
+          context: "{{defaultContext}}:interop"
+          push: false
+          build-args: |
+            GITREF=${{ github.event.pull_request.head.sha }}
+          load: true
+      - name: Run QUIC Interop tests
+        # TODO: Replace once https://github.com/quic-interop/quic-interop-runner/pull/356 is merged.
+        uses: mxinden/quic-interop-runner@action
+        with:
+          name: 'quic-go-latest'
+          image: ${{ steps.docker_build_and_push.outputs.imageID }}
+          url: https://github.com/quic-go/quic-go
+          client: quic-go-latest,quic-go,neqo
+          server: quic-go-latest,quic-go,msquic
