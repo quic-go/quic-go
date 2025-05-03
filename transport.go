@@ -38,10 +38,6 @@ func (e *errTransportClosed) Is(target error) bool {
 	return ok
 }
 
-type transportID uint64
-
-var transportIDCounter atomic.Uint64
-
 var errListenerAlreadySet = errors.New("listener already set")
 
 // The Transport is the central point to manage incoming and outgoing QUIC connections.
@@ -136,8 +132,6 @@ type Transport struct {
 	initOnce sync.Once
 	initErr  error
 
-	// Set in init.
-	transportID transportID
 	// If no ConnectionIDGenerator is set, this is the ConnectionIDLength.
 	connIDLen int
 	// Set in init.
@@ -376,7 +370,6 @@ func (t *Transport) doDial(
 
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 	t.initOnce.Do(func() {
-		t.transportID = transportID(transportIDCounter.Add(1))
 		var conn rawConn
 		if c, ok := t.Conn.(rawConn); ok {
 			conn = c
@@ -429,8 +422,6 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 func (t *Transport) connRunner() packetHandlerManager {
 	return t.handlerMap
 }
-
-func (t *Transport) id() transportID { return t.transportID }
 
 // WriteTo sends a packet on the underlying connection.
 func (t *Transport) WriteTo(b []byte, addr net.Addr) (int, error) {

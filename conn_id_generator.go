@@ -16,7 +16,8 @@ type connRunnerCallbacks struct {
 	ReplaceWithClosed  func([]protocol.ConnectionID, []byte)
 }
 
-type connRunners map[transportID]connRunnerCallbacks
+// The memory address of the Transport is used as the key.
+type connRunners map[*Transport]connRunnerCallbacks
 
 func (cr connRunners) AddConnectionID(id protocol.ConnectionID) {
 	for _, c := range cr {
@@ -56,7 +57,7 @@ type connIDGenerator struct {
 }
 
 func newConnIDGenerator(
-	tID transportID,
+	tr *Transport,
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID *protocol.ConnectionID, // nil for the client
 	statelessResetter *statelessResetter,
@@ -68,7 +69,7 @@ func newConnIDGenerator(
 		generator:         generator,
 		activeSrcConnIDs:  make(map[uint64]protocol.ConnectionID),
 		statelessResetter: statelessResetter,
-		connRunners:       map[transportID]connRunnerCallbacks{tID: connRunner},
+		connRunners:       map[*Transport]connRunnerCallbacks{tr: connRunner},
 		queueControlFrame: queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
@@ -201,7 +202,7 @@ func (m *connIDGenerator) ReplaceWithClosed(connClose []byte) {
 	m.connRunners.ReplaceWithClosed(connIDs, connClose)
 }
 
-func (m *connIDGenerator) AddConnRunner(id transportID, r connRunnerCallbacks) {
+func (m *connIDGenerator) AddConnRunner(id *Transport, r connRunnerCallbacks) {
 	// The transport might have already been added earlier.
 	// This happens if the application migrates back to and old path.
 	if _, ok := m.connRunners[id]; ok {

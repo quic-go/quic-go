@@ -34,7 +34,7 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 		initialClientDestConnID = &connID
 	}
 	g := newConnIDGenerator(
-		1,
+		&Transport{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		sr,
@@ -107,7 +107,7 @@ func TestConnIDGeneratorRetiring(t *testing.T) {
 	initialConnID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
 	var added, removed []protocol.ConnectionID
 	g := newConnIDGenerator(
-		1,
+		&Transport{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		&initialConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -178,7 +178,7 @@ func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool)
 		removed []protocol.ConnectionID
 	)
 	g := newConnIDGenerator(
-		0,
+		&Transport{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -228,7 +228,7 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 		replacedWith []byte
 	)
 	g := newConnIDGenerator(
-		1,
+		&Transport{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -274,7 +274,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 		added, removed, replaced []protocol.ConnectionID
 	}
 
-	var tracker1, tracker2 connIDTracker
+	var tracker1, tracker2, tracker3 connIDTracker
 	runner1 := connRunnerCallbacks{
 		AddConnectionID:    func(c protocol.ConnectionID) { tracker1.added = append(tracker1.added, c) },
 		RemoveConnectionID: func(c protocol.ConnectionID) { tracker1.removed = append(tracker1.removed, c) },
@@ -289,12 +289,20 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 			tracker2.replaced = append(tracker2.replaced, connIDs...)
 		},
 	}
+	runner3 := connRunnerCallbacks{
+		AddConnectionID:    func(c protocol.ConnectionID) { tracker3.added = append(tracker3.added, c) },
+		RemoveConnectionID: func(c protocol.ConnectionID) { tracker3.removed = append(tracker3.removed, c) },
+		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte) {
+			tracker3.replaced = append(tracker3.replaced, connIDs...)
+		},
+	}
 
 	sr := newStatelessResetter(&StatelessResetKey{1, 2, 3, 4})
 	var queuedFrames []wire.Frame
 
+	tr := &Transport{}
 	g := newConnIDGenerator(
-		1,
+		tr,
 		initialConnID,
 		&clientDestConnID,
 		sr,
@@ -306,13 +314,18 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	require.Len(t, tracker1.added, 2)
 
 	// add the second runner - it should get all existing connection IDs
-	g.AddConnRunner(2, runner2)
+	g.AddConnRunner(&Transport{}, runner2)
 	require.Len(t, tracker1.added, 2) // unchanged
 	require.Len(t, tracker2.added, 4)
 	require.Contains(t, tracker2.added, initialConnID)
 	require.Contains(t, tracker2.added, clientDestConnID)
 	require.Contains(t, tracker2.added, tracker1.added[0])
 	require.Contains(t, tracker2.added, tracker1.added[1])
+
+	// adding the same transport again doesn't do anything
+	trCopy := tr
+	g.AddConnRunner(trCopy, runner3)
+	require.Empty(t, tracker3.added)
 
 	var connIDToRetire protocol.ConnectionID
 	var seqToRetire uint64
