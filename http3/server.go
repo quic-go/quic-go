@@ -450,19 +450,19 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	}).Append(b)
 	ctrlStr.Write(b)
 
-	ctx := conn.Context()
-	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
-	ctx = context.WithValue(ctx, RemoteAddrContextKey, conn.RemoteAddr())
+	connCtx := conn.Context()
+	connCtx = context.WithValue(connCtx, ServerContextKey, s)
+	connCtx = context.WithValue(connCtx, http.LocalAddrContextKey, conn.LocalAddr())
+	connCtx = context.WithValue(connCtx, RemoteAddrContextKey, conn.RemoteAddr())
 	if s.ConnContext != nil {
-		ctx = s.ConnContext(ctx, conn)
-		if ctx == nil {
+		connCtx = s.ConnContext(connCtx, conn)
+		if connCtx == nil {
 			panic("http3: ConnContext returned nil")
 		}
 	}
 
 	hconn := newConnection(
-		ctx,
+		connCtx,
 		conn,
 		s.EnableDatagrams,
 		protocol.PerspectiveServer,
@@ -474,46 +474,57 @@ func (s *Server) handleConn(conn quic.Connection) error {
 	var nextStreamID quic.StreamID
 	var wg sync.WaitGroup
 	var handleErr error
+	var inGracefulShutdown bool
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
+	ctx := s.graceCtx
 	for {
-		str, datagrams, err := hconn.acceptStream(s.graceCtx)
+		// The context used here is:
+		// * before graceful shutdown: s.graceCtx
+		// * after graceful shutdown: s.closeCtx
+		// This allows us to keep accepting (and resetting) streams after graceful shutdown has started.
+		str, datagrams, err := hconn.acceptStream(ctx)
 		if err != nil {
+			// the underlying connection was closed (by either side)
+			if hconn.Context().Err() != nil {
+				var appErr *quic.ApplicationError
+				if !errors.As(err, &appErr) || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
+					handleErr = fmt.Errorf("accepting stream failed: %w", err)
+				}
+				break
+			}
 			// server (not gracefully) closed, close the connection immediately
 			if s.closeCtx.Err() != nil {
 				conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 				handleErr = http.ErrServerClosed
 				break
 			}
-
-			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
-			// new requests will be rejected and shouldn't be sent
-			if s.graceCtx.Err() != nil {
-				wg.Add(1)
-				// Send the GOAWAY frame in a separate Goroutine.
-				// Sending might block if the peer didn't grant enough flow control credit.
-				// Write is guaranteed to return once the connection is closed.
-				go func() {
-					defer wg.Done()
-					_, _ = ctrlStr.Write((&goAwayFrame{StreamID: nextStreamID}).Append(nil))
-				}()
-
-				select {
-				case <-hconn.Context().Done():
-					// we expect the client to eventually close the connection after receiving the GOAWAY
-				case <-s.closeCtx.Done():
-					// close the connection after graceful period
-					conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+			inGracefulShutdown = s.graceCtx.Err() != nil
+			if !inGracefulShutdown {
+				var appErr *quic.ApplicationError
+				if !errors.As(err, &appErr) || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
+					handleErr = fmt.Errorf("accepting stream failed: %w", err)
 				}
-				handleErr = http.ErrServerClosed
 				break
 			}
 
-			var appErr *quic.ApplicationError
-			if !errors.As(err, &appErr) || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
-				handleErr = fmt.Errorf("accepting stream failed: %w", err)
-			}
-			break
+			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
+			// new requests will be rejected and shouldn't be sent
+			wg.Add(1)
+			// Send the GOAWAY frame in a separate Goroutine.
+			// Sending might block if the peer didn't grant enough flow control credit.
+			// Write is guaranteed to return once the connection is closed.
+			go func() {
+				defer wg.Done()
+				_, _ = ctrlStr.Write((&goAwayFrame{StreamID: nextStreamID}).Append(nil))
+			}()
+			ctx = s.closeCtx
+			continue
+		}
+		if inGracefulShutdown {
+			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
+			continue
 		}
 
 		nextStreamID = str.StreamID() + 4
@@ -690,9 +701,10 @@ func (s *Server) Close() error {
 	return err
 }
 
-// Shutdown shuts down the server gracefully.
+// Shutdown gracefully shuts down the server without interrupting any active connections.
 // The server sends a GOAWAY frame first, then or for all running requests to complete.
-// Shutdown in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
+// Shutdown in combination with ListenAndServe may race if it is called before a UDP socket is established.
+// It is recommended to use Serve instead.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mutex.Lock()
 	s.closed = true
