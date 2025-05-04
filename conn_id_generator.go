@@ -13,7 +13,7 @@ import (
 type connRunnerCallbacks struct {
 	AddConnectionID    func(protocol.ConnectionID)
 	RemoveConnectionID func(protocol.ConnectionID)
-	ReplaceWithClosed  func([]protocol.ConnectionID, []byte)
+	ReplaceWithClosed  func([]protocol.ConnectionID, []byte, time.Duration)
 }
 
 // The memory address of the Transport is used as the key.
@@ -31,9 +31,9 @@ func (cr connRunners) RemoveConnectionID(id protocol.ConnectionID) {
 	}
 }
 
-func (cr connRunners) ReplaceWithClosed(ids []protocol.ConnectionID, b []byte) {
+func (cr connRunners) ReplaceWithClosed(ids []protocol.ConnectionID, b []byte, expiry time.Duration) {
 	for _, c := range cr {
-		c.ReplaceWithClosed(ids, b)
+		c.ReplaceWithClosed(ids, b, expiry)
 	}
 }
 
@@ -188,7 +188,7 @@ func (m *connIDGenerator) RemoveAll() {
 	}
 }
 
-func (m *connIDGenerator) ReplaceWithClosed(connClose []byte) {
+func (m *connIDGenerator) ReplaceWithClosed(connClose []byte, expiry time.Duration) {
 	connIDs := make([]protocol.ConnectionID, 0, len(m.activeSrcConnIDs)+len(m.connIDsToRetire)+1)
 	if m.initialClientDestConnID != nil {
 		connIDs = append(connIDs, *m.initialClientDestConnID)
@@ -199,7 +199,7 @@ func (m *connIDGenerator) ReplaceWithClosed(connClose []byte) {
 	for _, c := range m.connIDsToRetire {
 		connIDs = append(connIDs, c.connID)
 	}
-	m.connRunners.ReplaceWithClosed(connIDs, connClose)
+	m.connRunners.ReplaceWithClosed(connIDs, connClose, expiry)
 }
 
 func (m *connIDGenerator) AddConnRunner(id *Transport, r connRunnerCallbacks) {

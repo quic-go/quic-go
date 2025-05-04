@@ -442,7 +442,7 @@ func TestConnectionTransportError(t *testing.T) {
 	b.Data = append(b.Data, []byte("connection close")...)
 	tc.packer.EXPECT().PackConnectionClose(expectedErr, gomock.Any(), protocol.Version1).Return(&coalescedPacket{buffer: b}, nil)
 	tc.sendConn.EXPECT().Write([]byte("connection close"), gomock.Any(), gomock.Any())
-	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	gomock.InOrder(
 		tracer.EXPECT().ClosedConnection(expectedErr),
 		tracer.EXPECT().Close(),
@@ -476,7 +476,7 @@ func TestConnectionApplicationClose(t *testing.T) {
 	b.Data = append(b.Data, []byte("connection close")...)
 	tc.packer.EXPECT().PackApplicationClose(expectedErr, gomock.Any(), protocol.Version1).Return(&coalescedPacket{buffer: b}, nil)
 	tc.sendConn.EXPECT().Write([]byte("connection close"), gomock.Any(), gomock.Any())
-	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	gomock.InOrder(
 		tracer.EXPECT().ClosedConnection(expectedErr),
 		tracer.EXPECT().Close(),
@@ -835,7 +835,7 @@ func testConnectionUnpackFailureFatal(t *testing.T, unpackErr error) error {
 		connectionOptUnpacker(unpacker),
 	)
 
-	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
+	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any())
 	unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(0), protocol.PacketNumberLen(0), protocol.KeyPhaseBit(0), nil, unpackErr)
 	tc.packer.EXPECT().PackConnectionClose(gomock.Any(), gomock.Any(), protocol.Version1).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 	errChan := make(chan error, 1)
@@ -952,7 +952,7 @@ func TestConnectionRemoteClose(t *testing.T) {
 	tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	expectedErr := &qerr.TransportError{ErrorCode: qerr.StreamLimitError, Remote: true}
-	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
+	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any())
 	streamErrChan := make(chan error, 1)
 	mockStreamManager.EXPECT().CloseWithError(gomock.Any()).Do(func(e error) { streamErrChan <- e })
 	tracerErrChan := make(chan error, 1)
@@ -1407,7 +1407,7 @@ func TestConnection0RTTTransportParameters(t *testing.T) {
 	)
 	tc.packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), gomock.Any(), protocol.Version1).Return(nil, nil).AnyTimes()
 	tc.packer.EXPECT().PackConnectionClose(gomock.Any(), gomock.Any(), protocol.Version1).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
-	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
+	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any())
 
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()

@@ -49,8 +49,6 @@ type packetHandlerMap struct {
 
 	enqueueClosePacket func(closePacket)
 
-	deleteRetiredConnsAfter time.Duration
-
 	logger utils.Logger
 }
 
@@ -58,11 +56,10 @@ var _ packetHandlerManager = &packetHandlerMap{}
 
 func newPacketHandlerMap(enqueueClosePacket func(closePacket), logger utils.Logger) *packetHandlerMap {
 	return &packetHandlerMap{
-		handlers:                make(map[protocol.ConnectionID]packetHandler),
-		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
-		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
-		enqueueClosePacket:      enqueueClosePacket,
-		logger:                  logger,
+		handlers:           make(map[protocol.ConnectionID]packetHandler),
+		resetTokens:        make(map[protocol.StatelessResetToken]packetHandler),
+		enqueueClosePacket: enqueueClosePacket,
+		logger:             logger,
 	}
 }
 
@@ -112,7 +109,7 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 // Depending on which side closed the connection, we need to:
 // * remote close: absorb delayed packets
 // * local close: retransmit the CONNECTION_CLOSE packet, in case it was lost
-func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connClosePacket []byte) {
+func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connClosePacket []byte, expiry time.Duration) {
 	var handler packetHandler
 	if connClosePacket != nil {
 		handler = newClosedLocalConn(
@@ -132,7 +129,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connCl
 	h.mutex.Unlock()
 	h.logger.Debugf("Replacing connection for connection IDs %s with a closed connection.", ids)
 
-	time.AfterFunc(h.deleteRetiredConnsAfter, func() {
+	time.AfterFunc(expiry, func() {
 		h.mutex.Lock()
 		for _, id := range ids {
 			delete(h.handlers, id)
