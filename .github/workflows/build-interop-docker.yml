@@ -5,6 +5,7 @@ on:
       - master
     tags:
       - 'v*'
+  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +24,7 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
       - name: Login to Docker Hub
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -41,9 +43,8 @@ jobs:
           fi
       - uses: docker/build-push-action@v6
         with:
-          context: "{{defaultContext}}:interop"
+          context: "."
+          file: "interop/Dockerfile"
           platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            GITREF=${{ steps.tag.outputs.gitref }}
+          push: ${{ github.event_name == 'push' }}
           tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
