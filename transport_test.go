@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -47,8 +48,16 @@ type mockPacketHandler struct {
 	destruction chan<- error
 }
 
-func (h *mockPacketHandler) handlePacket(p receivedPacket)                        { h.packets <- p }
-func (h *mockPacketHandler) destroy(err error)                                    { h.destruction <- err }
+func (h *mockPacketHandler) handlePacket(p receivedPacket) {
+	h.packets <- p
+}
+
+func (h *mockPacketHandler) destroy(err error) {
+	if h.destruction != nil {
+		h.destruction <- err
+	}
+}
+
 func (h *mockPacketHandler) closeWithTransportError(code qerr.TransportErrorCode) {}
 
 func getPacket(t *testing.T, connID protocol.ConnectionID) []byte {
@@ -71,28 +80,19 @@ func getPacketWithPacketType(t *testing.T, connID protocol.ConnectionID, typ pro
 }
 
 func TestTransportPacketHandling(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	phm := NewMockPacketHandlerManager(mockCtrl)
-
-	tr := &Transport{
-		Conn:       newUDPConnLocalhost(t),
-		handlerMap: phm,
-	}
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	tr.init(true)
-	defer func() {
-		phm.EXPECT().Close(gomock.Any())
-		tr.Close()
-	}()
+	defer tr.Close()
 
 	connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 	connID2 := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
 
 	connChan1 := make(chan receivedPacket, 1)
 	conn1 := &mockPacketHandler{packets: connChan1}
-	phm.EXPECT().Get(connID1).Return(conn1, true)
+	(*packetHandlerMap)(tr).Add(connID1, conn1)
 	connChan2 := make(chan receivedPacket, 1)
 	conn2 := &mockPacketHandler{packets: connChan2}
-	phm.EXPECT().Get(connID2).Return(conn2, true)
+	(*packetHandlerMap)(tr).Add(connID2, conn2)
 
 	conn := newUDPConnLocalhost(t)
 	_, err := conn.WriteTo(getPacket(t, connID1), tr.Conn.LocalAddr())
@@ -158,51 +158,49 @@ func TestTransportAndDialConcurrentClose(t *testing.T) {
 }
 
 func TestTransportErrFromConn(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	phm := NewMockPacketHandlerManager(mockCtrl)
-	readErrChan := make(chan error, 2)
-	conn := &mockPacketConn{readErrs: readErrChan, localAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}}
-	tr := Transport{Conn: conn, handlerMap: phm}
-	defer tr.Close()
+	t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
 
+	readErrChan := make(chan error, 2)
+	tr := Transport{
+		Conn: &mockPacketConn{
+			readErrs:  readErrChan,
+			localAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234},
+		},
+	}
+	defer tr.Close()
 	tr.init(true)
-	tr.handlerMap = phm
+
+	errChan := make(chan error, 1)
+	ph := &mockPacketHandler{destruction: errChan}
+	(*packetHandlerMap)(&tr).Add(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), ph)
 
 	// temporary errors don't lead to a shutdown...
 	var tempErr deadlineError
 	require.True(t, tempErr.Temporary())
 	readErrChan <- tempErr
 	// don't expect any calls to phm.Close
-	time.Sleep(scaleDuration(20 * time.Millisecond))
+	time.Sleep(scaleDuration(10 * time.Millisecond))
 
 	// ...but non-temporary errors do
-	done := make(chan struct{})
-	phm.EXPECT().Close(gomock.Any()).Do(func(error) { close(done) })
 	readErrChan <- errors.New("read failed")
 	select {
-	case <-done:
+	case err := <-errChan:
+		require.ErrorIs(t, err, ErrTransportClosed)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
 
 	_, err := tr.Listen(&tls.Config{}, nil)
-	require.Error(t, err)
 	require.ErrorIs(t, err, ErrTransportClosed)
 }
 
 func TestTransportStatelessResetReceiving(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	phm := NewMockPacketHandlerManager(mockCtrl)
 	tr := &Transport{
 		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 4,
-		handlerMap:         phm,
 	}
 	tr.init(true)
-	defer func() {
-		phm.EXPECT().Close(gomock.Any())
-		tr.Close()
-	}()
+	defer tr.Close()
 
 	connID := protocol.ParseConnectionID([]byte{9, 10, 11, 12})
 	// now send a packet with a connection ID that doesn't exist
@@ -213,10 +211,7 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 
 	destroyChan := make(chan error, 1)
 	conn1 := &mockPacketHandler{destruction: destroyChan}
-	gomock.InOrder(
-		phm.EXPECT().Get(connID), // no handler for this connection ID
-		phm.EXPECT().GetByResetToken(token).Return(conn1, true),
-	)
+	(*packetHandlerMap)(tr).AddResetToken(token, conn1)
 
 	conn := newUDPConnLocalhost(t)
 	_, err = conn.WriteTo(b, tr.Conn.LocalAddr())
@@ -224,7 +219,7 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 
 	select {
 	case err := <-destroyChan:
-		require.Error(t, err)
+		require.ErrorIs(t, err, &qerr.StatelessResetError{})
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
@@ -232,25 +227,20 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 
 func TestTransportStatelessResetSending(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	phm := NewMockPacketHandlerManager(mockCtrl)
 	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	tr := &Transport{
 		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 4,
 		StatelessResetKey:  &StatelessResetKey{1, 2, 3, 4},
-		handlerMap:         phm,
 		Tracer:             tracer,
 	}
 	tr.init(true)
 	defer func() {
 		mockTracer.EXPECT().Close()
-		phm.EXPECT().Close(gomock.Any())
 		tr.Close()
 	}()
 
 	connID := protocol.ParseConnectionID([]byte{9, 10, 11, 12})
-	phm.EXPECT().Get(connID) // no handler for this connection ID
-	phm.EXPECT().GetByResetToken(gomock.Any())
 
 	// now send a packet with a connection ID that doesn't exist
 	b, err := wire.AppendShortHeader(nil, connID, 1337, 2, protocol.KeyPhaseOne)
@@ -274,8 +264,6 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	// but a stateless reset is sent for packets larger than MinStatelessResetSize
-	phm.EXPECT().Get(connID) // no handler for this connection ID
-	phm.EXPECT().GetByResetToken(gomock.Any())
 	_, err = conn.WriteTo(append(b, make([]byte, protocol.MinStatelessResetSize-len(b)+1)...), tr.Conn.LocalAddr())
 	require.NoError(t, err)
 	conn.SetReadDeadline(time.Now().Add(time.Second))
@@ -287,7 +275,7 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	require.Contains(t, string(p[:n]), string(srt[:]))
 }
 
-func TestTransportDropsUnparseableQUICPackets(t *testing.T) {
+func TestTransportUnparseableQUICPackets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	tr := &Transport{
@@ -511,7 +499,7 @@ func testTransportDial(t *testing.T, early bool) {
 	newClientConnection = func(
 		_ context.Context,
 		_ sendConn,
-		_ *Transport,
+		_ connRunner,
 		_ protocol.ConnectionID,
 		_ protocol.ConnectionID,
 		_ ConnectionIDGenerator,
@@ -586,7 +574,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 	newClientConnection = func(
 		_ context.Context,
 		_ sendConn,
-		_ *Transport,
+		_ connRunner,
 		_ protocol.ConnectionID,
 		_ protocol.ConnectionID,
 		_ ConnectionIDGenerator,
@@ -635,4 +623,79 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 	// for test tear down
 	conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 	conn2.EXPECT().destroy(gomock.Any()).AnyTimes()
+}
+
+func TestTransportReplaceWithClosed(t *testing.T) {
+	t.Run("local", func(t *testing.T) {
+		testTransportReplaceWithClosed(t, true)
+	})
+	t.Run("remote", func(t *testing.T) {
+		testTransportReplaceWithClosed(t, false)
+	})
+}
+
+func testTransportReplaceWithClosed(t *testing.T, local bool) {
+	srk := StatelessResetKey{1, 2, 3, 4}
+	tr := &Transport{
+		Conn:               newUDPConnLocalhost(t),
+		ConnectionIDLength: 4,
+		StatelessResetKey:  &srk,
+	}
+	tr.init(true)
+	defer tr.Close()
+
+	dur := scaleDuration(10 * time.Millisecond)
+
+	var closePacket []byte
+	if local {
+		closePacket = []byte("foobar")
+	}
+
+	handler := &mockPacketHandler{}
+	connID := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
+	m := (*packetHandlerMap)(tr)
+	require.True(t, m.Add(connID, handler))
+	start := time.Now()
+	m.ReplaceWithClosed([]protocol.ConnectionID{connID}, closePacket, dur)
+
+	p := make([]byte, 100)
+	p[0] = 0x40 // QUIC bit
+	copy(p[1:], connID.Bytes())
+
+	conn := newUDPConnLocalhost(t)
+	var sent int
+	for now := range time.NewTicker(dur / 20).C {
+		_, err := conn.WriteTo(p, tr.Conn.LocalAddr())
+		require.NoError(t, err)
+		sent++
+		if now.After(start.Add(dur)) {
+			break
+		}
+	}
+	// For locally closed connections, CONNECTION_CLOSE packets are sent with an exponential backoff
+	for i := 0; i*i < sent; i++ {
+		conn.SetReadDeadline(time.Now().Add(time.Second))
+		b := make([]byte, 100)
+		if local {
+			n, _, err := conn.ReadFrom(b)
+			require.NoError(t, err)
+			require.Equal(t, []byte("foobar"), b[:n])
+		}
+	}
+	// Afterwards, we receive a stateless reset, not a copy of the CONNECTION_CLOSE packet.
+	// Retry up to 3 times, the connection is deleted from the map on a timer.
+	for i := 0; i < 3; i++ {
+		_, err := conn.WriteTo(p, tr.Conn.LocalAddr())
+		require.NoError(t, err)
+		conn.SetReadDeadline(time.Now().Add(dur / 4))
+		b := make([]byte, 100)
+		n, _, err := conn.ReadFrom(b)
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			continue
+		}
+		require.NoError(t, err)
+		require.NotEqual(t, []byte("foobar"), b[:n])
+		require.GreaterOrEqual(t, n, protocol.MinStatelessResetSize)
+		break
+	}
 }

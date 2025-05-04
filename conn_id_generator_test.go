@@ -34,7 +34,7 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 		initialClientDestConnID = &connID
 	}
 	g := newConnIDGenerator(
-		&Transport{},
+		&packetHandlerMap{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		sr,
@@ -107,7 +107,7 @@ func TestConnIDGeneratorRetiring(t *testing.T) {
 	initialConnID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
 	var added, removed []protocol.ConnectionID
 	g := newConnIDGenerator(
-		&Transport{},
+		&packetHandlerMap{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		&initialConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -178,7 +178,7 @@ func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool)
 		removed []protocol.ConnectionID
 	)
 	g := newConnIDGenerator(
-		&Transport{},
+		&packetHandlerMap{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -228,7 +228,7 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 		replacedWith []byte
 	)
 	g := newConnIDGenerator(
-		&Transport{},
+		&packetHandlerMap{},
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
 		initialClientDestConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
@@ -300,7 +300,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	sr := newStatelessResetter(&StatelessResetKey{1, 2, 3, 4})
 	var queuedFrames []wire.Frame
 
-	tr := &Transport{}
+	tr := &packetHandlerMap{}
 	g := newConnIDGenerator(
 		tr,
 		initialConnID,
@@ -314,7 +314,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	require.Len(t, tracker1.added, 2)
 
 	// add the second runner - it should get all existing connection IDs
-	g.AddConnRunner(&Transport{}, runner2)
+	g.AddConnRunner(&packetHandlerMap{}, runner2)
 	require.Len(t, tracker1.added, 2) // unchanged
 	require.Len(t, tracker2.added, 4)
 	require.Contains(t, tracker2.added, initialConnID)

@@ -32,14 +32,6 @@ type packetHandler interface {
 	closeWithTransportError(qerr.TransportErrorCode)
 }
 
-type packetHandlerManager interface {
-	Get(protocol.ConnectionID) (packetHandler, bool)
-	GetByResetToken(protocol.StatelessResetToken) (packetHandler, bool)
-	AddWithConnID(destConnID, newConnID protocol.ConnectionID, h packetHandler) bool
-	Close(error)
-	connRunner
-}
-
 type quicConn interface {
 	EarlyConnection
 	earlyConnReady() <-chan struct{}
@@ -61,7 +53,7 @@ type rejectedPacket struct {
 
 // A Listener of QUIC
 type baseServer struct {
-	tr                        *Transport
+	tr                        *packetHandlerMap
 	disableVersionNegotiation bool
 	acceptEarlyConns          bool
 
@@ -89,7 +81,7 @@ type baseServer struct {
 		context.Context,
 		context.CancelCauseFunc,
 		sendConn,
-		*Transport,
+		connRunner,
 		protocol.ConnectionID, /* original dest connection ID */
 		*protocol.ConnectionID, /* retry src connection ID */
 		protocol.ConnectionID, /* client dest connection ID */
@@ -247,7 +239,7 @@ func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Ear
 
 func newServer(
 	conn rawConn,
-	tr *Transport,
+	tr *packetHandlerMap,
 	connIDGenerator ConnectionIDGenerator,
 	statelessResetter *statelessResetter,
 	connContext func(context.Context) context.Context,
@@ -501,7 +493,7 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 	}
 
 	// check again if we might have a connection now
-	if handler, ok := s.tr.connRunner().Get(connID); ok {
+	if handler, ok := s.tr.Get(connID); ok {
 		handler.handlePacket(p)
 		return true
 	}
@@ -591,7 +583,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	// The server queues packets for a while, and we might already have established a connection by now.
 	// This results in a second check in the connection map.
 	// That's ok since it's not the hot path (it's only taken by some Initial and 0-RTT packets).
-	if handler, ok := s.tr.connRunner().Get(hdr.DestConnectionID); ok {
+	if handler, ok := s.tr.Get(hdr.DestConnectionID); ok {
 		handler.handlePacket(p)
 		return nil
 	}
@@ -727,7 +719,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	// This is very unlikely: Even if an attacker chooses a connection ID that's already in use,
 	// under normal circumstances the packet would just be routed to that connection.
 	// The only time this collision will occur if we receive the two Initial packets at the same time.
-	if added := s.tr.connRunner().AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
+	if added := s.tr.AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 		conn.closeWithTransportError(qerr.ConnectionRefused)
 		return nil
