@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/http3"
+	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +25,7 @@ func TestHTTPShutdown(t *testing.T) {
 		go func() {
 			require.NoError(t, server.Close())
 		}()
-		time.Sleep(50 * time.Millisecond) // make sure the server started shutting down
+		time.Sleep(scaleDuration(10 * time.Millisecond)) // make sure the server started shutting down
 	})
 
 	_, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
@@ -34,7 +36,7 @@ func TestHTTPShutdown(t *testing.T) {
 }
 
 func TestGracefulShutdownShortRequest(t *testing.T) {
-	delay := scaleDuration(50 * time.Millisecond)
+	delay := scaleDuration(25 * time.Millisecond)
 
 	var server *http3.Server
 	mux := http.NewServeMux()
@@ -71,7 +73,7 @@ func TestGracefulShutdownShortRequest(t *testing.T) {
 }
 
 func TestGracefulShutdownLongLivedRequest(t *testing.T) {
-	delay := scaleDuration(50 * time.Millisecond)
+	delay := scaleDuration(25 * time.Millisecond)
 	errChan := make(chan error, 1)
 	requestChan := make(chan time.Duration, 1)
 
@@ -123,5 +125,74 @@ func TestGracefulShutdownLongLivedRequest(t *testing.T) {
 		require.InDelta(t, delay.Seconds(), requestDuration.Seconds(), (delay / 2).Seconds())
 	case <-time.After(time.Second):
 		t.Fatal("did not receive request duration")
+	}
+}
+
+func TestGracefulShutdownPendingStreams(t *testing.T) {
+	rtt := scaleDuration(25 * time.Millisecond)
+
+	handlerChan := make(chan struct{}, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/helloworld", func(w http.ResponseWriter, r *http.Request) {
+		handlerChan <- struct{}{}
+		time.Sleep(rtt)
+		w.Write([]byte("hello world"))
+	})
+	var server *http3.Server
+	port := startHTTPServer(t, mux, func(s *http3.Server) { server = s })
+	client := newHTTP3Client(t)
+
+	proxy := quicproxy.Proxy{
+		Conn:       newUDPConnLocalhost(t),
+		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
+		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
+			return rtt
+		},
+	}
+	require.NoError(t, proxy.Start())
+	defer proxy.Close()
+	proxyPort := proxy.LocalAddr().(*net.UDPAddr).Port
+
+	errChan := make(chan error, 1)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/helloworld", proxyPort), nil)
+	require.NoError(t, err)
+	go func() {
+		resp, err := client.Do(req)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		if resp.StatusCode != http.StatusOK {
+			errChan <- fmt.Errorf("expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+	}()
+
+	select {
+	case <-handlerChan:
+	case <-time.After(time.Second):
+		t.Fatal("did not receive request")
+	}
+
+	shutdownChan := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { shutdownChan <- server.Shutdown(ctx) }()
+	time.Sleep(rtt / 2) // wait for the server to start shutting down
+
+	// make sure that the server rejects further requests
+	for range 3 {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/helloworld", proxyPort), nil)
+		require.NoError(t, err)
+		_, err = client.Do(req)
+		var h3err *http3.Error
+		require.ErrorAs(t, err, &h3err)
+		require.Equal(t, http3.ErrCodeRequestRejected, h3err.ErrorCode)
+	}
+
+	cancel()
+	select {
+	case err := <-shutdownChan:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("shutdown did not complete")
 	}
 }
