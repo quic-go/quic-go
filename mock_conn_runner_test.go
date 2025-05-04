@@ -11,6 +11,7 @@ package quic
 
 import (
 	reflect "reflect"
+	time "time"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
@@ -187,15 +188,15 @@ func (c *MockConnRunnerRemoveResetTokenCall) DoAndReturn(f func(protocol.Statele
 }
 
 // ReplaceWithClosed mocks base method.
-func (m *MockConnRunner) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 []byte) {
+func (m *MockConnRunner) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 []byte, arg2 time.Duration) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1)
+	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1, arg2)
 }
 
 // ReplaceWithClosed indicates an expected call of ReplaceWithClosed.
-func (mr *MockConnRunnerMockRecorder) ReplaceWithClosed(arg0, arg1 any) *MockConnRunnerReplaceWithClosedCall {
+func (mr *MockConnRunnerMockRecorder) ReplaceWithClosed(arg0, arg1, arg2 any) *MockConnRunnerReplaceWithClosedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockConnRunner)(nil).ReplaceWithClosed), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockConnRunner)(nil).ReplaceWithClosed), arg0, arg1, arg2)
 	return &MockConnRunnerReplaceWithClosedCall{Call: call}
 }
 
@@ -211,13 +212,13 @@ func (c *MockConnRunnerReplaceWithClosedCall) Return() *MockConnRunnerReplaceWit
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockConnRunnerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte)) *MockConnRunnerReplaceWithClosedCall {
+func (c *MockConnRunnerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte, time.Duration)) *MockConnRunnerReplaceWithClosedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockConnRunnerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte)) *MockConnRunnerReplaceWithClosedCall {
+func (c *MockConnRunnerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte, time.Duration)) *MockConnRunnerReplaceWithClosedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -41,7 +41,7 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 		connRunnerCallbacks{
 			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
 			RemoveConnectionID: func(c protocol.ConnectionID) { removed = append(removed, c) },
-			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte) {},
+			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte, time.Duration) {},
 		},
 		func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
 		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
@@ -114,7 +114,7 @@ func TestConnIDGeneratorRetiring(t *testing.T) {
 		connRunnerCallbacks{
 			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
 			RemoveConnectionID: func(c protocol.ConnectionID) { removed = append(removed, c) },
-			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte) {},
+			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte, time.Duration) {},
 		},
 		func(f wire.Frame) {},
 		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
@@ -185,7 +185,7 @@ func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool)
 		connRunnerCallbacks{
 			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
 			RemoveConnectionID: func(c protocol.ConnectionID) { removed = append(removed, c) },
-			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte) {},
+			ReplaceWithClosed:  func([]protocol.ConnectionID, []byte, time.Duration) {},
 		},
 		func(f wire.Frame) {},
 		&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
@@ -235,7 +235,7 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 		connRunnerCallbacks{
 			AddConnectionID:    func(c protocol.ConnectionID) { added = append(added, c) },
 			RemoveConnectionID: func(c protocol.ConnectionID) { t.Fatal("didn't expect conn ID removals") },
-			ReplaceWithClosed: func(connIDs []protocol.ConnectionID, b []byte) {
+			ReplaceWithClosed: func(connIDs []protocol.ConnectionID, b []byte, _ time.Duration) {
 				replaced = connIDs
 				replacedWith = b
 			},
@@ -252,7 +252,7 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 	require.NoError(t, g.Retire(4, protocol.ParseConnectionID([]byte{1, 1, 1, 1}), time.Now()))
 	require.Len(t, added, protocol.MaxIssuedConnectionIDs+1)
 
-	g.ReplaceWithClosed([]byte("foobar"))
+	g.ReplaceWithClosed([]byte("foobar"), time.Second)
 	if hasInitialClientDestConnID {
 		require.Len(t, replaced, protocol.MaxIssuedConnectionIDs+3)
 		require.Contains(t, replaced, *initialClientDestConnID)
@@ -278,21 +278,21 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	runner1 := connRunnerCallbacks{
 		AddConnectionID:    func(c protocol.ConnectionID) { tracker1.added = append(tracker1.added, c) },
 		RemoveConnectionID: func(c protocol.ConnectionID) { tracker1.removed = append(tracker1.removed, c) },
-		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte) {
+		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte, _ time.Duration) {
 			tracker1.replaced = append(tracker1.replaced, connIDs...)
 		},
 	}
 	runner2 := connRunnerCallbacks{
 		AddConnectionID:    func(c protocol.ConnectionID) { tracker2.added = append(tracker2.added, c) },
 		RemoveConnectionID: func(c protocol.ConnectionID) { tracker2.removed = append(tracker2.removed, c) },
-		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte) {
+		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte, _ time.Duration) {
 			tracker2.replaced = append(tracker2.replaced, connIDs...)
 		},
 	}
 	runner3 := connRunnerCallbacks{
 		AddConnectionID:    func(c protocol.ConnectionID) { tracker3.added = append(tracker3.added, c) },
 		RemoveConnectionID: func(c protocol.ConnectionID) { tracker3.removed = append(tracker3.removed, c) },
-		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte) {
+		ReplaceWithClosed: func(connIDs []protocol.ConnectionID, _ []byte, _ time.Duration) {
 			tracker3.replaced = append(tracker3.replaced, connIDs...)
 		},
 	}
@@ -345,7 +345,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	require.Equal(t, []protocol.ConnectionID{clientDestConnID}, tracker1.removed)
 	require.Equal(t, []protocol.ConnectionID{clientDestConnID}, tracker2.removed)
 
-	g.ReplaceWithClosed([]byte("connection closed"))
+	g.ReplaceWithClosed([]byte("connection closed"), time.Second)
 	require.True(t, len(tracker1.replaced) > 0)
 	require.Equal(t, tracker1.replaced, tracker2.replaced)
 

@@ -11,6 +11,7 @@ package quic
 
 import (
 	reflect "reflect"
+	time "time"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
@@ -339,15 +340,15 @@ func (c *MockPacketHandlerManagerRemoveResetTokenCall) DoAndReturn(f func(protoc
 }
 
 // ReplaceWithClosed mocks base method.
-func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 []byte) {
+func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 []byte, arg2 time.Duration) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1)
+	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1, arg2)
 }
 
 // ReplaceWithClosed indicates an expected call of ReplaceWithClosed.
-func (mr *MockPacketHandlerManagerMockRecorder) ReplaceWithClosed(arg0, arg1 any) *MockPacketHandlerManagerReplaceWithClosedCall {
+func (mr *MockPacketHandlerManagerMockRecorder) ReplaceWithClosed(arg0, arg1, arg2 any) *MockPacketHandlerManagerReplaceWithClosedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockPacketHandlerManager)(nil).ReplaceWithClosed), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceWithClosed", reflect.TypeOf((*MockPacketHandlerManager)(nil).ReplaceWithClosed), arg0, arg1, arg2)
 	return &MockPacketHandlerManagerReplaceWithClosedCall{Call: call}
 }
 
@@ -363,13 +364,13 @@ func (c *MockPacketHandlerManagerReplaceWithClosedCall) Return() *MockPacketHand
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockPacketHandlerManagerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte)) *MockPacketHandlerManagerReplaceWithClosedCall {
+func (c *MockPacketHandlerManagerReplaceWithClosedCall) Do(f func([]protocol.ConnectionID, []byte, time.Duration)) *MockPacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte)) *MockPacketHandlerManagerReplaceWithClosedCall {
+func (c *MockPacketHandlerManagerReplaceWithClosedCall) DoAndReturn(f func([]protocol.ConnectionID, []byte, time.Duration)) *MockPacketHandlerManagerReplaceWithClosedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

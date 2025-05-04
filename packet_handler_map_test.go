@@ -74,12 +74,11 @@ func TestPacketHandlerMapReplaceWithLocalClosed(t *testing.T) {
 		utils.DefaultLogger,
 	)
 	dur := scaleDuration(10 * time.Millisecond)
-	m.deleteRetiredConnsAfter = dur
 
 	handler := &mockPacketHandler{}
 	connID := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
 	require.True(t, m.Add(connID, handler))
-	m.ReplaceWithClosed([]protocol.ConnectionID{connID}, []byte("foobar"))
+	m.ReplaceWithClosed([]protocol.ConnectionID{connID}, []byte("foobar"), dur)
 	h, ok := m.Get(connID)
 	require.True(t, ok)
 	require.NotEqual(t, handler, h)
@@ -93,7 +92,7 @@ func TestPacketHandlerMapReplaceWithLocalClosed(t *testing.T) {
 	require.Eventually(t, func() bool {
 		_, ok := m.Get(connID)
 		return !ok
-	}, time.Second, 10*time.Millisecond)
+	}, time.Second, dur)
 }
 
 func TestPacketHandlerMapReplaceWithRemoteClosed(t *testing.T) {
@@ -102,13 +101,12 @@ func TestPacketHandlerMapReplaceWithRemoteClosed(t *testing.T) {
 		func(p closePacket) { closePackets = append(closePackets, p) },
 		utils.DefaultLogger,
 	)
-	dur := scaleDuration(50 * time.Millisecond)
-	m.deleteRetiredConnsAfter = dur
+	dur := scaleDuration(25 * time.Millisecond)
 
 	handler := &mockPacketHandler{}
 	connID := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
 	require.True(t, m.Add(connID, handler))
-	m.ReplaceWithClosed([]protocol.ConnectionID{connID}, nil)
+	m.ReplaceWithClosed([]protocol.ConnectionID{connID}, nil, dur)
 	h, ok := m.Get(connID)
 	require.True(t, ok)
 	require.NotEqual(t, handler, h)

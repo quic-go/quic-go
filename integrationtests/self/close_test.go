@@ -31,7 +31,7 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
 		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration {
-			return 5 * time.Millisecond // 10ms RTT
+			return scaleDuration(5 * time.Millisecond) // 10ms RTT
 		},
 		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, b []byte) bool {
 			if drop := drop.Load(); drop && dir == quicproxy.DirectionOutgoing {
@@ -57,7 +57,7 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 	sconn.CloseWithError(1337, "closing")
 
 	// send 100 packets
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		str, err := conn.OpenStream()
 		require.NoError(t, err)
 		_, err = str.Write([]byte("foobar"))
@@ -68,7 +68,7 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 	// Expect retransmissions of the CONNECTION_CLOSE for the
 	// 1st, 2nd, 4th, 8th, 16th, 32th, 64th packet: 7 in total (+1 for the original packet)
 	var packets [][]byte
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		select {
 		case p := <-dropped:
 			packets = append(packets, p)
