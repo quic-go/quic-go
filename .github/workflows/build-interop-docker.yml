@@ -42,9 +42,8 @@ jobs:
           fi
       - uses: docker/build-push-action@v6
         with:
-          context: "{{defaultContext}}:interop"
+          context: "."
+          file: "interop/Dockerfile"
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' }}
-          build-args: |
-            GITREF=${{ steps.tag.outputs.gitref }}
           tags: martenseemann/quic-go-interop:${{ steps.tag.outputs.tag }}
