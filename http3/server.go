@@ -37,8 +37,6 @@ const (
 	streamTypeQPACKDecoderStream = 3
 )
 
-const goawayTimeout = 5 * time.Second
-
 // A QUICEarlyListener listens for incoming QUIC connections.
 type QUICEarlyListener interface {
 	Accept(context.Context) (quic.EarlyConnection, error)
@@ -491,10 +489,14 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
 			// new requests will be rejected and shouldn't be sent
 			if s.graceCtx.Err() != nil {
-				b = (&goAwayFrame{StreamID: nextStreamID}).Append(b[:0])
-				// set a deadline to send the GOAWAY frame
-				ctrlStr.SetWriteDeadline(time.Now().Add(goawayTimeout))
-				ctrlStr.Write(b)
+				wg.Add(1)
+				// Send the GOAWAY frame in a separate Goroutine.
+				// Sending might block if the peer didn't grant enough flow control credit.
+				// Write is guaranteed to return once the connection is closed.
+				go func() {
+					defer wg.Done()
+					_, _ = ctrlStr.Write((&goAwayFrame{StreamID: nextStreamID}).Append(nil))
+				}()
 
 				select {
 				case <-hconn.Context().Done():
