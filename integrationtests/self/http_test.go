@@ -596,8 +596,8 @@ func TestHTTPContextFromQUIC(t *testing.T) {
 	conn := newUDPConnLocalhost(t)
 	tr := &quic.Transport{
 		Conn: conn,
-		ConnContext: func(ctx context.Context) context.Context {
-			return context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
+		ConnContext: func(ctx context.Context, _ *quic.ClientInfo) (context.Context, error) {
+			return context.WithValue(ctx, "foo", "bar"), nil //nolint:staticcheck
 		},
 	}
 	defer tr.Close()

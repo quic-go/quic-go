@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,8 +52,8 @@ func TestConnContextOnServerSide(t *testing.T) {
 
 	tr := &quic.Transport{
 		Conn: newUDPConnLocalhost(t),
-		ConnContext: func(ctx context.Context) context.Context {
-			return context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
+		ConnContext: func(ctx context.Context, _ *quic.ClientInfo) (context.Context, error) {
+			return context.WithValue(ctx, "foo", "bar"), nil //nolint:staticcheck
 		},
 	}
 	defer tr.Close()
@@ -132,11 +134,53 @@ func TestConnContextOnServerSide(t *testing.T) {
 	checkContext(tlsGetCertificateContextChan, false)
 }
 
+func TestConnContext(t *testing.T) {
+	var shouldReject atomic.Bool
+	tr := &quic.Transport{
+		Conn: newUDPConnLocalhost(t),
+		ConnContext: func(ctx context.Context, ci *quic.ClientInfo) (context.Context, error) {
+			if shouldReject.Load() {
+				return nil, errors.New("rejecting connection")
+			}
+			return context.WithValue(ctx, "addr", ci.RemoteAddr), nil //nolint:staticcheck
+		},
+	}
+	defer tr.Close()
+
+	server, err := tr.Listen(
+		getTLSConfig(),
+		getQuicConfig(nil),
+	)
+	require.NoError(t, err)
+	defer server.Close()
+	t.Run("ClientInfo", func(t *testing.T) {
+		shouldReject.Store(false)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		pc := newUDPConnLocalhost(t)
+		c, err := quic.Dial(ctx, pc, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+		defer c.CloseWithError(0, "")
+
+		conn, err := server.Accept(ctx)
+		require.NoError(t, err)
+		require.Equal(t, pc.LocalAddr().String(), conn.Context().Value("addr").(net.Addr).String())
+		conn.CloseWithError(0, "")
+	})
+	t.Run("Reject", func(t *testing.T) {
+		shouldReject.Store(true)
+		_, err := quic.Dial(context.Background(), newUDPConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		require.Error(t, err)
+	})
+}
+
 // Users are not supposed to return a fresh context from ConnContext, but we should handle it gracefully.
 func TestConnContextFreshContext(t *testing.T) {
 	tr := &quic.Transport{
-		Conn:        newUDPConnLocalhost(t),
-		ConnContext: func(ctx context.Context) context.Context { return context.Background() },
+		Conn: newUDPConnLocalhost(t),
+		ConnContext: func(ctx context.Context, _ *quic.ClientInfo) (context.Context, error) {
+			return context.Background(), nil
+		},
 	}
 	defer tr.Close()
 	server, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
