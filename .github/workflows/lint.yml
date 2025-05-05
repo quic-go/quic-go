@@ -41,7 +41,7 @@ jobs:
       matrix:
         go: [  "1.23.x", "1.24.x" ]
     env:
-      GOLANGCI_LINT_VERSION: v2.0.2
+      GOLANGCI_LINT_VERSION: v2.1.6
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
@@ -49,13 +49,13 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint (Linux)
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         with:
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (Windows)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         env:
           GOOS: "windows"
         with:
@@ -63,7 +63,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (OSX)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         env:
           GOOS: "darwin"
         with:
@@ -71,7 +71,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (FreeBSD)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         env:
           GOOS: "freebsd"
         with:
@@ -79,7 +79,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (others)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v8
         env:
           GOOS: "solaris" # some OS that we don't have any build tags for
         with:
