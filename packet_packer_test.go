@@ -23,20 +23,21 @@ import (
 const testPackerConnIDLen = 4
 
 type testPacketPacker struct {
-	packer                         *packetPacker
-	initialStream, handshakeStream *cryptoStream
-	datagramQueue                  *datagramQueue
-	pnManager                      *mockackhandler.MockSentPacketHandler
-	sealingManager                 *MockSealingManager
-	framer                         *MockFrameSource
-	ackFramer                      *MockAckFrameSource
-	retransmissionQueue            *retransmissionQueue
+	packer              *packetPacker
+	initialStream       *initialCryptoStream
+	handshakeStream     *cryptoStream
+	datagramQueue       *datagramQueue
+	pnManager           *mockackhandler.MockSentPacketHandler
+	sealingManager      *MockSealingManager
+	framer              *MockFrameSource
+	ackFramer           *MockAckFrameSource
+	retransmissionQueue *retransmissionQueue
 }
 
 func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protocol.Perspective) *testPacketPacker {
 	destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 	require.Equal(t, testPackerConnIDLen, destConnID.Len())
-	initialStream := newCryptoStream()
+	initialStream := newInitialCryptoStream(pers == protocol.PerspectiveClient)
 	handshakeStream := newCryptoStream()
 	pnManager := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 	framer := NewMockFrameSource(mockCtrl)
@@ -121,6 +122,8 @@ func expectAppendFrames(framer *MockFrameSource, controlFrames []ackhandler.Fram
 }
 
 func TestPackLongHeaders(t *testing.T) {
+	skipIfDisableScramblingEnvSet(t)
+
 	const maxPacketSize protocol.ByteCount = 1234
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
@@ -139,7 +142,8 @@ func TestPackLongHeaders(t *testing.T) {
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, now, false)
 	// don't EXPECT any calls for a Handshake ACK frame
-	tp.initialStream.Write([]byte("initial"))
+	clientHello := getClientHello(t, "quic-go.net")
+	tp.initialStream.Write(clientHello)
 	tp.packer.retransmissionQueue.addHandshake(&wire.PingFrame{})
 
 	p, err := tp.packer.PackCoalescedPacket(false, maxPacketSize, now, protocol.Version1)
@@ -148,8 +152,10 @@ func TestPackLongHeaders(t *testing.T) {
 	require.Len(t, p.longHdrPackets, 2)
 	require.Nil(t, p.shortHdrPacket)
 	require.Equal(t, protocol.EncryptionInitial, p.longHdrPackets[0].EncryptionLevel())
-	require.Len(t, p.longHdrPackets[0].frames, 1)
-	require.Equal(t, []byte("initial"), p.longHdrPackets[0].frames[0].Frame.(*wire.CryptoFrame).Data)
+	require.Len(t, p.longHdrPackets[0].frames, 3)
+	for _, f := range p.longHdrPackets[0].frames {
+		require.IsType(t, &wire.CryptoFrame{}, f.Frame)
+	}
 	require.Equal(t, protocol.EncryptionHandshake, p.longHdrPackets[1].EncryptionLevel())
 	require.Len(t, p.longHdrPackets[1].frames, 1)
 	require.IsType(t, &wire.PingFrame{}, p.longHdrPackets[1].frames[0].Frame)
@@ -776,6 +782,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 
 func TestPackInitialProbePacket(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
+		t.Setenv(disableClientHelloScramblingEnv, "true")
 		testPackProbePacket(t, protocol.EncryptionInitial, protocol.PerspectiveClient)
 	})
 	t.Run("server", func(t *testing.T) {
@@ -797,13 +804,16 @@ func testPackProbePacket(t *testing.T, encLevel protocol.EncryptionLevel, perspe
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, perspective)
 
+	var cryptoData []byte
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
-		tp.packer.initialStream.Write([]byte("foobar"))
+		cryptoData = getClientHello(t, "")
+		tp.packer.initialStream.Write(cryptoData)
 	case protocol.EncryptionHandshake:
 		tp.sealingManager.EXPECT().GetHandshakeSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
-		tp.packer.handshakeStream.Write([]byte("foobar"))
+		cryptoData = []byte("foobar")
+		tp.packer.handshakeStream.Write(cryptoData)
 	}
 	tp.ackFramer.EXPECT().GetAckFrame(encLevel, gomock.Any(), false)
 	tp.pnManager.EXPECT().PeekPacketNumber(encLevel).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
@@ -820,7 +830,7 @@ func testPackProbePacket(t *testing.T, encLevel protocol.EncryptionLevel, perspe
 		require.Equal(t, maxPacketSize, p.buffer.Len())
 	}
 	require.Len(t, packet.frames, 1)
-	require.Equal(t, &wire.CryptoFrame{Data: []byte("foobar")}, packet.frames[0].Frame)
+	require.Equal(t, cryptoData, packet.frames[0].Frame.(*wire.CryptoFrame).Data)
 	hdrs, more := parsePacket(t, p.buffer.Data)
 	require.Len(t, hdrs, 1)
 	switch encLevel {
