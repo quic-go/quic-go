@@ -197,6 +197,9 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
 			case msgTypeIPTOS:
+				if len(body) != 1 {
+					return receivedPacket{}, errors.New("invalid IPTOS size")
+				}
 				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case ipv4PKTINFO:
 				ip, ifIndex, ok := parseIPv4PktInfo(body)
@@ -214,7 +217,11 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		if hdr.Level == unix.IPPROTO_IPV6 {
 			switch hdr.Type {
 			case unix.IPV6_TCLASS:
-				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
+				if len(body) != 4 {
+					return receivedPacket{}, errors.New("invalid IPV6_TCLASS size")
+				}
+				bits := uint8(binary.NativeEndian.Uint32(body)) & ecnMask
+				p.ecn = protocol.ParseECNHeaderBits(bits)
 			case unix.IPV6_PKTINFO:
 				// struct in6_pktinfo {
 				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
@@ -326,6 +333,6 @@ func appendIPv6ECNMsg(b []byte, val protocol.ECN) []byte {
 
 	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
 	offset := startLen + unix.CmsgSpace(0)
-	b[offset] = val.ToHeaderBits()
+	binary.NativeEndian.PutUint32(b[offset:offset+dataLen], uint32(val.ToHeaderBits()))
 	return b
 }
