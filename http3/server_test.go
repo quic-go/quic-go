@@ -860,7 +860,7 @@ func TestServerClosing(t *testing.T) {
 	require.ErrorIs(t, s.ServeQUICConn(nil), http.ErrServerClosed)
 }
 
-func TestHandlesConcurrentServeAndClose(t *testing.T) {
+func TestServerConcurrentServeAndClose(t *testing.T) {
 	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 	require.NoError(t, err)
 	c, err := net.ListenUDP("udp", addr)
@@ -875,6 +875,137 @@ func TestHandlesConcurrentServeAndClose(t *testing.T) {
 	s.Close()
 	select {
 	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestServerGracefulShutdown(t *testing.T) {
+	s := &Server{TLSConfig: testdata.GetTLSConfig()}
+	s.init()
+
+	mockCtrl := gomock.NewController(t)
+	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStrChan := make(chan []byte, 1)
+	controlStr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		controlStrChan <- b
+		return len(b), nil
+	}).AnyTimes()
+
+	streamChan := make(chan quic.Stream, 1)
+	testDone := make(chan struct{})
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+	conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+		<-testDone
+		return nil, assert.AnError
+	}).MaxTimes(1)
+	conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(ctx context.Context) (quic.Stream, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case str, ok := <-streamChan:
+			if !ok {
+				return nil, assert.AnError
+			}
+			return str, nil
+		}
+	}).AnyTimes()
+	conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+	conn.EXPECT().LocalAddr().AnyTimes()
+	conn.EXPECT().Context().Return(context.Background()).AnyTimes()
+
+	firstStream := mockquic.NewMockStream(mockCtrl)
+	firstStreamAccepted := make(chan struct{}, 1)
+	firstStream.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		firstStreamAccepted <- struct{}{}
+		<-testDone
+		return 0, assert.AnError
+	})
+	firstStream.EXPECT().StreamID().Return(quic.StreamID(1337)).AnyTimes()
+	firstStream.EXPECT().Context().Return(context.Background()).AnyTimes()
+	streamChan <- firstStream
+
+	go s.ServeQUICConn(conn)
+
+	var r bytes.Buffer
+	fp := &frameParser{r: &r}
+
+	select {
+	case b := <-controlStrChan:
+		_, l, err := quicvarint.Parse(b)
+		require.NoError(t, err)
+		r.Write(b[l:])
+		f, err := fp.ParseNext()
+		require.NoError(t, err)
+		require.IsType(t, &settingsFrame{}, f)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	select {
+	case <-firstStreamAccepted:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errChan := make(chan error)
+	go func() {
+		errChan <- s.Shutdown(ctx)
+	}()
+
+	select {
+	case b := <-controlStrChan:
+		r.Write(b)
+		f, err := fp.ParseNext()
+		require.NoError(t, err)
+		require.Equal(t, &goAwayFrame{StreamID: 1337 + 4}, f)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	select {
+	case <-errChan:
+		t.Fatal("didn't expect Shutdown to return")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	// all further streams are getting rejected
+	for range 3 {
+		resetChan := make(chan struct{}, 2)
+		str := mockquic.NewMockStream(mockCtrl)
+		str.EXPECT().StreamID().AnyTimes()
+		str.EXPECT().Context().Return(context.Background()).AnyTimes()
+		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected)).Do(func(sec quic.StreamErrorCode) {
+			resetChan <- struct{}{}
+		})
+		str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected)).Do(func(sec quic.StreamErrorCode) {
+			resetChan <- struct{}{}
+		})
+		streamChan <- str
+
+		for range 2 {
+			select {
+			case <-resetChan:
+			case <-time.After(time.Second):
+				t.Fatal("expected stream reset")
+			}
+		}
+	}
+
+	// cancel the context passed to Shutdown
+	conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), gomock.Any())
+	cancel()
+	firstStream.EXPECT().CancelRead(gomock.Any())
+	firstStream.EXPECT().CancelWrite(gomock.Any())
+	close(testDone)
+
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, context.Canceled)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
