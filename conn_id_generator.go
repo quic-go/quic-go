@@ -17,7 +17,7 @@ type connRunnerCallbacks struct {
 }
 
 // The memory address of the Transport is used as the key.
-type connRunners map[*Transport]connRunnerCallbacks
+type connRunners map[connRunner]connRunnerCallbacks
 
 func (cr connRunners) AddConnectionID(id protocol.ConnectionID) {
 	for _, c := range cr {
@@ -57,11 +57,11 @@ type connIDGenerator struct {
 }
 
 func newConnIDGenerator(
-	tr *Transport,
+	runner connRunner,
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID *protocol.ConnectionID, // nil for the client
 	statelessResetter *statelessResetter,
-	connRunner connRunnerCallbacks,
+	callbacks connRunnerCallbacks,
 	queueControlFrame func(wire.Frame),
 	generator ConnectionIDGenerator,
 ) *connIDGenerator {
@@ -69,7 +69,7 @@ func newConnIDGenerator(
 		generator:         generator,
 		activeSrcConnIDs:  make(map[uint64]protocol.ConnectionID),
 		statelessResetter: statelessResetter,
-		connRunners:       map[*Transport]connRunnerCallbacks{tr: connRunner},
+		connRunners:       map[connRunner]connRunnerCallbacks{runner: callbacks},
 		queueControlFrame: queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
@@ -202,13 +202,13 @@ func (m *connIDGenerator) ReplaceWithClosed(connClose []byte, expiry time.Durati
 	m.connRunners.ReplaceWithClosed(connIDs, connClose, expiry)
 }
 
-func (m *connIDGenerator) AddConnRunner(id *Transport, r connRunnerCallbacks) {
+func (m *connIDGenerator) AddConnRunner(runner connRunner, r connRunnerCallbacks) {
 	// The transport might have already been added earlier.
 	// This happens if the application migrates back to and old path.
-	if _, ok := m.connRunners[id]; ok {
+	if _, ok := m.connRunners[runner]; ok {
 		return
 	}
-	m.connRunners[id] = r
+	m.connRunners[runner] = r
 	if m.initialClientDestConnID != nil {
 		r.AddConnectionID(*m.initialClientDestConnID)
 	}

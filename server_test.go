@@ -37,7 +37,7 @@ type serverOpts struct {
 		context.Context,
 		context.CancelCauseFunc,
 		sendConn,
-		*Transport,
+		connRunner,
 		protocol.ConnectionID, // original dest connection ID
 		*protocol.ConnectionID, // retry src connection ID
 		protocol.ConnectionID, // client dest connection ID
@@ -61,9 +61,11 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 	require.NoError(t, err)
 	verifySourceAddress := func(net.Addr) bool { return serverOpts.useRetry }
 	config := populateConfig(serverOpts.config)
+	tr := &Transport{Conn: newUDPConnLocalhost(t)}
+	tr.init(true)
 	s := newServer(
 		c,
-		&Transport{handlerMap: newPacketHandlerMap(nil, utils.DefaultLogger)},
+		(*packetHandlerMap)(tr),
 		&protocol.DefaultConnectionIDGenerator{},
 		&statelessResetter{},
 		func(ctx context.Context) context.Context { return ctx },
@@ -596,6 +598,7 @@ func testServerTokenValidation(
 
 type connConstructorArgs struct {
 	ctx              context.Context
+	connRunner       connRunner
 	config           *Config
 	origDestConnID   protocol.ConnectionID
 	retrySrcConnID   *protocol.ConnectionID
@@ -607,10 +610,10 @@ type connConstructorArgs struct {
 type connConstructorRecorder struct {
 	ch chan connConstructorArgs
 
-	conns []quicConn
+	conns []*MockQUICConn
 }
 
-func newConnConstructorRecorder(conns ...quicConn) *connConstructorRecorder {
+func newConnConstructorRecorder(conns ...*MockQUICConn) *connConstructorRecorder {
 	return &connConstructorRecorder{
 		ch:    make(chan connConstructorArgs, len(conns)),
 		conns: conns,
@@ -623,7 +626,7 @@ func (r *connConstructorRecorder) NewConn(
 	ctx context.Context,
 	_ context.CancelCauseFunc,
 	_ sendConn,
-	_ *Transport,
+	connRunner connRunner,
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
@@ -641,6 +644,7 @@ func (r *connConstructorRecorder) NewConn(
 ) quicConn {
 	r.ch <- connConstructorArgs{
 		ctx:              ctx,
+		connRunner:       connRunner,
 		config:           config,
 		origDestConnID:   origDestConnID,
 		retrySrcConnID:   retrySrcConnID,
@@ -747,7 +751,7 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 
 func TestServerClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	var conns []quicConn
+	var conns []*MockQUICConn
 	const numConns = 3
 	done := make(chan struct{}, numConns)
 	for range numConns {
@@ -779,7 +783,7 @@ func TestServerClose(t *testing.T) {
 	}
 
 	server.Close()
-	// closing closes all handshakeing connections with CONNECTION_REFUSED
+	// closing closes all handshaking connections with CONNECTION_REFUSED
 	for range numConns {
 		select {
 		case <-done:
@@ -795,6 +799,11 @@ func TestServerClose(t *testing.T) {
 		_, err := server.Accept(ctx)
 		require.ErrorIs(t, err, ErrServerClosed)
 		require.ErrorIs(t, err, net.ErrClosed)
+	}
+
+	// test shutdown
+	for _, conn := range conns {
+		conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 	}
 }
 
@@ -878,7 +887,7 @@ func TestServerPacketHandling(t *testing.T) {
 	conn.EXPECT().handlePacket(gomock.Any()).Do(func(p receivedPacket) {
 		handledPacket <- p
 	})
-	server.tr.handlerMap.Add(destConnID, conn)
+	server.tr.Add(destConnID, conn)
 
 	server.handlePacket(
 		getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, srcConnID, destConnID),
@@ -904,7 +913,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ context.Context,
 			_ context.CancelCauseFunc,
 			_ sendConn,
-			_ *Transport,
+			_ connRunner,
 			_ protocol.ConnectionID,
 			_ *protocol.ConnectionID,
 			_ protocol.ConnectionID,
@@ -927,6 +936,8 @@ func TestServerReceiveQueue(t *testing.T) {
 			conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
 			conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
 			conn.EXPECT().closeWithTransportError(gomock.Any()).MaxTimes(1)
+			// during test shutdown
+			conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 			return conn
 		},
 	})
@@ -1013,6 +1024,9 @@ func testServerAccept(t *testing.T, acceptEarly bool) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+
+	// test shutdown
+	c.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServerAcceptHandshakeFailure(t *testing.T) {
@@ -1044,11 +1058,14 @@ func TestServerAcceptHandshakeFailure(t *testing.T) {
 		t.Fatal("server should not have accepted the connection")
 	case <-time.After(scaleDuration(5 * time.Millisecond)):
 	}
+
+	// test shutdown
+	c.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServerAcceptQueue(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	var conns []quicConn
+	var conns []*MockQUICConn
 	var rejectedConn *MockQUICConn
 	for i := range protocol.MaxAcceptQueueSize + 2 {
 		conn := NewMockQUICConn(mockCtrl)
@@ -1124,6 +1141,11 @@ func TestServerAcceptQueue(t *testing.T) {
 		require.Equal(t, protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}), args.origDestConnID)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
+	}
+
+	// test shutdown
+	for _, conn := range conns {
+		conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 	}
 }
 
@@ -1210,6 +1232,7 @@ func TestServer0RTTReordering(t *testing.T) {
 
 	// shutdown
 	conn.EXPECT().closeWithTransportError(gomock.Any()).AnyTimes()
+	conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServer0RTTQueueing(t *testing.T) {

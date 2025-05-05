@@ -111,8 +111,6 @@ func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTr
 
 // A Connection is a QUIC connection
 type connection struct {
-	tr *Transport
-
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
@@ -225,7 +223,7 @@ var newConnection = func(
 	ctx context.Context,
 	ctxCancel context.CancelCauseFunc,
 	conn sendConn,
-	tr *Transport,
+	runner connRunner,
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
@@ -244,7 +242,6 @@ var newConnection = func(
 	s := &connection{
 		ctx:                 ctx,
 		ctxCancel:           ctxCancel,
-		tr:                  tr,
 		conn:                conn,
 		config:              conf,
 		handshakeDestConnID: destConnID,
@@ -261,7 +258,6 @@ var newConnection = func(
 	} else {
 		s.logID = destConnID.String()
 	}
-	runner := tr.connRunner()
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
@@ -269,7 +265,7 @@ var newConnection = func(
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
-		tr,
+		runner,
 		srcConnID,
 		&clientDestConnID,
 		statelessResetter,
@@ -347,7 +343,7 @@ var newConnection = func(
 var newClientConnection = func(
 	ctx context.Context,
 	conn sendConn,
-	tr *Transport,
+	runner connRunner,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	connIDGenerator ConnectionIDGenerator,
@@ -362,7 +358,6 @@ var newClientConnection = func(
 	v protocol.Version,
 ) quicConn {
 	s := &connection{
-		tr:                  tr,
 		conn:                conn,
 		config:              conf,
 		origDestConnID:      destConnID,
@@ -375,7 +370,6 @@ var newClientConnection = func(
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
 	}
-	runner := tr.connRunner()
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
@@ -383,7 +377,7 @@ var newClientConnection = func(
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
-		tr,
+		runner,
 		srcConnID,
 		nil,
 		statelessResetter,
@@ -2650,9 +2644,9 @@ func (s *connection) AddPath(t *Transport) (*Path, error) {
 		t,
 		200*time.Millisecond, // initial RTT estimate
 		func() {
-			runner := t.connRunner()
+			runner := (*packetHandlerMap)(t)
 			s.connIDGenerator.AddConnRunner(
-				t,
+				runner,
 				connRunnerCallbacks{
 					AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 					RemoveConnectionID: runner.Remove,

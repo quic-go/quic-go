@@ -81,7 +81,7 @@ func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
 
 type testConnection struct {
 	conn       *connection
-	connRunner *MockPacketHandlerManager
+	connRunner *MockConnRunner
 	sendConn   *MockSendConn
 	packer     *MockPacker
 	destConnID protocol.ConnectionID
@@ -101,7 +101,7 @@ func newServerTestConnection(
 	}
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-	phm := NewMockPacketHandlerManager(mockCtrl)
+	connRunner := NewMockConnRunner(mockCtrl)
 	sendConn := NewMockSendConn(mockCtrl)
 	sendConn.EXPECT().capabilities().Return(connCapabilities{GSO: gso}).AnyTimes()
 	sendConn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
@@ -119,7 +119,7 @@ func newServerTestConnection(
 		ctx,
 		cancel,
 		sendConn,
-		&Transport{handlerMap: phm},
+		connRunner,
 		origDestConnID,
 		nil,
 		protocol.ConnectionID{},
@@ -141,7 +141,7 @@ func newServerTestConnection(
 	}
 	return &testConnection{
 		conn:       conn,
-		connRunner: phm,
+		connRunner: connRunner,
 		sendConn:   sendConn,
 		packer:     packer,
 		destConnID: origDestConnID,
@@ -162,7 +162,7 @@ func newClientTestConnection(
 	}
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-	phm := NewMockPacketHandlerManager(mockCtrl)
+	connRunner := NewMockConnRunner(mockCtrl)
 	sendConn := NewMockSendConn(mockCtrl)
 	sendConn.EXPECT().capabilities().Return(connCapabilities{}).AnyTimes()
 	sendConn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
@@ -178,7 +178,7 @@ func newClientTestConnection(
 	conn := newClientConnection(
 		context.Background(),
 		sendConn,
-		&Transport{handlerMap: phm},
+		connRunner,
 		destConnID,
 		srcConnID,
 		&protocol.DefaultConnectionIDGenerator{},
@@ -198,7 +198,7 @@ func newClientTestConnection(
 	}
 	return &testConnection{
 		conn:       conn,
-		connRunner: phm,
+		connRunner: connRunner,
 		sendConn:   sendConn,
 		packer:     packer,
 		destConnID: destConnID,
