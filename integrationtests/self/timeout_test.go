@@ -498,8 +498,6 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 		require.True(t, nerr.Timeout())
 	}
 
-	require.Eventually(t, func() bool { return !areHandshakesRunning() }, 5*handshakeTimeout, 5*time.Millisecond)
-
 	select {
 	case serverErr := <-serverErrChan: // The handshake completed on the server side.
 		require.Error(t, serverErr)

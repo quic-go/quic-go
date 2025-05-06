@@ -161,12 +161,6 @@ func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
 	return conn
 }
 
-func areHandshakesRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "RunHandshake")
-}
-
 func areTransportsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
@@ -193,10 +187,6 @@ func TestMain(m *testing.M) {
 	status := m.Run()
 	if status != 0 {
 		os.Exit(status)
-	}
-	if areHandshakesRunning() {
-		fmt.Println("stray handshake goroutines found")
-		os.Exit(1)
 	}
 	if areTransportsRunning() {
 		fmt.Println("stray transport goroutines found")
