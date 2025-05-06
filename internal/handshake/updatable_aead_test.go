@@ -330,15 +330,12 @@ func TestRejectFrequentKeyUpdates(t *testing.T) {
 }
 
 func setKeyUpdateIntervals(t *testing.T, firstKeyUpdateInterval, keyUpdateInterval uint64) {
-	origKeyUpdateInterval := KeyUpdateInterval
+	t.Setenv("QUIC_GO_TEST_KEY_UPDATE_INTERVAL", fmt.Sprintf("%d", keyUpdateInterval))
+
 	origFirstKeyUpdateInterval := FirstKeyUpdateInterval
-	KeyUpdateInterval = keyUpdateInterval
 	FirstKeyUpdateInterval = firstKeyUpdateInterval
 
-	t.Cleanup(func() {
-		KeyUpdateInterval = origKeyUpdateInterval
-		FirstKeyUpdateInterval = origFirstKeyUpdateInterval
-	})
+	t.Cleanup(func() { FirstKeyUpdateInterval = origFirstKeyUpdateInterval })
 }
 
 func TestInitiateKeyUpdateAfterSendingMaxPackets(t *testing.T) {
@@ -382,7 +379,7 @@ func TestInitiateKeyUpdateAfterSendingMaxPackets(t *testing.T) {
 
 func TestKeyUpdateEnforceACKKeyPhase(t *testing.T) {
 	const firstKeyUpdateInterval = 5
-	setKeyUpdateIntervals(t, firstKeyUpdateInterval, KeyUpdateInterval)
+	setKeyUpdateIntervals(t, firstKeyUpdateInterval, protocol.KeyUpdateInterval)
 
 	_, server, serverTracer := setupEndpoints(t, &utils.RTTStats{})
 	server.SetHandshakeConfirmed()
