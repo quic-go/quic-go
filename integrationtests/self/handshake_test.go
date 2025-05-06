@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -339,53 +341,123 @@ func TestServerAcceptQueueOverflow(t *testing.T) {
 	require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
 }
 
-func TestHandshakingConnectionsClosedOnServerShutdown(t *testing.T) {
-	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
-	addTracer(tr)
-	defer tr.Close()
+func TestHandshakeCloseListener(t *testing.T) {
+	t.Run("using Transport.Listen", func(t *testing.T) {
+		testHandshakeCloseListener(t, func(tlsConf *tls.Config) *quic.Listener {
+			tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+			addTracer(tr)
+			t.Cleanup(func() { tr.Close() })
 
-	rtt := scaleDuration(40 * time.Millisecond)
+			ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
+			require.NoError(t, err)
+			return ln
+		})
+	})
+
+	t.Run("using Listen", func(t *testing.T) {
+		conn := newUDPConnLocalhost(t)
+		testHandshakeCloseListener(t, func(tlsConf *tls.Config) *quic.Listener {
+			ln, err := quic.Listen(conn, tlsConf, getQuicConfig(nil))
+			require.NoError(t, err)
+			return ln
+		})
+
+		// make sure that the Transport didn't close the underlying connection
+		conn2 := newUDPConnLocalhost(t)
+		_, err := conn2.WriteTo([]byte("test"), conn2.LocalAddr())
+		require.NoError(t, err)
+
+		conn2.SetReadDeadline(time.Now().Add(time.Second))
+		b := make([]byte, 1000)
+		n, err := conn2.Read(b)
+		require.NoError(t, err)
+		require.Equal(t, "test", string(b[:n]))
+	})
+
+	// This test is somewhat slow (600ms), since the connection entries are kept for 3 PTOs.
+	t.Run("using ListenAddr", func(t *testing.T) {
+		var lnAddr *net.UDPAddr
+		testHandshakeCloseListener(t, func(tlsConf *tls.Config) *quic.Listener {
+			ln, err := quic.ListenAddr("127.0.0.1:0", tlsConf, getQuicConfig(nil))
+			require.NoError(t, err)
+			lnAddr = ln.Addr().(*net.UDPAddr)
+			return ln
+		})
+
+		// make sure that the Transport closed the underlying connection
+		if runtime.GOOS != "windows" { // this check doesn't work on Windows
+			require.Eventually(t, func() bool {
+				conn, err := net.DialUDP("udp", nil, lnAddr)
+				require.NoError(t, err)
+				defer conn.Close()
+				_, err = conn.Write([]byte("test"))
+				require.NoError(t, err)
+				conn.SetReadDeadline(time.Now().Add(scaleDuration(10 * time.Millisecond)))
+				_, err = conn.Read(make([]byte, 1000))
+				require.Error(t, err)
+				return strings.Contains(err.Error(), "read: connection refused")
+			}, time.Second, 50*time.Millisecond)
+		}
+	})
+}
+
+func testHandshakeCloseListener(t *testing.T, createListener func(*tls.Config) *quic.Listener) {
 	connQueued := make(chan struct{})
+	var sawFirst atomic.Bool
 	tlsConf := &tls.Config{
-		GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
-			close(connQueued)
-			// Sleep for a bit.
-			// This allows the server to close the connection before the handshake completes.
-			time.Sleep(rtt / 2)
+		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			isFirst := sawFirst.CompareAndSwap(false, true)
+			if isFirst {
+			} else {
+				// Sleep for a bit.
+				// This allows the server to close the connection before the handshake completes.
+				close(connQueued)
+				time.Sleep(scaleDuration(10 * time.Millisecond))
+			}
 			return getTLSConfig(), nil
 		},
 	}
 
-	ln, err := tr.Listen(tlsConf, getQuicConfig(nil))
-	require.NoError(t, err)
+	ln := createListener(tlsConf)
 
-	proxy := quicproxy.Proxy{
-		Conn:        newUDPConnLocalhost(t),
-		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
-	}
-	require.NoError(t, proxy.Start())
-	defer proxy.Close()
+	// dial the first connection
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
 
 	errChan := make(chan error, 1)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		_, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
 	select {
 	case <-connQueued:
-	case <-time.After(5 * rtt):
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
 		t.Fatal("timeout waiting for connection queued")
 	}
+
 	require.NoError(t, ln.Close())
 
-	err = <-errChan
-	var transportErr *quic.TransportError
-	require.ErrorAs(t, err, &transportErr)
-	require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
+	select {
+	case err := <-errChan:
+		var transportErr *quic.TransportError
+		require.ErrorAs(t, err, &transportErr)
+		require.Equal(t, quic.ConnectionRefused, transportErr.ErrorCode)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for handshaking connection to be rejected")
+	}
+
+	// the first connection should not be closed
+	select {
+	case <-conn.Context().Done():
+		t.Fatal("connection was closed")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
 }
 
 func TestALPN(t *testing.T) {

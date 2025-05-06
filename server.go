@@ -140,9 +140,7 @@ func (l *Listener) Accept(ctx context.Context) (Connection, error) {
 // Close closes the listener.
 // Accept will return [ErrServerClosed] as soon as all connections in the accept queue have been accepted.
 // QUIC handshakes that are still in flight will be rejected with a CONNECTION_REFUSED error.
-// The effect of closing the listener depends on how it was created:
-//   - if it was created using [Transport.Listen], already established connections will be unaffected
-//   - if it was created using the [Listen] convenience method, all established connection will be closed immediately
+// Already established (accepted)connections will be unaffected.
 func (l *Listener) Close() error {
 	return l.baseServer.Close()
 }
@@ -721,7 +719,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	// The only time this collision will occur if we receive the two Initial packets at the same time.
 	if added := s.tr.AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
-		conn.closeWithTransportError(qerr.ConnectionRefused)
+		conn.closeWithTransportError(ConnectionRefused)
 		return nil
 	}
 	// Pass queued 0-RTT to the newly established connection.
@@ -845,7 +843,7 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 	if s.logger.Debug() {
 		s.logger.Debugf("Client sent an invalid retry token. Sending INVALID_TOKEN to %s.", p.remoteAddr)
 	}
-	if err := s.sendError(p.remoteAddr, hdr, sealer, qerr.InvalidToken, p.info); err != nil {
+	if err := s.sendError(p.remoteAddr, hdr, sealer, InvalidToken, p.info); err != nil {
 		s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
 	}
 }
@@ -853,7 +851,7 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 func (s *baseServer) sendConnectionRefused(p rejectedPacket) {
 	defer p.buffer.Release()
 	sealer, _ := handshake.NewInitialAEAD(p.hdr.DestConnectionID, protocol.PerspectiveServer, p.hdr.Version)
-	if err := s.sendError(p.remoteAddr, p.hdr, sealer, qerr.ConnectionRefused, p.info); err != nil {
+	if err := s.sendError(p.remoteAddr, p.hdr, sealer, ConnectionRefused, p.info); err != nil {
 		s.logger.Debugf("Error sending CONNECTION_REFUSED error: %s", err)
 	}
 }
