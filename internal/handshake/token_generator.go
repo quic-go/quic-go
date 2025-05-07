@@ -112,7 +112,7 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 		token.OriginalDestConnectionID = protocol.ParseConnectionID(t.OriginalDestConnectionID)
 		token.RetrySrcConnectionID = protocol.ParseConnectionID(t.RetrySrcConnectionID)
 	} else {
-		token.RTT = time.Duration(t.RTT * int64(time.Microsecond))
+		token.RTT = time.Duration(t.RTT) * time.Microsecond
 	}
 	return token, nil
 }
