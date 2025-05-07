@@ -1,6 +1,8 @@
 module github.com/quic-go/quic-go
 
-go 1.23
+go 1.23.0
+
+toolchain go1.24.2
 
 require (
 	github.com/francoispqt/gojay v1.2.13
@@ -34,3 +36,6 @@ require (
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+// Forked from github.com/francoispqt/gojay
+replace github.com/francoispqt/gojay v1.2.13 => ./internal/gojay
