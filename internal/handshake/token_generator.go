@@ -76,7 +76,7 @@ func (g *TokenGenerator) NewToken(raddr net.Addr, rtt time.Duration) ([]byte, er
 	data, err := asn1.Marshal(token{
 		RemoteAddr: encodeRemoteAddr(raddr),
 		Timestamp:  time.Now().UnixNano(),
-		RTT:        RTT.Microseconds(),
+		RTT:        rtt.Microseconds(),
 	})
 	if err != nil {
 		return nil, err
