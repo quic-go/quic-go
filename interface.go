@@ -196,8 +196,6 @@ type Connection interface {
 	SendDatagram(payload []byte) error
 	// ReceiveDatagram gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveDatagram(context.Context) ([]byte, error)
-
-	AddPath(*Transport) (*Path, error)
 }
 
 // An EarlyConnection is a connection that is handshaking.
@@ -360,4 +358,9 @@ type ConnectionState struct {
 	Version Version
 	// GSO says if generic segmentation offload is used.
 	GSO bool
+}
+
+type MultipathExtension interface {
+	// AddPath adds a new path to the connection.
+	AddPath(*Transport) (*Path, error)
 }
