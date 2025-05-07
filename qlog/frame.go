@@ -1,6 +1,7 @@
 package qlog
 
 import (
+	"encoding/json/jsontext"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/wire"
@@ -64,6 +65,53 @@ func (f frame) MarshalJSONObject(enc *gojay.Encoder) {
 	}
 }
 
+func (f frame) MarshalJSONv2(enc *jsontext.Encoder) {
+	switch frame := f.Frame.(type) {
+	case *logging.PingFrame:
+		panic("not implemented")
+	case *logging.AckFrame:
+		panic("not implemented")
+	case *logging.ResetStreamFrame:
+		marshalResetStreamFrameJSONv2(enc, frame)
+	case *logging.StopSendingFrame:
+		panic("not implemented")
+	case *logging.CryptoFrame:
+		panic("not implemented")
+	case *logging.NewTokenFrame:
+		panic("not implemented")
+	case *logging.StreamFrame:
+		panic("not implemented")
+	case *logging.MaxDataFrame:
+		panic("not implemented")
+	case *logging.MaxStreamDataFrame:
+		panic("not implemented")
+	case *logging.MaxStreamsFrame:
+		panic("not implemented")
+	case *logging.DataBlockedFrame:
+		panic("not implemented")
+	case *logging.StreamDataBlockedFrame:
+		panic("not implemented")
+	case *logging.StreamsBlockedFrame:
+		panic("not implemented")
+	case *logging.NewConnectionIDFrame:
+		panic("not implemented")
+	case *logging.RetireConnectionIDFrame:
+		panic("not implemented")
+	case *logging.PathChallengeFrame:
+		panic("not implemented")
+	case *logging.PathResponseFrame:
+		panic("not implemented")
+	case *logging.ConnectionCloseFrame:
+		panic("not implemented")
+	case *logging.HandshakeDoneFrame:
+		panic("not implemented")
+	case *logging.DatagramFrame:
+		panic("not implemented")
+	default:
+		panic("unknown frame type")
+	}
+}
+
 func (f frame) IsNil() bool { return false }
 
 type frames []frame
@@ -116,6 +164,19 @@ func marshalResetStreamFrame(enc *gojay.Encoder, f *logging.ResetStreamFrame) {
 	enc.Int64Key("stream_id", int64(f.StreamID))
 	enc.Int64Key("error_code", int64(f.ErrorCode))
 	enc.Int64Key("final_size", int64(f.FinalSize))
+}
+
+func marshalResetStreamFrameJSONv2(e *jsontext.Encoder, f *logging.ResetStreamFrame) {
+	e.WriteToken(jsontext.BeginObject)
+	e.WriteToken(jsontext.String("frame_type"))
+	e.WriteToken(jsontext.String("reset_stream"))
+	e.WriteToken(jsontext.String("stream_id"))
+	e.WriteToken(jsontext.Int(int64(f.StreamID)))
+	e.WriteToken(jsontext.String("error_code"))
+	e.WriteToken(jsontext.Int(int64(f.ErrorCode)))
+	e.WriteToken(jsontext.String("final_size"))
+	e.WriteToken(jsontext.Int(int64(f.FinalSize)))
+	e.WriteToken(jsontext.EndObject)
 }
 
 func marshalStopSendingFrame(enc *gojay.Encoder, f *logging.StopSendingFrame) {

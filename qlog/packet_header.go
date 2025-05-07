@@ -1,6 +1,7 @@
 package qlog
 
 import (
+	"encoding/json/jsontext"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -94,6 +95,64 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	if h.Token != nil {
 		enc.ObjectKey("token", h.Token)
 	}
+}
+
+// [Encoder.WriteToken] and [Encoder.WriteValue] calls may be interleaved.
+// For example, the following JSON value:
+//
+//	{"name":"value","array":[null,false,true,3.14159],"object":{"k":"v"}}
+//
+// can be composed with the following calls (ignoring errors for brevity):
+//
+//	e.WriteToken(BeginObject)        // {
+//	e.WriteToken(String("name"))     // "name"
+//	e.WriteToken(String("value"))    // "value"
+//	e.WriteValue(Value(`"array"`))   // "array"
+//	e.WriteToken(BeginArray)         // [
+//	e.WriteToken(Null)               // null
+//	e.WriteToken(False)              // false
+//	e.WriteValue(Value("true"))      // true
+//	e.WriteToken(Float(3.14159))     // 3.14159
+//	e.WriteToken(EndArray)           // ]
+//	e.WriteValue(Value(`"object"`))  // "object"
+//	e.WriteValue(Value(`{"k":"v"}`)) // {"k":"v"}
+//	e.WriteToken(EndObject)          // }
+
+func (h packetHeader) MarshalJSONv2(e *jsontext.Encoder) {
+	e.WriteToken(jsontext.BeginObject)
+	e.WriteToken(jsontext.String("packet_type"))
+	e.WriteToken(jsontext.String(packetType(h.PacketType).String()))
+	if h.PacketType != logging.PacketTypeRetry {
+		e.WriteToken(jsontext.String("packet_number"))
+		e.WriteToken(jsontext.Int(int64(h.PacketNumber)))
+	}
+	if h.Version != 0 {
+		e.WriteToken(jsontext.String("version"))
+		e.WriteToken(jsontext.String(version(h.Version).String()))
+	}
+	if h.PacketType != logging.PacketType1RTT {
+		e.WriteToken(jsontext.String("scil"))
+		e.WriteToken(jsontext.Int(int64(h.SrcConnectionID.Len())))
+		if h.SrcConnectionID.Len() > 0 {
+			e.WriteToken(jsontext.String("scid"))
+			e.WriteToken(jsontext.String(h.SrcConnectionID.String()))
+		}
+	}
+	e.WriteToken(jsontext.String("dcil"))
+	e.WriteToken(jsontext.Int(int64(h.DestConnectionID.Len())))
+	if h.DestConnectionID.Len() > 0 {
+		e.WriteToken(jsontext.String("dcid"))
+		e.WriteToken(jsontext.String(h.DestConnectionID.String()))
+	}
+	if h.KeyPhaseBit == logging.KeyPhaseZero || h.KeyPhaseBit == logging.KeyPhaseOne {
+		e.WriteToken(jsontext.String("key_phase_bit"))
+		e.WriteToken(jsontext.String(h.KeyPhaseBit.String()))
+	}
+	if h.Token != nil {
+		e.WriteToken(jsontext.String("token"))
+		e.WriteToken(jsontext.String(fmt.Sprintf("%x", h.Token.Raw)))
+	}
+	e.WriteToken(jsontext.EndObject)
 }
 
 type packetHeaderVersionNegotiation struct {
