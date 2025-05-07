@@ -10,7 +10,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/gojay"
 )
 
 type connectionTracer struct {
