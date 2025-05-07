@@ -351,7 +351,7 @@ type ConnectionState struct {
 	GSO bool
 }
 
-type DatagramExtension interface {
+type DatagramTransmitter interface {
 	// SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221.
 	// There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.
 	// The payload of the datagram needs to fit into a single QUIC packet.
@@ -362,7 +362,7 @@ type DatagramExtension interface {
 	ReceiveDatagram(context.Context) ([]byte, error)
 }
 
-type MultipathExtension interface {
+type Multipather interface {
 	// AddPath adds a new path to the connection.
 	AddPath(*Transport) (*Path, error)
 }
