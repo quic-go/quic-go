@@ -241,7 +241,7 @@ var newConnection = func(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
-	RTT time.Duration,
+	rtt time.Duration,
 ) quicConn {
 	s := &connection{
 		ctx:                 ctx,
