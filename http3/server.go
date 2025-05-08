@@ -94,6 +94,9 @@ var RemoteAddrContextKey = &contextKey{"remote-addr"}
 type listener struct {
 	ln   *QUICEarlyListener
 	port int // 0 means that no info about port is available
+
+	// if this listener was constructed by the application, it won't be closed when the server is closed
+	createdLocally bool
 }
 
 // Server is a HTTP/3 server.
@@ -273,7 +276,7 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 // ServeListener always returns a non-nil error. After Shutdown or Close, the returned error is http.ErrServerClosed.
 func (s *Server) ServeListener(ln QUICEarlyListener) error {
 	s.mutex.Lock()
-	if err := s.addListener(&ln); err != nil {
+	if err := s.addListener(&ln, false); err != nil {
 		s.mutex.Unlock()
 		return err
 	}
@@ -344,7 +347,7 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.addListener(&ln); err != nil {
+	if err := s.addListener(&ln, true); err != nil {
 		return nil, err
 	}
 	return &ln, nil
@@ -401,7 +404,7 @@ func (s *Server) generateAltSvcHeader() {
 	s.altSvcHeader = strings.Join(altSvc, ",")
 }
 
-func (s *Server) addListener(l *QUICEarlyListener) error {
+func (s *Server) addListener(l *QUICEarlyListener, createdLocally bool) error {
 	if s.closed {
 		return http.ErrServerClosed
 	}
@@ -409,14 +412,14 @@ func (s *Server) addListener(l *QUICEarlyListener) error {
 
 	laddr := (*l).Addr()
 	if port, err := extractPort(laddr.String()); err == nil {
-		s.listeners = append(s.listeners, listener{ln: l, port: port})
+		s.listeners = append(s.listeners, listener{ln: l, port: port, createdLocally: createdLocally})
 	} else {
 		logger := s.Logger
 		if logger == nil {
 			logger = slog.Default()
 		}
 		logger.Error("Unable to extract port from listener, will not be announced using SetQUICHeaders", "local addr", laddr, "error", err)
-		s.listeners = append(s.listeners, listener{ln: l, port: 0})
+		s.listeners = append(s.listeners, listener{ln: l, port: 0, createdLocally: createdLocally})
 	}
 	s.generateAltSvcHeader()
 	return nil
@@ -688,9 +691,11 @@ func (s *Server) Close() error {
 	s.closeCancel()
 
 	var err error
-	for _, info := range s.listeners {
-		if cerr := (*info.ln).Close(); cerr != nil && err == nil {
-			err = cerr
+	for _, l := range s.listeners {
+		if l.createdLocally {
+			if cerr := (*l.ln).Close(); cerr != nil && err == nil {
+				err = cerr
+			}
 		}
 	}
 	if s.connCount.Load() == 0 {
@@ -708,7 +713,7 @@ func (s *Server) Close() error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mutex.Lock()
 	s.closed = true
-	// server is never used
+	// server was never used
 	if s.closeCtx == nil {
 		s.mutex.Unlock()
 		return nil

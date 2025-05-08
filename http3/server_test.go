@@ -880,6 +880,18 @@ func TestServerConcurrentServeAndClose(t *testing.T) {
 	}
 }
 
+func TestServerImmediateGracefulShutdown(t *testing.T) {
+	s := &Server{TLSConfig: testdata.GetTLSConfig()}
+	errChan := make(chan error, 1)
+	go func() { errChan <- s.Shutdown(context.Background()) }()
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func TestServerGracefulShutdown(t *testing.T) {
 	s := &Server{TLSConfig: testdata.GetTLSConfig()}
 	s.init()
