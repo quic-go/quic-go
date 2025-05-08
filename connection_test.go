@@ -134,6 +134,7 @@ func newServerTestConnection(
 		nil,
 		utils.DefaultLogger,
 		protocol.Version1,
+		1337*time.Millisecond,
 	).(*connection)
 	conn.packer = packer
 	for _, opt := range opts {

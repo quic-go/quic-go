@@ -96,6 +96,7 @@ type baseServer struct {
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
+		time.Duration,
 	) quicConn
 
 	closeMx sync.Mutex
@@ -637,6 +638,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		return nil
 	}
 
+	// restore RTT from token
+	var rtt time.Duration
+	if token != nil && !token.IsRetryToken {
+		rtt = token.RTT
+	}
+
 	config := s.config
 	if s.config.GetConfigForClient != nil {
 		conf, err := s.config.GetConfigForClient(&ClientInfo{
@@ -711,6 +718,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		tracer,
 		s.logger,
 		hdr.Version,
+		rtt,
 	)
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
