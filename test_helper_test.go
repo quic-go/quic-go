@@ -13,26 +13,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
-
-func TestQuicGo(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "QUIC Suite")
-}
-
-var mockCtrl *gomock.Controller
-
-var _ = BeforeEach(func() {
-	mockCtrl = gomock.NewController(GinkgoT())
-})
-
-var _ = BeforeSuite(func() {
-	log.SetOutput(io.Discard)
-})
 
 // in the tests for the stream deadlines we set a deadline
 // and wait to make an assertion when Read / Write was unblocked
@@ -62,25 +44,14 @@ func areConnsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*connection).run")
 }
 
-func areServersRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
-}
-
 func areTransportsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
 	return strings.Contains(b.String(), "quic-go.(*Transport).listen")
 }
 
-var _ = AfterEach(func() {
-	mockCtrl.Finish()
-	Eventually(areServersRunning).Should(BeFalse())
-	Eventually(areTransportsRunning()).Should(BeFalse())
-})
-
 func TestMain(m *testing.M) {
+	log.SetOutput(io.Discard)
 	status := m.Run()
 	if status != 0 {
 		os.Exit(status)
