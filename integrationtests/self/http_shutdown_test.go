@@ -201,14 +201,23 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 
 func TestHTTP3ListenerClosing(t *testing.T) {
 	t.Run("application listener", func(t *testing.T) {
-		testHTTP3ListenerClosing(t, true)
+		testHTTP3ListenerClosing(t, false, true)
 	})
 	t.Run("listener created by the http3.Server", func(t *testing.T) {
-		testHTTP3ListenerClosing(t, false)
+		testHTTP3ListenerClosing(t, false, false)
 	})
 }
 
-func testHTTP3ListenerClosing(t *testing.T, useApplicationListener bool) {
+func TestHTTP3ListenerGracefulShutdown(t *testing.T) {
+	t.Run("application listener", func(t *testing.T) {
+		testHTTP3ListenerClosing(t, true, true)
+	})
+	t.Run("listener created by the http3.Server", func(t *testing.T) {
+		testHTTP3ListenerClosing(t, true, false)
+	})
+}
+
+func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener bool) {
 	dial := func(t *testing.T, ctx context.Context, u *url.URL) error {
 		t.Helper()
 		tlsConf := getTLSClientConfig()
@@ -231,6 +240,12 @@ func testHTTP3ListenerClosing(t *testing.T, useApplicationListener bool) {
 	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	handlerChan := make(chan struct{})
+	mux.HandleFunc("/long", func(w http.ResponseWriter, r *http.Request) {
+		<-handlerChan
+		w.WriteHeader(http.StatusOK)
+	})
+
 	tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
 	server := &http3.Server{
 		Handler: mux,
@@ -260,8 +275,21 @@ func testHTTP3ListenerClosing(t *testing.T, useApplicationListener bool) {
 	defer cancel()
 	require.NoError(t, dial(t, ctx, u))
 
-	// close the server
-	require.NoError(t, server.Close())
+	longReqChan := make(chan error, 1)
+	shutdownChan := make(chan error, 1)
+	if graceful {
+		go func() {
+			u := &url.URL{Scheme: "https", Host: host, Path: "/long"}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			longReqChan <- dial(t, ctx, u)
+		}()
+		time.Sleep(scaleDuration(10 * time.Millisecond))
+
+		go func() { shutdownChan <- server.Shutdown(context.Background()) }()
+	} else {
+		require.NoError(t, server.Close())
+	}
 
 	select {
 	case err := <-serveChan:
@@ -275,41 +303,66 @@ func testHTTP3ListenerClosing(t *testing.T, useApplicationListener bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(10*time.Millisecond))
 		defer cancel()
 		require.ErrorIs(t, dial(t, ctx, u), context.DeadlineExceeded)
-		return
+	} else {
+		// If the listener was created by the application, it will not be closed,
+		// and it can be used to accept new connections.
+		errChan := make(chan error, 1)
+		go func() {
+			for {
+				conn, err := ln.Accept(context.Background())
+				if err != nil {
+					errChan <- err
+					return
+				}
+				select {
+				case <-conn.HandshakeComplete():
+					conn.CloseWithError(1337, "")
+				case <-time.After(time.Second):
+					errChan <- fmt.Errorf("connection did not complete handshake")
+				}
+				errChan <- nil
+			}
+		}()
+
+		for range 2 {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			err := dial(t, ctx, u)
+			var h3Err *http3.Error
+			require.ErrorAs(t, err, &h3Err)
+			require.Equal(t, http3.ErrCode(1337), h3Err.ErrorCode)
+			select {
+			case err := <-errChan:
+				require.NoError(t, err)
+			case <-time.After(time.Second):
+				t.Fatal("server did not accept connection")
+			}
+		}
 	}
 
-	// If the listener was created by the application, it will not be closed,
-	// and it can be used to accept new connections.
-	errChan := make(chan error, 1)
-	go func() {
-		for {
-			conn, err := ln.Accept(context.Background())
-			if err != nil {
-				errChan <- err
-				return
-			}
-			select {
-			case <-conn.HandshakeComplete():
-				conn.CloseWithError(1337, "")
-			case <-time.After(time.Second):
-				errChan <- fmt.Errorf("connection did not complete handshake")
-			}
-			errChan <- nil
-		}
-	}()
-
-	for range 3 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		err := dial(t, ctx, u)
-		var h3Err *http3.Error
-		require.ErrorAs(t, err, &h3Err)
-		require.Equal(t, http3.ErrCode(1337), h3Err.ErrorCode)
+	// the long request should have been terminated
+	if graceful {
 		select {
-		case err := <-errChan:
+		case err := <-longReqChan:
+			t.Fatalf("request should not have terminated: %v", err)
+		case err := <-shutdownChan:
+			t.Fatalf("graceful shutdown should not have returned: %v", err)
+		case <-time.After(scaleDuration(10 * time.Millisecond)):
+		}
+
+		close(handlerChan)
+		select {
+		case err := <-longReqChan:
 			require.NoError(t, err)
 		case <-time.After(time.Second):
-			t.Fatal("server did not accept connection")
+			t.Fatal("long request did not terminate")
+		}
+
+		select {
+		case err := <-shutdownChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("shutdown did not complete")
 		}
 	}
 }
