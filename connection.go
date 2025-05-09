@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1278,15 +1279,13 @@ func (s *connection) handleVersionNegotiationPacket(p receivedPacket) {
 		return
 	}
 
-	for _, v := range supportedVersions {
-		if v == s.version {
-			if s.tracer != nil && s.tracer.DroppedPacket != nil {
-				s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedVersion)
-			}
-			// The Version Negotiation packet contains the version that we offered.
-			// This might be a packet sent by an attacker, or it was corrupted.
-			return
+	if slices.Contains(supportedVersions, s.version) {
+		if s.tracer != nil && s.tracer.DroppedPacket != nil {
+			s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.InvalidPacketNumber, p.Size(), logging.PacketDropUnexpectedVersion)
 		}
+		// The Version Negotiation packet contains the version that we offered.
+		// This might be a packet sent by an attacker, or it was corrupted.
+		return
 	}
 
 	s.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", supportedVersions)
