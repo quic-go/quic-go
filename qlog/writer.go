@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/gojay"
 )
 
 const eventChanSize = 50

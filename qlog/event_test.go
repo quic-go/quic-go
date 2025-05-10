@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/gojay"
 	"github.com/stretchr/testify/require"
 )
 
