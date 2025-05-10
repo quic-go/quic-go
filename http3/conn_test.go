@@ -392,6 +392,7 @@ var _ = Describe("Connection", func() {
 				close(delivered)
 				return b, nil
 			})
+			qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, errors.New("test done"))
 			go func() {
 				defer GinkgoRecover()
 				conn.handleUnidirectionalStreams(nil)

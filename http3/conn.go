@@ -308,11 +308,10 @@ func (c *connection) receiveDatagrams() error {
 		streamID := protocol.StreamID(4 * quarterStreamID)
 		c.streamMx.Lock()
 		dg, ok := c.streams[streamID]
-		if !ok {
-			c.streamMx.Unlock()
-			return nil
-		}
 		c.streamMx.Unlock()
+		if !ok {
+			continue
+		}
 		dg.enqueue(b[n:])
 	}
 }
