@@ -184,6 +184,16 @@ var _ = Describe("Request Stream", func() {
 	})
 
 	It("reads after the response", func() {
+		encodeResponse := func(status int) []byte {
+			buf := &bytes.Buffer{}
+			rstr := mockquic.NewMockStream(mockCtrl)
+			rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
+			rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
+			rw.WriteHeader(status)
+			rw.Flush()
+			return buf.Bytes()
+		}
+
 		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 		Expect(err).ToNot(HaveOccurred())
 		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
