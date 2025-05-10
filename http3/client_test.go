@@ -20,6 +20,58 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestClientSettings(t *testing.T) {
+	t.Run("enable datagrams", func(t *testing.T) {
+		testClientSettings(t, true, nil)
+	})
+	t.Run("additional settings", func(t *testing.T) {
+		testClientSettings(t, false, map[uint64]uint64{13: 37})
+	})
+}
+
+func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uint64) {
+	tr := &Transport{
+		EnableDatagrams:    enableDatagrams,
+		AdditionalSettings: other,
+	}
+
+	mockCtrl := gomock.NewController(t)
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	conn.EXPECT().Context().Return(context.Background()).AnyTimes()
+	done := make(chan struct{})
+	conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+		<-done
+		return nil, assert.AnError
+	}).MaxTimes(1)
+	controlStr := mockquic.NewMockStream(mockCtrl)
+	var buf bytes.Buffer
+	controlStr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		buf.Write(b)
+		close(done)
+		return len(b), nil
+	})
+	conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+
+	tr.NewClientConn(conn)
+
+	select {
+	case <-done:
+		b := buf.Bytes()
+		typ, l, err := quicvarint.Parse(b)
+		require.NoError(t, err)
+		require.EqualValues(t, streamTypeControlStream, typ)
+		fp := (&frameParser{r: bytes.NewReader(b[l:])})
+		f, err := fp.ParseNext()
+		require.NoError(t, err)
+		require.IsType(t, &settingsFrame{}, f)
+		settingsFrame := f.(*settingsFrame)
+		require.Equal(t, settingsFrame.Datagram, enableDatagrams)
+		require.Equal(t, settingsFrame.Other, other)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func closedChan() <-chan struct{} {
 	ch := make(chan struct{})
 	close(ch)
