@@ -426,6 +426,8 @@ func testHandshakeCloseListener(t *testing.T, createListener func(*tls.Config) *
 	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
+	_, err = ln.Accept(ctx)
+	require.NoError(t, err)
 
 	errChan := make(chan error, 1)
 	go func() {
