@@ -254,10 +254,8 @@ func TestClientRequestLengthLimit(t *testing.T) {
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(
 		bytes.NewReader(encodeResponse(t, http.StatusTeapot)).Read,
 	).AnyTimes()
-	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled)).Do(func(quic.StreamErrorCode) {
-		close(done)
-	})
-	str.EXPECT().Close()
+	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+	str.EXPECT().Close().Do(func() error { close(done); return nil })
 	conn.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 
 	cc := (&Transport{}).NewClientConn(conn)
