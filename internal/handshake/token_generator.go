@@ -21,7 +21,7 @@ type Token struct {
 	SentTime          time.Time
 	encodedRemoteAddr []byte
 	// only set for tokens sent in NEW_TOKEN frames
-	RTT               time.Duration
+	RTT time.Duration
 	// only set for retry tokens
 	OriginalDestConnectionID protocol.ConnectionID
 	RetrySrcConnectionID     protocol.ConnectionID
