@@ -32,6 +32,11 @@ const (
 	defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 )
 
+type errConnUnusable struct{ e error }
+
+func (e *errConnUnusable) Unwrap() error { return e.e }
+func (e *errConnUnusable) Error() string { return fmt.Sprintf("http3: conn unusable: %s", e.e.Error()) }
+
 const max1xxResponses = 5 // arbitrary bound on number of informational responses
 
 var defaultQuicConfig = &quic.Config{
@@ -230,7 +235,7 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		c.maxResponseHeaderBytes,
 	)
 	if err != nil {
-		return nil, err
+		return nil, &errConnUnusable{e: err}
 	}
 
 	// Request Cancellation:
