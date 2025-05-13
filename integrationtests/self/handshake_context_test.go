@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,7 +52,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 	tr := &quic.Transport{
 		Conn: newUDPConnLocalhost(t),
 		ConnContext: func(ctx context.Context, _ *quic.ClientInfo) (context.Context, error) {
-			return context.WithValue(ctx, "foo", "bar"), nil //nolint:staticcheck
+			return context.WithValue(ctx, "foo", "bar"), nil
 		},
 	}
 	defer tr.Close()
@@ -134,15 +133,23 @@ func TestConnContextOnServerSide(t *testing.T) {
 	checkContext(tlsGetCertificateContextChan, false)
 }
 
-func TestConnContext(t *testing.T) {
-	var shouldReject atomic.Bool
+func TestConnContextRejection(t *testing.T) {
+	t.Run("rejecting", func(t *testing.T) {
+		testConnContextRejection(t, true)
+	})
+	t.Run("not rejecting", func(t *testing.T) {
+		testConnContextRejection(t, false)
+	})
+}
+
+func testConnContextRejection(t *testing.T, reject bool) {
 	tr := &quic.Transport{
 		Conn: newUDPConnLocalhost(t),
 		ConnContext: func(ctx context.Context, ci *quic.ClientInfo) (context.Context, error) {
-			if shouldReject.Load() {
+			if reject {
 				return nil, errors.New("rejecting connection")
 			}
-			return context.WithValue(ctx, "addr", ci.RemoteAddr), nil //nolint:staticcheck
+			return context.WithValue(ctx, "addr", ci.RemoteAddr), nil
 		},
 	}
 	defer tr.Close()
@@ -153,25 +160,21 @@ func TestConnContext(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer server.Close()
-	t.Run("ClientInfo", func(t *testing.T) {
-		shouldReject.Store(false)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		pc := newUDPConnLocalhost(t)
-		c, err := quic.Dial(ctx, pc, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
-		require.NoError(t, err)
-		defer c.CloseWithError(0, "")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	pc := newUDPConnLocalhost(t)
+	c, err := quic.Dial(ctx, pc, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	if reject {
+		require.ErrorContains(t, err, "CONNECTION_REFUSED")
+		return
+	}
+	require.NoError(t, err)
+	defer c.CloseWithError(0, "")
 
-		conn, err := server.Accept(ctx)
-		require.NoError(t, err)
-		require.Equal(t, pc.LocalAddr().String(), conn.Context().Value("addr").(net.Addr).String())
-		conn.CloseWithError(0, "")
-	})
-	t.Run("Reject", func(t *testing.T) {
-		shouldReject.Store(true)
-		_, err := quic.Dial(context.Background(), newUDPConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
-		require.Error(t, err)
-	})
+	conn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	require.Equal(t, pc.LocalAddr().String(), conn.Context().Value("addr").(net.Addr).String())
+	conn.CloseWithError(0, "")
 }
 
 // Users are not supposed to return a fresh context from ConnContext, but we should handle it gracefully.
