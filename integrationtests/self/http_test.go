@@ -208,8 +208,8 @@ func TestHTTPMultipleRequests(t *testing.T) {
 func TestContentLengthForSmallResponse(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/small", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("foo"))
-		w.Write([]byte("bar"))
+		io.WriteString(w, "foo")
+		io.WriteString(w, "bar")
 	})
 	port := startHTTPServer(t, mux)
 
@@ -297,7 +297,7 @@ func TestHTTPErrAbortHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/abort", func(w http.ResponseWriter, r *http.Request) {
 		// no recover here as it will interfere with the handler
-		w.Write([]byte("foobar"))
+		io.WriteString(w, "foobar")
 		w.(http.Flusher).Flush()
 		// wait for the client to receive the response
 		<-respChan
@@ -442,7 +442,7 @@ func TestHTTPClientRequestContextCancellation(t *testing.T) {
 		mux.HandleFunc("/cancel-after", func(w http.ResponseWriter, r *http.Request) {
 			// TODO(#4508): check for request context cancellations
 			for {
-				if _, err := w.Write([]byte("foobar")); err != nil {
+				if _, err := io.WriteString(w, "foobar"); err != nil {
 					errChan <- err
 					return
 				}
@@ -495,7 +495,7 @@ func TestHTTPDeadlines(t *testing.T) {
 			require.NoError(t, rc.SetReadDeadline(time.Now().Add(deadlineDelay)))
 			body, err := io.ReadAll(r.Body)
 			resultChan <- result{body: body, err: err}
-			w.Write([]byte("ok"))
+			io.WriteString(w, "ok")
 		})
 
 		expectedEnd := time.Now().Add(deadlineDelay)
@@ -728,7 +728,7 @@ func TestHTTPStreamedRequests(t *testing.T) {
 			if err != nil {
 				return
 			}
-			if _, err := w.Write([]byte(msg)); err != nil {
+			if _, err := io.WriteString(w, msg); err != nil {
 				errChan <- err
 				return
 			}
@@ -773,7 +773,7 @@ func TestHTTP1xxResponse(t *testing.T) {
 		w.Header().Add("Link", header1)
 		w.Header().Add("Link", header2)
 		w.WriteHeader(http.StatusEarlyHints)
-		w.Write([]byte(data))
+		io.WriteString(w, data)
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -843,7 +843,7 @@ func TestHTTP1xxTerminalResponse(t *testing.T) {
 func TestHTTP0RTT(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/0rtt", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(strconv.FormatBool(!r.TLS.HandshakeComplete)))
+		io.WriteString(w, strconv.FormatBool(!r.TLS.HandshakeComplete))
 	})
 	port := startHTTPServer(t, mux)
 
@@ -951,4 +951,112 @@ func TestHTTPStreamer(t *testing.T) {
 	repl, err := io.ReadAll(str)
 	require.NoError(t, err)
 	require.Equal(t, PRData, repl)
+}
+
+type blackHoleConn struct {
+	net.PacketConn
+	block atomic.Bool
+	close chan struct{}
+}
+
+func (c *blackHoleConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	return c.PacketConn.WriteTo(b, addr)
+}
+
+func (c *blackHoleConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	if c.block.Load() {
+		<-c.close
+		return 0, nil, errors.New("blocked")
+	}
+	return c.PacketConn.ReadFrom(b)
+}
+
+func (c *blackHoleConn) Close() error {
+	close(c.close)
+	return c.PacketConn.Close()
+}
+
+func (c *blackHoleConn) StartBlocking() { c.block.Store(true) }
+
+func TestHTTPRequestRetryAfterIdleTimeout(t *testing.T) {
+	t.Run("only cached conn", func(t *testing.T) {
+		testHTTPRequestRetryAfterIdleTimeout(t, true)
+	})
+	t.Run("allow re-dialing", func(t *testing.T) {
+		testHTTPRequestRetryAfterIdleTimeout(t, false)
+	})
+}
+
+func testHTTPRequestRetryAfterIdleTimeout(t *testing.T, onlyCachedConn bool) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/remote-addr", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, r.RemoteAddr)
+	})
+	port := startHTTPServer(t, mux, func(s *http3.Server) {})
+
+	firstConn := &blackHoleConn{PacketConn: newUDPConnLocalhost(t), close: make(chan struct{})}
+	secondConn := newUDPConnLocalhost(t)
+	conns := []net.PacketConn{firstConn, secondConn}
+	require.NotEqual(t, firstConn.LocalAddr().String(), secondConn.LocalAddr().String())
+
+	idleTimeout := scaleDuration(10 * time.Millisecond)
+	connChan := make(chan quic.EarlyConnection, 2)
+	tr := &http3.Transport{
+		TLSClientConfig: getTLSClientConfigWithoutServerName(),
+		QUICConfig:      getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
+		Dial: func(ctx context.Context, a string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+			conn := conns[0]
+			conns = conns[1:]
+			addr, err := net.ResolveUDPAddr("udp", a)
+			if err != nil {
+				return nil, err
+			}
+			c, err := quic.DialEarly(ctx, conn, addr, tlsCfg, cfg)
+			if err != nil {
+				return nil, err
+			}
+			connChan <- c
+			return c, nil
+		},
+		DisableCompression: true,
+	}
+	t.Cleanup(func() { tr.Close() })
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://127.0.0.1:%d/remote-addr", port), nil)
+	require.NoError(t, err)
+
+	resp, err := tr.RoundTripOpt(req, http3.RoundTripOpt{})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, firstConn.LocalAddr().String(), string(body))
+
+	firstConn.StartBlocking()
+	// wait for the connection to time out
+	select {
+	case c := <-connChan:
+		select {
+		case <-c.Context().Done():
+		case <-time.After(time.Second):
+			t.Fatal("connection did not time out")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no connection was created")
+	}
+
+	// second request should succeed after re-dialing
+	resp, err = tr.RoundTripOpt(req, http3.RoundTripOpt{OnlyCachedConn: onlyCachedConn})
+	if onlyCachedConn {
+		require.EqualError(t, err, "http3: no cached connection was available")
+		require.Len(t, conns, 1) // no second dial attempt
+		return
+	}
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err = io.ReadAll(&readerWithTimeout{Reader: resp.Body, Timeout: 2 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, secondConn.LocalAddr().String(), string(body))
+
+	require.Empty(t, conns) // make sure we dialed 2 connections
 }
