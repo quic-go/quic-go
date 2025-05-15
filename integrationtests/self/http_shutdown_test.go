@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,39 +40,156 @@ func TestHTTPShutdown(t *testing.T) {
 }
 
 func TestGracefulShutdownShortRequest(t *testing.T) {
-	delay := scaleDuration(25 * time.Millisecond)
-
 	var server *http3.Server
 	mux := http.NewServeMux()
 	port := startHTTPServer(t, mux, func(s *http3.Server) { server = s })
 	errChan := make(chan error, 1)
+	proceed := make(chan struct{})
 	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer close(errChan)
 			errChan <- server.Shutdown(context.Background())
 		}()
-		time.Sleep(delay)
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-proceed
 		w.Write([]byte("shutdown"))
 	})
 
-	client := newHTTP3Client(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*delay)
+	connChan := make(chan quic.EarlyConnection, 1)
+	tr := &http3.Transport{
+		TLSClientConfig: getTLSClientConfigWithoutServerName(),
+		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+			addr, err := net.ResolveUDPAddr("udp", a)
+			if err != nil {
+				return nil, err
+			}
+			conn, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), addr, tlsConf, conf)
+			connChan <- conn
+			return conn, err
+		},
+	}
+	t.Cleanup(func() { tr.Close() })
+
+	client := &http.Client{Transport: tr}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/shutdown", port), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.Equal(t, []byte("shutdown"), body)
-	client.Transport.(*http3.Transport).Close() // manually close the client
+
+	var conn quic.EarlyConnection
+	select {
+	case conn = <-connChan:
+	default:
+		t.Fatal("expected a connection")
+	}
+
+	type result struct {
+		body []byte
+		err  error
+	}
+	resultChan := make(chan result, 1)
+	go func() {
+		body, err := io.ReadAll(resp.Body)
+		resultChan <- result{body: body, err: err}
+	}()
+	select {
+	case <-resultChan:
+		t.Fatal("request body shouldn't have been read yet")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+	select {
+	case <-conn.Context().Done():
+		t.Fatal("connection shouldn't have been closed")
+	default:
+	}
+
+	// allow the request to proceed
+	close(proceed)
+	select {
+	case res := <-resultChan:
+		require.NoError(t, res.err)
+		require.Equal(t, []byte("shutdown"), res.body)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// now that the stream count dropped to 0, the client should close the connection
+	select {
+	case <-conn.Context().Done():
+		var appErr *quic.ApplicationError
+		require.ErrorAs(t, context.Cause(conn.Context()), &appErr)
+		assert.False(t, appErr.Remote)
+		assert.Equal(t, quic.ApplicationErrorCode(http3.ErrCodeNoError), appErr.ErrorCode)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 
 	select {
 	case err := <-errChan:
 		require.NoError(t, err)
 	case <-time.After(time.Second):
 		t.Fatal("shutdown did not complete")
+	}
+}
+
+func TestGracefulShutdownIdleConnection(t *testing.T) {
+	var server *http3.Server
+	port := startHTTPServer(t, http.NewServeMux(), func(s *http3.Server) { server = s })
+
+	connChan := make(chan quic.EarlyConnection, 1)
+	tr := &http3.Transport{
+		TLSClientConfig: getTLSClientConfigWithoutServerName(),
+		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+			addr, err := net.ResolveUDPAddr("udp", a)
+			if err != nil {
+				return nil, err
+			}
+			conn, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), addr, tlsConf, conf)
+			connChan <- conn
+			return conn, err
+		},
+	}
+	t.Cleanup(func() { tr.Close() })
+
+	client := &http.Client{Transport: tr}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/", port), nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
+	var conn quic.EarlyConnection
+	select {
+	case conn = <-connChan:
+	default:
+		t.Fatal("expected a connection")
+	}
+	// the connection should still be alive (and idle)
+	select {
+	case <-conn.Context().Done():
+		t.Fatal("connection shouldn't have been closed")
+	default:
+	}
+
+	shutdownChan := make(chan error, 1)
+	go func() { shutdownChan <- server.Shutdown(context.Background()) }()
+
+	// since the connection is idle, the client should close it immediately
+	select {
+	case <-conn.Context().Done():
+		var appErr *quic.ApplicationError
+		require.ErrorAs(t, context.Cause(conn.Context()), &appErr)
+		assert.False(t, appErr.Remote)
+		assert.Equal(t, quic.ApplicationErrorCode(http3.ErrCodeNoError), appErr.ErrorCode)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
 }
 
@@ -88,6 +206,8 @@ func TestGracefulShutdownLongLivedRequest(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
 
+		// The request simulated here takes longer than the server's graceful shutdown period.
+		// We expect it to be terminated once the server shuts down.
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), delay)
 			defer cancel()
