@@ -5,16 +5,17 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -257,28 +258,66 @@ func TestTransportConnectionReuse(t *testing.T) {
 // Requests reuse the same underlying QUIC connection.
 // If a request experiences an error, the behavior depends on the nature of that error.
 func TestTransportConnectionRedial(t *testing.T) {
-	// If it's connection error that is a timeout error, we re-dial a new connection.
-	// No error will be returned to the caller.
-	t.Run("timeout error", func(t *testing.T) {
-		testTransportConnectionRedial(t, true, &qerr.IdleTimeoutError{}, nil)
+	nonRetryableReq := httptest.NewRequest(
+		http.MethodGet,
+		"https://quic-go.org",
+		strings.NewReader("foobar"),
+	)
+	require.Nil(t, nonRetryableReq.GetBody)
+
+	retryableReq := nonRetryableReq.Clone(context.Background())
+	retryableReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader("foobaz")), nil
+	}
+
+	// If the error occurs when opening the stream, it is safe to retry the request:
+	// We can be certain that it wasn't sent out (not even partially).
+	t.Run("error when opening the stream", func(t *testing.T) {
+		require.NoError(t,
+			testTransportConnectionRedial(t, nonRetryableReq, &errConnUnusable{errors.New("test")}, "foobar", true),
+		)
 	})
 
-	// If it's a different connection error, the error is returned to the caller.
-	// The connection is not redialed.
-	t.Run("other error from the connection", func(t *testing.T) {
-		testErr := &quic.TransportError{ErrorCode: quic.ConnectionIDLimitError}
-		testTransportConnectionRedial(t, true, testErr, testErr)
+	// If the error occurs when opening the stream, it is safe to retry the request:
+	// We can be certain that it wasn't sent out (not even partially).
+	t.Run("non-retryable request error after opening the stream", func(t *testing.T) {
+		require.ErrorIs(t,
+			testTransportConnectionRedial(t, nonRetryableReq, assert.AnError, "foobar", false),
+			assert.AnError,
+		)
 	})
 
-	// If the error is not related to the connection, we return that error.
-	// The underlying connection remains open and is reused for subsequent requests.
-	t.Run("other error not from the connection", func(t *testing.T) {
-		testErr := &quic.TransportError{ErrorCode: quic.ConnectionIDLimitError}
-		testTransportConnectionRedial(t, false, testErr, testErr)
+	t.Run("retryable request after opening the stream", func(t *testing.T) {
+		require.ErrorIs(t,
+			testTransportConnectionRedial(t, retryableReq, assert.AnError, "", false),
+			assert.AnError,
+		)
+	})
+
+	t.Run("retryable request after H3_REQUEST_REJECTED", func(t *testing.T) {
+		require.NoError(t,
+			testTransportConnectionRedial(t,
+				retryableReq,
+				&Error{ErrorCode: ErrCodeRequestRejected},
+				"foobaz",
+				true,
+			),
+		)
+	})
+
+	t.Run("retryable request where GetBody returns an error", func(t *testing.T) {
+		req := nonRetryableReq.Clone(context.Background())
+		req.GetBody = func() (io.ReadCloser, error) {
+			return nil, assert.AnError
+		}
+		require.ErrorIs(t,
+			testTransportConnectionRedial(t, req, &Error{ErrorCode: ErrCodeRequestRejected}, "", false),
+			assert.AnError,
+		)
 	})
 }
 
-func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, expectedErr error) {
+func testTransportConnectionRedial(t *testing.T, req *http.Request, roundtripErr error, expectedBody string, expectRedial bool) error {
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
@@ -294,47 +333,27 @@ func testTransportConnectionRedial(t *testing.T, connClosed bool, roundtripErr, 
 		newClientConn: func(quic.EarlyConnection) clientConn { return cl },
 	}
 
-	// the first request succeeds
-	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
-	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
-	rsp, err := tr.RoundTrip(req1)
-	require.NoError(t, err)
-	require.Equal(t, req1, rsp.Request)
-	require.Equal(t, 1, dialCount)
+	var body string
+	cl.EXPECT().RoundTrip(req).Return(nil, roundtripErr)
+	if expectRedial {
+		cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				panic(fmt.Sprintf("reading body failed: %v", err))
+			}
+			body = string(b)
+			return &http.Response{Request: req}, nil
+		})
+	}
 
-	// the second request reuses the QUIC connection, and encounters an error
-	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if connClosed {
-		cancel()
-	}
-	conn.EXPECT().Context().Return(ctx)
-	cl.EXPECT().RoundTrip(req2).Return(nil, roundtripErr)
-	if expectedErr == nil {
-		cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
-	}
-	rsp, err = tr.RoundTrip(req2)
-	if expectedErr == nil {
-		require.NoError(t, err)
-		require.Equal(t, req2, rsp.Request)
-		require.Equal(t, 2, dialCount)
+	_, err := tr.RoundTrip(req)
+	if !expectRedial {
+		assert.Equal(t, 1, dialCount)
 	} else {
-		require.ErrorIs(t, err, expectedErr)
-		require.Equal(t, 1, dialCount)
+		assert.Equal(t, 2, dialCount)
+		assert.Equal(t, expectedBody, body)
 	}
-
-	// if the error was not a connection error, the next request reuses the connection
-	if connClosed {
-		return
-	}
-	currentDialCount := dialCount
-	req3 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file3.html", nil)
-	cl.EXPECT().RoundTrip(req3).Return(&http.Response{Request: req3}, nil)
-	rsp, err = tr.RoundTrip(req3)
-	require.NoError(t, err)
-	require.Equal(t, req3, rsp.Request)
-	require.Equal(t, currentDialCount, dialCount) // no new connection was dialed
+	return err
 }
 
 func TestTransportRequestContextCancellation(t *testing.T) {

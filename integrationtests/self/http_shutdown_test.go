@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -142,7 +143,16 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	})
 	var server *http3.Server
 	port := startHTTPServer(t, mux, func(s *http3.Server) { server = s })
-	client := newHTTP3Client(t)
+	connChan := make(chan quic.EarlyConnection, 1)
+	tr := &http3.Transport{
+		TLSClientConfig: getTLSClientConfigWithoutServerName(),
+		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+			conn, err := quic.DialAddrEarly(ctx, addr, tlsCfg, cfg)
+			connChan <- conn
+			return conn, err
+		},
+	}
+	cl := &http.Client{Transport: tr}
 
 	proxy := quicproxy.Proxy{
 		Conn:       newUDPConnLocalhost(t),
@@ -159,7 +169,7 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/helloworld", proxyPort), nil)
 	require.NoError(t, err)
 	go func() {
-		resp, err := client.Do(req)
+		resp, err := cl.Do(req)
 		if err != nil {
 			errChan <- err
 			return
@@ -180,14 +190,27 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	go func() { shutdownChan <- server.Shutdown(ctx) }()
 	time.Sleep(rtt / 2) // wait for the server to start shutting down
 
+	var conn quic.EarlyConnection
+	select {
+	case conn = <-connChan:
+	case <-time.After(time.Second):
+		t.Fatal("connection was not opened")
+	}
+
 	// make sure that the server rejects further requests
 	for range 3 {
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/helloworld", proxyPort), nil)
+		str, err := conn.OpenStreamSync(ctx)
 		require.NoError(t, err)
-		_, err = client.Do(req)
-		var h3err *http3.Error
-		require.ErrorAs(t, err, &h3err)
-		require.Equal(t, http3.ErrCodeRequestRejected, h3err.ErrorCode)
+		str.Write([]byte("foobar"))
+		select {
+		case <-str.Context().Done():
+		case <-time.After(time.Second):
+			t.Fatal("stream was not rejected")
+		}
+		_, err = str.Read(make([]byte, 10))
+		var serr *quic.StreamError
+		require.ErrorAs(t, err, &serr)
+		require.Equal(t, quic.StreamErrorCode(http3.ErrCodeRequestRejected), serr.ErrorCode)
 	}
 
 	cancel()
