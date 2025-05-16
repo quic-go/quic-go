@@ -165,7 +165,7 @@ func testConnContextRejection(t *testing.T, reject bool) {
 	pc := newUDPConnLocalhost(t)
 	c, err := quic.Dial(ctx, pc, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	if reject {
-		require.ErrorContains(t, err, "CONNECTION_REFUSED")
+		require.ErrorIs(t, err, &quic.TransportError{Remote: true, ErrorCode: quic.ConnectionRefused})
 		return
 	}
 	require.NoError(t, err)
