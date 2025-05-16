@@ -68,7 +68,7 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 		(*packetHandlerMap)(tr),
 		&protocol.DefaultConnectionIDGenerator{},
 		&statelessResetter{},
-		func(ctx context.Context) context.Context { return ctx },
+		func(ctx context.Context, _ *ClientInfo) (context.Context, error) { return ctx, nil },
 		&tls.Config{},
 		config,
 		serverOpts.tracer,
