@@ -236,6 +236,7 @@ var newConnection = func(
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
 	clientAddressValidated bool,
+	rtt time.Duration,
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
@@ -279,6 +280,7 @@ var newConnection = func(
 		connIDGenerator,
 	)
 	s.preSetup()
+	s.rttStats.SetInitialRTT(rtt)
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
 		protocol.ByteCount(s.config.InitialPacketSize),
@@ -453,6 +455,7 @@ var newClientConnection = func(
 	if s.config.TokenStore != nil {
 		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil {
 			s.packer.SetToken(token.data)
+			s.rttStats.SetInitialRTT(token.rtt)
 		}
 	}
 	return s
@@ -826,7 +829,7 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 			}
 		}
 	}
-	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr(), s.rttStats.SmoothedRTT())
 	if err != nil {
 		return err
 	}
@@ -1735,7 +1738,7 @@ func (s *connection) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 		}
 	}
 	if s.config.TokenStore != nil {
-		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token})
+		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token, rtt: s.rttStats.SmoothedRTT()})
 	}
 	return nil
 }

@@ -93,6 +93,7 @@ type baseServer struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
+		time.Duration,
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
@@ -637,6 +638,12 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		return nil
 	}
 
+	// restore RTT from token
+	var rtt time.Duration
+	if token != nil && !token.IsRetryToken {
+		rtt = token.RTT
+	}
+
 	config := s.config
 	clientInfo := &ClientInfo{
 		RemoteAddr:   p.remoteAddr,
@@ -710,6 +717,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		s.tlsConf,
 		s.tokenGenerator,
 		clientAddrVerified,
+		rtt,
 		tracer,
 		s.logger,
 		hdr.Version,

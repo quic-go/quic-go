@@ -41,23 +41,27 @@ func newToken(tg *handshake.TokenGenerator, data []byte) int {
 	}
 	usesUDPAddr := data[0]%2 == 0
 	data = data[1:]
-	if len(data) != 18 {
+	if len(data) < 18 {
 		return -1
 	}
 	var addr net.Addr
 	if usesUDPAddr {
 		addr = &net.UDPAddr{
 			Port: int(binary.BigEndian.Uint16(data[:2])),
-			IP:   net.IP(data[2:]),
+			IP:   net.IP(data[2:18]),
 		}
 	} else {
 		addr = &net.TCPAddr{
 			Port: int(binary.BigEndian.Uint16(data[:2])),
-			IP:   net.IP(data[2:]),
+			IP:   net.IP(data[2:18]),
 		}
 	}
+	data = data[18:]
+	if len(data) < 1 {
+		return -1
+	}
 	start := time.Now()
-	encrypted, err := tg.NewToken(addr)
+	encrypted, err := tg.NewToken(addr, time.Duration(data[0])*time.Millisecond)
 	if err != nil {
 		panic(err)
 	}

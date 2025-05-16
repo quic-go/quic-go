@@ -49,6 +49,7 @@ type serverOpts struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
+		time.Duration,
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
@@ -514,7 +515,7 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewToken(conn.LocalAddr())
+		token, err := tg.NewToken(conn.LocalAddr(), 10*time.Millisecond)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, mockTracer, conn, token, false, false, true)
@@ -531,7 +532,7 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewToken(conn.LocalAddr())
+		token, err := tg.NewToken(conn.LocalAddr(), 100*time.Millisecond)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, mockTracer, conn, token, false, false, true)
@@ -638,6 +639,7 @@ func (r *connConstructorRecorder) NewConn(
 	_ *tls.Config,
 	_ *handshake.TokenGenerator,
 	_ bool,
+	_ time.Duration,
 	_ *logging.ConnectionTracer,
 	_ utils.Logger,
 	_ protocol.Version,
@@ -925,6 +927,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ *tls.Config,
 			_ *handshake.TokenGenerator,
 			_ bool,
+			_ time.Duration,
 			_ *logging.ConnectionTracer,
 			_ utils.Logger,
 			_ protocol.Version,

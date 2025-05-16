@@ -131,6 +131,7 @@ func newServerTestConnection(
 		&tls.Config{},
 		handshake.NewTokenGenerator(handshake.TokenProtectorKey{}),
 		false,
+		1337*time.Millisecond,
 		nil,
 		utils.DefaultLogger,
 		protocol.Version1,
