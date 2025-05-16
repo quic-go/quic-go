@@ -238,10 +238,10 @@ var newConnection = func(
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
 	clientAddressValidated bool,
+	rtt time.Duration,
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
-	rtt time.Duration,
 ) quicConn {
 	s := &connection{
 		ctx:                 ctx,

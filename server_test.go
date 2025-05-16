@@ -49,10 +49,10 @@ type serverOpts struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
+		time.Duration,
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
-		time.Duration,
 	) quicConn
 }
 
@@ -636,10 +636,10 @@ func (r *connConstructorRecorder) NewConn(
 	_ *tls.Config,
 	_ *handshake.TokenGenerator,
 	_ bool,
+	_ time.Duration,
 	_ *logging.ConnectionTracer,
 	_ utils.Logger,
 	_ protocol.Version,
-	_ time.Duration,
 ) quicConn {
 	r.ch <- connConstructorArgs{
 		ctx:              ctx,
@@ -918,10 +918,10 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ *tls.Config,
 			_ *handshake.TokenGenerator,
 			_ bool,
+			_ time.Duration,
 			_ *logging.ConnectionTracer,
 			_ utils.Logger,
 			_ protocol.Version,
-			_ time.Duration,
 		) quicConn {
 			<-acceptConn
 			conn := NewMockQUICConn(mockCtrl)

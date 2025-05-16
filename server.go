@@ -101,10 +101,10 @@ type baseServer struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
+		time.Duration,
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
-		time.Duration,
 	) quicConn
 
 	closeMx sync.Mutex
@@ -725,10 +725,10 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		s.tlsConf,
 		s.tokenGenerator,
 		clientAddrVerified,
+		rtt,
 		tracer,
 		s.logger,
 		hdr.Version,
-		rtt,
 	)
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
