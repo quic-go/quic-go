@@ -306,6 +306,9 @@ func testClientExtendedConnect(t *testing.T, enabled bool) {
 	controlStr := mockquic.NewMockStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		<-allowSettings
+		if r.Len() == 0 {
+			<-done
+		}
 		return r.Read(b)
 	}).AnyTimes()
 	conn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)

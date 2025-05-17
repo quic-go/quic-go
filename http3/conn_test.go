@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -149,32 +150,56 @@ func TestConnResetUnknownUniStream(t *testing.T) {
 }
 
 func TestConnControlStreamFailures(t *testing.T) {
-	t.Run("missing settings", func(t *testing.T) {
-		testConnControlStreamFailures(t, (&dataFrame{}).Append(nil), ErrCodeMissingSettings)
+	t.Run("missing SETTINGS", func(t *testing.T) {
+		testConnControlStreamFailures(t, (&dataFrame{}).Append(nil), nil, ErrCodeMissingSettings)
 	})
 	t.Run("frame error", func(t *testing.T) {
 		testConnControlStreamFailures(t,
+			// 1337 is invalid value for the Extended CONNECT setting
 			(&settingsFrame{Other: map[uint64]uint64{settingExtendedConnect: 1337}}).Append(nil),
+			nil,
 			ErrCodeFrameError,
+		)
+	})
+	t.Run("invalid frame after SETTINGS", func(t *testing.T) {
+		b := (&settingsFrame{}).Append(nil)
+		// GOAWAY is the only allowed frame type after SETTINGS
+		b = (&headersFrame{}).Append(b)
+		testConnControlStreamFailures(t, b, nil, ErrCodeFrameUnexpected)
+	})
+	t.Run("control stream closed", func(t *testing.T) {
+		testConnControlStreamFailures(t, (&settingsFrame{}).Append(nil), io.EOF, ErrCodeClosedCriticalStream)
+	})
+	t.Run("control stream reset", func(t *testing.T) {
+		testConnControlStreamFailures(t,
+			(&settingsFrame{}).Append(nil),
+			&quic.StreamError{Remote: true, ErrorCode: 42},
+			ErrCodeClosedCriticalStream,
 		)
 	})
 }
 
-func testConnControlStreamFailures(t *testing.T, data []byte, expectedErr ErrCode) {
+func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, expectedErr ErrCode) {
 	mockCtrl := gomock.NewController(t)
 	qconn := mockquic.NewMockEarlyConnection(mockCtrl)
 	conn := newConnection(
 		context.Background(),
 		qconn,
 		false,
-		protocol.PerspectiveServer,
+		protocol.PerspectiveClient,
 		nil,
 		0,
 	)
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = append(b, data...)
+	r := bytes.NewReader(b)
 	controlStr := mockquic.NewMockStream(mockCtrl)
-	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(bytes.NewReader(b).Read).AnyTimes()
+	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		if r.Len() == 0 {
+			return 0, readErr
+		}
+		return r.Read(b)
+	}).AnyTimes()
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done"))
 	closed := make(chan struct{})
@@ -299,8 +324,16 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	)
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = (&settingsFrame{Datagram: true}).Append(b)
+	r := bytes.NewReader(b)
+	done := make(chan struct{})
+	defer close(done)
 	controlStr := mockquic.NewMockStream(mockCtrl)
-	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(bytes.NewReader(b).Read).AnyTimes()
+	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		if r.Len() == 0 {
+			<-done
+		}
+		return r.Read(b)
+	}).AnyTimes()
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil).MaxTimes(1)
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done")).MaxTimes(1)
 	qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: true}).MaxTimes(1)
@@ -351,6 +384,8 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	expected = append(expected, []byte("foobaz")...)
 	qconn.EXPECT().SendDatagram(expected).Return(assert.AnError)
 	require.ErrorIs(t, conn.sendDatagram(strID2, []byte("foobaz")), assert.AnError)
+
+	qconn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).AnyTimes()
 }
 
 func TestConnDatagramFailures(t *testing.T) {
@@ -376,18 +411,24 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = (&settingsFrame{Datagram: true}).Append(b)
 	r := bytes.NewReader(b)
+	done := make(chan struct{})
 	controlStr := mockquic.NewMockStream(mockCtrl)
-	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		if r.Len() == 0 {
+			<-done
+		}
+		return r.Read(b)
+	}).AnyTimes()
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil).MaxTimes(1)
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done")).MaxTimes(1)
 	qconn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: true}).MaxTimes(1)
 
 	qconn.EXPECT().ReceiveDatagram(gomock.Any()).Return(datagram, nil)
-	done := make(chan struct{})
 	qconn.EXPECT().CloseWithError(qerr.ApplicationErrorCode(ErrCodeDatagramError), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
 		close(done)
 		return nil
 	})
+	qconn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).AnyTimes() // further calls to CloseWithError are a no-op
 	go func() { conn.handleUnidirectionalStreams(nil) }()
 	select {
 	case <-done:
