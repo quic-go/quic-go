@@ -345,6 +345,8 @@ func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Res
 		if is1xxNonTerminal {
 			num1xx++
 			if num1xx > max1xxResponses {
+				str.CancelRead(quic.StreamErrorCode(ErrCodeExcessiveLoad))
+				str.CancelWrite(quic.StreamErrorCode(ErrCodeExcessiveLoad))
 				return nil, errors.New("http3: too many 1xx informational responses")
 			}
 			traceGot1xxResponse(trace, resCode, textproto.MIMEHeader(res.Header))
