@@ -412,6 +412,10 @@ func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, 
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	str.EXPECT().Close()
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(bytes.NewReader(rspBytes).Read).AnyTimes()
+	if tooMany {
+		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeExcessiveLoad))
+		str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeExcessiveLoad))
+	}
 	conn.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 
 	cc := (&Transport{}).NewClientConn(conn)
