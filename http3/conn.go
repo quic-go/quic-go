@@ -120,12 +120,21 @@ func (c *connection) openRequestStream(
 	disableCompression bool,
 	maxHeaderBytes uint64,
 ) (*requestStream, error) {
-	c.streamMx.Lock()
-	maxStreamID := c.maxStreamID
-	lastStreamID := c.lastStreamID
-	c.streamMx.Unlock()
-	if maxStreamID != protocol.InvalidStreamID && lastStreamID >= maxStreamID {
-		return nil, errGoAway
+	if c.perspective == protocol.PerspectiveClient {
+		c.streamMx.Lock()
+		maxStreamID := c.maxStreamID
+		var nextStreamID quic.StreamID
+		if c.lastStreamID == protocol.InvalidStreamID {
+			nextStreamID = 0
+		} else {
+			nextStreamID = c.lastStreamID + 4
+		}
+		c.streamMx.Unlock()
+		// Streams with stream ID equal to or greater than the stream ID carried in the GOAWAY frame
+		// will be rejected, see section 5.2 of RFC 9114.
+		if maxStreamID != protocol.InvalidStreamID && nextStreamID >= maxStreamID {
+			return nil, errGoAway
+		}
 	}
 
 	str, err := c.OpenStreamSync(ctx)

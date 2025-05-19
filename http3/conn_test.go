@@ -283,13 +283,13 @@ func testConnGoAway(t *testing.T, withStream bool) {
 	)
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = (&settingsFrame{}).Append(b)
-	b = (&goAwayFrame{StreamID: 4}).Append(b)
+	b = (&goAwayFrame{StreamID: 8}).Append(b)
 
 	var mockStr *mockquic.MockStream
 	var str quic.Stream
 	if withStream {
 		mockStr = mockquic.NewMockStream(mockCtrl)
-		mockStr.EXPECT().StreamID().Return(4).AnyTimes()
+		mockStr.EXPECT().StreamID().Return(0).AnyTimes()
 		mockStr.EXPECT().Context().Return(context.Background()).AnyTimes()
 		qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(mockStr, nil)
 		s, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
@@ -327,7 +327,20 @@ func testConnGoAway(t *testing.T, withStream bool) {
 		case <-time.After(scaleDuration(10 * time.Millisecond)):
 		}
 
-		_, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+		// The stream ID in the GOAWAY frame is 8, so it's possible to open stream 4.
+		mockStr2 := mockquic.NewMockStream(mockCtrl)
+		mockStr2.EXPECT().StreamID().Return(4).AnyTimes()
+		mockStr2.EXPECT().Context().Return(context.Background()).AnyTimes()
+		qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(mockStr2, nil)
+		str2, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+		require.NoError(t, err)
+		mockStr2.EXPECT().Close()
+		str2.Close()
+		mockStr2.EXPECT().CancelRead(gomock.Any())
+		str2.CancelRead(1337)
+
+		// It's not possible to open stream 8.
+		_, err = conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 		require.ErrorIs(t, err, errGoAway)
 
 		mockStr.EXPECT().Close()
