@@ -1188,13 +1188,11 @@ func testHTTPRequestAfterGracefulShutdown(t *testing.T, setGetBody bool) {
 		require.Nil(t, req.GetBody)
 	}
 
+	// By increasing the RTT, we make sure that the request is sent before the client receives the GOAWAY frame.
 	inShutdown.Store(true)
 	go server1.Shutdown(context.Background())
 	go server2.ServeListener(ln)
 	defer server2.Close()
-
-	// so that graceful shutdown can actually start
-	time.Sleep(scaleDuration(10 * time.Millisecond))
 
 	resp, err = cl.Do(req)
 	if !setGetBody {
