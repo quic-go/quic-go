@@ -330,12 +330,16 @@ func TestRejectFrequentKeyUpdates(t *testing.T) {
 }
 
 func setKeyUpdateIntervals(t *testing.T, firstKeyUpdateInterval, keyUpdateInterval uint64) {
-	t.Setenv("QUIC_GO_TEST_KEY_UPDATE_INTERVAL", fmt.Sprintf("%d", keyUpdateInterval))
+	origKeyUpdateInterval := KeyUpdateInterval
+	KeyUpdateInterval = keyUpdateInterval
 
 	origFirstKeyUpdateInterval := FirstKeyUpdateInterval
 	FirstKeyUpdateInterval = firstKeyUpdateInterval
 
-	t.Cleanup(func() { FirstKeyUpdateInterval = origFirstKeyUpdateInterval })
+	t.Cleanup(func() {
+		KeyUpdateInterval = origKeyUpdateInterval
+		FirstKeyUpdateInterval = origFirstKeyUpdateInterval
+	})
 }
 
 func TestInitiateKeyUpdateAfterSendingMaxPackets(t *testing.T) {

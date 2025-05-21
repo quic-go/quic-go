@@ -6,9 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
-	"os"
-	"strconv"
-	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -17,15 +14,9 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
-func keyUpdateInterval() uint64 {
-	// Reparsing the environment variable is not very performant, but it's only done in tests.
-	if testing.Testing() {
-		if v, err := strconv.ParseUint(os.Getenv("QUIC_GO_TEST_KEY_UPDATE_INTERVAL"), 10, 64); err == nil {
-			return v
-		}
-	}
-	return protocol.KeyUpdateInterval
-}
+// KeyUpdateInterval is the number of packets to receive or send before a initiating a new key update.
+// It's a package-level variable to allow modifying it for testing purposes.
+var KeyUpdateInterval uint64 = protocol.KeyUpdateInterval
 
 // FirstKeyUpdateInterval is the maximum number of packets we send or receive before initiating the first key update.
 // It's a package-level variable to allow modifying it for testing purposes.
@@ -302,11 +293,11 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 			return true
 		}
 	}
-	if a.numRcvdWithCurrentKey >= keyUpdateInterval() {
+	if a.numRcvdWithCurrentKey >= KeyUpdateInterval {
 		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)
 		return true
 	}
-	if a.numSentWithCurrentKey >= keyUpdateInterval() {
+	if a.numSentWithCurrentKey >= KeyUpdateInterval {
 		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %d", a.numSentWithCurrentKey, a.keyPhase+1)
 		return true
 	}
