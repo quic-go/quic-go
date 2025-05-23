@@ -28,8 +28,8 @@ var errGoAway = errors.New("connection in graceful shutdown")
 // It has all methods from the quic.Connection expect for AcceptStream, AcceptUniStream,
 // SendDatagram and ReceiveDatagram.
 type Connection interface {
-	OpenStream() (quic.Stream, error)
-	OpenStreamSync(context.Context) (quic.Stream, error)
+	OpenStream() (*quic.Stream, error)
+	OpenStreamSync(context.Context) (*quic.Stream, error)
 	OpenUniStream() (quic.SendStream, error)
 	OpenUniStreamSync(context.Context) (quic.SendStream, error)
 	LocalAddr() net.Addr
@@ -122,21 +122,19 @@ func (c *connection) openRequestStream(
 	disableCompression bool,
 	maxHeaderBytes uint64,
 ) (*RequestStream, error) {
-	if c.perspective == protocol.PerspectiveClient {
-		c.streamMx.Lock()
-		maxStreamID := c.maxStreamID
-		var nextStreamID quic.StreamID
-		if c.lastStreamID == protocol.InvalidStreamID {
-			nextStreamID = 0
-		} else {
-			nextStreamID = c.lastStreamID + 4
-		}
-		c.streamMx.Unlock()
-		// Streams with stream ID equal to or greater than the stream ID carried in the GOAWAY frame
-		// will be rejected, see section 5.2 of RFC 9114.
-		if maxStreamID != protocol.InvalidStreamID && nextStreamID >= maxStreamID {
-			return nil, errGoAway
-		}
+	c.streamMx.Lock()
+	maxStreamID := c.maxStreamID
+	var nextStreamID quic.StreamID
+	if c.lastStreamID == protocol.InvalidStreamID {
+		nextStreamID = 0
+	} else {
+		nextStreamID = c.lastStreamID + 4
+	}
+	c.streamMx.Unlock()
+	// Streams with stream ID equal to or greater than the stream ID carried in the GOAWAY frame
+	// will be rejected, see section 5.2 of RFC 9114.
+	if maxStreamID != protocol.InvalidStreamID && nextStreamID >= maxStreamID {
+		return nil, errGoAway
 	}
 
 	str, err := c.OpenStreamSync(ctx)

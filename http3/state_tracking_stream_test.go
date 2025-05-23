@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newStreamPair(t *testing.T) (client, server quic.Stream) {
+func newStreamPair(t *testing.T) (client, server *quic.Stream) {
 	t.Helper()
 
 	clientConn, serverConn := newConnPair(t)

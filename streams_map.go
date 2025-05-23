@@ -51,9 +51,9 @@ type streamsMap struct {
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController
 
 	mutex               sync.Mutex
-	outgoingBidiStreams *outgoingStreamsMap[streamI]
+	outgoingBidiStreams *outgoingStreamsMap[*Stream]
 	outgoingUniStreams  *outgoingStreamsMap[sendStreamI]
-	incomingBidiStreams *incomingStreamsMap[streamI]
+	incomingBidiStreams *incomingStreamsMap[*Stream]
 	incomingUniStreams  *incomingStreamsMap[receiveStreamI]
 	reset               bool
 }
@@ -85,7 +85,7 @@ func newStreamsMap(
 func (m *streamsMap) initMaps() {
 	m.outgoingBidiStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
-		func(num protocol.StreamNum) streamI {
+		func(num protocol.StreamNum) *Stream {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective)
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
@@ -93,7 +93,7 @@ func (m *streamsMap) initMaps() {
 	)
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
-		func(num protocol.StreamNum) streamI {
+		func(num protocol.StreamNum) *Stream {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective.Opposite())
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
@@ -119,7 +119,7 @@ func (m *streamsMap) initMaps() {
 	)
 }
 
-func (m *streamsMap) OpenStream() (Stream, error) {
+func (m *streamsMap) OpenStream() (*Stream, error) {
 	m.mutex.Lock()
 	reset := m.reset
 	mm := m.outgoingBidiStreams
@@ -131,7 +131,7 @@ func (m *streamsMap) OpenStream() (Stream, error) {
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
 }
 
-func (m *streamsMap) OpenStreamSync(ctx context.Context) (Stream, error) {
+func (m *streamsMap) OpenStreamSync(ctx context.Context) (*Stream, error) {
 	m.mutex.Lock()
 	reset := m.reset
 	mm := m.outgoingBidiStreams
@@ -167,7 +167,7 @@ func (m *streamsMap) OpenUniStreamSync(ctx context.Context) (SendStream, error) 
 	return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
 }
 
-func (m *streamsMap) AcceptStream(ctx context.Context) (Stream, error) {
+func (m *streamsMap) AcceptStream(ctx context.Context) (*Stream, error) {
 	m.mutex.Lock()
 	reset := m.reset
 	mm := m.incomingBidiStreams
@@ -230,14 +230,19 @@ func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (receiveStream
 		str, err := m.incomingUniStreams.GetOrOpenStream(num)
 		return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
 	case protocol.StreamTypeBidi:
-		var str receiveStreamI
-		var err error
 		if id.InitiatedBy() == m.perspective {
-			str, err = m.outgoingBidiStreams.GetStream(num)
+			str, err := m.outgoingBidiStreams.GetStream(num)
+			if str == nil && err == nil {
+				return nil, nil
+			}
+			return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		} else {
-			str, err = m.incomingBidiStreams.GetOrOpenStream(num)
+			str, err := m.incomingBidiStreams.GetOrOpenStream(num)
+			if str == nil && err == nil {
+				return nil, nil
+			}
+			return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		}
-		return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 	}
 	panic("")
 }
@@ -264,14 +269,19 @@ func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 		// an incoming unidirectional stream is a receive stream, not a send stream
 		return nil, fmt.Errorf("peer attempted to open send stream %d", id)
 	case protocol.StreamTypeBidi:
-		var str sendStreamI
-		var err error
 		if id.InitiatedBy() == m.perspective {
-			str, err = m.outgoingBidiStreams.GetStream(num)
+			str, err := m.outgoingBidiStreams.GetStream(num)
+			if str == nil && err == nil {
+				return nil, nil
+			}
+			return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		} else {
-			str, err = m.incomingBidiStreams.GetOrOpenStream(num)
+			str, err := m.incomingBidiStreams.GetOrOpenStream(num)
+			if str == nil && err == nil {
+				return nil, nil
+			}
+			return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		}
-		return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 	}
 	panic("")
 }
