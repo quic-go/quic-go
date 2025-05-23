@@ -28,7 +28,7 @@ func getDataFrame(data []byte) []byte {
 func TestStreamReadDataFrames(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
@@ -80,7 +80,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 func TestStreamInvalidFrame(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
@@ -109,7 +109,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 func TestStreamWrite(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
 	str.Write([]byte("foo"))
@@ -136,7 +136,7 @@ func TestStreamWrite(t *testing.T) {
 
 func TestRequestStream(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	requestWriter := newRequestWriter()
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	str := newRequestStream(

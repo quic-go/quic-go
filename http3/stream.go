@@ -17,7 +17,7 @@ import (
 // A Stream is an HTTP/3 request stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
 type Stream struct {
-	quic.Stream
+	*stateTrackingStream
 	conn *connection
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
@@ -30,19 +30,19 @@ type Stream struct {
 	parsedTrailer bool
 }
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, parseTrailer func(io.Reader, uint64) error) *Stream {
+func newStream(str *stateTrackingStream, conn *connection, datagrams *datagrammer, parseTrailer func(io.Reader, uint64) error) *Stream {
 	return &Stream{
-		Stream:       str,
-		conn:         conn,
-		buf:          make([]byte, 16),
-		datagrams:    datagrams,
-		parseTrailer: parseTrailer,
+		stateTrackingStream: str,
+		conn:                conn,
+		buf:                 make([]byte, 16),
+		datagrams:           datagrams,
+		parseTrailer:        parseTrailer,
 	}
 }
 
 func (s *Stream) Read(b []byte) (int, error) {
 	fp := &frameParser{
-		r:    s.Stream,
+		r:    s.stateTrackingStream,
 		conn: s.conn,
 	}
 	if s.bytesRemainingInFrame == 0 {
@@ -67,7 +67,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
-				return 0, s.parseTrailer(s.Stream, f.Length)
+				return 0, s.parseTrailer(s.stateTrackingStream, f.Length)
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -80,9 +80,9 @@ func (s *Stream) Read(b []byte) (int, error) {
 	var n int
 	var err error
 	if s.bytesRemainingInFrame < uint64(len(b)) {
-		n, err = s.Stream.Read(b[:s.bytesRemainingInFrame])
+		n, err = s.stateTrackingStream.Read(b[:s.bytesRemainingInFrame])
 	} else {
-		n, err = s.Stream.Read(b)
+		n, err = s.stateTrackingStream.Read(b)
 	}
 	s.bytesRemainingInFrame -= uint64(n)
 	return n, err
@@ -95,18 +95,18 @@ func (s *Stream) hasMoreData() bool {
 func (s *Stream) Write(b []byte) (int, error) {
 	s.buf = s.buf[:0]
 	s.buf = (&dataFrame{Length: uint64(len(b))}).Append(s.buf)
-	if _, err := s.Stream.Write(s.buf); err != nil {
+	if _, err := s.stateTrackingStream.Write(s.buf); err != nil {
 		return 0, err
 	}
-	return s.Stream.Write(b)
+	return s.stateTrackingStream.Write(b)
 }
 
 func (s *Stream) writeUnframed(b []byte) (int, error) {
-	return s.Stream.Write(b)
+	return s.stateTrackingStream.Write(b)
 }
 
 func (s *Stream) StreamID() protocol.StreamID {
-	return s.Stream.StreamID()
+	return s.stateTrackingStream.StreamID()
 }
 
 // A RequestStream is a low-level abstraction representing an HTTP/3 request stream.
@@ -174,7 +174,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	}
 	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
-	return s.requestWriter.WriteRequestHeader(s.Stream.Stream, req, s.requestedGzip)
+	return s.requestWriter.WriteRequestHeader(s.stateTrackingStream, req, s.requestedGzip)
 }
 
 // ReadResponse reads the HTTP response from the stream.
@@ -182,7 +182,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 // It doesn't set Response.Request and Response.TLS.
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
-	qstr := s.Stream.Stream
+	qstr := s.stateTrackingStream
 	fp := &frameParser{
 		conn: s.conn,
 		r: &tracingReader{

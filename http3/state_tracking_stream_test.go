@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,7 +54,7 @@ func TestStateTrackingStreamRead(t *testing.T) {
 
 func testStateTrackingStreamRead(t *testing.T, expectedErr error) {
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes().Return(quic.StreamID(1337))
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
@@ -102,7 +101,7 @@ func testStateTrackingStreamRead(t *testing.T, expectedErr error) {
 
 func TestStateTrackingStreamWrite(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes().Return(quic.StreamID(1337))
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
@@ -140,7 +139,7 @@ func TestStateTrackingStreamWrite(t *testing.T) {
 func TestStateTrackingStreamCancelRead(t *testing.T) {
 	const streamID quic.StreamID = 42
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
@@ -169,7 +168,7 @@ func TestStateTrackingStreamCancelRead(t *testing.T) {
 func TestStateTrackingStreamCancelWrite(t *testing.T) {
 	const streamID quic.StreamID = 1234
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
@@ -196,7 +195,7 @@ func TestStateTrackingStreamCancelWrite(t *testing.T) {
 
 func TestStateTrackingStreamContext(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes()
 	ctx, cancel := context.WithCancelCause(context.Background())
 	qstr.EXPECT().Context().Return(ctx).AnyTimes()
@@ -229,7 +228,7 @@ func TestStateTrackingStreamContext(t *testing.T) {
 func TestStateTrackingStreamReceiveThenSend(t *testing.T) {
 	streamID := quic.StreamID(1234)
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 
@@ -262,7 +261,7 @@ func TestStateTrackingStreamReceiveThenSend(t *testing.T) {
 func TestStateTrackingStreamSendThenReceive(t *testing.T) {
 	streamID := quic.StreamID(1337)
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 

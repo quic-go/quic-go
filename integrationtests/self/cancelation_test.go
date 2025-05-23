@@ -526,7 +526,7 @@ func TestHeavyStreamCancellation(t *testing.T) {
 	serverConn, err := server.Accept(context.Background())
 	require.NoError(t, err)
 
-	handleStream := func(str quic.Stream) {
+	handleStream := func(str *quic.Stream) {
 		str.SetDeadline(time.Now().Add(time.Second))
 		go func() {
 			defer wg.Done()

@@ -61,7 +61,7 @@ func (s *Server) handleConn(conn quic.Connection) {
 	}
 }
 
-func (s *Server) handleStream(str quic.Stream) error {
+func (s *Server) handleStream(str *quic.Stream) error {
 	reqBytes, err := io.ReadAll(str)
 	if err != nil {
 		return err

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,10 +17,10 @@ func TestResponseBodyReading(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	var buf bytes.Buffer
 	buf.Write(getDataFrame([]byte("foobar")))
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{stateTrackingStream: str}, -1, reqDone)
 
 	data, err := io.ReadAll(rb)
 	require.NoError(t, err)
@@ -30,7 +29,7 @@ func TestResponseBodyReading(t *testing.T) {
 
 func TestResponseBodyReadError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).Return(0, assert.AnError).Times(2)
 	reqDone := make(chan struct{})
 	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
@@ -49,7 +48,7 @@ func TestResponseBodyReadError(t *testing.T) {
 
 func TestResponseBodyClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
 	reqDone := make(chan struct{})
 	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
@@ -66,7 +65,7 @@ func TestResponseBodyClose(t *testing.T) {
 
 func TestResponseBodyConcurrentClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(3)
 	reqDone := make(chan struct{})
 	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
@@ -101,7 +100,7 @@ func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
 		l = 3
 	}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()

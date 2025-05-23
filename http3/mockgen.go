@@ -6,3 +6,5 @@ package http3
 type TestClientConnInterface = clientConn
 
 //go:generate sh -c "go run go.uber.org/mock/mockgen -typed -package http3 -destination mock_quic_early_listener_test.go github.com/quic-go/quic-go/http3 QUICEarlyListener"
+
+//go:generate sh -c "go run go.uber.org/mock/mockgen -typed -package http3 -destination mock_quic_stream_test.go github.com/quic-go/quic-go/http3 QUICStream"

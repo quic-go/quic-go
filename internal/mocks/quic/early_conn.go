@@ -43,10 +43,10 @@ func (m *MockEarlyConnection) EXPECT() *MockEarlyConnectionMockRecorder {
 }
 
 // AcceptStream mocks base method.
-func (m *MockEarlyConnection) AcceptStream(arg0 context.Context) (quic.Stream, error) {
+func (m *MockEarlyConnection) AcceptStream(arg0 context.Context) (*quic.Stream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptStream", arg0)
-	ret0, _ := ret[0].(quic.Stream)
+	ret0, _ := ret[0].(*quic.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -64,19 +64,19 @@ type MockEarlyConnectionAcceptStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockEarlyConnectionAcceptStreamCall) Return(arg0 quic.Stream, arg1 error) *MockEarlyConnectionAcceptStreamCall {
+func (c *MockEarlyConnectionAcceptStreamCall) Return(arg0 *quic.Stream, arg1 error) *MockEarlyConnectionAcceptStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockEarlyConnectionAcceptStreamCall) Do(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionAcceptStreamCall {
+func (c *MockEarlyConnectionAcceptStreamCall) Do(f func(context.Context) (*quic.Stream, error)) *MockEarlyConnectionAcceptStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockEarlyConnectionAcceptStreamCall) DoAndReturn(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionAcceptStreamCall {
+func (c *MockEarlyConnectionAcceptStreamCall) DoAndReturn(f func(context.Context) (*quic.Stream, error)) *MockEarlyConnectionAcceptStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -389,10 +389,10 @@ func (c *MockEarlyConnectionNextConnectionCall) DoAndReturn(f func(context.Conte
 }
 
 // OpenStream mocks base method.
-func (m *MockEarlyConnection) OpenStream() (quic.Stream, error) {
+func (m *MockEarlyConnection) OpenStream() (*quic.Stream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenStream")
-	ret0, _ := ret[0].(quic.Stream)
+	ret0, _ := ret[0].(*quic.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -410,28 +410,28 @@ type MockEarlyConnectionOpenStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockEarlyConnectionOpenStreamCall) Return(arg0 quic.Stream, arg1 error) *MockEarlyConnectionOpenStreamCall {
+func (c *MockEarlyConnectionOpenStreamCall) Return(arg0 *quic.Stream, arg1 error) *MockEarlyConnectionOpenStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockEarlyConnectionOpenStreamCall) Do(f func() (quic.Stream, error)) *MockEarlyConnectionOpenStreamCall {
+func (c *MockEarlyConnectionOpenStreamCall) Do(f func() (*quic.Stream, error)) *MockEarlyConnectionOpenStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockEarlyConnectionOpenStreamCall) DoAndReturn(f func() (quic.Stream, error)) *MockEarlyConnectionOpenStreamCall {
+func (c *MockEarlyConnectionOpenStreamCall) DoAndReturn(f func() (*quic.Stream, error)) *MockEarlyConnectionOpenStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // OpenStreamSync mocks base method.
-func (m *MockEarlyConnection) OpenStreamSync(arg0 context.Context) (quic.Stream, error) {
+func (m *MockEarlyConnection) OpenStreamSync(arg0 context.Context) (*quic.Stream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenStreamSync", arg0)
-	ret0, _ := ret[0].(quic.Stream)
+	ret0, _ := ret[0].(*quic.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -449,19 +449,19 @@ type MockEarlyConnectionOpenStreamSyncCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockEarlyConnectionOpenStreamSyncCall) Return(arg0 quic.Stream, arg1 error) *MockEarlyConnectionOpenStreamSyncCall {
+func (c *MockEarlyConnectionOpenStreamSyncCall) Return(arg0 *quic.Stream, arg1 error) *MockEarlyConnectionOpenStreamSyncCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockEarlyConnectionOpenStreamSyncCall) Do(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionOpenStreamSyncCall {
+func (c *MockEarlyConnectionOpenStreamSyncCall) Do(f func(context.Context) (*quic.Stream, error)) *MockEarlyConnectionOpenStreamSyncCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockEarlyConnectionOpenStreamSyncCall) DoAndReturn(f func(context.Context) (quic.Stream, error)) *MockEarlyConnectionOpenStreamSyncCall {
+func (c *MockEarlyConnectionOpenStreamSyncCall) DoAndReturn(f func(context.Context) (*quic.Stream, error)) *MockEarlyConnectionOpenStreamSyncCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
