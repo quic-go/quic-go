@@ -6,16 +6,17 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httptrace"
+	"testing"
 
+	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
 
 	"github.com/quic-go/qpack"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -24,192 +25,150 @@ func getDataFrame(data []byte) []byte {
 	return append(b, data...)
 }
 
-var _ = Describe("Stream", func() {
-	Context("reading", func() {
-		var (
-			str           *stream
-			qstr          *mockquic.MockStream
-			buf           *bytes.Buffer
-			errorCbCalled bool
-		)
+func TestStreamReadDataFrames(t *testing.T) {
+	var buf bytes.Buffer
+	mockCtrl := gomock.NewController(t)
+	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
-		BeforeEach(func() {
-			buf = &bytes.Buffer{}
-			errorCbCalled = false
-			qstr = mockquic.NewMockStream(mockCtrl)
-			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(qerr.ApplicationErrorCode, string) error {
-				errorCbCalled = true
-				return nil
-			}).AnyTimes()
-			str = newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil })
-		})
+	str := newStream(
+		qstr,
+		newConnection(
+			context.Background(),
+			mockquic.NewMockEarlyConnection(mockCtrl),
+			false,
+			protocol.PerspectiveClient,
+			nil,
+			0,
+		),
+		nil,
+		func(r io.Reader, u uint64) error { return nil },
+	)
 
-		It("reads DATA frames in a single run", func() {
-			buf.Write(getDataFrame([]byte("foobar")))
-			b := make([]byte, 6)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(6))
-			Expect(b).To(Equal([]byte("foobar")))
-		})
+	buf.Write(getDataFrame([]byte("foobar")))
+	b := make([]byte, 3)
+	n, err := str.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	require.Equal(t, []byte("foo"), b)
+	n, err = str.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	require.Equal(t, []byte("bar"), b)
 
-		It("reads DATA frames in multiple runs", func() {
-			buf.Write(getDataFrame([]byte("foobar")))
-			b := make([]byte, 3)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(3))
-			Expect(b).To(Equal([]byte("foo")))
-			n, err = str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(3))
-			Expect(b).To(Equal([]byte("bar")))
-		})
+	buf.Write(getDataFrame([]byte("baz")))
+	b = make([]byte, 10)
+	n, err = str.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	require.Equal(t, []byte("baz"), b[:n])
 
-		It("reads DATA frames into too large buffers", func() {
-			buf.Write(getDataFrame([]byte("foobar")))
-			b := make([]byte, 10)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(6))
-			Expect(b[:n]).To(Equal([]byte("foobar")))
-		})
+	buf.Write(getDataFrame([]byte("lorem")))
+	buf.Write(getDataFrame([]byte("ipsum")))
 
-		It("reads DATA frames into too large buffers, in multiple runs", func() {
-			buf.Write(getDataFrame([]byte("foobar")))
-			b := make([]byte, 4)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(4))
-			Expect(b).To(Equal([]byte("foob")))
-			n, err = str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(2))
-			Expect(b[:n]).To(Equal([]byte("ar")))
-		})
+	data, err := io.ReadAll(str)
+	require.NoError(t, err)
+	require.Equal(t, "loremipsum", string(data))
 
-		It("reads multiple DATA frames", func() {
-			buf.Write(getDataFrame([]byte("foo")))
-			buf.Write(getDataFrame([]byte("bar")))
-			b := make([]byte, 6)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(3))
-			Expect(b[:n]).To(Equal([]byte("foo")))
-			n, err = str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(3))
-			Expect(b[:n]).To(Equal([]byte("bar")))
-		})
+	// invalid frame
+	buf.Write([]byte("invalid"))
+	_, err = str.Read([]byte{0})
+	require.Error(t, err)
+}
 
-		It("errors when it can't parse the frame", func() {
-			buf.Write([]byte("invalid"))
-			_, err := str.Read([]byte{0})
-			Expect(err).To(HaveOccurred())
-		})
+func TestStreamInvalidFrame(t *testing.T) {
+	var buf bytes.Buffer
+	mockCtrl := gomock.NewController(t)
+	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	var errCode quic.ApplicationErrorCode
+	conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(
+		func(e quic.ApplicationErrorCode, msg string) error {
+			errCode = e
+			return nil
+		},
+	).AnyTimes()
 
-		It("errors on unexpected frames, and calls the error callback", func() {
-			b := (&settingsFrame{}).Append(nil)
-			buf.Write(b)
-			_, err := str.Read([]byte{0})
-			Expect(err).To(MatchError("peer sent an unexpected frame: *http3.settingsFrame"))
-			Expect(errorCbCalled).To(BeTrue())
-		})
-	})
+	str := newStream(
+		qstr,
+		newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0),
+		nil,
+		func(r io.Reader, u uint64) error { return nil },
+	)
 
-	Context("writing", func() {
-		It("writes data frames", func() {
-			buf := &bytes.Buffer{}
-			qstr := mockquic.NewMockStream(mockCtrl)
-			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
-			str.Write([]byte("foo"))
-			str.Write([]byte("foobar"))
+	b := (&settingsFrame{}).Append(nil)
+	buf.Write(b)
+	_, err := str.Read([]byte{0})
+	require.ErrorContains(t, err, "peer sent an unexpected frame")
+	require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), errCode)
+}
 
-			fp := frameParser{r: buf}
-			f, err := fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f).To(Equal(&dataFrame{Length: 3}))
-			b := make([]byte, 3)
-			_, err = io.ReadFull(buf, b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal([]byte("foo")))
+func TestStreamWrite(t *testing.T) {
+	var buf bytes.Buffer
+	mockCtrl := gomock.NewController(t)
+	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+	str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
+	str.Write([]byte("foo"))
+	str.Write([]byte("foobar"))
 
-			fp = frameParser{r: buf}
-			f, err = fp.ParseNext()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f).To(Equal(&dataFrame{Length: 6}))
-			b = make([]byte, 6)
-			_, err = io.ReadFull(buf, b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal([]byte("foobar")))
-		})
-	})
-})
+	fp := frameParser{r: &buf}
+	f, err := fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, &dataFrame{Length: 3}, f)
+	b := make([]byte, 3)
+	_, err = io.ReadFull(&buf, b)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), b)
 
-var _ = Describe("Request Stream", func() {
-	var str *requestStream
-	var qstr *mockquic.MockStream
+	fp = frameParser{r: &buf}
+	f, err = fp.ParseNext()
+	require.NoError(t, err)
+	require.Equal(t, &dataFrame{Length: 6}, f)
+	b = make([]byte, 6)
+	_, err = io.ReadFull(&buf, b)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foobar"), b)
+}
 
-	BeforeEach(func() {
-		qstr = mockquic.NewMockStream(mockCtrl)
-		requestWriter := newRequestWriter()
-		conn := mockquic.NewMockEarlyConnection(mockCtrl)
-		str = newRequestStream(
-			newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil }),
-			requestWriter,
-			make(chan struct{}),
-			qpack.NewDecoder(func(qpack.HeaderField) {}),
-			true,
-			math.MaxUint64,
-			&http.Response{},
-			&httptrace.ClientTrace{},
-		)
-	})
+func TestRequestStream(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	qstr := mockquic.NewMockStream(mockCtrl)
+	requestWriter := newRequestWriter()
+	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	str := newRequestStream(
+		newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil }),
+		requestWriter,
+		make(chan struct{}),
+		qpack.NewDecoder(func(qpack.HeaderField) {}),
+		true,
+		math.MaxUint64,
+		&http.Response{},
+		&httptrace.ClientTrace{},
+	)
 
-	It("refuses to read before having read the response", func() {
-		_, err := str.Read(make([]byte, 100))
-		Expect(err).To(MatchError("http3: invalid use of RequestStream.Read: need to call ReadResponse first"))
-	})
+	_, err := str.Read(make([]byte, 100))
+	require.EqualError(t, err, "http3: invalid use of RequestStream.Read: need to call ReadResponse first")
 
-	It("prevents duplicate calls to SendRequestHeader", func() {
-		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
-		Expect(err).ToNot(HaveOccurred())
-		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
-		Expect(str.SendRequestHeader(req)).To(Succeed())
-		Expect(str.SendRequestHeader(req)).To(MatchError("http3: invalid duplicate use of SendRequestHeader"))
-	})
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+	qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+	require.NoError(t, str.SendRequestHeader(req))
+	// duplicate calls are not allowed
+	require.EqualError(t, str.SendRequestHeader(req), "http3: invalid duplicate use of SendRequestHeader")
 
-	It("reads after the response", func() {
-		encodeResponse := func(status int) []byte {
-			buf := &bytes.Buffer{}
-			rstr := mockquic.NewMockStream(mockCtrl)
-			rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-			rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
-			rw.WriteHeader(status)
-			rw.Flush()
-			return buf.Bytes()
-		}
-
-		req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
-		Expect(err).ToNot(HaveOccurred())
-		qstr.EXPECT().Write(gomock.Any()).AnyTimes()
-		Expect(str.SendRequestHeader(req)).To(Succeed())
-
-		buf := bytes.NewBuffer(encodeResponse(200))
-		buf.Write((&dataFrame{Length: 6}).Append(nil))
-		buf.Write([]byte("foobar"))
-		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-		rsp, err := str.ReadResponse()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(rsp.StatusCode).To(Equal(200))
-		b := make([]byte, 10)
-		n, err := str.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(6))
-		Expect(b[:n]).To(Equal([]byte("foobar")))
-	})
-})
+	buf := bytes.NewBuffer(encodeResponse(t, 200))
+	buf.Write((&dataFrame{Length: 6}).Append(nil))
+	buf.Write([]byte("foobar"))
+	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	rsp, err := str.ReadResponse()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	b := make([]byte, 10)
+	n, err := str.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, 6, n)
+	require.Equal(t, []byte("foobar"), b[:n])
+}
