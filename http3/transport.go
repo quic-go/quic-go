@@ -39,7 +39,7 @@ type RoundTripOpt struct {
 }
 
 type clientConn interface {
-	OpenRequestStream(context.Context) (RequestStream, error)
+	OpenRequestStream(context.Context) (*RequestStream, error)
 	RoundTrip(*http.Request) (*http.Response, error)
 }
 
