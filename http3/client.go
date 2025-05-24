@@ -265,7 +265,7 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 // It cancels writing on the stream if any error other than io.EOF occurs.
 type cancelingReader struct {
 	r   io.Reader
-	str Stream
+	str *RequestStream
 }
 
 func (r *cancelingReader) Read(b []byte) (int, error) {
@@ -276,7 +276,7 @@ func (r *cancelingReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (c *ClientConn) sendRequestBody(str Stream, body io.ReadCloser, contentLength int64) error {
+func (c *ClientConn) sendRequestBody(str *RequestStream, body io.ReadCloser, contentLength int64) error {
 	defer body.Close()
 	buf := make([]byte, bodyCopyBufferSize)
 	sr := &cancelingReader{str: str, r: body}

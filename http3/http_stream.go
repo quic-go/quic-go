@@ -16,15 +16,7 @@ import (
 
 // A Stream is an HTTP/3 request stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
-type Stream interface {
-	quic.Stream
-
-	SendDatagram([]byte) error
-	ReceiveDatagram(context.Context) ([]byte, error)
-}
-
-// When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
-type stream struct {
+type Stream struct {
 	quic.Stream
 	conn *connection
 
@@ -38,10 +30,8 @@ type stream struct {
 	parsedTrailer bool
 }
 
-var _ Stream = &stream{}
-
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, parseTrailer func(io.Reader, uint64) error) *stream {
-	return &stream{
+func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, parseTrailer func(io.Reader, uint64) error) *Stream {
+	return &Stream{
 		Stream:       str,
 		conn:         conn,
 		buf:          make([]byte, 16),
@@ -50,7 +40,7 @@ func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, parseT
 	}
 }
 
-func (s *stream) Read(b []byte) (int, error) {
+func (s *Stream) Read(b []byte) (int, error) {
 	fp := &frameParser{
 		r:    s.Stream,
 		conn: s.conn,
@@ -98,11 +88,11 @@ func (s *stream) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (s *stream) hasMoreData() bool {
+func (s *Stream) hasMoreData() bool {
 	return s.bytesRemainingInFrame > 0
 }
 
-func (s *stream) Write(b []byte) (int, error) {
+func (s *Stream) Write(b []byte) (int, error) {
 	s.buf = s.buf[:0]
 	s.buf = (&dataFrame{Length: uint64(len(b))}).Append(s.buf)
 	if _, err := s.Stream.Write(s.buf); err != nil {
@@ -111,11 +101,11 @@ func (s *stream) Write(b []byte) (int, error) {
 	return s.Stream.Write(b)
 }
 
-func (s *stream) writeUnframed(b []byte) (int, error) {
+func (s *Stream) writeUnframed(b []byte) (int, error) {
 	return s.Stream.Write(b)
 }
 
-func (s *stream) StreamID() protocol.StreamID {
+func (s *Stream) StreamID() protocol.StreamID {
 	return s.Stream.StreamID()
 }
 
@@ -124,7 +114,7 @@ func (s *stream) StreamID() protocol.StreamID {
 // the application to optimistically use the stream (and, for example, send datagrams)
 // before receiving the response.
 type RequestStream struct {
-	*stream
+	*Stream
 
 	responseBody io.ReadCloser // set by ReadResponse
 
@@ -143,7 +133,7 @@ type RequestStream struct {
 }
 
 func newRequestStream(
-	str *stream,
+	str *Stream,
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
 	decoder *qpack.Decoder,
@@ -153,7 +143,7 @@ func newRequestStream(
 	trace *httptrace.ClientTrace,
 ) *RequestStream {
 	return &RequestStream{
-		stream:             str,
+		Stream:             str,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
 		decoder:            decoder,
@@ -184,7 +174,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	}
 	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
-	return s.requestWriter.WriteRequestHeader(s.Stream, req, s.requestedGzip)
+	return s.requestWriter.WriteRequestHeader(s.Stream.Stream, req, s.requestedGzip)
 }
 
 // ReadResponse reads the HTTP response from the stream.
@@ -192,10 +182,11 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 // It doesn't set Response.Request and Response.TLS.
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
+	qstr := s.Stream.Stream
 	fp := &frameParser{
 		conn: s.conn,
 		r: &tracingReader{
-			Reader: s.Stream,
+			Reader: qstr,
 			first:  &s.firstByte,
 			trace:  s.trace,
 		},
@@ -217,7 +208,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
 	}
 	headerBlock := make([]byte, hf.Length)
-	if _, err := io.ReadFull(s.Stream, headerBlock); err != nil {
+	if _, err := io.ReadFull(qstr, headerBlock); err != nil {
 		s.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		s.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", err)
@@ -237,7 +228,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 
 	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.
-	respBody := newResponseBody(s.stream, res.ContentLength, s.reqDone)
+	respBody := newResponseBody(s.Stream, res.ContentLength, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
@@ -259,12 +250,12 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	return res, nil
 }
 
-func (s *stream) SendDatagram(b []byte) error {
+func (s *Stream) SendDatagram(b []byte) error {
 	// TODO: reject if datagrams are not negotiated (yet)
 	return s.datagrams.Send(b)
 }
 
-func (s *stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+func (s *Stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 	// TODO: reject if datagrams are not negotiated (yet)
 	return s.datagrams.Receive(ctx)
 }
