@@ -38,7 +38,7 @@ func TestConnReceiveSettings(t *testing.T) {
 		Other:           map[uint64]uint64{1337: 42},
 	}).Append(b)
 	r := bytes.NewReader(b)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done"))
@@ -85,9 +85,9 @@ func testConnRejectDuplicateStreams(t *testing.T, typ uint64) {
 	if typ == streamTypeControlStream {
 		b = (&settingsFrame{}).Append(b)
 	}
-	controlStr1 := mockquic.NewMockStream(mockCtrl)
+	controlStr1 := NewMockQUICStream(mockCtrl)
 	controlStr1.EXPECT().Read(gomock.Any()).DoAndReturn(bytes.NewReader(b).Read).AnyTimes()
-	controlStr2 := mockquic.NewMockStream(mockCtrl)
+	controlStr2 := NewMockQUICStream(mockCtrl)
 	controlStr2.EXPECT().Read(gomock.Any()).DoAndReturn(bytes.NewReader(b).Read).AnyTimes()
 	done := make(chan struct{})
 	closed := make(chan struct{})
@@ -126,7 +126,7 @@ func TestConnResetUnknownUniStream(t *testing.T) {
 		0,
 	)
 	buf := bytes.NewBuffer(quicvarint.Append(nil, 0x1337))
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	reset := make(chan struct{})
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(quic.StreamErrorCode) { close(reset) })
@@ -223,7 +223,7 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = append(b, data...)
 	r := bytes.NewReader(b)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		if r.Len() == 0 {
 			return 0, readErr
@@ -234,7 +234,7 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done"))
 	closed := make(chan struct{})
 
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().StreamID().Return(4).AnyTimes()
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
@@ -288,7 +288,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 	var mockStr *mockquic.MockStream
 	var str quic.Stream
 	if withStream {
-		mockStr = mockquic.NewMockStream(mockCtrl)
+		mockStr = NewMockQUICStream(mockCtrl)
 		mockStr.EXPECT().StreamID().Return(0).AnyTimes()
 		mockStr.EXPECT().Context().Return(context.Background()).AnyTimes()
 		qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(mockStr, nil)
@@ -300,7 +300,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 	done := make(chan struct{})
 	defer close(done)
 	r := bytes.NewReader(b)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		if r.Len() == 0 {
 			<-done
@@ -328,7 +328,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 		}
 
 		// The stream ID in the GOAWAY frame is 8, so it's possible to open stream 4.
-		mockStr2 := mockquic.NewMockStream(mockCtrl)
+		mockStr2 := NewMockQUICStream(mockCtrl)
 		mockStr2.EXPECT().StreamID().Return(4).AnyTimes()
 		mockStr2.EXPECT().Context().Return(context.Background()).AnyTimes()
 		qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(mockStr2, nil)
@@ -377,7 +377,7 @@ func testConnRejectPushStream(t *testing.T, pers protocol.Perspective, expectedE
 		0,
 	)
 	buf := bytes.NewBuffer(quicvarint.Append(nil, streamTypePushStream))
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done"))
@@ -416,7 +416,7 @@ func TestConnInconsistentDatagramSupport(t *testing.T) {
 	)
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = (&settingsFrame{Datagram: true}).Append(b)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(bytes.NewReader(b).Read).AnyTimes()
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStr, nil)
 	qconn.EXPECT().AcceptUniStream(gomock.Any()).Return(nil, errors.New("test done"))
@@ -459,7 +459,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	r := bytes.NewReader(b)
 	done := make(chan struct{})
 	defer close(done)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		if r.Len() == 0 {
 			<-done
@@ -494,7 +494,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	}
 
 	// now open the stream...
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockQUICStream(mockCtrl)
 	qstr.EXPECT().StreamID().Return(strID).MinTimes(1)
 	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
 	qconn.EXPECT().OpenStreamSync(gomock.Any()).Return(qstr, nil)
@@ -544,7 +544,7 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 	b = (&settingsFrame{Datagram: true}).Append(b)
 	r := bytes.NewReader(b)
 	done := make(chan struct{})
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		if r.Len() == 0 {
 			<-done

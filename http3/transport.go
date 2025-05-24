@@ -39,7 +39,7 @@ type RoundTripOpt struct {
 }
 
 type clientConn interface {
-	OpenRequestStream(context.Context) (RequestStream, error)
+	OpenRequestStream(context.Context) (*RequestStream, error)
 	RoundTrip(*http.Request) (*http.Response, error)
 }
 
@@ -98,7 +98,7 @@ type Transport struct {
 	// However, if the user explicitly requested gzip it is not automatically uncompressed.
 	DisableCompression bool
 
-	StreamHijacker    func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
+	StreamHijacker    func(FrameType, quic.ConnectionTracingID, QUICStream, error) (hijacked bool, err error)
 	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool)
 
 	Logger *slog.Logger

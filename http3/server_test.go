@@ -87,7 +87,7 @@ func testServerSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	settingsChan := make(chan []byte)
 	mockCtrl := gomock.NewController(t)
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		settingsChan <- b
 		return len(b), nil
@@ -227,7 +227,7 @@ func testServerRequestHandling(t *testing.T,
 ) (responseHeaders map[string][]string, body []byte) {
 	responseBuf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 	str.EXPECT().CancelRead(gomock.Any())
@@ -295,7 +295,7 @@ func TestServerHandlerBodyNotRead(t *testing.T) {
 
 func TestServerFirstFrameNotHeaders(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Write(gomock.Any()).AnyTimes()
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	var buf bytes.Buffer
@@ -316,7 +316,7 @@ func TestServerFirstFrameNotHeaders(t *testing.T) {
 
 func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.HandlerFunc) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Write(gomock.Any()).AnyTimes()
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
@@ -345,7 +345,7 @@ func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.
 
 func TestServerStreamResetByClient(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	done := make(chan struct{})
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
@@ -393,7 +393,7 @@ func TestServerPanickingHandler(t *testing.T) {
 
 func testServerPanickingHandler(t *testing.T, handler http.HandlerFunc) (logOutput string) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
@@ -449,7 +449,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 
 	done := make(chan struct{}, 2)
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().StreamID().AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { done <- struct{}{} })
@@ -458,7 +458,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 
 	testDone := make(chan struct{})
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Write(gomock.Any())
 	conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 	conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -485,7 +485,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 func TestServerRequestContext(t *testing.T) {
 	responseBuf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	strCtx, strCtxCancel := context.WithCancel(context.Background())
 	str.EXPECT().StreamID().AnyTimes()
 	str.EXPECT().Context().Return(strCtx).AnyTimes()
@@ -507,7 +507,7 @@ func TestServerRequestContext(t *testing.T) {
 
 	testDone := make(chan struct{})
 	defer close(testDone)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Write(gomock.Any()).AnyTimes()
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1337}).AnyTimes()
@@ -556,7 +556,7 @@ func TestServerRequestContext(t *testing.T) {
 func TestServerHTTPStreamHijacking(t *testing.T) {
 	responseBuf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockQUICStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(
@@ -631,7 +631,7 @@ func testServerHijackBidirectionalStream(t *testing.T, bidirectional bool, doHij
 
 	buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 	mockCtrl := gomock.NewController(t)
-	unknownStr := mockquic.NewMockStream(mockCtrl)
+	unknownStr := NewMockQUICStream(mockCtrl)
 	unknownStr.EXPECT().Context().Return(context.Background()).AnyTimes()
 	unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	unknownStr.EXPECT().StreamID().AnyTimes()
@@ -653,7 +653,7 @@ func testServerHijackBidirectionalStream(t *testing.T, bidirectional bool, doHij
 		<-testDone
 		return nil, assert.AnError
 	})
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStr.EXPECT().Write(gomock.Any())
 	conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 	conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
@@ -897,7 +897,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	s.init()
 
 	mockCtrl := gomock.NewController(t)
-	controlStr := mockquic.NewMockStream(mockCtrl)
+	controlStr := NewMockQUICStream(mockCtrl)
 	controlStrChan := make(chan []byte, 1)
 	controlStr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		controlStrChan <- b
@@ -927,7 +927,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	conn.EXPECT().LocalAddr().AnyTimes()
 	conn.EXPECT().Context().Return(context.Background()).AnyTimes()
 
-	firstStream := mockquic.NewMockStream(mockCtrl)
+	firstStream := NewMockQUICStream(mockCtrl)
 	firstStreamAccepted := make(chan struct{}, 1)
 	firstStream.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 		firstStreamAccepted <- struct{}{}
@@ -988,7 +988,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	// all further streams are getting rejected
 	for range 3 {
 		resetChan := make(chan struct{}, 2)
-		str := mockquic.NewMockStream(mockCtrl)
+		str := NewMockQUICStream(mockCtrl)
 		str.EXPECT().StreamID().AnyTimes()
 		str.EXPECT().Context().Return(context.Background()).AnyTimes()
 		str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected)).Do(func(sec quic.StreamErrorCode) {

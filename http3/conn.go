@@ -26,8 +26,8 @@ var errGoAway = errors.New("connection in graceful shutdown")
 // It has all methods from the quic.Connection expect for AcceptStream, AcceptUniStream,
 // SendDatagram and ReceiveDatagram.
 type Connection interface {
-	OpenStream() (quic.Stream, error)
-	OpenStreamSync(context.Context) (quic.Stream, error)
+	OpenStream() (*quic.Stream, error)
+	OpenStreamSync(context.Context) (*quic.Stream, error)
 	OpenUniStream() (quic.SendStream, error)
 	OpenUniStreamSync(context.Context) (quic.SendStream, error)
 	LocalAddr() net.Addr
@@ -119,7 +119,7 @@ func (c *connection) openRequestStream(
 	reqDone chan<- struct{},
 	disableCompression bool,
 	maxHeaderBytes uint64,
-) (*requestStream, error) {
+) (*RequestStream, error) {
 	if c.perspective == protocol.PerspectiveClient {
 		c.streamMx.Lock()
 		maxStreamID := c.maxStreamID
@@ -146,9 +146,9 @@ func (c *connection) openRequestStream(
 	c.streams[str.StreamID()] = datagrams
 	c.lastStreamID = str.StreamID()
 	c.streamMx.Unlock()
-	qstr := newStateTrackingStream(str, c, datagrams)
+	ststr := newStateTrackingStream(str, c, datagrams)
 	rsp := &http.Response{}
-	hstr := newStream(qstr, c, datagrams, func(r io.Reader, l uint64) error {
+	hstr := newStream(ststr, c, datagrams, func(r io.Reader, l uint64) error {
 		hdr, err := c.decodeTrailers(r, l, maxHeaderBytes)
 		if err != nil {
 			return err
@@ -176,25 +176,22 @@ func (c *connection) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http
 	return parseTrailers(fields)
 }
 
-func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagrammer, error) {
+func (c *connection) acceptStream(ctx context.Context) (*stateTrackingStream, *datagrammer, error) {
 	str, err := c.AcceptStream(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	datagrams := newDatagrammer(func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
-	if c.perspective == protocol.PerspectiveServer {
-		strID := str.StreamID()
-		c.streamMx.Lock()
-		c.streams[strID] = datagrams
-		if c.idleTimeout > 0 {
-			if len(c.streams) == 1 {
-				c.idleTimer.Stop()
-			}
+	strID := str.StreamID()
+	c.streamMx.Lock()
+	c.streams[strID] = datagrams
+	if c.idleTimeout > 0 {
+		if len(c.streams) == 1 {
+			c.idleTimer.Stop()
 		}
-		c.streamMx.Unlock()
-		str = newStateTrackingStream(str, c, datagrams)
 	}
-	return str, datagrams, nil
+	c.streamMx.Unlock()
+	return newStateTrackingStream(str, c, datagrams), datagrams, nil
 }
 
 func (c *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {

@@ -3,13 +3,25 @@ package http3
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/quic-go/quic-go"
 )
 
-var _ quic.Stream = &stateTrackingStream{}
+type QUICStream interface {
+	StreamID() quic.StreamID
+	io.ReadWriteCloser
+	CancelRead(quic.StreamErrorCode)
+	CancelWrite(quic.StreamErrorCode)
+	Context() context.Context
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
+var _ QUICStream = &quic.Stream{}
 
 // stateTrackingStream is an implementation of quic.Stream that delegates
 // to an underlying stream
@@ -19,7 +31,7 @@ var _ quic.Stream = &stateTrackingStream{}
 // parent connection, this is done through the streamClearer interface when
 // both the send and receive sides are closed
 type stateTrackingStream struct {
-	quic.Stream
+	QUICStream
 
 	mx      sync.Mutex
 	sendErr error
@@ -38,11 +50,11 @@ type errorSetter interface {
 	SetReceiveError(error)
 }
 
-func newStateTrackingStream(s quic.Stream, clearer streamClearer, setter errorSetter) *stateTrackingStream {
+func newStateTrackingStream(s QUICStream, clearer streamClearer, setter errorSetter) *stateTrackingStream {
 	t := &stateTrackingStream{
-		Stream:  s,
-		clearer: clearer,
-		setter:  setter,
+		QUICStream: s,
+		clearer:    clearer,
+		setter:     setter,
 	}
 
 	context.AfterFunc(s.Context(), func() {
@@ -86,16 +98,16 @@ func (s *stateTrackingStream) closeReceive(e error) {
 
 func (s *stateTrackingStream) Close() error {
 	s.closeSend(errors.New("write on closed stream"))
-	return s.Stream.Close()
+	return s.QUICStream.Close()
 }
 
 func (s *stateTrackingStream) CancelWrite(e quic.StreamErrorCode) {
 	s.closeSend(&quic.StreamError{StreamID: s.StreamID(), ErrorCode: e})
-	s.Stream.CancelWrite(e)
+	s.QUICStream.CancelWrite(e)
 }
 
 func (s *stateTrackingStream) Write(b []byte) (int, error) {
-	n, err := s.Stream.Write(b)
+	n, err := s.QUICStream.Write(b)
 	if err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		s.closeSend(err)
 	}
@@ -104,11 +116,11 @@ func (s *stateTrackingStream) Write(b []byte) (int, error) {
 
 func (s *stateTrackingStream) CancelRead(e quic.StreamErrorCode) {
 	s.closeReceive(&quic.StreamError{StreamID: s.StreamID(), ErrorCode: e})
-	s.Stream.CancelRead(e)
+	s.QUICStream.CancelRead(e)
 }
 
 func (s *stateTrackingStream) Read(b []byte) (int, error) {
-	n, err := s.Stream.Read(b)
+	n, err := s.QUICStream.Read(b)
 	if err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
 		s.closeReceive(err)
 	}

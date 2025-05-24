@@ -42,10 +42,10 @@ func (m *MockClientConn) EXPECT() *MockClientConnMockRecorder {
 }
 
 // OpenRequestStream mocks base method.
-func (m *MockClientConn) OpenRequestStream(arg0 context.Context) (RequestStream, error) {
+func (m *MockClientConn) OpenRequestStream(arg0 context.Context) (*RequestStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenRequestStream", arg0)
-	ret0, _ := ret[0].(RequestStream)
+	ret0, _ := ret[0].(*RequestStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -63,19 +63,19 @@ type MockClientConnOpenRequestStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockClientConnOpenRequestStreamCall) Return(arg0 RequestStream, arg1 error) *MockClientConnOpenRequestStreamCall {
+func (c *MockClientConnOpenRequestStreamCall) Return(arg0 *RequestStream, arg1 error) *MockClientConnOpenRequestStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockClientConnOpenRequestStreamCall) Do(f func(context.Context) (RequestStream, error)) *MockClientConnOpenRequestStreamCall {
+func (c *MockClientConnOpenRequestStreamCall) Do(f func(context.Context) (*RequestStream, error)) *MockClientConnOpenRequestStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockClientConnOpenRequestStreamCall) DoAndReturn(f func(context.Context) (RequestStream, error)) *MockClientConnOpenRequestStreamCall {
+func (c *MockClientConnOpenRequestStreamCall) DoAndReturn(f func(context.Context) (*RequestStream, error)) *MockClientConnOpenRequestStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
