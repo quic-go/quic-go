@@ -119,7 +119,7 @@ func (c *connection) openRequestStream(
 	reqDone chan<- struct{},
 	disableCompression bool,
 	maxHeaderBytes uint64,
-) (*requestStream, error) {
+) (*RequestStream, error) {
 	if c.perspective == protocol.PerspectiveClient {
 		c.streamMx.Lock()
 		maxStreamID := c.maxStreamID

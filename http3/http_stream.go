@@ -23,23 +23,7 @@ type Stream interface {
 	ReceiveDatagram(context.Context) ([]byte, error)
 }
 
-// A RequestStream is an HTTP/3 request stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
-type RequestStream interface {
-	Stream
-
-	// SendRequestHeader sends the HTTP request.
-	// It is invalid to call it more than once.
-	// It is invalid to call it after Write has been called.
-	SendRequestHeader(req *http.Request) error
-
-	// ReadResponse reads the HTTP response from the stream.
-	// It is invalid to call it more than once.
-	// It doesn't set Response.Request and Response.TLS.
-	// It is invalid to call it after Read has been called.
-	ReadResponse() (*http.Response, error)
-}
-
 type stream struct {
 	quic.Stream
 	conn *connection
@@ -135,9 +119,11 @@ func (s *stream) StreamID() protocol.StreamID {
 	return s.Stream.StreamID()
 }
 
-// The stream conforms to the quic.Stream interface, but instead of writing to and reading directly
-// from the QUIC stream, it writes to and reads from the HTTP stream.
-type requestStream struct {
+// A RequestStream is a low-level abstraction representing an HTTP/3 request stream.
+// It decouples sending of the HTTP request from reading the HTTP response, allowing
+// the application to optimistically use the stream (and, for example, send datagrams)
+// before receiving the response.
+type RequestStream struct {
 	*stream
 
 	responseBody io.ReadCloser // set by ReadResponse
@@ -156,8 +142,6 @@ type requestStream struct {
 	firstByte     bool
 }
 
-var _ RequestStream = &requestStream{}
-
 func newRequestStream(
 	str *stream,
 	requestWriter *requestWriter,
@@ -167,8 +151,8 @@ func newRequestStream(
 	maxHeaderBytes uint64,
 	rsp *http.Response,
 	trace *httptrace.ClientTrace,
-) *requestStream {
-	return &requestStream{
+) *RequestStream {
+	return &RequestStream{
 		stream:             str,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
@@ -180,14 +164,17 @@ func newRequestStream(
 	}
 }
 
-func (s *requestStream) Read(b []byte) (int, error) {
+func (s *RequestStream) Read(b []byte) (int, error) {
 	if s.responseBody == nil {
 		return 0, errors.New("http3: invalid use of RequestStream.Read: need to call ReadResponse first")
 	}
 	return s.responseBody.Read(b)
 }
 
-func (s *requestStream) SendRequestHeader(req *http.Request) error {
+// SendRequestHeader sends the HTTP request.
+// It is invalid to call it more than once.
+// It is invalid to call it after Write has been called.
+func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	if s.sentRequest {
 		return errors.New("http3: invalid duplicate use of SendRequestHeader")
 	}
@@ -200,7 +187,11 @@ func (s *requestStream) SendRequestHeader(req *http.Request) error {
 	return s.requestWriter.WriteRequestHeader(s.Stream, req, s.requestedGzip)
 }
 
-func (s *requestStream) ReadResponse() (*http.Response, error) {
+// ReadResponse reads the HTTP response from the stream.
+// It is invalid to call it more than once.
+// It doesn't set Response.Request and Response.TLS.
+// It is invalid to call it after Read has been called.
+func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	fp := &frameParser{
 		conn: s.conn,
 		r: &tracingReader{
