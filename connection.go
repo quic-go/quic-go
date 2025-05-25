@@ -467,7 +467,7 @@ func (s *connection) preSetup() {
 	s.handshakeStream = newCryptoStream()
 	s.sendQueue = newSendQueue(s.conn)
 	s.retransmissionQueue = newRetransmissionQueue()
-	s.frameParser = *wire.NewFrameParser(s.config.EnableDatagrams)
+	s.frameParser = *wire.NewFrameParser(s.config.EnableDatagrams, false)
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
