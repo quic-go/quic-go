@@ -14,35 +14,38 @@ import (
 	"github.com/quic-go/qpack"
 )
 
+type datagramStream interface {
+	quic.Stream
+	SendDatagram(b []byte) error
+	ReceiveDatagram(ctx context.Context) ([]byte, error)
+}
+
 // A Stream is an HTTP/3 request stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
 type Stream struct {
-	quic.Stream
+	datagramStream
 	conn *connection
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
 
 	bytesRemainingInFrame uint64
 
-	datagrams *datagrammer
-
 	parseTrailer  func(io.Reader, uint64) error
 	parsedTrailer bool
 }
 
-func newStream(str quic.Stream, conn *connection, datagrams *datagrammer, parseTrailer func(io.Reader, uint64) error) *Stream {
+func newStream(str datagramStream, conn *connection, parseTrailer func(io.Reader, uint64) error) *Stream {
 	return &Stream{
-		Stream:       str,
-		conn:         conn,
-		buf:          make([]byte, 16),
-		datagrams:    datagrams,
-		parseTrailer: parseTrailer,
+		datagramStream: str,
+		conn:           conn,
+		buf:            make([]byte, 16),
+		parseTrailer:   parseTrailer,
 	}
 }
 
 func (s *Stream) Read(b []byte) (int, error) {
 	fp := &frameParser{
-		r:    s.Stream,
+		r:    s.datagramStream,
 		conn: s.conn,
 	}
 	if s.bytesRemainingInFrame == 0 {
@@ -67,7 +70,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
-				return 0, s.parseTrailer(s.Stream, f.Length)
+				return 0, s.parseTrailer(s.datagramStream, f.Length)
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -80,9 +83,9 @@ func (s *Stream) Read(b []byte) (int, error) {
 	var n int
 	var err error
 	if s.bytesRemainingInFrame < uint64(len(b)) {
-		n, err = s.Stream.Read(b[:s.bytesRemainingInFrame])
+		n, err = s.datagramStream.Read(b[:s.bytesRemainingInFrame])
 	} else {
-		n, err = s.Stream.Read(b)
+		n, err = s.datagramStream.Read(b)
 	}
 	s.bytesRemainingInFrame -= uint64(n)
 	return n, err
@@ -95,18 +98,18 @@ func (s *Stream) hasMoreData() bool {
 func (s *Stream) Write(b []byte) (int, error) {
 	s.buf = s.buf[:0]
 	s.buf = (&dataFrame{Length: uint64(len(b))}).Append(s.buf)
-	if _, err := s.Stream.Write(s.buf); err != nil {
+	if _, err := s.datagramStream.Write(s.buf); err != nil {
 		return 0, err
 	}
-	return s.Stream.Write(b)
+	return s.datagramStream.Write(b)
 }
 
 func (s *Stream) writeUnframed(b []byte) (int, error) {
-	return s.Stream.Write(b)
+	return s.datagramStream.Write(b)
 }
 
 func (s *Stream) StreamID() protocol.StreamID {
-	return s.Stream.StreamID()
+	return s.datagramStream.StreamID()
 }
 
 // A RequestStream is a low-level abstraction representing an HTTP/3 request stream.
@@ -174,7 +177,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	}
 	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
-	return s.requestWriter.WriteRequestHeader(s.Stream.Stream, req, s.requestedGzip)
+	return s.requestWriter.WriteRequestHeader(s.datagramStream, req, s.requestedGzip)
 }
 
 // ReadResponse reads the HTTP response from the stream.
@@ -182,7 +185,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 // It doesn't set Response.Request and Response.TLS.
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
-	qstr := s.Stream.Stream
+	qstr := s.datagramStream
 	fp := &frameParser{
 		conn: s.conn,
 		r: &tracingReader{
@@ -252,12 +255,12 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 
 func (s *Stream) SendDatagram(b []byte) error {
 	// TODO: reject if datagrams are not negotiated (yet)
-	return s.datagrams.Send(b)
+	return s.datagramStream.SendDatagram(b)
 }
 
 func (s *Stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 	// TODO: reject if datagrams are not negotiated (yet)
-	return s.datagrams.Receive(ctx)
+	return s.datagramStream.ReceiveDatagram(ctx)
 }
 
 type tracingReader struct {

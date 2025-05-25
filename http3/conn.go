@@ -20,6 +20,8 @@ import (
 	"github.com/quic-go/qpack"
 )
 
+const maxQuarterStreamID = 1<<60 - 1
+
 var errGoAway = errors.New("connection in graceful shutdown")
 
 // Connection is an HTTP/3 connection.
@@ -54,7 +56,7 @@ type connection struct {
 	decoder *qpack.Decoder
 
 	streamMx     sync.Mutex
-	streams      map[protocol.StreamID]*datagrammer
+	streams      map[protocol.StreamID]*stateTrackingStream
 	lastStreamID protocol.StreamID
 	maxStreamID  protocol.StreamID
 
@@ -82,7 +84,7 @@ func newConnection(
 		enableDatagrams:  enableDatagrams,
 		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
 		receivedSettings: make(chan struct{}),
-		streams:          make(map[protocol.StreamID]*datagrammer),
+		streams:          make(map[protocol.StreamID]*stateTrackingStream),
 		maxStreamID:      protocol.InvalidStreamID,
 		lastStreamID:     protocol.InvalidStreamID,
 	}
@@ -141,23 +143,30 @@ func (c *connection) openRequestStream(
 	if err != nil {
 		return nil, err
 	}
-	datagrams := newDatagrammer(func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
+	hstr := newStateTrackingStream(str, c, func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
 	c.streamMx.Lock()
-	c.streams[str.StreamID()] = datagrams
+	c.streams[str.StreamID()] = hstr
 	c.lastStreamID = str.StreamID()
 	c.streamMx.Unlock()
-	qstr := newStateTrackingStream(str, c, datagrams)
 	rsp := &http.Response{}
-	hstr := newStream(qstr, c, datagrams, func(r io.Reader, l uint64) error {
-		hdr, err := c.decodeTrailers(r, l, maxHeaderBytes)
-		if err != nil {
-			return err
-		}
-		rsp.Trailer = hdr
-		return nil
-	})
 	trace := httptrace.ContextClientTrace(ctx)
-	return newRequestStream(hstr, requestWriter, reqDone, c.decoder, disableCompression, maxHeaderBytes, rsp, trace), nil
+	return newRequestStream(
+		newStream(hstr, c, func(r io.Reader, l uint64) error {
+			hdr, err := c.decodeTrailers(r, l, maxHeaderBytes)
+			if err != nil {
+				return err
+			}
+			rsp.Trailer = hdr
+			return nil
+		}),
+		requestWriter,
+		reqDone,
+		c.decoder,
+		disableCompression,
+		maxHeaderBytes,
+		rsp,
+		trace,
+	), nil
 }
 
 func (c *connection) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {
@@ -176,25 +185,23 @@ func (c *connection) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http
 	return parseTrailers(fields)
 }
 
-func (c *connection) acceptStream(ctx context.Context) (quic.Stream, *datagrammer, error) {
+// only used by the server
+func (c *connection) acceptStream(ctx context.Context) (*stateTrackingStream, error) {
 	str, err := c.AcceptStream(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	datagrams := newDatagrammer(func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
-	if c.perspective == protocol.PerspectiveServer {
-		strID := str.StreamID()
-		c.streamMx.Lock()
-		c.streams[strID] = datagrams
-		if c.idleTimeout > 0 {
-			if len(c.streams) == 1 {
-				c.idleTimer.Stop()
-			}
+	strID := str.StreamID()
+	hstr := newStateTrackingStream(str, c, func(b []byte) error { return c.sendDatagram(strID, b) })
+	c.streamMx.Lock()
+	c.streams[strID] = hstr
+	if c.idleTimeout > 0 {
+		if len(c.streams) == 1 {
+			c.idleTimer.Stop()
 		}
-		c.streamMx.Unlock()
-		str = newStateTrackingStream(str, c, datagrams)
 	}
-	return str, datagrams, nil
+	c.streamMx.Unlock()
+	return hstr, nil
 }
 
 func (c *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
@@ -397,7 +404,7 @@ func (c *connection) receiveDatagrams() error {
 		if !ok {
 			continue
 		}
-		dg.enqueue(b[n:])
+		dg.enqueueDatagram(b[n:])
 	}
 }
 

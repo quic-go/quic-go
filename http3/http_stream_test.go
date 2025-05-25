@@ -28,7 +28,7 @@ func getDataFrame(data []byte) []byte {
 func TestStreamReadDataFrames(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockDatagramStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
@@ -42,7 +42,6 @@ func TestStreamReadDataFrames(t *testing.T) {
 			nil,
 			0,
 		),
-		nil,
 		func(r io.Reader, u uint64) error { return nil },
 	)
 
@@ -80,7 +79,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 func TestStreamInvalidFrame(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockDatagramStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
@@ -95,7 +94,6 @@ func TestStreamInvalidFrame(t *testing.T) {
 	str := newStream(
 		qstr,
 		newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0),
-		nil,
 		func(r io.Reader, u uint64) error { return nil },
 	)
 
@@ -109,9 +107,9 @@ func TestStreamInvalidFrame(t *testing.T) {
 func TestStreamWrite(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockDatagramStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
+	str := newStream(qstr, nil, func(r io.Reader, u uint64) error { return nil })
 	str.Write([]byte("foo"))
 	str.Write([]byte("foobar"))
 
@@ -136,11 +134,15 @@ func TestStreamWrite(t *testing.T) {
 
 func TestRequestStream(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
+	qstr := NewMockDatagramStream(mockCtrl)
 	requestWriter := newRequestWriter()
 	conn := mockquic.NewMockEarlyConnection(mockCtrl)
 	str := newRequestStream(
-		newStream(qstr, newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0), nil, func(r io.Reader, u uint64) error { return nil }),
+		newStream(
+			qstr,
+			newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0),
+			func(r io.Reader, u uint64) error { return nil },
+		),
 		requestWriter,
 		make(chan struct{}),
 		qpack.NewDecoder(func(qpack.HeaderField) {}),
