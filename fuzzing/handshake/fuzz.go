@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"github.com/Noooste/utls"
 	"io"
 	"log"
 	"math"
@@ -15,12 +15,12 @@ import (
 	"net"
 	"time"
 
-	"github.com/quic-go/quic-go/fuzzing/internal/helper"
-	"github.com/quic-go/quic-go/internal/handshake"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qtls"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/Noooste/quic-go/fuzzing/internal/helper"
+	"github.com/Noooste/quic-go/internal/handshake"
+	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/qtls"
+	"github.com/Noooste/quic-go/internal/utils"
+	"github.com/Noooste/quic-go/internal/wire"
 )
 
 var (
@@ -183,7 +183,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	}
 
 	// This sets the cipher suite for both client and server.
-	// The way crypto/tls is designed doesn't allow us to set different cipher suites for client and server.
+	// The way github.com/Noooste/utls is designed doesn't allow us to set different cipher suites for client and server.
 	resetCipherSuite := func() {}
 	switch (runConfig[0] >> 6) % 4 {
 	case 0:

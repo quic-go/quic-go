@@ -2,11 +2,11 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"testing"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/Noooste/quic-go"
 
 	"github.com/stretchr/testify/require"
 )

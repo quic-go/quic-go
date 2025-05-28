@@ -1,8 +1,8 @@
 package handshake
 
 import (
-	"crypto/tls"
 	"encoding/hex"
+	"github.com/Noooste/utls"
 	"strings"
 	"testing"
 

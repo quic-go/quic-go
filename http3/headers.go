@@ -3,7 +3,7 @@ package http3
 import (
 	"errors"
 	"fmt"
-	"net/http"
+	"github.com/Noooste/fhttp"
 	"net/textproto"
 	"net/url"
 	"strconv"

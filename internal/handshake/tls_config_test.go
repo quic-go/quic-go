@@ -1,7 +1,7 @@
 package handshake
 
 import (
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"net"
 	"reflect"
 	"testing"

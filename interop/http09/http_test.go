@@ -1,16 +1,16 @@
 package http09
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"net"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/testdata"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/internal/testdata"
 
 	"github.com/stretchr/testify/require"
 )

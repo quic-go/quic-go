@@ -6,15 +6,15 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/binary"
+	"github.com/Noooste/utls"
 	"io"
 	mrand "math/rand/v2"
 	"testing"
 
 	"golang.org/x/crypto/cryptobyte"
 
-	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

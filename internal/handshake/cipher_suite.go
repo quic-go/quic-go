@@ -4,13 +4,13 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-// These cipher suite implementations are copied from the standard library crypto/tls package.
+// These cipher suite implementations are copied from the standard library github.com/Noooste/utls package.
 
 const aeadNonceLength = 12
 

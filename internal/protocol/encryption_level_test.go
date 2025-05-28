@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"testing"
 
 	"github.com/stretchr/testify/require"

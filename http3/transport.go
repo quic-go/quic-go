@@ -2,13 +2,13 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"net/http/httptrace"
 	"net/url"
 	"strings"
@@ -17,8 +17,8 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/internal/protocol"
 )
 
 // Settings are HTTP/3 settings that apply to the underlying connection.

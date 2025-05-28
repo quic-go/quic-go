@@ -2,19 +2,19 @@ package main
 
 import (
 	"bytes"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"sync"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
-	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/http3"
+	"github.com/Noooste/quic-go/internal/testdata"
+	"github.com/Noooste/quic-go/qlog"
 )
 
 func main() {

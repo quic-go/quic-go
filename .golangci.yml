@@ -26,7 +26,7 @@ linters:
         quicvarint:
           list-mode: strict
           files:
-            - '**/github.com/quic-go/quic-go/quicvarint/*'
+            - '**/github.com/Noooste/quic-go/quicvarint/*'
             - '!$test'
           allow:
             - $gostd
@@ -59,7 +59,7 @@ linters:
         path: _test\.go
         text: 'SA1029:' # inappropriate key in call to context.WithValue
       # WebTransport still relies on the ConnectionTracingID and ConnectionTracingKey.
-      # See https://github.com/quic-go/quic-go/issues/4405 for more details.
+      # See https://github.com/Noooste/quic-go/issues/4405 for more details.
       - linters:
           - staticcheck
         paths:

@@ -1,8 +1,8 @@
 package protocol
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 )
 
 // EncryptionLevel is the encryption level

@@ -1,12 +1,12 @@
 package qtls
 
 import (
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 	"net"
 	"testing"
 
-	"github.com/quic-go/quic-go/internal/testdata"
+	"github.com/Noooste/quic-go/internal/testdata"
 
 	"github.com/stretchr/testify/require"
 )

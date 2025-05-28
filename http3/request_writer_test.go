@@ -2,8 +2,8 @@ package http3
 
 import (
 	"bytes"
+	"github.com/Noooste/fhttp"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 

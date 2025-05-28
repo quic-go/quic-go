@@ -4,24 +4,24 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
+	"github.com/Noooste/utls"
 	"net"
 	"net/netip"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/handshake"
-	"github.com/quic-go/quic-go/internal/mocks"
-	mockackhandler "github.com/quic-go/quic-go/internal/mocks/ackhandler"
-	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/Noooste/quic-go/internal/ackhandler"
+	"github.com/Noooste/quic-go/internal/handshake"
+	"github.com/Noooste/quic-go/internal/mocks"
+	mockackhandler "github.com/Noooste/quic-go/internal/mocks/ackhandler"
+	mocklogging "github.com/Noooste/quic-go/internal/mocks/logging"
+	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/qerr"
+	"github.com/Noooste/quic-go/internal/utils"
+	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/Noooste/quic-go/logging"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1759,7 +1759,7 @@ func TestConnectionPacketPacing(t *testing.T) {
 }
 
 // When the send queue blocks, we need to reset the pacing timer, otherwise the run loop might busy-loop.
-// See https://github.com/quic-go/quic-go/pull/4943 for more details.
+// See https://github.com/Noooste/quic-go/pull/4943 for more details.
 func TestConnectionPacingAndSendQueue(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
@@ -2824,7 +2824,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 // When the connection is closed before sending the first packet,
 // we don't send a CONNECTION_CLOSE.
 // This can happen if there's something wrong the tls.Config, and
-// crypto/tls refuses to start the handshake.
+// github.com/Noooste/utls refuses to start the handshake.
 func TestConnectionEarlyClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)

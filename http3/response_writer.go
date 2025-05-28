@@ -3,8 +3,8 @@ package http3
 import (
 	"bytes"
 	"fmt"
+	"github.com/Noooste/fhttp"
 	"log/slog"
-	"net/http"
 	"net/textproto"
 	"strconv"
 	"strings"

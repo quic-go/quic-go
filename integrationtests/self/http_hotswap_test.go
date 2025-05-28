@@ -1,15 +1,15 @@
 package self_test
 
 import (
+	"github.com/Noooste/fhttp"
 	"io"
 	"net"
-	"net/http"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/http3"
 	"github.com/stretchr/testify/require"
 )
 

@@ -2,8 +2,8 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
+	"github.com/Noooste/utls"
 	"io"
 	"net"
 	"os"
@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/Noooste/quic-go"
+	quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
+	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/Noooste/quic-go/logging"
 
 	"github.com/stretchr/testify/require"
 )
@@ -704,7 +704,7 @@ func Test0RTTRejectedOnALPNChanged(t *testing.T) {
 	// switch to different ALPN on the server side
 	tlsConf.NextProtos = []string{"new-alpn"}
 	// Append to the client's ALPN.
-	// crypto/tls will attempt to resume with the ALPN from the original connection
+	// github.com/Noooste/utls will attempt to resume with the ALPN from the original connection
 	clientConf.NextProtos = append(clientConf.NextProtos, "new-alpn")
 	counter, tracer := newPacketTracer()
 	ln, err := quic.ListenEarly(

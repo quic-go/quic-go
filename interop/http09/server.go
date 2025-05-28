@@ -2,14 +2,14 @@ package http09
 
 import (
 	"context"
+	"github.com/Noooste/fhttp"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 
-	"github.com/quic-go/quic-go"
+	"github.com/Noooste/quic-go"
 )
 
 const NextProto = "hq-interop"

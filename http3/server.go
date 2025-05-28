@@ -2,13 +2,13 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/Noooste/fhttp"
+	"github.com/Noooste/utls"
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"runtime"
 	"slices"
 	"strconv"
@@ -17,9 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
 )

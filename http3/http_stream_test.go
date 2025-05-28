@@ -3,16 +3,16 @@ package http3
 import (
 	"bytes"
 	"context"
+	"github.com/Noooste/fhttp"
 	"io"
 	"math"
-	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
 	"testing"
 
-	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/Noooste/quic-go"
+	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+	"github.com/Noooste/quic-go/internal/protocol"
 
 	"github.com/quic-go/qpack"
 

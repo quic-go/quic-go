@@ -1,8 +1,8 @@
 package testdata
 
 import (
-	"crypto/tls"
 	"crypto/x509"
+	"github.com/Noooste/utls"
 	"os"
 	"path"
 	"runtime"

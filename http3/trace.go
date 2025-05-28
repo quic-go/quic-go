@@ -1,13 +1,13 @@
 package http3
 
 import (
-	"crypto/tls"
+	"github.com/Noooste/utls"
 	"net"
 	"net/http/httptrace"
 	"net/textproto"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/Noooste/quic-go"
 )
 
 func traceGetConn(trace *httptrace.ClientTrace, hostPort string) {
@@ -99,7 +99,7 @@ func traceTLSHandshakeStart(trace *httptrace.ClientTrace) {
 }
 
 func traceTLSHandshakeDone(trace *httptrace.ClientTrace, state tls.ConnectionState, err error) {
-	if trace != nil && trace.TLSHandshakeDone != nil {
-		trace.TLSHandshakeDone(state, err)
-	}
+	//if trace != nil && trace.TLSHandshakeDone != nil {
+	//	trace.TLSHandshakeDone(state, err)
+	//}
 }
