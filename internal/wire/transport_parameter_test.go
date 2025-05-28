@@ -48,8 +48,9 @@ func TestTransportParametersStringRepresentation(t *testing.T) {
 		StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 		ActiveConnectionIDLimit:         123,
 		MaxDatagramFrameSize:            876,
+		EnableResetStreamAt:             true,
 	}
-	expected := "&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876}"
+	expected := "&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876, EnableResetStreamAt: true}"
 	require.Equal(t, expected, p.String())
 }
 
@@ -69,7 +70,7 @@ func TestTransportParametersStringRepresentationWithoutOptionalFields(t *testing
 		ActiveConnectionIDLimit:         89,
 		MaxDatagramFrameSize:            protocol.InvalidByteCount,
 	}
-	expected := "&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: (empty), InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"
+	expected := "&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: (empty), InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89, EnableResetStreamAt: false}"
 	require.Equal(t, expected, p.String())
 }
 
@@ -95,6 +96,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 		ActiveConnectionIDLimit:         2 + getRandomValueUpTo(quicvarint.Max-2),
 		MaxUDPPayloadSize:               1200 + protocol.ByteCount(getRandomValueUpTo(quicvarint.Max-1200)),
 		MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
+		EnableResetStreamAt:             getRandomValue()%2 == 0,
 	}
 	data := params.Marshal(protocol.PerspectiveServer)
 
@@ -117,6 +119,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 	require.Equal(t, params.ActiveConnectionIDLimit, p.ActiveConnectionIDLimit)
 	require.Equal(t, params.MaxUDPPayloadSize, p.MaxUDPPayloadSize)
 	require.Equal(t, params.MaxDatagramFrameSize, p.MaxDatagramFrameSize)
+	require.Equal(t, params.EnableResetStreamAt, p.EnableResetStreamAt)
 }
 
 func TestMarshalAdditionalTransportParameters(t *testing.T) {
@@ -369,6 +372,17 @@ func TestTransportParameterErrors(t *testing.T) {
 			perspective:    protocol.PerspectiveClient,
 			expectedErrMsg: "invalid value for max_ack_delay: 3689348814741910323ms (maximum 16383ms)",
 		},
+		{
+			name: "invalid value for reset_stream_at",
+			data: func() []byte {
+				b := quicvarint.Append(nil, uint64(resetStreamAtParameterID))
+				b = quicvarint.Append(b, 1)
+				b = quicvarint.Append(b, 1)
+				return appendInitialSourceConnectionID(b)
+			}(),
+			perspective:    protocol.PerspectiveClient,
+			expectedErrMsg: "wrong length for reset_stream_at: 1 (expected empty)",
+		},
 	}
 
 	for _, tt := range tests {
@@ -550,6 +564,7 @@ func TestTransportParametersFromSessionTicket(t *testing.T) {
 		MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(uint64(protocol.MaxStreamCount))),
 		ActiveConnectionIDLimit:        2 + getRandomValueUpTo(quicvarint.Max-2),
 		MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(uint64(MaxDatagramSize))),
+		EnableResetStreamAt:            getRandomValue()%2 == 0,
 	}
 	require.True(t, params.ValidFor0RTT(params))
 	b := params.MarshalForSessionTicket(nil)
@@ -563,6 +578,7 @@ func TestTransportParametersFromSessionTicket(t *testing.T) {
 	require.Equal(t, params.MaxUniStreamNum, tp.MaxUniStreamNum)
 	require.Equal(t, params.ActiveConnectionIDLimit, tp.ActiveConnectionIDLimit)
 	require.Equal(t, params.MaxDatagramFrameSize, tp.MaxDatagramFrameSize)
+	require.Equal(t, params.EnableResetStreamAt, tp.EnableResetStreamAt)
 }
 
 func TestSessionTicketInvalidTransportParameters(t *testing.T) {
