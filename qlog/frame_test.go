@@ -119,6 +119,24 @@ func TestResetStreamFrame(t *testing.T) {
 	)
 }
 
+func TestResetStreamAtFrame(t *testing.T) {
+	check(t,
+		&logging.ResetStreamFrame{
+			StreamID:     987,
+			FinalSize:    1234,
+			ErrorCode:    42,
+			ReliableSize: 999,
+		},
+		map[string]interface{}{
+			"frame_type":    "reset_stream_at",
+			"stream_id":     987,
+			"error_code":    42,
+			"final_size":    1234,
+			"reliable_size": 999,
+		},
+	)
+}
+
 func TestStopSendingFrame(t *testing.T) {
 	check(t,
 		&logging.StopSendingFrame{

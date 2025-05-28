@@ -112,10 +112,17 @@ func marshalAckFrame(enc *gojay.Encoder, f *logging.AckFrame) {
 }
 
 func marshalResetStreamFrame(enc *gojay.Encoder, f *logging.ResetStreamFrame) {
-	enc.StringKey("frame_type", "reset_stream")
+	if f.ReliableSize > 0 {
+		enc.StringKey("frame_type", "reset_stream_at")
+	} else {
+		enc.StringKey("frame_type", "reset_stream")
+	}
 	enc.Int64Key("stream_id", int64(f.StreamID))
 	enc.Int64Key("error_code", int64(f.ErrorCode))
 	enc.Int64Key("final_size", int64(f.FinalSize))
+	if f.ReliableSize > 0 {
+		enc.Int64Key("reliable_size", int64(f.ReliableSize))
+	}
 }
 
 func marshalStopSendingFrame(enc *gojay.Encoder, f *logging.StopSendingFrame) {
