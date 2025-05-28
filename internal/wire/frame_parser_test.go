@@ -13,7 +13,7 @@ import (
 )
 
 func TestFrameParsingReturnsNilWhenNothingToRead(t *testing.T) {
-	parser := NewFrameParser(true)
+	parser := NewFrameParser(true, true)
 	l, f, err := parser.ParseNext(nil, protocol.Encryption1RTT, protocol.Version1)
 	require.NoError(t, err)
 	require.Zero(t, l)
@@ -21,7 +21,7 @@ func TestFrameParsingReturnsNilWhenNothingToRead(t *testing.T) {
 }
 
 func TestFrameParsingSkipsPaddingFrames(t *testing.T) {
-	parser := NewFrameParser(true)
+	parser := NewFrameParser(true, true)
 	b := []byte{0, 0} // 2 PADDING frames
 	b, err := (&PingFrame{}).Append(b, protocol.Version1)
 	require.NoError(t, err)
@@ -32,7 +32,7 @@ func TestFrameParsingSkipsPaddingFrames(t *testing.T) {
 }
 
 func TestFrameParsingHandlesPaddingAtEnd(t *testing.T) {
-	parser := NewFrameParser(true)
+	parser := NewFrameParser(true, true)
 	l, f, err := parser.ParseNext([]byte{0, 0, 0}, protocol.Encryption1RTT, protocol.Version1)
 	require.NoError(t, err)
 	require.Nil(t, f)
@@ -40,9 +40,9 @@ func TestFrameParsingHandlesPaddingAtEnd(t *testing.T) {
 }
 
 func TestFrameParsingParsesSingleFrame(t *testing.T) {
-	parser := NewFrameParser(true)
+	parser := NewFrameParser(true, true)
 	var b []byte
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		var err error
 		b, err = (&PingFrame{}).Append(b, protocol.Version1)
 		require.NoError(t, err)
@@ -53,8 +53,8 @@ func TestFrameParsingParsesSingleFrame(t *testing.T) {
 	require.Equal(t, 1, l)
 }
 
-func TestFrameParsingUnpacksAckFrames(t *testing.T) {
-	parser := NewFrameParser(true)
+func TestFrameParserACK(t *testing.T) {
+	parser := NewFrameParser(true, true)
 	f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
@@ -66,8 +66,17 @@ func TestFrameParsingUnpacksAckFrames(t *testing.T) {
 	require.Equal(t, len(b), l)
 }
 
-func TestFrameParsingUsesCustomAckDelayExponentFor1RTTPackets(t *testing.T) {
-	parser := NewFrameParser(true)
+func TestFrameParserAckDelay(t *testing.T) {
+	t.Run("1-RTT", func(t *testing.T) {
+		testFrameParserAckDelay(t, protocol.Encryption1RTT)
+	})
+	t.Run("Handshake", func(t *testing.T) {
+		testFrameParserAckDelay(t, protocol.EncryptionHandshake)
+	})
+}
+
+func testFrameParserAckDelay(t *testing.T, encLevel protocol.EncryptionLevel) {
+	parser := NewFrameParser(true, true)
 	parser.SetAckDelayExponent(protocol.AckDelayExponent + 2)
 	f := &AckFrame{
 		AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
@@ -75,80 +84,17 @@ func TestFrameParsingUsesCustomAckDelayExponentFor1RTTPackets(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	_, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+	_, frame, err := parser.ParseNext(b, encLevel, protocol.Version1)
 	require.NoError(t, err)
-	require.Equal(t, 4*time.Second, frame.(*AckFrame).DelayTime)
-}
-
-func TestFrameParsingUsesDefaultAckDelayExponentForNon1RTTPackets(t *testing.T) {
-	parser := NewFrameParser(true)
-	parser.SetAckDelayExponent(protocol.AckDelayExponent + 2)
-	f := &AckFrame{
-		AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
-		DelayTime: time.Second,
+	if encLevel == protocol.Encryption1RTT {
+		require.Equal(t, 4*time.Second, frame.(*AckFrame).DelayTime)
+	} else {
+		require.Equal(t, time.Second, frame.(*AckFrame).DelayTime)
 	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	_, frame, err := parser.ParseNext(b, protocol.EncryptionHandshake, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, time.Second, frame.(*AckFrame).DelayTime)
 }
 
-func TestFrameParsingUnpacksResetStreamFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &ResetStreamFrame{
-		StreamID:  0xdeadbeef,
-		FinalSize: 0xdecafbad1234,
-		ErrorCode: 0x1337,
-	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksStopSendingFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &StopSendingFrame{StreamID: 0x42}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksCryptoFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &CryptoFrame{
-		Offset: 0x1337,
-		Data:   []byte("lorem ipsum"),
-	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.NotNil(t, frame)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksNewTokenFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &NewTokenFrame{Token: []byte("foobar")}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.NotNil(t, frame)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksStreamFrames(t *testing.T) {
-	parser := NewFrameParser(true)
+func TestFrameParserStreamFrames(t *testing.T) {
+	parser := NewFrameParser(true, true)
 	f := &StreamFrame{
 		StreamID: 0x42,
 		Offset:   0x1337,
@@ -164,199 +110,142 @@ func TestFrameParsingUnpacksStreamFrames(t *testing.T) {
 	require.Equal(t, len(b), l)
 }
 
-func TestFrameParsingUnpacksMaxDataFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &MaxDataFrame{MaximumData: 0xcafe}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksMaxStreamDataFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &MaxStreamDataFrame{
-		StreamID:          0xdeadbeef,
-		MaximumStreamData: 0xdecafbad,
+func TestFrameParserFrames(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame Frame
+	}{
+		{
+			name:  "MAX_DATA",
+			frame: &MaxDataFrame{MaximumData: 0xcafe},
+		},
+		{
+			name:  "MAX_STREAM_DATA",
+			frame: &MaxStreamDataFrame{StreamID: 0xdeadbeef, MaximumStreamData: 0xdecafbad},
+		},
+		{
+			name: "RESET_STREAM",
+			frame: &ResetStreamFrame{
+				StreamID:  0xdeadbeef,
+				FinalSize: 0xdecafbad1234,
+				ErrorCode: 0x1337,
+			},
+		},
+		{
+			name:  "STOP_SENDING",
+			frame: &StopSendingFrame{StreamID: 0x42},
+		},
+		{
+			name:  "CRYPTO",
+			frame: &CryptoFrame{Offset: 0x1337, Data: []byte("lorem ipsum")},
+		},
+		{
+			name:  "NEW_TOKEN",
+			frame: &NewTokenFrame{Token: []byte("foobar")},
+		},
+		{
+			name:  "MAX_STREAMS",
+			frame: &MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 0x1337},
+		},
+		{
+			name:  "DATA_BLOCKED",
+			frame: &DataBlockedFrame{MaximumData: 0x1234},
+		},
+		{
+			name:  "STREAM_DATA_BLOCKED",
+			frame: &StreamDataBlockedFrame{StreamID: 0xdeadbeef, MaximumStreamData: 0xdead},
+		},
+		{
+			name:  "STREAMS_BLOCKED",
+			frame: &StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 0x1234567},
+		},
+		{
+			name: "NEW_CONNECTION_ID",
+			frame: &NewConnectionIDFrame{
+				SequenceNumber:      0x1337,
+				ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+				StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+			},
+		},
+		{
+			name:  "RETIRE_CONNECTION_ID",
+			frame: &RetireConnectionIDFrame{SequenceNumber: 0x1337},
+		},
+		{
+			name:  "PATH_CHALLENGE",
+			frame: &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+		},
+		{
+			name:  "PATH_RESPONSE",
+			frame: &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+		},
+		{
+			name:  "CONNECTION_CLOSE",
+			frame: &ConnectionCloseFrame{IsApplicationError: true, ReasonPhrase: "foobar"},
+		},
+		{
+			name:  "HANDSHAKE_DONE",
+			frame: &HandshakeDoneFrame{},
+		},
+		{
+			name:  "DATAGRAM",
+			frame: &DatagramFrame{Data: []byte("foobar")},
+		},
+		{
+			name:  "RESET_STREAM_AT",
+			frame: &ResetStreamFrame{StreamID: 0x1337, ReliableSize: 0x42, FinalSize: 0xdeadbeef},
+		},
 	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
 
-func TestFrameParsingUnpacksMaxStreamsFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &MaxStreamsFrame{
-		Type:         protocol.StreamTypeBidi,
-		MaxStreamNum: 0x1337,
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := NewFrameParser(true, true)
+			b, err := test.frame.Append(nil, protocol.Version1)
+			require.NoError(t, err)
+			l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+			require.NoError(t, err)
+			require.Equal(t, test.frame, frame)
+			require.Equal(t, len(b), l)
+		})
 	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
 }
 
-func TestFrameParsingUnpacksDataBlockedFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &DataBlockedFrame{MaximumData: 0x1234}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
+func checkFrameUnsupported(t *testing.T, err error, expectedFrameType uint64) {
+	t.Helper()
+	require.ErrorContains(t, err, errUnknownFrameType.Error())
+	var transportErr *qerr.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
+	require.Equal(t, expectedFrameType, transportErr.FrameType)
+	require.Equal(t, "unknown frame type", transportErr.ErrorMessage)
 }
 
-func TestFrameParsingUnpacksStreamDataBlockedFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &StreamDataBlockedFrame{
-		StreamID:          0xdeadbeef,
-		MaximumStreamData: 0xdead,
-	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksStreamsBlockedFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &StreamsBlockedFrame{
-		Type:        protocol.StreamTypeBidi,
-		StreamLimit: 0x1234567,
-	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksNewConnectionIDFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &NewConnectionIDFrame{
-		SequenceNumber:      0x1337,
-		ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-		StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
-	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksRetireConnectionIDFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksPathChallengeFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.NotNil(t, frame)
-	require.IsType(t, &PathChallengeFrame{}, frame)
-	require.Equal(t, [8]byte{1, 2, 3, 4, 5, 6, 7, 8}, frame.(*PathChallengeFrame).Data)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksPathResponseFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.NotNil(t, frame)
-	require.IsType(t, &PathResponseFrame{}, frame)
-	require.Equal(t, [8]byte{1, 2, 3, 4, 5, 6, 7, 8}, frame.(*PathResponseFrame).Data)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksConnectionCloseFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &ConnectionCloseFrame{
-		IsApplicationError: true,
-		ReasonPhrase:       "foobar",
-	}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksHandshakeDoneFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &HandshakeDoneFrame{}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingUnpacksDatagramFrames(t *testing.T) {
-	parser := NewFrameParser(true)
-	f := &DatagramFrame{Data: []byte("foobar")}
-	b, err := f.Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
-}
-
-func TestFrameParsingErrorsWhenDatagramFramesAreNotSupported(t *testing.T) {
-	parser := NewFrameParser(false)
+func TestFrameParserDatagramUnsupported(t *testing.T) {
+	parser := NewFrameParser(false, true)
 	f := &DatagramFrame{Data: []byte("foobar")}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	_, _, err = parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	require.Error(t, err)
-	var transportErr *qerr.TransportError
-	require.ErrorAs(t, err, &transportErr)
-	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
-	require.Equal(t, uint64(0x30), transportErr.FrameType)
-	require.Equal(t, "unknown frame type", transportErr.ErrorMessage)
+	checkFrameUnsupported(t, err, 0x30)
 }
 
-func TestFrameParsingErrorsOnInvalidType(t *testing.T) {
-	parser := NewFrameParser(true)
+func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
+	parser := NewFrameParser(true, false)
+	f := &ResetStreamFrame{StreamID: 0x1337, ReliableSize: 0x42, FinalSize: 0xdeadbeef}
+	b, err := f.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	_, _, err = parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+	checkFrameUnsupported(t, err, 0x24)
+}
+
+func TestFrameParserInvalidFrameType(t *testing.T) {
+	parser := NewFrameParser(true, true)
 	_, _, err := parser.ParseNext(encodeVarInt(0x42), protocol.Encryption1RTT, protocol.Version1)
-	require.Error(t, err)
-	var transportErr *qerr.TransportError
-	require.ErrorAs(t, err, &transportErr)
-	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
-	require.Equal(t, uint64(0x42), transportErr.FrameType)
-	require.Equal(t, "unknown frame type", transportErr.ErrorMessage)
+	checkFrameUnsupported(t, err, 0x42)
 }
 
 func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
-	parser := NewFrameParser(true)
+	parser := NewFrameParser(true, true)
 	f := &MaxStreamDataFrame{
 		StreamID:          0x1337,
 		MaximumStreamData: 0xdeadbeef,
@@ -399,7 +288,7 @@ func BenchmarkParseStreamAndACK(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	parser := NewFrameParser(false)
+	parser := NewFrameParser(false, false)
 	parser.SetAckDelayExponent(3)
 
 	b.ResetTimer()
@@ -457,7 +346,7 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 		}
 	}
 
-	parser := NewFrameParser(false)
+	parser := NewFrameParser(false, false)
 
 	b.ResetTimer()
 	b.ReportAllocs()
