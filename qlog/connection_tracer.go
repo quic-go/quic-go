@@ -227,6 +227,7 @@ func (t *connectionTracer) toTransportParameters(tp *wire.TransportParameters) *
 		InitialMaxStreamsUni:            int64(tp.MaxUniStreamNum),
 		PreferredAddress:                pa,
 		MaxDatagramFrameSize:            tp.MaxDatagramFrameSize,
+		EnableResetStreamAt:             tp.EnableResetStreamAt,
 	}
 }
 

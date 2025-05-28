@@ -213,6 +213,7 @@ func TestSentTransportParameters(t *testing.T) {
 		RetrySourceConnectionID:         &rcid,
 		ActiveConnectionIDLimit:         7,
 		MaxDatagramFrameSize:            protocol.InvalidByteCount,
+		EnableResetStreamAt:             true,
 	})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -234,6 +235,7 @@ func TestSentTransportParameters(t *testing.T) {
 	require.Equal(t, float64(3000), ev["initial_max_stream_data_uni"])
 	require.Equal(t, float64(10), ev["initial_max_streams_bidi"])
 	require.Equal(t, float64(20), ev["initial_max_streams_uni"])
+	require.True(t, ev["reset_stream_at"].(bool))
 	require.NotContains(t, ev, "preferred_address")
 	require.NotContains(t, ev, "max_datagram_frame_size")
 }

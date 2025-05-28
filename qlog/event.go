@@ -435,6 +435,7 @@ type eventTransportParameters struct {
 	PreferredAddress *preferredAddress
 
 	MaxDatagramFrameSize protocol.ByteCount
+	EnableResetStreamAt  bool
 }
 
 func (e eventTransportParameters) Category() category { return categoryTransport }
@@ -479,6 +480,9 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	}
 	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		enc.Int64Key("max_datagram_frame_size", int64(e.MaxDatagramFrameSize))
+	}
+	if e.EnableResetStreamAt {
+		enc.BoolKey("reset_stream_at", true)
 	}
 }
 
