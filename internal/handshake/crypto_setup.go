@@ -26,7 +26,7 @@ const clientSessionStateRevision = 5
 
 type cryptoSetup struct {
 	tlsConf *tls.Config
-	conn    *tls.QUICConn
+	conn    *tls.UQUICConn
 
 	events []Event
 
@@ -75,6 +75,7 @@ func NewCryptoSetupClient(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	version protocol.Version,
+	clientHelloFn func() *tls.ClientHelloSpec,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
@@ -91,11 +92,14 @@ func NewCryptoSetupClient(
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
-	cs.conn = tls.QUICClient(&tls.QUICConfig{
+	cs.conn = tls.UQUICClient(&tls.QUICConfig{ // uQuic-go
 		TLSConfig:           tlsConf,
 		EnableSessionEvents: true,
-	})
+	}, tls.HelloCustom)
+
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
+
+	_ = cs.conn.ApplyPreset(clientHelloFn()) // uQuic-go TODO: better handle of error
 
 	return cs
 }
@@ -112,25 +116,27 @@ func NewCryptoSetupServer(
 	logger utils.Logger,
 	version protocol.Version,
 ) CryptoSetup {
-	cs := newCryptoSetup(
-		connID,
-		tp,
-		rttStats,
-		tracer,
-		logger,
-		protocol.PerspectiveServer,
-		version,
-	)
-	cs.allow0RTT = allow0RTT
+	panic("NewCryptoSetupServer is not yet implemented for github.com/Noooste/uquic-go")
 
-	tlsConf = setupConfigForServer(tlsConf, localAddr, remoteAddr)
-
-	cs.tlsConf = tlsConf
-	cs.conn = tls.QUICServer(&tls.QUICConfig{
-		TLSConfig:           tlsConf,
-		EnableSessionEvents: true,
-	})
-	return cs
+	//cs := newCryptoSetup(
+	//	connID,
+	//	tp,
+	//	rttStats,
+	//	tracer,
+	//	logger,
+	//	protocol.PerspectiveServer,
+	//	version,
+	//)
+	//cs.allow0RTT = allow0RTT
+	//
+	//tlsConf = setupConfigForServer(tlsConf, localAddr, remoteAddr)
+	//
+	//cs.tlsConf = tlsConf
+	//cs.conn = tls.QUICServer(&tls.QUICConfig{
+	//	TLSConfig:           tlsConf,
+	//	EnableSessionEvents: true,
+	//})
+	//return cs
 }
 
 func newCryptoSetup(

@@ -328,6 +328,9 @@ type Config struct {
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
 	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
+
+	// TLSGetClientHelloSpec is called to get the ClientHelloSpec for the TLS handshake.
+	TLSGetClientHelloSpec func() *tls.ClientHelloSpec
 }
 
 // ClientHelloInfo contains information about an incoming connection attempt.
