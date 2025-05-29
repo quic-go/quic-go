@@ -431,7 +431,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	require.Equal(t, protocol.StreamID(strID), str.StreamID())
 
 	// now open the stream...
-	serverConn.SendDatagram(append(quarterStreamID, []byte("bar")...))
+	require.NoError(t, serverConn.SendDatagram(append(quarterStreamID, []byte("bar")...)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
