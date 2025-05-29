@@ -227,7 +227,7 @@ func testServerRequestHandling(t *testing.T,
 ) (responseHeaders map[string][]string, body []byte) {
 	responseBuf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 	str.EXPECT().CancelRead(gomock.Any())
@@ -246,7 +246,7 @@ func testServerRequestHandling(t *testing.T,
 	qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
 	conn := newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 
-	s.handleRequest(conn, str, nil, qpack.NewDecoder(nil))
+	s.handleRequest(conn, str, qpack.NewDecoder(nil))
 	hfs := decodeHeader(t, responseBuf)
 	fp := frameParser{r: responseBuf}
 	var content []byte
@@ -295,7 +295,7 @@ func TestServerHandlerBodyNotRead(t *testing.T) {
 
 func TestServerFirstFrameNotHeaders(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Write(gomock.Any()).AnyTimes()
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	var buf bytes.Buffer
@@ -311,12 +311,12 @@ func TestServerFirstFrameNotHeaders(t *testing.T) {
 	qconn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any())
 	conn := newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 
-	s.handleRequest(conn, str, nil, qpack.NewDecoder(nil))
+	s.handleRequest(conn, str, qpack.NewDecoder(nil))
 }
 
 func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.HandlerFunc) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Write(gomock.Any()).AnyTimes()
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
@@ -339,13 +339,13 @@ func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.
 	qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
 	conn := newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 
-	s.handleRequest(conn, str, nil, qpack.NewDecoder(nil))
+	s.handleRequest(conn, str, qpack.NewDecoder(nil))
 	require.True(t, called)
 }
 
 func TestServerStreamResetByClient(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	done := make(chan struct{})
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
@@ -364,7 +364,7 @@ func TestServerStreamResetByClient(t *testing.T) {
 	qconn.EXPECT().LocalAddr().AnyTimes()
 	conn := newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 
-	s.handleRequest(conn, str, nil, qpack.NewDecoder(nil))
+	s.handleRequest(conn, str, qpack.NewDecoder(nil))
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -393,7 +393,7 @@ func TestServerPanickingHandler(t *testing.T) {
 
 func testServerPanickingHandler(t *testing.T, handler http.HandlerFunc) (logOutput string) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeInternalError))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeInternalError))
@@ -415,7 +415,7 @@ func testServerPanickingHandler(t *testing.T, handler http.HandlerFunc) (logOutp
 	qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
 	conn := newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 
-	s.handleRequest(conn, str, nil, qpack.NewDecoder(nil))
+	s.handleRequest(conn, str, qpack.NewDecoder(nil))
 	return logBuf.String()
 }
 
@@ -556,7 +556,7 @@ func TestServerRequestContext(t *testing.T) {
 func TestServerHTTPStreamHijacking(t *testing.T) {
 	responseBuf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Context().Return(context.Background()).AnyTimes()
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(
@@ -578,7 +578,7 @@ func TestServerHTTPStreamHijacking(t *testing.T) {
 	qconn.EXPECT().Context().Return(context.Background()).AnyTimes()
 	conn := newConnection(context.Background(), qconn, false, protocol.PerspectiveServer, nil, 0)
 
-	s.handleRequest(conn, str, nil, qpack.NewDecoder(nil))
+	s.handleRequest(conn, str, qpack.NewDecoder(nil))
 	hfs := decodeHeader(t, responseBuf)
 	require.Equal(t, hfs[":status"], []string{"200"})
 	require.Equal(t, []byte("foobar"), responseBuf.Bytes())

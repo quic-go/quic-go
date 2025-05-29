@@ -162,7 +162,7 @@ func TestHTTPDatagrams(t *testing.T) {
 	port := startHTTPServer(t, mux, func(s *http3.Server) { s.EnableDatagrams = true })
 	str := dialAndOpenHTTPDatagramStream(t, fmt.Sprintf("https://localhost:%d/datagrams", port))
 
-	for i := 0; i < num; i++ {
+	for i := range num {
 		b := make([]byte, 8)
 		binary.BigEndian.PutUint64(b, uint64(i))
 		require.NoError(t, str.SendDatagram(bytes.Repeat(b, 100)))
@@ -178,6 +178,8 @@ loop:
 			}
 		case err := <-errChan:
 			t.Fatalf("receiving datagrams failed: %s", err)
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
 		}
 	}
 	str.CancelWrite(42)

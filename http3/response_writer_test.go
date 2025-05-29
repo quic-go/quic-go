@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
-
 	"github.com/quic-go/qpack"
 
 	"github.com/stretchr/testify/require"
@@ -59,11 +57,11 @@ func (rw *testResponseWriter) DecodeBody(t *testing.T) []byte {
 func newTestResponseWriter(t *testing.T) *testResponseWriter {
 	buf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
 	str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
-	rw := newResponseWriter(newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
+	rw := newResponseWriter(newStream(str, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
 	return &testResponseWriter{responseWriter: rw, buf: buf}
 }
 

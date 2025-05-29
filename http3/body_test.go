@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,10 +17,10 @@ func TestResponseBodyReading(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	var buf bytes.Buffer
 	buf.Write(getDataFrame([]byte("foobar")))
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
 
 	data, err := io.ReadAll(rb)
 	require.NoError(t, err)
@@ -30,10 +29,10 @@ func TestResponseBodyReading(t *testing.T) {
 
 func TestResponseBodyReadError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).Return(0, assert.AnError).Times(2)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
 
 	_, err := rb.Read([]byte{0})
 	require.ErrorIs(t, err, assert.AnError)
@@ -49,10 +48,10 @@ func TestResponseBodyReadError(t *testing.T) {
 
 func TestResponseBodyClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
 	require.NoError(t, rb.Close())
 	select {
 	case <-reqDone:
@@ -66,10 +65,10 @@ func TestResponseBodyClose(t *testing.T) {
 
 func TestResponseBodyConcurrentClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(3)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
 
 	for range 3 {
 		go rb.Close()
@@ -101,11 +100,11 @@ func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
 		l = 3
 	}
 	mockCtrl := gomock.NewController(t)
-	str := mockquic.NewMockStream(mockCtrl)
+	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	rb := newResponseBody(&Stream{Stream: str}, l, make(chan struct{}))
+	rb := newResponseBody(&Stream{datagramStream: str}, l, make(chan struct{}))
 	data, err := io.ReadAll(rb)
 	require.Equal(t, []byte("foobar")[:l], data)
 	require.ErrorIs(t, err, errTooMuchData)
