@@ -2,8 +2,10 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -13,7 +15,9 @@ import (
 	"time"
 
 	"github.com/quic-go/qpack"
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools"
+	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )
@@ -67,6 +71,60 @@ func init() {
 
 func getTLSConfig() *tls.Config       { return tlsConfig.Clone() }
 func getTLSClientConfig() *tls.Config { return tlsClientConfig.Clone() }
+
+func newConnPair(t *testing.T) (client, server quic.Connection) {
+	t.Helper()
+
+	ln, err := quic.Listen(
+		newUDPConnLocalhost(t),
+		getTLSConfig(),
+		&quic.Config{
+			InitialStreamReceiveWindow:     uint64(protocol.MaxByteCount),
+			InitialConnectionReceiveWindow: uint64(protocol.MaxByteCount),
+		},
+	)
+	require.NoError(t, err)
+
+	cl, err := quic.Dial(context.Background(), newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() { cl.CloseWithError(0, "") })
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.CloseWithError(0, "") })
+	return cl, conn
+}
+
+func expectStreamReadReset(t *testing.T, str quic.ReceiveStream, errCode quic.StreamErrorCode) {
+	t.Helper()
+
+	str.SetReadDeadline(time.Now().Add(time.Second))
+	_, err := str.Read([]byte{0})
+	require.Error(t, err)
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatal("didn't receive a stream reset")
+	}
+	var strErr *quic.StreamError
+	require.ErrorAs(t, err, &strErr)
+	require.Equal(t, errCode, strErr.ErrorCode)
+}
+
+func expectStreamWriteReset(t *testing.T, str quic.SendStream, errCode quic.StreamErrorCode) {
+	t.Helper()
+
+	select {
+	case <-str.Context().Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	_, err := str.Write([]byte{0})
+	require.Error(t, err)
+	var strErr *quic.StreamError
+	require.ErrorAs(t, err, &strErr)
+	require.Equal(t, errCode, strErr.ErrorCode)
+}
 
 func encodeRequest(t *testing.T, req *http.Request) []byte {
 	t.Helper()
