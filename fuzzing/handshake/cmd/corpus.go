@@ -33,6 +33,7 @@ func main() {
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		nil,
 	)
 
 	config := testdata.GetTLSConfig()

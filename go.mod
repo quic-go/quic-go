@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.24.3
 
 require (
-	github.com/Noooste/utls v0.0.2
+	github.com/Noooste/utls v1.3.12
 	github.com/francoispqt/gojay v1.2.13
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.6
@@ -37,7 +37,6 @@ require (
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/quic-go/qtls-go1-20 v0.4.1 // indirect
-	github.com/refraction-networking/utls v1.6.2 // indirect
 	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/text v0.25.0 // indirect

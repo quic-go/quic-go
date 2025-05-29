@@ -124,5 +124,6 @@ func populateConfig(config *Config) *Config {
 		DisablePathMTUDiscovery:        config.DisablePathMTUDiscovery,
 		Allow0RTT:                      config.Allow0RTT,
 		Tracer:                         config.Tracer,
+		TLSGetClientHelloSpec:          config.TLSGetClientHelloSpec,
 	}
 }

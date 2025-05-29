@@ -99,6 +99,10 @@ func NewCryptoSetupClient(
 
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
+	if clientHelloFn == nil {
+		return cs
+	}
+
 	_ = cs.conn.ApplyPreset(clientHelloFn()) // uQuic-go TODO: better handle of error
 
 	return cs
