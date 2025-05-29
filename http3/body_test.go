@@ -21,7 +21,7 @@ func TestResponseBodyReading(t *testing.T) {
 	str := mockquic.NewMockStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
 
 	data, err := io.ReadAll(rb)
 	require.NoError(t, err)
@@ -33,7 +33,7 @@ func TestResponseBodyReadError(t *testing.T) {
 	str := mockquic.NewMockStream(mockCtrl)
 	str.EXPECT().Read(gomock.Any()).Return(0, assert.AnError).Times(2)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
 
 	_, err := rb.Read([]byte{0})
 	require.ErrorIs(t, err, assert.AnError)
@@ -52,7 +52,7 @@ func TestResponseBodyClose(t *testing.T) {
 	str := mockquic.NewMockStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
 	require.NoError(t, rb.Close())
 	select {
 	case <-reqDone:
@@ -69,7 +69,7 @@ func TestResponseBodyConcurrentClose(t *testing.T) {
 	str := mockquic.NewMockStream(mockCtrl)
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(3)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&stream{Stream: str}, -1, reqDone)
+	rb := newResponseBody(&Stream{Stream: str}, -1, reqDone)
 
 	for range 3 {
 		go rb.Close()
@@ -105,7 +105,7 @@ func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	rb := newResponseBody(&stream{Stream: str}, l, make(chan struct{}))
+	rb := newResponseBody(&Stream{Stream: str}, l, make(chan struct{}))
 	data, err := io.ReadAll(rb)
 	require.Equal(t, []byte("foobar")[:l], data)
 	require.ErrorIs(t, err, errTooMuchData)
