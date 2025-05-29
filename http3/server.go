@@ -486,7 +486,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		// * before graceful shutdown: s.graceCtx
 		// * after graceful shutdown: s.closeCtx
 		// This allows us to keep accepting (and resetting) streams after graceful shutdown has started.
-		str, datagrams, err := hconn.acceptStream(ctx)
+		str, err := hconn.acceptStream(ctx)
 		if err != nil {
 			// the underlying connection was closed (by either side)
 			if hconn.Context().Err() != nil {
@@ -536,7 +536,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			// handleRequest will return once the request has been handled,
 			// or the underlying connection is closed
 			defer wg.Done()
-			s.handleRequest(hconn, str, datagrams, hconn.decoder)
+			s.handleRequest(hconn, str, hconn.decoder)
 		}()
 	}
 	wg.Wait()
@@ -550,7 +550,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *datagrammer, decoder *qpack.Decoder) {
+func (s *Server) handleRequest(conn *connection, str datagramStream, decoder *qpack.Decoder) {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -610,7 +610,7 @@ func (s *Server) handleRequest(conn *connection, str quic.Stream, datagrams *dat
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, datagrams, nil)
+	hstr := newStream(str, conn, nil)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 

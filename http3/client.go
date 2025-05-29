@@ -127,7 +127,7 @@ func newClientConn(
 }
 
 // OpenRequestStream opens a new request stream on the HTTP/3 connection.
-func (c *ClientConn) OpenRequestStream(ctx context.Context) (RequestStream, error) {
+func (c *ClientConn) OpenRequestStream(ctx context.Context) (*RequestStream, error) {
 	return c.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
 }
 
@@ -265,7 +265,7 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 // It cancels writing on the stream if any error other than io.EOF occurs.
 type cancelingReader struct {
 	r   io.Reader
-	str Stream
+	str *RequestStream
 }
 
 func (r *cancelingReader) Read(b []byte) (int, error) {
@@ -276,7 +276,7 @@ func (r *cancelingReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (c *ClientConn) sendRequestBody(str Stream, body io.ReadCloser, contentLength int64) error {
+func (c *ClientConn) sendRequestBody(str *RequestStream, body io.ReadCloser, contentLength int64) error {
 	defer body.Close()
 	buf := make([]byte, bodyCopyBufferSize)
 	sr := &cancelingReader{str: str, r: body}
@@ -300,7 +300,7 @@ func (c *ClientConn) sendRequestBody(str Stream, body io.ReadCloser, contentLeng
 	return err
 }
 
-func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
+func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Response, error) {
 	trace := httptrace.ContextClientTrace(req.Context())
 	if err := str.SendRequestHeader(req); err != nil {
 		traceWroteRequest(trace, err)
