@@ -90,7 +90,7 @@ func TestHTTPSettings(t *testing.T) {
 	})
 }
 
-func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) http3.RequestStream {
+func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) *http3.RequestStream {
 	t.Helper()
 
 	u, err := url.Parse(addr)

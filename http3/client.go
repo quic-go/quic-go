@@ -127,7 +127,7 @@ func newClientConn(
 }
 
 // OpenRequestStream opens a new request stream on the HTTP/3 connection.
-func (c *ClientConn) OpenRequestStream(ctx context.Context) (RequestStream, error) {
+func (c *ClientConn) OpenRequestStream(ctx context.Context) (*RequestStream, error) {
 	return c.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
 }
 
@@ -300,7 +300,7 @@ func (c *ClientConn) sendRequestBody(str Stream, body io.ReadCloser, contentLeng
 	return err
 }
 
-func (c *ClientConn) doRequest(req *http.Request, str *requestStream) (*http.Response, error) {
+func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Response, error) {
 	trace := httptrace.ContextClientTrace(req.Context())
 	if err := str.SendRequestHeader(req); err != nil {
 		traceWroteRequest(trace, err)
