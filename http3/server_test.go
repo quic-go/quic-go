@@ -4,53 +4,23 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func getConnPair(t *testing.T) (client, server quic.Connection) {
-	t.Helper()
-
-	ln, err := quic.Listen(
-		newUDPConnLocalhost(t),
-		getTLSConfig(),
-		&quic.Config{
-			InitialStreamReceiveWindow:     uint64(protocol.MaxByteCount),
-			InitialConnectionReceiveWindow: uint64(protocol.MaxByteCount),
-			Tracer:                         qlog.DefaultConnectionTracer,
-		},
-	)
-	require.NoError(t, err)
-
-	cl, err := quic.Dial(context.Background(), newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
-	require.NoError(t, err)
-	t.Cleanup(func() { cl.CloseWithError(0, "") })
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	conn, err := ln.Accept(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { conn.CloseWithError(0, "") })
-	return cl, conn
-}
 
 func TestConfigureTLSConfig(t *testing.T) {
 	t.Run("basic config", func(t *testing.T) {
@@ -111,7 +81,7 @@ func testServerSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	testDone := make(chan struct{})
 	defer close(testDone)
 
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	go s.handleConn(serverConn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -205,7 +175,7 @@ func testServerRequestHandling(t *testing.T,
 	handler http.HandlerFunc,
 	req *http.Request,
 ) (responseHeaders map[string][]string, body []byte) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
@@ -234,7 +204,7 @@ func testServerRequestHandling(t *testing.T,
 }
 
 func TestServerFirstFrameNotHeaders(t *testing.T) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 
@@ -288,7 +258,7 @@ func TestServerHandlerBodyNotRead(t *testing.T) {
 }
 
 func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.HandlerFunc) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
@@ -312,35 +282,8 @@ func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.
 	}
 }
 
-func expectStreamReadReset(t *testing.T, str quic.ReceiveStream, errCode quic.StreamErrorCode) {
-	t.Helper()
-	str.SetReadDeadline(time.Now().Add(time.Second))
-	_, err := str.Read([]byte{0})
-	require.Error(t, err)
-	if errors.Is(err, os.ErrDeadlineExceeded) {
-		t.Fatal("didn't receive a stream reset")
-	}
-	var strErr *quic.StreamError
-	require.ErrorAs(t, err, &strErr)
-	require.Equal(t, errCode, strErr.ErrorCode)
-}
-
-func expectStreamWriteReset(t *testing.T, str quic.SendStream, errCode quic.StreamErrorCode) {
-	t.Helper()
-	select {
-	case <-str.Context().Done():
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
-	_, err := str.Write([]byte{0})
-	require.Error(t, err)
-	var strErr *quic.StreamError
-	require.ErrorAs(t, err, &strErr)
-	require.Equal(t, errCode, strErr.ErrorCode)
-}
-
 func TestServerStreamResetByClient(t *testing.T) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	str.CancelWrite(1337)
@@ -377,7 +320,7 @@ func TestServerPanickingHandler(t *testing.T) {
 }
 
 func testServerPanickingHandler(t *testing.T, handler http.HandlerFunc) (logOutput string) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodHead, "https://www.example.com", nil)))
@@ -425,7 +368,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 	}
 	s.init()
 
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
@@ -441,7 +384,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 }
 
 func TestServerRequestContext(t *testing.T) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodHead, "https://www.example.com", nil)))
@@ -486,7 +429,7 @@ func TestServerRequestContext(t *testing.T) {
 }
 
 func TestServerHTTPStreamHijacking(t *testing.T) {
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodHead, "https://www.example.com", nil)))
@@ -561,7 +504,7 @@ func testServerHijackBidirectionalStream(t *testing.T, bidirectional bool, doHij
 		},
 	}
 
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	go s.ServeQUICConn(serverConn)
 
 	buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
@@ -820,7 +763,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 		requestChan <- struct{}{}
 	})}
 
-	clientConn, serverConn := getConnPair(t)
+	clientConn, serverConn := newConnPair(t)
 	go s.ServeQUICConn(serverConn)
 
 	firstStream, err := clientConn.OpenStream()
