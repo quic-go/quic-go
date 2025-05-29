@@ -72,10 +72,10 @@ func init() {
 func getTLSConfig() *tls.Config       { return tlsConfig.Clone() }
 func getTLSClientConfig() *tls.Config { return tlsClientConfig.Clone() }
 
-func newConnPair(t *testing.T) (client, server quic.Connection) {
+func newConnPair(t *testing.T) (client, server quic.EarlyConnection) {
 	t.Helper()
 
-	ln, err := quic.Listen(
+	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
@@ -87,7 +87,7 @@ func newConnPair(t *testing.T) (client, server quic.Connection) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	cl, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
+	cl, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
 	require.NoError(t, err)
 	t.Cleanup(func() { cl.CloseWithError(0, "") })
 
@@ -97,10 +97,10 @@ func newConnPair(t *testing.T) (client, server quic.Connection) {
 	return cl, conn
 }
 
-func newConnPairWithDatagrams(t *testing.T) (client, server quic.Connection) {
+func newConnPairWithDatagrams(t *testing.T) (client, server quic.EarlyConnection) {
 	t.Helper()
 
-	ln, err := quic.Listen(
+	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
@@ -113,7 +113,7 @@ func newConnPairWithDatagrams(t *testing.T) (client, server quic.Connection) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	cl, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{EnableDatagrams: true})
+	cl, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{EnableDatagrams: true})
 	require.NoError(t, err)
 	t.Cleanup(func() { cl.CloseWithError(0, "") })
 

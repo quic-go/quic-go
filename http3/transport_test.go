@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/assert"
@@ -218,12 +217,9 @@ func TestTransportMultipleQUICVersions(t *testing.T) {
 }
 
 func TestTransportConnectionReuse(t *testing.T) {
+	conn, _ := newConnPair(t)
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	handshakeChan := make(chan struct{})
-	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
@@ -318,12 +314,9 @@ func TestTransportConnectionRedial(t *testing.T) {
 }
 
 func testTransportConnectionRedial(t *testing.T, req *http.Request, roundtripErr error, expectedBody string, expectRedial bool) error {
+	conn, _ := newConnPair(t)
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	handshakeChan := make(chan struct{})
-	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
@@ -359,10 +352,7 @@ func testTransportConnectionRedial(t *testing.T, req *http.Request, roundtripErr
 func TestTransportRequestContextCancellation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	handshakeChan := make(chan struct{})
-	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
+	conn, _ := newConnPair(t)
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
@@ -406,10 +396,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	handshakeChan := make(chan struct{})
-	close(handshakeChan)
-	conn.EXPECT().HandshakeComplete().Return(handshakeChan).AnyTimes()
+	conn, _ := newConnPair(t)
 	var dialCount int
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
@@ -437,7 +424,7 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 
 func TestTransportCloseEstablishedConnections(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	conn, _ := newConnPair(t)
 	tr := &Transport{
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 			return conn, nil
@@ -451,8 +438,13 @@ func TestTransportCloseEstablishedConnections(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/foobar.html", nil)
 	_, err := tr.RoundTrip(req)
 	require.NoError(t, err)
-	conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(0), "")
 	require.NoError(t, tr.Close())
+
+	select {
+	case <-conn.Context().Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func TestTransportCloseInFlightDials(t *testing.T) {
@@ -493,8 +485,8 @@ func TestTransportCloseInFlightDials(t *testing.T) {
 
 func TestTransportCloseIdleConnections(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	conn1 := mockquic.NewMockEarlyConnection(mockCtrl)
-	conn2 := mockquic.NewMockEarlyConnection(mockCtrl)
+	conn1, _ := newConnPair(t)
+	conn2, _ := newConnPair(t)
 	roundTripCalled := make(chan struct{})
 	tr := &Transport{
 		Dial: func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
@@ -540,11 +532,20 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 	cancel1()
 	<-reqFinished
 	// req1 is finished
-	conn1.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
 	tr.CloseIdleConnections()
+	select {
+	case <-conn1.Context().Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
 	cancel2()
 	<-reqFinished
 	// all requests are finished
-	conn2.EXPECT().CloseWithError(gomock.Any(), gomock.Any())
 	tr.CloseIdleConnections()
+	select {
+	case <-conn2.Context().Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
