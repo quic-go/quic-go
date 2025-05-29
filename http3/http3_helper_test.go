@@ -85,12 +85,38 @@ func newConnPair(t *testing.T) (client, server quic.Connection) {
 	)
 	require.NoError(t, err)
 
-	cl, err := quic.Dial(context.Background(), newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	cl, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
 	require.NoError(t, err)
 	t.Cleanup(func() { cl.CloseWithError(0, "") })
 
+	conn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.CloseWithError(0, "") })
+	return cl, conn
+}
+
+func newConnPairWithDatagrams(t *testing.T) (client, server quic.Connection) {
+	t.Helper()
+
+	ln, err := quic.Listen(
+		newUDPConnLocalhost(t),
+		getTLSConfig(),
+		&quic.Config{
+			InitialStreamReceiveWindow:     uint64(protocol.MaxByteCount),
+			InitialConnectionReceiveWindow: uint64(protocol.MaxByteCount),
+			EnableDatagrams:                true,
+		},
+	)
+	require.NoError(t, err)
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
+	cl, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{EnableDatagrams: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { cl.CloseWithError(0, "") })
+
 	conn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.CloseWithError(0, "") })
