@@ -136,11 +136,14 @@ func TestStateTrackingStreamRemoteCancelation(t *testing.T) {
 	client.SetWriteDeadline(time.Time{})
 
 	server.CancelRead(123)
-	time.Sleep(scaleDuration(10 * time.Millisecond)) // wait for the reset to be received
 
+	var writeErr error
+	require.Eventually(t, func() bool {
+		_, writeErr = str.Write([]byte("bar"))
+		return writeErr != nil
+	}, time.Second, scaleDuration(time.Millisecond))
 	expectedErr := &quic.StreamError{Remote: true, StreamID: server.StreamID(), ErrorCode: 123}
-	_, err = str.Write([]byte("bar"))
-	require.ErrorIs(t, err, expectedErr)
+	require.ErrorIs(t, writeErr, expectedErr)
 	require.Nil(t, clearer.cleared)
 	checkDatagramReceive(t, str)
 	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
@@ -222,16 +225,19 @@ func TestStateTrackingStreamSendThenReceive(t *testing.T) {
 	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
 	server.CancelRead(1234)
-	time.Sleep(scaleDuration(10 * time.Millisecond)) // wait for the reset to be received
 
+	var writeErr error
+	require.Eventually(t, func() bool {
+		_, writeErr = str.Write([]byte("bar"))
+		return writeErr != nil
+	}, time.Second, scaleDuration(time.Millisecond))
 	id := server.StreamID()
 	expectedErr := &quic.StreamError{Remote: true, StreamID: id, ErrorCode: 1234}
-	_, err := str.Write([]byte("bar"))
-	require.ErrorIs(t, err, expectedErr)
+	require.ErrorIs(t, writeErr, expectedErr)
 	require.Nil(t, clearer.cleared)
 	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
 
-	_, err = server.Write([]byte("foobar"))
+	_, err := server.Write([]byte("foobar"))
 	require.NoError(t, err)
 	require.NoError(t, server.Close())
 
