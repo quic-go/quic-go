@@ -1,9 +1,7 @@
 package http3
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"io"
 	"net"
 	"os"
@@ -11,12 +9,30 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
+
+func newStreamPair(t *testing.T) (client, server quic.Stream) {
+	t.Helper()
+
+	clientConn, serverConn := newConnPair(t)
+	serverStr, err := serverConn.OpenStream()
+	require.NoError(t, err)
+	// need to send something to the client to make it accept the stream
+	_, err = serverStr.Write([]byte{0})
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	clientStr, err := clientConn.AcceptStream(ctx)
+	require.NoError(t, err)
+	clientStr.SetReadDeadline(time.Now().Add(time.Second))
+	_, err = clientStr.Read([]byte{0})
+	require.NoError(t, err)
+	clientStr.SetWriteDeadline(time.Time{})
+	return clientStr, serverStr
+}
 
 func canceledCtx() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -45,31 +61,31 @@ func (s *mockStreamClearer) clearStream(id quic.StreamID) {
 
 func TestStateTrackingStreamRead(t *testing.T) {
 	t.Run("io.EOF", func(t *testing.T) {
-		testStateTrackingStreamRead(t, io.EOF)
+		testStateTrackingStreamRead(t, false)
 	})
 	t.Run("remote stream reset", func(t *testing.T) {
-		testStateTrackingStreamRead(t, assert.AnError)
+		testStateTrackingStreamRead(t, true)
 	})
 }
 
-func testStateTrackingStreamRead(t *testing.T, expectedErr error) {
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(quic.StreamID(1337))
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+func testStateTrackingStreamRead(t *testing.T, reset bool) {
+	client, server := newStreamPair(t)
 
 	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
+	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
 	// deadline errors are ignored
-	qstr.EXPECT().Read(gomock.Any()).Return(0, os.ErrDeadlineExceeded)
+	client.SetReadDeadline(time.Now())
 	_, err := str.Read(make([]byte, 3))
 	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 	require.Nil(t, clearer.cleared)
+	client.SetReadDeadline(time.Time{})
 
-	if expectedErr == io.EOF {
-		buf := bytes.NewBuffer([]byte("foobar"))
-		qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	_, err = server.Write([]byte("foobar"))
+	require.NoError(t, err)
+
+	if !reset {
+		server.Close()
 
 		for range 3 {
 			_, err := str.Read([]byte{0})
@@ -78,13 +94,16 @@ func testStateTrackingStreamRead(t *testing.T, expectedErr error) {
 			checkDatagramReceive(t, str)
 		}
 	} else {
-		qstr.EXPECT().Read(gomock.Any()).Return(0, expectedErr).AnyTimes()
+		server.CancelWrite(42)
 	}
 
+	var expectedErr error
 	_, err = io.ReadAll(str)
-	if expectedErr == io.EOF {
+	if !reset {
 		require.NoError(t, err)
+		expectedErr = io.EOF
 	} else {
+		expectedErr = &quic.StreamError{Remote: true, StreamID: server.StreamID(), ErrorCode: 42}
 		require.ErrorIs(t, err, expectedErr)
 	}
 	require.Nil(t, clearer.cleared)
@@ -95,18 +114,11 @@ func testStateTrackingStreamRead(t *testing.T, expectedErr error) {
 	require.NoError(t, str.SendDatagram([]byte("foo")))
 }
 
-func TestStateTrackingStreamWrite(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(quic.StreamID(1337))
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+func TestStateTrackingStreamRemoteCancelation(t *testing.T) {
+	client, server := newStreamPair(t)
 
 	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
-
-	qstr.EXPECT().Write([]byte("foo")).Return(3, nil)
-	qstr.EXPECT().Write([]byte("baz")).Return(0, os.ErrDeadlineExceeded)
-	qstr.EXPECT().Write([]byte("bar")).Return(0, assert.AnError)
+	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
 	_, err := str.Write([]byte("foo"))
 	require.NoError(t, err)
@@ -115,57 +127,34 @@ func TestStateTrackingStreamWrite(t *testing.T) {
 	checkDatagramSend(t, str)
 
 	// deadline errors are ignored
+	client.SetWriteDeadline(time.Now())
 	_, err = str.Write([]byte("baz"))
 	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 	require.Nil(t, clearer.cleared)
 	checkDatagramReceive(t, str)
 	checkDatagramSend(t, str)
+	client.SetWriteDeadline(time.Time{})
 
-	_, err = str.Write([]byte("bar"))
-	require.ErrorIs(t, err, assert.AnError)
+	server.CancelRead(123)
+
+	var writeErr error
+	require.Eventually(t, func() bool {
+		_, writeErr = str.Write([]byte("bar"))
+		return writeErr != nil
+	}, time.Second, scaleDuration(time.Millisecond))
+	expectedErr := &quic.StreamError{Remote: true, StreamID: server.StreamID(), ErrorCode: 123}
+	require.ErrorIs(t, writeErr, expectedErr)
 	require.Nil(t, clearer.cleared)
 	checkDatagramReceive(t, str)
-	require.ErrorIs(t, str.SendDatagram([]byte("test")), assert.AnError)
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
 }
 
-func TestStateTrackingStreamCancelRead(t *testing.T) {
-	const streamID quic.StreamID = 42
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+func TestStateTrackingStreamLocalCancelation(t *testing.T) {
+	client, _ := newStreamPair(t)
 
 	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
+	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
-	buf := bytes.NewBuffer([]byte("foobar"))
-	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	qstr.EXPECT().CancelRead(quic.StreamErrorCode(1337))
-	_, err := str.Read(make([]byte, 3))
-	require.NoError(t, err)
-	require.Nil(t, clearer.cleared)
-	checkDatagramReceive(t, str)
-	checkDatagramSend(t, str)
-
-	str.CancelRead(1337)
-	require.Nil(t, clearer.cleared)
-	_, err = str.ReceiveDatagram(canceledCtx())
-	require.ErrorIs(t, err, &quic.StreamError{StreamID: streamID, ErrorCode: 1337})
-	checkDatagramSend(t, str)
-}
-
-func TestStateTrackingStreamCancelWrite(t *testing.T) {
-	const streamID quic.StreamID = 1234
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
-
-	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
-
-	qstr.EXPECT().Write(gomock.Any())
-	qstr.EXPECT().CancelWrite(quic.StreamErrorCode(1337))
 	_, err := str.Write([]byte("foobar"))
 	require.NoError(t, err)
 	require.Nil(t, clearer.cleared)
@@ -175,30 +164,26 @@ func TestStateTrackingStreamCancelWrite(t *testing.T) {
 	str.CancelWrite(1337)
 	require.Nil(t, clearer.cleared)
 	checkDatagramReceive(t, str)
-	require.ErrorIs(t, str.SendDatagram([]byte("test")), &quic.StreamError{StreamID: streamID, ErrorCode: 1337})
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), &quic.StreamError{StreamID: client.StreamID(), ErrorCode: 1337})
 }
 
-func TestStateTrackingStreamContext(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes()
-	ctx, cancel := context.WithCancelCause(context.Background())
-	qstr.EXPECT().Context().Return(ctx).AnyTimes()
+func TestStateTrackingStreamClose(t *testing.T) {
+	client, _ := newStreamPair(t)
 
 	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
+	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
 	require.Nil(t, clearer.cleared)
 	checkDatagramReceive(t, str)
 	checkDatagramSend(t, str)
 
-	cancel(assert.AnError)
+	require.NoError(t, client.Close())
 	require.Eventually(t, func() bool {
 		err := str.SendDatagram([]byte("test"))
 		if err == nil {
 			return false
 		}
-		require.ErrorIs(t, err, assert.AnError)
+		require.ErrorIs(t, err, context.Canceled)
 		return true
 	}, time.Second, scaleDuration(5*time.Millisecond))
 
@@ -207,70 +192,67 @@ func TestStateTrackingStreamContext(t *testing.T) {
 }
 
 func TestStateTrackingStreamReceiveThenSend(t *testing.T) {
-	streamID := quic.StreamID(1234)
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+	client, server := newStreamPair(t)
 
 	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
+	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
-	buf := bytes.NewBuffer([]byte("foobar"))
-	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	_, err := io.ReadAll(str)
+	_, err := server.Write([]byte("foobar"))
+	require.NoError(t, err)
+	require.NoError(t, server.Close())
+
+	_, err = io.ReadAll(str)
 	require.NoError(t, err)
 
 	require.Nil(t, clearer.cleared)
 	_, err = str.ReceiveDatagram(canceledCtx())
 	require.ErrorIs(t, err, io.EOF)
 
-	testErr := errors.New("test error")
-	qstr.EXPECT().Write([]byte("bar")).Return(0, testErr)
+	client.CancelWrite(123)
 
+	id := client.StreamID()
 	_, err = str.Write([]byte("bar"))
-	require.ErrorIs(t, err, testErr)
-	require.ErrorIs(t, str.SendDatagram([]byte("test")), testErr)
+	require.ErrorIs(t, err, &quic.StreamError{StreamID: id, ErrorCode: 123})
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), &quic.StreamError{StreamID: id, ErrorCode: 123})
 
-	require.Equal(t, &streamID, clearer.cleared)
+	require.Equal(t, &id, clearer.cleared)
 }
 
 func TestStateTrackingStreamSendThenReceive(t *testing.T) {
-	streamID := quic.StreamID(1337)
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(streamID)
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+	client, server := newStreamPair(t)
 
 	var clearer mockStreamClearer
-	str := newStateTrackingStream(qstr, &clearer, func(b []byte) error { return nil })
+	str := newStateTrackingStream(client, &clearer, func(b []byte) error { return nil })
 
-	testErr := errors.New("test error")
-	qstr.EXPECT().Write([]byte("bar")).Return(0, testErr)
+	server.CancelRead(1234)
 
-	_, err := str.Write([]byte("bar"))
-	require.ErrorIs(t, err, testErr)
+	var writeErr error
+	require.Eventually(t, func() bool {
+		_, writeErr = str.Write([]byte("bar"))
+		return writeErr != nil
+	}, time.Second, scaleDuration(time.Millisecond))
+	id := server.StreamID()
+	expectedErr := &quic.StreamError{Remote: true, StreamID: id, ErrorCode: 1234}
+	require.ErrorIs(t, writeErr, expectedErr)
 	require.Nil(t, clearer.cleared)
-	require.ErrorIs(t, str.SendDatagram([]byte("test")), testErr)
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
 
-	buf := bytes.NewBuffer([]byte("foobar"))
-	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	_, err := server.Write([]byte("foobar"))
+	require.NoError(t, err)
+	require.NoError(t, server.Close())
 
 	_, err = io.ReadAll(str)
 	require.NoError(t, err)
 	_, err = str.ReceiveDatagram(canceledCtx())
 	require.ErrorIs(t, err, io.EOF)
 
-	require.Equal(t, &streamID, clearer.cleared)
+	require.Equal(t, &id, clearer.cleared)
 }
 
 func TestDatagramReceiving(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(quic.StreamID(1337))
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+	client, _ := newStreamPair(t)
 
-	str := newStateTrackingStream(qstr, nil, func(b []byte) error { return nil })
+	str := newStateTrackingStream(client, nil, func(b []byte) error { return nil })
 	type result struct {
 		data []byte
 		err  error
@@ -319,12 +301,9 @@ func TestDatagramReceiving(t *testing.T) {
 func TestDatagramSending(t *testing.T) {
 	var sendQueue [][]byte
 	errors := []error{nil, nil, assert.AnError}
-	mockCtrl := gomock.NewController(t)
-	qstr := mockquic.NewMockStream(mockCtrl)
-	qstr.EXPECT().StreamID().AnyTimes().Return(quic.StreamID(1337))
-	qstr.EXPECT().Context().Return(context.Background()).AnyTimes()
+	client, _ := newStreamPair(t)
 
-	str := newStateTrackingStream(qstr, nil, func(b []byte) error {
+	str := newStateTrackingStream(client, nil, func(b []byte) error {
 		sendQueue = append(sendQueue, b)
 		err := errors[0]
 		errors = errors[1:]
