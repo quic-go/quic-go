@@ -113,7 +113,7 @@ func (c *MockStreamSenderonHasStreamControlFrameCall) DoAndReturn(f func(protoco
 }
 
 // onHasStreamData mocks base method.
-func (m *MockStreamSender) onHasStreamData(arg0 protocol.StreamID, arg1 sendStreamI) {
+func (m *MockStreamSender) onHasStreamData(arg0 protocol.StreamID, arg1 *SendStream) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "onHasStreamData", arg0, arg1)
 }
@@ -137,13 +137,13 @@ func (c *MockStreamSenderonHasStreamDataCall) Return() *MockStreamSenderonHasStr
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamSenderonHasStreamDataCall) Do(f func(protocol.StreamID, sendStreamI)) *MockStreamSenderonHasStreamDataCall {
+func (c *MockStreamSenderonHasStreamDataCall) Do(f func(protocol.StreamID, *SendStream)) *MockStreamSenderonHasStreamDataCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamSenderonHasStreamDataCall) DoAndReturn(f func(protocol.StreamID, sendStreamI)) *MockStreamSenderonHasStreamDataCall {
+func (c *MockStreamSenderonHasStreamDataCall) DoAndReturn(f func(protocol.StreamID, *SendStream)) *MockStreamSenderonHasStreamDataCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

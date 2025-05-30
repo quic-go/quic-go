@@ -89,40 +89,6 @@ type ReceiveStream interface {
 	SetReadDeadline(t time.Time) error
 }
 
-// A SendStream is a unidirectional Send Stream.
-type SendStream interface {
-	// StreamID returns the stream ID.
-	StreamID() StreamID
-	// Write writes data to the stream.
-	// Write can be made to time out using SetDeadline and SetWriteDeadline.
-	// If the stream was canceled, the error is a StreamError.
-	io.Writer
-	// Close closes the write-direction of the stream.
-	// Future calls to Write are not permitted after calling Close.
-	// It must not be called concurrently with Write.
-	// It must not be called after calling CancelWrite.
-	io.Closer
-	// CancelWrite aborts sending on this stream.
-	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
-	// Write will unblock immediately, and future calls to Write will fail.
-	// When called multiple times it is a no-op.
-	// When called after Close, it aborts delivery. Note that there is no guarantee if
-	// the peer will receive the FIN or the reset first.
-	CancelWrite(StreamErrorCode)
-	// The Context is canceled as soon as the write-side of the stream is closed.
-	// This happens when Close() or CancelWrite() is called, or when the peer
-	// cancels the read-side of their stream.
-	// The cancellation cause is set to the error that caused the stream to
-	// close, or `context.Canceled` in case the stream is closed without error.
-	Context() context.Context
-	// SetWriteDeadline sets the deadline for future Write calls
-	// and any currently-blocked Write call.
-	// Even if write times out, it may return n > 0, indicating that
-	// some data was successfully written.
-	// A zero value for t means Write will not time out.
-	SetWriteDeadline(t time.Time) error
-}
-
 // A Connection is a QUIC connection between two peers.
 // Calls to the connection (and to streams) can return the following types of errors:
 //   - [ApplicationError]: for errors triggered by the application running on top of QUIC
@@ -155,13 +121,13 @@ type Connection interface {
 	// or the stream has been reset or closed.
 	// When reaching the peer's stream limit, it is not possible to open a new stream until the
 	// peer raises the stream limit. In that case, a StreamLimitReachedError is returned.
-	OpenUniStream() (SendStream, error)
+	OpenUniStream() (*SendStream, error)
 	// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream,
 	// or the stream has been reset or closed.
-	OpenUniStreamSync(context.Context) (SendStream, error)
+	OpenUniStreamSync(context.Context) (*SendStream, error)
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
