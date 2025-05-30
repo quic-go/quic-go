@@ -219,15 +219,19 @@ func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		streamsMap := NewMockStreamManager(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		str := NewMockReceiveStreamI(mockCtrl)
+		mockSender := NewMockStreamSender(mockCtrl)
+		mockSender.EXPECT().onHasStreamData(streamID, gomock.Any()).AnyTimes()
+		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+		str := newReceiveStream(streamID, mockSender, mockFC)
 		// STREAM frame
+		mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(len(f.Data)), false, gomock.Any())
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		str.EXPECT().handleStreamFrame(f, now)
 		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
 		require.NoError(t, err)
 		// RESET_STREAM frame
+		mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1337), true, gomock.Any())
+		mockFC.EXPECT().Abandon()
 		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		str.EXPECT().handleResetStreamFrame(rsf, now)
 		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
 		require.NoError(t, err)
 		// STREAM_DATA_BLOCKED frames are not passed to the stream
@@ -399,17 +403,18 @@ func TestConnectionAcceptStreams(t *testing.T) {
 	// bidirectional streams
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	mstr := &Stream{}
-	streamsMap.EXPECT().AcceptStream(ctx).Return(mstr, nil)
+	str1 := &Stream{}
+	streamsMap.EXPECT().AcceptStream(ctx).Return(str1, nil)
 	str, err := tc.conn.AcceptStream(ctx)
 	require.NoError(t, err)
-	require.Equal(t, mstr, str)
+	require.Equal(t, str1, str)
 
 	// unidirectional streams
-	streamsMap.EXPECT().AcceptUniStream(ctx).Return(mstr, nil)
+	str2 := &ReceiveStream{}
+	streamsMap.EXPECT().AcceptUniStream(ctx).Return(str2, nil)
 	ustr, err := tc.conn.AcceptUniStream(ctx)
 	require.NoError(t, err)
-	require.Equal(t, mstr, ustr)
+	require.Equal(t, str2, ustr)
 }
 
 func TestConnectionServerInvalidFrames(t *testing.T) {

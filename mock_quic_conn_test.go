@@ -81,10 +81,10 @@ func (c *MockQUICConnAcceptStreamCall) DoAndReturn(f func(context.Context) (*Str
 }
 
 // AcceptUniStream mocks base method.
-func (m *MockQUICConn) AcceptUniStream(arg0 context.Context) (ReceiveStream, error) {
+func (m *MockQUICConn) AcceptUniStream(arg0 context.Context) (*ReceiveStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptUniStream", arg0)
-	ret0, _ := ret[0].(ReceiveStream)
+	ret0, _ := ret[0].(*ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -102,19 +102,19 @@ type MockQUICConnAcceptUniStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockQUICConnAcceptUniStreamCall) Return(arg0 ReceiveStream, arg1 error) *MockQUICConnAcceptUniStreamCall {
+func (c *MockQUICConnAcceptUniStreamCall) Return(arg0 *ReceiveStream, arg1 error) *MockQUICConnAcceptUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICConnAcceptUniStreamCall) Do(f func(context.Context) (ReceiveStream, error)) *MockQUICConnAcceptUniStreamCall {
+func (c *MockQUICConnAcceptUniStreamCall) Do(f func(context.Context) (*ReceiveStream, error)) *MockQUICConnAcceptUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICConnAcceptUniStreamCall) DoAndReturn(f func(context.Context) (ReceiveStream, error)) *MockQUICConnAcceptUniStreamCall {
+func (c *MockQUICConnAcceptUniStreamCall) DoAndReturn(f func(context.Context) (*ReceiveStream, error)) *MockQUICConnAcceptUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
