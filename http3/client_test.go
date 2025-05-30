@@ -542,24 +542,26 @@ func testClientStreamHijacking(t *testing.T, bidirectional, doHijack bool, strea
 
 	clientConn, serverConn := newConnPair(t)
 
-	buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
+	b := quicvarint.Append(nil, 0x41)
 	if bidirectional {
 		str, err := serverConn.OpenStream()
 		require.NoError(t, err)
-		_, err = str.Write(buf.Bytes())
+		_, err = str.Write(b)
 		require.NoError(t, err)
 
 		if streamReadErr != nil {
 			str.CancelWrite(1337)
+			time.Sleep(scaleDuration(10 * time.Millisecond)) // wait for the reset to be received
 		}
 	} else {
 		str, err := serverConn.OpenUniStream()
 		require.NoError(t, err)
-		_, err = str.Write(buf.Bytes())
+		_, err = str.Write(b)
 		require.NoError(t, err)
 
 		if streamReadErr != nil {
 			str.CancelWrite(1337)
+			time.Sleep(scaleDuration(10 * time.Millisecond)) // wait for the reset to be received
 		}
 	}
 
