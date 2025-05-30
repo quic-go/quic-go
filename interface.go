@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"io"
 	"net"
 	"time"
 
@@ -70,25 +69,6 @@ type connTracingCtxKey struct{}
 // context returned by tls.Config.ClientInfo.Context.
 var QUICVersionContextKey = handshake.QUICVersionContextKey
 
-// A ReceiveStream is a unidirectional Receive Stream.
-type ReceiveStream interface {
-	// StreamID returns the stream ID.
-	StreamID() StreamID
-	// Read reads data from the stream.
-	// Read can be made to time out using SetDeadline and SetReadDeadline.
-	// If the stream was canceled, the error is a StreamError.
-	io.Reader
-	// CancelRead aborts receiving on this stream.
-	// It will ask the peer to stop transmitting stream data.
-	// Read will unblock immediately, and future Read calls will fail.
-	// When called multiple times or after reading the io.EOF it is a no-op.
-	CancelRead(StreamErrorCode)
-	// SetReadDeadline sets the deadline for future Read calls and
-	// any currently-blocked Read call.
-	// A zero value for t means Read will not time out.
-	SetReadDeadline(t time.Time) error
-}
-
 // A Connection is a QUIC connection between two peers.
 // Calls to the connection (and to streams) can return the following types of errors:
 //   - [ApplicationError]: for errors triggered by the application running on top of QUIC
@@ -101,7 +81,7 @@ type Connection interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	AcceptStream(context.Context) (*Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
-	AcceptUniStream(context.Context) (ReceiveStream, error)
+	AcceptUniStream(context.Context) (*ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream,

@@ -54,7 +54,7 @@ type streamsMap struct {
 	outgoingBidiStreams *outgoingStreamsMap[*Stream]
 	outgoingUniStreams  *outgoingStreamsMap[*SendStream]
 	incomingBidiStreams *incomingStreamsMap[*Stream]
-	incomingUniStreams  *incomingStreamsMap[receiveStreamI]
+	incomingUniStreams  *incomingStreamsMap[*ReceiveStream]
 	reset               bool
 }
 
@@ -110,7 +110,7 @@ func (m *streamsMap) initMaps() {
 	)
 	m.incomingUniStreams = newIncomingStreamsMap(
 		protocol.StreamTypeUni,
-		func(num protocol.StreamNum) receiveStreamI {
+		func(num protocol.StreamNum) *ReceiveStream {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective.Opposite())
 			return newReceiveStream(id, m.sender, m.newFlowController(id))
 		},
@@ -179,7 +179,7 @@ func (m *streamsMap) AcceptStream(ctx context.Context) (*Stream, error) {
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective.Opposite())
 }
 
-func (m *streamsMap) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
+func (m *streamsMap) AcceptUniStream(ctx context.Context) (*ReceiveStream, error) {
 	m.mutex.Lock()
 	reset := m.reset
 	mm := m.incomingUniStreams
@@ -208,7 +208,7 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	panic("")
 }
 
-func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
+func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (*ReceiveStream, error) {
 	str, err := m.getOrOpenReceiveStream(id)
 	if err != nil {
 		return nil, &qerr.TransportError{
@@ -219,7 +219,7 @@ func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStream
 	return str, nil
 }
 
-func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
+func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (*ReceiveStream, error) {
 	num := id.StreamNum()
 	switch id.Type() {
 	case protocol.StreamTypeUni:
@@ -235,13 +235,13 @@ func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (receiveStream
 			if str == nil && err == nil {
 				return nil, nil
 			}
-			return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
+			return str.ReceiveStream, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		} else {
 			str, err := m.incomingBidiStreams.GetOrOpenStream(num)
 			if str == nil && err == nil {
 				return nil, nil
 			}
-			return str, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
+			return str.ReceiveStream, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		}
 	}
 	panic("")

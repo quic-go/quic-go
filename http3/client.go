@@ -84,7 +84,7 @@ func newClientConn(
 	enableDatagrams bool,
 	additionalSettings map[uint64]uint64,
 	streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error),
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, quic.ReceiveStream, error) (hijacked bool),
+	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool),
 	maxResponseHeaderBytes int64,
 	disableCompression bool,
 	logger *slog.Logger,

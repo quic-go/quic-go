@@ -133,7 +133,12 @@ func newConnPairWithDatagrams(t *testing.T) (client, server quic.EarlyConnection
 	return cl, conn
 }
 
-func expectStreamReadReset(t *testing.T, str quic.ReceiveStream, errCode quic.StreamErrorCode) {
+type quicReceiveStream interface {
+	io.Reader
+	SetReadDeadline(time.Time) error
+}
+
+func expectStreamReadReset(t *testing.T, str quicReceiveStream, errCode quic.StreamErrorCode) {
 	t.Helper()
 
 	str.SetReadDeadline(time.Now().Add(time.Second))

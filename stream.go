@@ -49,7 +49,7 @@ func (s *uniStreamSender) onHasStreamControlFrame(id protocol.StreamID, str stre
 var _ streamSender = &uniStreamSender{}
 
 type Stream struct {
-	receiveStream
+	*ReceiveStream
 	*SendStream
 
 	completedMutex         sync.Mutex
@@ -57,8 +57,6 @@ type Stream struct {
 	receiveStreamCompleted bool
 	sendStreamCompleted    bool
 }
-
-var _ streamControlFrameGetter = &receiveStream{}
 
 // newStream creates a new Stream
 func newStream(
@@ -93,7 +91,7 @@ func newStream(
 			sender.onHasStreamControlFrame(streamID, s)
 		},
 	}
-	s.receiveStream = *newReceiveStream(streamID, senderForReceiveStream, flowController)
+	s.ReceiveStream = newReceiveStream(streamID, senderForReceiveStream, flowController)
 	return s
 }
 
@@ -112,7 +110,7 @@ func (s *Stream) getControlFrame(now time.Time) (_ ackhandler.Frame, ok, hasMore
 	if ok {
 		return f, true, true
 	}
-	return s.receiveStream.getControlFrame(now)
+	return s.ReceiveStream.getControlFrame(now)
 }
 
 func (s *Stream) SetDeadline(t time.Time) error {
@@ -126,7 +124,7 @@ func (s *Stream) SetDeadline(t time.Time) error {
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
 func (s *Stream) closeForShutdown(err error) {
 	s.SendStream.closeForShutdown(err)
-	s.receiveStream.closeForShutdown(err)
+	s.ReceiveStream.closeForShutdown(err)
 }
 
 // checkIfCompleted is called from the uniStreamSender, when one of the stream halves is completed.
