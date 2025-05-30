@@ -24,7 +24,7 @@ var errDeadline net.Error = &deadlineError{}
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
 	onHasConnectionData()
-	onHasStreamData(protocol.StreamID, sendStreamI)
+	onHasStreamData(protocol.StreamID, *SendStream)
 	onHasStreamControlFrame(protocol.StreamID, streamControlFrameGetter)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
@@ -38,7 +38,7 @@ type uniStreamSender struct {
 	onHasStreamControlFrameImpl func(protocol.StreamID, streamControlFrameGetter)
 }
 
-func (s *uniStreamSender) onHasStreamData(id protocol.StreamID, str sendStreamI) {
+func (s *uniStreamSender) onHasStreamData(id protocol.StreamID, str *SendStream) {
 	s.streamSender.onHasStreamData(id, str)
 }
 func (s *uniStreamSender) onStreamCompleted(protocol.StreamID) { s.onStreamCompletedImpl() }
@@ -50,7 +50,7 @@ var _ streamSender = &uniStreamSender{}
 
 type Stream struct {
 	receiveStream
-	sendStream
+	*SendStream
 
 	completedMutex         sync.Mutex
 	sender                 streamSender
@@ -80,7 +80,7 @@ func newStream(
 			sender.onHasStreamControlFrame(streamID, s)
 		},
 	}
-	s.sendStream = *newSendStream(ctx, streamID, senderForSendStream, flowController)
+	s.SendStream = newSendStream(ctx, streamID, senderForSendStream, flowController)
 	senderForReceiveStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {
@@ -100,15 +100,15 @@ func newStream(
 // need to define StreamID() here, since both receiveStream and readStream have a StreamID()
 func (s *Stream) StreamID() protocol.StreamID {
 	// the result is same for receiveStream and sendStream
-	return s.sendStream.StreamID()
+	return s.SendStream.StreamID()
 }
 
 func (s *Stream) Close() error {
-	return s.sendStream.Close()
+	return s.SendStream.Close()
 }
 
 func (s *Stream) getControlFrame(now time.Time) (_ ackhandler.Frame, ok, hasMore bool) {
-	f, ok, _ := s.sendStream.getControlFrame(now)
+	f, ok, _ := s.SendStream.getControlFrame(now)
 	if ok {
 		return f, true, true
 	}
@@ -125,7 +125,7 @@ func (s *Stream) SetDeadline(t time.Time) error {
 // It makes Read and Write unblock (and return the error) immediately.
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
 func (s *Stream) closeForShutdown(err error) {
-	s.sendStream.closeForShutdown(err)
+	s.SendStream.closeForShutdown(err)
 	s.receiveStream.closeForShutdown(err)
 }
 

@@ -30,8 +30,8 @@ var errGoAway = errors.New("connection in graceful shutdown")
 type Connection interface {
 	OpenStream() (*quic.Stream, error)
 	OpenStreamSync(context.Context) (*quic.Stream, error)
-	OpenUniStream() (quic.SendStream, error)
-	OpenUniStreamSync(context.Context) (quic.SendStream, error)
+	OpenUniStream() (*quic.SendStream, error)
+	OpenUniStreamSync(context.Context) (*quic.SendStream, error)
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 	CloseWithError(quic.ApplicationErrorCode, string) error

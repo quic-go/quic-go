@@ -147,7 +147,12 @@ func expectStreamReadReset(t *testing.T, str quic.ReceiveStream, errCode quic.St
 	require.Equal(t, errCode, strErr.ErrorCode)
 }
 
-func expectStreamWriteReset(t *testing.T, str quic.SendStream, errCode quic.StreamErrorCode) {
+type quicSendStream interface {
+	io.Writer
+	Context() context.Context
+}
+
+func expectStreamWriteReset(t *testing.T, str quicSendStream, errCode quic.StreamErrorCode) {
 	t.Helper()
 
 	select {

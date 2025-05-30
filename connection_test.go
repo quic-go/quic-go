@@ -284,15 +284,17 @@ func TestConnectionHandleSendStreamFrames(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		streamsMap := NewMockStreamManager(mockCtrl)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		str := NewMockSendStreamI(mockCtrl)
+		mockSender := NewMockStreamSender(mockCtrl)
+		mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any()).AnyTimes()
+		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC)
 		// STOP_SENDING frame
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
-		str.EXPECT().handleStopSendingFrame(ss)
 		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
 		require.NoError(t, err)
 		// MAX_STREAM_DATA frame
+		mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(1337))
 		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
-		str.EXPECT().updateSendWindow(msd.MaximumStreamData)
 		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
 		require.NoError(t, err)
 	})
@@ -363,29 +365,30 @@ func TestConnectionOpenStreams(t *testing.T) {
 	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
 
 	// using OpenStream
-	mstr := &Stream{}
-	streamsMap.EXPECT().OpenStream().Return(mstr, nil)
+	str1 := &Stream{}
+	streamsMap.EXPECT().OpenStream().Return(str1, nil)
 	str, err := tc.conn.OpenStream()
 	require.NoError(t, err)
-	require.Equal(t, mstr, str)
+	require.Equal(t, str1, str)
 
 	// using OpenStreamSync
-	streamsMap.EXPECT().OpenStreamSync(context.Background()).Return(mstr, nil)
+	streamsMap.EXPECT().OpenStreamSync(context.Background()).Return(str1, nil)
 	str, err = tc.conn.OpenStreamSync(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, mstr, str)
+	require.Equal(t, str1, str)
 
 	// using OpenUniStream
-	streamsMap.EXPECT().OpenUniStream().Return(mstr, nil)
+	str2 := &SendStream{}
+	streamsMap.EXPECT().OpenUniStream().Return(str2, nil)
 	ustr, err := tc.conn.OpenUniStream()
 	require.NoError(t, err)
-	require.Equal(t, mstr, ustr)
+	require.Equal(t, str2, ustr)
 
 	// using OpenUniStreamSync
-	streamsMap.EXPECT().OpenUniStreamSync(context.Background()).Return(mstr, nil)
+	streamsMap.EXPECT().OpenUniStreamSync(context.Background()).Return(str2, nil)
 	ustr, err = tc.conn.OpenUniStreamSync(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, mstr, ustr)
+	require.Equal(t, str2, ustr)
 }
 
 func TestConnectionAcceptStreams(t *testing.T) {
