@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"net/http/httptrace"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/quic-go/qpack"
@@ -32,11 +32,12 @@ func TestStreamReadDataFrames(t *testing.T) {
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
+	clientConn, _ := newConnPair(t)
 	str := newStream(
 		qstr,
 		newConnection(
-			context.Background(),
-			mockquic.NewMockEarlyConnection(mockCtrl),
+			clientConn.Context(),
+			clientConn,
 			false,
 			protocol.PerspectiveClient,
 			nil,
@@ -78,30 +79,32 @@ func TestStreamReadDataFrames(t *testing.T) {
 
 func TestStreamInvalidFrame(t *testing.T) {
 	var buf bytes.Buffer
+	b := (&settingsFrame{}).Append(nil)
+	buf.Write(b)
+
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
-	var errCode quic.ApplicationErrorCode
-	conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(
-		func(e quic.ApplicationErrorCode, msg string) error {
-			errCode = e
-			return nil
-		},
-	).AnyTimes()
+	clientConn, serverConn := newConnPair(t)
 
 	str := newStream(
 		qstr,
-		newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0),
+		newConnection(context.Background(), clientConn, false, protocol.PerspectiveClient, nil, 0),
 		func(r io.Reader, u uint64) error { return nil },
 	)
 
-	b := (&settingsFrame{}).Append(nil)
-	buf.Write(b)
 	_, err := str.Read([]byte{0})
 	require.ErrorContains(t, err, "peer sent an unexpected frame")
-	require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), errCode)
+
+	select {
+	case <-serverConn.Context().Done():
+		var appErr *quic.ApplicationError
+		require.ErrorAs(t, context.Cause(serverConn.Context()), &appErr)
+		require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), appErr.ErrorCode)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func TestStreamWrite(t *testing.T) {
@@ -136,11 +139,11 @@ func TestRequestStream(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
 	requestWriter := newRequestWriter()
-	conn := mockquic.NewMockEarlyConnection(mockCtrl)
+	clientConn, _ := newConnPair(t)
 	str := newRequestStream(
 		newStream(
 			qstr,
-			newConnection(context.Background(), conn, false, protocol.PerspectiveClient, nil, 0),
+			newConnection(context.Background(), clientConn, false, protocol.PerspectiveClient, nil, 0),
 			func(r io.Reader, u uint64) error { return nil },
 		),
 		requestWriter,
