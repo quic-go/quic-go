@@ -94,6 +94,11 @@ func newConnPair(t *testing.T) (client, server quic.EarlyConnection) {
 	conn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.CloseWithError(0, "") })
+	select {
+	case <-conn.HandshakeComplete():
+	case <-ctx.Done():
+		t.Fatal("timeout")
+	}
 	return cl, conn
 }
 
@@ -120,6 +125,11 @@ func newConnPairWithDatagrams(t *testing.T) (client, server quic.EarlyConnection
 	conn, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.CloseWithError(0, "") })
+	select {
+	case <-conn.HandshakeComplete():
+	case <-ctx.Done():
+		t.Fatal("timeout")
+	}
 	return cl, conn
 }
 

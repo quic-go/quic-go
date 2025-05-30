@@ -2,17 +2,17 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 func testFrameParserEOF(t *testing.T, data []byte) {
@@ -30,20 +30,29 @@ func testFrameParserEOF(t *testing.T, data []byte) {
 func TestParserReservedFrameType(t *testing.T) {
 	for _, ft := range []uint64{0x2, 0x6, 0x8, 0x9} {
 		t.Run(fmt.Sprintf("type %#x", ft), func(t *testing.T) {
-			mockCtrl := gomock.NewController(t)
-			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			client, server := newConnPair(t)
+
 			data := quicvarint.Append(nil, ft)
 			data = quicvarint.Append(data, 6)
 			data = append(data, []byte("foobar")...)
 
-			conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any())
 			fp := frameParser{
 				r:    bytes.NewReader(data),
-				conn: conn,
+				conn: client,
 			}
 			_, err := fp.ParseNext()
 			require.Error(t, err)
 			require.ErrorContains(t, err, "http3: reserved frame type")
+
+			select {
+			case <-server.Context().Done():
+				require.ErrorIs(t,
+					context.Cause(server.Context()),
+					&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeFrameUnexpected)},
+				)
+			case <-time.After(time.Second):
+				t.Fatal("timeout")
+			}
 		})
 	}
 }
