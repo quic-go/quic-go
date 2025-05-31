@@ -191,6 +191,45 @@ func (c *MockSentPacketHandlerMigratedPathCall) DoAndReturn(f func(time.Time, pr
 	return c
 }
 
+// NextPacketNumber mocks base method.
+func (m *MockSentPacketHandler) NextPacketNumber(arg0 protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextPacketNumber", arg0)
+	ret0, _ := ret[0].(protocol.PacketNumber)
+	ret1, _ := ret[1].(protocol.PacketNumberLen)
+	return ret0, ret1
+}
+
+// NextPacketNumber indicates an expected call of NextPacketNumber.
+func (mr *MockSentPacketHandlerMockRecorder) NextPacketNumber(arg0 any) *MockSentPacketHandlerNextPacketNumberCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).NextPacketNumber), arg0)
+	return &MockSentPacketHandlerNextPacketNumberCall{Call: call}
+}
+
+// MockSentPacketHandlerNextPacketNumberCall wrap *gomock.Call
+type MockSentPacketHandlerNextPacketNumberCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSentPacketHandlerNextPacketNumberCall) Return(arg0 protocol.PacketNumber, arg1 protocol.PacketNumberLen) *MockSentPacketHandlerNextPacketNumberCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSentPacketHandlerNextPacketNumberCall) Do(f func(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)) *MockSentPacketHandlerNextPacketNumberCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSentPacketHandlerNextPacketNumberCall) DoAndReturn(f func(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)) *MockSentPacketHandlerNextPacketNumberCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // OnLossDetectionTimeout mocks base method.
 func (m *MockSentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 	m.ctrl.T.Helper()
@@ -225,83 +264,6 @@ func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) Do(f func(time.Time) e
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockSentPacketHandlerOnLossDetectionTimeoutCall) DoAndReturn(f func(time.Time) error) *MockSentPacketHandlerOnLossDetectionTimeoutCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// PeekPacketNumber mocks base method.
-func (m *MockSentPacketHandler) PeekPacketNumber(arg0 protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PeekPacketNumber", arg0)
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	ret1, _ := ret[1].(protocol.PacketNumberLen)
-	return ret0, ret1
-}
-
-// PeekPacketNumber indicates an expected call of PeekPacketNumber.
-func (mr *MockSentPacketHandlerMockRecorder) PeekPacketNumber(arg0 any) *MockSentPacketHandlerPeekPacketNumberCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PeekPacketNumber), arg0)
-	return &MockSentPacketHandlerPeekPacketNumberCall{Call: call}
-}
-
-// MockSentPacketHandlerPeekPacketNumberCall wrap *gomock.Call
-type MockSentPacketHandlerPeekPacketNumberCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockSentPacketHandlerPeekPacketNumberCall) Return(arg0 protocol.PacketNumber, arg1 protocol.PacketNumberLen) *MockSentPacketHandlerPeekPacketNumberCall {
-	c.Call = c.Call.Return(arg0, arg1)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerPeekPacketNumberCall) Do(f func(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)) *MockSentPacketHandlerPeekPacketNumberCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerPeekPacketNumberCall) DoAndReturn(f func(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)) *MockSentPacketHandlerPeekPacketNumberCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// PopPacketNumber mocks base method.
-func (m *MockSentPacketHandler) PopPacketNumber(arg0 protocol.EncryptionLevel) protocol.PacketNumber {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PopPacketNumber", arg0)
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	return ret0
-}
-
-// PopPacketNumber indicates an expected call of PopPacketNumber.
-func (mr *MockSentPacketHandlerMockRecorder) PopPacketNumber(arg0 any) *MockSentPacketHandlerPopPacketNumberCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PopPacketNumber), arg0)
-	return &MockSentPacketHandlerPopPacketNumberCall{Call: call}
-}
-
-// MockSentPacketHandlerPopPacketNumberCall wrap *gomock.Call
-type MockSentPacketHandlerPopPacketNumberCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockSentPacketHandlerPopPacketNumberCall) Return(arg0 protocol.PacketNumber) *MockSentPacketHandlerPopPacketNumberCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerPopPacketNumberCall) Do(f func(protocol.EncryptionLevel) protocol.PacketNumber) *MockSentPacketHandlerPopPacketNumberCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerPopPacketNumberCall) DoAndReturn(f func(protocol.EncryptionLevel) protocol.PacketNumber) *MockSentPacketHandlerPopPacketNumberCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

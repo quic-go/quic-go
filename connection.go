@@ -1309,7 +1309,7 @@ func (s *connection) handleVersionNegotiationPacket(p receivedPacket) {
 	}
 
 	s.logger.Infof("Switching to QUIC version %s.", newVersion)
-	nextPN, _ := s.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
+	nextPN, _ := s.sentPacketHandler.NextPacketNumber(protocol.EncryptionInitial)
 	s.destroyImpl(&errCloseForRecreating{
 		nextPacketNumber: nextPN,
 		nextVersion:      newVersion,
