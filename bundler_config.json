@@ -1,0 +1,8 @@
+{
+    "source_root": "./",
+    "output_file": "bundle_output.txt",
+    "ignore_file": ".bundleignore",
+    "include_extensions": [
+        ".go"
+    ]
+}

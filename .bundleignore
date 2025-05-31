@@ -1,0 +1,22 @@
+# Ignorer les dossiers courants
+doc
+tests
+.git
+__pycache__
+
+# Fichiers à ignorer
+*.log
+*.tmp
+*.pyc
+bundle_output.txt
+bundler.py
+bundler_config.json
+codecov.yml
+go.mod
+go.sum
+LICENSE
+move_tests.py
+oss-fuzz.sh
+.bundleignore
+.gitignore
+.golangci.yml
