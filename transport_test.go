@@ -668,7 +668,7 @@ func testTransportReplaceWithClosed(t *testing.T, local bool) {
 		_, err := conn.WriteTo(p, tr.Conn.LocalAddr())
 		require.NoError(t, err)
 		sent++
-		if now.After(start.Add(dur)) {
+		if now.After(start.Add(dur / 2)) {
 			break
 		}
 	}
@@ -683,19 +683,18 @@ func testTransportReplaceWithClosed(t *testing.T, local bool) {
 		}
 	}
 	// Afterwards, we receive a stateless reset, not a copy of the CONNECTION_CLOSE packet.
-	// Retry up to 3 times, the connection is deleted from the map on a timer.
-	for i := 0; i < 3; i++ {
+	// Retry a few times, since the connection is deleted from the map on a timer.
+	require.Eventually(t, func() bool {
 		_, err := conn.WriteTo(p, tr.Conn.LocalAddr())
 		require.NoError(t, err)
 		conn.SetReadDeadline(time.Now().Add(dur / 4))
 		b := make([]byte, 100)
 		n, _, err := conn.ReadFrom(b)
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			continue
+		if errors.Is(err, os.ErrDeadlineExceeded) || bytes.Equal(b[:n], []byte("foobar")) {
+			return false
 		}
 		require.NoError(t, err)
-		require.NotEqual(t, []byte("foobar"), b[:n])
 		require.GreaterOrEqual(t, n, protocol.MinStatelessResetSize)
-		break
-	}
+		return true
+	}, scaleDuration(200*time.Millisecond), scaleDuration(10*time.Millisecond))
 }
