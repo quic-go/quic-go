@@ -29,7 +29,7 @@ type SentPacketHandler interface {
 	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */
 
 	ECNMode(isShortHeaderPacket bool) protocol.ECN // isShortHeaderPacket should only be true for non-coalesced 1-RTT packets
-	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
+	NextPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 
 	GetLossDetectionTimeout() time.Time
 	OnLossDetectionTimeout(now time.Time) error

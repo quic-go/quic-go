@@ -834,7 +834,7 @@ func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
 	return h.ecnTracker.Mode()
 }
 
-func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
+func (h *sentPacketHandler) NextPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		return h.nextInitialPN, protocol.PacketNumberLengthForHeader(h.nextInitialPN, h.initialPackets.largestAcked)
