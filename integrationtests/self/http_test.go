@@ -1164,7 +1164,7 @@ func testHTTPRequestAfterGracefulShutdown(t *testing.T, setGetBody bool) {
 	cl := &http.Client{Transport: tr}
 
 	// first request to establish the connection
-	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/", ln.Addr().(*net.UDPAddr).Port))
+	resp, err := cl.Get(fmt.Sprintf("https://%s/", proxy.LocalAddr()))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
@@ -1176,7 +1176,7 @@ func testHTTPRequestAfterGracefulShutdown(t *testing.T, setGetBody bool) {
 			WroteHeaders: func() { headersCount++ },
 		}),
 		http.MethodGet,
-		fmt.Sprintf("https://localhost:%d/echo", ln.Addr().(*net.UDPAddr).Port),
+		fmt.Sprintf("https://%s/echo", proxy.LocalAddr()),
 		io.LimitReader(strings.NewReader("foobar"), 1000),
 	)
 	require.NoError(t, err)
