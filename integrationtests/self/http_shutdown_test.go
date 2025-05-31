@@ -267,7 +267,11 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	tr := &http3.Transport{
 		TLSClientConfig: getTLSClientConfigWithoutServerName(),
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-			conn, err := quic.DialAddrEarly(ctx, addr, tlsCfg, cfg)
+			a, err := net.ResolveUDPAddr("udp", addr)
+			if err != nil {
+				return nil, err
+			}
+			conn, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), a, tlsCfg, cfg)
 			connChan <- conn
 			return conn, err
 		},
@@ -275,18 +279,15 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	cl := &http.Client{Transport: tr}
 
 	proxy := quicproxy.Proxy{
-		Conn:       newUDPConnLocalhost(t),
-		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
-		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
-			return rtt
-		},
+		Conn:        newUDPConnLocalhost(t),
+		ServerAddr:  &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
+		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, _ []byte) time.Duration { return rtt },
 	}
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
-	proxyPort := proxy.LocalAddr().(*net.UDPAddr).Port
 
 	errChan := make(chan error, 1)
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/helloworld", proxyPort), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/helloworld", proxy.LocalAddr()), nil)
 	require.NoError(t, err)
 	go func() {
 		resp, err := cl.Do(req)
