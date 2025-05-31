@@ -9,19 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSequentialPacketNumberGenerator(t *testing.T) {
-	const initialPN protocol.PacketNumber = 123
-	png := newSequentialPacketNumberGenerator(initialPN)
-
-	for i := initialPN; i < initialPN+1000; i++ {
-		require.Equal(t, i, png.Peek())
-		require.Equal(t, i, png.Peek())
-		skipNext, pn := png.Pop()
-		require.False(t, skipNext)
-		require.Equal(t, i, pn)
-	}
-}
-
 func TestSkippingPacketNumberGenerator(t *testing.T) {
 	// the maximum period must be sufficiently small such that using a 32-bit random number is ok
 	require.Less(t, 2*protocol.SkipPacketMaxPeriod, protocol.PacketNumber(math.MaxInt32))

@@ -5,34 +5,6 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
-type packetNumberGenerator interface {
-	Peek() protocol.PacketNumber
-	// Pop pops the packet number.
-	// It reports if the packet number (before the one just popped) was skipped.
-	// It never skips more than one packet number in a row.
-	Pop() (skipped bool, _ protocol.PacketNumber)
-}
-
-type sequentialPacketNumberGenerator struct {
-	next protocol.PacketNumber
-}
-
-var _ packetNumberGenerator = &sequentialPacketNumberGenerator{}
-
-func newSequentialPacketNumberGenerator(initial protocol.PacketNumber) packetNumberGenerator {
-	return &sequentialPacketNumberGenerator{next: initial}
-}
-
-func (p *sequentialPacketNumberGenerator) Peek() protocol.PacketNumber {
-	return p.next
-}
-
-func (p *sequentialPacketNumberGenerator) Pop() (bool, protocol.PacketNumber) {
-	next := p.next
-	p.next++
-	return false, next
-}
-
 // The skippingPacketNumberGenerator generates the packet number for the next packet
 // it randomly skips a packet number every averagePeriod packets (on average).
 // It is guaranteed to never skip two consecutive packet numbers.
@@ -46,9 +18,7 @@ type skippingPacketNumberGenerator struct {
 	rng utils.Rand
 }
 
-var _ packetNumberGenerator = &skippingPacketNumberGenerator{}
-
-func newSkippingPacketNumberGenerator(initial, initialPeriod, maxPeriod protocol.PacketNumber) packetNumberGenerator {
+func newSkippingPacketNumberGenerator(initial, initialPeriod, maxPeriod protocol.PacketNumber) *skippingPacketNumberGenerator {
 	g := &skippingPacketNumberGenerator{
 		next:      initial,
 		period:    initialPeriod,
