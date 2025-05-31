@@ -140,7 +140,6 @@ func TestDatagramLoss(t *testing.T) {
 	proxy := &quicproxy.Proxy{
 		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: server.Addr().(*net.UDPAddr),
-		// Drop about 10% of Short Header packets with DATAGRAM frames
 		DropPacket: func(dir quicproxy.Direction, _, _ net.Addr, packet []byte) bool {
 			if wire.IsLongHeaderPacket(packet[0]) { // don't drop Long Header packets
 				return false
@@ -149,7 +148,8 @@ func TestDatagramLoss(t *testing.T) {
 				return false
 			}
 			total.Add(1)
-			if mrand.Int()%10 == 0 {
+			// drop about 20% of Short Header packets with DATAGRAM frames
+			if mrand.Int()%5 == 0 {
 				switch dir {
 				case quicproxy.DirectionIncoming:
 					droppedIncoming.Add(1)
@@ -196,7 +196,7 @@ func TestDatagramLoss(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < numDatagrams; i++ {
+	for i := range numDatagrams {
 		payload := bytes.Repeat([]byte{uint8(i)}, datagramSize)
 		require.NoError(t, clientConn.SendDatagram(payload))
 		require.NoError(t, serverConn.SendDatagram(payload))
