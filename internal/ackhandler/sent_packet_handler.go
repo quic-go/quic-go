@@ -251,7 +251,26 @@ func (h *sentPacketHandler) SentPacket(
 ) {
 	h.bytesSent += size
 
-	pnSpace := h.getPacketNumberSpace(encLevel)
+	var pnSpace *packetNumberSpace
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		pnSpace = h.initialPackets
+		if pn != h.nextInitialPN {
+			panic("initial packet number mismatch")
+		}
+		h.nextInitialPN++
+	case protocol.EncryptionHandshake:
+		pnSpace = h.handshakePackets
+		if pn != h.nextHandshakePN {
+			panic("handshake packet number mismatch")
+		}
+		h.nextHandshakePN++
+	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+		pnSpace = h.appDataPackets
+		if pn != h.popAppDataPacketNumber() {
+			panic("application data packet number mismatch")
+		}
+	}
 	if h.logger.Debug() && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
 		for p := max(0, pnSpace.largestSent+1); p < pn; p++ {
 			h.logger.Debugf("Skipping packet number %d", p)
@@ -793,8 +812,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 		h.ptoMode = SendPTOHandshake
 	case protocol.Encryption1RTT:
 		// skip a packet number in order to elicit an immediate ACK
-		pn := h.PopPacketNumber(protocol.Encryption1RTT)
-		h.getPacketNumberSpace(protocol.Encryption1RTT).history.SkippedPacket(pn)
+		h.appDataPackets.history.SkippedPacket(h.popAppDataPacketNumber())
 		h.ptoMode = SendPTOAppData
 	default:
 		return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
@@ -830,28 +848,16 @@ func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) 
 	panic("unreachable")
 }
 
-func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) protocol.PacketNumber {
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		pn := h.nextInitialPN
-		h.nextInitialPN++
-		return pn
-	case protocol.EncryptionHandshake:
-		pn := h.nextHandshakePN
-		h.nextHandshakePN++
-		return pn
-	case protocol.Encryption0RTT, protocol.Encryption1RTT:
-		skipped, pn := h.appDataPNG.Pop()
-		if skipped {
-			skippedPN := pn - 1
-			h.appDataPackets.history.SkippedPacket(skippedPN)
-			if h.logger.Debug() {
-				h.logger.Debugf("Skipping packet number %d", skippedPN)
-			}
+func (h *sentPacketHandler) popAppDataPacketNumber() protocol.PacketNumber {
+	skipped, pn := h.appDataPNG.Pop()
+	if skipped {
+		skippedPN := pn - 1
+		h.appDataPackets.history.SkippedPacket(skippedPN)
+		if h.logger.Debug() {
+			h.logger.Debugf("Skipping packet number %d", skippedPN)
 		}
-		return pn
 	}
-	panic("unreachable")
+	return pn
 }
 
 func (h *sentPacketHandler) SendMode(now time.Time) SendMode {

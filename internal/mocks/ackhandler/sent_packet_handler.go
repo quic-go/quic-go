@@ -268,44 +268,6 @@ func (c *MockSentPacketHandlerPeekPacketNumberCall) DoAndReturn(f func(protocol.
 	return c
 }
 
-// PopPacketNumber mocks base method.
-func (m *MockSentPacketHandler) PopPacketNumber(arg0 protocol.EncryptionLevel) protocol.PacketNumber {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PopPacketNumber", arg0)
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	return ret0
-}
-
-// PopPacketNumber indicates an expected call of PopPacketNumber.
-func (mr *MockSentPacketHandlerMockRecorder) PopPacketNumber(arg0 any) *MockSentPacketHandlerPopPacketNumberCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PopPacketNumber), arg0)
-	return &MockSentPacketHandlerPopPacketNumberCall{Call: call}
-}
-
-// MockSentPacketHandlerPopPacketNumberCall wrap *gomock.Call
-type MockSentPacketHandlerPopPacketNumberCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockSentPacketHandlerPopPacketNumberCall) Return(arg0 protocol.PacketNumber) *MockSentPacketHandlerPopPacketNumberCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerPopPacketNumberCall) Do(f func(protocol.EncryptionLevel) protocol.PacketNumber) *MockSentPacketHandlerPopPacketNumberCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerPopPacketNumberCall) DoAndReturn(f func(protocol.EncryptionLevel) protocol.PacketNumber) *MockSentPacketHandlerPopPacketNumberCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // QueueProbePacket mocks base method.
 func (m *MockSentPacketHandler) QueueProbePacket(arg0 protocol.EncryptionLevel) bool {
 	m.ctrl.T.Helper()
