@@ -198,6 +198,9 @@ func testClientResponseValidation(t *testing.T, tr *Transport, rsp []byte, expec
 	select {
 	case err := <-errChan:
 		expectStreamWriteReset(t, str, expectedReset)
+		// The client closes the stream after sending the request,
+		// so we need to wait for the RESET_STREAM frame to be received.
+		time.Sleep(scaleDuration(10 * time.Millisecond))
 		expectStreamReadReset(t, str, expectedReset)
 		return err
 	case <-time.After(time.Second):
