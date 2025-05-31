@@ -207,6 +207,12 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 	_, err = controlStr.Write(quicvarint.Append(nil, streamTypeControlStream))
 	require.NoError(t, err)
 
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn.handleUnidirectionalStreams(nil)
+	}()
+
 	switch readErr {
 	case nil:
 		_, err = controlStr.Write(data)
@@ -223,11 +229,6 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 
 	conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		conn.handleUnidirectionalStreams(nil)
-	}()
 	select {
 	case <-serverConn.Context().Done():
 		require.ErrorIs(t,
