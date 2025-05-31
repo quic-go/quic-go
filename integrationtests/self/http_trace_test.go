@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/http3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,7 +63,13 @@ func TestHTTPClientTrace(t *testing.T) {
 	}
 	ctx := httptrace.WithClientTrace(context.Background(), &trace)
 
-	cl := newHTTP3Client(t)
+	tr := &http3.Transport{
+		TLSClientConfig: getTLSClientConfigWithoutServerName(),
+		QUICConfig:      getQuicConfig(nil),
+	}
+	t.Cleanup(func() { tr.Close() })
+	cl := &http.Client{Transport: tr}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/client-trace", port), nil)
 	require.NoError(t, err)
 	resp, err := cl.Do(req)
