@@ -10,6 +10,8 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"net"
+	"time"
 
 	"github.com/quic-go/quic-go"
 )
@@ -68,6 +70,26 @@ func clientMain() error {
 		return err
 	}
 	defer stream.Close()
+
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{
+		IP:   net.IPv4zero,
+		Port: 0})
+	if err != nil {
+		panic(err)
+	}
+	transport2 := quic.Transport{
+		Conn: udpConn,
+	}
+	path2, err := conn.AddPath(&transport2)
+	if err != nil {
+		panic(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = path2.Probe(ctx)
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Printf("Client: Sending '%s'\n", message)
 	if _, err := stream.Write([]byte(message)); err != nil {
