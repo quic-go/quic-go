@@ -2948,7 +2948,7 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 	calls = append(calls,
 		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 			shortHeaderPacket{}, errNothingToPack,
-		),
+		).MaxTimes(1),
 	)
 	gomock.InOrder(calls...)
 	require.Equal(t, tc.remoteAddr, tc.conn.RemoteAddr())
