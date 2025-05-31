@@ -10,11 +10,13 @@ import (
 	"math/rand/v2"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/integrationtests/tools"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -297,4 +299,24 @@ func contains0RTTPacket(data []byte) bool {
 		data = rest
 	}
 	return false
+}
+
+// addDialCallback explicitly adds the http3.Transport's Dial callback.
+// This is needed since dialing on dual-stack sockets is flaky on macOS,
+// see https://github.com/golang/go/issues/67226.
+func addDialCallback(t *testing.T, tr *http3.Transport) {
+	t.Helper()
+
+	if runtime.GOOS != "darwin" {
+		return
+	}
+
+	require.Nil(t, tr.Dial)
+	tr.Dial = func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+		a, err := net.ResolveUDPAddr("udp", addr)
+		if err != nil {
+			return nil, err
+		}
+		return quic.DialEarly(ctx, newUDPConnLocalhost(t), a, tlsConf, conf)
+	}
 }

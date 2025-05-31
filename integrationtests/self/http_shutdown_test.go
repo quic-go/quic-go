@@ -368,6 +368,7 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 		tlsConf.NextProtos = []string{http3.NextProtoH3}
 		tr := &http3.Transport{TLSClientConfig: tlsConf}
 		defer tr.Close()
+		addDialCallback(t, tr)
 		cl := &http.Client{Transport: tr}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 		require.NoError(t, err)
@@ -396,7 +397,7 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 		// the following values will be ignored when using ServeListener
 		TLSConfig:  tlsConf,
 		QUICConfig: getQuicConfig(nil),
-		Addr:       "127.0.0.1:47283",
+		Addr:       "127.0.0.1:0",
 	}
 
 	serveChan := make(chan error, 1)
@@ -411,7 +412,17 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 		go func() { serveChan <- server.ServeListener(ln) }()
 	} else {
 		go func() { serveChan <- server.ListenAndServe() }()
-		host = server.Addr
+		// The server is listening on a random port, and the only way to get the port
+		// is to parse the Alt-Svc header.
+		var port int
+		require.Eventually(t, func() bool {
+			hdr := make(http.Header)
+			server.SetQUICHeaders(hdr)
+			altSvc := hdr.Get("Alt-Svc")
+			n, err := fmt.Sscanf(altSvc, `h3=":%d"`, &port)
+			return err == nil && n == 1
+		}, time.Second, 10*time.Millisecond)
+		host = fmt.Sprintf("127.0.0.1:%d", port)
 	}
 
 	u := &url.URL{Scheme: "https", Host: host, Path: "/ok"}
@@ -471,10 +482,7 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 		for range 2 {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			err := dial(t, ctx, u)
-			var h3Err *http3.Error
-			require.ErrorAs(t, err, &h3Err)
-			require.Equal(t, http3.ErrCode(1337), h3Err.ErrorCode)
+			require.ErrorIs(t, dial(t, ctx, u), &http3.Error{ErrorCode: 1337, Remote: true})
 			select {
 			case err := <-errChan:
 				require.NoError(t, err)

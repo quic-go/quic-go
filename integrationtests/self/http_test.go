@@ -85,6 +85,7 @@ func newHTTP3Client(t *testing.T) *http.Client {
 		QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		DisableCompression: true,
 	}
+	addDialCallback(t, tr)
 	t.Cleanup(func() { tr.Close() })
 	return &http.Client{Transport: tr}
 }
@@ -356,7 +357,13 @@ func TestHTTPDifferentOrigins(t *testing.T) {
 	})
 	port := startHTTPServer(t, mux)
 
-	cl := newHTTP3Client(t)
+	tr := &http3.Transport{
+		TLSClientConfig: getTLSClientConfigWithoutServerName(),
+		QUICConfig:      getQuicConfig(nil),
+	}
+	t.Cleanup(func() { tr.Close() })
+	cl := &http.Client{Transport: tr}
+
 	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/remote-addr", port))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -888,6 +895,7 @@ func TestHTTP0RTT(t *testing.T) {
 		DisableCompression: true,
 	}
 	defer tr.Close()
+	addDialCallback(t, tr)
 
 	proxyPort := proxy.LocalAddr().(*net.UDPAddr).Port
 	req, err := http.NewRequest(http3.MethodGet0RTT, fmt.Sprintf("https://localhost:%d/0rtt", proxyPort), nil)
@@ -912,6 +920,7 @@ func TestHTTP0RTT(t *testing.T) {
 		DisableCompression: true,
 	}
 	defer tr2.Close()
+	addDialCallback(t, tr2)
 	rsp, err = tr2.RoundTrip(req)
 	require.NoError(t, err)
 	require.Equal(t, 200, rsp.StatusCode)
@@ -949,6 +958,7 @@ func TestHTTPStreamer(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 	tr := http3.Transport{}
+	addDialCallback(t, &tr)
 	cc := tr.NewClientConn(conn)
 	str, err := cc.OpenRequestStream(ctx)
 	require.NoError(t, err)
