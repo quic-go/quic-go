@@ -190,6 +190,44 @@ func (c *MockDatagramStreamContextCall) DoAndReturn(f func() context.Context) *M
 	return c
 }
 
+// QUICStream mocks base method.
+func (m *MockDatagramStream) QUICStream() *quic.Stream {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QUICStream")
+	ret0, _ := ret[0].(*quic.Stream)
+	return ret0
+}
+
+// QUICStream indicates an expected call of QUICStream.
+func (mr *MockDatagramStreamMockRecorder) QUICStream() *MockDatagramStreamQUICStreamCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QUICStream", reflect.TypeOf((*MockDatagramStream)(nil).QUICStream))
+	return &MockDatagramStreamQUICStreamCall{Call: call}
+}
+
+// MockDatagramStreamQUICStreamCall wrap *gomock.Call
+type MockDatagramStreamQUICStreamCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockDatagramStreamQUICStreamCall) Return(arg0 *quic.Stream) *MockDatagramStreamQUICStreamCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockDatagramStreamQUICStreamCall) Do(f func() *quic.Stream) *MockDatagramStreamQUICStreamCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockDatagramStreamQUICStreamCall) DoAndReturn(f func() *quic.Stream) *MockDatagramStreamQUICStreamCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Read mocks base method.
 func (m *MockDatagramStream) Read(p []byte) (int, error) {
 	m.ctrl.T.Helper()
@@ -306,56 +344,18 @@ func (c *MockDatagramStreamSendDatagramCall) DoAndReturn(f func([]byte) error) *
 	return c
 }
 
-// SetDeadline mocks base method.
-func (m *MockDatagramStream) SetDeadline(t time.Time) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetDeadline", t)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetDeadline indicates an expected call of SetDeadline.
-func (mr *MockDatagramStreamMockRecorder) SetDeadline(t any) *MockDatagramStreamSetDeadlineCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDeadline", reflect.TypeOf((*MockDatagramStream)(nil).SetDeadline), t)
-	return &MockDatagramStreamSetDeadlineCall{Call: call}
-}
-
-// MockDatagramStreamSetDeadlineCall wrap *gomock.Call
-type MockDatagramStreamSetDeadlineCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockDatagramStreamSetDeadlineCall) Return(arg0 error) *MockDatagramStreamSetDeadlineCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockDatagramStreamSetDeadlineCall) Do(f func(time.Time) error) *MockDatagramStreamSetDeadlineCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockDatagramStreamSetDeadlineCall) DoAndReturn(f func(time.Time) error) *MockDatagramStreamSetDeadlineCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // SetReadDeadline mocks base method.
-func (m *MockDatagramStream) SetReadDeadline(t time.Time) error {
+func (m *MockDatagramStream) SetReadDeadline(arg0 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetReadDeadline", t)
+	ret := m.ctrl.Call(m, "SetReadDeadline", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetReadDeadline indicates an expected call of SetReadDeadline.
-func (mr *MockDatagramStreamMockRecorder) SetReadDeadline(t any) *MockDatagramStreamSetReadDeadlineCall {
+func (mr *MockDatagramStreamMockRecorder) SetReadDeadline(arg0 any) *MockDatagramStreamSetReadDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockDatagramStream)(nil).SetReadDeadline), t)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockDatagramStream)(nil).SetReadDeadline), arg0)
 	return &MockDatagramStreamSetReadDeadlineCall{Call: call}
 }
 
@@ -383,17 +383,17 @@ func (c *MockDatagramStreamSetReadDeadlineCall) DoAndReturn(f func(time.Time) er
 }
 
 // SetWriteDeadline mocks base method.
-func (m *MockDatagramStream) SetWriteDeadline(t time.Time) error {
+func (m *MockDatagramStream) SetWriteDeadline(arg0 time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWriteDeadline", t)
+	ret := m.ctrl.Call(m, "SetWriteDeadline", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetWriteDeadline indicates an expected call of SetWriteDeadline.
-func (mr *MockDatagramStreamMockRecorder) SetWriteDeadline(t any) *MockDatagramStreamSetWriteDeadlineCall {
+func (mr *MockDatagramStreamMockRecorder) SetWriteDeadline(arg0 any) *MockDatagramStreamSetWriteDeadlineCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockDatagramStream)(nil).SetWriteDeadline), t)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockDatagramStream)(nil).SetWriteDeadline), arg0)
 	return &MockDatagramStreamSetWriteDeadlineCall{Call: call}
 }
 

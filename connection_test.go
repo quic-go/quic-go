@@ -363,7 +363,7 @@ func TestConnectionOpenStreams(t *testing.T) {
 	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
 
 	// using OpenStream
-	mstr := NewMockStreamI(mockCtrl)
+	mstr := &Stream{}
 	streamsMap.EXPECT().OpenStream().Return(mstr, nil)
 	str, err := tc.conn.OpenStream()
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestConnectionAcceptStreams(t *testing.T) {
 	// bidirectional streams
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	mstr := NewMockStreamI(mockCtrl)
+	mstr := &Stream{}
 	streamsMap.EXPECT().AcceptStream(ctx).Return(mstr, nil)
 	str, err := tc.conn.AcceptStream(ctx)
 	require.NoError(t, err)

@@ -529,7 +529,7 @@ func testClientStreamHijacking(t *testing.T, bidirectional, doHijack bool, strea
 	tr := &Transport{}
 	switch bidirectional {
 	case true:
-		tr.StreamHijacker = func(ft FrameType, id quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
+		tr.StreamHijacker = func(ft FrameType, id quic.ConnectionTracingID, _ *quic.Stream, e error) (hijacked bool, err error) {
 			hijackChan <- hijackCall{ft: ft, connTracingID: id, e: e}
 			if !doHijack {
 				return false, errors.New("not hijacking")

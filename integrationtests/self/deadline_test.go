@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupDeadlineTest(t *testing.T) (serverStr, clientStr quic.Stream) {
+func setupDeadlineTest(t *testing.T) (serverStr, clientStr *quic.Stream) {
 	t.Helper()
 	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)

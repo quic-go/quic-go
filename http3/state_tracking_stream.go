@@ -19,7 +19,7 @@ const streamDatagramQueueLen = 32
 // parent connection, this is done through the streamClearer interface when
 // both the send and receive sides are closed
 type stateTrackingStream struct {
-	quic.Stream
+	*quic.Stream
 
 	sendDatagram func([]byte) error
 	hasData      chan struct{}
@@ -32,16 +32,13 @@ type stateTrackingStream struct {
 	clearer streamClearer
 }
 
-var (
-	_ datagramStream = &stateTrackingStream{}
-	_ quic.Stream    = &stateTrackingStream{}
-)
+var _ datagramStream = &stateTrackingStream{}
 
 type streamClearer interface {
 	clearStream(quic.StreamID)
 }
 
-func newStateTrackingStream(s quic.Stream, clearer streamClearer, sendDatagram func([]byte) error) *stateTrackingStream {
+func newStateTrackingStream(s *quic.Stream, clearer streamClearer, sendDatagram func([]byte) error) *stateTrackingStream {
 	t := &stateTrackingStream{
 		Stream:       s,
 		clearer:      clearer,
@@ -169,4 +166,8 @@ start:
 	case <-s.hasData:
 	}
 	goto start
+}
+
+func (s *stateTrackingStream) QUICStream() *quic.Stream {
+	return s.Stream
 }

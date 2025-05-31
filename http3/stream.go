@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -15,9 +16,17 @@ import (
 )
 
 type datagramStream interface {
-	quic.Stream
+	io.ReadWriteCloser
+	CancelRead(quic.StreamErrorCode)
+	CancelWrite(quic.StreamErrorCode)
+	StreamID() quic.StreamID
+	Context() context.Context
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
 	SendDatagram(b []byte) error
 	ReceiveDatagram(ctx context.Context) ([]byte, error)
+
+	QUICStream() *quic.Stream
 }
 
 // A Stream is an HTTP/3 request stream.

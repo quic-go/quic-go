@@ -156,7 +156,7 @@ type Server struct {
 	// Callers can either ignore the frame and return control of the stream back to HTTP/3
 	// (by returning hijacked false).
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
-	StreamHijacker func(FrameType, quic.ConnectionTracingID, quic.Stream, error) (hijacked bool, err error)
+	StreamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error)
 
 	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
 	// If parsing the stream type fails, the error is passed to the callback.
@@ -557,7 +557,7 @@ func (s *Server) handleRequest(conn *connection, str datagramStream, decoder *qp
 			return s.StreamHijacker(
 				ft,
 				conn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID),
-				str,
+				str.QUICStream(),
 				e,
 			)
 		}
