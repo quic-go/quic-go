@@ -97,13 +97,11 @@ func NewCryptoSetupClient(
 		EnableSessionEvents: true,
 	}, tls.HelloCustom)
 
-	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
-
-	if clientHelloFn == nil {
-		return cs
+	if clientHelloFn != nil {
+		_ = cs.conn.ApplyPreset(clientHelloFn()) // uQuic-go TODO: better handle of error
 	}
 
-	_ = cs.conn.ApplyPreset(clientHelloFn()) // uQuic-go TODO: better handle of error
+	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
 	return cs
 }
