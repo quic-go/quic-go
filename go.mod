@@ -6,7 +6,7 @@ toolchain go1.24.3
 
 require (
 	github.com/Noooste/fhttp v1.0.13
-	github.com/Noooste/utls v1.3.15
+	github.com/Noooste/utls v1.3.8
 	github.com/francoispqt/gojay v1.2.13
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.6
