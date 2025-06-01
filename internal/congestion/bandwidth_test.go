@@ -1,14 +1,12 @@
 package congestion
 
 import (
+	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("Bandwidth", func() {
-	It("converts from time delta", func() {
-		Expect(BandwidthFromDelta(1, time.Millisecond)).To(Equal(1000 * BytesPerSecond))
-	})
-})
+func TestBandwidthFromDelta(t *testing.T) {
+	require.Equal(t, 1000*BytesPerSecond, BandwidthFromDelta(1, time.Millisecond))
+}
