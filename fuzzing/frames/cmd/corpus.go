@@ -23,13 +23,13 @@ func getRandomData(l int) []byte {
 func getRandomNumber() uint64 {
 	switch 1 << uint8(mrand.IntN(3)) {
 	case 1:
-		return uint64(mrand.IntN(64))
+		return mrand.Uint64N(64)
 	case 2:
-		return uint64(mrand.IntN(16384))
+		return mrand.Uint64N(16384)
 	case 4:
-		return uint64(mrand.IntN(1073741824))
+		return mrand.Uint64N(1073741824)
 	case 8:
-		return uint64(mrand.IntN(4611686018427387904))
+		return mrand.Uint64N(4611686018427387904)
 	default:
 		panic("unexpected length")
 	}
@@ -44,10 +44,9 @@ func getRandomNumberLowerOrEqual(target uint64) uint64 {
 
 // returns a *maximum* number of num ACK ranges
 func getAckRanges(num int) []wire.AckRange {
-	var ranges []wire.AckRange
-
-	prevSmallest := uint64(mrand.IntN(4611686018427387904))
-	for i := 0; i < num; i++ {
+	prevSmallest := mrand.Uint64N(4611686018427387904)
+	ranges := make([]wire.AckRange, 0, num)
+	for range num {
 		if prevSmallest <= 2 {
 			break
 		}
@@ -262,11 +261,11 @@ func main() {
 		}
 	}
 
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		frames := getFrames()
 
 		var b []byte
-		for j := 0; j < mrand.IntN(30)+2; j++ {
+		for range mrand.IntN(30) + 2 {
 			if mrand.IntN(10) == 0 { // write a PADDING frame
 				b = append(b, 0)
 			}

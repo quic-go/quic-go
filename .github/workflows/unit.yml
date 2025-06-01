@@ -17,10 +17,13 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - run: go version
+      - name: Remove integrationtests
+        shell: bash
+        run: rm -rf integrationtests
       - name: Run tests
         env:
           TIMESCALE_FACTOR: 10
-        run: go test -v -shuffle on -cover -coverprofile coverage.txt $(go list ./... | grep -v integrationtests)
+        run: go test -v -shuffle on -cover -coverprofile coverage.txt ./...
       - name: Run tests as root
         if: ${{ matrix.os == 'ubuntu' }}
         env:
@@ -37,14 +40,14 @@ jobs:
         env:
           TIMESCALE_FACTOR: 10
           GOARCH: 386
-        run: go test -v -shuffle on -cover -coverprofile coverage.txt $(go list ./... | grep -v integrationtests | grep -v fuzzing)
+        run: go test -v -shuffle on -cover -coverprofile coverage.txt ./...
       - name: Run tests with race detector
         if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
         env:
           TIMESCALE_FACTOR: 20
         run: go test -v -shuffle on -cover -coverprofile coverage.txt $(go list ./... | grep -v integrationtests)
       - name: Run benchmark tests
-        run: go test -v -run=^$ -benchtime 0.5s -bench=. $(go list ./... | grep -v integrationtests/self)
+        run: go test -v -run=^$ -benchtime 0.5s -bench=. ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         env:

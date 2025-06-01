@@ -123,10 +123,10 @@ func getTransportParameters(seed uint8) *wire.TransportParameters {
 	r := mrand.New(mrand.NewPCG(uint64(seed), uint64(seed)))
 	return &wire.TransportParameters{
 		ActiveConnectionIDLimit:        2,
-		InitialMaxData:                 protocol.ByteCount(r.IntN(maxVarInt)),
-		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.IntN(maxVarInt)),
-		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.IntN(maxVarInt)),
-		InitialMaxStreamDataUni:        protocol.ByteCount(r.IntN(maxVarInt)),
+		InitialMaxData:                 protocol.ByteCount(r.Uint64() % maxVarInt),
+		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(r.Uint64() % maxVarInt),
+		InitialMaxStreamDataBidiRemote: protocol.ByteCount(r.Uint64() % maxVarInt),
+		InitialMaxStreamDataUni:        protocol.ByteCount(r.Uint64() % maxVarInt),
 	}
 }
 
