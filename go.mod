@@ -5,13 +5,12 @@ go 1.24
 toolchain go1.24.3
 
 require (
-	github.com/Noooste/utls v1.3.12
+	github.com/Noooste/utls v1.3.14
 	github.com/francoispqt/gojay v1.2.13
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.6
 	github.com/prometheus/client_golang v1.19.1
 	github.com/quic-go/qpack v0.5.1
-	github.com/quic-go/quic-go v0.40.1
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/mock v0.5.0
 	golang.org/x/crypto v0.38.0

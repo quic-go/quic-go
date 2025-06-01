@@ -98,7 +98,9 @@ func NewCryptoSetupClient(
 	}, tls.HelloCustom)
 
 	if clientHelloFn != nil {
-		_ = cs.conn.ApplyPreset(clientHelloFn()) // uQuic-go TODO: better handle of error
+		if err := cs.conn.ApplyPreset(clientHelloFn()); err != nil {
+			panic(fmt.Sprintf("failed to apply client hello preset: %s", err))
+		}
 	}
 
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
