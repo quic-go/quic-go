@@ -82,10 +82,10 @@ func (c *MockStreamManagerAcceptStreamCall) DoAndReturn(f func(context.Context) 
 }
 
 // AcceptUniStream mocks base method.
-func (m *MockStreamManager) AcceptUniStream(arg0 context.Context) (ReceiveStream, error) {
+func (m *MockStreamManager) AcceptUniStream(arg0 context.Context) (*ReceiveStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptUniStream", arg0)
-	ret0, _ := ret[0].(ReceiveStream)
+	ret0, _ := ret[0].(*ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -103,19 +103,19 @@ type MockStreamManagerAcceptUniStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamManagerAcceptUniStreamCall) Return(arg0 ReceiveStream, arg1 error) *MockStreamManagerAcceptUniStreamCall {
+func (c *MockStreamManagerAcceptUniStreamCall) Return(arg0 *ReceiveStream, arg1 error) *MockStreamManagerAcceptUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamManagerAcceptUniStreamCall) Do(f func(context.Context) (ReceiveStream, error)) *MockStreamManagerAcceptUniStreamCall {
+func (c *MockStreamManagerAcceptUniStreamCall) Do(f func(context.Context) (*ReceiveStream, error)) *MockStreamManagerAcceptUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamManagerAcceptUniStreamCall) DoAndReturn(f func(context.Context) (ReceiveStream, error)) *MockStreamManagerAcceptUniStreamCall {
+func (c *MockStreamManagerAcceptUniStreamCall) DoAndReturn(f func(context.Context) (*ReceiveStream, error)) *MockStreamManagerAcceptUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -195,10 +195,10 @@ func (c *MockStreamManagerDeleteStreamCall) DoAndReturn(f func(protocol.StreamID
 }
 
 // GetOrOpenReceiveStream mocks base method.
-func (m *MockStreamManager) GetOrOpenReceiveStream(arg0 protocol.StreamID) (receiveStreamI, error) {
+func (m *MockStreamManager) GetOrOpenReceiveStream(arg0 protocol.StreamID) (*ReceiveStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrOpenReceiveStream", arg0)
-	ret0, _ := ret[0].(receiveStreamI)
+	ret0, _ := ret[0].(*ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -216,19 +216,19 @@ type MockStreamManagerGetOrOpenReceiveStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Return(arg0 receiveStreamI, arg1 error) *MockStreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Return(arg0 *ReceiveStream, arg1 error) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (receiveStreamI, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (*ReceiveStream, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamManagerGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (receiveStreamI, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (*ReceiveStream, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

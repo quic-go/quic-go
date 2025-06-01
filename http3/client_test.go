@@ -537,7 +537,7 @@ func testClientStreamHijacking(t *testing.T, bidirectional, doHijack bool, strea
 			return true, nil
 		}
 	case false:
-		tr.UniStreamHijacker = func(st StreamType, id quic.ConnectionTracingID, rs quic.ReceiveStream, e error) (hijacked bool) {
+		tr.UniStreamHijacker = func(st StreamType, id quic.ConnectionTracingID, rs *quic.ReceiveStream, e error) (hijacked bool) {
 			hijackChan <- hijackCall{st: st, connTracingID: id, e: e}
 			return doHijack
 		}

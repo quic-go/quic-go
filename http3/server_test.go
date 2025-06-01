@@ -495,7 +495,7 @@ func testServerHijackBidirectionalStream(t *testing.T, bidirectional bool, doHij
 			hijackChan <- hijackCall{ft: ft, connTracingID: connTracingID, e: e}
 			return doHijack, hijackErr
 		},
-		UniStreamHijacker: func(st StreamType, connTracingID quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
+		UniStreamHijacker: func(st StreamType, connTracingID quic.ConnectionTracingID, _ *quic.ReceiveStream, err error) bool {
 			defer close(testDone)
 			hijackChan <- hijackCall{st: st, connTracingID: connTracingID, e: err}
 			return doHijack

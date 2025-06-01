@@ -198,12 +198,12 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	// Stream data is consumed (almost) immediately, so flow-control window auto-tuning kicks in.
 	// The window size is doubled for every batch.
 	var windowSizes []protocol.ByteCount
-	for i := 0; i < numBatches; i++ {
+	for i := range numBatches {
 		windowSizes = append(windowSizes, window<<i)
 	}
 
-	var serverStr quic.ReceiveStream
-	for i := 0; i < numBatches; i++ {
+	var serverStr *quic.ReceiveStream
+	for i := range numBatches {
 		str.SetWriteDeadline(time.Now().Add(rtt))
 		n, err := str.Write(make([]byte, 10000))
 		require.Error(t, err)
