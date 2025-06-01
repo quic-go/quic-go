@@ -573,7 +573,7 @@ func TestSendStreamCancellation(t *testing.T) {
 	require.True(t, mockCtrl.Satisfied())
 
 	wrote := make(chan struct{})
-	mockSender.EXPECT().onHasStreamData(streamID, str).Do(func(protocol.StreamID, sendStreamI) { close(wrote) })
+	mockSender.EXPECT().onHasStreamData(streamID, str).Do(func(protocol.StreamID, *SendStream) { close(wrote) })
 	errChan := make(chan error, 1)
 	go func() {
 		_, err := strWithTimeout.Write(make([]byte, 2000))

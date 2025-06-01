@@ -114,7 +114,7 @@ func TestFramerStreamDataBlocked(t *testing.T) {
 // in the next packet.
 func testFramerStreamDataBlocked(t *testing.T, fits bool) {
 	const streamID = 5
-	str := NewMockSendStreamI(gomock.NewController(t))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 	framer.AddActiveStream(streamID, str)
 	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -175,7 +175,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 	fc.UpdateSendWindow(offset)
 	fc.AddBytesSent(offset)
 
-	str := NewMockSendStreamI(gomock.NewController(t))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer := newFramer(fc)
 	framer.AddActiveStream(streamID, str)
 
@@ -292,9 +292,9 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 
 	// add two streams
 	mockCtrl := gomock.NewController(t)
-	str1 := NewMockSendStreamI(mockCtrl)
+	str1 := NewMockStreamFrameGetter(mockCtrl)
 	str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f1}, nil, true)
-	str2 := NewMockSendStreamI(mockCtrl)
+	str2 := NewMockStreamFrameGetter(mockCtrl)
 	str2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f2}, nil, false)
 	framer.AddActiveStream(str1ID, str1)
 	framer.AddActiveStream(str1ID, str1) // duplicate calls are ok (they're no-ops)
@@ -332,7 +332,7 @@ func TestFramerRemoveActiveStream(t *testing.T) {
 	const id = protocol.StreamID(42)
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
-	framer.AddActiveStream(id, NewMockSendStreamI(gomock.NewController(t)))
+	framer.AddActiveStream(id, NewMockStreamFrameGetter(gomock.NewController(t)))
 	require.True(t, framer.HasData())
 	framer.RemoveActiveStream(id) // no calls will be issued to the mock stream
 	// we can't assert on framer.HasData here, since it's not removed from the ringbuffer
@@ -344,7 +344,7 @@ func TestFramerRemoveActiveStream(t *testing.T) {
 func TestFramerMinStreamFrameSize(t *testing.T) {
 	const id = protocol.StreamID(42)
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
-	str := NewMockSendStreamI(gomock.NewController(t))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer.AddActiveStream(id, str)
 
 	require.True(t, framer.HasData())
@@ -369,7 +369,7 @@ func TestFramerMinStreamFrameSize(t *testing.T) {
 func TestFramerMinStreamFrameSizeMultipleStreamFrames(t *testing.T) {
 	const id = protocol.StreamID(42)
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
-	str := NewMockSendStreamI(gomock.NewController(t))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer.AddActiveStream(id, str)
 
 	// pop a frame such that the remaining size is one byte less than the minimum STREAM frame size
@@ -388,7 +388,7 @@ func TestFramerMinStreamFrameSizeMultipleStreamFrames(t *testing.T) {
 
 func TestFramerFillPacketOneStream(t *testing.T) {
 	const id = protocol.StreamID(42)
-	str := NewMockSendStreamI(gomock.NewController(t))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 
 	for i := protocol.MinStreamFrameSize; i < 2000; i++ {
@@ -418,8 +418,8 @@ func TestFramerFillPacketMultipleStreams(t *testing.T) {
 		id2 = protocol.StreamID(11)
 	)
 	mockCtrl := gomock.NewController(t)
-	stream1 := NewMockSendStreamI(mockCtrl)
-	stream2 := NewMockSendStreamI(mockCtrl)
+	stream1 := NewMockStreamFrameGetter(mockCtrl)
+	stream2 := NewMockStreamFrameGetter(mockCtrl)
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 
 	for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
@@ -464,7 +464,7 @@ func TestFramer0RTTRejection(t *testing.T) {
 	framer.QueueControlFrame(&wire.StreamsBlockedFrame{StreamLimit: 13})
 	framer.QueueControlFrame(pc)
 
-	framer.AddActiveStream(10, NewMockSendStreamI(gomock.NewController(t)))
+	framer.AddActiveStream(10, NewMockStreamFrameGetter(gomock.NewController(t)))
 
 	framer.Handle0RTTRejection()
 	controlFrames, streamFrames, _ := framer.Append(nil, nil, protocol.MaxByteCount, time.Now(), protocol.Version1)

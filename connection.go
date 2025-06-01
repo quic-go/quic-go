@@ -31,12 +31,12 @@ type unpacker interface {
 }
 
 type streamManager interface {
-	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
+	GetOrOpenSendStream(protocol.StreamID) (*SendStream, error)
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
 	OpenStream() (*Stream, error)
-	OpenUniStream() (SendStream, error)
+	OpenUniStream() (*SendStream, error)
 	OpenStreamSync(context.Context) (*Stream, error)
-	OpenUniStreamSync(context.Context) (SendStream, error)
+	OpenUniStreamSync(context.Context) (*SendStream, error)
 	AcceptStream(context.Context) (*Stream, error)
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
@@ -2509,11 +2509,11 @@ func (s *connection) OpenStreamSync(ctx context.Context) (*Stream, error) {
 	return s.streamsMap.OpenStreamSync(ctx)
 }
 
-func (s *connection) OpenUniStream() (SendStream, error) {
+func (s *connection) OpenUniStream() (*SendStream, error) {
 	return s.streamsMap.OpenUniStream()
 }
 
-func (s *connection) OpenUniStreamSync(ctx context.Context) (SendStream, error) {
+func (s *connection) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
 	return s.streamsMap.OpenUniStreamSync(ctx)
 }
 
@@ -2572,7 +2572,7 @@ func (s *connection) queueControlFrame(f wire.Frame) {
 
 func (s *connection) onHasConnectionData() { s.scheduleSending() }
 
-func (s *connection) onHasStreamData(id protocol.StreamID, str sendStreamI) {
+func (s *connection) onHasStreamData(id protocol.StreamID, str *SendStream) {
 	s.framer.AddActiveStream(id, str)
 	s.scheduleSending()
 }

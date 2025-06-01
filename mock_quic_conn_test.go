@@ -466,10 +466,10 @@ func (c *MockQUICConnOpenStreamSyncCall) DoAndReturn(f func(context.Context) (*S
 }
 
 // OpenUniStream mocks base method.
-func (m *MockQUICConn) OpenUniStream() (SendStream, error) {
+func (m *MockQUICConn) OpenUniStream() (*SendStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenUniStream")
-	ret0, _ := ret[0].(SendStream)
+	ret0, _ := ret[0].(*SendStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -487,28 +487,28 @@ type MockQUICConnOpenUniStreamCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockQUICConnOpenUniStreamCall) Return(arg0 SendStream, arg1 error) *MockQUICConnOpenUniStreamCall {
+func (c *MockQUICConnOpenUniStreamCall) Return(arg0 *SendStream, arg1 error) *MockQUICConnOpenUniStreamCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICConnOpenUniStreamCall) Do(f func() (SendStream, error)) *MockQUICConnOpenUniStreamCall {
+func (c *MockQUICConnOpenUniStreamCall) Do(f func() (*SendStream, error)) *MockQUICConnOpenUniStreamCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICConnOpenUniStreamCall) DoAndReturn(f func() (SendStream, error)) *MockQUICConnOpenUniStreamCall {
+func (c *MockQUICConnOpenUniStreamCall) DoAndReturn(f func() (*SendStream, error)) *MockQUICConnOpenUniStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // OpenUniStreamSync mocks base method.
-func (m *MockQUICConn) OpenUniStreamSync(arg0 context.Context) (SendStream, error) {
+func (m *MockQUICConn) OpenUniStreamSync(arg0 context.Context) (*SendStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenUniStreamSync", arg0)
-	ret0, _ := ret[0].(SendStream)
+	ret0, _ := ret[0].(*SendStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -526,19 +526,19 @@ type MockQUICConnOpenUniStreamSyncCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockQUICConnOpenUniStreamSyncCall) Return(arg0 SendStream, arg1 error) *MockQUICConnOpenUniStreamSyncCall {
+func (c *MockQUICConnOpenUniStreamSyncCall) Return(arg0 *SendStream, arg1 error) *MockQUICConnOpenUniStreamSyncCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICConnOpenUniStreamSyncCall) Do(f func(context.Context) (SendStream, error)) *MockQUICConnOpenUniStreamSyncCall {
+func (c *MockQUICConnOpenUniStreamSyncCall) Do(f func(context.Context) (*SendStream, error)) *MockQUICConnOpenUniStreamSyncCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICConnOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (SendStream, error)) *MockQUICConnOpenUniStreamSyncCall {
+func (c *MockQUICConnOpenUniStreamSyncCall) DoAndReturn(f func(context.Context) (*SendStream, error)) *MockQUICConnOpenUniStreamSyncCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
