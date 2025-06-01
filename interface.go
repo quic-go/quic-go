@@ -70,18 +70,6 @@ type connTracingCtxKey struct{}
 // context returned by tls.Config.ClientInfo.Context.
 var QUICVersionContextKey = handshake.QUICVersionContextKey
 
-// Stream is the interface implemented by QUIC streams.
-// In addition to the errors listed on the [Connection],
-// calls to stream functions can return a [StreamError] if the stream is canceled.
-type Stream interface {
-	ReceiveStream
-	SendStream
-	// SetDeadline sets the read and write deadlines associated
-	// with the connection. It is equivalent to calling both
-	// SetReadDeadline and SetWriteDeadline.
-	SetDeadline(t time.Time) error
-}
-
 // A ReceiveStream is a unidirectional Receive Stream.
 type ReceiveStream interface {
 	// StreamID returns the stream ID.
@@ -145,7 +133,7 @@ type SendStream interface {
 //   - [VersionNegotiationError]: returned by the client, when there's no version overlap between the peers
 type Connection interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
-	AcceptStream(context.Context) (Stream, error)
+	AcceptStream(context.Context) (*Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
@@ -154,13 +142,13 @@ type Connection interface {
 	// or the stream has been reset or closed.
 	// When reaching the peer's stream limit, it is not possible to open a new stream until the
 	// peer raises the stream limit. In that case, a StreamLimitReachedError is returned.
-	OpenStream() (Stream, error)
+	OpenStream() (*Stream, error)
 	// OpenStreamSync opens a new bidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream,
 	// or the stream has been reset or closed.
-	OpenStreamSync(context.Context) (Stream, error)
+	OpenStreamSync(context.Context) (*Stream, error)
 	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream,

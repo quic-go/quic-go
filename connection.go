@@ -33,11 +33,11 @@ type unpacker interface {
 type streamManager interface {
 	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
-	OpenStream() (Stream, error)
+	OpenStream() (*Stream, error)
 	OpenUniStream() (SendStream, error)
-	OpenStreamSync(context.Context) (Stream, error)
+	OpenStreamSync(context.Context) (*Stream, error)
 	OpenUniStreamSync(context.Context) (SendStream, error)
-	AcceptStream(context.Context) (Stream, error)
+	AcceptStream(context.Context) (*Stream, error)
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*wire.TransportParameters)
@@ -2492,7 +2492,7 @@ func (s *connection) maxPacketSize() protocol.ByteCount {
 }
 
 // AcceptStream returns the next stream openend by the peer
-func (s *connection) AcceptStream(ctx context.Context) (Stream, error) {
+func (s *connection) AcceptStream(ctx context.Context) (*Stream, error) {
 	return s.streamsMap.AcceptStream(ctx)
 }
 
@@ -2501,11 +2501,11 @@ func (s *connection) AcceptUniStream(ctx context.Context) (ReceiveStream, error)
 }
 
 // OpenStream opens a stream
-func (s *connection) OpenStream() (Stream, error) {
+func (s *connection) OpenStream() (*Stream, error) {
 	return s.streamsMap.OpenStream()
 }
 
-func (s *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
+func (s *connection) OpenStreamSync(ctx context.Context) (*Stream, error) {
 	return s.streamsMap.OpenStreamSync(ctx)
 }
 

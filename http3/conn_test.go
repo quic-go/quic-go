@@ -269,7 +269,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 	b = (&settingsFrame{}).Append(b)
 	b = (&goAwayFrame{StreamID: 8}).Append(b)
 
-	var str quic.Stream
+	var str *RequestStream
 	if withStream {
 		s, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 		require.NoError(t, err)

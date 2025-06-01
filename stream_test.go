@@ -38,7 +38,7 @@ func TestStreamDeadlines(t *testing.T) {
 func TestStreamCompletion(t *testing.T) {
 	completeReadSide := func(
 		t *testing.T,
-		str *stream,
+		str *Stream,
 		mockCtrl *gomock.Controller,
 		mockFC *mocks.MockStreamFlowController,
 	) {
@@ -57,7 +57,7 @@ func TestStreamCompletion(t *testing.T) {
 
 	completeWriteSide := func(
 		t *testing.T,
-		str *stream,
+		str *Stream,
 		mockCtrl *gomock.Controller,
 		mockFC *mocks.MockStreamFlowController,
 		mockSender *MockStreamSender,

@@ -490,7 +490,7 @@ func testServerHijackBidirectionalStream(t *testing.T, bidirectional bool, doHij
 	hijackChan := make(chan hijackCall, 1)
 	testDone := make(chan struct{})
 	s := &Server{
-		StreamHijacker: func(ft FrameType, connTracingID quic.ConnectionTracingID, _ quic.Stream, e error) (hijacked bool, err error) {
+		StreamHijacker: func(ft FrameType, connTracingID quic.ConnectionTracingID, _ *quic.Stream, e error) (hijacked bool, err error) {
 			defer close(testDone)
 			hijackChan <- hijackCall{ft: ft, connTracingID: connTracingID, e: e}
 			return doHijack, hijackErr
