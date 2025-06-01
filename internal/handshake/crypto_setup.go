@@ -26,7 +26,7 @@ const clientSessionStateRevision = 5
 
 type cryptoSetup struct {
 	tlsConf *tls.Config
-	conn    *tls.UQUICConn
+	conn    *tls.QUICConn
 
 	events []Event
 
@@ -92,16 +92,16 @@ func NewCryptoSetupClient(
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
-	cs.conn = tls.UQUICClient(&tls.QUICConfig{ // uQuic-go
+	cs.conn = tls.QUICClient(&tls.QUICConfig{ // uQuic-go
 		TLSConfig:           tlsConf,
 		EnableSessionEvents: true,
-	}, tls.HelloCustom)
+	})
 
-	if clientHelloFn != nil {
-		if err := cs.conn.ApplyPreset(clientHelloFn()); err != nil {
-			panic(fmt.Sprintf("failed to apply client hello preset: %s", err))
-		}
-	}
+	//if clientHelloFn != nil {
+	//	if err := cs.conn.ApplyPreset(clientHelloFn()); err != nil {
+	//		panic(fmt.Sprintf("failed to apply client hello preset: %s", err))
+	//	}
+	//}
 
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
