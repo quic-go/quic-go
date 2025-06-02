@@ -2104,7 +2104,7 @@ func (s *connection) sendPackets(now time.Time) error {
 				if err != nil {
 					return err
 				}
-				s.logger.Debugf("sending path probe packet from %s", s.LocalAddr())
+				s.logger.Debugf("sending path probe packet from %s", tr.conn.LocalAddr())
 				s.logShortHeaderPacket(probe.DestConnID, probe.Ack, probe.Frames, probe.StreamFrames, probe.PacketNumber, probe.PacketNumberLen, probe.KeyPhase, protocol.ECNNon, buf.Len(), false)
 				s.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
 				tr.WriteTo(buf.Data, s.conn.RemoteAddr())
@@ -2639,7 +2639,7 @@ func (s *connection) AddPath(t *Transport) (*Path, error) {
 	if s.peerParams.DisableActiveMigration {
 		return nil, errors.New("server disabled connection migration")
 	}
-	if err := t.init(false); err != nil {
+	if err := t.init(s.srcConnIDLen == 0); err != nil {
 		return nil, err
 	}
 	return s.getPathManager().NewPath(
