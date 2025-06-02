@@ -17,10 +17,13 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - run: go version
+      - name: Remove integrationtests
+        shell: bash
+        run: rm -rf integrationtests
       - name: Run tests
         env:
           TIMESCALE_FACTOR: 10
-        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -cover -randomize-all -randomize-suites -trace -skip-package integrationtests
+        run: go test -v -shuffle on -cover -coverprofile coverage.txt ./...
       - name: Run tests as root
         if: ${{ matrix.os == 'ubuntu' }}
         env:
@@ -28,22 +31,23 @@ jobs:
           FILE: sys_conn_helper_linux_test.go
         run: |
           test -f $FILE # make sure the file actually exists
-          go run github.com/onsi/ginkgo/v2/ginkgo build -cover -tags root .
-          sudo ./quic-go.test -ginkgo.v -ginkgo.trace -ginkgo.randomize-all -ginkgo.focus-file=$FILE -test.coverprofile coverage-root.txt
+          TEST_NAMES=$(grep '^func Test' "$FILE" | sed 's/^func \([A-Za-z0-9_]*\)(.*/\1/' | tr '\n' '|')
+          go test -c -cover -tags root -o quic-go.test .
+          sudo ./quic-go.test -test.v -test.run "${TEST_NAMES%|}" -test.coverprofile coverage-root.txt
           rm quic-go.test
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
         env:
           TIMESCALE_FACTOR: 10
           GOARCH: 386
-        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -cover -coverprofile coverage.txt -output-dir . -randomize-all -randomize-suites -trace -skip-package integrationtests
+        run: go test -v -shuffle on -cover -coverprofile coverage.txt ./...
       - name: Run tests with race detector
         if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
         env:
           TIMESCALE_FACTOR: 20
-        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -race -randomize-all -randomize-suites -trace -skip-package integrationtests
+        run: go test -v -shuffle on -cover -coverprofile coverage.txt $(go list ./... | grep -v integrationtests)
       - name: Run benchmark tests
-        run: go test -v -run=^$ -benchtime 0.5s -bench=. $(go list ./... | grep -v integrationtests/self)
+        run: go test -v -run=^$ -benchtime 0.5s -bench=. ./...
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         env:

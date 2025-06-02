@@ -3,10 +3,15 @@ package http3
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -16,7 +21,6 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/integrationtests/tools"
 	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
@@ -44,11 +48,11 @@ func scaleDuration(t time.Duration) time.Duration {
 var tlsConfig, tlsClientConfig *tls.Config
 
 func init() {
-	ca, caPrivateKey, err := tools.GenerateCA()
+	ca, caPrivateKey, err := generateCA()
 	if err != nil {
 		panic(err)
 	}
-	leafCert, leafPrivateKey, err := tools.GenerateLeafCert(ca, caPrivateKey)
+	leafCert, leafPrivateKey, err := generateLeafCert(ca, caPrivateKey)
 	if err != nil {
 		panic(err)
 	}
@@ -67,6 +71,57 @@ func init() {
 		RootCAs:    root,
 		NextProtos: []string{NextProtoH3},
 	}
+}
+
+func generateCA() (*x509.Certificate, crypto.PrivateKey, error) {
+	certTempl := &x509.Certificate{
+		SerialNumber:          big.NewInt(2019),
+		Subject:               pkix.Name{},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, pub, priv)
+	if err != nil {
+		return nil, nil, err
+	}
+	ca, err := x509.ParseCertificate(caBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ca, priv, nil
+}
+
+func generateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Certificate, crypto.PrivateKey, error) {
+	certTempl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		DNSNames:     []string{"localhost"},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, pub, caPriv)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cert, priv, nil
 }
 
 func getTLSConfig() *tls.Config       { return tlsConfig.Clone() }
