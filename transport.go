@@ -327,8 +327,9 @@ func (t *Transport) doDial(
 
 	// The error channel needs to be buffered, as the run loop will continue running
 	// after doDial returns (if the handshake is successful).
+	// Similarly, the recreateChan needs to be buffered; in case a different case is selected.
 	errChan := make(chan error, 1)
-	recreateChan := make(chan errCloseForRecreating)
+	recreateChan := make(chan errCloseForRecreating, 1)
 	go func() {
 		err := conn.run()
 		var recreateErr *errCloseForRecreating
