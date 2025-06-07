@@ -32,7 +32,6 @@ const pathProbePacketLossTimeout = time.Second
 
 type packetNumberSpace struct {
 	history sentPacketHistory
-	pns     packetNumberGenerator
 
 	lossTime                   time.Time
 	lastAckElicitingPacketTime time.Time
@@ -41,16 +40,9 @@ type packetNumberSpace struct {
 	largestSent  protocol.PacketNumber
 }
 
-func newPacketNumberSpace(initialPN protocol.PacketNumber, isAppData bool) *packetNumberSpace {
-	var pns packetNumberGenerator
-	if isAppData {
-		pns = newSkippingPacketNumberGenerator(initialPN, protocol.SkipPacketInitialPeriod, protocol.SkipPacketMaxPeriod)
-	} else {
-		pns = newSequentialPacketNumberGenerator(initialPN)
-	}
+func newPacketNumberSpace(isAppData bool) *packetNumberSpace {
 	return &packetNumberSpace{
 		history:      *newSentPacketHistory(isAppData),
-		pns:          pns,
 		largestSent:  protocol.InvalidPacketNumber,
 		largestAcked: protocol.InvalidPacketNumber,
 	}
@@ -64,8 +56,11 @@ type alarmTimer struct {
 
 type sentPacketHandler struct {
 	initialPackets   *packetNumberSpace
+	nextInitialPN    protocol.PacketNumber
 	handshakePackets *packetNumberSpace
+	nextHandshakePN  protocol.PacketNumber
 	appDataPackets   *packetNumberSpace
+	appDataPNG       *skippingPacketNumberGenerator
 
 	// Do we know that the peer completed address validation yet?
 	// Always true for the server.
@@ -138,9 +133,11 @@ func newSentPacketHandler(
 	h := &sentPacketHandler{
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
 		peerAddressValidated:           pers == protocol.PerspectiveClient || clientAddressValidated,
-		initialPackets:                 newPacketNumberSpace(initialPN, false),
-		handshakePackets:               newPacketNumberSpace(0, false),
-		appDataPackets:                 newPacketNumberSpace(0, true),
+		initialPackets:                 newPacketNumberSpace(false),
+		nextInitialPN:                  initialPN,
+		handshakePackets:               newPacketNumberSpace(false),
+		appDataPackets:                 newPacketNumberSpace(true),
+		appDataPNG:                     newSkippingPacketNumberGenerator(0, protocol.SkipPacketInitialPeriod, protocol.SkipPacketMaxPeriod),
 		rttStats:                       rttStats,
 		congestion:                     congestion,
 		perspective:                    pers,
@@ -254,7 +251,26 @@ func (h *sentPacketHandler) SentPacket(
 ) {
 	h.bytesSent += size
 
-	pnSpace := h.getPacketNumberSpace(encLevel)
+	var pnSpace *packetNumberSpace
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		pnSpace = h.initialPackets
+		if pn != h.nextInitialPN {
+			panic("initial packet number mismatch")
+		}
+		h.nextInitialPN++
+	case protocol.EncryptionHandshake:
+		pnSpace = h.handshakePackets
+		if pn != h.nextHandshakePN {
+			panic("handshake packet number mismatch")
+		}
+		h.nextHandshakePN++
+	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+		pnSpace = h.appDataPackets
+		if pn != h.popAppDataPacketNumber() {
+			panic("application data packet number mismatch")
+		}
+	}
 	if h.logger.Debug() && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
 		for p := max(0, pnSpace.largestSent+1); p < pn; p++ {
 			h.logger.Debugf("Skipping packet number %d", p)
@@ -796,8 +812,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 		h.ptoMode = SendPTOHandshake
 	case protocol.Encryption1RTT:
 		// skip a packet number in order to elicit an immediate ACK
-		pn := h.PopPacketNumber(protocol.Encryption1RTT)
-		h.getPacketNumberSpace(protocol.Encryption1RTT).history.SkippedPacket(pn)
+		h.appDataPackets.history.SkippedPacket(h.popAppDataPacketNumber())
 		h.ptoMode = SendPTOAppData
 	default:
 		return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
@@ -819,19 +834,25 @@ func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
 	return h.ecnTracker.Mode()
 }
 
-func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
-	pnSpace := h.getPacketNumberSpace(encLevel)
-	pn := pnSpace.pns.Peek()
-	// See section 17.1 of RFC 9000.
-	return pn, protocol.PacketNumberLengthForHeader(pn, pnSpace.largestAcked)
+func (h *sentPacketHandler) NextPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return h.nextInitialPN, protocol.PacketNumberLengthForHeader(h.nextInitialPN, h.initialPackets.largestAcked)
+	case protocol.EncryptionHandshake:
+		return h.nextHandshakePN, protocol.PacketNumberLengthForHeader(h.nextHandshakePN, h.handshakePackets.largestAcked)
+	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+		pn := h.appDataPNG.Peek()
+		// See section 17.1 of RFC 9000.
+		return pn, protocol.PacketNumberLengthForHeader(pn, h.appDataPackets.largestAcked)
+	}
+	panic("unreachable")
 }
 
-func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) protocol.PacketNumber {
-	pnSpace := h.getPacketNumberSpace(encLevel)
-	skipped, pn := pnSpace.pns.Pop()
+func (h *sentPacketHandler) popAppDataPacketNumber() protocol.PacketNumber {
+	skipped, pn := h.appDataPNG.Pop()
 	if skipped {
 		skippedPN := pn - 1
-		pnSpace.history.SkippedPacket(skippedPN)
+		h.appDataPackets.history.SkippedPacket(skippedPN)
 		if h.logger.Debug() {
 			h.logger.Debugf("Skipping packet number %d", skippedPN)
 		}
@@ -962,8 +983,8 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 			h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 		}
 	}
-	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Peek(), false)
-	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Peek(), true)
+	h.initialPackets = newPacketNumberSpace(false)
+	h.appDataPackets = newPacketNumberSpace(true)
 	oldAlarm := h.alarm
 	h.alarm = alarmTimer{}
 	if h.tracer != nil {
