@@ -135,59 +135,191 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 		// target URI (the path-absolute production and optionally a '?' character
 		// followed by the query production (see Sections 3.3 and 3.4 of
 		// [RFC3986]).
-		f(":authority", host)
-		f(":method", req.Method)
-		if req.Method != http.MethodConnect || isExtendedConnect {
-			f(":path", path)
-			f(":scheme", req.URL.Scheme)
-		}
-		if isExtendedConnect {
-			f(":protocol", req.Proto)
-		}
-		if trailers != "" {
-			f("trailer", trailers)
+
+		// Handle pseudo-header ordering
+		if pHeaders, ok := req.Header[http.PHeaderOrderKey]; ok && len(pHeaders) > 0 {
+			for _, pHeader := range pHeaders {
+				switch pHeader {
+				case ":authority":
+					f(":authority", host)
+				case ":method":
+					f(":method", req.Method)
+				case ":path":
+					if req.Method != http.MethodConnect || isExtendedConnect {
+						f(":path", path)
+					}
+				case ":scheme":
+					if req.Method != http.MethodConnect || isExtendedConnect {
+						f(":scheme", req.URL.Scheme)
+					}
+				case ":protocol":
+					if isExtendedConnect {
+						f(":protocol", req.Proto)
+					}
+				case "trailer":
+					if trailers != "" {
+						f("trailer", trailers)
+					}
+				}
+			}
+		} else {
+			f(":authority", host)
+			f(":method", req.Method)
+			if req.Method != http.MethodConnect || isExtendedConnect {
+				f(":path", path)
+				f(":scheme", req.URL.Scheme)
+			}
+			if isExtendedConnect {
+				f(":protocol", req.Proto)
+			}
+			if trailers != "" {
+				f("trailer", trailers)
+			}
 		}
 
+		// Handle regular header ordering
 		var didUA bool
-		for k, vv := range req.Header {
-			if strings.EqualFold(k, "host") || strings.EqualFold(k, "content-length") {
-				// Host is :authority, already sent.
-				// Content-Length is automatic, set below.
-				continue
-			} else if strings.EqualFold(k, "connection") || strings.EqualFold(k, "proxy-connection") ||
-				strings.EqualFold(k, "transfer-encoding") || strings.EqualFold(k, "upgrade") ||
-				strings.EqualFold(k, "keep-alive") {
-				// Per 8.1.2.2 Connection-Specific Header
-				// Fields, don't send connection-specific
-				// fields. We have already checked if any
-				// are error-worthy so just ignore the rest.
-				continue
-			} else if strings.EqualFold(k, "user-agent") {
-				// Match Go's http1 behavior: at most one
-				// User-Agent. If set to nil or empty string,
-				// then omit it. Otherwise if not mentioned,
-				// include the default (below).
-				didUA = true
-				if len(vv) < 1 {
-					continue
-				}
-				vv = vv[:1]
-				if vv[0] == "" {
-					continue
-				}
 
+		// Check if HeaderOrderKey is present for regular headers
+		if headerOrder, ok := req.Header[http.HeaderOrderKey]; ok && len(headerOrder) > 0 {
+			// Create a map for quick lookup of header order
+			orderMap := make(map[string]int)
+			for i, headerName := range headerOrder {
+				orderMap[strings.ToLower(headerName)] = i
 			}
 
-			for _, v := range vv {
-				f(k, v)
+			// Create a slice to hold headers with their order
+			type headerWithOrder struct {
+				key      string
+				values   []string
+				order    int
+				hasOrder bool
+			}
+
+			var orderedHeaders []headerWithOrder
+
+			// Process all headers and assign order
+			for k, vv := range req.Header {
+				if k == http.HeaderOrderKey || k == http.PHeaderOrderKey {
+					continue
+				}
+
+				if strings.EqualFold(k, "host") || strings.EqualFold(k, "content-length") {
+					// Host is :authority, already sent.
+					// Content-Length is automatic, set below.
+					continue
+				} else if strings.EqualFold(k, "connection") || strings.EqualFold(k, "proxy-connection") ||
+					strings.EqualFold(k, "transfer-encoding") || strings.EqualFold(k, "upgrade") ||
+					strings.EqualFold(k, "keep-alive") {
+					// Per 8.1.2.2 Connection-Specific Header
+					// Fields, don't send connection-specific
+					// fields. We have already checked if any
+					// are error-worthy so just ignore the rest.
+					continue
+				} else if strings.EqualFold(k, "user-agent") {
+					// Match Go's http1 behavior: at most one
+					// User-Agent. If set to nil or empty string,
+					// then omit it. Otherwise if not mentioned,
+					// include the default (below).
+					didUA = true
+					if len(vv) < 1 {
+						continue
+					}
+					vv = vv[:1]
+					if vv[0] == "" {
+						continue
+					}
+				}
+
+				// Check if this header has an order defined
+				if order, hasOrder := orderMap[strings.ToLower(k)]; hasOrder {
+					orderedHeaders = append(orderedHeaders, headerWithOrder{
+						key:      k,
+						values:   vv,
+						order:    order,
+						hasOrder: true,
+					})
+				} else {
+					orderedHeaders = append(orderedHeaders, headerWithOrder{
+						key:      k,
+						values:   vv,
+						order:    len(headerOrder), // Put unordered headers after ordered ones
+						hasOrder: false,
+					})
+				}
+			}
+
+			// Sort headers by order
+			sort.Slice(orderedHeaders, func(i, j int) bool {
+				if orderedHeaders[i].hasOrder && orderedHeaders[j].hasOrder {
+					return orderedHeaders[i].order < orderedHeaders[j].order
+				} else if orderedHeaders[i].hasOrder && !orderedHeaders[j].hasOrder {
+					return true
+				} else if !orderedHeaders[i].hasOrder && orderedHeaders[j].hasOrder {
+					return false
+				} else {
+					// Both don't have order, sort lexicographically
+					return orderedHeaders[i].key < orderedHeaders[j].key
+				}
+			})
+
+			// Output headers in order
+			for _, header := range orderedHeaders {
+				for _, v := range header.values {
+					f(header.key, v)
+				}
+			}
+		} else {
+			// No header order specified, use original logic
+			for k, vv := range req.Header {
+				if k == http.HeaderOrderKey || k == http.PHeaderOrderKey {
+					continue
+				}
+
+				if strings.EqualFold(k, "host") || strings.EqualFold(k, "content-length") {
+					// Host is :authority, already sent.
+					// Content-Length is automatic, set below.
+					continue
+				} else if strings.EqualFold(k, "connection") || strings.EqualFold(k, "proxy-connection") ||
+					strings.EqualFold(k, "transfer-encoding") || strings.EqualFold(k, "upgrade") ||
+					strings.EqualFold(k, "keep-alive") {
+					// Per 8.1.2.2 Connection-Specific Header
+					// Fields, don't send connection-specific
+					// fields. We have already checked if any
+					// are error-worthy so just ignore the rest.
+					continue
+				} else if strings.EqualFold(k, "user-agent") {
+					// Match Go's http1 behavior: at most one
+					// User-Agent. If set to nil or empty string,
+					// then omit it. Otherwise if not mentioned,
+					// include the default (below).
+					didUA = true
+					if len(vv) < 1 {
+						continue
+					}
+					vv = vv[:1]
+					if vv[0] == "" {
+						continue
+					}
+				}
+
+				for _, v := range vv {
+					f(k, v)
+				}
 			}
 		}
+
+		// Add content-length if needed
 		if shouldSendReqContentLength(req.Method, contentLength) {
 			f("content-length", strconv.FormatInt(contentLength, 10))
 		}
+
+		// Add gzip header if requested
 		if addGzipHeader {
 			f("accept-encoding", "gzip")
 		}
+
+		// Add default user-agent if not already set
 		if !didUA {
 			f("user-agent", defaultUserAgent)
 		}
