@@ -312,7 +312,7 @@ func addDialCallback(t *testing.T, tr *http3.Transport) {
 	}
 
 	require.Nil(t, tr.Dial)
-	tr.Dial = func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+	tr.Dial = func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
 		a, err := net.ResolveUDPAddr("udp", addr)
 		if err != nil {
 			return nil, err

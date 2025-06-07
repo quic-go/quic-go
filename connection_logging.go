@@ -50,7 +50,7 @@ func toLoggingAckFrame(f *wire.AckFrame) *logging.AckFrame {
 	return ack
 }
 
-func (s *connection) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN) {
+func (s *Conn) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN) {
 	// quic-go logging
 	if s.logger.Debug() {
 		p.header.Log(s.logger)
@@ -82,7 +82,7 @@ func (s *connection) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN) 
 	}
 }
 
-func (s *connection) logShortHeaderPacket(
+func (s *Conn) logShortHeaderPacket(
 	destConnID protocol.ConnectionID,
 	ackFrame *wire.AckFrame,
 	frames []ackhandler.Frame,
@@ -134,7 +134,7 @@ func (s *connection) logShortHeaderPacket(
 	}
 }
 
-func (s *connection) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
+func (s *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 	if s.logger.Debug() {
 		// There's a short period between dropping both Initial and Handshake keys and completion of the handshake,
 		// during which we might call PackCoalescedPacket but just pack a short header packet.

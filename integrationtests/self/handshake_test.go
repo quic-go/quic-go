@@ -280,7 +280,7 @@ func TestClosedConnectionsInAcceptQueue(t *testing.T) {
 	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued and closed
 
 	// accept all connections, and find the closed one
-	var closedConn quic.Connection
+	var closedConn *quic.Conn
 	for i := 0; i < 2; i++ {
 		conn, err := server.Accept(ctx)
 		require.NoError(t, err)
@@ -467,7 +467,7 @@ func TestALPN(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	acceptChan := make(chan quic.Connection, 2)
+	acceptChan := make(chan *quic.Conn, 2)
 	go func() {
 		for {
 			conn, err := ln.Accept(context.Background())

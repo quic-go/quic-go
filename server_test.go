@@ -53,7 +53,7 @@ type serverOpts struct {
 		*logging.ConnectionTracer,
 		utils.Logger,
 		protocol.Version,
-	) quicConn
+	) *wrappedConn
 }
 
 func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
@@ -611,13 +611,13 @@ type connConstructorArgs struct {
 type connConstructorRecorder struct {
 	ch chan connConstructorArgs
 
-	conns []*MockQUICConn
+	hooks []*connTestHooks
 }
 
-func newConnConstructorRecorder(conns ...*MockQUICConn) *connConstructorRecorder {
+func newConnConstructorRecorder(hooks ...*connTestHooks) *connConstructorRecorder {
 	return &connConstructorRecorder{
-		ch:    make(chan connConstructorArgs, len(conns)),
-		conns: conns,
+		ch:    make(chan connConstructorArgs, len(hooks)),
+		hooks: hooks,
 	}
 }
 
@@ -643,7 +643,7 @@ func (r *connConstructorRecorder) NewConn(
 	_ *logging.ConnectionTracer,
 	_ utils.Logger,
 	_ protocol.Version,
-) quicConn {
+) *wrappedConn {
 	r.ch <- connConstructorArgs{
 		ctx:              ctx,
 		connRunner:       connRunner,
@@ -654,9 +654,9 @@ func (r *connConstructorRecorder) NewConn(
 		destConnID:       destConnID,
 		srcConnID:        srcConnID,
 	}
-	c := r.conns[0]
-	r.conns = r.conns[1:]
-	return c
+	hooks := r.hooks[0]
+	r.hooks = r.hooks[1:]
+	return &wrappedConn{testHooks: hooks}
 }
 
 func TestServerCreateConnection(t *testing.T) {
@@ -669,7 +669,6 @@ func TestServerCreateConnection(t *testing.T) {
 }
 
 func testServerCreateConnection(t *testing.T, useRetry bool) {
-	mockCtrl := gomock.NewController(t)
 	tokenGeneratorKey := TokenGeneratorKey{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
 	tg := handshake.NewTokenGenerator(tokenGeneratorKey)
 
@@ -679,17 +678,13 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 	})
 
 	done := make(chan struct{}, 3)
-	c := NewMockQUICConn(mockCtrl)
-	c.EXPECT().run().Do(func() error { done <- struct{}{}; return nil })
-	c.EXPECT().Context().DoAndReturn(func() context.Context {
-		done <- struct{}{}
-		return context.Background()
+	handledPackets := make(chan receivedPacket, 1)
+	recorder := newConnConstructorRecorder(&connTestHooks{
+		run:               func() error { done <- struct{}{}; return nil },
+		context:           func() context.Context { done <- struct{}{}; return context.Background() },
+		handshakeComplete: func() <-chan struct{} { done <- struct{}{}; return make(chan struct{}) },
+		handlePacket:      func(p receivedPacket) { handledPackets <- p },
 	})
-	c.EXPECT().HandshakeComplete().DoAndReturn(func() <-chan struct{} {
-		done <- struct{}{}
-		return make(chan struct{})
-	})
-	recorder := newConnConstructorRecorder(c)
 	server.newConn = recorder.NewConn
 
 	conn := newUDPConnLocalhost(t)
@@ -716,9 +711,15 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 		&wire.ExtendedHeader{Header: hdr, PacketNumberLen: protocol.PacketNumberLen4},
 		make([]byte, protocol.MinInitialPacketSize),
 	)
-	c.EXPECT().handlePacket(packet)
 
 	server.handlePacket(packet)
+
+	select {
+	case p := <-handledPackets:
+		require.Equal(t, packet, p)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 
 	var args connConstructorArgs
 	select {
@@ -745,27 +746,18 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 			t.Fatal("timeout")
 		}
 	}
-
-	// shutdown
-	c.EXPECT().closeWithTransportError(ConnectionRefused)
-	c.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServerClose(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	var conns []*MockQUICConn
+	var hooks []*connTestHooks
 	const numConns = 3
 	done := make(chan struct{}, numConns)
 	for range numConns {
-		conn := NewMockQUICConn(mockCtrl)
-		conn.EXPECT().run().MaxTimes(1)
-		conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
-		conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-		conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1) // doesn't complete handshake
-		conn.EXPECT().closeWithTransportError(ConnectionRefused).Do(func(TransportErrorCode) { done <- struct{}{} })
-		conns = append(conns, conn)
+		hooks = append(hooks, &connTestHooks{
+			closeWithTransportError: func(TransportErrorCode) { done <- struct{}{} },
+		})
 	}
-	recorder := newConnConstructorRecorder(conns...)
+	recorder := newConnConstructorRecorder(hooks...)
 	server := newTestServer(t, &serverOpts{newConn: recorder.NewConn})
 
 	for range numConns {
@@ -802,20 +794,10 @@ func TestServerClose(t *testing.T) {
 		require.ErrorIs(t, err, ErrServerClosed)
 		require.ErrorIs(t, err, net.ErrClosed)
 	}
-
-	// test shutdown
-	for _, conn := range conns {
-		conn.EXPECT().destroy(gomock.Any()).AnyTimes()
-	}
 }
 
 func TestServerGetConfigForClientAccept(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	c := NewMockQUICConn(mockCtrl)
-	c.EXPECT().run().MaxTimes(1)
-	c.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-	c.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
-	recorder := newConnConstructorRecorder(c)
+	recorder := newConnConstructorRecorder(&connTestHooks{})
 	server := newTestServer(t, &serverOpts{
 		config: &Config{
 			GetConfigForClient: func(*ClientInfo) (*Config, error) {
@@ -831,7 +813,6 @@ func TestServerGetConfigForClientAccept(t *testing.T) {
 		protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 		protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 	)
-	c.EXPECT().handlePacket(packet).MaxTimes(1)
 
 	server.handlePacket(packet)
 
@@ -845,10 +826,6 @@ func TestServerGetConfigForClientAccept(t *testing.T) {
 
 	assert.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}), args.destConnID)
 	assert.NotEqual(t, args.origDestConnID, args.srcConnID)
-
-	// shutdown
-	c.EXPECT().closeWithTransportError(ConnectionRefused)
-	c.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServerGetConfigForClientReject(t *testing.T) {
@@ -878,33 +855,6 @@ func TestServerGetConfigForClientReject(t *testing.T) {
 	checkConnectionClose(t, conn, argsChan, destConnID, srcConnID, qerr.ConnectionRefused)
 }
 
-func TestServerPacketHandling(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	server := newTestServer(t, &serverOpts{})
-
-	srcConnID := randConnID(6)
-	destConnID := randConnID(8)
-	conn := NewMockQUICConn(mockCtrl)
-	handledPacket := make(chan receivedPacket, 1)
-	conn.EXPECT().handlePacket(gomock.Any()).Do(func(p receivedPacket) {
-		handledPacket <- p
-	})
-	server.tr.Add(destConnID, conn)
-
-	server.handlePacket(
-		getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, srcConnID, destConnID),
-	)
-	select {
-	case p := <-handledPacket:
-		require.Equal(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, p.remoteAddr)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
-
-	// shutdown
-	conn.EXPECT().destroy(gomock.Any()).AnyTimes()
-}
-
 func TestServerReceiveQueue(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	acceptConn := make(chan struct{})
@@ -931,17 +881,9 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ *logging.ConnectionTracer,
 			_ utils.Logger,
 			_ protocol.Version,
-		) quicConn {
+		) *wrappedConn {
 			<-acceptConn
-			conn := NewMockQUICConn(mockCtrl)
-			conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
-			conn.EXPECT().run().MaxTimes(1)
-			conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-			conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
-			conn.EXPECT().closeWithTransportError(gomock.Any()).MaxTimes(1)
-			// during test shutdown
-			conn.EXPECT().destroy(gomock.Any()).AnyTimes()
-			return conn
+			return &wrappedConn{testHooks: &connTestHooks{handlePacket: func(receivedPacket) {}}}
 		},
 	})
 
@@ -977,16 +919,13 @@ func TestServerAccept(t *testing.T) {
 func testServerAccept(t *testing.T, acceptEarly bool) {
 	mockCtrl := gomock.NewController(t)
 	ready := make(chan struct{})
-	c := NewMockQUICConn(mockCtrl)
-	c.EXPECT().run()
-	c.EXPECT().handlePacket(gomock.Any())
-	c.EXPECT().Context().Return(context.Background())
+	hooks := &connTestHooks{}
 	if acceptEarly {
-		c.EXPECT().earlyConnReady().Return(ready)
+		hooks.earlyConnReady = func() <-chan struct{} { return ready }
 	} else {
-		c.EXPECT().HandshakeComplete().Return(ready)
+		hooks.handshakeComplete = func() <-chan struct{} { return ready }
 	}
-	recorder := newConnConstructorRecorder(c)
+	recorder := newConnConstructorRecorder(hooks)
 	tracer, _ := mocklogging.NewMockTracer(mockCtrl)
 	server := newTestServer(t, &serverOpts{
 		acceptEarly: acceptEarly,
@@ -1027,19 +966,14 @@ func testServerAccept(t *testing.T, acceptEarly bool) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-
-	// test shutdown
-	c.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServerAcceptHandshakeFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	c := NewMockQUICConn(gomock.NewController(t))
-	c.EXPECT().run()
-	c.EXPECT().handlePacket(gomock.Any())
-	c.EXPECT().Context().Return(ctx)
-	c.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-	recorder := newConnConstructorRecorder(c)
+	recorder := newConnConstructorRecorder(&connTestHooks{
+		context:           func() context.Context { return ctx },
+		handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
+	})
 	server := newTestServer(t, &serverOpts{newConn: recorder.NewConn})
 
 	// establish a new connection, which then starts handshaking
@@ -1061,31 +995,24 @@ func TestServerAcceptHandshakeFailure(t *testing.T) {
 		t.Fatal("server should not have accepted the connection")
 	case <-time.After(scaleDuration(5 * time.Millisecond)):
 	}
-
-	// test shutdown
-	c.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServerAcceptQueue(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	var conns []*MockQUICConn
-	var rejectedConn *MockQUICConn
+	var conns []*connTestHooks
+	rejectedCloseError := make(chan TransportErrorCode, 1)
 	for i := range protocol.MaxAcceptQueueSize + 2 {
-		conn := NewMockQUICConn(mockCtrl)
-		conn.EXPECT().handlePacket(gomock.Any())
-		conn.EXPECT().run()
-		c := make(chan struct{})
-		close(c)
-		conn.EXPECT().HandshakeComplete().Return(c)
-		conn.EXPECT().Context().Return(context.Background())
+		conn := &connTestHooks{
+			handshakeComplete: func() <-chan struct{} {
+				c := make(chan struct{})
+				close(c)
+				return c
+			},
+		}
 		conns = append(conns, conn)
 		if i == protocol.MaxAcceptQueueSize {
-			rejectedConn = conn
+			conn.closeWithTransportError = func(code TransportErrorCode) { rejectedCloseError <- code }
 			continue
 		}
-		defer func(conn *MockQUICConn) {
-			conn.EXPECT().closeWithTransportError(ConnectionRefused).MaxTimes(1)
-		}(conn)
 	}
 	recorder := newConnConstructorRecorder(conns...)
 	server := newTestServer(t, &serverOpts{newConn: recorder.NewConn})
@@ -1107,10 +1034,6 @@ func TestServerAcceptQueue(t *testing.T) {
 	// wait for the connection to be enqueued
 	time.Sleep(scaleDuration(10 * time.Millisecond))
 
-	done := make(chan struct{})
-	rejectedConn.EXPECT().closeWithTransportError(ConnectionRefused).Do(func(TransportErrorCode) {
-		close(done)
-	})
 	server.handlePacket(
 		getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, randConnID(6), randConnID(8)),
 	)
@@ -1120,7 +1043,8 @@ func TestServerAcceptQueue(t *testing.T) {
 		t.Fatal("timeout")
 	}
 	select {
-	case <-done:
+	case code := <-rejectedCloseError:
+		require.Equal(t, ConnectionRefused, code)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
@@ -1145,18 +1069,18 @@ func TestServerAcceptQueue(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-
-	// test shutdown
-	for _, conn := range conns {
-		conn.EXPECT().destroy(gomock.Any()).AnyTimes()
-	}
 }
 
 func TestServer0RTTReordering(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
-	conn := NewMockQUICConn(mockCtrl)
-	recorder := newConnConstructorRecorder(conn)
+	packets := make(chan receivedPacket, protocol.Max0RTTQueueLen+1)
+	done := make(chan struct{})
+	recorder := newConnConstructorRecorder(&connTestHooks{
+		handlePacket:   func(p receivedPacket) { packets <- p },
+		earlyConnReady: func() <-chan struct{} { return make(chan struct{}) },
+		run:            func() error { close(done); return nil },
+	})
 	server := newTestServer(t, &serverOpts{
 		acceptEarly: true,
 		tracer:      tracer,
@@ -1205,13 +1129,7 @@ func TestServer0RTTReordering(t *testing.T) {
 	server.handlePacket(p)
 
 	// now receive the Initial
-	done := make(chan struct{})
 	initial := getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, randConnID(5), connID)
-	packets := make(chan receivedPacket, protocol.Max0RTTQueueLen+1)
-	conn.EXPECT().handlePacket(gomock.Any()).Do(func(p receivedPacket) { packets <- p }).AnyTimes()
-	conn.EXPECT().Context().Return(context.Background())
-	conn.EXPECT().earlyConnReady().Return(make(chan struct{}))
-	conn.EXPECT().run().Do(func() error { close(done); return nil })
 	server.handlePacket(initial)
 
 	for i := range protocol.Max0RTTQueueLen + 1 {
@@ -1232,10 +1150,6 @@ func TestServer0RTTReordering(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-
-	// shutdown
-	conn.EXPECT().closeWithTransportError(gomock.Any()).AnyTimes()
-	conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestServer0RTTQueueing(t *testing.T) {

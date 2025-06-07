@@ -27,7 +27,7 @@ func TestEarlyData(t *testing.T) {
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
-	connChan := make(chan quic.EarlyConnection)
+	connChan := make(chan *quic.Conn)
 	errChan := make(chan error)
 	go func() {
 		conn, err := ln.Accept(context.Background())
@@ -43,7 +43,7 @@ func TestEarlyData(t *testing.T) {
 	clientConn, err := quic.Dial(ctx, newUDPConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 
-	var serverConn quic.EarlyConnection
+	var serverConn *quic.Conn
 	select {
 	case serverConn = <-connChan:
 	case err := <-errChan:

@@ -51,8 +51,8 @@ type TokenStore interface {
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// ConnectionTracingKey can be used to associate a [logging.ConnectionTracer] with a [Connection].
-// It is set on the Connection.Context() context,
+// ConnectionTracingKey can be used to associate a [logging.ConnectionTracer] with a [Conn].
+// It is set on the Conn.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
 //
 // Deprecated: Applications can set their own tracing key using Transport.ConnContext.
@@ -68,88 +68,6 @@ type connTracingCtxKey struct{}
 // QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the
 // context returned by tls.Config.ClientInfo.Context.
 var QUICVersionContextKey = handshake.QUICVersionContextKey
-
-// A Connection is a QUIC connection between two peers.
-// Calls to the connection (and to streams) can return the following types of errors:
-//   - [ApplicationError]: for errors triggered by the application running on top of QUIC
-//   - [TransportError]: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
-//   - [IdleTimeoutError]: when the peer goes away unexpectedly (this is a [net.Error] timeout error)
-//   - [HandshakeTimeoutError]: when the cryptographic handshake takes too long (this is a [net.Error] timeout error)
-//   - [StatelessResetError]: when we receive a stateless reset
-//   - [VersionNegotiationError]: returned by the client, when there's no version overlap between the peers
-type Connection interface {
-	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
-	AcceptStream(context.Context) (*Stream, error)
-	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
-	AcceptUniStream(context.Context) (*ReceiveStream, error)
-	// OpenStream opens a new bidirectional QUIC stream.
-	// There is no signaling to the peer about new streams:
-	// The peer can only accept the stream after data has been sent on the stream,
-	// or the stream has been reset or closed.
-	// When reaching the peer's stream limit, it is not possible to open a new stream until the
-	// peer raises the stream limit. In that case, a StreamLimitReachedError is returned.
-	OpenStream() (*Stream, error)
-	// OpenStreamSync opens a new bidirectional QUIC stream.
-	// It blocks until a new stream can be opened.
-	// There is no signaling to the peer about new streams:
-	// The peer can only accept the stream after data has been sent on the stream,
-	// or the stream has been reset or closed.
-	OpenStreamSync(context.Context) (*Stream, error)
-	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
-	// There is no signaling to the peer about new streams:
-	// The peer can only accept the stream after data has been sent on the stream,
-	// or the stream has been reset or closed.
-	// When reaching the peer's stream limit, it is not possible to open a new stream until the
-	// peer raises the stream limit. In that case, a StreamLimitReachedError is returned.
-	OpenUniStream() (*SendStream, error)
-	// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
-	// It blocks until a new stream can be opened.
-	// There is no signaling to the peer about new streams:
-	// The peer can only accept the stream after data has been sent on the stream,
-	// or the stream has been reset or closed.
-	OpenUniStreamSync(context.Context) (*SendStream, error)
-	// LocalAddr returns the local address.
-	LocalAddr() net.Addr
-	// RemoteAddr returns the address of the peer.
-	RemoteAddr() net.Addr
-	// CloseWithError closes the connection with an error.
-	// The error string will be sent to the peer.
-	CloseWithError(ApplicationErrorCode, string) error
-	// Context returns a context that is cancelled when the connection is closed.
-	// The cancellation cause is set to the error that caused the connection to
-	// close, or `context.Canceled` in case the listener is closed first.
-	Context() context.Context
-	// ConnectionState returns basic details about the QUIC connection.
-	// Warning: This API should not be considered stable and might change soon.
-	ConnectionState() ConnectionState
-
-	// SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221.
-	// There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.
-	// The payload of the datagram needs to fit into a single QUIC packet.
-	// In addition, a datagram may be dropped before being sent out if the available packet size suddenly decreases.
-	// If the payload is too large to be sent at the current time, a DatagramTooLargeError is returned.
-	SendDatagram(payload []byte) error
-	// ReceiveDatagram gets a message received in a datagram, as specified in RFC 9221.
-	ReceiveDatagram(context.Context) ([]byte, error)
-
-	AddPath(*Transport) (*Path, error)
-}
-
-// An EarlyConnection is a connection that is handshaking.
-// Data sent during the handshake is encrypted using the forward secure keys.
-// When using client certificates, the client's identity is only verified
-// after completion of the handshake.
-type EarlyConnection interface {
-	Connection
-
-	// HandshakeComplete blocks until the handshake completes (or fails).
-	// For the client, data sent before completion of the handshake is encrypted with 0-RTT keys.
-	// For the server, data sent before completion of the handshake is encrypted with 1-RTT keys,
-	// however the client's identity is only verified once the handshake completes.
-	HandshakeComplete() <-chan struct{}
-
-	NextConnection(context.Context) (Connection, error)
-}
 
 // StatelessResetKey is a key used to derive stateless reset tokens.
 type StatelessResetKey [32]byte
@@ -231,7 +149,7 @@ type Config struct {
 	// limit the memory usage.
 	// To avoid deadlocks, it is not valid to call other functions on the connection or on streams
 	// in this callback.
-	AllowConnectionWindowIncrease func(conn Connection, delta uint64) bool
+	AllowConnectionWindowIncrease func(conn *Conn, delta uint64) bool
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any bidirectional streams.
@@ -285,7 +203,7 @@ type ConnectionState struct {
 	// TLS contains information about the TLS connection state, incl. the tls.ConnectionState.
 	TLS tls.ConnectionState
 	// SupportsDatagrams indicates whether the peer advertised support for QUIC datagrams (RFC 9221).
-	// When true, datagrams can be sent using the Connection's SendDatagram method.
+	// When true, datagrams can be sent using the Conn's SendDatagram method.
 	// This is a unilateral declaration by the peer - receiving datagrams is only possible if
 	// datagram support was enabled locally via Config.EnableDatagrams.
 	SupportsDatagrams bool
