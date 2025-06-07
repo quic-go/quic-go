@@ -37,8 +37,8 @@ func TestParserReservedFrameType(t *testing.T) {
 			data = append(data, []byte("foobar")...)
 
 			fp := frameParser{
-				r:    bytes.NewReader(data),
-				conn: client,
+				r:         bytes.NewReader(data),
+				closeConn: client.CloseWithError,
 			}
 			_, err := fp.ParseNext()
 			require.Error(t, err)
