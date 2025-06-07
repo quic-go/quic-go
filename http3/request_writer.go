@@ -113,6 +113,12 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	// potentially pollute our hpack state. (We want to be able to
 	// continue to reuse the hpack encoder for future requests)
 	for k, vv := range req.Header {
+		if k == http.PHeaderOrderKey || k == http.HeaderOrderKey {
+			// This is a special header used by the Transport to control the order of headers.
+			// It is not a valid HTTP header field name, so we skip it here.
+			continue
+		}
+
 		if !httpguts.ValidHeaderFieldName(k) {
 			return fmt.Errorf("invalid HTTP header name %q", k)
 		}
