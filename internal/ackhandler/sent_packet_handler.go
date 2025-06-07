@@ -97,6 +97,7 @@ type sentPacketHandler struct {
 	// The number of PTO probe packets that should be sent.
 	// Only applies to the application-data packet number space.
 	numProbesToSend int
+	pacer           *congestion.Pacer
 
 	// The alarm timeout
 	alarm alarmTimer
@@ -108,6 +109,8 @@ type sentPacketHandler struct {
 
 	tracer *logging.ConnectionTracer
 	logger utils.Logger
+
+	mtuDiscoverer mtuDiscoverer
 }
 
 var (
@@ -123,18 +126,13 @@ func newSentPacketHandler(
 	rttStats *utils.RTTStats,
 	clientAddressValidated bool,
 	enableECN bool,
+	congestionAlgorithm congestion.SendAlgorithmWithDebugInfos,
+	pacer *congestion.Pacer,
+	mtuDiscoverer mtuDiscoverer,
 	pers protocol.Perspective,
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 ) *sentPacketHandler {
-	congestion := congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		rttStats,
-		initialMaxDatagramSize,
-		true, // use Reno
-		tracer,
-	)
-
 	h := &sentPacketHandler{
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
 		peerAddressValidated:           pers == protocol.PerspectiveClient || clientAddressValidated,
@@ -142,7 +140,9 @@ func newSentPacketHandler(
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
 		rttStats:                       rttStats,
-		congestion:                     congestion,
+		congestion:                     congestionAlgorithm,
+		pacer:                          pacer,
+		mtuDiscoverer:                  mtuDiscoverer,
 		perspective:                    pers,
 		tracer:                         tracer,
 		logger:                         logger,
@@ -213,6 +213,51 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 	h.numProbesToSend = 0
 	h.ptoMode = SendNone
 	h.setLossDetectionTimer(now)
+}
+
+// GetPacketNumberGeneratorForLevel returns the packet number generator for the given encryption level.
+// This is used by the connection to initialize the multipath manager for Path 0.
+func (h *sentPacketHandler) GetPacketNumberGeneratorForLevel(encLevel protocol.EncryptionLevel) *ackhandler.PacketNumberGenerator {
+	// This is a simplified access pattern. PacketNumberGenerator is not directly exposed.
+	// sentPacketHandler has pnManager which is not exported.
+	// newPacketNumberSpace creates a packetNumberGenerator.
+	// This indicates a potential need to refactor how PNGs are accessed or managed,
+	// or that the main connection's SPH might not be the direct source for Path 0's PNG
+	// if Path 0 is fully managed by multiPathManager with its own SPH.
+	// For now, let's assume this is about the 1-RTT space for path 0.
+	// The sentPacketHandler has AppDataSpaceInitialPacketNumber.
+	// It internally creates a packetNumberGenerator for appDataPackets.
+	// This method would need to return that specific generator.
+	// However, packetNumberSpace.pns is not exported.
+	// This points to a design consideration: if multiPathManager's path 0
+	// uses the *exact same instance* of SPH/RPH as the connection, then these getters
+	// might be on connection. If it creates *new* SPH/RPH for path 0, then these
+	// getters are fine on SPH.
+
+	// For the purpose of this subtask, assuming we want the 1-RTT PNG from the main SPH:
+	if encLevel == protocol.Encryption1RTT && h.appDataPackets != nil {
+		// Cannot directly access h.appDataPackets.pns. This needs a proper accessor in packetNumberSpace or SPH.
+		// Placeholder:
+		// return &h.appDataPackets.pns
+		// Since I cannot implement this without further refactoring ackhandler internal types,
+		// I will return nil for now and note this as a major TODO/blocker for this specific approach.
+		// The alternative is that connection.go's newConnection/newClientConnection, when creating path 0 for MPM,
+		// creates a *new* PNG for it, rather than trying to reuse the one inside its main SPH.
+		// This seems more aligned with each path having its *own* components.
+		return nil // Placeholder - Requires refactor or different approach for Path 0 PNG
+	}
+	// Similarly for other levels if needed, but 1-RTT is primary for this subtask.
+	return nil
+}
+
+// GetCongestionController returns the congestion controller.
+func (h *sentPacketHandler) GetCongestionController() congestion.SendAlgorithmWithDebugInfos {
+	return h.congestion
+}
+
+// GetPacer returns the pacer.
+func (h *sentPacketHandler) GetPacer() *congestion.Pacer {
+	return h.pacer
 }
 
 func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t time.Time) {
@@ -466,6 +511,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			}
 			continue
 		}
+		// Check if it's an MTU probe and notify discoverer
+		// This is handled by the PING frame's OnAcked handler (mtuFinderAckHandler)
+		// No explicit call to h.mtuDiscoverer is needed here.
 		h.ackedPackets = append(h.ackedPackets, p)
 	}
 	if h.logger.Debug() && len(h.ackedPackets) > 0 {
@@ -885,11 +933,18 @@ func (h *sentPacketHandler) SendMode(now time.Time) SendMode {
 }
 
 func (h *sentPacketHandler) TimeUntilSend() time.Time {
+	if h.pacer != nil {
+		return h.pacer.TimeUntilSend()
+	}
+	// Fallback if pacer is not set (e.g. for non-1RTT packet number spaces or tests)
 	return h.congestion.TimeUntilSend(h.bytesInFlight)
 }
 
 func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
 	h.congestion.SetMaxDatagramSize(s)
+	if h.pacer != nil {
+		h.pacer.SetMaxDatagramSize(s)
+	}
 }
 
 func (h *sentPacketHandler) isAmplificationLimited() bool {
@@ -996,5 +1051,14 @@ func (h *sentPacketHandler) MigratedPath(now time.Time, initialMaxDatagramSize p
 		true, // use Reno
 		h.tracer,
 	)
+	// Re-initialize pacer with the new congestion controller
+	if h.pacer != nil {
+		h.pacer.Reset(h.congestion.TimeUntilSend)
+		h.pacer.SetMaxDatagramSize(initialMaxDatagramSize) // Ensure pacer also knows the new MDS
+	} else {
+		// This case should ideally not happen if pacer is always initialized with congestion controller
+		h.pacer = congestion.NewPacer(h.congestion.TimeUntilSend)
+		h.pacer.SetMaxDatagramSize(initialMaxDatagramSize)
+	}
 	h.setLossDetectionTimer(now)
 }

@@ -74,7 +74,10 @@ type updatableAEAD struct {
 	nonceBuf []byte
 
 	multipathEnabled bool
-	logger           utils.Logger
+	// logger field already exists from previous step, ensure it's correctly initialized if needed again.
+
+	nextKeyUpdateTime time.Time
+	ptoProvider       func() time.Duration
 }
 
 var (
@@ -82,18 +85,19 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version, multipathEnabled bool) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version, multipathEnabled bool, ptoProvider func() time.Duration) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
-		logger:                  logger,
+		logger:                  logger, // Already initialized by previous step, ensure it's correct
 		multipathEnabled:        multipathEnabled,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
-		rttStats:                rttStats,
+		rttStats:                rttStats, // Still used for prevRcvAEADExpiry, might be removable if ptoProvider covers all
 		tracer:                  tracer,
-		logger:                  logger,
 		version:                 version,
+		ptoProvider:             ptoProvider,
+		// logger field already exists and is set.
 	}
 }
 
@@ -119,9 +123,30 @@ func (a *updatableAEAD) rollKeys() {
 	a.nextSendTrafficSecret = a.getNextTrafficSecret(a.suite.Hash, a.nextSendTrafficSecret)
 	a.nextRcvAEAD = createAEAD(a.suite, a.nextRcvTrafficSecret, a.version)
 	a.nextSendAEAD = createAEAD(a.suite, a.nextSendTrafficSecret, a.version)
+
+	if a.ptoProvider != nil {
+		largestPTO := a.ptoProvider()
+		a.nextKeyUpdateTime = time.Now().Add(3 * largestPTO)
+		a.logger.Debugf("Key update initiated. Next update possible after %s (3 * %s)", a.nextKeyUpdateTime.Format(time.RFC3339), largestPTO)
+	} else {
+		// Fallback if ptoProvider is not set, though it should be.
+		// This might happen if called before cryptoSetup has fully initialized it.
+		// Or, if this AEAD instance is not the 1-RTT one.
+		// The original rttStats based PTO is still used for prevRcvAEADExpiry.
+		// For nextKeyUpdateTime, we might log a warning or use a default fixed delay.
+		a.logger.Warnf("ptoProvider not set during rollKeys; nextKeyUpdateTime based on default RTT stats PTO")
+		if a.rttStats != nil { // Should always be set
+			a.nextKeyUpdateTime = time.Now().Add(3 * a.rttStats.PTO(true))
+		} else {
+			// Highly unlikely, but as a last resort, use a fixed sensible default.
+			a.nextKeyUpdateTime = time.Now().Add(3 * protocol.DefaultProbeTimeout)
+		}
+	}
 }
 
 func (a *updatableAEAD) startKeyDropTimer(now time.Time) {
+	// Use the local rttStats for dropping old keys, as this is about local timer for local AEAD.
+	// The largestOverallPTO is for coordinating *initiation* of new keys across paths.
 	d := 3 * a.rttStats.PTO(true)
 	a.logger.Debugf("Starting key drop timer to drop key phase %d (in %s)", a.keyPhase-1, d)
 	a.prevRcvAEADExpiry = now.Add(d)
@@ -348,6 +373,10 @@ func (a *updatableAEAD) updateAllowed() bool {
 
 func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 	if !a.updateAllowed() {
+		return false
+	}
+	if !a.nextKeyUpdateTime.IsZero() && time.Now().Before(a.nextKeyUpdateTime) {
+		a.logger.Debugf("Key update cool-down period active. Next update possible after %s", a.nextKeyUpdateTime.Format(time.RFC3339))
 		return false
 	}
 	// Initiate the first key update shortly after the handshake, in order to exercise the key update mechanism.

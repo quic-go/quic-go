@@ -75,10 +75,12 @@ func NewCryptoSetupClient(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	version protocol.Version,
+	ptoProvider func() time.Duration,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
 		tp,
+		ptoProvider,
 		rttStats,
 		tracer,
 		logger,
@@ -111,10 +113,12 @@ func NewCryptoSetupServer(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	version protocol.Version,
+	ptoProvider func() time.Duration,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
 		tp,
+		ptoProvider,
 		rttStats,
 		tracer,
 		logger,
@@ -141,6 +145,7 @@ func newCryptoSetup(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 	version protocol.Version,
+	ptoProvider func() time.Duration,
 ) *cryptoSetup {
 	initialSealer, initialOpener := NewInitialAEAD(connID, perspective, version)
 	if tracer != nil && tracer.UpdatedKeyFromTLS != nil {
@@ -155,7 +160,7 @@ func newCryptoSetup(
 	return &cryptoSetup{
 		initialSealer: initialSealer,
 		initialOpener: initialOpener,
-		aead:          newUpdatableAEAD(rttStats, tracer, logger, version, false /* multipathEnabled */),
+		aead:          newUpdatableAEAD(rttStats, tracer, logger, version, false /* multipathEnabled */, ptoProvider),
 		events:        make([]Event, 0, 16),
 		ourParams:     tp,
 		rttStats:      rttStats,

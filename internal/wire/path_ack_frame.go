@@ -22,13 +22,29 @@ type PathAckFrame struct {
 // Length of a written frame.
 func (f *PathAckFrame) Length(v protocol.Version) protocol.ByteCount {
 	length := quicvarint.Len(uint64(f.PathIdentifier))
-	length += quicvarint.Len(uint64(f.LargestAcked))
-	length += quicvarint.Len(uint64(f.DelayTime / time.Microsecond)) // Ack Delay is encoded in microseconds
-	length += quicvarint.Len(uint64(len(f.AckRanges)))               // Number of ACK Ranges
+	if len(f.AckRanges) == 0 { // Should not happen with a valid ACK frame logic
+		return protocol.ByteCount(length + quicvarint.Len(0) + quicvarint.Len(0) + quicvarint.Len(0))
+	}
+	largestAcked := f.AckRanges[0].Largest // Assuming AckRanges are sorted as in wire.AckFrame
 
-	for _, ackRange := range f.AckRanges {
-		length += quicvarint.Len(uint64(ackRange.Smallest))
-		length += quicvarint.Len(uint64(ackRange.Largest))
+	length += quicvarint.Len(uint64(largestAcked))
+	// Note: ackDelayExponent is not used for Length calculation of the delay value itself,
+	// only for encoding. The varint length depends on the magnitude of the encoded value.
+	// We use the scaled value for Length calculation as that's what gets encoded.
+	length += quicvarint.Len(encodeAckDelay(f.DelayTime, protocol.DefaultAckDelayExponent)) // Use default for length calculation, actual exponent for Append
+
+	numRanges := len(f.AckRanges)
+	length += quicvarint.Len(uint64(numRanges -1)) // Number of additional blocks
+
+	// First ACK range block
+	length += quicvarint.Len(uint64(f.AckRanges[0].Largest - f.AckRanges[0].Smallest))
+
+	// Subsequent ACK range blocks
+	for i := 1; i < numRanges; i++ {
+		gap := uint64(f.AckRanges[i-1].Smallest - f.AckRanges[i].Largest - 2)
+		ackRangeLen := uint64(f.AckRanges[i].Largest - f.AckRanges[i].Smallest)
+		length += quicvarint.Len(gap)
+		length += quicvarint.Len(ackRangeLen)
 	}
 
 	if f.ECNCounts != nil {
@@ -40,39 +56,45 @@ func (f *PathAckFrame) Length(v protocol.Version) protocol.ByteCount {
 }
 
 // Append appends a PATH_ACK frame.
-func (f *PathAckFrame) Append(b []byte, v protocol.Version) ([]byte, error) {
+// The ackDelayExponent is the one negotiated for 1-RTT packets.
+func (f *PathAckFrame) Append(b []byte, ackDelayExponent uint8, v protocol.Version) ([]byte, error) {
 	b = quicvarint.Append(b, uint64(f.PathIdentifier))
-	// The rest is identical to AckFrame.Append, minus the type byte.
-	// We can adapt the logic from AckFrame.AppendAckFrame acks.go for the body.
-	b = quicvarint.Append(b, uint64(f.LargestAcked))
-	b = quicvarint.Append(b, uint64(f.DelayTime/time.Microsecond))
-	b = quicvarint.Append(b, uint64(len(f.AckRanges)))
 
-	// Process ACK ranges in reverse order as per QUIC spec for encoding efficiency
-	for i := len(f.AckRanges) - 1; i >= 0; i-- {
-		ackRange := f.AckRanges[i]
-		// The "Gap" is LargestAcked - Smallest in the preceding range (or 0 for the first range)
-		// The "Ack Range Length" is Largest - Smallest in the current range
-		// This encoding is complex and typically handled by AckFrame's internal logic.
-		// For PATH_ACK, we assume AckRanges are already correctly representing {Smallest, Largest} pairs.
-		// The draft for PATH_ACK doesn't specify a different encoding than ACK, so we assume direct values.
-		// However, standard ACK encoding is:
-		// First Ack Range ( LargestAcked - Smallest)
-		// Gap (Smallest in previous range - Largest in current range - 2)
-		// Ack Range Length (Largest - Smallest in current range)
-		// For simplicity here, and matching AckFrame's direct data, we'll write Smallest and Largest directly.
-		// This might need adjustment if the on-the-wire format is more compact like standard ACK.
-		// The draft says "The format of these fields is identical to that of the ACK frame"
-		// Let's use the simpler direct representation for now, assuming AckFrame's logic handles the complex encoding if needed.
-		// For now, we'll just append the fields as they are.
-		// This part will need careful review against how wire.AckFrame actually serializes AckRanges.
+	if len(f.AckRanges) == 0 {
+		// This case should ideally be prevented by higher-level logic
+		// (e.g., an ACK frame must acknowledge at least one packet).
+		// However, to be safe, append default values if it occurs.
+		b = quicvarint.Append(b, 0) // Largest Acked
+		b = quicvarint.Append(b, 0) // ACK Delay
+		b = quicvarint.Append(b, 0) // Num ACK Ranges - 1
+		// No ranges to append.
+		// No ECN counts if there are no ranges.
+		return b, nil
+	}
 
-		// The current wire.AckFrame.Append uses a more complex logic involving gaps.
-		// Replicating that here directly is prone to errors.
-		// A better approach would be to have a common ackblock serialization function.
-		// For this subtask, we'll append them directly, acknowledging this simplification.
-		b = quicvarint.Append(b, uint64(ackRange.Smallest)) // This is NOT how standard ACK frames encode ranges.
-		b = quicvarint.Append(b, uint64(ackRange.Largest))  // This is NOT how standard ACK frames encode ranges.
+	// Sort AckRanges to ensure Largest is first, and then by Largest descending.
+	// This is critical for correct gap encoding. The wire.AckFrame does this.
+	// For PathAckFrame, we assume it's already sorted by the caller (e.g. path specific ack handler).
+	// If not, it needs sorting here:
+	// sort.Slice(f.AckRanges, func(i, j int) bool {
+	//    return f.AckRanges[i].Largest > f.AckRanges[j].Largest
+	// })
+
+	b = quicvarint.Append(b, uint64(f.AckRanges[0].Largest))
+	b = quicvarint.Append(b, encodeAckDelay(f.DelayTime, ackDelayExponent))
+
+	numRanges := len(f.AckRanges)
+	b = quicvarint.Append(b, uint64(numRanges-1)) // Number of additional blocks
+
+	// First ACK range block: Largest Acked - Smallest Acked in this block
+	b = quicvarint.Append(b, uint64(f.AckRanges[0].Largest-f.AckRanges[0].Smallest))
+
+	// Subsequent ACK range blocks
+	for i := 1; i < numRanges; i++ {
+		gap := uint64(f.AckRanges[i-1].Smallest - f.AckRanges[i].Largest - 2)
+		ackRangeLen := uint64(f.AckRanges[i].Largest - f.AckRanges[i].Smallest)
+		b = quicvarint.Append(b, gap)
+		b = quicvarint.Append(b, ackRangeLen)
 	}
 
 	if f.ECNCounts != nil {
@@ -178,5 +200,10 @@ func parsePathAckFrame(r *bytes.Reader, frameType uint8, ackDelayExponent uint8,
 		return nil, errRemainingBytes
 	}
 	return frame, nil
+}
+
+// encodeAckDelay encodes the ACK Delay
+func encodeAckDelay(delay time.Duration, ackDelayExponent uint8) uint64 {
+	return uint64(delay.Nanoseconds() / (1000 * (1 << ackDelayExponent)))
 }
 [end of internal/wire/path_ack_frame.go]

@@ -444,7 +444,8 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
 	}
-	// TODO: Only marshal if multipath is supported by the local endpoint.
+	// Marshal InitialMaxPathID only if it's set (i.e., not InvalidPathID),
+	// indicating that multipath is configured for the local endpoint.
 	if p.InitialMaxPathID != protocol.InvalidPathID {
 		b = p.marshalVarintParam(b, initialMaxPathIDParameterID, p.InitialMaxPathID)
 	}

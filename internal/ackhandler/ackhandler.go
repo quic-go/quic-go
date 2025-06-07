@@ -18,7 +18,10 @@ func NewAckHandler(
 	pers protocol.Perspective,
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
+	congestionController congestion.SendAlgorithmWithDebugInfos,
+	pacer *congestion.Pacer,
+	mtuDiscoverer mtuDiscoverer,
 ) (SentPacketHandler, ReceivedPacketHandler) {
-	sph := newSentPacketHandler(initialPacketNumber, initialMaxDatagramSize, rttStats, clientAddressValidated, enableECN, pers, tracer, logger)
-	return sph, newReceivedPacketHandler(sph, logger)
+	sph := newSentPacketHandler(initialPacketNumber, initialMaxDatagramSize, rttStats, clientAddressValidated, enableECN, congestionController, pacer, mtuDiscoverer, pers, tracer, logger)
+	return sph, newReceivedPacketHandler(sph, rttStats, logger, tracer, pers)
 }
