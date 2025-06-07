@@ -180,7 +180,7 @@ func (f *settingsFrame) Append(b []byte) []byte {
 	var l int
 	for id, val := range f.Other {
 		if id == SettingsGREASE {
-			quicvarint.Len(quicvarint.Max)
+			l += quicvarint.Len(quicvarint.Max)
 			if val != 0 {
 				l += quicvarint.Len(val)
 			} else {
@@ -239,7 +239,7 @@ func (f *settingsFrame) AppendWithOrder(b []byte) []byte {
 			continue // skip unknown settings
 		}
 		if id == SettingsGREASE {
-			quicvarint.Len(quicvarint.Max)
+			l += quicvarint.Len(quicvarint.Max)
 			if val != 0 {
 				l += quicvarint.Len(val)
 			} else {
