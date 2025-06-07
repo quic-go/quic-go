@@ -138,7 +138,7 @@ func TestConfigCloning(t *testing.T) {
 		var calledAllowConnectionWindowIncrease, calledTracer bool
 		c1 := &Config{
 			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, assert.AnError },
-			AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
+			AllowConnectionWindowIncrease: func(*Conn, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 			Tracer: func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer {
 				calledTracer = true
 				return nil

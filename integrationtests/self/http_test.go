@@ -385,10 +385,10 @@ func TestHTTPServerIdleTimeout(t *testing.T) {
 	idleTimeout := scaleDuration(10 * time.Millisecond)
 	port := startHTTPServer(t, mux, func(s *http3.Server) { s.IdleTimeout = idleTimeout })
 
-	connChan := make(chan quic.EarlyConnection, 1)
+	connChan := make(chan *quic.Conn, 1)
 	tr := &http3.Transport{
 		TLSClientConfig: getTLSClientConfigWithoutServerName(),
-		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			conn, err := quic.DialAddrEarly(ctx, addr, tlsCfg, cfg)
 			connChan <- conn
 			return conn, err
@@ -400,7 +400,7 @@ func TestHTTPServerIdleTimeout(t *testing.T) {
 	_, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 	require.NoError(t, err)
 
-	var conn quic.EarlyConnection
+	var conn *quic.Conn
 	select {
 	case conn = <-connChan:
 	case <-time.After(time.Second):
@@ -425,7 +425,7 @@ func TestHTTPReestablishConnectionAfterDialError(t *testing.T) {
 	cl := http.Client{
 		Transport: &http3.Transport{
 			TLSClientConfig: getTLSClientConfig(),
-			Dial: func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+			Dial: func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
 				dialCounter++
 				if dialCounter == 1 { // make the first dial fail
 					return nil, assert.AnError
@@ -673,7 +673,7 @@ func TestHTTPConnContext(t *testing.T) {
 		mux,
 		func(s *http3.Server) { server = s },
 		func(s *http3.Server) {
-			s.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
+			s.ConnContext = func(ctx context.Context, c *quic.Conn) context.Context {
 				connCtxChan <- ctx
 				ctx = context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
 				return ctx
@@ -1035,11 +1035,11 @@ func testHTTPRequestRetryAfterIdleTimeout(t *testing.T, onlyCachedConn bool) {
 	require.NotEqual(t, firstConn.LocalAddr().String(), secondConn.LocalAddr().String())
 
 	idleTimeout := scaleDuration(10 * time.Millisecond)
-	connChan := make(chan quic.EarlyConnection, 2)
+	connChan := make(chan *quic.Conn, 2)
 	tr := &http3.Transport{
 		TLSClientConfig: getTLSClientConfigWithoutServerName(),
 		QUICConfig:      getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
-		Dial: func(ctx context.Context, a string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+		Dial: func(ctx context.Context, a string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			conn := conns[0]
 			conns = conns[1:]
 			addr, err := net.ResolveUDPAddr("udp", a)
@@ -1161,7 +1161,7 @@ func testHTTPRequestAfterGracefulShutdown(t *testing.T, setGetBody bool) {
 	var dialCount int
 	tr := &http3.Transport{
 		TLSClientConfig: tlsConf,
-		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
 			addr, err := net.ResolveUDPAddr("udp", a)
 			if err != nil {
 				return nil, err

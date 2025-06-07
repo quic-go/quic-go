@@ -37,14 +37,14 @@ const (
 	streamTypeQPACKDecoderStream = 3
 )
 
-// A QUICEarlyListener listens for incoming QUIC connections.
-type QUICEarlyListener interface {
-	Accept(context.Context) (quic.EarlyConnection, error)
+// A QUICListener listens for incoming QUIC connections.
+type QUICListener interface {
+	Accept(context.Context) (*quic.Conn, error)
 	Addr() net.Addr
 	io.Closer
 }
 
-var _ QUICEarlyListener = &quic.EarlyListener{}
+var _ QUICListener = &quic.EarlyListener{}
 
 // ConfigureTLSConfig creates a new tls.Config which can be used
 // to create a quic.Listener meant for serving HTTP/3.
@@ -92,7 +92,7 @@ var RemoteAddrContextKey = &contextKey{"remote-addr"}
 
 // listener contains info about specific listener added with addListener
 type listener struct {
-	ln   *QUICEarlyListener
+	ln   *QUICListener
 	port int // 0 means that no info about port is available
 
 	// if this listener was constructed by the application, it won't be closed when the server is closed
@@ -171,7 +171,7 @@ type Server struct {
 
 	// ConnContext optionally specifies a function that modifies the context used for a new connection c.
 	// The provided ctx has a ServerContextKey value.
-	ConnContext func(ctx context.Context, c quic.Connection) context.Context
+	ConnContext func(ctx context.Context, c *quic.Conn) context.Context
 
 	Logger *slog.Logger
 
@@ -253,7 +253,7 @@ func (s *Server) decreaseConnCount() {
 }
 
 // ServeQUICConn serves a single QUIC connection.
-func (s *Server) ServeQUICConn(conn quic.Connection) error {
+func (s *Server) ServeQUICConn(conn *quic.Conn) error {
 	s.mutex.Lock()
 	if s.closed {
 		s.mutex.Unlock()
@@ -274,7 +274,7 @@ func (s *Server) ServeQUICConn(conn quic.Connection) error {
 // and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
 // ServeListener always returns a non-nil error. After Shutdown or Close, the returned error is http.ErrServerClosed.
-func (s *Server) ServeListener(ln QUICEarlyListener) error {
+func (s *Server) ServeListener(ln QUICListener) error {
 	s.mutex.Lock()
 	if err := s.addListener(&ln, false); err != nil {
 		s.mutex.Unlock()
@@ -286,7 +286,7 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 	return s.serveListener(ln)
 }
 
-func (s *Server) serveListener(ln QUICEarlyListener) error {
+func (s *Server) serveListener(ln QUICListener) error {
 	for {
 		conn, err := ln.Accept(s.graceCtx)
 		// server closed
@@ -310,7 +310,7 @@ func (s *Server) serveListener(ln QUICEarlyListener) error {
 
 var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
 
-func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (*QUICEarlyListener, error) {
+func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) (*QUICListener, error) {
 	if tlsConf == nil {
 		return nil, errServerWithoutTLSConfig
 	}
@@ -333,7 +333,7 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 		return nil, http.ErrServerClosed
 	}
 
-	var ln QUICEarlyListener
+	var ln QUICListener
 	var err error
 	if conn == nil {
 		addr := s.Addr
@@ -404,7 +404,7 @@ func (s *Server) generateAltSvcHeader() {
 	s.altSvcHeader = strings.Join(altSvc, ",")
 }
 
-func (s *Server) addListener(l *QUICEarlyListener, createdLocally bool) error {
+func (s *Server) addListener(l *QUICListener, createdLocally bool) error {
 	if s.closed {
 		return http.ErrServerClosed
 	}
@@ -425,7 +425,7 @@ func (s *Server) addListener(l *QUICEarlyListener, createdLocally bool) error {
 	return nil
 }
 
-func (s *Server) removeListener(l *QUICEarlyListener) {
+func (s *Server) removeListener(l *QUICListener) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -437,7 +437,7 @@ func (s *Server) removeListener(l *QUICEarlyListener) {
 
 // handleConn handles the HTTP/3 exchange on a QUIC connection.
 // It blocks until all HTTP handlers for all streams have returned.
-func (s *Server) handleConn(conn quic.Connection) error {
+func (s *Server) handleConn(conn *quic.Conn) error {
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
 	// when the server is gracefully closed
 	ctrlStr, err := conn.OpenUniStream()

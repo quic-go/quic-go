@@ -91,7 +91,7 @@ func testTransferWithConnectionIDs(
 	// setup client
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	var conn quic.Connection
+	var conn *quic.Conn
 	clientCounter, clientTracer := newPacketTracer()
 	clientQUICConf := getQuicConfig(&quic.Config{
 		Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {

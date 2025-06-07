@@ -94,7 +94,7 @@ func TestDrainServerAcceptQueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	// fill up the accept queue
-	conns := make([]quic.Connection, 0, protocol.MaxAcceptQueueSize)
+	conns := make([]*quic.Conn, 0, protocol.MaxAcceptQueueSize)
 	for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
 		conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		require.NoError(t, err)

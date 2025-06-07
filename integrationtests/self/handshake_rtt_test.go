@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func handshakeWithRTT(t *testing.T, serverAddr net.Addr, tlsConf *tls.Config, quicConf *quic.Config, rtt time.Duration) quic.Connection {
+func handshakeWithRTT(t *testing.T, serverAddr net.Addr, tlsConf *tls.Config, quicConf *quic.Config, rtt time.Duration) *quic.Conn {
 	t.Helper()
 
 	proxy := quicproxy.Proxy{
@@ -101,7 +101,7 @@ func TestHandshakeRTTWithHelloRetryRequest(t *testing.T) {
 }
 
 func TestHandshakeRTTReceiveMessage(t *testing.T) {
-	sendAndReceive := func(t *testing.T, serverConn, clientConn quic.Connection) {
+	sendAndReceive := func(t *testing.T, serverConn, clientConn *quic.Conn) {
 		t.Helper()
 		serverStr, err := serverConn.OpenUniStream()
 		require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestHandshakeRTTReceiveMessage(t *testing.T) {
 		require.NoError(t, err)
 		defer ln.Close()
 
-		connChan := make(chan quic.Connection, 1)
+		connChan := make(chan *quic.Conn, 1)
 		go func() {
 			conn, err := ln.Accept(context.Background())
 			if err != nil {
@@ -151,7 +151,7 @@ func TestHandshakeRTTReceiveMessage(t *testing.T) {
 		require.NoError(t, err)
 		defer ln.Close()
 
-		connChan := make(chan quic.Connection, 1)
+		connChan := make(chan *quic.Conn, 1)
 		go func() {
 			conn, err := ln.Accept(context.Background())
 			if err != nil {

@@ -84,7 +84,7 @@ type client struct {
 	quicConf *quic.Config
 
 	once    sync.Once
-	conn    quic.EarlyConnection
+	conn    *quic.Conn
 	dialErr error
 }
 

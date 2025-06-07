@@ -17,7 +17,7 @@ func BenchmarkHandshake(b *testing.B) {
 	require.NoError(b, err)
 	defer ln.Close()
 
-	connChan := make(chan quic.Connection, 1)
+	connChan := make(chan *quic.Conn, 1)
 	go func() {
 		for {
 			conn, err := ln.Accept(context.Background())

@@ -127,7 +127,7 @@ func generateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Cer
 func getTLSConfig() *tls.Config       { return tlsConfig.Clone() }
 func getTLSClientConfig() *tls.Config { return tlsClientConfig.Clone() }
 
-func newConnPair(t *testing.T) (client, server quic.EarlyConnection) {
+func newConnPair(t *testing.T) (client, server *quic.Conn) {
 	t.Helper()
 
 	ln, err := quic.ListenEarly(
@@ -157,7 +157,7 @@ func newConnPair(t *testing.T) (client, server quic.EarlyConnection) {
 	return cl, conn
 }
 
-func newConnPairWithDatagrams(t *testing.T) (client, server quic.EarlyConnection) {
+func newConnPairWithDatagrams(t *testing.T) (client, server *quic.Conn) {
 	t.Helper()
 
 	ln, err := quic.ListenEarly(
