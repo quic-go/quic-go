@@ -179,7 +179,16 @@ func (f *settingsFrame) Append(b []byte) []byte {
 	b = quicvarint.Append(b, 0x4)
 	var l int
 	for id, val := range f.Other {
-		l += quicvarint.Len(id) + quicvarint.Len(val)
+		if id == SettingsGREASE {
+			quicvarint.Len(quicvarint.Max)
+			if val != 0 {
+				l += quicvarint.Len(val)
+			} else {
+				l += quicvarint.Len(quicvarint.Max)
+			}
+		} else {
+			l += quicvarint.Len(id) + quicvarint.Len(val)
+		}
 	}
 	if f.Datagram {
 		l += quicvarint.Len(SettingsH3Datagram) + quicvarint.Len(1)
@@ -201,6 +210,16 @@ func (f *settingsFrame) Append(b []byte) []byte {
 			// We already added this setting.
 			continue
 		}
+
+		if id == SettingsGREASE && val == 0 {
+			// generate a GREASE value
+			key := 0x1f*uint64(rand.Int32()) + 0x21
+			val = rand.Uint64() % (1 << 32)
+			b = quicvarint.Append(b, key) // GREASE value, RFC 9114
+			b = quicvarint.Append(b, val)
+			continue // GREASE values are not added to the Other map
+		}
+
 		b = quicvarint.Append(b, id)
 		b = quicvarint.Append(b, val)
 	}
@@ -219,7 +238,16 @@ func (f *settingsFrame) AppendWithOrder(b []byte) []byte {
 		if !ok {
 			continue // skip unknown settings
 		}
-		l += quicvarint.Len(id) + quicvarint.Len(val)
+		if id == SettingsGREASE {
+			quicvarint.Len(quicvarint.Max)
+			if val != 0 {
+				l += quicvarint.Len(val)
+			} else {
+				l += quicvarint.Len(quicvarint.Max)
+			}
+		} else {
+			l += quicvarint.Len(id) + quicvarint.Len(val)
+		}
 	}
 	if f.Datagram {
 		l += quicvarint.Len(SettingsH3Datagram) + quicvarint.Len(1)
@@ -242,8 +270,13 @@ func (f *settingsFrame) AppendWithOrder(b []byte) []byte {
 		}
 		if id == SettingsGREASE && val == 0 {
 			// generate a GREASE value
+			key := 0x1f*uint64(rand.Int32()) + 0x21
 			val = rand.Uint64() % (1 << 32)
+			b = quicvarint.Append(b, key) // GREASE value, RFC 9114
+			b = quicvarint.Append(b, val)
+			continue // GREASE values are not added to the Other map
 		}
+
 		b = quicvarint.Append(b, id)
 		b = quicvarint.Append(b, val)
 	}
