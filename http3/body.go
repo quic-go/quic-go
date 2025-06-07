@@ -9,7 +9,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// A Hijacker allows hijacking of the stream creating part of a quic.Connection from a http.ResponseWriter.
+// A Hijacker allows hijacking of the stream creating part of a quic.Conn from a http.ResponseWriter.
 // It is used by WebTransport to create WebTransport streams after a session has been established.
 type Hijacker interface {
 	Connection() Connection

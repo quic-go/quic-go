@@ -420,7 +420,7 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 		return err
 	}
 
-	runClient := func(conn quic.Connection) error {
+	runClient := func(conn *quic.Conn) error {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
 			return err

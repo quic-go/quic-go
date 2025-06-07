@@ -56,10 +56,10 @@ func TestGracefulShutdownShortRequest(t *testing.T) {
 		w.Write([]byte("shutdown"))
 	})
 
-	connChan := make(chan quic.EarlyConnection, 1)
+	connChan := make(chan *quic.Conn, 1)
 	tr := &http3.Transport{
 		TLSClientConfig: getTLSClientConfigWithoutServerName(),
-		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
 			addr, err := net.ResolveUDPAddr("udp", a)
 			if err != nil {
 				return nil, err
@@ -80,7 +80,7 @@ func TestGracefulShutdownShortRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var conn quic.EarlyConnection
+	var conn *quic.Conn
 	select {
 	case conn = <-connChan:
 	default:
@@ -140,10 +140,10 @@ func TestGracefulShutdownIdleConnection(t *testing.T) {
 	var server *http3.Server
 	port := startHTTPServer(t, http.NewServeMux(), func(s *http3.Server) { server = s })
 
-	connChan := make(chan quic.EarlyConnection, 1)
+	connChan := make(chan *quic.Conn, 1)
 	tr := &http3.Transport{
 		TLSClientConfig: getTLSClientConfigWithoutServerName(),
-		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (quic.EarlyConnection, error) {
+		Dial: func(ctx context.Context, a string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
 			addr, err := net.ResolveUDPAddr("udp", a)
 			if err != nil {
 				return nil, err
@@ -165,7 +165,7 @@ func TestGracefulShutdownIdleConnection(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 
-	var conn quic.EarlyConnection
+	var conn *quic.Conn
 	select {
 	case conn = <-connChan:
 	default:
@@ -263,10 +263,10 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	})
 	var server *http3.Server
 	port := startHTTPServer(t, mux, func(s *http3.Server) { server = s })
-	connChan := make(chan quic.EarlyConnection, 1)
+	connChan := make(chan *quic.Conn, 1)
 	tr := &http3.Transport{
 		TLSClientConfig: getTLSClientConfigWithoutServerName(),
-		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			a, err := net.ResolveUDPAddr("udp", addr)
 			if err != nil {
 				return nil, err
@@ -311,7 +311,7 @@ func TestGracefulShutdownPendingStreams(t *testing.T) {
 	go func() { shutdownChan <- server.Shutdown(ctx) }()
 	time.Sleep(rtt / 2) // wait for the server to start shutting down
 
-	var conn quic.EarlyConnection
+	var conn *quic.Conn
 	select {
 	case conn = <-connChan:
 	case <-time.After(time.Second):

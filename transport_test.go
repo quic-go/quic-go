@@ -60,25 +60,6 @@ func (h *mockPacketHandler) destroy(err error) {
 
 func (h *mockPacketHandler) closeWithTransportError(code qerr.TransportErrorCode) {}
 
-func getPacket(t *testing.T, connID protocol.ConnectionID) []byte {
-	return getPacketWithPacketType(t, connID, protocol.PacketTypeHandshake, 2)
-}
-
-func getPacketWithPacketType(t *testing.T, connID protocol.ConnectionID, typ protocol.PacketType, length protocol.ByteCount) []byte {
-	t.Helper()
-	b, err := (&wire.ExtendedHeader{
-		Header: wire.Header{
-			Type:             typ,
-			DestConnectionID: connID,
-			Length:           length,
-			Version:          protocol.Version1,
-		},
-		PacketNumberLen: protocol.PacketNumberLen2,
-	}).Append(nil, protocol.Version1)
-	require.NoError(t, err)
-	return append(b, bytes.Repeat([]byte{42}, int(length)-2)...)
-}
-
 func TestTransportPacketHandling(t *testing.T) {
 	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	tr.init(true)
@@ -480,20 +461,20 @@ func testTransportDial(t *testing.T, early bool) {
 	originalClientConnConstructor := newClientConnection
 	t.Cleanup(func() { newClientConnection = originalClientConnConstructor })
 
-	mockCtrl := gomock.NewController(t)
-	conn := NewMockQUICConn(mockCtrl)
+	var conn *connTestHooks
 	handshakeChan := make(chan struct{})
-	if early {
-		conn.EXPECT().earlyConnReady().Return(handshakeChan)
-		conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-	} else {
-		conn.EXPECT().HandshakeComplete().Return(handshakeChan)
-	}
 	blockRun := make(chan struct{})
-	conn.EXPECT().run().DoAndReturn(func() error {
-		<-blockRun
-		return errors.New("done")
-	})
+	if early {
+		conn = &connTestHooks{
+			earlyConnReady:    func() <-chan struct{} { return handshakeChan },
+			handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
+		}
+	} else {
+		conn = &connTestHooks{
+			handshakeComplete: func() <-chan struct{} { return handshakeChan },
+		}
+	}
+	conn.run = func() error { <-blockRun; return errors.New("done") }
 	defer close(blockRun)
 
 	newClientConnection = func(
@@ -512,8 +493,8 @@ func testTransportDial(t *testing.T, early bool) {
 		_ *logging.ConnectionTracer,
 		_ utils.Logger,
 		_ protocol.Version,
-	) quicConn {
-		return conn
+	) *wrappedConn {
+		return &wrappedConn{testHooks: conn}
 	}
 
 	tr := &Transport{Conn: newUDPConnLocalhost(t)}
@@ -543,25 +524,20 @@ func testTransportDial(t *testing.T, early bool) {
 		require.NoError(t, err)
 	case <-time.After(time.Second):
 	}
-
-	// for test tear-down
-	conn.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestTransportDialingVersionNegotiation(t *testing.T) {
 	originalClientConnConstructor := newClientConnection
 	t.Cleanup(func() { newClientConnection = originalClientConnConstructor })
 
-	// connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
-	mockCtrl := gomock.NewController(t)
-	// runner := NewMockConnRunner(mockCtrl)
-	conn := NewMockQUICConn(mockCtrl)
-	conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-	conn.EXPECT().run().Return(&errCloseForRecreating{nextPacketNumber: 109, nextVersion: 789})
-
-	conn2 := NewMockQUICConn(mockCtrl)
-	conn2.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-	conn2.EXPECT().run().Return(assert.AnError)
+	conn := &connTestHooks{
+		handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
+		run:               func() error { return &errCloseForRecreating{nextPacketNumber: 109, nextVersion: 789} },
+	}
+	conn2 := &connTestHooks{
+		handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
+		run:               func() error { return assert.AnError },
+	}
 
 	type connParams struct {
 		pn                   protocol.PacketNumber
@@ -587,13 +563,13 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		_ *logging.ConnectionTracer,
 		_ utils.Logger,
 		v protocol.Version,
-	) quicConn {
+	) *wrappedConn {
 		connChan <- connParams{pn: pn, hasNegotiatedVersion: hasNegotiatedVersion, version: v}
 		if counter == 0 {
 			counter++
-			return conn
+			return &wrappedConn{testHooks: conn}
 		}
-		return conn2
+		return &wrappedConn{testHooks: conn2}
 	}
 
 	tr := &Transport{Conn: newUDPConnLocalhost(t)}
@@ -619,10 +595,6 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-
-	// for test tear down
-	conn.EXPECT().destroy(gomock.Any()).AnyTimes()
-	conn2.EXPECT().destroy(gomock.Any()).AnyTimes()
 }
 
 func TestTransportReplaceWithClosed(t *testing.T) {

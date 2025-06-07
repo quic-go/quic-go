@@ -46,7 +46,7 @@ func (s *Server) ServeListener(ln *quic.EarlyListener) error {
 	}
 }
 
-func (s *Server) handleConn(conn quic.Connection) {
+func (s *Server) handleConn(conn *quic.Conn) {
 	for {
 		str, err := conn.AcceptStream(context.Background())
 		if err != nil {

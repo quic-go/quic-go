@@ -32,7 +32,7 @@ func convertStreamError(err error, stype protocol.StreamType, pers protocol.Pers
 	return fmt.Errorf(strError.Error(), ids...)
 }
 
-// StreamLimitReachedError is returned from Connection.OpenStream and Connection.OpenUniStream
+// StreamLimitReachedError is returned from Conn.OpenStream and Connection.OpenUniStream
 // when it is not possible to open a new stream because the number of opens streams reached
 // the peer's stream limit.
 type StreamLimitReachedError struct{}
