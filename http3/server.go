@@ -450,7 +450,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		Datagram:        s.EnableDatagrams,
 		ExtendedConnect: true,
 		Other:           s.AdditionalSettings,
-	}).Append(b)
+	}).AppendWithOrder(b)
 	ctrlStr.Write(b)
 
 	connCtx := conn.Context()

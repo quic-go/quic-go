@@ -86,6 +86,9 @@ type Transport struct {
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
+	// uQuic being
+	AdditionalSettingsOrder []uint64
+
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
 	// Zero means to use a default limit.
@@ -132,6 +135,7 @@ func (t *Transport) init() error {
 				conn,
 				t.EnableDatagrams,
 				t.AdditionalSettings,
+				t.AdditionalSettingsOrder,
 				t.StreamHijacker,
 				t.UniStreamHijacker,
 				t.MaxResponseHeaderBytes,
@@ -426,6 +430,7 @@ func (t *Transport) NewClientConn(conn quic.Connection) *ClientConn {
 		conn,
 		t.EnableDatagrams,
 		t.AdditionalSettings,
+		t.AdditionalSettingsOrder,
 		t.StreamHijacker,
 		t.UniStreamHijacker,
 		t.MaxResponseHeaderBytes,
