@@ -155,8 +155,8 @@ func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, q
 			return
 		}
 		fp := &frameParser{
-			r:    str,
-			conn: &c.connection,
+			r:         str,
+			closeConn: c.CloseWithError,
 			unknownFrameHandler: func(ft FrameType, e error) (processed bool, err error) {
 				id := c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
 				return streamHijacker(ft, id, str, e)

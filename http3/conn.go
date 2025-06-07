@@ -287,7 +287,7 @@ func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.Co
 }
 
 func (c *connection) handleControlStream(str *quic.ReceiveStream) {
-	fp := &frameParser{conn: c.Connection, r: str}
+	fp := &frameParser{closeConn: c.Connection.CloseWithError, r: str}
 	f, err := fp.ParseNext()
 	if err != nil {
 		var serr *quic.StreamError

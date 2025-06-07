@@ -54,8 +54,8 @@ func newStream(str datagramStream, conn *connection, parseTrailer func(io.Reader
 
 func (s *Stream) Read(b []byte) (int, error) {
 	fp := &frameParser{
-		r:    s.datagramStream,
-		conn: s.conn,
+		r:         s.datagramStream,
+		closeConn: s.conn.CloseWithError,
 	}
 	if s.bytesRemainingInFrame == 0 {
 	parseLoop:
@@ -196,7 +196,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	qstr := s.datagramStream
 	fp := &frameParser{
-		conn: s.conn,
+		closeConn: s.conn.CloseWithError,
 		r: &tracingReader{
 			Reader: qstr,
 			first:  &s.firstByte,
