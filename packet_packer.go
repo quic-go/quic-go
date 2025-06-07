@@ -449,7 +449,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, longHdrPacket)
 	} else if oneRTTPayload.length > 0 {
-		shp, err := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, kp, oneRTTPayload, 0, maxSize, oneRTTSealer, false, v)
+		shp, err := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, kp, 0, oneRTTPayload, 0, maxSize, oneRTTSealer, false, v)
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +492,7 @@ func (p *packetPacker) appendPacket(
 	}
 	kp := sealer.KeyPhase()
 
-	return p.appendShortHeaderPacket(buf, connID, pn, pnLen, kp, pl, 0, maxPacketSize, sealer, false, v)
+	return p.appendShortHeaderPacket(buf, connID, pn, pnLen, kp, 0, pl, 0, maxPacketSize, sealer, false, v)
 }
 
 func (p *packetPacker) maybeGetCryptoPacket(
@@ -789,7 +789,7 @@ func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, 
 	}
 	buffer := getPacketBuffer()
 	packet := &coalescedPacket{buffer: buffer}
-	shp, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, 0, maxPacketSize, s, false, v)
+	shp, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, 0, pl, 0, maxPacketSize, s, false, v)
 	if err != nil {
 		return nil, err
 	}
@@ -811,7 +811,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 	padding := size - p.shortHeaderPacketLength(connID, pnLen, pl) - protocol.ByteCount(s.Overhead())
 	kp := s.KeyPhase()
-	packet, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, padding, size, s, true, v)
+	packet, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, 0, pl, padding, size, s, true, v)
 	return packet, buffer, err
 }
 
@@ -831,7 +831,7 @@ func (p *packetPacker) PackPathProbePacket(connID protocol.ConnectionID, frames 
 		length: l,
 	}
 	padding := protocol.MinInitialPacketSize - p.shortHeaderPacketLength(connID, pnLen, payload) - protocol.ByteCount(s.Overhead())
-	packet, err := p.appendShortHeaderPacket(buf, connID, pn, pnLen, s.KeyPhase(), payload, padding, protocol.MinInitialPacketSize, s, false, v)
+	packet, err := p.appendShortHeaderPacket(buf, connID, pn, pnLen, s.KeyPhase(), 0, payload, padding, protocol.MinInitialPacketSize, s, false, v)
 	if err != nil {
 		return shortHeaderPacket{}, nil, err
 	}
@@ -904,9 +904,10 @@ func (p *packetPacker) appendShortHeaderPacket(
 	pn protocol.PacketNumber,
 	pnLen protocol.PacketNumberLen,
 	kp protocol.KeyPhaseBit,
+	pathID uint64,
 	pl payload,
 	padding, maxPacketSize protocol.ByteCount,
-	sealer sealer,
+	sealer handshake.ShortHeaderSealer,
 	isMTUProbePacket bool,
 	v protocol.Version,
 ) (shortHeaderPacket, error) {
@@ -933,7 +934,7 @@ func (p *packetPacker) appendShortHeaderPacket(
 			return shortHeaderPacket{}, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, maxPacketSize)
 		}
 	}
-	raw = p.encryptPacket(raw, sealer, pn, payloadOffset, protocol.ByteCount(pnLen))
+	raw = p.encryptShortHeaderPacket(raw, sealer, pn, pathID, payloadOffset, protocol.ByteCount(pnLen))
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
 	if newPN := p.pnManager.PopPacketNumber(protocol.Encryption1RTT); newPN != pn {
@@ -994,6 +995,15 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 
 func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.PacketNumber, payloadOffset, pnLen protocol.ByteCount) []byte {
 	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], pn, raw[:payloadOffset])
+	raw = raw[:len(raw)+sealer.Overhead()]
+	// apply header protection
+	pnOffset := payloadOffset - pnLen
+	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[0], raw[pnOffset:payloadOffset])
+	return raw
+}
+
+func (p *packetPacker) encryptShortHeaderPacket(raw []byte, sealer handshake.ShortHeaderSealer, pn protocol.PacketNumber, pathID uint64, payloadOffset, pnLen protocol.ByteCount) []byte {
+	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], pn, pathID, raw[:payloadOffset])
 	raw = raw[:len(raw)+sealer.Overhead()]
 	// apply header protection
 	pnOffset := payloadOffset - pnLen

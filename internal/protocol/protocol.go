@@ -148,6 +148,9 @@ const MaxMaxAckDelay = (1<<14 - 1) * time.Millisecond
 // MaxConnIDLen is the maximum length of the connection ID
 const MaxConnIDLen = 20
 
+// InvalidPathID is an invalid path ID
+const InvalidPathID = ^uint64(0)
+
 // InvalidPacketLimitAES is the maximum number of packets that we can fail to decrypt when using
 // AEAD_AES_128_GCM or AEAD_AES_265_GCM.
 const InvalidPacketLimitAES = 1 << 52

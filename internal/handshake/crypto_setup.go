@@ -147,10 +147,15 @@ func newCryptoSetup(
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
+	// Provisional: multipathEnabled based on our params only.
+	// This will need to be updated when peer params are known if we want to enable it
+	// even if only the peer advertised it. For now, this aligns with the idea that
+	// we only *use* multipath nonce calculation if *we* also intend to use multipath.
+	// multipathEnabled := tp.InitialMaxPathID != protocol.InvalidPathID // Removed provisional assignment
 	return &cryptoSetup{
 		initialSealer: initialSealer,
 		initialOpener: initialOpener,
-		aead:          newUpdatableAEAD(rttStats, tracer, logger, version),
+		aead:          newUpdatableAEAD(rttStats, tracer, logger, version, false /* multipathEnabled */),
 		events:        make([]Event, 0, 16),
 		ourParams:     tp,
 		rttStats:      rttStats,
@@ -252,6 +257,19 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
 		h.writeRecord(ev.Level, ev.Data)
 		return nil
 	case tls.QUICHandshakeDone:
+		if h.ourParams.InitialMaxPathID != protocol.InvalidPathID || (h.peerParams != nil && h.peerParams.InitialMaxPathID != protocol.InvalidPathID) {
+			suiteID := h.conn.ConnectionState().CipherSuite
+			if suiteID == 0 { // Should not happen if handshake is done
+				return errors.New("cryptoSetup BUG: handshake done but no cipher suite selected")
+			}
+			suite := getCipherSuite(suiteID)
+			if suite.AEAD == nil { // Should not happen with valid suiteID
+				return fmt.Errorf("cryptoSetup BUG: cipher suite %d not found or AEAD is nil", suiteID)
+			}
+			if suite.AEAD.NonceSize() < 12 {
+				return qerr.NewError(qerr.TransportParameterError, "cipher suite nonce too short for multipath")
+			}
+		}
 		h.handshakeComplete()
 		return nil
 	case tls.QUICStoreSession:
@@ -307,6 +325,21 @@ func (h *cryptoSetup) handleTransportParameters(data []byte) error {
 	}
 	h.peerParams = &tp
 	h.events = append(h.events, Event{Kind: EventReceivedTransportParameters, TransportParameters: h.peerParams})
+
+	// Determine and set multipath_enabled status on AEAD
+	// This should be done as soon as both our and peer transport parameters are known.
+	if h.ourParams != nil && h.peerParams != nil {
+		isMultipathNegotiated := h.ourParams.InitialMaxPathID != protocol.InvalidPathID && h.peerParams.InitialMaxPathID != protocol.InvalidPathID
+		if se, ok := h.aead.(interface{ SetMultipathEnabled(bool) }); ok {
+			se.SetMultipathEnabled(isMultipathNegotiated)
+			if isMultipathNegotiated {
+				h.logger.Debugf("Multipath is negotiated and enabled for AEAD.")
+			}
+		} else {
+			// This should not happen if aead is always updatableAEAD
+			h.logger.Errorf("AEAD does not support SetMultipathEnabled")
+		}
+	}
 	return nil
 }
 

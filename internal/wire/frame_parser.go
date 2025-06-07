@@ -34,7 +34,20 @@ const (
 	connectionCloseFrameType    = 0x1c
 	applicationCloseFrameType   = 0x1d
 	handshakeDoneFrameType      = 0x1e
+	pathNewConnectionIDFrameType = 0x20 // Experimental
+	pathRetireConnectionIDFrameType = 0x21 // Experimental
+	pathAvailableFrameType      = 0x22 // Experimental
+	pathBackupFrameType         = 0x23 // Experimental
+	pathAbandonFrameType        = 0x24 // Experimental
+	maxPathIDFrameType          = 0x25 // Experimental
+	pathsBlockedFrameType       = 0x26 // Experimental
+	pathCIDsBlockedFrameType    = 0x27 // Experimental
+	PathAckFrameType            = 0x28 // Experimental, TBD-00 from draft
+	PathAckWithECNFrameType     = 0x29 // Experimental, TBD-01 from draft
 )
+
+var errInvalidAckRanges = errors.New("invalid ACK ranges")
+var errRemainingBytes = errors.New("remaining bytes after parsing frame")
 
 // The FrameParser parses QUIC frames, one by one.
 type FrameParser struct {
@@ -141,6 +154,26 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 			frame, l, err = parseConnectionCloseFrame(b, typ, v)
 		case handshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
+		case pathNewConnectionIDFrameType:
+			frame, l, err = parsePathNewConnectionIDFrame(bytes.NewReader(b), v)
+		case pathRetireConnectionIDFrameType:
+			frame, l, err = parsePathRetireConnectionIDFrame(bytes.NewReader(b), v)
+		case pathAvailableFrameType:
+			frame, l, err = parsePathAvailableFrame(bytes.NewReader(b), v)
+		case pathBackupFrameType:
+			frame, l, err = parsePathBackupFrame(bytes.NewReader(b), v)
+		case pathAbandonFrameType:
+			frame, l, err = parsePathAbandonFrame(bytes.NewReader(b), v)
+		case maxPathIDFrameType:
+			frame, l, err = parseMaxPathIDFrame(bytes.NewReader(b), v)
+		case pathsBlockedFrameType:
+			frame, l, err = parsePathsBlockedFrame(bytes.NewReader(b), v)
+		case pathCIDsBlockedFrameType:
+			frame, l, err = parsePathCIDsBlockedFrame(bytes.NewReader(b), v)
+		case PathAckFrameType, PathAckWithECNFrameType:
+			// The ackDelayExponent for PATH_ACK should be the one for 1-RTT,
+			// as PATH_ACK is expected to be used on established paths.
+			frame, l, err = parsePathAckFrame(bytes.NewReader(b), uint8(typ), p.ackDelayExponent, v)
 		case 0x30, 0x31:
 			if p.supportsDatagrams {
 				frame, l, err = parseDatagramFrame(b, typ, v)

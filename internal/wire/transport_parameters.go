@@ -32,6 +32,7 @@ const (
 	maxUDPPayloadSizeParameterID               transportParameterID = 0x3
 	initialMaxDataParameterID                  transportParameterID = 0x4
 	initialMaxStreamDataBidiLocalParameterID   transportParameterID = 0x5
+	initialMaxPathIDParameterID                transportParameterID = 0x0f739bbc1b666d0d
 	initialMaxStreamDataBidiRemoteParameterID  transportParameterID = 0x6
 	initialMaxStreamDataUniParameterID         transportParameterID = 0x7
 	initialMaxStreamsBidiParameterID           transportParameterID = 0x8
@@ -83,7 +84,12 @@ type TransportParameters struct {
 	ActiveConnectionIDLimit uint64
 
 	MaxDatagramFrameSize protocol.ByteCount
+	InitialMaxPathID     uint64
 }
+
+const (
+	maxPathIDValue = (1 << 32) - 1
+)
 
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
@@ -109,6 +115,7 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 	p.AckDelayExponent = protocol.DefaultAckDelayExponent
 	p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	p.MaxDatagramFrameSize = protocol.InvalidByteCount
+	p.InitialMaxPathID = protocol.InvalidPathID
 
 	for len(b) > 0 {
 		paramIDInt, l, err := quicvarint.Parse(b)
@@ -140,6 +147,7 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			initialMaxStreamsUniParameterID,
 			maxAckDelayParameterID,
 			maxDatagramFrameSizeParameterID,
+			initialMaxPathIDParameterID,
 			ackDelayExponentParameterID:
 			if err := p.readNumericTransportParameter(b, paramID, int(paramLen)); err != nil {
 				return err
@@ -326,6 +334,11 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 		p.ActiveConnectionIDLimit = val
 	case maxDatagramFrameSizeParameterID:
 		p.MaxDatagramFrameSize = protocol.ByteCount(val)
+	case initialMaxPathIDParameterID:
+		if val > maxPathIDValue {
+			return fmt.Errorf("initial_max_path_id too large: %d (maximum %d)", val, maxPathIDValue)
+		}
+		p.InitialMaxPathID = val
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
@@ -430,6 +443,10 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	}
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
+	}
+	// TODO: Only marshal if multipath is supported by the local endpoint.
+	if p.InitialMaxPathID != protocol.InvalidPathID {
+		b = p.marshalVarintParam(b, initialMaxPathIDParameterID, p.InitialMaxPathID)
 	}
 
 	if pers == protocol.PerspectiveClient && len(AdditionalTransportParametersClient) > 0 {
@@ -538,6 +555,10 @@ func (p *TransportParameters) String() string {
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		logString += ", MaxDatagramFrameSize: %d"
 		logParams = append(logParams, p.MaxDatagramFrameSize)
+	}
+	if p.InitialMaxPathID != protocol.InvalidPathID {
+		logString += ", InitialMaxPathID: %d"
+		logParams = append(logParams, p.InitialMaxPathID)
 	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)

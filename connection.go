@@ -212,6 +212,11 @@ type connection struct {
 	logID  string
 	tracer *logging.ConnectionTracer
 	logger utils.Logger
+
+	peerInitialMaxPathID  protocol.PathID
+	localInitialMaxPathID protocol.PathID
+
+	multiPathManager *multiPathManager
 }
 
 var (
@@ -292,6 +297,25 @@ var newConnection = func(
 		s.logger,
 	)
 	s.currentMTUEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+
+	// TODO: Check conf.EnableMultipath. For now, assume it's true.
+	if true { // Replace with conf.EnableMultipath
+		// TODO: Set s.localInitialMaxPathID based on conf.MaxPaths or a default.
+		// Ensure it doesn't exceed maxPathIDValue.
+		s.localInitialMaxPathID = 2 // Example default for now
+		if s.localInitialMaxPathID > protocol.PathID(wire.MaxPathIDValue) {
+			s.logger.Errorf("Configured localInitialMaxPathID %d exceeds maximum %d", s.localInitialMaxPathID, wire.MaxPathIDValue)
+			s.localInitialMaxPathID = protocol.InvalidPathID
+		}
+
+		if s.localInitialMaxPathID != protocol.InvalidPathID && srcConnID.Len() == 0 {
+			s.logger.Errorf("Multipath enabled but server's initial source CID is zero. Disabling InitialMaxPathID.")
+			s.localInitialMaxPathID = protocol.InvalidPathID
+		}
+	} else {
+		s.localInitialMaxPathID = protocol.InvalidPathID
+	}
+
 	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -314,6 +338,7 @@ var newConnection = func(
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
 		RetrySourceConnectionID:   retrySrcConnID,
+		InitialMaxPathID:          uint64(s.localInitialMaxPathID),
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
@@ -339,6 +364,7 @@ var newConnection = func(
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, s.oneRTTStream)
+	s.multiPathManager = newMultiPathManager(s, s.logger)
 	return s
 }
 
@@ -405,6 +431,25 @@ var newClientConnection = func(
 		s.logger,
 	)
 	s.currentMTUEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+
+	// TODO: Check conf.EnableMultipath. For now, assume it's true.
+	if true { // Replace with conf.EnableMultipath
+		// TODO: Set s.localInitialMaxPathID based on conf.MaxPaths or a default.
+		// Ensure it doesn't exceed maxPathIDValue.
+		s.localInitialMaxPathID = 2 // Example default for now
+		if s.localInitialMaxPathID > protocol.PathID(wire.MaxPathIDValue) {
+			s.logger.Errorf("Configured localInitialMaxPathID %d exceeds maximum %d", s.localInitialMaxPathID, wire.MaxPathIDValue)
+			s.localInitialMaxPathID = protocol.InvalidPathID
+		}
+
+		if s.localInitialMaxPathID != protocol.InvalidPathID && srcConnID.Len() == 0 {
+			s.logger.Errorf("Multipath enabled but client's initial source CID is zero. Disabling InitialMaxPathID.")
+			s.localInitialMaxPathID = protocol.InvalidPathID
+		}
+	} else {
+		s.localInitialMaxPathID = protocol.InvalidPathID
+	}
+
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -424,6 +469,7 @@ var newClientConnection = func(
 		// See https://github.com/quic-go/quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
+		InitialMaxPathID:          uint64(s.localInitialMaxPathID),
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
@@ -504,6 +550,8 @@ func (s *connection) preSetup() {
 
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
 	s.connState.Version = s.version
+	s.multiPathManager = newMultiPathManager(s, s.logger)
+	return s
 }
 
 // run the connection main loop
@@ -809,7 +857,6 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 	// During a 0-RTT connection, the client is only allowed to use the new transport parameters for 1-RTT packets.
 	if s.perspective == protocol.PerspectiveClient {
 		s.applyTransportParameters()
-		return nil
 	}
 
 	// All these only apply to the server side.
@@ -1519,16 +1566,64 @@ func (s *connection) handleFrame(
 		err = s.handleStopSendingFrame(frame)
 	case *wire.PingFrame:
 	case *wire.PathChallengeFrame:
-		s.handlePathChallengeFrame(frame)
-		pathChallenge = frame
+		// PathChallenge is received by the server, or by the client if the server sends one.
+		// Pass it to the multipath manager.
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathChallenge(frame, s.RemoteAddr(), destConnID, rcvTime)
+		}
+		// The connection itself might also need to respond if it's a direct challenge not tied to a new path.
+		// For now, assume multipathManager handles queuing the response.
+		// s.handlePathChallengeFrame(frame) // Original direct handling
+		pathChallenge = frame // Still needed for short header packet processing logic
 	case *wire.PathResponseFrame:
-		err = s.handlePathResponseFrame(frame)
+		// PathResponse is received by the client, or by the server if it sent a challenge.
+		// Pass it to the multipath manager.
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathResponse(frame, s.RemoteAddr(), rcvTime)
+		}
+		// err = s.handlePathResponseFrame(frame) // Original direct handling
 	case *wire.NewTokenFrame:
 		err = s.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
 		err = s.handleNewConnectionIDFrame(frame)
 	case *wire.RetireConnectionIDFrame:
 		err = s.handleRetireConnectionIDFrame(rcvTime, frame, destConnID)
+	case *wire.PathNewConnectionIDFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathNewConnectionID(frame)
+		}
+	case *wire.PathRetireConnectionIDFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathRetireConnectionID(frame, rcvTime)
+		}
+	case *wire.PathAvailableFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathAvailable(frame)
+		}
+	case *wire.PathBackupFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathBackup(frame)
+		}
+	case *wire.PathAbandonFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathAbandon(frame, rcvTime)
+		}
+	case *wire.MaxPathIDFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandleMaxPathID(frame)
+		}
+	case *wire.PathsBlockedFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathsBlocked(frame)
+		}
+	case *wire.PathCIDsBlockedFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathCIDsBlocked(frame)
+		}
+	case *wire.PathAckFrame:
+		if s.multiPathManager != nil {
+			s.multiPathManager.HandlePathAckFrame(frame, rcvTime)
+		}
 	case *wire.HandshakeDoneFrame:
 		err = s.handleHandshakeDoneFrame(rcvTime)
 	case *wire.DatagramFrame:
@@ -1984,6 +2079,25 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 		// On the server side, the early connection is ready as soon as we processed
 		// the client's transport parameters.
 		close(s.earlyConnReadyChan)
+	}
+
+	if params.InitialMaxPathID != protocol.InvalidPathID {
+		s.peerInitialMaxPathID = protocol.PathID(params.InitialMaxPathID)
+		if s.perspective == protocol.PerspectiveServer {
+			if len(params.OriginalDestinationConnectionID) == 0 || len(params.InitialSourceConnectionID) == 0 {
+				return &qerr.TransportError{
+					ErrorCode:    qerr.TransportParameterError,
+					ErrorMessage: "non-zero connection ID required for multipath",
+				}
+			}
+		} else { // client
+			if len(s.handshakeDestConnID) == 0 || len(s.connIDGenerator.GetInitialConnID()) == 0 {
+				return &qerr.TransportError{
+					ErrorCode:    qerr.TransportParameterError,
+					ErrorMessage: "non-zero connection ID required for multipath",
+				}
+			}
+		}
 	}
 
 	s.connStateMutex.Lock()
@@ -2677,4 +2791,51 @@ func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
 // connection ID length), and the size of the encryption tag.
 func estimateMaxPayloadSize(mtu protocol.ByteCount) protocol.ByteCount {
 	return mtu - 1 /* type byte */ - 20 /* maximum connection ID length */ - 16 /* tag size */
+}
+
+// ProbePath initiates a path probe to the given remote address.
+// This is intended for client use.
+func (s *connection) ProbePath(remoteAddr net.Addr) error {
+	if s.perspective == protocol.PerspectiveServer {
+		return errors.New("ProbePath can only be called on the client")
+	}
+	if s.multiPathManager == nil {
+		return errors.New("multipath manager not initialized")
+	}
+	return s.multiPathManager.InitiatePathProbe(remoteAddr)
+}
+
+// Perspective returns the perspective of the connection (client or server).
+func (s *connection) Perspective() protocol.Perspective {
+	return s.perspective
+}
+
+// Packer returns the packet packer.
+func (s *connection) Packer() packer {
+	return s.packer
+}
+
+// SendQueue returns the send queue.
+func (s *connection) SendQueue() sender {
+	return s.sendQueue
+}
+
+// ConnIDGenerator returns the connection ID generator.
+func (s *connection) ConnIDGenerator() *connIDGenerator {
+	return s.connIDGenerator
+}
+
+// ConnIDManager returns the connection ID manager.
+func (s *connection) ConnIDManager() *connIDManager {
+	return s.connIDManager
+}
+
+// GetPeerInitialMaxPathID returns the peer's initial_max_path_id.
+func (s *connection) GetPeerInitialMaxPathID() protocol.PathID {
+	return s.peerInitialMaxPathID
+}
+
+// GetLocalInitialMaxPathID returns our own initial_max_path_id.
+func (s *connection) GetLocalInitialMaxPathID() protocol.PathID {
+	return s.localInitialMaxPathID
 }

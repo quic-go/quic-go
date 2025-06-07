@@ -111,7 +111,8 @@ func (u *packetUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (prot
 	if err != nil {
 		return 0, 0, 0, nil, err
 	}
-	pn, pnLen, kp, decrypted, err := u.unpackShortHeaderPacket(opener, rcvTime, data)
+	// TODO: Determine actual path ID when multipath is fully integrated.
+	pn, pnLen, kp, decrypted, err := u.unpackShortHeaderPacket(opener, rcvTime, 0, data)
 	if err != nil {
 		return 0, 0, 0, nil, err
 	}
@@ -122,6 +123,22 @@ func (u *packetUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (prot
 		}
 	}
 	return pn, pnLen, kp, decrypted, nil
+}
+
+func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpener, rcvTime time.Time, pathID uint64, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
+	l, pn, pnLen, kp, parseErr := u.unpackShortHeader(opener, data)
+	// If the reserved bits are set incorrectly, we still need to continue unpacking.
+	// This avoids a timing side-channel, which otherwise might allow an attacker
+	// to gain information about the header encryption.
+	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
+		return 0, 0, 0, nil, &headerParseError{parseErr}
+	}
+	pn = opener.DecodePacketNumber(pn, pnLen)
+	decrypted, err := opener.Open(data[l:l], data[l:], rcvTime, pn, kp, pathID, data[:l])
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	return pn, pnLen, kp, decrypted, parseErr
 }
 
 func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpener, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, []byte, error) {
@@ -142,22 +159,6 @@ func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpene
 		return nil, nil, parseErr
 	}
 	return extHdr, decrypted, nil
-}
-
-func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpener, rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
-	l, pn, pnLen, kp, parseErr := u.unpackShortHeader(opener, data)
-	// If the reserved bits are set incorrectly, we still need to continue unpacking.
-	// This avoids a timing side-channel, which otherwise might allow an attacker
-	// to gain information about the header encryption.
-	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
-		return 0, 0, 0, nil, &headerParseError{parseErr}
-	}
-	pn = opener.DecodePacketNumber(pn, pnLen)
-	decrypted, err := opener.Open(data[l:l], data[l:], rcvTime, pn, kp, data[:l])
-	if err != nil {
-		return 0, 0, 0, nil, err
-	}
-	return pn, pnLen, kp, decrypted, parseErr
 }
 
 func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (int, protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, error) {

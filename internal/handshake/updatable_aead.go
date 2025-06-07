@@ -72,6 +72,9 @@ type updatableAEAD struct {
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
+
+	multipathEnabled bool
+	logger           utils.Logger
 }
 
 var (
@@ -79,10 +82,12 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version, multipathEnabled bool) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
+		logger:                  logger,
+		multipathEnabled:        multipathEnabled,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
 		rttStats:                rttStats,
@@ -172,8 +177,8 @@ func (a *updatableAEAD) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNL
 	return protocol.DecodePacketNumber(wirePNLen, a.highestRcvdPN, wirePN)
 }
 
-func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
-	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
+func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, pathID uint64, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+	dec, err := a.open(dst, src, rcvTime, pn, pathID, kp, ad)
 	if err == ErrDecryptionFailed {
 		a.invalidPacketCount++
 		if a.invalidPacketCount >= a.invalidPacketLimit {
@@ -186,7 +191,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	return dec, err
 }
 
-func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, pathID uint64, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
 		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
@@ -195,21 +200,44 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 			a.tracer.DroppedKey(a.keyPhase - 1)
 		}
 	}
-	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
+
+	var currentNonce []byte
+	if a.multipathEnabled {
+		nonce := make([]byte, len(a.nonceBuf))
+		iv := a.suite.IV()
+
+		var pathAndPacketNumberBytes [12]byte
+		binary.BigEndian.PutUint32(pathAndPacketNumberBytes[0:4], uint32(pathID))
+		maskedPN := pn & 0x3FFFFFFFFFFFFFFF // Keep lower 62 bits
+		binary.BigEndian.PutUint64(pathAndPacketNumberBytes[4:12], maskedPN)
+
+		copy(nonce[len(nonce)-12:], pathAndPacketNumberBytes[:])
+		for i := 0; i < len(nonce); i++ {
+			nonce[i] ^= iv[i]
+		}
+		if a.logger.Debug() {
+			a.logger.Debugf("Multipath AEAD Open: PathID: %d, PN: %d, Nonce: %x", pathID, pn, nonce)
+		}
+		currentNonce = nonce
+	} else {
+		binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
+		currentNonce = a.nonceBuf
+	}
+
 	if kp != a.keyPhase.Bit() {
 		if a.keyPhase > 0 && a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
 			if a.prevRcvAEAD == nil {
 				return nil, ErrKeysDropped
 			}
 			// we updated the key, but the peer hasn't updated yet
-			dec, err := a.prevRcvAEAD.Open(dst, a.nonceBuf, src, ad)
+			dec, err := a.prevRcvAEAD.Open(dst, currentNonce, src, ad)
 			if err != nil {
 				err = ErrDecryptionFailed
 			}
 			return dec, err
 		}
 		// try opening the packet with the next key phase
-		dec, err := a.nextRcvAEAD.Open(dst, a.nonceBuf, src, ad)
+		dec, err := a.nextRcvAEAD.Open(dst, currentNonce, src, ad)
 		if err != nil {
 			return nil, ErrDecryptionFailed
 		}
@@ -233,7 +261,7 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	}
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
 	// It uses the nonce provided here and XOR it with the IV.
-	dec, err := a.rcvAEAD.Open(dst, a.nonceBuf, src, ad)
+	dec, err := a.rcvAEAD.Open(dst, currentNonce, src, ad)
 	if err != nil {
 		return dec, ErrDecryptionFailed
 	}
@@ -250,7 +278,7 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	return dec, err
 }
 
-func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
+func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, pathID uint64, ad []byte) []byte {
 	if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
 		a.firstSentWithCurrentKey = pn
 	}
@@ -258,6 +286,32 @@ func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byt
 		a.firstPacketNumber = pn
 	}
 	a.numSentWithCurrentKey++
+
+	if a.multipathEnabled {
+		nonce := make([]byte, len(a.nonceBuf))
+		// IV is already stored in a.nonceBuf by setAEADParameters which copies suite.IV()
+		// For multipath, the IV from the cipher suite is used directly.
+		// The packet number and path ID are XORed with this IV.
+		iv := a.suite.IV()
+
+		var pathAndPacketNumberBytes [12]byte
+		binary.BigEndian.PutUint32(pathAndPacketNumberBytes[0:4], uint32(pathID))
+		maskedPN := pn & 0x3FFFFFFFFFFFFFFF // Keep lower 62 bits
+		binary.BigEndian.PutUint64(pathAndPacketNumberBytes[4:12], maskedPN)
+
+		// Left-pad pathAndPacketNumberBytes with zeros if nonce size > 12
+		copy(nonce[len(nonce)-12:], pathAndPacketNumberBytes[:])
+
+		for i := 0; i < len(nonce); i++ {
+			nonce[i] ^= iv[i]
+		}
+		if a.logger.Debug() {
+			a.logger.Debugf("Multipath AEAD Seal: PathID: %d, PN: %d, Nonce: %x", pathID, pn, nonce)
+		}
+		return a.sendAEAD.Seal(dst, nonce, src, ad)
+	}
+
+	// Original nonce calculation for non-multipath
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
 	// It uses the nonce provided here and XOR it with the IV.
@@ -338,4 +392,9 @@ func (a *updatableAEAD) DecryptHeader(sample []byte, firstByte *byte, hdrBytes [
 
 func (a *updatableAEAD) FirstPacketNumber() protocol.PacketNumber {
 	return a.firstPacketNumber
+}
+
+// SetMultipathEnabled sets the multipathEnabled flag.
+func (a *updatableAEAD) SetMultipathEnabled(enabled bool) {
+	a.multipathEnabled = enabled
 }

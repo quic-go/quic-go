@@ -38,7 +38,7 @@ type LongHeaderOpener interface {
 type ShortHeaderOpener interface {
 	headerDecryptor
 	DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber
-	Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, associatedData []byte) ([]byte, error)
+	Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, pathID uint64, associatedData []byte) ([]byte, error)
 }
 
 // LongHeaderSealer seals a long header packet
@@ -50,7 +50,9 @@ type LongHeaderSealer interface {
 
 // ShortHeaderSealer seals a short header packet
 type ShortHeaderSealer interface {
-	LongHeaderSealer
+	Seal(dst, src []byte, packetNumber protocol.PacketNumber, pathID uint64, associatedData []byte) []byte
+	EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte)
+	Overhead() int
 	KeyPhase() protocol.KeyPhaseBit
 }
 
