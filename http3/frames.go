@@ -105,8 +105,9 @@ const (
 	// Extended CONNECT, RFC 9220
 	settingExtendedConnect uint64 = 0x8
 	// SettingsH3Datagram is used to enable HTTP datagrams, RFC 9297
-	SettingsH3Datagram uint64 = 0x33
-	GREASE             uint64 = 13252957810 // 0xC0000002, a GREASE value to avoid fingerprinting
+	SettingsH3Datagram         uint64 = 0x33
+	SettingsEnableWebTransport uint64 = 727725890     // Enable WebTransport, RFC 9298
+	SettingsGREASE             uint64 = 0x1f*1 + 0x21 // GREASE value, RFC 9114
 )
 
 type settingsFrame struct {
