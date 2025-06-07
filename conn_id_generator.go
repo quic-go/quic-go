@@ -280,6 +280,16 @@ func (g *ConnectionIDGenerator) GetConnectionIDSequenceNumber(cid protocol.Conne
 	return protocol.InvalidPathID // Using as a sentinel for not found, though it's a PathID type.
 }
 
+// GetActiveCIDCount returns the number of active CIDs currently issued for a given path.
+// Returns 0 if the path does not exist or has no active CIDs.
+func (g *ConnectionIDGenerator) GetActiveCIDCount(pathID protocol.PathID) int {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	if pathState, ok := g.cidStateByPath[pathID]; ok {
+		return pathState.activeCIDCount
+	}
+	return 0
+}
 
 // RemoveRetiredConnIDs is called periodically to remove CIDs that have passed their retirement grace period.
 func (g *ConnectionIDGenerator) RemoveRetiredConnIDs(now time.Time) {

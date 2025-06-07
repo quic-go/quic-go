@@ -412,11 +412,22 @@ func (m *multiPathManager) HandlePathChallenge(challenge *wire.PathChallengeFram
 	}
 
 	// If the path was newly created and components initialized, start MTU discovery
-	if path.mtuDiscoverer != nil && !path.isActive { // Path is new, just got its components
+	if path.mtuDiscoverer != nil && !path.isActive { // Path is new, just got its components.
 	    // isActive will be set true once client responds to our challenge or we get other activity.
 	    // For now, MTU discovery can start as we are sending our own challenge.
 		path.mtuDiscoverer.Start(rcvTime)
 		m.logger.Debugf("HandlePathChallenge: Started MTU discovery on new path %d", path.id)
+
+		// Server proactively issues new CIDs for this new path it's trying to validate.
+		if m.conn.Perspective() == protocol.PerspectiveServer {
+			m.logger.Debugf("Path %d: Server proactively issuing new CIDs upon its own challenge.", path.id)
+			for i := 0; i < 2; i++ { // Issue up to 2 CIDs initially
+				if err := m.conn.GetConnIDGenerator().GenerateNewConnectionID(path.id, false); err != nil {
+					m.logger.Errorf("Path %d: failed to generate initial CID %d for server use: %v", path.id, i+1, err)
+					break // Stop if there's an error (e.g., limit reached)
+				}
+			}
+		}
 	}
 	path.isActive = true // Mark active for sending the response/challenge. Actual validation is ongoing.
 }
@@ -481,14 +492,28 @@ func (m *multiPathManager) getPathForResponseAndValidate(challengeData [8]byte, 
 					m.logger.Debugf("HandlePathResponse: Started MTU discovery on validated path %d", p.id)
 
 					// Client should also provide a CID for server to use on this path via PATH_NEW_CONNECTION_ID.
-					// This logic should ideally be centralized or triggered here.
-					// Example: if m.conn.Perspective() == protocol.PerspectiveClient {
-					//     newCIDInfo, err := m.conn.ConnIDGenerator().GenerateNewConnectionID(p.id, true) // true to retire old if any on path
-					//     if err == nil { m.conn.QueueControlFrame(newCIDInfo.ToPathFrame(p.id)) }
-					// }
+					if m.conn.Perspective() == protocol.PerspectiveClient {
+						m.logger.Debugf("Path %d: Client proactively issuing new CIDs upon validation.", p.id)
+						for i := 0; i < 2; i++ { // Issue up to 2 CIDs initially
+							if err := m.conn.GetConnIDGenerator().GenerateNewConnectionID(p.id, false); err != nil {
+								m.logger.Errorf("Path %d: failed to generate initial connection ID %d: %v", p.id, i+1, err)
+								break // Stop if there's an error (e.g., limit reached)
+							}
+						}
+					}
 				} else if p.mtuDiscoverer != nil {
 					// If components existed but MTU discoverer somehow wasn't started or needs restart.
 					p.mtuDiscoverer.Start(rcvTime)
+					// Also issue CIDs if path is re-validated and was missing them,
+					// though this scenario is less likely if CIDs were issued on first validation.
+					if m.conn.Perspective() == protocol.PerspectiveClient {
+						// Check if CIDs are already plentiful for this path before issuing more.
+						// This check is simplified; ConnIDGenerator itself handles limits.
+						// For simplicity, just try to issue one more if this block is hit.
+						if err := m.conn.GetConnIDGenerator().GenerateNewConnectionID(p.id, false); err != nil {
+							m.logger.Debugf("Path %d: failed to generate additional CID on re-validation: %v", p.id, err)
+						}
+					}
 				}
 				return p
 			} else {
@@ -586,7 +611,53 @@ func (m *multiPathManager) GetActiveValidatedPaths() []*quicPath { /* ... */
 }
 func (m *multiPathManager) HandleMaxPathID(frame *wire.MaxPathIDFrame) { /* ... (as before) ... */ }
 func (m *multiPathManager) HandlePathsBlocked(frame *wire.PathsBlockedFrame) { /* ... (as before) ... */ }
-func (m *multiPathManager) HandlePathCIDsBlocked(frame *wire.PathCIDsBlockedFrame) { /* ... (as before) ... */ }
+
+func (m *multiPathManager) HandlePathCIDsBlocked(frame *wire.PathCIDsBlockedFrame) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.conn == nil || m.conn.GetConnIDGenerator() == nil {
+		return
+	}
+
+	// Validate PathIdentifier
+	// Path 0 is always valid. Other paths up to what we advertised.
+	ourMaxPathID := protocol.PathID(0)
+	if cg := m.conn.GetConnIDGenerator(); cg != nil && cg.getOurMaxPathIDFunc != nil { // Check if ConnIDGenerator can provide this
+		ourMaxPathID = cg.getOurMaxPathIDFunc()
+	} else if m.ourMaxPathIDAdvertised != protocol.InvalidPathID { // Fallback to MPM's view
+		ourMaxPathID = m.ourMaxPathIDAdvertised
+	}
+
+	if frame.PathIdentifier > ourMaxPathID && frame.PathIdentifier != protocol.InitialPathID {
+		m.logger.Debugf("Received PATH_CIDS_BLOCKED for invalid PathIdentifier %d (our MAX_PATH_ID is %d)", frame.PathIdentifier, ourMaxPathID)
+		// Optionally send an error. For now, just ignore.
+		return
+	}
+
+	// Check if path exists, though ConnIDGenerator.GenerateNewConnectionID will also check path validity.
+	var pathExists bool
+	for _, p := range m.paths {
+		if p.id == frame.PathIdentifier {
+			pathExists = true
+			break
+		}
+	}
+	if !pathExists && frame.PathIdentifier != protocol.InitialPathID { // Path 0 might not be explicitly in m.paths if MPM inactive initially
+		m.logger.Debugf("Received PATH_CIDS_BLOCKED for non-existent path %d", frame.PathIdentifier)
+		// This could be an error, or we could try to generate a CID for it anyway if pathID is valid.
+		// ConnIDGenerator will create path state if it's valid & new.
+	}
+
+	m.logger.Debugf("Received PATH_CIDS_BLOCKED for path %d. Generating a new CID.", frame.PathIdentifier)
+	// The `retirePriorToOldCIDs` boolean is set to `false` as per subtask instruction.
+	// This means we won't aggressively retire older CIDs on this path unless the generator's internal logic decides to.
+	if err := m.conn.GetConnIDGenerator().GenerateNewConnectionID(frame.PathIdentifier, false); err != nil {
+		m.logger.Errorf("Failed to generate new CID for path %d in response to PATH_CIDS_BLOCKED: %v", frame.PathIdentifier, err)
+	} else {
+		m.logger.Debugf("Successfully generated new CID for path %d in response to PATH_CIDS_BLOCKED.", frame.PathIdentifier)
+	}
+}
+
 func (m *multiPathManager) QueueMaxPathIDFrame(maxPathID protocol.PathID) { /* ... (as before) ... */ }
 func (m *multiPathManager) QueuePathsBlockedFrame() { /* ... (as before) ... */ }
 func (m *multiPathManager) QueuePathCIDsBlockedFrame(pathID protocol.PathID, nextSeqNum uint64) { /* ... (as before) ... */ }
@@ -609,8 +680,27 @@ func (m *multiPathManager) HandlePathNewConnectionID(frame *wire.PathNewConnecti
 }
 func (m *multiPathManager) HandlePathRetireConnectionID(frame *wire.PathRetireConnectionIDFrame, rcvTime time.Time) {
 	m.logger.Debugf("MultipathManager: Peer retiring our CID with SeqNum %d on Path %d.", frame.SequenceNumber, frame.PathIdentifier)
-	if err := m.conn.ConnIDGenerator().Retire(frame.PathIdentifier, frame.SequenceNumber, rcvTime.Add(defaultRetireCIDGracePeriod)); err != nil { // Using fixed grace period for now
+	err := m.conn.GetConnIDGenerator().Retire(frame.PathIdentifier, frame.SequenceNumber, rcvTime.Add(defaultRetireCIDGracePeriod))
+	if err != nil {
 		m.logger.Errorf("Error retiring our CID for path %d, seq %d: %v", frame.PathIdentifier, frame.SequenceNumber, err)
+		return // If retirement failed, don't proceed to potentially issue a new one.
+	}
+
+	// After successful retirement, check if we need to replenish CIDs for this path.
+	// Define a minimum threshold for active CIDs we want the peer to have for any path.
+	const defaultMinOurActiveCIDsForPath = 2 // TODO: Make this configurable if needed.
+
+	activeCount := m.conn.GetConnIDGenerator().GetActiveCIDCount(frame.PathIdentifier)
+	if activeCount < defaultMinOurActiveCIDsForPath {
+		m.logger.Debugf("Path %d: Active CID count (%d) fell below threshold (%d) after peer retired CID. Issuing a new one.",
+			frame.PathIdentifier, activeCount, defaultMinOurActiveCIDsForPath)
+		// The `retirePriorToOldCIDs` boolean is set to `false` here, as we are replenishing,
+		// not necessarily trying to force retirement of others unless ConnIDGenerator's limit logic kicks in.
+		if genErr := m.conn.GetConnIDGenerator().GenerateNewConnectionID(frame.PathIdentifier, false); genErr != nil {
+			m.logger.Errorf("Path %d: Failed to issue new CID after retirement reduced active count: %v", frame.PathIdentifier, genErr)
+		} else {
+			m.logger.Debugf("Path %d: Successfully issued new CID to replenish active CIDs.", frame.PathIdentifier)
+		}
 	}
 }
 

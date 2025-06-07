@@ -159,16 +159,81 @@ func (m *connIDManager) Add(frame *wire.PathNewConnectionIDFrame) error {
 		return nil
 	}
 
-	// Check connection ID limit for this path
-	// Count non-retired CIDs for this path.
-	// The limit is on "active" CIDs from peer's perspective, which means CIDs we haven't told them to retire yet.
-	// Our m.connIDsByPath[pathID] stores CIDs peer gave us that *we* haven't told them we are retiring.
-	if uint64(len(m.connIDsByPath[pathID])) >= m.connIDLimitPerPath {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ConnectionIDLimitError,
-			ErrorMessage: fmt.Sprintf("exceeded connection ID limit for path %d", pathID),
+	// Enforce our local connection ID limit per path.
+	// If adding this new CID would exceed the limit, retire the oldest one(s) to make space.
+	// The count of CIDs for a path is len(m.connIDsByPath[pathID]).
+	// We are about to add one more.
+	for uint64(len(m.connIDsByPath[pathID])) >= m.connIDLimitPerPath && m.connIDLimitPerPath > 0 {
+		// We need to make space. Find the CID with the lowest sequence number to retire.
+		var oldestSeqNum uint64 = protocol.MaxUint64 // Initialize with a large value
+		var oldestCIDInfo *connIDInfo
+		foundOldest := false
+
+		for seq, ci := range m.connIDsByPath[pathID] {
+			// Don't try to retire the CID we are currently adding, if it somehow got into the map already (should not happen due to earlier checks)
+			if seq == frame.SequenceNumber && ci.ConnectionID.Equal(frame.ConnectionID) {
+				continue
+			}
+			if seq < oldestSeqNum {
+				oldestSeqNum = seq
+				oldestCIDInfo = ci
+				foundOldest = true
+			}
+		}
+
+		if foundOldest && oldestCIDInfo != nil {
+			m.logger.Debugf("Path %d: Connection ID limit (%d) reached. Retiring oldest CID (Seq: %d, ID: %s) to make space for new CID (Seq: %d, ID: %s).",
+				pathID, m.connIDLimitPerPath, oldestSeqNum, oldestCIDInfo.ConnectionID, frame.SequenceNumber, frame.ConnectionID)
+			// RetireDestinationConnectionID will remove it from m.connIDsByPath[pathID]
+			// and queue the PATH_RETIRE_CONNECTION_ID frame.
+			// It's important that RetireDestinationConnectionID correctly modifies the collection being iterated.
+			// To be safe, we can collect CIDs to retire and do it after iteration, or ensure the map iteration is safe.
+			// For now, assume direct call is okay. If it modifies map, len() will update.
+			// However, RetireDestinationConnectionID also takes a lock, which would deadlock here as Add already holds the lock.
+			// So, we need to manually perform the actions of RetireDestinationConnectionID here without re-locking or calling it directly.
+
+			// Manual retirement logic:
+			m.removeResetTokenFunc(oldestCIDInfo.StatelessResetToken)
+			delete(m.connIDsByPath[pathID], oldestSeqNum)
+			m.logger.Debugf("Queuing PATH_RETIRE_CONNECTION_ID for path %d, peer's CID seq %d (CID: %s) due to limit.", pathID, oldestSeqNum, oldestCIDInfo.ConnectionID)
+			m.queueControlFrameFunc(&wire.PathRetireConnectionIDFrame{PathIdentifier: pathID, SequenceNumber: oldestSeqNum})
+
+			// If this was the active DCID for the path, clear it.
+			if activeCID, ok := m.activeDestConnIDByPath[pathID]; ok && activeCID.Equal(oldestCIDInfo.ConnectionID) {
+				delete(m.activeDestConnIDByPath, pathID)
+				delete(m.activeDestConnIDSeqNumByPath, pathID)
+				// A new active CID will be selected later if this new one is suitable or another one is chosen.
+			}
+		} else {
+			// This case should ideally not be reached if connIDLimitPerPath > 0,
+			// as there should always be an "oldest" if the map is not empty.
+			// If connIDLimitPerPath is 0, this loop condition prevents entry.
+			// If the map is empty and limit is also 0, this means no CIDs allowed.
+			if m.connIDLimitPerPath == 0 {
+                 return &qerr.TransportError{
+                    ErrorCode:    qerr.ConnectionIDLimitError,
+                    ErrorMessage: fmt.Sprintf("connection ID limit is 0 for path %d, cannot add new CID", pathID),
+                }
+            }
+			m.logger.Errorf("Path %d: Could not find an old CID to retire despite being at limit %d (current count %d). New CID %d not added.",
+                pathID, m.connIDLimitPerPath, len(m.connIDsByPath[pathID]), frame.SequenceNumber)
+			return &qerr.TransportError{
+				ErrorCode:    qerr.InternalError,
+				ErrorMessage: fmt.Sprintf("internal error: failed to make space for new CID on path %d", pathID),
+			}
 		}
 	}
+	// Now, there should be space.
+	if uint64(len(m.connIDsByPath[pathID])) >= m.connIDLimitPerPath && m.connIDLimitPerPath > 0 {
+		// This implies we couldn't make space, which shouldn't happen if the logic above is correct
+		// and connIDLimitPerPath > 0. If connIDLimitPerPath is 0, it means we can't store any.
+		 m.logger.Errorf("Path %d: Still at CID limit %d after attempting to retire. Cannot add CID %d.", pathID, m.connIDLimitPerPath, frame.SequenceNumber)
+		 return &qerr.TransportError{
+			 ErrorCode:    qerr.ConnectionIDLimitError,
+			 ErrorMessage: fmt.Sprintf("failed to make space for new CID on path %d (limit: %d)", pathID, m.connIDLimitPerPath),
+		 }
+	}
+
 
 	newInfo := &connIDInfo{
 		SequenceNumber:      frame.SequenceNumber,
