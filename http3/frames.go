@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 
 	"github.com/Noooste/quic-go"
 	"github.com/Noooste/quic-go/quicvarint"
@@ -238,6 +239,10 @@ func (f *settingsFrame) AppendWithOrder(b []byte) []byte {
 		}
 		if id == settingExtendedConnect {
 			extendedConnectAdded = true
+		}
+		if id == SettingsGREASE && val == 0 {
+			// generate a GREASE value
+			val = rand.Uint64() % (1 << 32)
 		}
 		b = quicvarint.Append(b, id)
 		b = quicvarint.Append(b, val)
