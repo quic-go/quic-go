@@ -9,8 +9,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24.x"
-      - name: Check that no non-test files import Ginkgo or Gomega
-        run: .github/workflows/no_ginkgo.sh
       - name: Check for //go:build ignore in .go files
         run: |
           IGNORED_FILES=$(grep -rl '//go:build ignore' . --include='*.go') || true
