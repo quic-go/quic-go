@@ -17,14 +17,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func (e streamError) TestError() error {
-	nums := make([]interface{}, len(e.nums))
-	for i, num := range e.nums {
-		nums[i] = num
-	}
-	return fmt.Errorf(e.message, nums...)
-}
-
 func TestStreamsMapCreatingStreams(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
 		testStreamsMapCreatingAndDeletingStreams(t, protocol.PerspectiveClient,
