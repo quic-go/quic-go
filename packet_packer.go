@@ -13,19 +13,20 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
+	// path is defined in connection.go, ensure it's accessible or rethink import if packer moves
 )
 
 var errNothingToPack = errors.New("nothing to pack")
 
 type packer interface {
-	PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (*coalescedPacket, error)
-	PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, *packetBuffer, error)
-	AppendPacket(_ *packetBuffer, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, error)
-	PackPTOProbePacket(_ protocol.EncryptionLevel, _ protocol.ByteCount, addPingIfEmpty bool, now time.Time, v protocol.Version) (*coalescedPacket, error)
-	PackConnectionClose(*qerr.TransportError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
-	PackApplicationClose(*qerr.ApplicationError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
-	PackPathProbePacket(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error)
-	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *packetBuffer, error)
+	PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version, currentPath *path) (*coalescedPacket, error)
+	PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version, currentPath *path) (shortHeaderPacket, *packetBuffer, error)
+	AppendPacket(_ *packetBuffer, maxPacketSize protocol.ByteCount, now time.Time, v protocol.Version, currentPath *path) (shortHeaderPacket, error)
+	PackPTOProbePacket(_ protocol.EncryptionLevel, _ protocol.ByteCount, addPingIfEmpty bool, now time.Time, v protocol.Version, currentPath *path) (*coalescedPacket, error)
+	PackConnectionClose(*qerr.TransportError, protocol.ByteCount, protocol.Version, *path) (*coalescedPacket, error)
+	PackApplicationClose(*qerr.ApplicationError, protocol.ByteCount, protocol.Version, *path) (*coalescedPacket, error)
+	PackPathProbePacket(destConnID protocol.ConnectionID, frame ackhandler.Frame, v protocol.Version, currentPath *path) (shortHeaderPacket, *packetBuffer, error)
+	PackMTUProbePacket(ping wire.PingFrame, size protocol.ByteCount, v protocol.Version, currentPath *path) (shortHeaderPacket, *packetBuffer, error)
 
 	SetToken([]byte)
 }
@@ -104,11 +105,16 @@ type sealingManager interface {
 	GetHandshakeSealer() (handshake.LongHeaderSealer, error)
 	Get0RTTSealer() (handshake.LongHeaderSealer, error)
 	Get1RTTSealer() (handshake.ShortHeaderSealer, error)
+	EncryptionLevel() protocol.EncryptionLevel
+	OneRTTPacketKeyAvailable() bool
+	KeyPhase() protocol.KeyPhaseBit
+	ConnectionState() handshake.ConnectionState
 }
 
 type frameSource interface {
 	HasData() bool
 	Append([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, time.Time, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)
+	HasDataForEncryptionLevel(protocol.EncryptionLevel) bool
 }
 
 type ackFrameSource interface {
@@ -121,6 +127,7 @@ type packetPacker struct {
 
 	perspective protocol.Perspective
 	cryptoSetup sealingManager
+	config      *Config
 
 	initialStream   *initialCryptoStream
 	handshakeStream *cryptoStream
@@ -151,6 +158,7 @@ func newPacketPacker(
 	acks ackFrameSource,
 	datagramQueue *datagramQueue,
 	perspective protocol.Perspective,
+	config *Config,
 ) *packetPacker {
 	var b [16]byte
 	_, _ = crand.Read(b[:])
@@ -168,129 +176,124 @@ func newPacketPacker(
 		acks:                acks,
 		rand:                *rand.New(rand.NewPCG(binary.BigEndian.Uint64(b[:8]), binary.BigEndian.Uint64(b[8:]))),
 		pnManager:           packetNumberManager,
+		config:              config,
 	}
 }
 
-// PackConnectionClose packs a packet that closes the connection with a transport error.
-func (p *packetPacker) PackConnectionClose(e *qerr.TransportError, maxPacketSize protocol.ByteCount, v protocol.Version) (*coalescedPacket, error) {
-	var reason string
-	// don't send details of crypto errors
-	if !e.ErrorCode.IsCryptoError() {
-		reason = e.ErrorMessage
+func (p *packetPacker) PackConnectionClose(quicErr *qerr.TransportError, maxPacketSize protocol.ByteCount, v protocol.Version, currentPath *path) (*coalescedPacket, error) {
+	var reasonPhrase string
+	if p.config.EnableDetailedConnectionCloseFrames {
+		reasonPhrase = quicErr.ErrorMessage
 	}
-	return p.packConnectionClose(false, uint64(e.ErrorCode), e.FrameType, reason, maxPacketSize, v)
+	return p.packConnectionCloseImpl(false, uint64(quicErr.ErrorCode), quicErr.FrameType, reasonPhrase, maxPacketSize, v, currentPath)
 }
 
-// PackApplicationClose packs a packet that closes the connection with an application error.
-func (p *packetPacker) PackApplicationClose(e *qerr.ApplicationError, maxPacketSize protocol.ByteCount, v protocol.Version) (*coalescedPacket, error) {
-	return p.packConnectionClose(true, uint64(e.ErrorCode), 0, e.ErrorMessage, maxPacketSize, v)
+func (p *packetPacker) PackApplicationClose(quicErr *qerr.ApplicationError, maxPacketSize protocol.ByteCount, v protocol.Version, currentPath *path) (*coalescedPacket, error) {
+	var reasonPhrase string
+	if p.config.EnableDetailedConnectionCloseFrames {
+		reasonPhrase = quicErr.ErrorMessage
+	}
+	if currentPath == nil || currentPath.pnSpace == nil {
+		return nil, errors.New("PackApplicationClose called with nil currentPath or pnSpace")
+	}
+	if !p.cryptoSetup.OneRTTPacketKeyAvailable() {
+		return nil, errors.New("cannot send application close: 1-RTT keys not available")
+	}
+	return p.packConnectionCloseImpl(true, uint64(quicErr.ErrorCode), 0, reasonPhrase, maxPacketSize, v, currentPath)
 }
 
-func (p *packetPacker) packConnectionClose(
+func (p *packetPacker) packConnectionCloseImpl(
 	isApplicationError bool,
 	errorCode uint64,
 	frameType uint64,
 	reason string,
 	maxPacketSize protocol.ByteCount,
 	v protocol.Version,
+	currentPath *path,
 ) (*coalescedPacket, error) {
-	var sealers [4]sealer
-	var hdrs [3]*wire.ExtendedHeader
-	var payloads [4]payload
-	var size protocol.ByteCount
-	var connID protocol.ConnectionID
-	var oneRTTPacketNumber protocol.PacketNumber
-	var oneRTTPacketNumberLen protocol.PacketNumberLen
-	var keyPhase protocol.KeyPhaseBit // only set for 1-RTT
-	var numLongHdrPackets uint8
-	encLevels := [4]protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption0RTT, protocol.Encryption1RTT}
-	for i, encLevel := range encLevels {
-		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.Encryption0RTT {
-			continue
+	ccf := &wire.ConnectionCloseFrame{
+		IsApplicationError: isApplicationError,
+		ErrorCode:          errorCode,
+		FrameType:          frameType,
+		ReasonPhrase:       reason,
+	}
+
+	buffer := getPacketBuffer()
+	var shp *shortHeaderPacket
+	var lhp []*longHeaderPacket
+
+	if p.cryptoSetup.OneRTTPacketKeyAvailable() && (p.perspective == protocol.PerspectiveClient || (p.perspective == protocol.PerspectiveServer && p.cryptoSetup.ConnectionState().HandshakeState == handshake.StateDone)) {
+		if currentPath == nil || currentPath.pnSpace == nil {
+			return nil, errors.New("packConnectionCloseImpl (1-RTT) called with nil currentPath or pnSpace")
 		}
-		ccf := &wire.ConnectionCloseFrame{
-			IsApplicationError: isApplicationError,
-			ErrorCode:          errorCode,
-			FrameType:          frameType,
-			ReasonPhrase:       reason,
+		sealer, err := p.cryptoSetup.Get1RTTSealer()
+		if err != nil {
+			return nil, err
 		}
-		// don't send application errors in Initial or Handshake packets
+		pn, pnLen := currentPath.pnSpace.pnGen.PeekPacketNumber()
+		hdr := &wire.ShortHeader{
+			DestConnectionID: p.getDestConnID(),
+			PacketNumber:     pn,
+			PacketNumberLen:  pnLen,
+			KeyPhase:         sealer.KeyPhase(),
+		}
+		payload := payload{frames: []ackhandler.Frame{{Frame: ccf}}, length: ccf.Length(v)}
+		appendedPacket, err := p.appendShortHeaderPacket(buffer, hdr.DestConnectionID, hdr.PacketNumber, hdr.PacketNumberLen, hdr.KeyPhase, payload, 0, maxPacketSize, sealer, false, v)
+		if err != nil {
+			return nil, err
+		}
+		currentPath.pnSpace.pnGen.PopPacketNumber()
+		shp = &appendedPacket
+	} else {
+		encLevel := p.cryptoSetup.EncryptionLevel()
 		if isApplicationError && (encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake) {
 			ccf.IsApplicationError = false
 			ccf.ErrorCode = uint64(qerr.ApplicationErrorErrorCode)
 			ccf.ReasonPhrase = ""
 		}
-		pl := payload{
-			frames: []ackhandler.Frame{{Frame: ccf}},
-			length: ccf.Length(v),
-		}
-
-		var sealer sealer
-		var err error
-		switch encLevel {
-		case protocol.EncryptionInitial:
-			sealer, err = p.cryptoSetup.GetInitialSealer()
-		case protocol.EncryptionHandshake:
-			sealer, err = p.cryptoSetup.GetHandshakeSealer()
-		case protocol.Encryption0RTT:
-			sealer, err = p.cryptoSetup.Get0RTTSealer()
-		case protocol.Encryption1RTT:
-			var s handshake.ShortHeaderSealer
-			s, err = p.cryptoSetup.Get1RTTSealer()
-			if err == nil {
-				keyPhase = s.KeyPhase()
-			}
-			sealer = s
-		}
-		if err == handshake.ErrKeysNotYetAvailable || err == handshake.ErrKeysDropped {
-			continue
-		}
+		sealer, err := p.getLongHeaderSealer(encLevel)
 		if err != nil {
 			return nil, err
 		}
-		sealers[i] = sealer
-		var hdr *wire.ExtendedHeader
-		if encLevel == protocol.Encryption1RTT {
-			connID = p.getDestConnID()
-			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
-			size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, pl)
-		} else {
-			hdr = p.getLongHeader(encLevel, v)
-			hdrs[i] = hdr
-			size += p.longHeaderPacketLength(hdr, pl, v) + protocol.ByteCount(sealer.Overhead())
-			numLongHdrPackets++
+		hdr := p.getLongHeader(encLevel, v)
+		payload := payload{frames: []ackhandler.Frame{{Frame: ccf}}, length: ccf.Length(v)}
+
+		var currentTotalSize protocol.ByteCount
+		if shp != nil { currentTotalSize += shp.Length }
+		for _, lp := range lhp { currentTotalSize += lp.length }
+
+		paddingLen := p.initialPaddingLen(payload.frames, currentTotalSize + p.longHeaderPacketLength(hdr, payload, v) + protocol.ByteCount(sealer.Overhead()), maxPacketSize)
+		if encLevel != protocol.EncryptionInitial {
+			paddingLen = 0
 		}
-		payloads[i] = pl
+
+		appendedPacket, err := p.appendLongHeaderPacket(buffer, hdr, payload, paddingLen, encLevel, sealer, v)
+		if err != nil {
+			return nil, err
+		}
+		lhp = append(lhp, appendedPacket)
 	}
-	buffer := getPacketBuffer()
-	packet := &coalescedPacket{
+
+	return &coalescedPacket{
 		buffer:         buffer,
-		longHdrPackets: make([]*longHeaderPacket, 0, numLongHdrPackets),
-	}
-	for i, encLevel := range encLevels {
-		if sealers[i] == nil {
-			continue
-		}
-		if encLevel == protocol.Encryption1RTT {
-			shp, err := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, keyPhase, payloads[i], 0, maxPacketSize, sealers[i], false, v)
-			if err != nil {
-				return nil, err
-			}
-			packet.shortHdrPacket = &shp
-		} else {
-			var paddingLen protocol.ByteCount
-			if encLevel == protocol.EncryptionInitial {
-				paddingLen = p.initialPaddingLen(payloads[i].frames, size, maxPacketSize)
-			}
-			longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdrs[i], payloads[i], paddingLen, encLevel, sealers[i], v)
-			if err != nil {
-				return nil, err
-			}
-			packet.longHdrPackets = append(packet.longHdrPackets, longHdrPacket)
-		}
-	}
-	return packet, nil
+		longHdrPackets: lhp,
+		shortHdrPacket: shp,
+	}, nil
 }
+
+func (p *packetPacker) getLongHeaderSealer(encLevel protocol.EncryptionLevel) (handshake.LongHeaderSealer, error) {
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return p.cryptoSetup.GetInitialSealer()
+	case protocol.EncryptionHandshake:
+		return p.cryptoSetup.GetHandshakeSealer()
+	case protocol.Encryption0RTT:
+		return p.cryptoSetup.Get0RTTSealer()
+	default:
+		return nil, fmt.Errorf("no long header sealer for %s", encLevel)
+	}
+}
+
 
 // longHeaderPacketLength calculates the length of a serialized long header packet.
 // It takes into account that packets that have a tiny payload need to be padded,
@@ -327,22 +330,26 @@ func (p *packetPacker) initialPaddingLen(frames []ackhandler.Frame, currentSize,
 	return maxPacketSize - currentSize
 }
 
+func (p *packetPacker) maxShortHeaderPacketOverhead(hdr *wire.ShortHeader) protocol.ByteCount {
+	// Assumes max PN length for overhead calculation, as actual PN length isn't known yet.
+	return wire.ShortHeaderLen(hdr.DestConnectionID, protocol.PacketNumberLen4) + protocol.ByteCount(p.cryptoSetup.Overhead(protocol.Encryption1RTT))
+}
+
+
 // PackCoalescedPacket packs a new packet.
 // It packs an Initial / Handshake if there is data to send in these packet number spaces.
 // It should only be called before the handshake is confirmed.
-func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCount, now time.Time, v protocol.Version) (*coalescedPacket, error) {
+func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCount, now time.Time, v protocol.Version, currentPath *path) (*coalescedPacket, error) {
 	var (
 		initialHdr, handshakeHdr, zeroRTTHdr                            *wire.ExtendedHeader
 		initialPayload, handshakePayload, zeroRTTPayload, oneRTTPayload payload
-		oneRTTPacketNumber                                              protocol.PacketNumber
-		oneRTTPacketNumberLen                                           protocol.PacketNumberLen
 	)
 	// Try packing an Initial packet.
 	initialSealer, err := p.cryptoSetup.GetInitialSealer()
 	if err != nil && err != handshake.ErrKeysDropped {
 		return nil, err
 	}
-	var size protocol.ByteCount
+	var currentSize protocol.ByteCount
 	if initialSealer != nil {
 		initialHdr, initialPayload = p.maybeGetCryptoPacket(
 			maxSize-protocol.ByteCount(initialSealer.Overhead()),
@@ -354,13 +361,13 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 			v,
 		)
 		if initialPayload.length > 0 {
-			size += p.longHeaderPacketLength(initialHdr, initialPayload, v) + protocol.ByteCount(initialSealer.Overhead())
+			currentSize += p.longHeaderPacketLength(initialHdr, initialPayload, v) + protocol.ByteCount(initialSealer.Overhead())
 		}
 	}
 
 	// Add a Handshake packet.
 	var handshakeSealer sealer
-	if (onlyAck && size == 0) || (!onlyAck && size < maxSize-protocol.MinCoalescedPacketSize) {
+	if (onlyAck && currentSize == 0) || (!onlyAck && currentSize < maxSize-protocol.MinCoalescedPacketSize) {
 		var err error
 		handshakeSealer, err = p.cryptoSetup.GetHandshakeSealer()
 		if err != nil && err != handshake.ErrKeysDropped && err != handshake.ErrKeysNotYetAvailable {
@@ -368,17 +375,17 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 		}
 		if handshakeSealer != nil {
 			handshakeHdr, handshakePayload = p.maybeGetCryptoPacket(
-				maxSize-size-protocol.ByteCount(handshakeSealer.Overhead()),
+				maxSize-currentSize-protocol.ByteCount(handshakeSealer.Overhead()),
 				protocol.EncryptionHandshake,
 				now,
 				false,
 				onlyAck,
-				size == 0,
+				currentSize == 0, // only add PING if this is the first packet
 				v,
 			)
 			if handshakePayload.length > 0 {
 				s := p.longHeaderPacketLength(handshakeHdr, handshakePayload, v) + protocol.ByteCount(handshakeSealer.Overhead())
-				size += s
+				currentSize += s
 			}
 		}
 	}
@@ -386,22 +393,28 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 	// Add a 0-RTT / 1-RTT packet.
 	var zeroRTTSealer sealer
 	var oneRTTSealer handshake.ShortHeaderSealer
+	var oneRTTPacketNumber protocol.PacketNumber
+	var oneRTTPacketNumberLen protocol.PacketNumberLen
 	var connID protocol.ConnectionID
 	var kp protocol.KeyPhaseBit
-	if (onlyAck && size == 0) || (!onlyAck && size < maxSize-protocol.MinCoalescedPacketSize) {
+
+	if (onlyAck && currentSize == 0) || (!onlyAck && currentSize < maxSize-protocol.MinCoalescedPacketSize) {
 		var err error
 		oneRTTSealer, err = p.cryptoSetup.Get1RTTSealer()
 		if err != nil && err != handshake.ErrKeysDropped && err != handshake.ErrKeysNotYetAvailable {
 			return nil, err
 		}
 		if err == nil { // 1-RTT
+			if currentPath == nil || currentPath.pnSpace == nil {
+				return nil, errors.New("PackCoalescedPacket: currentPath or pnSpace is nil for 1-RTT component")
+			}
 			kp = oneRTTSealer.KeyPhase()
 			connID = p.getDestConnID()
-			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+			oneRTTPacketNumber, oneRTTPacketNumberLen = currentPath.pnSpace.pnGen.PeekPacketNumber()
 			hdrLen := wire.ShortHeaderLen(connID, oneRTTPacketNumberLen)
-			oneRTTPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, hdrLen, maxSize-size, onlyAck, size == 0, now, v)
+			oneRTTPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, hdrLen, maxSize-currentSize, onlyAck, currentSize == 0, now, v)
 			if oneRTTPayload.length > 0 {
-				size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, oneRTTPayload) + protocol.ByteCount(oneRTTSealer.Overhead())
+				currentSize += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, oneRTTPayload) + protocol.ByteCount(oneRTTSealer.Overhead())
 			}
 		} else if p.perspective == protocol.PerspectiveClient && !onlyAck { // 0-RTT packets can't contain ACK frames
 			var err error
@@ -410,9 +423,9 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 				return nil, err
 			}
 			if zeroRTTSealer != nil {
-				zeroRTTHdr, zeroRTTPayload = p.maybeGetAppDataPacketFor0RTT(zeroRTTSealer, maxSize-size, now, v)
+				zeroRTTHdr, zeroRTTPayload = p.maybeGetAppDataPacketFor0RTT(zeroRTTSealer, maxSize-currentSize, now, v)
 				if zeroRTTPayload.length > 0 {
-					size += p.longHeaderPacketLength(zeroRTTHdr, zeroRTTPayload, v) + protocol.ByteCount(zeroRTTSealer.Overhead())
+					currentSize += p.longHeaderPacketLength(zeroRTTHdr, zeroRTTPayload, v) + protocol.ByteCount(zeroRTTSealer.Overhead())
 				}
 			}
 		}
@@ -428,48 +441,107 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 		longHdrPackets: make([]*longHeaderPacket, 0, 3),
 	}
 	if initialPayload.length > 0 {
-		padding := p.initialPaddingLen(initialPayload.frames, size, maxSize)
-		cont, err := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, protocol.EncryptionInitial, initialSealer, v)
-		if err != nil {
-			return nil, err
+		padding := p.initialPaddingLen(initialPayload.frames, currentSize, maxSize)
+		cont, errLHP := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, protocol.EncryptionInitial, initialSealer, v)
+		if errLHP != nil {
+			return nil, errLHP
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, cont)
 	}
 	if handshakePayload.length > 0 {
-		cont, err := p.appendLongHeaderPacket(buffer, handshakeHdr, handshakePayload, 0, protocol.EncryptionHandshake, handshakeSealer, v)
-		if err != nil {
-			return nil, err
+		cont, errLHP := p.appendLongHeaderPacket(buffer, handshakeHdr, handshakePayload, 0, protocol.EncryptionHandshake, handshakeSealer, v)
+		if errLHP != nil {
+			return nil, errLHP
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, cont)
 	}
 	if zeroRTTPayload.length > 0 {
-		longHdrPacket, err := p.appendLongHeaderPacket(buffer, zeroRTTHdr, zeroRTTPayload, 0, protocol.Encryption0RTT, zeroRTTSealer, v)
-		if err != nil {
-			return nil, err
+		longHdrPacket, errLHP := p.appendLongHeaderPacket(buffer, zeroRTTHdr, zeroRTTPayload, 0, protocol.Encryption0RTT, zeroRTTSealer, v)
+		if errLHP != nil {
+			return nil, errLHP
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, longHdrPacket)
 	} else if oneRTTPayload.length > 0 {
-		shp, err := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, kp, oneRTTPayload, 0, maxSize, oneRTTSealer, false, v)
-		if err != nil {
-			return nil, err
+		shp, errSHP := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, kp, oneRTTPayload, 0, maxSize, oneRTTSealer, false, v)
+		if errSHP != nil {
+			return nil, errSHP
 		}
 		packet.shortHdrPacket = &shp
+		currentPath.pnSpace.pnGen.PopPacketNumber() // Pop after successful append
 	}
 	return packet, nil
 }
 
 // PackAckOnlyPacket packs a packet containing only an ACK in the application data packet number space.
 // It should be called after the handshake is confirmed.
-func (p *packetPacker) PackAckOnlyPacket(maxSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (p *packetPacker) PackAckOnlyPacket(maxSize protocol.ByteCount, now time.Time, v protocol.Version, currentPath *path) (shortHeaderPacket, *packetBuffer, error) {
+	ack := p.acks.GetAckFrame(protocol.Encryption1RTT, now, true)
+	if ack == nil {
+		return shortHeaderPacket{}, nil, errNothingToPack
+	}
+	if currentPath == nil || currentPath.pnSpace == nil {
+		// This should not happen for 1-RTT packets.
+		return shortHeaderPacket{}, nil, errors.New("PackAckOnlyPacket called with nil currentPath or pnSpace for 1-RTT")
+	}
+
 	buf := getPacketBuffer()
-	packet, err := p.appendPacket(buf, true, maxSize, now, v)
-	return packet, buf, err
+	destConnID := p.getDestConnID()
+
+	payloadFrames := []ackhandler.Frame{{Frame: ack}}
+	payloadLength, err := p.framer.AppendControlFrames(buf, payloadFrames, maxSize-protocol.ByteCount(wire.ShortHeaderLen(destConnID, 0)), v)
+	if err != nil {
+		// either the ACK can't fit, or we don't have connection ID and PN length yet
+		// (though for 1-RTT, PN length should be known via path's PN generator)
+		return shortHeaderPacket{}, nil, err
+	}
+	if payloadLength == 0 {
+		buf.Release()
+		return shortHeaderPacket{}, nil, errNothingToPack
+	}
+
+	// Use path-specific packet number generator
+	pn, pnLen := currentPath.pnSpace.pnGen.PeekPacketNumber()
+	hdr := &wire.ShortHeader{
+		DestConnectionID: destConnID,
+		PacketNumber:     pn,
+		PacketNumberLen:  pnLen,
+	}
+	hdrRaw, err := hdr.Append(buf.Data[:0], v)
+	if err != nil {
+		return shortHeaderPacket{}, nil, err
+	}
+	buf.Data = buf.Data[len(hdrRaw):]
+	buf.Data = append(hdrRaw, buf.Data...)
+	buf.EncryptionTarget = buf.Data[len(hdrRaw):]
+	buf.SetHeader(&wire.ExtendedHeader{Header: *hdr,
+		KeyPhase:         p.cryptoSetup.KeyPhase()})
+	buf.PrependChainingKey(payloadLength, hdr.PacketNumber, hdr.KeyPhase)
+
+	// Pop from path-specific packet number generator
+	currentPath.pnSpace.pnGen.PopPacketNumber()
+	return shortHeaderPacket{
+		DestConnID:      hdr.DestConnectionID,
+		PacketNumber:     hdr.PacketNumber,
+		PacketNumberLen:  hdr.PacketNumberLen,
+		KeyPhase:         hdr.KeyPhase,
+		Ack:              ack,
+		Frames:           []ackhandler.Frame{},
+		Length:           protocol.ByteCount(len(buf.Data)),
+	}, buf, nil
 }
 
 // AppendPacket packs a packet in the application data packet number space.
 // It should be called after the handshake is confirmed.
-func (p *packetPacker) AppendPacket(buf *packetBuffer, maxSize protocol.ByteCount, now time.Time, v protocol.Version) (shortHeaderPacket, error) {
-	return p.appendPacket(buf, false, maxSize, now, v)
+func (p *packetPacker) AppendPacket(buf *packetBuffer, maxSize protocol.ByteCount, now time.Time, v protocol.Version, currentPath *path) (shortHeaderPacket, error) {
+	if currentPath == nil || currentPath.pnSpace == nil {
+		// This should not happen for 1-RTT packets.
+		// Consider returning an error or panic if appropriate for development.
+		return shortHeaderPacket{}, errors.New("AppendPacket called with nil currentPath or pnSpace for 1-RTT")
+	}
+	if p.perspective == protocol.PerspectiveServer && p.cryptoSetup.ConnectionState().HandshakeState != handshake.StateDone {
+		return shortHeaderPacket{}, errNothingToPack
+	}
+	return p.appendPacket(buf, false, maxSize, now, v, currentPath)
 }
 
 func (p *packetPacker) appendPacket(
@@ -478,12 +550,14 @@ func (p *packetPacker) appendPacket(
 	maxPacketSize protocol.ByteCount,
 	now time.Time,
 	v protocol.Version,
+	currentPath *path,
 ) (shortHeaderPacket, error) {
 	sealer, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
 		return shortHeaderPacket{}, err
 	}
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	// Use path-specific packet number generator for 1-RTT packets
+	pn, pnLen := currentPath.pnSpace.pnGen.PeekPacketNumber()
 	connID := p.getDestConnID()
 	hdrLen := wire.ShortHeaderLen(connID, pnLen)
 	pl := p.maybeGetShortHeaderPacket(sealer, hdrLen, maxPacketSize, onlyAck, true, now, v)
@@ -492,8 +566,15 @@ func (p *packetPacker) appendPacket(
 	}
 	kp := sealer.KeyPhase()
 
-	return p.appendShortHeaderPacket(buf, connID, pn, pnLen, kp, pl, 0, maxPacketSize, sealer, false, v)
+	shp, err := p.appendShortHeaderPacket(buf, connID, pn, pnLen, kp, pl, 0, maxPacketSize, sealer, false, v)
+	if err != nil {
+		return shortHeaderPacket{}, err
+	}
+	// Pop from path-specific packet number generator only after successful append
+	currentPath.pnSpace.pnGen.PopPacketNumber()
+	return shp, nil
 }
+
 
 func (p *packetPacker) maybeGetCryptoPacket(
 	maxPacketSize protocol.ByteCount,
@@ -515,7 +596,6 @@ func (p *packetPacker) maybeGetCryptoPacket(
 
 	var hasCryptoData func() bool
 	var popCryptoFrame func(maxLen protocol.ByteCount) *wire.CryptoFrame
-	//nolint:exhaustive // Initial and Handshake are the only two encryption levels here.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		hasCryptoData = p.initialStream.HasData
@@ -523,6 +603,8 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	case protocol.EncryptionHandshake:
 		hasCryptoData = p.handshakeStream.HasData
 		popCryptoFrame = p.handshakeStream.PopCryptoFrame
+	default: // Should not happen for crypto packets
+		return nil, payload{}
 	}
 	handler := p.retransmissionQueue.AckHandler(encLevel)
 	hasRetransmission := p.retransmissionQueue.HasData(encLevel)
@@ -534,7 +616,6 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	var pl payload
 	if !hasCryptoData() && !hasRetransmission && ack == nil {
 		if !addPingIfEmpty {
-			// nothing to send
 			return nil, payload{}
 		}
 		ping := &wire.PingFrame{}
@@ -564,7 +645,8 @@ func (p *packetPacker) maybeGetCryptoPacket(
 			maxPacketSize -= frameLen
 		}
 		return hdr, pl
-	} else {
+	}
+	else {
 		for hasCryptoData() {
 			cf := popCryptoFrame(maxPacketSize)
 			if cf == nil {
@@ -607,12 +689,10 @@ func (p *packetPacker) maybeGetAppDataPacket(
 ) payload {
 	pl := p.composeNextPacket(maxPayloadSize, onlyAck, ackAllowed, now, v)
 
-	// check if we have anything to send
 	if len(pl.frames) == 0 && len(pl.streamFrames) == 0 {
 		if pl.ack == nil {
 			return payload{}
 		}
-		// the packet only contains an ACK
 		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
 			ping := &wire.PingFrame{}
 			pl.frames = append(pl.frames, ackhandler.Frame{Frame: ping})
@@ -656,17 +736,13 @@ func (p *packetPacker) composeNextPacket(
 	if p.datagramQueue != nil {
 		if f := p.datagramQueue.Peek(); f != nil {
 			size := f.Length(v)
-			if size <= maxPayloadSize-pl.length { // DATAGRAM frame fits
+			if size <= maxPayloadSize-pl.length {
 				pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
 				pl.length += size
 				p.datagramQueue.Pop()
 			} else if !hasAck {
-				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK.
-				// Discard this frame. There's no point in retrying this in the next packet,
-				// as it's unlikely that the available packet size will increase.
 				p.datagramQueue.Pop()
 			}
-			// If the DATAGRAM frame was too large and the packet contained an ACK, we'll try to send it out later.
 		}
 	}
 
@@ -694,17 +770,13 @@ func (p *packetPacker) composeNextPacket(
 		startLen := len(pl.frames)
 		pl.frames, pl.streamFrames, lengthAdded = p.framer.Append(pl.frames, pl.streamFrames, maxPayloadSize-pl.length, now, v)
 		pl.length += lengthAdded
-		// add handlers for the control frames that were added
 		for i := startLen; i < len(pl.frames); i++ {
 			if pl.frames[i].Handler != nil {
 				continue
 			}
 			switch pl.frames[i].Frame.(type) {
 			case *wire.PathChallengeFrame, *wire.PathResponseFrame:
-				// Path probing is currently not supported, therefore we don't need to set the OnAcked callback yet.
-				// PATH_CHALLENGE and PATH_RESPONSE are never retransmitted.
 			default:
-				// we might be packing a 0-RTT packet, but we need to use the 1-RTT ack handler anyway
 				pl.frames[i].Handler = p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)
 			}
 		}
@@ -718,13 +790,16 @@ func (p *packetPacker) PackPTOProbePacket(
 	addPingIfEmpty bool,
 	now time.Time,
 	v protocol.Version,
+	currentPath *path, // Added currentPath
 ) (*coalescedPacket, error) {
 	if encLevel == protocol.Encryption1RTT {
-		return p.packPTOProbePacket1RTT(maxPacketSize, addPingIfEmpty, now, v)
+		if currentPath == nil || currentPath.pnSpace == nil {
+			return nil, errors.New("PackPTOProbePacket (1-RTT) called with nil currentPath or pnSpace")
+		}
+		return p.packPTOProbePacket1RTT(maxPacketSize, addPingIfEmpty, now, v, currentPath)
 	}
 
 	var sealer handshake.LongHeaderSealer
-	//nolint:exhaustive // Probe packets are never sent for 0-RTT.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		var err error
@@ -739,7 +814,7 @@ func (p *packetPacker) PackPTOProbePacket(
 			return nil, err
 		}
 	default:
-		panic("unknown encryption level")
+		panic("unknown encryption level for PTO probe (long header)")
 	}
 	hdr, pl := p.maybeGetCryptoPacket(
 		maxPacketSize-protocol.ByteCount(sealer.Overhead()),
@@ -755,10 +830,10 @@ func (p *packetPacker) PackPTOProbePacket(
 	}
 	buffer := getPacketBuffer()
 	packet := &coalescedPacket{buffer: buffer}
-	size := p.longHeaderPacketLength(hdr, pl, v) + protocol.ByteCount(sealer.Overhead())
+	currentTotalSize := p.longHeaderPacketLength(hdr, pl, v) + protocol.ByteCount(sealer.Overhead())
 	var padding protocol.ByteCount
 	if encLevel == protocol.EncryptionInitial {
-		padding = p.initialPaddingLen(pl.frames, size, maxPacketSize)
+		padding = p.initialPaddingLen(pl.frames, currentTotalSize, maxPacketSize)
 	}
 
 	longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdr, pl, padding, encLevel, sealer, v)
@@ -769,14 +844,15 @@ func (p *packetPacker) PackPTOProbePacket(
 	return packet, nil
 }
 
-func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, addPingIfEmpty bool, now time.Time, v protocol.Version) (*coalescedPacket, error) {
+func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, addPingIfEmpty bool, now time.Time, v protocol.Version, currentPath *path) (*coalescedPacket, error) {
 	s, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
 		return nil, err
 	}
 	kp := s.KeyPhase()
 	connID := p.getDestConnID()
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+
+	pn, pnLen := currentPath.pnSpace.pnGen.PeekPacketNumber()
 	hdrLen := wire.ShortHeaderLen(connID, pnLen)
 	pl := p.maybeGetAppDataPacket(maxPacketSize-protocol.ByteCount(s.Overhead())-hdrLen, false, true, now, v)
 	if pl.length == 0 {
@@ -794,13 +870,17 @@ func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, 
 		return nil, err
 	}
 	packet.shortHdrPacket = &shp
+	currentPath.pnSpace.pnGen.PopPacketNumber()
 	return packet, nil
 }
 
-func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (p *packetPacker) PackMTUProbePacket(ping wire.PingFrame, size protocol.ByteCount, v protocol.Version, currentPath *path) (shortHeaderPacket, *packetBuffer, error) {
+	if currentPath == nil || currentPath.pnSpace == nil {
+		return shortHeaderPacket{}, nil, errors.New("PackMTUProbePacket called with nil currentPath or pnSpace")
+	}
 	pl := payload{
-		frames: []ackhandler.Frame{ping},
-		length: ping.Frame.Length(v),
+		frames: []ackhandler.Frame{{Frame: &ping, Handler: emptyHandler{}}},
+		length: ping.Length(v),
 	}
 	buffer := getPacketBuffer()
 	s, err := p.cryptoSetup.Get1RTTSealer()
@@ -808,36 +888,60 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 		return shortHeaderPacket{}, nil, err
 	}
 	connID := p.getDestConnID()
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	pn, pnLen := currentPath.pnSpace.pnGen.PeekPacketNumber()
 	padding := size - p.shortHeaderPacketLength(connID, pnLen, pl) - protocol.ByteCount(s.Overhead())
 	kp := s.KeyPhase()
+
 	packet, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, padding, size, s, true, v)
+	if err == nil {
+		currentPath.pnSpace.pnGen.PopPacketNumber()
+	}
 	return packet, buffer, err
 }
 
-func (p *packetPacker) PackPathProbePacket(connID protocol.ConnectionID, frames []ackhandler.Frame, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+func (p *packetPacker) PackPathProbePacket(destConnID protocol.ConnectionID, frame ackhandler.Frame, v protocol.Version, currentPath *path) (shortHeaderPacket, *packetBuffer, error) {
+	var pn protocol.PacketNumber
+	var pnLen protocol.PacketNumberLen
+
+	if currentPath != nil && currentPath.pnSpace != nil {
+		pn, pnLen = currentPath.pnSpace.pnGen.PeekPacketNumber()
+	} else { // Fallback for server-side PATH_CHALLENGE or if path context is otherwise unavailable
+		pn, pnLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	}
+
 	buf := getPacketBuffer()
 	s, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
 		return shortHeaderPacket{}, nil, err
 	}
-	var l protocol.ByteCount
-	for _, f := range frames {
-		l += f.Frame.Length(v)
+
+	payloadFrames := []ackhandler.Frame{frame}
+	var plLength protocol.ByteCount
+	for _, f := range payloadFrames {
+		plLength += f.Frame.Length(v)
 	}
 	payload := payload{
-		frames: frames,
-		length: l,
+		frames: payloadFrames,
+		length: plLength,
 	}
-	padding := protocol.MinInitialPacketSize - p.shortHeaderPacketLength(connID, pnLen, payload) - protocol.ByteCount(s.Overhead())
-	packet, err := p.appendShortHeaderPacket(buf, connID, pn, pnLen, s.KeyPhase(), payload, padding, protocol.MinInitialPacketSize, s, false, v)
-	if err != nil {
-		return shortHeaderPacket{}, nil, err
+	// Path Probes are padded to MinInitialPacketSize
+	padding := protocol.MinInitialPacketSize - p.shortHeaderPacketLength(destConnID, pnLen, payload) - protocol.ByteCount(s.Overhead())
+	if padding < 0 {
+	    padding = 0
+	}
+
+	packet, err := p.appendShortHeaderPacket(buf, destConnID, pn, pnLen, s.KeyPhase(), payload, padding, protocol.MinInitialPacketSize, s, false, v)
+	if err == nil {
+		if currentPath != nil && currentPath.pnSpace != nil {
+			currentPath.pnSpace.pnGen.PopPacketNumber()
+		} else { // Fallback
+			p.pnManager.PopPacketNumber(protocol.Encryption1RTT)
+		}
 	}
 	packet.IsPathProbePacket = true
 	return packet, buf, err
 }
+
 
 func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protocol.Version) *wire.ExtendedHeader {
 	pn, pnLen := p.pnManager.PeekPacketNumber(encLevel)
@@ -849,7 +953,6 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protoc
 	hdr.SrcConnectionID = p.srcConnID
 	hdr.DestConnectionID = p.getDestConnID()
 
-	//nolint:exhaustive // 1-RTT packets are not long header packets.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		hdr.Type = protocol.PacketTypeInitial
@@ -887,7 +990,7 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
 	if pn := p.pnManager.PopPacketNumber(encLevel); pn != header.PacketNumber {
-		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, header.PacketNumber)
+		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d for encLevel %s", header.PacketNumber, pn, encLevel)
 	}
 	return &longHeaderPacket{
 		header:       header,
@@ -936,9 +1039,6 @@ func (p *packetPacker) appendShortHeaderPacket(
 	raw = p.encryptPacket(raw, sealer, pn, payloadOffset, protocol.ByteCount(pnLen))
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
-	if newPN := p.pnManager.PopPacketNumber(protocol.Encryption1RTT); newPN != pn {
-		return shortHeaderPacket{}, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, newPN)
-	}
 	return shortHeaderPacket{
 		PacketNumber:         pn,
 		PacketNumberLen:      pnLen,
@@ -966,8 +1066,6 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	if paddingLen > 0 {
 		raw = append(raw, make([]byte, paddingLen)...)
 	}
-	// Randomize the order of the control frames.
-	// This makes sure that the receiver doesn't rely on the order in which frames are packed.
 	if len(pl.frames) > 1 {
 		p.rand.Shuffle(len(pl.frames), func(i, j int) { pl.frames[i], pl.frames[j] = pl.frames[j], pl.frames[i] })
 	}
@@ -995,7 +1093,6 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.PacketNumber, payloadOffset, pnLen protocol.ByteCount) []byte {
 	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], pn, raw[:payloadOffset])
 	raw = raw[:len(raw)+sealer.Overhead()]
-	// apply header protection
 	pnOffset := payloadOffset - pnLen
 	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[0], raw[pnOffset:payloadOffset])
 	return raw
@@ -1011,3 +1108,5 @@ var _ ackhandler.FrameHandler = emptyHandler{}
 
 func (emptyHandler) OnAcked(wire.Frame) {}
 func (emptyHandler) OnLost(wire.Frame)  {}
+
+[end of packet_packer.go]

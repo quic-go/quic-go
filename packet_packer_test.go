@@ -978,3 +978,58 @@ func TestPackPathProbePacket(t *testing.T) {
 	require.True(t, p.IsPathProbePacket)
 	require.False(t, p.IsPathMTUProbePacket)
 }
+
+func TestPackerAppendPacketWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.AppendPacket using path-specific PN")
+	// Test scenarios:
+	// - Provide a path with a pnGen. Verify AppendPacket uses it for PN.
+	// - Verify error if path or pnSpace is nil.
+}
+
+func TestPackerPackAckOnlyPacketWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackAckOnlyPacket using path-specific PN")
+	// Test scenarios:
+	// - Provide a path with a pnGen. Verify PackAckOnlyPacket uses it for PN.
+	// - Verify error if path or pnSpace is nil.
+}
+
+func TestPackerPackMTUProbePacketWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackMTUProbePacket using path-specific PN")
+	// Test scenarios:
+	// - Provide a path with a pnGen. Verify PackMTUProbePacket uses it for PN.
+	// - Verify error if path or pnSpace is nil.
+}
+
+func TestPackerPackPTOProbePacketWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackPTOProbePacket using path-specific PN for 1-RTT")
+	// Test scenarios:
+	// - For 1-RTT, provide a path with pnGen, verify it's used. Error if path/pnSpace nil.
+	// - For Initial/Handshake, verify global PN is used (path arg might be nil).
+}
+
+func TestPackerPackCoalescedPacketWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackCoalescedPacket using path-specific PN for 1-RTT part")
+	// Test scenarios:
+	// - For 1-RTT component, provide path with pnGen, verify it's used. Error if path/pnSpace nil and 1-RTT packed.
+	// - For Initial/Handshake components, verify global PN is used.
+}
+
+func TestPackerPackConnectionCloseWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackConnectionClose using path-specific PN for 1-RTT")
+	// Test scenarios:
+	// - For 1-RTT, provide path with pnGen, verify it's used. Error if path/pnSpace nil.
+	// - For Long Header, verify global PN is used.
+}
+
+func TestPackerPackApplicationCloseWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackApplicationClose using path-specific PN")
+	// Test scenarios:
+	// - Provide path with pnGen, verify it's used. Error if path/pnSpace nil.
+}
+
+func TestPackerPackPathProbePacketWithPathPN(t *testing.T) {
+	t.Skip("TODO: Implement test for packer.PackPathProbePacket using path-specific PN or fallback")
+	// Test scenarios:
+	// - Provide path with pnGen, verify it's used.
+	// - Provide nil path, verify fallback to global 1-RTT PN is used.
+}

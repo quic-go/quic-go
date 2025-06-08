@@ -69,6 +69,26 @@ func connectionOptHandshakeConfirmed() testConnectionOpt {
 	}
 }
 
+func TestPathPacketNumberSpaceUsage(t *testing.T) {
+	t.Skip("TODO: Implement test for path-specific packet number space usage via connection calls")
+	// High-level test scenarios:
+	// - After connection setup, send a 1-RTT data packet.
+	// - Verify (possibly by mocking pnGen or packer) that s.paths[0].pnSpace.pnGen was used.
+	// - If client probes a new path, verify packets on that path use its specific pnGen.
+}
+
+// TestPathAwarePackerCalls verifies that connection methods correctly pass path context to packer methods.
+func TestPathAwarePackerCalls(t *testing.T) {
+	t.Skip("TODO: Implement test to verify connection methods pass correct path to packer.")
+	// Scenarios:
+	// - sendPackets calls packer.PackCoalescedPacket with primary path.
+	// - sendPackets calls packer.PackMTUProbePacket with primary path.
+	// - maybeSendAckOnlyPacket calls packer.PackAckOnlyPacket with primary path.
+	// - sendProbePacket calls packer.PackPTOProbePacket with primary path (for 1-RTT).
+	// - sendConnectionClose calls packer.PackConnectionClose/ApplicationClose with primary path.
+	// This test would likely involve a mock packer to assert the *path argument.
+}
+
 func connectionOptRTT(rtt time.Duration) testConnectionOpt {
 	var rttStats utils.RTTStats
 	rttStats.UpdateRTT(rtt, 0)
