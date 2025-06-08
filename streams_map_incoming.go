@@ -9,20 +9,6 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-const (
-	firstIncomingBidiStreamServer protocol.StreamID = 0
-	firstIncomingUniStreamServer  protocol.StreamID = 2
-	firstIncomingBidiStreamClient protocol.StreamID = 1
-	firstIncomingUniStreamClient  protocol.StreamID = 3
-)
-
-const (
-	firstOutgoingBidiStreamServer protocol.StreamID = 1
-	firstOutgoingUniStreamServer  protocol.StreamID = 3
-	firstOutgoingBidiStreamClient protocol.StreamID = 0
-	firstOutgoingUniStreamClient  protocol.StreamID = 2
-)
-
 type incomingStream interface {
 	closeForShutdown(error)
 }
@@ -62,13 +48,13 @@ func newIncomingStreamsMap[T incomingStream](
 	var nextStreamToAccept protocol.StreamID
 	switch {
 	case streamType == protocol.StreamTypeBidi && pers == protocol.PerspectiveServer:
-		nextStreamToAccept = firstIncomingBidiStreamServer
+		nextStreamToAccept = protocol.FirstIncomingBidiStreamServer
 	case streamType == protocol.StreamTypeBidi && pers == protocol.PerspectiveClient:
-		nextStreamToAccept = firstIncomingBidiStreamClient
+		nextStreamToAccept = protocol.FirstIncomingBidiStreamClient
 	case streamType == protocol.StreamTypeUni && pers == protocol.PerspectiveServer:
-		nextStreamToAccept = firstIncomingUniStreamServer
+		nextStreamToAccept = protocol.FirstIncomingUniStreamServer
 	case streamType == protocol.StreamTypeUni && pers == protocol.PerspectiveClient:
-		nextStreamToAccept = firstIncomingUniStreamClient
+		nextStreamToAccept = protocol.FirstIncomingUniStreamClient
 	}
 	return &incomingStreamsMap[T]{
 		newStreamChan:      make(chan struct{}, 1),

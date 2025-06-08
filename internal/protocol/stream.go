@@ -29,6 +29,28 @@ const (
 	MaxStreamID StreamID = quicvarint.Max
 )
 
+const (
+	// FirstOutgoingBidiStreamClient is the first bidirectional stream opened by the client
+	FirstOutgoingBidiStreamClient StreamID = 0
+	// FirstOutgoingUniStreamClient is the first unidirectional stream opened by the client
+	FirstOutgoingUniStreamClient StreamID = 2
+	// FirstOutgoingBidiStreamServer is the first bidirectional stream opened by the server
+	FirstOutgoingBidiStreamServer StreamID = 1
+	// FirstOutgoingUniStreamServer is the first unidirectional stream opened by the server
+	FirstOutgoingUniStreamServer StreamID = 3
+)
+
+const (
+	// FirstIncomingBidiStreamServer is the first bidirectional stream accepted by the server
+	FirstIncomingBidiStreamServer = FirstOutgoingBidiStreamClient
+	// FirstIncomingUniStreamServer is the first unidirectional stream accepted by the server
+	FirstIncomingUniStreamServer = FirstOutgoingUniStreamClient
+	// FirstIncomingBidiStreamClient is the first bidirectional stream accepted by the client
+	FirstIncomingBidiStreamClient = FirstOutgoingBidiStreamServer
+	// FirstIncomingUniStreamClient is the first unidirectional stream accepted by the client
+	FirstIncomingUniStreamClient = FirstOutgoingUniStreamServer
+)
+
 // StreamID calculates the stream ID.
 func (s StreamNum) StreamID(stype StreamType, pers Perspective) StreamID {
 	if s == 0 {

@@ -28,18 +28,18 @@ func (e streamError) TestError() error {
 func TestStreamsMapCreatingStreams(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
 		testStreamsMapCreatingAndDeletingStreams(t, protocol.PerspectiveClient,
-			firstIncomingBidiStreamClient,
-			firstOutgoingBidiStreamClient,
-			firstIncomingUniStreamClient,
-			firstOutgoingUniStreamClient,
+			protocol.FirstIncomingBidiStreamClient,
+			protocol.FirstOutgoingBidiStreamClient,
+			protocol.FirstIncomingUniStreamClient,
+			protocol.FirstOutgoingUniStreamClient,
 		)
 	})
 	t.Run("server", func(t *testing.T) {
 		testStreamsMapCreatingAndDeletingStreams(t, protocol.PerspectiveServer,
-			firstIncomingBidiStreamServer,
-			firstOutgoingBidiStreamServer,
-			firstIncomingUniStreamServer,
-			firstOutgoingUniStreamServer,
+			protocol.FirstIncomingBidiStreamServer,
+			protocol.FirstOutgoingBidiStreamServer,
+			protocol.FirstIncomingUniStreamServer,
+			protocol.FirstOutgoingUniStreamServer,
 		)
 	})
 }
@@ -118,18 +118,18 @@ func testStreamsMapCreatingAndDeletingStreams(t *testing.T,
 func TestStreamsMapDeletingStreams(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
 		testStreamsMapDeletingStreams(t, protocol.PerspectiveClient,
-			firstIncomingBidiStreamClient,
-			firstOutgoingBidiStreamClient,
-			firstIncomingUniStreamClient,
-			firstOutgoingUniStreamClient,
+			protocol.FirstIncomingBidiStreamClient,
+			protocol.FirstOutgoingBidiStreamClient,
+			protocol.FirstIncomingUniStreamClient,
+			protocol.FirstOutgoingUniStreamClient,
 		)
 	})
 	t.Run("server", func(t *testing.T) {
 		testStreamsMapDeletingStreams(t, protocol.PerspectiveServer,
-			firstIncomingBidiStreamServer,
-			firstOutgoingBidiStreamServer,
-			firstIncomingUniStreamServer,
-			firstOutgoingUniStreamServer,
+			protocol.FirstIncomingBidiStreamServer,
+			protocol.FirstOutgoingBidiStreamServer,
+			protocol.FirstIncomingUniStreamServer,
+			protocol.FirstOutgoingUniStreamServer,
 		)
 	})
 }
