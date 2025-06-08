@@ -11,27 +11,6 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-type streamError struct {
-	message string
-	nums    []protocol.StreamNum
-}
-
-func (e streamError) Error() string {
-	return e.message
-}
-
-func convertStreamError(err error, stype protocol.StreamType, pers protocol.Perspective) error {
-	strError, ok := err.(streamError)
-	if !ok {
-		return err
-	}
-	ids := make([]interface{}, len(strError.nums))
-	for i, num := range strError.nums {
-		ids[i] = num.StreamID(stype, pers)
-	}
-	return fmt.Errorf(strError.Error(), ids...)
-}
-
 // StreamLimitReachedError is returned from Connection.OpenStream and Connection.OpenUniStream
 // when it is not possible to open a new stream because the number of opens streams reached
 // the peer's stream limit.
@@ -85,11 +64,11 @@ func newStreamsMap(
 func (m *streamsMap) initMaps() {
 	m.outgoingBidiStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
-		func(num protocol.StreamNum) *Stream {
-			id := num.StreamID(protocol.StreamTypeBidi, m.perspective)
+		func(id protocol.StreamID) *Stream {
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
 		m.queueControlFrame,
+		m.perspective,
 	)
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
@@ -102,11 +81,11 @@ func (m *streamsMap) initMaps() {
 	)
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
-		func(num protocol.StreamNum) *SendStream {
-			id := num.StreamID(protocol.StreamTypeUni, m.perspective)
+		func(id protocol.StreamID) *SendStream {
 			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
 		m.queueControlFrame,
+		m.perspective,
 	)
 	m.incomingUniStreams = newIncomingStreamsMap(
 		protocol.StreamTypeUni,
@@ -127,8 +106,7 @@ func (m *streamsMap) OpenStream() (*Stream, error) {
 	if reset {
 		return nil, Err0RTTRejected
 	}
-	str, err := mm.OpenStream()
-	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
+	return mm.OpenStream()
 }
 
 func (m *streamsMap) OpenStreamSync(ctx context.Context) (*Stream, error) {
@@ -139,8 +117,7 @@ func (m *streamsMap) OpenStreamSync(ctx context.Context) (*Stream, error) {
 	if reset {
 		return nil, Err0RTTRejected
 	}
-	str, err := mm.OpenStreamSync(ctx)
-	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
+	return mm.OpenStreamSync(ctx)
 }
 
 func (m *streamsMap) OpenUniStream() (*SendStream, error) {
@@ -151,8 +128,7 @@ func (m *streamsMap) OpenUniStream() (*SendStream, error) {
 	if reset {
 		return nil, Err0RTTRejected
 	}
-	str, err := mm.OpenStream()
-	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
+	return mm.OpenStream()
 }
 
 func (m *streamsMap) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
@@ -163,8 +139,7 @@ func (m *streamsMap) OpenUniStreamSync(ctx context.Context) (*SendStream, error)
 	if reset {
 		return nil, Err0RTTRejected
 	}
-	str, err := mm.OpenStreamSync(ctx)
-	return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
+	return mm.OpenStreamSync(ctx)
 }
 
 func (m *streamsMap) AcceptStream(ctx context.Context) (*Stream, error) {
@@ -175,8 +150,7 @@ func (m *streamsMap) AcceptStream(ctx context.Context) (*Stream, error) {
 	if reset {
 		return nil, Err0RTTRejected
 	}
-	str, err := mm.AcceptStream(ctx)
-	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective.Opposite())
+	return mm.AcceptStream(ctx)
 }
 
 func (m *streamsMap) AcceptUniStream(ctx context.Context) (*ReceiveStream, error) {
@@ -187,21 +161,19 @@ func (m *streamsMap) AcceptUniStream(ctx context.Context) (*ReceiveStream, error
 	if reset {
 		return nil, Err0RTTRejected
 	}
-	str, err := mm.AcceptStream(ctx)
-	return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective.Opposite())
+	return mm.AcceptStream(ctx)
 }
 
 func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
-	num := id.StreamNum()
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		if id.InitiatedBy() == m.perspective {
-			return convertStreamError(m.outgoingUniStreams.DeleteStream(num), protocol.StreamTypeUni, m.perspective)
+			return m.outgoingUniStreams.DeleteStream(id)
 		}
 		return m.incomingUniStreams.DeleteStream(id)
 	case protocol.StreamTypeBidi:
 		if id.InitiatedBy() == m.perspective {
-			return convertStreamError(m.outgoingBidiStreams.DeleteStream(num), protocol.StreamTypeBidi, m.perspective)
+			return m.outgoingBidiStreams.DeleteStream(id)
 		}
 		return m.incomingBidiStreams.DeleteStream(id)
 	}
@@ -220,28 +192,26 @@ func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (*ReceiveStrea
 }
 
 func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (*ReceiveStream, error) {
-	num := id.StreamNum()
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		if id.InitiatedBy() == m.perspective {
 			// an outgoing unidirectional stream is a send stream, not a receive stream
 			return nil, fmt.Errorf("peer attempted to open receive stream %d", id)
 		}
-		str, err := m.incomingUniStreams.GetOrOpenStream(id)
-		return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
+		return m.incomingUniStreams.GetOrOpenStream(id)
 	case protocol.StreamTypeBidi:
 		if id.InitiatedBy() == m.perspective {
-			str, err := m.outgoingBidiStreams.GetStream(num)
+			str, err := m.outgoingBidiStreams.GetStream(id)
 			if str == nil && err == nil {
 				return nil, nil
 			}
-			return str.ReceiveStream, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
+			return str.ReceiveStream, err
 		} else {
 			str, err := m.incomingBidiStreams.GetOrOpenStream(id)
 			if str == nil && err == nil {
 				return nil, nil
 			}
-			return str.ReceiveStream, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
+			return str.ReceiveStream, err
 		}
 	}
 	panic("")
@@ -259,26 +229,25 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (*SendStream, err
 }
 
 func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (*SendStream, error) {
-	num := id.StreamNum()
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		if id.InitiatedBy() == m.perspective {
-			str, err := m.outgoingUniStreams.GetStream(num)
+			str, err := m.outgoingUniStreams.GetStream(id)
 			if str == nil && err == nil {
 				return nil, nil
 			}
-			return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
+			return str, err
 		}
 		// an incoming unidirectional stream is a receive stream, not a send stream
 		return nil, fmt.Errorf("peer attempted to open send stream %d", id)
 	case protocol.StreamTypeBidi:
 		if id.InitiatedBy() == m.perspective {
-			str, err := m.outgoingBidiStreams.GetStream(num)
+			str, err := m.outgoingBidiStreams.GetStream(id)
 			if str == nil && err == nil {
 				return nil, nil
 			}
 			if err != nil {
-				return nil, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
+				return nil, err
 			}
 			return str.SendStream, nil
 		} else {
@@ -287,7 +256,7 @@ func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (*SendStream, err
 				return nil, nil
 			}
 			if err != nil {
-				return nil, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
+				return nil, err
 			}
 			return str.SendStream, nil
 		}
@@ -298,17 +267,17 @@ func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (*SendStream, err
 func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) {
 	switch f.Type {
 	case protocol.StreamTypeUni:
-		m.outgoingUniStreams.SetMaxStream(f.MaxStreamNum)
+		m.outgoingUniStreams.SetMaxStream(f.MaxStreamNum.StreamID(protocol.StreamTypeUni, m.perspective))
 	case protocol.StreamTypeBidi:
-		m.outgoingBidiStreams.SetMaxStream(f.MaxStreamNum)
+		m.outgoingBidiStreams.SetMaxStream(f.MaxStreamNum.StreamID(protocol.StreamTypeBidi, m.perspective))
 	}
 }
 
 func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) {
 	m.outgoingBidiStreams.UpdateSendWindow(p.InitialMaxStreamDataBidiRemote)
-	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamNum)
+	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamNum.StreamID(protocol.StreamTypeBidi, m.perspective))
 	m.outgoingUniStreams.UpdateSendWindow(p.InitialMaxStreamDataUni)
-	m.outgoingUniStreams.SetMaxStream(p.MaxUniStreamNum)
+	m.outgoingUniStreams.SetMaxStream(p.MaxUniStreamNum.StreamID(protocol.StreamTypeUni, m.perspective))
 }
 
 func (m *streamsMap) CloseWithError(err error) {
