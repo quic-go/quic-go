@@ -262,6 +262,11 @@ type Config struct {
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
 	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
+	// MaxPaths is the maximum number of paths that this endpoint is willing to use and advertise.
+	// A value of 0 indicates no support for multipath / multipath disabled.
+	// The negotiated number of paths will be the minimum of the client's and server's advertised values.
+	// If either side advertises 0, the connection will operate in single-path mode (negotiated value will be 1).
+	MaxPaths uint8 // User-configured value.
 }
 
 // ClientHelloInfo contains information about an incoming connection attempt.

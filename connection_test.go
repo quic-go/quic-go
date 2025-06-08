@@ -928,7 +928,7 @@ func TestConnectionMaxUnprocessedPackets(t *testing.T) {
 		// nothing here should block
 		tc.conn.handlePacket(receivedPacket{data: []byte("foobar")})
 	}
-	tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, logging.ByteCount(6), logging.PacketDropDOSPrevention).Do(func(logging.PacketType, logging.PacketNumber, logging.ByteCount, logging.PacketDropReason) {
+	tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.InvalidPacketNumber, logging.ByteCount(6), logging.PacketDropDOSPrevention).Do(func(logging.PacketType, protocol.PacketNumber, logging.ByteCount, logging.PacketDropReason) {
 		close(done)
 	})
 	tc.conn.handlePacket(receivedPacket{data: []byte("foobar")})
@@ -3102,4 +3102,66 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+// TestTransportParameterInitialMaxPathID verifies the sending and receiving
+// of the initial_max_path_id transport parameter.
+func TestTransportParameterInitialMaxPathID(t *testing.T) {
+	t.Skip("TODO: Implement test for initial_max_path_id transport parameter")
+	// Test scenarios:
+	// 1. Client sends MaxPaths, Server receives and processes it.
+	// 2. Server sends MaxPaths, Client receives and processes it.
+	// 3. Both send MaxPaths=0 (disabled), verify negotiatedMaxPathID is 1.
+	// 4. Client sends N, Server sends M, verify negotiatedMaxPathID is min(N,M) (or 1 if N or M is 0).
+	// 5. Parameter omitted by one side, verify behavior (should be treated as 0, so negotiated is 1).
+}
+
+// TestPerPathMTUDiscovererInitialization verifies that an MtuDiscoverer
+// is initialized for the primary path.
+func TestPerPathMTUDiscovererInitialization(t *testing.T) {
+	t.Skip("TODO: Implement test for per-path MTU discoverer initialization")
+	// Test scenarios:
+	// 1. Connection established, verify s.paths[0].mtuDiscoverer is not nil.
+	// 2. Verify it's initialized with correct initial and max sizes based on config and peer TPs.
+	// 3. Verify for client and server perspectives.
+}
+
+// TestSendPacketsUsesPathMTU verifies that sendPackets (via maxPacketSize)
+// uses the MTU size from the correct path's MtuDiscoverer.
+func TestSendPacketsUsesPathMTU(t *testing.T) {
+	t.Skip("TODO: Implement test for sendPackets using path-specific MTU size")
+	// Test scenarios:
+	// 1. Setup a connection with a primary path and its MTU discoverer.
+	// 2. Mock the CurrentSize() of the MTU discoverer.
+	// 3. Call sendPackets (or a helper that leads to it) and verify that packets are sized according to the mocked MTU.
+	//    (This might involve checking the packer or the buffer lengths).
+}
+
+// TestSendPacketsSendsPathMTUProbes verifies that sendPackets sends MTU
+// probes for the correct path when its MtuDiscoverer indicates a probe is needed.
+func TestSendPacketsSendsPathMTUProbes(t *testing.T) {
+	t.Skip("TODO: Implement test for sendPackets sending path-specific MTU probes")
+	// Test scenarios:
+	// 1. Setup a connection with a primary path and its MTU discoverer.
+	// 2. Mock ShouldSendProbe() to return true and GetPing() to return a specific PING frame and size.
+	// 3. Call sendPackets.
+	// 4. Verify that a packet containing the expected PING frame and matching the probe size is sent.
+	//    (This might involve inspecting packets captured by a mock sendConn).
+}
+
+// TestNegotiatedMaxPathIDLogic verifies the logic for calculating
+// negotiatedMaxPathID based on local and peer advertised values.
+func TestNegotiatedMaxPathIDLogic(t *testing.T) {
+	t.Skip("TODO: Implement test for negotiatedMaxPathID logic")
+	// Test scenarios:
+	// - local=2, peer=3 -> negotiated=2
+	// - local=3, peer=2 -> negotiated=2
+	// - local=1, peer=5 -> negotiated=1
+	// - local=5, peer=1 -> negotiated=1
+	// - local=0, peer=5 -> negotiated=1 (local advertises 0)
+	// - local=5, peer=0 -> negotiated=1 (peer advertises 0)
+	// - local=0, peer=0 -> negotiated=1
+	// - local=1, peer=1 -> negotiated=1
+	// This test might involve creating minimal connection objects or directly testing
+	// the transport parameter handling logic that sets negotiatedMaxPathID.
 }

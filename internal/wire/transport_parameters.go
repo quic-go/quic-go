@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -47,6 +48,8 @@ const (
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
 	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
 	resetStreamAtParameterID transportParameterID = 0x17f7586d2cb571
+	// Multipath transport parameters (draft-ietf-quic-multipath)
+	transportParameterIDInitialMaxPathID transportParameterID = 0xba00 // Experimental codepoint
 )
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
@@ -83,6 +86,7 @@ type TransportParameters struct {
 
 	StatelessResetToken     *protocol.StatelessResetToken
 	ActiveConnectionIDLimit uint64
+	InitialMaxPathID        uint64 // Added field
 
 	MaxDatagramFrameSize protocol.ByteCount // RFC 9221
 	EnableResetStreamAt  bool               // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
@@ -112,6 +116,7 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 	p.AckDelayExponent = protocol.DefaultAckDelayExponent
 	p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	p.MaxDatagramFrameSize = protocol.InvalidByteCount
+	p.InitialMaxPathID = 0 // Default to 0
 
 	for len(b) > 0 {
 		paramIDInt, l, err := quicvarint.Parse(b)
@@ -128,7 +133,14 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 		if uint64(len(b)) < paramLen {
 			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", len(b), paramLen)
 		}
+		val := b[:paramLen]
+		b = b[paramLen:]
+
+		if slices.Contains(parameterIDs, paramID) {
+			return fmt.Errorf("received duplicate transport parameter %#x", paramID)
+		}
 		parameterIDs = append(parameterIDs, paramID)
+
 		switch paramID {
 		case activeConnectionIDLimitParameterID:
 			readActiveConnectionIDLimit = true
@@ -144,18 +156,16 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			maxAckDelayParameterID,
 			maxDatagramFrameSizeParameterID,
 			ackDelayExponentParameterID:
-			if err := p.readNumericTransportParameter(b, paramID, int(paramLen)); err != nil {
+			if err := p.readNumericTransportParameter(val, paramID, int(paramLen)); err != nil {
 				return err
 			}
-			b = b[paramLen:]
 		case preferredAddressParameterID:
 			if sentBy == protocol.PerspectiveClient {
 				return errors.New("client sent a preferred_address")
 			}
-			if err := p.readPreferredAddress(b, int(paramLen)); err != nil {
+			if err := p.readPreferredAddress(val, int(paramLen)); err != nil {
 				return err
 			}
-			b = b[paramLen:]
 		case disableActiveMigrationParameterID:
 			if paramLen != 0 {
 				return fmt.Errorf("wrong length for disable_active_migration: %d (expected empty)", paramLen)
@@ -169,11 +179,10 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 				return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
 			}
 			var token protocol.StatelessResetToken
-			if len(b) < len(token) {
-				return io.EOF
+			if len(val) < len(token) {
+				return io.EOF // Should not happen given paramLen check
 			}
-			copy(token[:], b)
-			b = b[len(token):]
+			copy(token[:], val)
 			p.StatelessResetToken = &token
 		case originalDestinationConnectionIDParameterID:
 			if sentBy == protocol.PerspectiveClient {
@@ -182,15 +191,13 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			if paramLen > protocol.MaxConnIDLen {
 				return protocol.ErrInvalidConnectionIDLen
 			}
-			p.OriginalDestinationConnectionID = protocol.ParseConnectionID(b[:paramLen])
-			b = b[paramLen:]
+			p.OriginalDestinationConnectionID = protocol.ParseConnectionID(val)
 			readOriginalDestinationConnectionID = true
 		case initialSourceConnectionIDParameterID:
 			if paramLen > protocol.MaxConnIDLen {
 				return protocol.ErrInvalidConnectionIDLen
 			}
-			p.InitialSourceConnectionID = protocol.ParseConnectionID(b[:paramLen])
-			b = b[paramLen:]
+			p.InitialSourceConnectionID = protocol.ParseConnectionID(val)
 			readInitialSourceConnectionID = true
 		case retrySourceConnectionIDParameterID:
 			if sentBy == protocol.PerspectiveClient {
@@ -199,16 +206,19 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			if paramLen > protocol.MaxConnIDLen {
 				return protocol.ErrInvalidConnectionIDLen
 			}
-			connID := protocol.ParseConnectionID(b[:paramLen])
-			b = b[paramLen:]
+			connID := protocol.ParseConnectionID(val)
 			p.RetrySourceConnectionID = &connID
 		case resetStreamAtParameterID:
 			if paramLen != 0 {
 				return fmt.Errorf("wrong length for reset_stream_at: %d (expected empty)", paramLen)
 			}
 			p.EnableResetStreamAt = true
+		case transportParameterIDInitialMaxPathID: // Added case
+			if err := p.unmarshalInitialMaxPathID(val); err != nil {
+				return err
+			}
 		default:
-			b = b[paramLen:]
+			// ignore unknown transport parameters
 		}
 	}
 
@@ -226,20 +236,20 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			return errors.New("missing initial_source_connection_id")
 		}
 	}
+	return nil
+}
 
-	// check that every transport parameter was sent at most once
-	slices.SortFunc(parameterIDs, func(a, b transportParameterID) int {
-		if a < b {
-			return -1
-		}
-		return 1
-	})
-	for i := 0; i < len(parameterIDs)-1; i++ {
-		if parameterIDs[i] == parameterIDs[i+1] {
-			return fmt.Errorf("received duplicate transport parameter %#x", parameterIDs[i])
-		}
+func (p *TransportParameters) unmarshalInitialMaxPathID(val []byte) error {
+	// This check is now done before calling this function by checking parameterIDs
+	// if p.InitialMaxPathID != 0 {
+	// 	return errors.New("received duplicate initial_max_path_id")
+	// }
+	r := bytes.NewReader(val)
+	pathID, err := quicvarint.Read(r)
+	if err != nil || r.Len() != 0 {
+		return errors.New("invalid initial_max_path_id")
 	}
-
+	p.InitialMaxPathID = pathID
 	return nil
 }
 
@@ -388,6 +398,10 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 		b = quicvarint.Append(b, uint64(disableActiveMigrationParameterID))
 		b = quicvarint.Append(b, 0)
 	}
+	// initial_max_path_id
+	if p.InitialMaxPathID > 0 {
+		b = p.marshalVarintParam(b, transportParameterIDInitialMaxPathID, p.InitialMaxPathID)
+	}
 	if pers == protocol.PerspectiveServer {
 		// stateless_reset_token
 		if p.StatelessResetToken != nil {
@@ -488,6 +502,10 @@ func (p *TransportParameters) MarshalForSessionTicket(b []byte) []byte {
 	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 	// active_connection_id_limit
 	b = p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
+	// initial_max_path_id
+	if p.InitialMaxPathID > 0 { // Also save InitialMaxPathID in session ticket
+		b = p.marshalVarintParam(b, transportParameterIDInitialMaxPathID, p.InitialMaxPathID)
+	}
 	// max_datagram_frame_size
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
@@ -517,6 +535,15 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 	if saved.MaxDatagramFrameSize != protocol.InvalidByteCount && (p.MaxDatagramFrameSize == protocol.InvalidByteCount || p.MaxDatagramFrameSize < saved.MaxDatagramFrameSize) {
 		return false
 	}
+	// If multipath was negotiated in the previous session, it must be negotiated in this one.
+	// If it was not negotiated previously, it's okay if it is now.
+	if saved.InitialMaxPathID > 0 && p.InitialMaxPathID == 0 {
+		return false
+	}
+	// It's not allowed to reduce the number of paths.
+	if saved.InitialMaxPathID > 0 && p.InitialMaxPathID < saved.InitialMaxPathID {
+		return false
+	}
 	return p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
 		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
 		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
@@ -530,6 +557,15 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 // It is only used on the client side.
 func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
 	if saved.MaxDatagramFrameSize != protocol.InvalidByteCount && (p.MaxDatagramFrameSize == protocol.InvalidByteCount || p.MaxDatagramFrameSize < saved.MaxDatagramFrameSize) {
+		return false
+	}
+	// If multipath was negotiated in the previous session, it must be negotiated in this one.
+	// If it was not negotiated previously, it's okay if it is now.
+	if saved.InitialMaxPathID > 0 && p.InitialMaxPathID == 0 {
+		return false
+	}
+	// It's not allowed to reduce the number of paths.
+	if saved.InitialMaxPathID > 0 && p.InitialMaxPathID < saved.InitialMaxPathID {
 		return false
 	}
 	return p.ActiveConnectionIDLimit >= saved.ActiveConnectionIDLimit &&
@@ -549,8 +585,8 @@ func (p *TransportParameters) String() string {
 		logString += "RetrySourceConnectionID: %s, "
 		logParams = append(logParams, p.RetrySourceConnectionID)
 	}
-	logString += "InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
-	logParams = append(logParams, []any{p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}...)
+	logString += "InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d, InitialMaxPathID: %d"
+	logParams = append(logParams, []any{p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit, p.InitialMaxPathID}...)
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)

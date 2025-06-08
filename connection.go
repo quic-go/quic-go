@@ -72,6 +72,14 @@ type receivedPacket struct {
 	info packetInfo // only valid if the contained IP address is valid
 }
 
+// path represents a network path for the QUIC connection.
+type path struct {
+	// pathID is a unique identifier for this path on the connection.
+	pathID uint64 // Path ID for this path
+
+	mtuDiscoverer mtuDiscoverer
+}
+
 func (p *receivedPacket) Size() protocol.ByteCount { return protocol.ByteCount(len(p.data)) }
 
 func (p *receivedPacket) Clone() *receivedPacket {
@@ -151,7 +159,8 @@ type connection struct {
 	unpacker      unpacker
 	frameParser   wire.FrameParser
 	packer        packer
-	mtuDiscoverer mtuDiscoverer // initialized when the transport parameters are received
+	// mtuDiscoverer mtuDiscoverer // initialized when the transport parameters are received
+	paths []*path
 
 	currentMTUEstimate atomic.Uint32
 
@@ -199,6 +208,9 @@ type connection struct {
 	peerParams *wire.TransportParameters
 
 	timer connectionTimer
+	// negotiatedMaxPathID is the minimum of the local and remote initial_max_path_id.
+	// If either side advertises 0, or if the value is 1, this results in 1 (single path).
+	negotiatedMaxPathID uint64
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
 	// It is reset as soon as we receive a packet from the peer.
 	keepAlivePingSent bool
@@ -312,6 +324,7 @@ var newConnection = func(
 		// old quic-go versions interpret it as 0, instead of the default value of 2.
 		// See https://github.com/quic-go/quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialMaxPathID:          uint64(s.config.MaxPaths),
 		InitialSourceConnectionID: srcConnID,
 		RetrySourceConnectionID:   retrySrcConnID,
 	}
@@ -423,6 +436,7 @@ var newClientConnection = func(
 		// old quic-go versions interpret it as 0, instead of the default value of 2.
 		// See https://github.com/quic-go/quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialMaxPathID:          uint64(s.config.MaxPaths),
 		InitialSourceConnectionID: srcConnID,
 	}
 	if s.config.EnableDatagrams {
@@ -469,6 +483,7 @@ func (s *connection) preSetup() {
 	s.retransmissionQueue = newRetransmissionQueue()
 	s.frameParser = *wire.NewFrameParser(s.config.EnableDatagrams, false)
 	s.rttStats = &utils.RTTStats{}
+	s.paths = make([]*path, 0, 1) // Initialize with capacity, can grow up to negotiatedMaxPathID
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(s.config.MaxConnectionReceiveWindow),
@@ -846,8 +861,8 @@ func (s *connection) handleHandshakeConfirmed(now time.Time) error {
 	s.handshakeConfirmed = true
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
 
-	if !s.config.DisablePathMTUDiscovery && s.conn.capabilities().DF {
-		s.mtuDiscoverer.Start(now)
+	if len(s.paths) > 0 && s.paths[0].mtuDiscoverer != nil && !s.config.DisablePathMTUDiscovery && s.conn.capabilities().DF {
+		s.paths[0].mtuDiscoverer.Start(now)
 	}
 	return nil
 }
@@ -1781,10 +1796,13 @@ func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encr
 		}
 	}
 	// If one of the acknowledged packets was a Path MTU probe packet, this might have increased the Path MTU estimate.
-	if s.mtuDiscoverer != nil {
-		if mtu := s.mtuDiscoverer.CurrentSize(); mtu > protocol.ByteCount(s.currentMTUEstimate.Load()) {
+	// TODO: This needs to be path-specific. When an ACK for a packet sent on path X is received,
+	// and that packet was an MTU probe, update path X's MTU and potentially the connection's
+	// currentMTUEstimate if it's higher. For now, assume primary path.
+	if acked1RTTPacket && len(s.paths) > 0 && s.paths[0].mtuDiscoverer != nil { // Modified condition
+		if mtu := s.paths[0].mtuDiscoverer.CurrentSize(); mtu > protocol.ByteCount(s.currentMTUEstimate.Load()) {
 			s.currentMTUEstimate.Store(uint32(mtu))
-			s.sentPacketHandler.SetMaxDatagramSize(mtu)
+			// TODO: s.sentPacketHandler.SetMaxDatagramSize(mtu) also needs to be path specific if CC is per path
 		}
 	}
 	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
@@ -1956,6 +1974,14 @@ func (s *connection) restoreTransportParameters(params *wire.TransportParameters
 	s.connStateMutex.Lock()
 	s.connState.SupportsDatagrams = s.supportsDatagrams()
 	s.connStateMutex.Unlock()
+
+	localMaxPaths := uint64(s.config.MaxPaths)
+	peerMaxPaths := s.peerParams.InitialMaxPathID
+	if localMaxPaths == 0 || peerMaxPaths == 0 {
+		s.negotiatedMaxPathID = 1
+	} else {
+		s.negotiatedMaxPathID = min(localMaxPaths, peerMaxPaths)
+	}
 }
 
 func (s *connection) handleTransportParameters(params *wire.TransportParameters) error {
@@ -1989,6 +2015,14 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 	s.connStateMutex.Lock()
 	s.connState.SupportsDatagrams = s.supportsDatagrams()
 	s.connStateMutex.Unlock()
+
+	localMaxPaths := uint64(s.config.MaxPaths)
+	peerMaxPaths := params.InitialMaxPathID
+	if localMaxPaths == 0 || peerMaxPaths == 0 {
+		s.negotiatedMaxPathID = 1
+	} else {
+		s.negotiatedMaxPathID = min(localMaxPaths, peerMaxPaths)
+	}
 	return nil
 }
 
@@ -2039,21 +2073,39 @@ func (s *connection) applyTransportParameters() {
 	if params.StatelessResetToken != nil {
 		s.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
 	}
-	// We don't support connection migration yet, so we don't have any use for the preferred_address.
+
+	// Initialize the primary path if it doesn't exist.
+	// For now, we only handle one path. PathID 0 is assumed for the initial path.
+	if len(s.paths) == 0 && s.negotiatedMaxPathID > 0 {
+		primaryPath := &path{
+			pathID: 0, // Assuming 0 for the initial path
+		}
+		s.paths = append(s.paths, primaryPath)
+	}
+
+	// The preferred_address transport parameter is handled by the connIDManager if present.
 	if params.PreferredAddress != nil {
 		// Retire the connection ID.
 		s.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, params.PreferredAddress.StatelessResetToken)
 	}
-	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
-	if params.MaxUDPPayloadSize > 0 && params.MaxUDPPayloadSize < maxPacketSize {
-		maxPacketSize = params.MaxUDPPayloadSize
+
+	// Initialize MTU discoverer for the primary path if it has been created.
+	if len(s.paths) > 0 && s.paths[0].mtuDiscoverer == nil {
+		// This is where the existing maxPacketSize calculation for MTU discoverer moves
+		maxPacketSizeForMTUD := protocol.ByteCount(protocol.MaxPacketBufferSize)
+		if params.MaxUDPPayloadSize > 0 && params.MaxUDPPayloadSize < maxPacketSizeForMTUD {
+			maxPacketSizeForMTUD = params.MaxUDPPayloadSize
+		}
+		discoverer := newMTUDiscoverer(
+			s.rttStats,
+			protocol.ByteCount(s.config.InitialPacketSize),
+			maxPacketSizeForMTUD,
+			s.tracer,
+		)
+		s.paths[0].mtuDiscoverer = discoverer
+		// Set initial MTU estimate based on the primary path's MTU discoverer
+		s.currentMTUEstimate.Store(uint32(s.paths[0].mtuDiscoverer.CurrentSize()))
 	}
-	s.mtuDiscoverer = newMTUDiscoverer(
-		s.rttStats,
-		protocol.ByteCount(s.config.InitialPacketSize),
-		maxPacketSize,
-		s.tracer,
-	)
 }
 
 func (s *connection) triggerSending(now time.Time) error {
@@ -2096,6 +2148,13 @@ func (s *connection) triggerSending(now time.Time) error {
 }
 
 func (s *connection) sendPackets(now time.Time) error {
+	// Determine the current path for sending. For now, this is the primary path.
+	// In a full multipath implementation, this would involve path selection logic.
+	var currentSendPath *path
+	if len(s.paths) > 0 {
+		currentSendPath = s.paths[0]
+	}
+
 	if s.perspective == protocol.PerspectiveClient && s.handshakeConfirmed {
 		if pm := s.pathManagerOutgoing.Load(); pm != nil {
 			connID, frame, tr, ok := pm.NextPathToProbe()
@@ -2119,9 +2178,9 @@ func (s *connection) sendPackets(now time.Time) error {
 	// Can't use GSO, since we need to send a single packet that's larger than our current maximum size.
 	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
 	// MTU probe packets per connection.
-	if s.handshakeConfirmed && s.mtuDiscoverer != nil && s.mtuDiscoverer.ShouldSendProbe(now) {
-		ping, size := s.mtuDiscoverer.GetPing(now)
-		p, buf, err := s.packer.PackMTUProbePacket(ping, size, s.version)
+	if s.handshakeConfirmed && currentSendPath != nil && currentSendPath.mtuDiscoverer != nil && currentSendPath.mtuDiscoverer.ShouldSendProbe(now) {
+		ping, mtuProbeSize := currentSendPath.mtuDiscoverer.GetPing(now)
+		p, buf, err := s.packer.PackMTUProbePacket(ping, mtuProbeSize, s.version)
 		if err != nil {
 			return err
 		}
@@ -2474,6 +2533,9 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 }
 
 func (s *connection) maxPacketSize() protocol.ByteCount {
+	if len(s.paths) > 0 && s.paths[0].mtuDiscoverer != nil {
+		return s.paths[0].mtuDiscoverer.CurrentSize()
+	}
 	if s.mtuDiscoverer == nil {
 		// Use the configured packet size on the client side.
 		// If the server sends a max_udp_payload_size that's smaller than this size, we can ignore this:
