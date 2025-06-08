@@ -17,20 +17,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-const (
-	firstIncomingBidiStreamServer protocol.StreamID = 0
-	firstOutgoingBidiStreamServer protocol.StreamID = 1
-	firstIncomingUniStreamServer  protocol.StreamID = 2
-	firstOutgoingUniStreamServer  protocol.StreamID = 3
-)
-
-const (
-	firstIncomingBidiStreamClient protocol.StreamID = 1
-	firstOutgoingBidiStreamClient protocol.StreamID = 0
-	firstIncomingUniStreamClient  protocol.StreamID = 3
-	firstOutgoingUniStreamClient  protocol.StreamID = 2
-)
-
 func (e streamError) TestError() error {
 	nums := make([]interface{}, len(e.nums))
 	for i, num := range e.nums {

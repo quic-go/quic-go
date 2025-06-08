@@ -1,5 +1,7 @@
 package protocol
 
+import "github.com/quic-go/quic-go/quicvarint"
+
 // StreamType encodes if this is a unidirectional or bidirectional stream
 type StreamType uint8
 
@@ -23,6 +25,8 @@ const (
 	// MaxStreamCount is the maximum stream count value that can be sent in MAX_STREAMS frames
 	// and as the stream count in the transport parameters
 	MaxStreamCount StreamNum = 1 << 60
+	// MaxStreamID is the maximum stream ID
+	MaxStreamID StreamID = quicvarint.Max
 )
 
 // StreamID calculates the stream ID.

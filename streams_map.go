@@ -93,12 +93,12 @@ func (m *streamsMap) initMaps() {
 	)
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
-		func(num protocol.StreamNum) *Stream {
-			id := num.StreamID(protocol.StreamTypeBidi, m.perspective.Opposite())
+		func(id protocol.StreamID) *Stream {
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingBidiStreams,
 		m.queueControlFrame,
+		m.perspective,
 	)
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
@@ -110,12 +110,12 @@ func (m *streamsMap) initMaps() {
 	)
 	m.incomingUniStreams = newIncomingStreamsMap(
 		protocol.StreamTypeUni,
-		func(num protocol.StreamNum) *ReceiveStream {
-			id := num.StreamID(protocol.StreamTypeUni, m.perspective.Opposite())
+		func(id protocol.StreamID) *ReceiveStream {
 			return newReceiveStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingUniStreams,
 		m.queueControlFrame,
+		m.perspective,
 	)
 }
 
@@ -198,12 +198,12 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 		if id.InitiatedBy() == m.perspective {
 			return convertStreamError(m.outgoingUniStreams.DeleteStream(num), protocol.StreamTypeUni, m.perspective)
 		}
-		return convertStreamError(m.incomingUniStreams.DeleteStream(num), protocol.StreamTypeUni, m.perspective.Opposite())
+		return m.incomingUniStreams.DeleteStream(id)
 	case protocol.StreamTypeBidi:
 		if id.InitiatedBy() == m.perspective {
 			return convertStreamError(m.outgoingBidiStreams.DeleteStream(num), protocol.StreamTypeBidi, m.perspective)
 		}
-		return convertStreamError(m.incomingBidiStreams.DeleteStream(num), protocol.StreamTypeBidi, m.perspective.Opposite())
+		return m.incomingBidiStreams.DeleteStream(id)
 	}
 	panic("")
 }
@@ -227,7 +227,7 @@ func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (*ReceiveStrea
 			// an outgoing unidirectional stream is a send stream, not a receive stream
 			return nil, fmt.Errorf("peer attempted to open receive stream %d", id)
 		}
-		str, err := m.incomingUniStreams.GetOrOpenStream(num)
+		str, err := m.incomingUniStreams.GetOrOpenStream(id)
 		return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
 	case protocol.StreamTypeBidi:
 		if id.InitiatedBy() == m.perspective {
@@ -237,7 +237,7 @@ func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (*ReceiveStrea
 			}
 			return str.ReceiveStream, convertStreamError(err, protocol.StreamTypeBidi, id.InitiatedBy())
 		} else {
-			str, err := m.incomingBidiStreams.GetOrOpenStream(num)
+			str, err := m.incomingBidiStreams.GetOrOpenStream(id)
 			if str == nil && err == nil {
 				return nil, nil
 			}
@@ -282,7 +282,7 @@ func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (*SendStream, err
 			}
 			return str.SendStream, nil
 		} else {
-			str, err := m.incomingBidiStreams.GetOrOpenStream(num)
+			str, err := m.incomingBidiStreams.GetOrOpenStream(id)
 			if str == nil && err == nil {
 				return nil, nil
 			}

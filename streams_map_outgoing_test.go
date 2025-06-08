@@ -15,6 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockGenericStream struct {
+	num protocol.StreamNum
+
+	closed     bool
+	closeErr   error
+	sendWindow protocol.ByteCount
+}
+
+func (s *mockGenericStream) closeForShutdown(err error) {
+	s.closed = true
+	s.closeErr = err
+}
+
+func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) {
+	s.sendWindow = limit
+}
+
 func TestStreamsMapOutgoingOpenAndDelete(t *testing.T) {
 	m := newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
