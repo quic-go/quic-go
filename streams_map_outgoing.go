@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -153,7 +154,10 @@ func (m *outgoingStreamsMap[T]) GetStream(id protocol.StreamID) (T, error) {
 	m.mutex.RLock()
 	if id >= m.nextStream {
 		m.mutex.RUnlock()
-		return *new(T), fmt.Errorf("peer attempted to open stream %d", id)
+		return *new(T), &qerr.TransportError{
+			ErrorCode:    qerr.StreamStateError,
+			ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", id),
+		}
 	}
 	s := m.streams[id]
 	m.mutex.RUnlock()
@@ -165,7 +169,10 @@ func (m *outgoingStreamsMap[T]) DeleteStream(id protocol.StreamID) error {
 	defer m.mutex.Unlock()
 
 	if _, ok := m.streams[id]; !ok {
-		return fmt.Errorf("tried to delete unknown outgoing stream %d", id)
+		return &qerr.TransportError{
+			ErrorCode:    qerr.StreamStateError,
+			ErrorMessage: fmt.Sprintf("tried to delete unknown outgoing stream %d", id),
+		}
 	}
 	delete(m.streams, id)
 	return nil

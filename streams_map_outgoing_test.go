@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,7 @@ func testStreamsMapOutgoingOpenAndDelete(t *testing.T, perspective protocol.Pers
 	m.SetMaxStream(protocol.MaxStreamID)
 
 	_, err := m.GetStream(firstStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 	require.ErrorContains(t, err, fmt.Sprintf("peer attempted to open stream %d", firstStream))
 
 	str1, err := m.OpenStream()
@@ -54,14 +56,14 @@ func testStreamsMapOutgoingOpenAndDelete(t *testing.T, perspective protocol.Pers
 
 	err = m.DeleteStream(firstStream + 1337*4)
 	require.Error(t, err)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 	require.ErrorContains(t, err, "tried to delete unknown outgoing stream")
 
 	require.NoError(t, m.DeleteStream(firstStream))
 	// deleting the same stream twice will fail
-	require.ErrorContains(t,
-		m.DeleteStream(firstStream),
-		"tried to delete unknown outgoing stream",
-	)
+	err = m.DeleteStream(firstStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, "tried to delete unknown outgoing stream")
 	// after deleting the stream it's not available anymore
 	str, err := m.GetStream(firstStream)
 	require.NoError(t, err)
@@ -98,7 +100,6 @@ func testStreamsMapOutgoingLimits(t *testing.T, perspective protocol.Perspective
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = m.OpenStreamSync(ctx)
-	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 
 	// OpenStreamSync blocks until the context is canceled...

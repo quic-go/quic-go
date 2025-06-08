@@ -12,6 +12,7 @@ package quic
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	wire "github.com/quic-go/quic-go/internal/wire"
@@ -194,80 +195,40 @@ func (c *MockStreamManagerDeleteStreamCall) DoAndReturn(f func(protocol.StreamID
 	return c
 }
 
-// GetOrOpenReceiveStream mocks base method.
-func (m *MockStreamManager) GetOrOpenReceiveStream(arg0 protocol.StreamID) (*ReceiveStream, error) {
+// HandleMaxStreamDataFrame mocks base method.
+func (m *MockStreamManager) HandleMaxStreamDataFrame(arg0 *wire.MaxStreamDataFrame) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrOpenReceiveStream", arg0)
-	ret0, _ := ret[0].(*ReceiveStream)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "HandleMaxStreamDataFrame", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream.
-func (mr *MockStreamManagerMockRecorder) GetOrOpenReceiveStream(arg0 any) *MockStreamManagerGetOrOpenReceiveStreamCall {
+// HandleMaxStreamDataFrame indicates an expected call of HandleMaxStreamDataFrame.
+func (mr *MockStreamManagerMockRecorder) HandleMaxStreamDataFrame(arg0 any) *MockStreamManagerHandleMaxStreamDataFrameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenReceiveStream), arg0)
-	return &MockStreamManagerGetOrOpenReceiveStreamCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMaxStreamDataFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleMaxStreamDataFrame), arg0)
+	return &MockStreamManagerHandleMaxStreamDataFrameCall{Call: call}
 }
 
-// MockStreamManagerGetOrOpenReceiveStreamCall wrap *gomock.Call
-type MockStreamManagerGetOrOpenReceiveStreamCall struct {
+// MockStreamManagerHandleMaxStreamDataFrameCall wrap *gomock.Call
+type MockStreamManagerHandleMaxStreamDataFrameCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Return(arg0 *ReceiveStream, arg1 error) *MockStreamManagerGetOrOpenReceiveStreamCall {
-	c.Call = c.Call.Return(arg0, arg1)
+func (c *MockStreamManagerHandleMaxStreamDataFrameCall) Return(arg0 error) *MockStreamManagerHandleMaxStreamDataFrameCall {
+	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamManagerGetOrOpenReceiveStreamCall) Do(f func(protocol.StreamID) (*ReceiveStream, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
+func (c *MockStreamManagerHandleMaxStreamDataFrameCall) Do(f func(*wire.MaxStreamDataFrame) error) *MockStreamManagerHandleMaxStreamDataFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamManagerGetOrOpenReceiveStreamCall) DoAndReturn(f func(protocol.StreamID) (*ReceiveStream, error)) *MockStreamManagerGetOrOpenReceiveStreamCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// GetOrOpenSendStream mocks base method.
-func (m *MockStreamManager) GetOrOpenSendStream(arg0 protocol.StreamID) (*SendStream, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrOpenSendStream", arg0)
-	ret0, _ := ret[0].(*SendStream)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream.
-func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 any) *MockStreamManagerGetOrOpenSendStreamCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenSendStream), arg0)
-	return &MockStreamManagerGetOrOpenSendStreamCall{Call: call}
-}
-
-// MockStreamManagerGetOrOpenSendStreamCall wrap *gomock.Call
-type MockStreamManagerGetOrOpenSendStreamCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockStreamManagerGetOrOpenSendStreamCall) Return(arg0 *SendStream, arg1 error) *MockStreamManagerGetOrOpenSendStreamCall {
-	c.Call = c.Call.Return(arg0, arg1)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockStreamManagerGetOrOpenSendStreamCall) Do(f func(protocol.StreamID) (*SendStream, error)) *MockStreamManagerGetOrOpenSendStreamCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamManagerGetOrOpenSendStreamCall) DoAndReturn(f func(protocol.StreamID) (*SendStream, error)) *MockStreamManagerGetOrOpenSendStreamCall {
+func (c *MockStreamManagerHandleMaxStreamDataFrameCall) DoAndReturn(f func(*wire.MaxStreamDataFrame) error) *MockStreamManagerHandleMaxStreamDataFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -304,6 +265,158 @@ func (c *MockStreamManagerHandleMaxStreamsFrameCall) Do(f func(*wire.MaxStreamsF
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockStreamManagerHandleMaxStreamsFrameCall) DoAndReturn(f func(*wire.MaxStreamsFrame)) *MockStreamManagerHandleMaxStreamsFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// HandleResetStreamFrame mocks base method.
+func (m *MockStreamManager) HandleResetStreamFrame(arg0 *wire.ResetStreamFrame, arg1 time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleResetStreamFrame", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleResetStreamFrame indicates an expected call of HandleResetStreamFrame.
+func (mr *MockStreamManagerMockRecorder) HandleResetStreamFrame(arg0, arg1 any) *MockStreamManagerHandleResetStreamFrameCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleResetStreamFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleResetStreamFrame), arg0, arg1)
+	return &MockStreamManagerHandleResetStreamFrameCall{Call: call}
+}
+
+// MockStreamManagerHandleResetStreamFrameCall wrap *gomock.Call
+type MockStreamManagerHandleResetStreamFrameCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamManagerHandleResetStreamFrameCall) Return(arg0 error) *MockStreamManagerHandleResetStreamFrameCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamManagerHandleResetStreamFrameCall) Do(f func(*wire.ResetStreamFrame, time.Time) error) *MockStreamManagerHandleResetStreamFrameCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamManagerHandleResetStreamFrameCall) DoAndReturn(f func(*wire.ResetStreamFrame, time.Time) error) *MockStreamManagerHandleResetStreamFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// HandleStopSendingFrame mocks base method.
+func (m *MockStreamManager) HandleStopSendingFrame(arg0 *wire.StopSendingFrame) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleStopSendingFrame", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleStopSendingFrame indicates an expected call of HandleStopSendingFrame.
+func (mr *MockStreamManagerMockRecorder) HandleStopSendingFrame(arg0 any) *MockStreamManagerHandleStopSendingFrameCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleStopSendingFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleStopSendingFrame), arg0)
+	return &MockStreamManagerHandleStopSendingFrameCall{Call: call}
+}
+
+// MockStreamManagerHandleStopSendingFrameCall wrap *gomock.Call
+type MockStreamManagerHandleStopSendingFrameCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamManagerHandleStopSendingFrameCall) Return(arg0 error) *MockStreamManagerHandleStopSendingFrameCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamManagerHandleStopSendingFrameCall) Do(f func(*wire.StopSendingFrame) error) *MockStreamManagerHandleStopSendingFrameCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamManagerHandleStopSendingFrameCall) DoAndReturn(f func(*wire.StopSendingFrame) error) *MockStreamManagerHandleStopSendingFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// HandleStreamDataBlockedFrame mocks base method.
+func (m *MockStreamManager) HandleStreamDataBlockedFrame(arg0 *wire.StreamDataBlockedFrame) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleStreamDataBlockedFrame", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleStreamDataBlockedFrame indicates an expected call of HandleStreamDataBlockedFrame.
+func (mr *MockStreamManagerMockRecorder) HandleStreamDataBlockedFrame(arg0 any) *MockStreamManagerHandleStreamDataBlockedFrameCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleStreamDataBlockedFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleStreamDataBlockedFrame), arg0)
+	return &MockStreamManagerHandleStreamDataBlockedFrameCall{Call: call}
+}
+
+// MockStreamManagerHandleStreamDataBlockedFrameCall wrap *gomock.Call
+type MockStreamManagerHandleStreamDataBlockedFrameCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamManagerHandleStreamDataBlockedFrameCall) Return(arg0 error) *MockStreamManagerHandleStreamDataBlockedFrameCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamManagerHandleStreamDataBlockedFrameCall) Do(f func(*wire.StreamDataBlockedFrame) error) *MockStreamManagerHandleStreamDataBlockedFrameCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamManagerHandleStreamDataBlockedFrameCall) DoAndReturn(f func(*wire.StreamDataBlockedFrame) error) *MockStreamManagerHandleStreamDataBlockedFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// HandleStreamFrame mocks base method.
+func (m *MockStreamManager) HandleStreamFrame(arg0 *wire.StreamFrame, arg1 time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleStreamFrame", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleStreamFrame indicates an expected call of HandleStreamFrame.
+func (mr *MockStreamManagerMockRecorder) HandleStreamFrame(arg0, arg1 any) *MockStreamManagerHandleStreamFrameCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleStreamFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleStreamFrame), arg0, arg1)
+	return &MockStreamManagerHandleStreamFrameCall{Call: call}
+}
+
+// MockStreamManagerHandleStreamFrameCall wrap *gomock.Call
+type MockStreamManagerHandleStreamFrameCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamManagerHandleStreamFrameCall) Return(arg0 error) *MockStreamManagerHandleStreamFrameCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamManagerHandleStreamFrameCall) Do(f func(*wire.StreamFrame, time.Time) error) *MockStreamManagerHandleStreamFrameCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamManagerHandleStreamFrameCall) DoAndReturn(f func(*wire.StreamFrame, time.Time) error) *MockStreamManagerHandleStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

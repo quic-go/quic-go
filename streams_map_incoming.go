@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -115,7 +116,10 @@ func (m *incomingStreamsMap[T]) GetOrOpenStream(id protocol.StreamID) (T, error)
 	m.mutex.RLock()
 	if id > m.maxStream {
 		m.mutex.RUnlock()
-		return *new(T), fmt.Errorf("peer tried to open stream %d (current limit: %d)", id, m.maxStream)
+		return *new(T), &qerr.TransportError{
+			ErrorCode:    qerr.StreamLimitError,
+			ErrorMessage: fmt.Sprintf("peer tried to open stream %d (current limit: %d)", id, m.maxStream),
+		}
 	}
 	// if the num is smaller than the highest we accepted
 	// * this stream exists in the map, and we can return it, or
@@ -152,7 +156,13 @@ func (m *incomingStreamsMap[T]) DeleteStream(id protocol.StreamID) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	return m.deleteStream(id)
+	if err := m.deleteStream(id); err != nil {
+		return &qerr.TransportError{
+			ErrorCode:    qerr.StreamStateError,
+			ErrorMessage: err.Error(),
+		}
+	}
+	return nil
 }
 
 func (m *incomingStreamsMap[T]) deleteStream(id protocol.StreamID) error {
