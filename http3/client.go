@@ -254,16 +254,27 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	return rsp, maybeReplaceError(err)
 }
 
+// ReceivedSettings returns a channel that is closed once the server's HTTP/3 settings were received.
+// Settings can be obtained from the Settings method after the channel was closed.
 func (c *ClientConn) ReceivedSettings() <-chan struct{} {
 	return c.conn.ReceivedSettings()
 }
 
+// Settings returns the HTTP/3 settings for this connection.
+// It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *ClientConn) Settings() *Settings {
 	return c.conn.Settings()
 }
 
-func (c *ClientConn) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
-	return c.conn.CloseWithError(code, msg)
+// CloseWithError closes the connection with the given error code and message.
+// It is invalid to call this function after the connection was closed.
+func (c *ClientConn) CloseWithError(code ErrCode, msg string) error {
+	return c.conn.CloseWithError(quic.ApplicationErrorCode(code), msg)
+}
+
+// Context returns a context that is cancelled when the connection is closed.
+func (c *ClientConn) Context() context.Context {
+	return c.conn.Context()
 }
 
 // cancelingReader reads from the io.Reader.
