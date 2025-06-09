@@ -36,6 +36,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
+      - name: Install go-junit-report
+        run: go install github.com/jstemmer/go-junit-report/v2@v2.1.0
       - name: Set qlogger
         if: env.DEBUG == 'true'
         run: echo "QLOGFLAG= -qlog" >> $GITHUB_ENV
@@ -47,25 +49,25 @@ jobs:
         run: echo "GOARCH=386" >> $GITHUB_ENV
       - run: go version
       - name: Run tools tests
-        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools/...
+        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools/... 2>&1 | go-junit-report -set-exit-code -iocopy -out report_tools.xml
       - name: Run version negotiation tests
-        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/versionnegotiation ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/versionnegotiation ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_versionnegotiation.xml
       - name: Run self tests, using QUIC v1
         if: success() || failure() # run this step even if the previous one failed
-        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_self.xml
       - name: Run self tests, using QUIC v2
         if: ${{ !matrix.race && (success() || failure()) }} # run this step even if the previous one failed
-        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=2 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=2 ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_self_v2.xml
       - name: Run self tests, with GSO disabled
         if: ${{ matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_GSO: true
-        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_self_nogso.xml
       - name: Run self tests, with ECN disabled
         if: ${{ !matrix.race && matrix.os == 'ubuntu' && (success() || failure()) }} # run this step even if the previous one failed
         env:
           QUIC_GO_DISABLE_ECN: true
-        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }}
+        run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_self_noecn.xml
       - name: Run benchmarks
         if: ${{ !matrix.race }}
         run: go test -v -run=^$ -timeout 5m -shuffle=on -bench=. ./integrationtests/self
@@ -76,3 +78,11 @@ jobs:
           name: qlogs-${{ matrix.os }}-go${{ matrix.go }}-race${{ matrix.race }}${{ matrix.use32bit && '-32bit' || '' }}
           path: integrationtests/self/*.qlog
           retention-days: 7
+      - name: Upload report to Codecov
+        if: ${{ !cancelled() && !matrix.race && !matrix.use32bit }}
+        uses: codecov/test-results-action@v1
+        with:
+          name: Unit tests
+          files: report_tools.xml,report_versionnegotiation.xml,report_self.xml,report_self_v2.xml,report_self_nogso.xml,report_self_noecn.xml
+          env_vars: OS,GO
+          token: ${{ secrets.CODECOV_TOKEN }}
