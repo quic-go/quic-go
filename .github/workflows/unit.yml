@@ -35,7 +35,7 @@ jobs:
           test -f $FILE # make sure the file actually exists
           TEST_NAMES=$(grep '^func Test' "$FILE" | sed 's/^func \([A-Za-z0-9_]*\)(.*/\1/' | tr '\n' '|')
           go test -c -cover -tags root -o quic-go.test .
-          sudo ./quic-go.test -test.v -test.run "${TEST_NAMES%|}" -test.coverprofile coverage-root.txt 2>&1 | go-junit-report -set-exit-code -iocopy -out report_root.xml
+          sudo ./quic-go.test -test.v -test.run "${TEST_NAMES%|}" -test.coverprofile coverage-root.txt 2>&1 | go-junit-report -set-exit-code -iocopy -package-name github.com/quic-go/quic-go -out report_root.xml
           rm quic-go.test
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on macOS
