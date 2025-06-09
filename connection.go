@@ -30,23 +30,6 @@ type unpacker interface {
 	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
-type streamManager interface {
-	GetOrOpenSendStream(protocol.StreamID) (*SendStream, error)
-	GetOrOpenReceiveStream(protocol.StreamID) (*ReceiveStream, error)
-	OpenStream() (*Stream, error)
-	OpenUniStream() (*SendStream, error)
-	OpenStreamSync(context.Context) (*Stream, error)
-	OpenUniStreamSync(context.Context) (*SendStream, error)
-	AcceptStream(context.Context) (*Stream, error)
-	AcceptUniStream(context.Context) (*ReceiveStream, error)
-	DeleteStream(protocol.StreamID) error
-	UpdateLimits(*wire.TransportParameters)
-	HandleMaxStreamsFrame(*wire.MaxStreamsFrame)
-	CloseWithError(error)
-	ResetFor0RTT()
-	UseResetMaps()
-}
-
 type cryptoStreamHandler interface {
 	StartHandshake(context.Context) error
 	ChangeConnectionID(protocol.ConnectionID)
@@ -133,7 +116,7 @@ type connection struct {
 	largestRcvdAppData  protocol.PacketNumber
 	pathManagerOutgoing atomic.Pointer[pathManagerOutgoing]
 
-	streamsMap      streamManager
+	streamsMap      *streamsMap
 	connIDManager   *connIDManager
 	connIDGenerator *connIDGenerator
 
@@ -1498,25 +1481,25 @@ func (s *connection) handleFrame(
 	case *wire.CryptoFrame:
 		err = s.handleCryptoFrame(frame, encLevel, rcvTime)
 	case *wire.StreamFrame:
-		err = s.handleStreamFrame(frame, rcvTime)
+		err = s.streamsMap.HandleStreamFrame(frame, rcvTime)
 	case *wire.AckFrame:
 		err = s.handleAckFrame(frame, encLevel, rcvTime)
 	case *wire.ConnectionCloseFrame:
 		err = s.handleConnectionCloseFrame(frame)
 	case *wire.ResetStreamFrame:
-		err = s.handleResetStreamFrame(frame, rcvTime)
+		err = s.streamsMap.HandleResetStreamFrame(frame, rcvTime)
 	case *wire.MaxDataFrame:
-		s.handleMaxDataFrame(frame)
+		s.connFlowController.UpdateSendWindow(frame.MaximumData)
 	case *wire.MaxStreamDataFrame:
-		err = s.handleMaxStreamDataFrame(frame)
+		err = s.streamsMap.HandleMaxStreamDataFrame(frame)
 	case *wire.MaxStreamsFrame:
-		s.handleMaxStreamsFrame(frame)
+		s.streamsMap.HandleMaxStreamsFrame(frame)
 	case *wire.DataBlockedFrame:
 	case *wire.StreamDataBlockedFrame:
-		err = s.handleStreamDataBlockedFrame(frame)
+		err = s.streamsMap.HandleStreamDataBlockedFrame(frame)
 	case *wire.StreamsBlockedFrame:
 	case *wire.StopSendingFrame:
-		err = s.handleStopSendingFrame(frame)
+		err = s.streamsMap.HandleStopSendingFrame(frame)
 	case *wire.PingFrame:
 	case *wire.PathChallengeFrame:
 		s.handlePathChallengeFrame(frame)
@@ -1526,9 +1509,9 @@ func (s *connection) handleFrame(
 	case *wire.NewTokenFrame:
 		err = s.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
-		err = s.handleNewConnectionIDFrame(frame)
+		err = s.connIDManager.Add(frame)
 	case *wire.RetireConnectionIDFrame:
-		err = s.handleRetireConnectionIDFrame(rcvTime, frame, destConnID)
+		err = s.connIDGenerator.Retire(frame.SequenceNumber, destConnID, rcvTime.Add(3*s.rttStats.PTO(false)))
 	case *wire.HandshakeDoneFrame:
 		err = s.handleHandshakeDoneFrame(rcvTime)
 	case *wire.DatagramFrame:
@@ -1625,70 +1608,6 @@ func (s *connection) handleHandshakeEvents(now time.Time) error {
 	}
 }
 
-func (s *connection) handleStreamFrame(frame *wire.StreamFrame, rcvTime time.Time) error {
-	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
-	if err != nil {
-		return err
-	}
-	if str == nil { // stream was already closed and garbage collected
-		return nil
-	}
-	return str.handleStreamFrame(frame, rcvTime)
-}
-
-func (s *connection) handleMaxDataFrame(frame *wire.MaxDataFrame) {
-	s.connFlowController.UpdateSendWindow(frame.MaximumData)
-}
-
-func (s *connection) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
-	str, err := s.streamsMap.GetOrOpenSendStream(frame.StreamID)
-	if err != nil {
-		return err
-	}
-	if str == nil {
-		// stream is closed and already garbage collected
-		return nil
-	}
-	str.updateSendWindow(frame.MaximumStreamData)
-	return nil
-}
-
-func (s *connection) handleStreamDataBlockedFrame(frame *wire.StreamDataBlockedFrame) error {
-	// We don't need to do anything in response to a STREAM_DATA_BLOCKED frame,
-	// but we need to make sure that the stream ID is valid.
-	_, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
-	return err
-}
-
-func (s *connection) handleMaxStreamsFrame(frame *wire.MaxStreamsFrame) {
-	s.streamsMap.HandleMaxStreamsFrame(frame)
-}
-
-func (s *connection) handleResetStreamFrame(frame *wire.ResetStreamFrame, rcvTime time.Time) error {
-	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
-	if err != nil {
-		return err
-	}
-	if str == nil {
-		// stream is closed and already garbage collected
-		return nil
-	}
-	return str.handleResetStreamFrame(frame, rcvTime)
-}
-
-func (s *connection) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
-	str, err := s.streamsMap.GetOrOpenSendStream(frame.StreamID)
-	if err != nil {
-		return err
-	}
-	if str == nil {
-		// stream is closed and already garbage collected
-		return nil
-	}
-	str.handleStopSendingFrame(frame)
-	return nil
-}
-
 func (s *connection) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
 	if s.perspective == protocol.PerspectiveClient {
 		s.queueControlFrame(&wire.PathResponseFrame{Data: f.Data})
@@ -1741,14 +1660,6 @@ func (s *connection) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token, rtt: s.rttStats.SmoothedRTT()})
 	}
 	return nil
-}
-
-func (s *connection) handleNewConnectionIDFrame(f *wire.NewConnectionIDFrame) error {
-	return s.connIDManager.Add(f)
-}
-
-func (s *connection) handleRetireConnectionIDFrame(now time.Time, f *wire.RetireConnectionIDFrame, destConnID protocol.ConnectionID) error {
-	return s.connIDGenerator.Retire(f.SequenceNumber, destConnID, now.Add(3*s.rttStats.PTO(false)))
 }
 
 func (s *connection) handleHandshakeDoneFrame(rcvTime time.Time) error {

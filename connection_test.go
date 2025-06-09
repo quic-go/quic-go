@@ -35,10 +35,6 @@ func connectionOptCryptoSetup(cs *mocks.MockCryptoSetup) testConnectionOpt {
 	return func(conn *connection) { conn.cryptoStreamHandler = cs }
 }
 
-func connectionOptStreamManager(sm *MockStreamManager) testConnectionOpt {
-	return func(conn *connection) { conn.streamsMap = sm }
-}
-
 func connectionOptConnFlowController(cfc flowcontrol.ConnectionFlowController) testConnectionOpt {
 	return func(conn *connection) { conn.connFlowController = cfc }
 }
@@ -208,145 +204,28 @@ func newClientTestConnection(
 	}
 }
 
-func TestConnectionHandleReceiveStreamFrames(t *testing.T) {
-	const streamID protocol.StreamID = 5
-	now := time.Now()
+func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
+	const id protocol.StreamID = 5
 	connID := protocol.ConnectionID{}
-	f := &wire.StreamFrame{StreamID: streamID, Data: []byte("foobar")}
-	rsf := &wire.ResetStreamFrame{StreamID: streamID, ErrorCode: 42, FinalSize: 1337}
-	sdbf := &wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: 1337}
 
-	t.Run("for existing and new streams", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		streamsMap := NewMockStreamManager(mockCtrl)
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		mockSender := NewMockStreamSender(mockCtrl)
-		mockSender.EXPECT().onHasStreamData(streamID, gomock.Any()).AnyTimes()
-		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
-		str := newReceiveStream(streamID, mockSender, mockFC)
-		// STREAM frame
-		mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(len(f.Data)), false, gomock.Any())
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-		// RESET_STREAM frame
-		mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1337), true, gomock.Any())
-		mockFC.EXPECT().Abandon()
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-		// STREAM_DATA_BLOCKED frames are not passed to the stream
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(str, nil)
-		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-	})
+	tests := []struct {
+		name  string
+		frame wire.Frame
+	}{
+		{name: "STREAM", frame: &wire.StreamFrame{StreamID: id, Data: []byte("foobar")}},
+		{name: "RESET_STREAM", frame: &wire.ResetStreamFrame{StreamID: id, ErrorCode: 42, FinalSize: 1337}},
+		{name: "STOP_SENDING", frame: &wire.StopSendingFrame{StreamID: id, ErrorCode: 42}},
+		{name: "MAX_STREAM_DATA", frame: &wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1337}},
+		{name: "STREAM_DATA_BLOCKED", frame: &wire.StreamDataBlockedFrame{StreamID: id, MaximumStreamData: 42}},
+	}
 
-	t.Run("for closed streams", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		streamsMap := NewMockStreamManager(mockCtrl)
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		// STREAM frame
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-		// RESET_STREAM frame
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-		// STREAM_DATA_BLOCKED frames are not passed to the stream
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, nil)
-		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-	})
-
-	t.Run("for invalid streams", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		streamsMap := NewMockStreamManager(mockCtrl)
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		// STREAM frame
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, assert.AnError)
-		_, err := tc.conn.handleFrame(f, protocol.Encryption1RTT, connID, now)
-		require.ErrorIs(t, err, assert.AnError)
-		// RESET_STREAM frame
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, assert.AnError)
-		_, err = tc.conn.handleFrame(rsf, protocol.Encryption1RTT, connID, now)
-		require.ErrorIs(t, err, assert.AnError)
-		// STREAM_DATA_BLOCKED frames are not passed to the stream
-		streamsMap.EXPECT().GetOrOpenReceiveStream(streamID).Return(nil, assert.AnError)
-		_, err = tc.conn.handleFrame(sdbf, protocol.Encryption1RTT, connID, now)
-		require.ErrorIs(t, err, assert.AnError)
-	})
-}
-
-func TestConnectionHandleSendStreamFrames(t *testing.T) {
-	const streamID protocol.StreamID = 3
-	now := time.Now()
-	connID := protocol.ConnectionID{}
-	ss := &wire.StopSendingFrame{StreamID: streamID, ErrorCode: 42}
-	msd := &wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1337}
-
-	t.Run("for existing and new streams", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		streamsMap := NewMockStreamManager(mockCtrl)
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		mockSender := NewMockStreamSender(mockCtrl)
-		mockSender.EXPECT().onHasStreamControlFrame(streamID, gomock.Any()).AnyTimes()
-		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
-		str := newSendStream(context.Background(), streamID, mockSender, mockFC)
-		// STOP_SENDING frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
-		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-		// MAX_STREAM_DATA frame
-		mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(1337))
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(str, nil)
-		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-	})
-
-	t.Run("for closed streams", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		streamsMap := NewMockStreamManager(mockCtrl)
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		// STOP_SENDING frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, nil)
-		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-		// MAX_STREAM_DATA frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, nil)
-		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
-		require.NoError(t, err)
-	})
-
-	t.Run("for invalid streams", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		streamsMap := NewMockStreamManager(mockCtrl)
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-		// STOP_SENDING frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, assert.AnError)
-		_, err := tc.conn.handleFrame(ss, protocol.Encryption1RTT, connID, now)
-		require.ErrorIs(t, err, assert.AnError)
-		// MAX_STREAM_DATA frame
-		streamsMap.EXPECT().GetOrOpenSendStream(streamID).Return(nil, assert.AnError)
-		_, err = tc.conn.handleFrame(msd, protocol.Encryption1RTT, connID, now)
-		require.ErrorIs(t, err, assert.AnError)
-	})
-}
-
-func TestConnectionHandleStreamNumFrames(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	streamsMap := NewMockStreamManager(mockCtrl)
-	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-	now := time.Now()
-	connID := protocol.ConnectionID{}
-	// MAX_STREAMS frame
-	msf := &wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 10}
-	streamsMap.EXPECT().HandleMaxStreamsFrame(msf)
-	_, err := tc.conn.handleFrame(msf, protocol.Encryption1RTT, connID, now)
-	require.NoError(t, err)
-	// STREAMS_BLOCKED frame
-	_, err = tc.conn.handleFrame(&wire.StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 1}, protocol.Encryption1RTT, connID, now)
-	require.NoError(t, err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tc := newServerTestConnection(t, gomock.NewController(t), nil, false)
+			_, err := tc.conn.handleFrame(test.frame, protocol.Encryption1RTT, connID, time.Now())
+			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+		})
+	}
 }
 
 func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
@@ -363,60 +242,6 @@ func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	// DATA_BLOCKED frame
 	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)
-}
-
-func TestConnectionOpenStreams(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	streamsMap := NewMockStreamManager(mockCtrl)
-	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-
-	// using OpenStream
-	str1 := &Stream{}
-	streamsMap.EXPECT().OpenStream().Return(str1, nil)
-	str, err := tc.conn.OpenStream()
-	require.NoError(t, err)
-	require.Equal(t, str1, str)
-
-	// using OpenStreamSync
-	streamsMap.EXPECT().OpenStreamSync(context.Background()).Return(str1, nil)
-	str, err = tc.conn.OpenStreamSync(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, str1, str)
-
-	// using OpenUniStream
-	str2 := &SendStream{}
-	streamsMap.EXPECT().OpenUniStream().Return(str2, nil)
-	ustr, err := tc.conn.OpenUniStream()
-	require.NoError(t, err)
-	require.Equal(t, str2, ustr)
-
-	// using OpenUniStreamSync
-	streamsMap.EXPECT().OpenUniStreamSync(context.Background()).Return(str2, nil)
-	ustr, err = tc.conn.OpenUniStreamSync(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, str2, ustr)
-}
-
-func TestConnectionAcceptStreams(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	streamsMap := NewMockStreamManager(mockCtrl)
-	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptStreamManager(streamsMap))
-
-	// bidirectional streams
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	str1 := &Stream{}
-	streamsMap.EXPECT().AcceptStream(ctx).Return(str1, nil)
-	str, err := tc.conn.AcceptStream(ctx)
-	require.NoError(t, err)
-	require.Equal(t, str1, str)
-
-	// unidirectional streams
-	str2 := &ReceiveStream{}
-	streamsMap.EXPECT().AcceptUniStream(ctx).Return(str2, nil)
-	ustr, err := tc.conn.AcceptUniStream(ctx)
-	require.NoError(t, err)
-	require.Equal(t, str2, ustr)
 }
 
 func TestConnectionServerInvalidFrames(t *testing.T) {
@@ -943,14 +768,12 @@ func TestConnectionMaxUnprocessedPackets(t *testing.T) {
 
 func TestConnectionRemoteClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	mockStreamManager := NewMockStreamManager(mockCtrl)
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 	unpacker := NewMockUnpacker(mockCtrl)
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		nil,
 		false,
-		connectionOptStreamManager(mockStreamManager),
 		connectionOptTracer(tr),
 		connectionOptUnpacker(unpacker),
 	)
@@ -964,8 +787,6 @@ func TestConnectionRemoteClose(t *testing.T) {
 
 	expectedErr := &qerr.TransportError{ErrorCode: qerr.StreamLimitError, Remote: true}
 	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any())
-	streamErrChan := make(chan error, 1)
-	mockStreamManager.EXPECT().CloseWithError(gomock.Any()).Do(func(e error) { streamErrChan <- e })
 	tracerErrChan := make(chan error, 1)
 	tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) { tracerErrChan <- e })
 	tracer.EXPECT().Close()
@@ -984,12 +805,6 @@ func TestConnectionRemoteClose(t *testing.T) {
 	}
 	select {
 	case err := <-tracerErrChan:
-		require.ErrorIs(t, err, expectedErr)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
-	select {
-	case err := <-streamErrChan:
 		require.ErrorIs(t, err, expectedErr)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
@@ -1061,6 +876,8 @@ func TestConnectionTransportParameters(t *testing.T) {
 	)
 	_, err := tc.conn.OpenStream()
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
+	_, err = tc.conn.OpenUniStream()
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	tracer.EXPECT().ReceivedTransportParameters(gomock.Any())
 	params := &wire.TransportParameters{
 		MaxIdleTimeout:                90 * time.Second,
@@ -1071,11 +888,78 @@ func TestConnectionTransportParameters(t *testing.T) {
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
 		OriginalDestinationConnectionID: tc.destConnID,
 		MaxBidiStreamNum:                1,
+		MaxUniStreamNum:                 1,
 	}
 	require.NoError(t, tc.conn.handleTransportParameters(params))
 	require.Equal(t, protocol.ByteCount(1337), connFC.SendWindowSize())
 	_, err = tc.conn.OpenStream()
 	require.NoError(t, err)
+	_, err = tc.conn.OpenUniStream()
+	require.NoError(t, err)
+}
+
+func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
+	tc.conn.handleTransportParameters(&wire.TransportParameters{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	uniStreamChan := make(chan error)
+	go func() {
+		_, err := tc.conn.OpenUniStreamSync(ctx)
+		uniStreamChan <- err
+	}()
+	bidiStreamChan := make(chan error)
+	go func() {
+		_, err := tc.conn.OpenStreamSync(ctx)
+		bidiStreamChan <- err
+	}()
+
+	select {
+	case <-uniStreamChan:
+		t.Fatal("uni stream should be blocked")
+	case <-bidiStreamChan:
+		t.Fatal("bidi stream should be blocked")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	// MAX_STREAMS frame for bidirectional stream
+	_, err := tc.conn.handleFrame(
+		&wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 10},
+		protocol.Encryption1RTT,
+		protocol.ConnectionID{},
+		time.Now(),
+	)
+	require.NoError(t, err)
+
+	select {
+	case <-uniStreamChan:
+		t.Fatal("uni stream should be blocked")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+	select {
+	case err := <-bidiStreamChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// MAX_STREAMS frame for bidirectional stream
+	_, err = tc.conn.handleFrame(
+		&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 10},
+		protocol.Encryption1RTT,
+		protocol.ConnectionID{},
+		time.Now(),
+	)
+	require.NoError(t, err)
+	select {
+	case err := <-uniStreamChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func TestConnectionTransportParameterValidationFailureServer(t *testing.T) {
@@ -3075,10 +2959,11 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	).AnyTimes()
 	tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any())
 	// add a new connection ID, so the path can be probed
-	require.NoError(t, tc.conn.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
+	_, err = tc.conn.handleFrame(&wire.NewConnectionIDFrame{
 		SequenceNumber: 1,
 		ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-	}))
+	}, protocol.EncryptionInitial, tc.destConnID, time.Now())
+	require.NoError(t, err)
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
 

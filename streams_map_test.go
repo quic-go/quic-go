@@ -19,7 +19,7 @@ import (
 
 func TestStreamsMapCreatingStreams(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
-		testStreamsMapCreatingAndDeletingStreams(t, protocol.PerspectiveClient,
+		testStreamsMapCreatingStreams(t, protocol.PerspectiveClient,
 			protocol.FirstIncomingBidiStreamClient,
 			protocol.FirstOutgoingBidiStreamClient,
 			protocol.FirstIncomingUniStreamClient,
@@ -27,7 +27,7 @@ func TestStreamsMapCreatingStreams(t *testing.T) {
 		)
 	})
 	t.Run("server", func(t *testing.T) {
-		testStreamsMapCreatingAndDeletingStreams(t, protocol.PerspectiveServer,
+		testStreamsMapCreatingStreams(t, protocol.PerspectiveServer,
 			protocol.FirstIncomingBidiStreamServer,
 			protocol.FirstOutgoingBidiStreamServer,
 			protocol.FirstIncomingUniStreamServer,
@@ -36,7 +36,7 @@ func TestStreamsMapCreatingStreams(t *testing.T) {
 	})
 }
 
-func testStreamsMapCreatingAndDeletingStreams(t *testing.T,
+func testStreamsMapCreatingStreams(t *testing.T,
 	perspective protocol.Perspective,
 	firstIncomingBidiStream protocol.StreamID,
 	firstOutgoingBidiStream protocol.StreamID,
@@ -50,7 +50,9 @@ func testStreamsMapCreatingAndDeletingStreams(t *testing.T,
 		mockSender,
 		func(wire.Frame) {},
 		func(protocol.StreamID) flowcontrol.StreamFlowController {
-			return mocks.NewMockStreamFlowController(mockCtrl)
+			fc := mocks.NewMockStreamFlowController(mockCtrl)
+			fc.EXPECT().UpdateHighestReceived(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			return fc
 		},
 		1,
 		1,
@@ -76,25 +78,9 @@ func testStreamsMapCreatingAndDeletingStreams(t *testing.T,
 	assert.Equal(t, ustr1.StreamID(), firstOutgoingUniStream)
 	assert.Equal(t, ustr2.StreamID(), firstOutgoingUniStream+4)
 
-	// accepting streams:
-	// This function is called when a frame referencing this stream is received.
-	// The peer may open a peer-initiated stream...
-	_, err = m.GetOrOpenReceiveStream(firstIncomingBidiStream)
-	require.NoError(t, err)
-	_, err = m.GetOrOpenReceiveStream(firstIncomingUniStream)
-	require.NoError(t, err)
-
-	// ... but not a stream that is initiated by us.
-	_, err = m.GetOrOpenSendStream(firstOutgoingBidiStream + 8)
-	require.ErrorIs(t, err, &qerr.TransportError{
-		ErrorCode:    qerr.StreamStateError,
-		ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", firstOutgoingBidiStream+8),
-	})
-	_, err = m.GetOrOpenSendStream(firstOutgoingUniStream + 8)
-	require.ErrorIs(t, err, &qerr.TransportError{
-		ErrorCode:    qerr.StreamStateError,
-		ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", firstOutgoingUniStream+8),
-	})
+	// accepting streams is triggered by receiving a frame referencing this stream
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, time.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, time.Now()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -141,7 +127,9 @@ func testStreamsMapDeletingStreams(t *testing.T,
 		mockSender,
 		func(frame wire.Frame) { frameQueue = append(frameQueue, frame) },
 		func(protocol.StreamID) flowcontrol.StreamFlowController {
-			return mocks.NewMockStreamFlowController(mockCtrl)
+			fc := mocks.NewMockStreamFlowController(mockCtrl)
+			fc.EXPECT().UpdateHighestReceived(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			return fc
 		},
 		100,
 		100,
@@ -155,37 +143,25 @@ func testStreamsMapDeletingStreams(t *testing.T,
 	_, err := m.OpenStream()
 	require.NoError(t, err)
 	require.NoError(t, m.DeleteStream(firstOutgoingBidiStream))
-	sstr, err := m.GetOrOpenSendStream(firstOutgoingBidiStream)
-	require.NoError(t, err)
-	require.Nil(t, sstr)
-	require.ErrorContains(t,
-		m.DeleteStream(firstOutgoingBidiStream+400),
-		fmt.Sprintf("tried to delete unknown outgoing stream %d", firstOutgoingBidiStream+400),
-	)
+	err = m.DeleteStream(firstOutgoingBidiStream + 400)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("tried to delete unknown outgoing stream %d", firstOutgoingBidiStream+400))
 
 	_, err = m.OpenUniStream()
 	require.NoError(t, err)
 	require.NoError(t, m.DeleteStream(firstOutgoingUniStream))
-	sstr, err = m.GetOrOpenSendStream(firstOutgoingUniStream)
-	require.NoError(t, err)
-	require.Nil(t, sstr)
-	require.ErrorContains(t,
-		m.DeleteStream(firstOutgoingUniStream+400),
-		fmt.Sprintf("tried to delete unknown outgoing stream %d", firstOutgoingUniStream+400),
-	)
+	err = m.DeleteStream(firstOutgoingUniStream + 400)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("tried to delete unknown outgoing stream %d", firstOutgoingUniStream+400))
 
 	require.Empty(t, frameQueue)
 	// deleting incoming bidirectional streams
-	_, err = m.GetOrOpenReceiveStream(firstIncomingBidiStream)
-	require.NoError(t, err)
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, time.Now()))
 	require.NoError(t, m.DeleteStream(firstIncomingBidiStream))
-	sstr, err = m.GetOrOpenSendStream(firstIncomingBidiStream)
-	require.NoError(t, err)
-	require.Nil(t, sstr)
-	require.ErrorContains(t,
-		m.DeleteStream(firstIncomingBidiStream+400),
-		fmt.Sprintf("tried to delete unknown incoming stream %d", firstIncomingBidiStream+400),
-	)
+	err = m.DeleteStream(firstIncomingBidiStream + 400)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("tried to delete unknown incoming stream %d", firstIncomingBidiStream+400))
+
 	// the MAX_STREAMS frame is only queued once the stream is accepted
 	require.Empty(t, frameQueue)
 	_, err = m.AcceptStream(context.Background())
@@ -200,16 +176,12 @@ func testStreamsMapDeletingStreams(t *testing.T,
 	frameQueue = frameQueue[:0]
 
 	// deleting incoming unidirectional streams
-	_, err = m.GetOrOpenReceiveStream(firstIncomingUniStream)
-	require.NoError(t, err)
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, time.Now()))
 	require.NoError(t, m.DeleteStream(firstIncomingUniStream))
-	rstr, err := m.GetOrOpenReceiveStream(firstIncomingUniStream)
-	require.NoError(t, err)
-	require.Nil(t, rstr)
-	require.ErrorContains(t,
-		m.DeleteStream(firstIncomingUniStream+400),
-		fmt.Sprintf("tried to delete unknown incoming stream %d", firstIncomingUniStream+400),
-	)
+	err = m.DeleteStream(firstIncomingUniStream + 400)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("tried to delete unknown incoming stream %d", firstIncomingUniStream+400))
+
 	// the MAX_STREAMS frame is only queued once the stream is accepted
 	require.Empty(t, frameQueue)
 	_, err = m.AcceptUniStream(context.Background())
@@ -254,6 +226,7 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 	// increase via transport parameters
 	_, err := m.OpenStream()
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
+	require.ErrorContains(t, err, "too many open streams")
 	m.UpdateLimits(&wire.TransportParameters{MaxBidiStreamNum: 1})
 	_, err = m.OpenStream()
 	require.NoError(t, err)
@@ -291,6 +264,239 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 	m.UpdateLimits(&wire.TransportParameters{MaxBidiStreamNum: 0})
 	_, err = m.OpenStream()
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
+}
+
+func TestStreamsMapHandleReceiveStreamFrames(t *testing.T) {
+	for _, pers := range []protocol.Perspective{protocol.PerspectiveClient, protocol.PerspectiveServer} {
+		t.Run(pers.String(), func(t *testing.T) {
+			t.Run("STREAM frame", func(t *testing.T) {
+				testStreamsMapHandleReceiveStreamFrames(t,
+					pers,
+					func(m *streamsMap, id protocol.StreamID) error {
+						return m.HandleStreamFrame(&wire.StreamFrame{StreamID: id}, time.Now())
+					},
+				)
+			})
+
+			t.Run("STREAM_DATA_BLOCKED frame", func(t *testing.T) {
+				testStreamsMapHandleReceiveStreamFrames(t,
+					pers,
+					func(m *streamsMap, id protocol.StreamID) error {
+						return m.HandleStreamDataBlockedFrame(&wire.StreamDataBlockedFrame{StreamID: id})
+					},
+				)
+			})
+
+			t.Run("RESET_STREAM frame", func(t *testing.T) {
+				testStreamsMapHandleReceiveStreamFrames(t,
+					pers,
+					func(m *streamsMap, id protocol.StreamID) error {
+						return m.HandleResetStreamFrame(&wire.ResetStreamFrame{StreamID: id}, time.Now())
+					},
+				)
+			})
+		})
+	}
+}
+
+func testStreamsMapHandleReceiveStreamFrames(t *testing.T, pers protocol.Perspective, handleFrame func(*streamsMap, protocol.StreamID) error) {
+	mockCtrl := gomock.NewController(t)
+	mockSender := NewMockStreamSender(mockCtrl)
+	var streamsCreated []protocol.StreamID
+	m := newStreamsMap(
+		context.Background(),
+		mockSender,
+		func(frame wire.Frame) {},
+		func(id protocol.StreamID) flowcontrol.StreamFlowController {
+			streamsCreated = append(streamsCreated, id)
+			fc := mocks.NewMockStreamFlowController(mockCtrl)
+			fc.EXPECT().UpdateHighestReceived(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			fc.EXPECT().Abandon().AnyTimes()
+			return fc
+		},
+		100,
+		100,
+		pers,
+	)
+	m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: protocol.MaxStreamCount})
+	m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: protocol.MaxStreamCount})
+
+	var firstOutgoingUniStream, firstOutgoingBidiStream, firstIncomingUniStream, firstIncomingBidiStream protocol.StreamID
+	if pers == protocol.PerspectiveClient {
+		firstOutgoingBidiStream = protocol.FirstOutgoingBidiStreamClient
+		firstOutgoingUniStream = protocol.FirstOutgoingUniStreamClient
+		firstIncomingUniStream = protocol.FirstIncomingUniStreamClient
+		firstIncomingBidiStream = protocol.FirstIncomingBidiStreamClient
+	} else {
+		firstOutgoingBidiStream = protocol.FirstOutgoingBidiStreamServer
+		firstOutgoingUniStream = protocol.FirstOutgoingUniStreamServer
+		firstIncomingUniStream = protocol.FirstIncomingUniStreamServer
+		firstIncomingBidiStream = protocol.FirstIncomingBidiStreamServer
+	}
+
+	// 1. The peer can't open a unidirectional send stream...
+	err := handleFrame(m, firstOutgoingUniStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("invalid frame for receive stream %d", firstOutgoingUniStream))
+	require.Empty(t, streamsCreated)
+	// ... and a STREAM frame for a unidirectional send stream is invalid even if the stream is open.
+	_, err = m.OpenUniStream()
+	require.NoError(t, err)
+	err = handleFrame(m, firstOutgoingUniStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("invalid frame for receive stream %d", firstOutgoingUniStream))
+	streamsCreated = streamsCreated[:0]
+
+	// 2. The peer can't open a bidirectional stream initiated by us...
+	err = handleFrame(m, firstOutgoingBidiStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("peer attempted to open stream %d", firstOutgoingBidiStream))
+	require.Empty(t, streamsCreated)
+	// ... but it's valid once we have opened the stream.
+	_, err = m.OpenStream()
+	require.NoError(t, err)
+	require.NoError(t, handleFrame(m, firstOutgoingBidiStream))
+	streamsCreated = streamsCreated[:0]
+	// Delayed frames for deleted streams are absorbed.
+	require.NoError(t, m.DeleteStream(firstOutgoingBidiStream))
+	require.NoError(t, handleFrame(m, firstOutgoingBidiStream))
+	require.Empty(t, streamsCreated)
+
+	// 3. The peer can send STREAM frames for unidirectional receive streams,
+	// as long as they're below the stream limit.
+	require.ErrorIs(t,
+		handleFrame(m, firstIncomingUniStream+400),
+		&qerr.TransportError{ErrorCode: qerr.StreamLimitError},
+	)
+	require.Empty(t, streamsCreated)
+	require.NoError(t, handleFrame(m, firstIncomingUniStream))
+	require.Equal(t, streamsCreated, []protocol.StreamID{firstIncomingUniStream})
+	streamsCreated = streamsCreated[:0]
+	// Delayed frames for deleted streams are absorbed.
+	require.NoError(t, m.DeleteStream(firstIncomingUniStream))
+	require.NoError(t, handleFrame(m, firstIncomingUniStream))
+	require.Empty(t, streamsCreated)
+
+	// 4. The peer can send STREAM frames for bidirectional receive streams,
+	// as long as they're below the stream limit.
+	require.ErrorIs(t,
+		handleFrame(m, firstIncomingBidiStream+400),
+		&qerr.TransportError{ErrorCode: qerr.StreamLimitError},
+	)
+	require.Empty(t, streamsCreated)
+	require.NoError(t, handleFrame(m, firstIncomingBidiStream))
+	require.Equal(t, streamsCreated, []protocol.StreamID{firstIncomingBidiStream})
+}
+
+func TestStreamsMapHandleSendStreamFrames(t *testing.T) {
+	for _, pers := range []protocol.Perspective{protocol.PerspectiveClient, protocol.PerspectiveServer} {
+		t.Run(pers.String(), func(t *testing.T) {
+			t.Run("STOP_SENDING frame", func(t *testing.T) {
+				testStreamsMapHandleSendStreamFrames(t,
+					pers,
+					func(m *streamsMap, id protocol.StreamID) error {
+						return m.HandleStopSendingFrame(&wire.StopSendingFrame{StreamID: id})
+					},
+				)
+			})
+
+			t.Run("MAX_STREAM_DATA frame", func(t *testing.T) {
+				testStreamsMapHandleSendStreamFrames(t,
+					pers,
+					func(m *streamsMap, id protocol.StreamID) error {
+						return m.HandleMaxStreamDataFrame(&wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1000})
+					},
+				)
+			})
+		})
+	}
+}
+
+func testStreamsMapHandleSendStreamFrames(t *testing.T, pers protocol.Perspective, handleFrame func(m *streamsMap, id protocol.StreamID) error) {
+	mockCtrl := gomock.NewController(t)
+	mockSender := NewMockStreamSender(mockCtrl)
+	mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()).AnyTimes()
+	var streamsCreated []protocol.StreamID
+	m := newStreamsMap(
+		context.Background(),
+		mockSender,
+		func(frame wire.Frame) {},
+		func(id protocol.StreamID) flowcontrol.StreamFlowController {
+			streamsCreated = append(streamsCreated, id)
+			fc := mocks.NewMockStreamFlowController(mockCtrl)
+			fc.EXPECT().UpdateSendWindow(gomock.Any()).AnyTimes()
+			return fc
+		},
+		100,
+		100,
+		pers,
+	)
+	m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: protocol.MaxStreamCount})
+	m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: protocol.MaxStreamCount})
+
+	var firstOutgoingUniStream, firstOutgoingBidiStream, firstIncomingUniStream, firstIncomingBidiStream protocol.StreamID
+	if pers == protocol.PerspectiveClient {
+		firstOutgoingBidiStream = protocol.FirstOutgoingBidiStreamClient
+		firstOutgoingUniStream = protocol.FirstOutgoingUniStreamClient
+		firstIncomingUniStream = protocol.FirstIncomingUniStreamClient
+		firstIncomingBidiStream = protocol.FirstIncomingBidiStreamClient
+	} else {
+		firstOutgoingBidiStream = protocol.FirstOutgoingBidiStreamServer
+		firstOutgoingUniStream = protocol.FirstOutgoingUniStreamServer
+		firstIncomingUniStream = protocol.FirstIncomingUniStreamServer
+		firstIncomingBidiStream = protocol.FirstIncomingBidiStreamServer
+	}
+
+	// 1. The peer can't open a unidirectional send stream...
+	err := handleFrame(m, firstOutgoingUniStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("peer attempted to open stream %d", firstOutgoingUniStream))
+	require.Empty(t, streamsCreated)
+	// ... but once we have opened the stream, it's valid.
+	_, err = m.OpenUniStream()
+	require.NoError(t, err)
+	require.NoError(t, handleFrame(m, firstOutgoingUniStream))
+	streamsCreated = streamsCreated[:0]
+	// Delayed frames for deleted streams are absorbed.
+	require.NoError(t, m.DeleteStream(firstOutgoingUniStream))
+	require.NoError(t, handleFrame(m, firstOutgoingUniStream))
+	require.Empty(t, streamsCreated)
+
+	// 2. The peer can't open a bidirectional stream initiated by us...
+	err = handleFrame(m, firstOutgoingBidiStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("peer attempted to open stream %d", firstOutgoingBidiStream))
+	require.Empty(t, streamsCreated)
+	// ... but once we have opened the stream, it's valid.
+	_, err = m.OpenStream()
+	require.NoError(t, err)
+	require.NoError(t, handleFrame(m, firstOutgoingBidiStream))
+	streamsCreated = streamsCreated[:0]
+	// Delayed frames for deleted streams are absorbed.
+	require.NoError(t, m.DeleteStream(firstOutgoingBidiStream))
+	require.NoError(t, handleFrame(m, firstOutgoingBidiStream))
+	require.Empty(t, streamsCreated)
+
+	// 3. The peer can't send STOP_SENDING frames for unidirectional send streams
+	err = handleFrame(m, firstIncomingUniStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, fmt.Sprintf("invalid frame for send stream %d", firstIncomingUniStream))
+	require.Empty(t, streamsCreated)
+
+	// 4. The peer can send STOP_SENDING frames for bidirectional receive streams iniated by itself,
+	// as long as they're below the stream limit.
+	require.ErrorIs(t,
+		handleFrame(m, firstIncomingBidiStream+400),
+		&qerr.TransportError{ErrorCode: qerr.StreamLimitError},
+	)
+	require.Empty(t, streamsCreated)
+	require.NoError(t, handleFrame(m, firstIncomingBidiStream))
+	require.Equal(t, streamsCreated, []protocol.StreamID{firstIncomingBidiStream})
+	streamsCreated = streamsCreated[:0]
+	// Delayed frames for deleted streams are absorbed.
+	require.NoError(t, m.DeleteStream(firstIncomingBidiStream))
+	require.NoError(t, handleFrame(m, firstIncomingBidiStream))
+	require.Empty(t, streamsCreated)
 }
 
 func TestStreamsMapClosing(t *testing.T) {
@@ -366,7 +572,9 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 		mockSender,
 		func(wire.Frame) {},
 		func(protocol.StreamID) flowcontrol.StreamFlowController {
-			return mocks.NewMockStreamFlowController(mockCtrl)
+			fc := mocks.NewMockStreamFlowController(mockCtrl)
+			fc.EXPECT().UpdateHighestReceived(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			return fc
 		},
 		1,
 		1,
@@ -380,10 +588,11 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 	require.ErrorIs(t, err, Err0RTTRejected)
 	_, err = m.AcceptStream(context.Background())
 	require.ErrorIs(t, err, Err0RTTRejected)
+	_, err = m.AcceptUniStream(context.Background())
+	require.ErrorIs(t, err, Err0RTTRejected)
+
 	// make sure that we can still get new streams, as the server might be sending us data
-	str, err := m.GetOrOpenReceiveStream(3)
-	require.NoError(t, err)
-	require.NotNil(t, str)
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: 3}, time.Now()))
 
 	// now switch to using the new streams map
 	m.UseResetMaps()

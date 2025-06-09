@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 
 	"github.com/stretchr/testify/assert"
@@ -80,6 +81,7 @@ func testStreamsMapIncomingGettingStreams(t *testing.T, perspective protocol.Per
 	_, err = m.GetOrOpenStream(firstStream + 4*maxNumStreams - 4)
 	require.NoError(t, err)
 	_, err = m.GetOrOpenStream(firstStream + 4*maxNumStreams)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamLimitError})
 	require.ErrorContains(t, err, "peer tried to open stream")
 	require.Equal(t, maxNumStreams, newStreamCounter)
 }
@@ -151,6 +153,7 @@ func testStreamsMapIncomingDeletingStreams(t *testing.T, perspective protocol.Pe
 		perspective,
 	)
 	err := m.DeleteStream(firstStream + 1337*4)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 	require.ErrorContains(t, err, "tried to delete unknown incoming stream")
 
 	s, err := m.GetOrOpenStream(firstStream + 4)
