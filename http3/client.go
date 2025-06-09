@@ -75,10 +75,6 @@ type ClientConn struct {
 
 var _ http.RoundTripper = &ClientConn{}
 
-// Deprecated: SingleDestinationRoundTripper was renamed to ClientConn.
-// It can be obtained by calling NewClientConn on a Transport.
-type SingleDestinationRoundTripper = ClientConn
-
 func newClientConn(
 	conn *quic.Conn,
 	enableDatagrams bool,
