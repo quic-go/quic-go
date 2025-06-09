@@ -106,7 +106,7 @@ func transfer0RTTData(
 	require.NoError(t, err)
 
 	errChan := make(chan error, 1)
-	serverConnChan := make(chan quic.EarlyConnection, 1)
+	serverConnChan := make(chan *quic.Conn, 1)
 	go func() {
 		defer close(errChan)
 		conn, err := ln.Accept(ctx)
@@ -148,7 +148,7 @@ func transfer0RTTData(
 		t.Fatal("timeout waiting for server to process data")
 	}
 
-	var serverConn quic.EarlyConnection
+	var serverConn *quic.Conn
 	select {
 	case serverConn = <-serverConnChan:
 	case <-time.After(time.Second):
@@ -532,7 +532,7 @@ func check0RTTRejected(t *testing.T,
 	addr net.Addr,
 	conf *tls.Config,
 	sendData bool,
-) (clientConn, serverConn quic.Connection) {
+) (clientConn, serverConn *quic.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	conn, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), addr, conf, getQuicConfig(nil))

@@ -29,38 +29,38 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type testConnectionOpt func(*connection)
+type testConnectionOpt func(*Conn)
 
 func connectionOptCryptoSetup(cs *mocks.MockCryptoSetup) testConnectionOpt {
-	return func(conn *connection) { conn.cryptoStreamHandler = cs }
+	return func(conn *Conn) { conn.cryptoStreamHandler = cs }
 }
 
 func connectionOptConnFlowController(cfc flowcontrol.ConnectionFlowController) testConnectionOpt {
-	return func(conn *connection) { conn.connFlowController = cfc }
+	return func(conn *Conn) { conn.connFlowController = cfc }
 }
 
 func connectionOptTracer(tr *logging.ConnectionTracer) testConnectionOpt {
-	return func(conn *connection) { conn.tracer = tr }
+	return func(conn *Conn) { conn.tracer = tr }
 }
 
 func connectionOptSentPacketHandler(sph ackhandler.SentPacketHandler) testConnectionOpt {
-	return func(conn *connection) { conn.sentPacketHandler = sph }
+	return func(conn *Conn) { conn.sentPacketHandler = sph }
 }
 
 func connectionOptReceivedPacketHandler(rph ackhandler.ReceivedPacketHandler) testConnectionOpt {
-	return func(conn *connection) { conn.receivedPacketHandler = rph }
+	return func(conn *Conn) { conn.receivedPacketHandler = rph }
 }
 
 func connectionOptUnpacker(u unpacker) testConnectionOpt {
-	return func(conn *connection) { conn.unpacker = u }
+	return func(conn *Conn) { conn.unpacker = u }
 }
 
 func connectionOptSender(s sender) testConnectionOpt {
-	return func(conn *connection) { conn.sendQueue = s }
+	return func(conn *Conn) { conn.sendQueue = s }
 }
 
 func connectionOptHandshakeConfirmed() testConnectionOpt {
-	return func(conn *connection) {
+	return func(conn *Conn) {
 		conn.handshakeComplete = true
 		conn.handshakeConfirmed = true
 	}
@@ -69,15 +69,15 @@ func connectionOptHandshakeConfirmed() testConnectionOpt {
 func connectionOptRTT(rtt time.Duration) testConnectionOpt {
 	var rttStats utils.RTTStats
 	rttStats.UpdateRTT(rtt, 0)
-	return func(conn *connection) { conn.rttStats = &rttStats }
+	return func(conn *Conn) { conn.rttStats = &rttStats }
 }
 
 func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
-	return func(conn *connection) { conn.retrySrcConnID = &rcid }
+	return func(conn *Conn) { conn.retrySrcConnID = &rcid }
 }
 
 type testConnection struct {
-	conn       *connection
+	conn       *Conn
 	connRunner *MockConnRunner
 	sendConn   *MockSendConn
 	packer     *MockPacker
@@ -112,7 +112,7 @@ func newServerTestConnection(
 	if config == nil {
 		config = &Config{DisablePathMTUDiscovery: true}
 	}
-	conn := newConnection(
+	wc := newConnection(
 		ctx,
 		cancel,
 		sendConn,
@@ -132,7 +132,9 @@ func newServerTestConnection(
 		nil,
 		utils.DefaultLogger,
 		protocol.Version1,
-	).(*connection)
+	)
+	require.Nil(t, wc.testHooks)
+	conn := wc.Conn
 	conn.packer = packer
 	for _, opt := range opts {
 		opt(conn)
@@ -189,13 +191,14 @@ func newClientTestConnection(
 		nil,
 		utils.DefaultLogger,
 		protocol.Version1,
-	).(*connection)
+	)
+	require.Nil(t, conn.testHooks)
 	conn.packer = packer
 	for _, opt := range opts {
-		opt(conn)
+		opt(conn.Conn)
 	}
 	return &testConnection{
-		conn:       conn,
+		conn:       conn.Conn,
 		connRunner: connRunner,
 		sendConn:   sendConn,
 		packer:     packer,
@@ -844,7 +847,7 @@ func TestConnectionHandshakeIdleTimeout(t *testing.T) {
 		&Config{HandshakeIdleTimeout: scaleDuration(25 * time.Millisecond)},
 		false,
 		connectionOptTracer(tr),
-		func(c *connection) { c.creationTime = time.Now().Add(-10 * time.Second) },
+		func(c *Conn) { c.creationTime = time.Now().Add(-10 * time.Second) },
 	)
 	tc.packer.EXPECT().PackCoalescedPacket(false, gomock.Any(), gomock.Any(), protocol.Version1).AnyTimes()
 	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()

@@ -93,8 +93,15 @@ func (e *errCloseForRecreating) Error() string {
 var connTracingID atomic.Uint64              // to be accessed atomically
 func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTracingID.Add(1)) }
 
-// A Connection is a QUIC connection
-type connection struct {
+// A Conn is a QUIC connection between two peers.
+// Calls to the connection (and to streams) can return the following types of errors:
+//   - [ApplicationError]: for errors triggered by the application running on top of QUIC
+//   - [TransportError]: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
+//   - [IdleTimeoutError]: when the peer goes away unexpectedly (this is a [net.Error] timeout error)
+//   - [HandshakeTimeoutError]: when the cryptographic handshake takes too long (this is a [net.Error] timeout error)
+//   - [StatelessResetError]: when we receive a stateless reset
+//   - [VersionNegotiationError]: returned by the client, when there's no version overlap between the peers
+type Conn struct {
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
@@ -197,11 +204,22 @@ type connection struct {
 	logger utils.Logger
 }
 
-var (
-	_ Connection      = &connection{}
-	_ EarlyConnection = &connection{}
-	_ streamSender    = &connection{}
-)
+var _ streamSender = &Conn{}
+
+type connTestHooks struct {
+	run                     func() error
+	earlyConnReady          func() <-chan struct{}
+	context                 func() context.Context
+	handshakeComplete       func() <-chan struct{}
+	closeWithTransportError func(TransportErrorCode)
+	destroy                 func(error)
+	handlePacket            func(receivedPacket)
+}
+
+type wrappedConn struct {
+	testHooks *connTestHooks
+	*Conn
+}
 
 var newConnection = func(
 	ctx context.Context,
@@ -223,8 +241,8 @@ var newConnection = func(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
-) quicConn {
-	s := &connection{
+) *wrappedConn {
+	s := &Conn{
 		ctx:                 ctx,
 		ctxCancel:           ctxCancel,
 		conn:                conn,
@@ -322,7 +340,7 @@ var newConnection = func(
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, s.oneRTTStream)
-	return s
+	return &wrappedConn{Conn: s}
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -342,8 +360,8 @@ var newClientConnection = func(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.Version,
-) quicConn {
-	s := &connection{
+) *wrappedConn {
+	s := &Conn{
 		conn:                conn,
 		config:              conf,
 		origDestConnID:      destConnID,
@@ -441,10 +459,10 @@ var newClientConnection = func(
 			s.rttStats.SetInitialRTT(token.rtt)
 		}
 	}
-	return s
+	return &wrappedConn{Conn: s}
 }
 
-func (s *connection) preSetup() {
+func (s *Conn) preSetup() {
 	s.largestRcvdAppData = protocol.InvalidPacketNumber
 	s.initialStream = newInitialCryptoStream(s.perspective == protocol.PerspectiveClient)
 	s.handshakeStream = newCryptoStream()
@@ -490,7 +508,7 @@ func (s *connection) preSetup() {
 }
 
 // run the connection main loop
-func (s *connection) run() (err error) {
+func (s *Conn) run() (err error) {
 	defer func() { s.ctxCancel(err) }()
 
 	defer func() {
@@ -683,23 +701,24 @@ runLoop:
 }
 
 // blocks until the early connection can be used
-func (s *connection) earlyConnReady() <-chan struct{} {
+//
+//nolint:unused // False positive: This function is used by Transport.doDial.
+func (s *Conn) earlyConnReady() <-chan struct{} {
 	return s.earlyConnReadyChan
 }
 
-func (s *connection) HandshakeComplete() <-chan struct{} {
-	return s.handshakeCompleteChan
-}
-
-func (s *connection) Context() context.Context {
+// Context returns a context that is cancelled when the connection is closed.
+// The cancellation cause is set to the error that caused the connection to close.
+func (s *Conn) Context() context.Context {
 	return s.ctx
 }
 
-func (s *connection) supportsDatagrams() bool {
+func (s *Conn) supportsDatagrams() bool {
 	return s.peerParams.MaxDatagramFrameSize > 0
 }
 
-func (s *connection) ConnectionState() ConnectionState {
+// ConnectionState returns basic details about the QUIC connection.
+func (s *Conn) ConnectionState() ConnectionState {
 	s.connStateMutex.Lock()
 	defer s.connStateMutex.Unlock()
 	cs := s.cryptoStreamHandler.ConnectionState()
@@ -710,14 +729,14 @@ func (s *connection) ConnectionState() ConnectionState {
 }
 
 // Time when the connection should time out
-func (s *connection) nextIdleTimeoutTime() time.Time {
+func (s *Conn) nextIdleTimeoutTime() time.Time {
 	idleTimeout := max(s.idleTimeout, s.rttStats.PTO(true)*3)
 	return s.idleTimeoutStartTime().Add(idleTimeout)
 }
 
 // Time when the next keep-alive packet should be sent.
 // It returns a zero time if no keep-alive should be sent.
-func (s *connection) nextKeepAliveTime() time.Time {
+func (s *Conn) nextKeepAliveTime() time.Time {
 	if s.config.KeepAlivePeriod == 0 || s.keepAlivePingSent {
 		return time.Time{}
 	}
@@ -725,7 +744,7 @@ func (s *connection) nextKeepAliveTime() time.Time {
 	return s.lastPacketReceivedTime.Add(keepAliveInterval)
 }
 
-func (s *connection) maybeResetTimer() {
+func (s *Conn) maybeResetTimer() {
 	var deadline time.Time
 	if !s.handshakeComplete {
 		deadline = s.creationTime.Add(s.config.handshakeTimeout())
@@ -749,7 +768,7 @@ func (s *connection) maybeResetTimer() {
 	)
 }
 
-func (s *connection) idleTimeoutStartTime() time.Time {
+func (s *Conn) idleTimeoutStartTime() time.Time {
 	startTime := s.lastPacketReceivedTime
 	if t := s.firstAckElicitingPacketAfterIdleSentTime; t.After(startTime) {
 		startTime = t
@@ -757,7 +776,7 @@ func (s *connection) idleTimeoutStartTime() time.Time {
 	return startTime
 }
 
-func (s *connection) switchToNewPath(tr *Transport, now time.Time) {
+func (s *Conn) switchToNewPath(tr *Transport, now time.Time) {
 	initialPacketSize := protocol.ByteCount(s.config.InitialPacketSize)
 	s.sentPacketHandler.MigratedPath(now, initialPacketSize)
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
@@ -775,7 +794,7 @@ func (s *connection) switchToNewPath(tr *Transport, now time.Time) {
 	}()
 }
 
-func (s *connection) handleHandshakeComplete(now time.Time) error {
+func (s *Conn) handleHandshakeComplete(now time.Time) error {
 	defer close(s.handshakeCompleteChan)
 	// Once the handshake completes, we have derived 1-RTT keys.
 	// There's no point in queueing undecryptable packets for later decryption anymore.
@@ -821,7 +840,7 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 	return nil
 }
 
-func (s *connection) handleHandshakeConfirmed(now time.Time) error {
+func (s *Conn) handleHandshakeConfirmed(now time.Time) error {
 	if err := s.dropEncryptionLevel(protocol.EncryptionHandshake, now); err != nil {
 		return err
 	}
@@ -835,7 +854,7 @@ func (s *connection) handleHandshakeConfirmed(now time.Time) error {
 	return nil
 }
 
-func (s *connection) handlePackets() (wasProcessed bool, _ error) {
+func (s *Conn) handlePackets() (wasProcessed bool, _ error) {
 	// Now process all packets in the receivedPackets channel.
 	// Limit the number of packets to the length of the receivedPackets channel,
 	// so we eventually get a chance to send out an ACK when receiving a lot of packets.
@@ -879,7 +898,7 @@ func (s *connection) handlePackets() (wasProcessed bool, _ error) {
 	return wasProcessed, nil
 }
 
-func (s *connection) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ error) {
+func (s *Conn) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ error) {
 	s.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
@@ -975,7 +994,7 @@ func (s *connection) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ er
 	return wasProcessed, nil
 }
 
-func (s *connection) handleShortHeaderPacket(p receivedPacket, isCoalesced bool) (wasProcessed bool, _ error) {
+func (s *Conn) handleShortHeaderPacket(p receivedPacket, isCoalesced bool) (wasProcessed bool, _ error) {
 	var wasQueued bool
 
 	defer func() {
@@ -1089,7 +1108,7 @@ func (s *connection) handleShortHeaderPacket(p receivedPacket, isCoalesced bool)
 	return true, nil
 }
 
-func (s *connection) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header) (wasProcessed bool, _ error) {
+func (s *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header) (wasProcessed bool, _ error) {
 	var wasQueued bool
 
 	defer func() {
@@ -1145,7 +1164,7 @@ func (s *connection) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header) 
 	return true, nil
 }
 
-func (s *connection) handleUnpackError(err error, p receivedPacket, pt logging.PacketType) (wasQueued bool, _ error) {
+func (s *Conn) handleUnpackError(err error, p receivedPacket, pt logging.PacketType) (wasQueued bool, _ error) {
 	switch err {
 	case handshake.ErrKeysDropped:
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
@@ -1186,7 +1205,7 @@ func (s *connection) handleUnpackError(err error, p receivedPacket, pt logging.P
 	}
 }
 
-func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime time.Time) bool /* was this a valid Retry */ {
+func (s *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime time.Time) bool /* was this a valid Retry */ {
 	if s.perspective == protocol.PerspectiveServer {
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket)
@@ -1247,7 +1266,7 @@ func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime ti
 	return true
 }
 
-func (s *connection) handleVersionNegotiationPacket(p receivedPacket) {
+func (s *Conn) handleVersionNegotiationPacket(p receivedPacket) {
 	if s.perspective == protocol.PerspectiveServer || // servers never receive version negotiation packets
 		s.receivedFirstPacket || s.versionNegotiated { // ignore delayed / duplicated version negotiation packets
 		if s.tracer != nil && s.tracer.DroppedPacket != nil {
@@ -1299,7 +1318,7 @@ func (s *connection) handleVersionNegotiationPacket(p receivedPacket) {
 	})
 }
 
-func (s *connection) handleUnpackedLongHeaderPacket(
+func (s *Conn) handleUnpackedLongHeaderPacket(
 	packet *unpackedPacket,
 	ecn protocol.ECN,
 	rcvTime time.Time,
@@ -1375,7 +1394,7 @@ func (s *connection) handleUnpackedLongHeaderPacket(
 	return s.receivedPacketHandler.ReceivedPacket(packet.hdr.PacketNumber, ecn, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
-func (s *connection) handleUnpackedShortHeaderPacket(
+func (s *Conn) handleUnpackedShortHeaderPacket(
 	destConnID protocol.ConnectionID,
 	pn protocol.PacketNumber,
 	data []byte,
@@ -1399,7 +1418,7 @@ func (s *connection) handleUnpackedShortHeaderPacket(
 
 // handleFrames parses the frames, one after the other, and handles them.
 // It returns the last PATH_CHALLENGE frame contained in the packet, if any.
-func (s *connection) handleFrames(
+func (s *Conn) handleFrames(
 	data []byte,
 	destConnID protocol.ConnectionID,
 	encLevel protocol.EncryptionLevel,
@@ -1469,7 +1488,7 @@ func (s *connection) handleFrames(
 	return
 }
 
-func (s *connection) handleFrame(
+func (s *Conn) handleFrame(
 	f wire.Frame,
 	encLevel protocol.EncryptionLevel,
 	destConnID protocol.ConnectionID,
@@ -1523,7 +1542,7 @@ func (s *connection) handleFrame(
 }
 
 // handlePacket is called by the server with a new packet
-func (s *connection) handlePacket(p receivedPacket) {
+func (s *Conn) handlePacket(p receivedPacket) {
 	s.receivedPacketMx.Lock()
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxConnUnprocessedPackets
@@ -1543,7 +1562,7 @@ func (s *connection) handlePacket(p receivedPacket) {
 	}
 }
 
-func (s *connection) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) error {
+func (s *Conn) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) error {
 	if frame.IsApplicationError {
 		return &qerr.ApplicationError{
 			Remote:       true,
@@ -1559,7 +1578,7 @@ func (s *connection) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame
 	}
 }
 
-func (s *connection) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+func (s *Conn) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
 	if err := s.cryptoStreamManager.HandleCryptoFrame(frame, encLevel); err != nil {
 		return err
 	}
@@ -1575,7 +1594,7 @@ func (s *connection) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protoco
 	return s.handleHandshakeEvents(rcvTime)
 }
 
-func (s *connection) handleHandshakeEvents(now time.Time) error {
+func (s *Conn) handleHandshakeEvents(now time.Time) error {
 	for {
 		ev := s.cryptoStreamHandler.NextEvent()
 		var err error
@@ -1608,13 +1627,13 @@ func (s *connection) handleHandshakeEvents(now time.Time) error {
 	}
 }
 
-func (s *connection) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
+func (s *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
 	if s.perspective == protocol.PerspectiveClient {
 		s.queueControlFrame(&wire.PathResponseFrame{Data: f.Data})
 	}
 }
 
-func (s *connection) handlePathResponseFrame(f *wire.PathResponseFrame) error {
+func (s *Conn) handlePathResponseFrame(f *wire.PathResponseFrame) error {
 	switch s.perspective {
 	case protocol.PerspectiveClient:
 		return s.handlePathResponseFrameClient(f)
@@ -1625,7 +1644,7 @@ func (s *connection) handlePathResponseFrame(f *wire.PathResponseFrame) error {
 	}
 }
 
-func (s *connection) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
+func (s *Conn) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
 	pm := s.pathManagerOutgoing.Load()
 	if pm == nil {
 		return &qerr.TransportError{
@@ -1637,7 +1656,7 @@ func (s *connection) handlePathResponseFrameClient(f *wire.PathResponseFrame) er
 	return nil
 }
 
-func (s *connection) handlePathResponseFrameServer(f *wire.PathResponseFrame) error {
+func (s *Conn) handlePathResponseFrameServer(f *wire.PathResponseFrame) error {
 	if s.pathManager == nil {
 		// since we didn't send PATH_CHALLENGEs yet, we don't expect PATH_RESPONSEs
 		return &qerr.TransportError{
@@ -1649,7 +1668,7 @@ func (s *connection) handlePathResponseFrameServer(f *wire.PathResponseFrame) er
 	return nil
 }
 
-func (s *connection) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
+func (s *Conn) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 	if s.perspective == protocol.PerspectiveServer {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
@@ -1662,7 +1681,7 @@ func (s *connection) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 	return nil
 }
 
-func (s *connection) handleHandshakeDoneFrame(rcvTime time.Time) error {
+func (s *Conn) handleHandshakeDoneFrame(rcvTime time.Time) error {
 	if s.perspective == protocol.PerspectiveServer {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
@@ -1675,7 +1694,7 @@ func (s *connection) handleHandshakeDoneFrame(rcvTime time.Time) error {
 	return nil
 }
 
-func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+func (s *Conn) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
 	acked1RTTPacket, err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime)
 	if err != nil {
 		return err
@@ -1701,7 +1720,7 @@ func (s *connection) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encr
 	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 }
 
-func (s *connection) handleDatagramFrame(f *wire.DatagramFrame) error {
+func (s *Conn) handleDatagramFrame(f *wire.DatagramFrame) error {
 	if f.Length(s.version) > wire.MaxDatagramSize {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
@@ -1712,7 +1731,7 @@ func (s *connection) handleDatagramFrame(f *wire.DatagramFrame) error {
 	return nil
 }
 
-func (s *connection) setCloseError(e *closeError) {
+func (s *Conn) setCloseError(e *closeError) {
 	s.closeErr.CompareAndSwap(nil, e)
 	select {
 	case s.closeChan <- struct{}{}:
@@ -1721,21 +1740,23 @@ func (s *connection) setCloseError(e *closeError) {
 }
 
 // closeLocal closes the connection and send a CONNECTION_CLOSE containing the error
-func (s *connection) closeLocal(e error) {
+func (s *Conn) closeLocal(e error) {
 	s.setCloseError(&closeError{err: e, immediate: false})
 }
 
 // destroy closes the connection without sending the error on the wire
-func (s *connection) destroy(e error) {
+func (s *Conn) destroy(e error) {
 	s.destroyImpl(e)
 	<-s.ctx.Done()
 }
 
-func (s *connection) destroyImpl(e error) {
+func (s *Conn) destroyImpl(e error) {
 	s.setCloseError(&closeError{err: e, immediate: true})
 }
 
-func (s *connection) CloseWithError(code ApplicationErrorCode, desc string) error {
+// CloseWithError closes the connection with an error.
+// The error string will be sent to the peer.
+func (s *Conn) CloseWithError(code ApplicationErrorCode, desc string) error {
 	s.closeLocal(&qerr.ApplicationError{
 		ErrorCode:    code,
 		ErrorMessage: desc,
@@ -1744,12 +1765,12 @@ func (s *connection) CloseWithError(code ApplicationErrorCode, desc string) erro
 	return nil
 }
 
-func (s *connection) closeWithTransportError(code TransportErrorCode) {
+func (s *Conn) closeWithTransportError(code TransportErrorCode) {
 	s.closeLocal(&qerr.TransportError{ErrorCode: code})
 	<-s.ctx.Done()
 }
 
-func (s *connection) handleCloseError(closeErr *closeError) {
+func (s *Conn) handleCloseError(closeErr *closeError) {
 	if closeErr.immediate {
 		if nerr, ok := closeErr.err.(net.Error); ok && nerr.Timeout() {
 			s.logger.Errorf("Destroying connection: %s", closeErr.err)
@@ -1835,7 +1856,7 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 	s.connIDGenerator.ReplaceWithClosed(connClosePacket, 3*s.rttStats.PTO(false))
 }
 
-func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now time.Time) error {
+func (s *Conn) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now time.Time) error {
 	if s.tracer != nil && s.tracer.DroppedEncryptionLevel != nil {
 		s.tracer.DroppedEncryptionLevel(encLevel)
 	}
@@ -1855,7 +1876,7 @@ func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now 
 }
 
 // is called for the client, when restoring transport parameters saved for 0-RTT
-func (s *connection) restoreTransportParameters(params *wire.TransportParameters) {
+func (s *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	if s.logger.Debug() {
 		s.logger.Debugf("Restoring Transport Parameters: %s", params)
 	}
@@ -1869,7 +1890,7 @@ func (s *connection) restoreTransportParameters(params *wire.TransportParameters
 	s.connStateMutex.Unlock()
 }
 
-func (s *connection) handleTransportParameters(params *wire.TransportParameters) error {
+func (s *Conn) handleTransportParameters(params *wire.TransportParameters) error {
 	if s.tracer != nil && s.tracer.ReceivedTransportParameters != nil {
 		s.tracer.ReceivedTransportParameters(params)
 	}
@@ -1903,7 +1924,7 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 	return nil
 }
 
-func (s *connection) checkTransportParameters(params *wire.TransportParameters) error {
+func (s *Conn) checkTransportParameters(params *wire.TransportParameters) error {
 	if s.logger.Debug() {
 		s.logger.Debugf("Processed Transport Parameters: %s", params)
 	}
@@ -1933,7 +1954,7 @@ func (s *connection) checkTransportParameters(params *wire.TransportParameters) 
 	return nil
 }
 
-func (s *connection) applyTransportParameters() {
+func (s *Conn) applyTransportParameters() {
 	params := s.peerParams
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = s.config.MaxIdleTimeout
@@ -1967,7 +1988,7 @@ func (s *connection) applyTransportParameters() {
 	)
 }
 
-func (s *connection) triggerSending(now time.Time) error {
+func (s *Conn) triggerSending(now time.Time) error {
 	s.pacingDeadline = time.Time{}
 
 	sendMode := s.sentPacketHandler.SendMode(now)
@@ -2006,7 +2027,7 @@ func (s *connection) triggerSending(now time.Time) error {
 	}
 }
 
-func (s *connection) sendPackets(now time.Time) error {
+func (s *Conn) sendPackets(now time.Time) error {
 	if s.perspective == protocol.PerspectiveClient && s.handshakeConfirmed {
 		if pm := s.pathManagerOutgoing.Load(); pm != nil {
 			connID, frame, tr, ok := pm.NextPathToProbe()
@@ -2077,7 +2098,7 @@ func (s *connection) sendPackets(now time.Time) error {
 	return s.sendPacketsWithoutGSO(now)
 }
 
-func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
+func (s *Conn) sendPacketsWithoutGSO(now time.Time) error {
 	for {
 		buf := getPacketBuffer()
 		ecn := s.sentPacketHandler.ECNMode(true)
@@ -2113,7 +2134,7 @@ func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 	}
 }
 
-func (s *connection) sendPacketsWithGSO(now time.Time) error {
+func (s *Conn) sendPacketsWithGSO(now time.Time) error {
 	buf := getLargePacketBuffer()
 	maxSize := s.maxPacketSize()
 
@@ -2177,7 +2198,7 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 	}
 }
 
-func (s *connection) resetPacingDeadline() {
+func (s *Conn) resetPacingDeadline() {
 	deadline := s.sentPacketHandler.TimeUntilSend()
 	if deadline.IsZero() {
 		deadline = deadlineSendImmediately
@@ -2185,7 +2206,7 @@ func (s *connection) resetPacingDeadline() {
 	s.pacingDeadline = deadline
 }
 
-func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
+func (s *Conn) maybeSendAckOnlyPacket(now time.Time) error {
 	if !s.handshakeConfirmed {
 		ecn := s.sentPacketHandler.ECNMode(false)
 		packet, err := s.packer.PackCoalescedPacket(true, s.maxPacketSize(), now, s.version)
@@ -2212,7 +2233,7 @@ func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 	return nil
 }
 
-func (s *connection) sendProbePacket(sendMode ackhandler.SendMode, now time.Time) error {
+func (s *Conn) sendProbePacket(sendMode ackhandler.SendMode, now time.Time) error {
 	var encLevel protocol.EncryptionLevel
 	//nolint:exhaustive // We only need to handle the PTO send modes here.
 	switch sendMode {
@@ -2253,7 +2274,7 @@ func (s *connection) sendProbePacket(sendMode ackhandler.SendMode, now time.Time
 
 // appendOneShortHeaderPacket appends a new packet to the given packetBuffer.
 // If there was nothing to pack, the returned size is 0.
-func (s *connection) appendOneShortHeaderPacket(buf *packetBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now time.Time) (protocol.ByteCount, error) {
+func (s *Conn) appendOneShortHeaderPacket(buf *packetBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now time.Time) (protocol.ByteCount, error) {
 	startLen := buf.Len()
 	p, err := s.packer.AppendPacket(buf, maxSize, now, s.version)
 	if err != nil {
@@ -2265,7 +2286,7 @@ func (s *connection) appendOneShortHeaderPacket(buf *packetBuffer, maxSize proto
 	return size, nil
 }
 
-func (s *connection) registerPackedShortHeaderPacket(p shortHeaderPacket, ecn protocol.ECN, now time.Time) {
+func (s *Conn) registerPackedShortHeaderPacket(p shortHeaderPacket, ecn protocol.ECN, now time.Time) {
 	if p.IsPathProbePacket {
 		s.sentPacketHandler.SentPacket(
 			now,
@@ -2304,7 +2325,7 @@ func (s *connection) registerPackedShortHeaderPacket(p shortHeaderPacket, ecn pr
 	s.connIDManager.SentPacket()
 }
 
-func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN, now time.Time) error {
+func (s *Conn) sendPackedCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN, now time.Time) error {
 	s.logCoalescedPacket(packet, ecn)
 	for _, p := range packet.longHdrPackets {
 		if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
@@ -2361,7 +2382,7 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, ecn prot
 	return nil
 }
 
-func (s *connection) sendConnectionClose(e error) ([]byte, error) {
+func (s *Conn) sendConnectionClose(e error) ([]byte, error) {
 	var packet *coalescedPacket
 	var err error
 	var transportErr *qerr.TransportError
@@ -2384,7 +2405,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, 0, ecn)
 }
 
-func (s *connection) maxPacketSize() protocol.ByteCount {
+func (s *Conn) maxPacketSize() protocol.ByteCount {
 	if s.mtuDiscoverer == nil {
 		// Use the configured packet size on the client side.
 		// If the server sends a max_udp_payload_size that's smaller than this size, we can ignore this:
@@ -2402,33 +2423,55 @@ func (s *connection) maxPacketSize() protocol.ByteCount {
 	return s.mtuDiscoverer.CurrentSize()
 }
 
-// AcceptStream returns the next stream openend by the peer
-func (s *connection) AcceptStream(ctx context.Context) (*Stream, error) {
+// AcceptStream returns the next stream opened by the peer, blocking until one is available.
+func (s *Conn) AcceptStream(ctx context.Context) (*Stream, error) {
 	return s.streamsMap.AcceptStream(ctx)
 }
 
-func (s *connection) AcceptUniStream(ctx context.Context) (*ReceiveStream, error) {
+// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
+func (s *Conn) AcceptUniStream(ctx context.Context) (*ReceiveStream, error) {
 	return s.streamsMap.AcceptUniStream(ctx)
 }
 
-// OpenStream opens a stream
-func (s *connection) OpenStream() (*Stream, error) {
+// OpenStream opens a new bidirectional QUIC stream.
+// There is no signaling to the peer about new streams:
+// The peer can only accept the stream after data has been sent on the stream,
+// or the stream has been reset or closed.
+// When reaching the peer's stream limit, it is not possible to open a new stream until the
+// peer raises the stream limit. In that case, a [StreamLimitReachedError] is returned.
+func (s *Conn) OpenStream() (*Stream, error) {
 	return s.streamsMap.OpenStream()
 }
 
-func (s *connection) OpenStreamSync(ctx context.Context) (*Stream, error) {
+// OpenStreamSync opens a new bidirectional QUIC stream.
+// It blocks until a new stream can be opened.
+// There is no signaling to the peer about new streams:
+// The peer can only accept the stream after data has been sent on the stream,
+// or the stream has been reset or closed.
+func (s *Conn) OpenStreamSync(ctx context.Context) (*Stream, error) {
 	return s.streamsMap.OpenStreamSync(ctx)
 }
 
-func (s *connection) OpenUniStream() (*SendStream, error) {
+// OpenUniStream opens a new outgoing unidirectional QUIC stream.
+// There is no signaling to the peer about new streams:
+// The peer can only accept the stream after data has been sent on the stream,
+// or the stream has been reset or closed.
+// When reaching the peer's stream limit, it is not possible to open a new stream until the
+// peer raises the stream limit. In that case, a [StreamLimitReachedError] is returned.
+func (s *Conn) OpenUniStream() (*SendStream, error) {
 	return s.streamsMap.OpenUniStream()
 }
 
-func (s *connection) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
+// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
+// It blocks until a new stream can be opened.
+// There is no signaling to the peer about new streams:
+// The peer can only accept the stream after data has been sent on the stream,
+// or the stream has been reset or closed.
+func (s *Conn) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
 	return s.streamsMap.OpenUniStreamSync(ctx)
 }
 
-func (s *connection) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
+func (s *Conn) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
 	initialSendWindow := s.peerParams.InitialMaxStreamDataUni
 	if id.Type() == protocol.StreamTypeBidi {
 		if id.InitiatedBy() == s.perspective {
@@ -2449,7 +2492,7 @@ func (s *connection) newFlowController(id protocol.StreamID) flowcontrol.StreamF
 }
 
 // scheduleSending signals that we have data for sending
-func (s *connection) scheduleSending() {
+func (s *Conn) scheduleSending() {
 	select {
 	case s.sendingScheduled <- struct{}{}:
 	default:
@@ -2458,7 +2501,7 @@ func (s *connection) scheduleSending() {
 
 // tryQueueingUndecryptablePacket queues a packet for which we're missing the decryption keys.
 // The logging.PacketType is only used for logging purposes.
-func (s *connection) tryQueueingUndecryptablePacket(p receivedPacket, pt logging.PacketType) {
+func (s *Conn) tryQueueingUndecryptablePacket(p receivedPacket, pt logging.PacketType) {
 	if s.handshakeComplete {
 		panic("shouldn't queue undecryptable packets after handshake completion")
 	}
@@ -2476,31 +2519,37 @@ func (s *connection) tryQueueingUndecryptablePacket(p receivedPacket, pt logging
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
 
-func (s *connection) queueControlFrame(f wire.Frame) {
+func (s *Conn) queueControlFrame(f wire.Frame) {
 	s.framer.QueueControlFrame(f)
 	s.scheduleSending()
 }
 
-func (s *connection) onHasConnectionData() { s.scheduleSending() }
+func (s *Conn) onHasConnectionData() { s.scheduleSending() }
 
-func (s *connection) onHasStreamData(id protocol.StreamID, str *SendStream) {
+func (s *Conn) onHasStreamData(id protocol.StreamID, str *SendStream) {
 	s.framer.AddActiveStream(id, str)
 	s.scheduleSending()
 }
 
-func (s *connection) onHasStreamControlFrame(id protocol.StreamID, str streamControlFrameGetter) {
+func (s *Conn) onHasStreamControlFrame(id protocol.StreamID, str streamControlFrameGetter) {
 	s.framer.AddStreamWithControlFrames(id, str)
 	s.scheduleSending()
 }
 
-func (s *connection) onStreamCompleted(id protocol.StreamID) {
+func (s *Conn) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
 		s.closeLocal(err)
 	}
 	s.framer.RemoveActiveStream(id)
 }
 
-func (s *connection) SendDatagram(p []byte) error {
+// SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221,
+// if the peer enabled datagram support.
+// There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.
+// The payload of the datagram needs to fit into a single QUIC packet.
+// In addition, a datagram may be dropped before being sent out if the available packet size suddenly decreases.
+// If the payload is too large to be sent at the current time, a DatagramTooLargeError is returned.
+func (s *Conn) SendDatagram(p []byte) error {
 	if !s.supportsDatagrams() {
 		return errors.New("datagram support disabled")
 	}
@@ -2520,17 +2569,21 @@ func (s *connection) SendDatagram(p []byte) error {
 	return s.datagramQueue.Add(f)
 }
 
-func (s *connection) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+// ReceiveDatagram gets a message received in a QUIC datagram, as specified in RFC 9221.
+func (s *Conn) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 	if !s.config.EnableDatagrams {
 		return nil, errors.New("datagram support disabled")
 	}
 	return s.datagramQueue.Receive(ctx)
 }
 
-func (s *connection) LocalAddr() net.Addr  { return s.conn.LocalAddr() }
-func (s *connection) RemoteAddr() net.Addr { return s.conn.RemoteAddr() }
+// LocalAddr returns the local address of the QUIC connection.
+func (s *Conn) LocalAddr() net.Addr { return s.conn.LocalAddr() }
 
-func (s *connection) getPathManager() *pathManagerOutgoing {
+// RemoteAddr returns the remote address of the QUIC connection.
+func (s *Conn) RemoteAddr() net.Addr { return s.conn.RemoteAddr() }
+
+func (s *Conn) getPathManager() *pathManagerOutgoing {
 	s.pathManagerOutgoing.CompareAndSwap(nil,
 		func() *pathManagerOutgoing { // this function is only called if a swap is performed
 			return newPathManagerOutgoing(
@@ -2543,7 +2596,7 @@ func (s *connection) getPathManager() *pathManagerOutgoing {
 	return s.pathManagerOutgoing.Load()
 }
 
-func (s *connection) AddPath(t *Transport) (*Path, error) {
+func (s *Conn) AddPath(t *Transport) (*Path, error) {
 	if s.perspective == protocol.PerspectiveServer {
 		return nil, errors.New("server cannot initiate connection migration")
 	}
@@ -2570,7 +2623,15 @@ func (s *connection) AddPath(t *Transport) (*Path, error) {
 	), nil
 }
 
-func (s *connection) NextConnection(ctx context.Context) (Connection, error) {
+// HandshakeComplete blocks until the handshake completes (or fails).
+// For the client, data sent before completion of the handshake is encrypted with 0-RTT keys.
+// For the server, data sent before completion of the handshake is encrypted with 1-RTT keys,
+// however the client's identity is only verified once the handshake completes.
+func (s *Conn) HandshakeComplete() <-chan struct{} {
+	return s.handshakeCompleteChan
+}
+
+func (s *Conn) NextConnection(ctx context.Context) (*Conn, error) {
 	// The handshake might fail after the server rejected 0-RTT.
 	// This could happen if the Finished message is malformed or never received.
 	select {

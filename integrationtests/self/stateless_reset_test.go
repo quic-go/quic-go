@@ -64,7 +64,7 @@ func testStatelessReset(t *testing.T, connIDLen int) {
 	require.NoError(t, proxy.Start())
 	defer proxy.Close()
 
-	var conn quic.Connection
+	var conn *quic.Conn
 	if connIDLen > 0 {
 		cl := &quic.Transport{
 			Conn:               newUDPConnLocalhost(t),

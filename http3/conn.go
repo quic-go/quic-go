@@ -25,7 +25,7 @@ const maxQuarterStreamID = 1<<60 - 1
 var errGoAway = errors.New("connection in graceful shutdown")
 
 // Connection is an HTTP/3 connection.
-// It has all methods from the quic.Connection expect for AcceptStream, AcceptUniStream,
+// It has all methods from the quic.Conn expect for AcceptStream, AcceptUniStream,
 // SendDatagram and ReceiveDatagram.
 type Connection interface {
 	OpenStream() (*quic.Stream, error)
@@ -45,7 +45,8 @@ type Connection interface {
 }
 
 type connection struct {
-	quic.Connection
+	*quic.Conn
+
 	ctx context.Context
 
 	perspective protocol.Perspective
@@ -69,7 +70,7 @@ type connection struct {
 
 func newConnection(
 	ctx context.Context,
-	quicConn quic.Connection,
+	quicConn *quic.Conn,
 	enableDatagrams bool,
 	perspective protocol.Perspective,
 	logger *slog.Logger,
@@ -77,7 +78,7 @@ func newConnection(
 ) *connection {
 	c := &connection{
 		ctx:              ctx,
-		Connection:       quicConn,
+		Conn:             quicConn,
 		perspective:      perspective,
 		logger:           logger,
 		idleTimeout:      idleTimeout,
@@ -206,7 +207,7 @@ func (c *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) 
 	if c.idleTimer != nil {
 		c.idleTimer.Stop()
 	}
-	return c.Connection.CloseWithError(code, msg)
+	return c.Conn.CloseWithError(code, msg)
 }
 
 func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool)) {
@@ -278,7 +279,7 @@ func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.Co
 			}
 			// Only a single control stream is allowed.
 			if isFirstControlStr := rcvdControlStr.CompareAndSwap(false, true); !isFirstControlStr {
-				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
+				c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "duplicate control stream")
 				return
 			}
 			c.handleControlStream(str)
@@ -287,20 +288,20 @@ func (c *connection) handleUnidirectionalStreams(hijack func(StreamType, quic.Co
 }
 
 func (c *connection) handleControlStream(str *quic.ReceiveStream) {
-	fp := &frameParser{closeConn: c.Connection.CloseWithError, r: str}
+	fp := &frameParser{closeConn: c.Conn.CloseWithError, r: str}
 	f, err := fp.ParseNext()
 	if err != nil {
 		var serr *quic.StreamError
 		if err == io.EOF || errors.As(err, &serr) {
-			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
+			c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
 			return
 		}
-		c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+		c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
 		return
 	}
 	sf, ok := f.(*settingsFrame)
 	if !ok {
-		c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
+		c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 		return
 	}
 	c.settings = &Settings{
@@ -336,10 +337,10 @@ func (c *connection) handleControlStream(str *quic.ReceiveStream) {
 		if err != nil {
 			var serr *quic.StreamError
 			if err == io.EOF || errors.As(err, &serr) {
-				c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
+				c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
 				return
 			}
-			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+			c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
 			return
 		}
 		// GOAWAY is the only frame allowed at this point:
@@ -347,17 +348,17 @@ func (c *connection) handleControlStream(str *quic.ReceiveStream) {
 		// * we don't support any extension that might add support for more frames
 		goaway, ok := f.(*goAwayFrame)
 		if !ok {
-			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			return
 		}
 		if goaway.StreamID%4 != 0 { // client-initiated, bidirectional streams
-			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+			c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 			return
 		}
 		c.streamMx.Lock()
 		if c.maxStreamID != protocol.InvalidStreamID && goaway.StreamID > c.maxStreamID {
 			c.streamMx.Unlock()
-			c.Connection.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+			c.Conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 			return
 		}
 		c.maxStreamID = goaway.StreamID

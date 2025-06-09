@@ -80,7 +80,7 @@ var _ http.RoundTripper = &ClientConn{}
 type SingleDestinationRoundTripper = ClientConn
 
 func newClientConn(
-	conn quic.Connection,
+	conn *quic.Conn,
 	enableDatagrams bool,
 	additionalSettings map[uint64]uint64,
 	streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error),
@@ -201,20 +201,17 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		req.Method = http.MethodHead
 	default:
 		// wait for the handshake to complete
-		earlyConn, ok := c.Connection.(quic.EarlyConnection)
-		if ok {
-			select {
-			case <-earlyConn.HandshakeComplete():
-			case <-req.Context().Done():
-				return nil, req.Context().Err()
-			}
+		select {
+		case <-c.HandshakeComplete():
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
 		}
 	}
 
 	// It is only possible to send an Extended CONNECT request once the SETTINGS were received.
 	// See section 3 of RFC 8441.
 	if isExtendedConnectRequest(req) {
-		connCtx := c.Connection.Context()
+		connCtx := c.Conn.Context()
 		// wait for the server's SETTINGS frame to arrive
 		select {
 		case <-c.ReceivedSettings():

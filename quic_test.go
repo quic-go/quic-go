@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,6 +37,25 @@ func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.Close() })
 	return conn
+}
+
+func getPacket(t *testing.T, connID protocol.ConnectionID) []byte {
+	return getPacketWithPacketType(t, connID, protocol.PacketTypeHandshake, 2)
+}
+
+func getPacketWithPacketType(t *testing.T, connID protocol.ConnectionID, typ protocol.PacketType, length protocol.ByteCount) []byte {
+	t.Helper()
+	b, err := (&wire.ExtendedHeader{
+		Header: wire.Header{
+			Type:             typ,
+			DestConnectionID: connID,
+			Length:           length,
+			Version:          protocol.Version1,
+		},
+		PacketNumberLen: protocol.PacketNumberLen2,
+	}).Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	return append(b, bytes.Repeat([]byte{42}, int(length)-2)...)
 }
 
 func areConnsRunning() bool {
