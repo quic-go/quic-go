@@ -33,7 +33,7 @@ type datagramStream interface {
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
 type Stream struct {
 	datagramStream
-	conn *connection
+	conn *Conn
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
 
@@ -43,7 +43,7 @@ type Stream struct {
 	parsedTrailer bool
 }
 
-func newStream(str datagramStream, conn *connection, parseTrailer func(io.Reader, uint64) error) *Stream {
+func newStream(str datagramStream, conn *Conn, parseTrailer func(io.Reader, uint64) error) *Stream {
 	return &Stream{
 		datagramStream: str,
 		conn:           conn,

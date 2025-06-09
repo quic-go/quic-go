@@ -48,7 +48,7 @@ func TestHTTPSettings(t *testing.T) {
 	})
 
 	t.Run("client settings", func(t *testing.T) {
-		connChan := make(chan http3.Connection, 1)
+		connChan := make(chan *http3.Conn, 1)
 		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 			conn := w.(http3.Hijacker).Connection()
 			connChan <- conn
@@ -70,7 +70,7 @@ func TestHTTPSettings(t *testing.T) {
 
 		_, err = tr.RoundTrip(req)
 		require.NoError(t, err)
-		var conn http3.Connection
+		var conn *http3.Conn
 		select {
 		case conn = <-connChan:
 		case <-time.After(time.Second):

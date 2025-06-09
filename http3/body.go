@@ -12,7 +12,7 @@ import (
 // A Hijacker allows hijacking of the stream creating part of a quic.Conn from a http.ResponseWriter.
 // It is used by WebTransport to create WebTransport streams after a session has been established.
 type Hijacker interface {
-	Connection() Connection
+	Connection() *Conn
 }
 
 var errTooMuchData = errors.New("peer sent too much data")
