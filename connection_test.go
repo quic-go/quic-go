@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
+	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/mocks"
 	mockackhandler "github.com/quic-go/quic-go/internal/mocks/ackhandler"
@@ -38,7 +39,7 @@ func connectionOptStreamManager(sm *MockStreamManager) testConnectionOpt {
 	return func(conn *connection) { conn.streamsMap = sm }
 }
 
-func connectionOptConnFlowController(cfc *mocks.MockConnectionFlowController) testConnectionOpt {
+func connectionOptConnFlowController(cfc flowcontrol.ConnectionFlowController) testConnectionOpt {
 	return func(conn *connection) { conn.connFlowController = cfc }
 }
 
@@ -350,14 +351,15 @@ func TestConnectionHandleStreamNumFrames(t *testing.T) {
 
 func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	connFC := mocks.NewMockConnectionFlowController(mockCtrl)
+	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	require.Zero(t, connFC.SendWindowSize())
 	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
 	now := time.Now()
 	connID := protocol.ConnectionID{}
 	// MAX_DATA frame
-	connFC.EXPECT().UpdateSendWindow(protocol.ByteCount(1337))
 	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)
+	require.Equal(t, protocol.ByteCount(1337), connFC.SendWindowSize())
 	// DATA_BLOCKED frame
 	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)
@@ -1048,29 +1050,32 @@ func TestConnectionHandshakeIdleTimeout(t *testing.T) {
 func TestConnectionTransportParameters(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
-	streamManager := NewMockStreamManager(mockCtrl)
-	connFC := mocks.NewMockConnectionFlowController(mockCtrl)
+	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	require.Zero(t, connFC.SendWindowSize())
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		nil,
 		false,
 		connectionOptTracer(tr),
-		connectionOptStreamManager(streamManager),
 		connectionOptConnFlowController(connFC),
 	)
+	_, err := tc.conn.OpenStream()
+	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	tracer.EXPECT().ReceivedTransportParameters(gomock.Any())
 	params := &wire.TransportParameters{
 		MaxIdleTimeout:                90 * time.Second,
 		InitialMaxStreamDataBidiLocal: 0x5000,
-		InitialMaxData:                0x5000,
+		InitialMaxData:                1337,
 		ActiveConnectionIDLimit:       3,
 		// marshaling always sets it to this value
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
 		OriginalDestinationConnectionID: tc.destConnID,
+		MaxBidiStreamNum:                1,
 	}
-	streamManager.EXPECT().UpdateLimits(params)
-	connFC.EXPECT().UpdateSendWindow(params.InitialMaxData)
 	require.NoError(t, tc.conn.handleTransportParameters(params))
+	require.Equal(t, protocol.ByteCount(1337), connFC.SendWindowSize())
+	_, err = tc.conn.OpenStream()
+	require.NoError(t, err)
 }
 
 func TestConnectionTransportParameterValidationFailureServer(t *testing.T) {
