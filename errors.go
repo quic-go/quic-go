@@ -41,8 +41,8 @@ const (
 	NoViablePathError         = qerr.NoViablePathError
 )
 
-// A StreamError is used for Stream.CancelRead and Stream.CancelWrite.
-// It is also returned from Stream.Read and Stream.Write if the peer canceled reading or writing.
+// A StreamError is used to signal stream cancellations.
+// It is returned from the Read and Write methods of the [ReceiveStream], [SendStream] and [Stream].
 type StreamError struct {
 	StreamID  StreamID
 	ErrorCode StreamErrorCode

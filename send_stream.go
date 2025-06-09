@@ -54,7 +54,11 @@ type SendStream struct {
 	flowController flowcontrol.StreamFlowController
 }
 
-var _ streamControlFrameGetter = &SendStream{}
+var (
+	_ streamControlFrameGetter = &SendStream{}
+	_ outgoingStream           = &SendStream{}
+	_ sendStreamFrameHandler   = &SendStream{}
+)
 
 func newSendStream(
 	ctx context.Context,
@@ -79,8 +83,8 @@ func (s *SendStream) StreamID() StreamID {
 }
 
 // Write writes data to the stream.
-// Write can be made to time out using SetDeadline and SetWriteDeadline.
-// If the stream was canceled, the error is a StreamError.
+// Write can be made to time out using [SendStream.SetWriteDeadline].
+// If the stream was canceled, the error is a [StreamError].
 func (s *SendStream) Write(p []byte) (int, error) {
 	// Concurrent use of Write is not permitted (and doesn't make any sense),
 	// but sometimes people do it anyway.
@@ -414,8 +418,8 @@ func (s *SendStream) Close() error {
 // Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
 // Write will unblock immediately, and future calls to Write will fail.
 // When called multiple times it is a no-op.
-// When called after Close, it aborts delivery. Note that there is no guarantee if
-// the peer will receive the FIN or the reset first.
+// When called after Close, it aborts reliable delivery of outstanding stream data.
+// Note that there is no guarantee if the peer will receive the FIN or the cancellation error first.
 func (s *SendStream) CancelWrite(errorCode StreamErrorCode) {
 	s.cancelWrite(errorCode, false)
 }

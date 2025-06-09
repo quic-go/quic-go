@@ -49,7 +49,10 @@ type ReceiveStream struct {
 	flowController flowcontrol.StreamFlowController
 }
 
-var _ streamControlFrameGetter = &ReceiveStream{}
+var (
+	_ streamControlFrameGetter  = &ReceiveStream{}
+	_ receiveStreamFrameHandler = &ReceiveStream{}
+)
 
 func newReceiveStream(
 	streamID protocol.StreamID,
@@ -73,8 +76,8 @@ func (s *ReceiveStream) StreamID() protocol.StreamID {
 }
 
 // Read reads data from the stream.
-// Read can be made to time out using SetDeadline and SetReadDeadline.
-// If the stream was canceled, the error is a StreamError.
+// Read can be made to time out using [ReceiveStream.SetReadDeadline].
+// If the stream was canceled, the error is a [StreamError].
 func (s *ReceiveStream) Read(p []byte) (int, error) {
 	// Concurrent use of Read is not permitted (and doesn't make any sense),
 	// but sometimes people do it anyway.
@@ -233,7 +236,7 @@ func (s *ReceiveStream) dequeueNextFrame() {
 }
 
 // CancelRead aborts receiving on this stream.
-// It will ask the peer to stop transmitting stream data.
+// It instructs the peer to stop transmitting stream data.
 // Read will unblock immediately, and future Read calls will fail.
 // When called multiple times or after reading the io.EOF it is a no-op.
 func (s *ReceiveStream) CancelRead(errorCode StreamErrorCode) {
