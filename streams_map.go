@@ -38,8 +38,6 @@ type streamsMap struct {
 	reset               bool
 }
 
-var _ streamManager = &streamsMap{}
-
 func newStreamsMap(
 	ctx context.Context,
 	sender streamSender,

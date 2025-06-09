@@ -30,26 +30,6 @@ type unpacker interface {
 	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
-type streamManager interface {
-	OpenStream() (*Stream, error)
-	OpenUniStream() (*SendStream, error)
-	OpenStreamSync(context.Context) (*Stream, error)
-	OpenUniStreamSync(context.Context) (*SendStream, error)
-	AcceptStream(context.Context) (*Stream, error)
-	AcceptUniStream(context.Context) (*ReceiveStream, error)
-	DeleteStream(protocol.StreamID) error
-	UpdateLimits(*wire.TransportParameters)
-	HandleStreamFrame(*wire.StreamFrame, time.Time) error
-	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame) error
-	HandleMaxStreamsFrame(*wire.MaxStreamsFrame)
-	HandleResetStreamFrame(*wire.ResetStreamFrame, time.Time) error
-	HandleStopSendingFrame(*wire.StopSendingFrame) error
-	HandleStreamDataBlockedFrame(*wire.StreamDataBlockedFrame) error
-	CloseWithError(error)
-	ResetFor0RTT()
-	UseResetMaps()
-}
-
 type cryptoStreamHandler interface {
 	StartHandshake(context.Context) error
 	ChangeConnectionID(protocol.ConnectionID)
@@ -136,7 +116,7 @@ type connection struct {
 	largestRcvdAppData  protocol.PacketNumber
 	pathManagerOutgoing atomic.Pointer[pathManagerOutgoing]
 
-	streamsMap      streamManager
+	streamsMap      *streamsMap
 	connIDManager   *connIDManager
 	connIDGenerator *connIDGenerator
 
