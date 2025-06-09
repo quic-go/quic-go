@@ -126,7 +126,7 @@ func (s *Stream) StreamID() protocol.StreamID {
 // the application to optimistically use the stream (and, for example, send datagrams)
 // before receiving the response.
 type RequestStream struct {
-	*Stream
+	str *Stream
 
 	responseBody io.ReadCloser // set by ReadResponse
 
@@ -155,7 +155,7 @@ func newRequestStream(
 	trace *httptrace.ClientTrace,
 ) *RequestStream {
 	return &RequestStream{
-		Stream:             str,
+		str:                str,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
 		decoder:            decoder,
@@ -173,6 +173,38 @@ func (s *RequestStream) Read(b []byte) (int, error) {
 	return s.responseBody.Read(b)
 }
 
+func (s *RequestStream) StreamID() protocol.StreamID {
+	return s.str.StreamID()
+}
+
+func (s *RequestStream) Write(b []byte) (int, error) {
+	return s.str.Write(b)
+}
+
+func (s *RequestStream) Close() error {
+	return s.str.Close()
+}
+
+func (s *RequestStream) CancelRead(errorCode quic.StreamErrorCode) {
+	s.str.CancelRead(errorCode)
+}
+
+func (s *RequestStream) CancelWrite(errorCode quic.StreamErrorCode) {
+	s.str.CancelWrite(errorCode)
+}
+
+func (s *RequestStream) Context() context.Context {
+	return s.str.Context()
+}
+
+func (s *RequestStream) SendDatagram(b []byte) error {
+	return s.str.SendDatagram(b)
+}
+
+func (s *RequestStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+	return s.str.ReceiveDatagram(ctx)
+}
+
 // SendRequestHeader sends the HTTP request.
 // It is invalid to call it more than once.
 // It is invalid to call it after Write has been called.
@@ -186,7 +218,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	}
 	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
-	return s.requestWriter.WriteRequestHeader(s.datagramStream, req, s.requestedGzip)
+	return s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip)
 }
 
 // ReadResponse reads the HTTP response from the stream.
@@ -194,9 +226,9 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 // It doesn't set Response.Request and Response.TLS.
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
-	qstr := s.datagramStream
+	qstr := s.str.datagramStream
 	fp := &frameParser{
-		closeConn: s.conn.CloseWithError,
+		closeConn: s.str.conn.CloseWithError,
 		r: &tracingReader{
 			Reader: qstr,
 			first:  &s.firstByte,
@@ -205,42 +237,42 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	}
 	frame, err := fp.ParseNext()
 	if err != nil {
-		s.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
-		s.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
+		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
+		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return nil, fmt.Errorf("http3: parsing frame failed: %w", err)
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
+		s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
 	}
 	if hf.Length > s.maxHeaderBytes {
-		s.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
-		s.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
+		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
+		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(qstr, headerBlock); err != nil {
-		s.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		s.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", err)
 	}
 	hfs, err := s.decoder.DecodeFull(headerBlock)
 	if err != nil {
 		// TODO: use the right error code
-		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
+		s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
 	res := s.response
 	if err := updateResponseFromHeaders(res, hfs); err != nil {
-		s.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-		s.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+		s.str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
+		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 		return nil, fmt.Errorf("http3: invalid response: %w", err)
 	}
 
 	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.
-	respBody := newResponseBody(s.Stream, res.ContentLength, s.reqDone)
+	respBody := newResponseBody(s.str, res.ContentLength, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
