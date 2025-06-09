@@ -831,13 +831,18 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connCl
 		for _, id := range ids {
 			delete(h.handlers, id)
 		}
-		if len(h.handlers) == 0 {
-			t := (*Transport)(h)
-			t.mutex.Lock()
-			t.maybeStopListening()
-			t.mutex.Unlock()
-		}
 		h.connMx.Unlock()
+		// If there are no handlers left, stop listening.
+		// We need to reacquire the locks here. Transport.mutex MUST be acquired before
+		// connMx.
+		t := (*Transport)(h)
+		t.mutex.Lock()
+		t.connMx.Lock()
+		if len(t.handlers) == 0 {
+			t.maybeStopListening()
+		}
+		t.connMx.Unlock()
+		t.mutex.Unlock()
 		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
 	})
 }
