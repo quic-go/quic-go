@@ -500,11 +500,15 @@ func (t *Transport) close(e error) {
 	}
 
 	e = &errTransportClosed{err: e}
-	if t.server != nil {
-		t.server.close(e, false)
-	}
 	t.closeErr = e
+	server := t.server
+	if server != nil {
+		t.mutex.Unlock()
+		server.close(e, false)
+		t.mutex.Lock()
+	}
 
+	// Close existing connections
 	var wg sync.WaitGroup
 	for _, handler := range t.handlers {
 		wg.Add(1)
@@ -513,7 +517,7 @@ func (t *Transport) close(e error) {
 			wg.Done()
 		}(handler)
 	}
-	t.mutex.Unlock() // closing existing connections requires releasing this mutex
+	t.mutex.Unlock() // closing connections requires releasing transport mutex
 	wg.Wait()
 
 	if t.Tracer != nil && t.Tracer.Close != nil {
