@@ -123,8 +123,6 @@ func TestLogAddPrefixes(t *testing.T) {
 }
 
 func TestLogLevelFromEnv(t *testing.T) {
-	defer os.Unsetenv(logEnv)
-
 	testCases := []struct {
 		envValue string
 		expected LogLevel
@@ -136,13 +134,13 @@ func TestLogLevelFromEnv(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		os.Setenv(logEnv, tc.envValue)
+		t.Setenv(logEnv, tc.envValue)
 		require.Equal(t, tc.expected, readLoggingEnv())
 	}
 
 	// invalid values
-	os.Setenv(logEnv, "")
+	t.Setenv(logEnv, "")
 	require.Equal(t, LogLevelNothing, readLoggingEnv())
-	os.Setenv(logEnv, "asdf")
+	t.Setenv(logEnv, "asdf")
 	require.Equal(t, LogLevelNothing, readLoggingEnv())
 }

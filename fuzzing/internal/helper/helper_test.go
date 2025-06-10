@@ -8,19 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createTempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "fuzzing-helper")
-	require.NoError(t, err)
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	return dir
-}
-
 func TestWriteCorpusFile(t *testing.T) {
 	const data = "lorem ipsum"
 	const expectedShaSum = "bfb7759a67daeb65410490b4d98bb9da7d1ea2ce"
 
-	dir := createTempDir(t)
+	dir := t.TempDir()
 	require.NoError(t, WriteCorpusFile(dir, []byte(data)))
 
 	path := filepath.Join(dir, expectedShaSum)
@@ -36,7 +28,7 @@ func TestWriteCorpusFileWithPrefix(t *testing.T) {
 	const expectedShaSum = "523f5cab80fab0c7889dbf50dd310ab8c8879f9c"
 	const prefixLen = 7
 
-	dir := createTempDir(t)
+	dir := t.TempDir()
 	require.NoError(t, WriteCorpusFileWithPrefix(dir, []byte(data), prefixLen))
 
 	path := filepath.Join(dir, expectedShaSum)
@@ -49,7 +41,7 @@ func TestWriteCorpusFileWithPrefix(t *testing.T) {
 }
 
 func TestCreateDirectoryIfNotExists(t *testing.T) {
-	dir := createTempDir(t)
+	dir := t.TempDir()
 	subdir := filepath.Join(dir, "corpus")
 	require.NoDirExists(t, subdir)
 
