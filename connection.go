@@ -701,8 +701,6 @@ runLoop:
 }
 
 // blocks until the early connection can be used
-//
-//nolint:unused // False positive: This function is used by Transport.doDial.
 func (c *Conn) earlyConnReady() <-chan struct{} {
 	return c.earlyConnReadyChan
 }
@@ -1992,7 +1990,6 @@ func (c *Conn) triggerSending(now time.Time) error {
 	c.pacingDeadline = time.Time{}
 
 	sendMode := c.sentPacketHandler.SendMode(now)
-	//nolint:exhaustive // No need to handle pacing limited here.
 	switch sendMode {
 	case ackhandler.SendAny:
 		return c.sendPackets(now)
