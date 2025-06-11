@@ -15,6 +15,7 @@ linters:
     - unconvert
     - unparam
     - unused
+    - usetesting
   settings:
     depguard:
       rules:
@@ -48,6 +49,10 @@ linters:
     misspell:
       ignore-rules:
         - ect
+    # see https://github.com/ldez/usetesting/issues/10
+    usetesting:
+      context-background: false
+      context-todo: false
   exclusions:
     generated: lax
     presets:
