@@ -502,9 +502,10 @@ func (t *Transport) close(e error) {
 	e = &errTransportClosed{err: e}
 	t.closeErr = e
 	server := t.server
+	t.server = nil
 	if server != nil {
 		t.mutex.Unlock()
-		server.close(e, false)
+		server.close(e, true)
 		t.mutex.Lock()
 	}
 
