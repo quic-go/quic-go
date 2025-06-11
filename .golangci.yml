@@ -9,6 +9,7 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - nolintlint
     - prealloc
     - staticcheck
     - unconvert

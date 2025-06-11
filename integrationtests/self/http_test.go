@@ -675,7 +675,7 @@ func TestHTTPConnContext(t *testing.T) {
 		func(s *http3.Server) {
 			s.ConnContext = func(ctx context.Context, c *quic.Conn) context.Context {
 				connCtxChan <- ctx
-				ctx = context.WithValue(ctx, "foo", "bar") //nolint:staticcheck
+				ctx = context.WithValue(ctx, "foo", "bar")
 				return ctx
 			}
 		},

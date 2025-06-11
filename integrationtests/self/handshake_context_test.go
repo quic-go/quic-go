@@ -229,7 +229,7 @@ func TestContextOnClientSide(t *testing.T) {
 		return &tlsServerConf.Certificates[0], nil
 	}
 
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar")) //nolint:staticcheck
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "foo", "bar"))
 	conn, err := quic.Dial(
 		ctx,
 		newUDPConnLocalhost(t),
