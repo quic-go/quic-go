@@ -348,13 +348,13 @@ func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 }
 
 func (s *baseServer) Close() error {
-	s.close(ErrServerClosed, true)
+	s.close(ErrServerClosed, false)
 	return nil
 }
 
 // close closes the server. Transport.mutex *MUST NOT* be held while calling this method.
-// This method closes any handshaking connections which requires the tranpsort mutex.
-func (s *baseServer) close(e error, notifyOnClose bool) {
+// This method closes any handshaking connections which requires the transport mutex.
+func (s *baseServer) close(e error, transportClose bool) {
 	s.closeMx.Lock()
 	if s.closeErr != nil {
 		s.closeMx.Unlock()
@@ -365,12 +365,25 @@ func (s *baseServer) close(e error, notifyOnClose bool) {
 	<-s.running
 	s.closeMx.Unlock()
 
-	if notifyOnClose {
+	if !transportClose {
 		s.onClose()
 	}
+
 	// wait until all handshakes in flight have terminated
 	s.handshakingCount.Wait()
 	close(s.stopAccepting)
+
+	if transportClose {
+		// if the transport is closing, drain the connQueue. All connections in the queue
+		// will be closed by the transport.
+		for {
+			select {
+			case <-s.connQueue:
+			default:
+				return
+			}
+		}
+	}
 }
 
 // Addr returns the server's network address
