@@ -77,7 +77,7 @@ func TestWriteConnectionCloseNoReasonPhrase(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{ConnectionCloseFrameType}
+	expected := []byte{byte(ConnectionCloseFrameType)}
 	expected = append(expected, encodeVarInt(0xbeef)...)
 	expected = append(expected, encodeVarInt(0x12345)...) // frame type
 	expected = append(expected, encodeVarInt(0)...)       // reason phrase length
@@ -91,7 +91,7 @@ func TestWriteConnectionCloseWithReasonPhrase(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{ConnectionCloseFrameType}
+	expected := []byte{byte(ConnectionCloseFrameType)}
 	expected = append(expected, encodeVarInt(0xdead)...)
 	expected = append(expected, encodeVarInt(0)...) // frame type
 	expected = append(expected, encodeVarInt(6)...) // reason phrase length
@@ -107,7 +107,7 @@ func TestWriteConnectionCloseWithApplicationError(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{ApplicationCloseFrameType}
+	expected := []byte{byte(ApplicationCloseFrameType)}
 	expected = append(expected, encodeVarInt(0xdead)...)
 	expected = append(expected, encodeVarInt(6)...) // reason phrase length
 	expected = append(expected, []byte("foobar")...)

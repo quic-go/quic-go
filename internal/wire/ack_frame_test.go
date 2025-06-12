@@ -118,7 +118,7 @@ func TestParseACKUseAckDelayExponent(t *testing.T) {
 		typ, l, err := quicvarint.Parse(b)
 		require.NoError(t, err)
 		var frame AckFrame
-		n, err := parseAckFrame(&frame, b[l:], typ, protocol.AckDelayExponent+i, protocol.Version1)
+		n, err := parseAckFrame(&frame, b[l:], FrameType(typ), protocol.AckDelayExponent+i, protocol.Version1)
 		require.NoError(t, err)
 		require.Equal(t, len(b[l:]), n)
 		require.Equal(t, delayTime*(1<<i), frame.DelayTime)
@@ -202,7 +202,7 @@ func TestWriteACKSimpleFrame(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{AckFrameType}
+	expected := []byte{byte(AckFrameType)}
 	expected = append(expected, encodeVarInt(1337)...) // largest acked
 	expected = append(expected, 0)                     // delay
 	expected = append(expected, encodeVarInt(0)...)    // num ranges
@@ -220,7 +220,7 @@ func TestWriteACKECNFrame(t *testing.T) {
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	require.Len(t, b, int(f.Length(protocol.Version1)))
-	expected := []byte{AckECNFrameType}
+	expected := []byte{byte(AckECNFrameType)}
 	expected = append(expected, encodeVarInt(2000)...) // largest acked
 	expected = append(expected, 0)                     // delay
 	expected = append(expected, encodeVarInt(0)...)    // num ranges
@@ -243,7 +243,7 @@ func TestWriteACKSinglePacket(t *testing.T) {
 	require.NoError(t, err)
 	b = b[l:]
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, b, typ, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, b, FrameType(typ), protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(b), n)
 	require.Equal(t, f, &frame)
@@ -262,7 +262,7 @@ func TestWriteACKManyPackets(t *testing.T) {
 	require.NoError(t, err)
 	b = b[l:]
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, b, typ, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, b, FrameType(typ), protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(b), n)
 	require.Equal(t, f, &frame)
@@ -284,7 +284,7 @@ func TestWriteACKSingleGap(t *testing.T) {
 	require.NoError(t, err)
 	b = b[l:]
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, b, typ, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, b, FrameType(typ), protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(b), n)
 	require.Equal(t, f, &frame)
@@ -308,7 +308,7 @@ func TestWriteACKMultipleRanges(t *testing.T) {
 	require.NoError(t, err)
 	b = b[l:]
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, b, typ, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, b, FrameType(typ), protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(b), n)
 	require.Equal(t, f, &frame)
@@ -333,7 +333,7 @@ func TestWriteACKLimitMaxSize(t *testing.T) {
 	require.NoError(t, err)
 	b = b[l:]
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, b, typ, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, b, FrameType(typ), protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(b), n)
 	require.True(t, frame.HasMissingRanges())

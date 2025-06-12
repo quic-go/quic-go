@@ -125,7 +125,8 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 	if typ&0xf8 == 0x8 {
 		frame, l, err = parseStreamFrame(b, typ, v)
 	} else {
-		switch FrameType(typ) {
+		frameTyp := FrameType(typ)
+		switch frameTyp {
 		case PingFrameType:
 			frame = &PingFrame{}
 		case AckFrameType, AckECNFrameType:
@@ -134,7 +135,7 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
 			p.ackFrame.Reset()
-			l, err = parseAckFrame(p.ackFrame, b, typ, ackDelayExponent, v)
+			l, err = parseAckFrame(p.ackFrame, b, frameTyp, ackDelayExponent, v)
 			frame = p.ackFrame
 		case ResetStreamFrameType:
 			frame, l, err = parseResetStreamFrame(b, false, v)
@@ -149,13 +150,13 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 		case MaxStreamDataFrameType:
 			frame, l, err = parseMaxStreamDataFrame(b, v)
 		case BidiMaxStreamsFrameType, UniMaxStreamsFrameType:
-			frame, l, err = parseMaxStreamsFrame(b, typ, v)
+			frame, l, err = parseMaxStreamsFrame(b, frameTyp, v)
 		case DataBlockedFrameType:
 			frame, l, err = parseDataBlockedFrame(b, v)
 		case StreamDataBlockedFrameType:
 			frame, l, err = parseStreamDataBlockedFrame(b, v)
 		case BidiStreamBlockedFrameType, UniStreamBlockedFrameType:
-			frame, l, err = parseStreamsBlockedFrame(b, typ, v)
+			frame, l, err = parseStreamsBlockedFrame(b, frameTyp, v)
 		case NewConnectionIDFrameType:
 			frame, l, err = parseNewConnectionIDFrame(b, v)
 		case RetireConnectionIDFrameType:
@@ -165,7 +166,7 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 		case PathResponseFrameType:
 			frame, l, err = parsePathResponseFrame(b, v)
 		case ConnectionCloseFrameType, ApplicationCloseFrameType:
-			frame, l, err = parseConnectionCloseFrame(b, typ, v)
+			frame, l, err = parseConnectionCloseFrame(b, frameTyp, v)
 		case HandshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
 		case 0x30, 0x31:

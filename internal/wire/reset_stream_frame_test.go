@@ -77,7 +77,7 @@ func TestWriteResetStream(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{ResetStreamFrameType}
+	expected := []byte{byte(ResetStreamFrameType)}
 	expected = append(expected, encodeVarInt(0x1337)...)
 	expected = append(expected, encodeVarInt(0xcafe)...)
 	expected = append(expected, encodeVarInt(0x11223344decafbad)...)
@@ -94,7 +94,7 @@ func TestWriteResetStreamAt(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{ResetStreamAtFrameType}
+	expected := []byte{byte(ResetStreamAtFrameType)}
 	expected = append(expected, encodeVarInt(1337)...)
 	expected = append(expected, encodeVarInt(0xcafe)...)
 	expected = append(expected, encodeVarInt(42)...)

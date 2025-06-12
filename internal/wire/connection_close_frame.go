@@ -15,7 +15,7 @@ type ConnectionCloseFrame struct {
 	ReasonPhrase       string
 }
 
-func parseConnectionCloseFrame(b []byte, typ uint64, _ protocol.Version) (*ConnectionCloseFrame, int, error) {
+func parseConnectionCloseFrame(b []byte, typ FrameType, _ protocol.Version) (*ConnectionCloseFrame, int, error) {
 	startLen := len(b)
 	f := &ConnectionCloseFrame{IsApplicationError: typ == ApplicationCloseFrameType}
 	ec, l, err := quicvarint.Parse(b)
@@ -60,9 +60,9 @@ func (f *ConnectionCloseFrame) Length(protocol.Version) protocol.ByteCount {
 
 func (f *ConnectionCloseFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	if f.IsApplicationError {
-		b = append(b, ApplicationCloseFrameType)
+		b = append(b, byte(ApplicationCloseFrameType))
 	} else {
-		b = append(b, ConnectionCloseFrameType)
+		b = append(b, byte(ConnectionCloseFrameType))
 	}
 
 	b = quicvarint.Append(b, f.ErrorCode)
