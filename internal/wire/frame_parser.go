@@ -39,25 +39,26 @@ const (
 	ResetStreamAtFrameType      FrameType = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
 )
 
-var errUnknownFrameType = errors.New("unknown frame type")
+// TODO: What to do with this, maybe migrate into the connection? But I also don't like this idea
+var ErrUnknownFrameType = errors.New("unknown frame type")
 
 // The FrameParser parses QUIC frames, one by one.
 type FrameParser struct {
-	ackDelayExponent      uint8
-	supportsDatagrams     bool
-	supportsResetStreamAt bool
+	AckDelayExponent      uint8
+	SupportsDatagrams     bool
+	SupportsResetStreamAt bool
 
 	// To avoid allocating when parsing, keep a single ACK frame struct.
 	// It is used over and over again.
-	ackFrame *AckFrame
+	AckFrame *AckFrame
 }
 
 // NewFrameParser creates a new frame parser.
 func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser {
 	return &FrameParser{
-		supportsDatagrams:     supportsDatagrams,
-		supportsResetStreamAt: supportsResetStreamAt,
-		ackFrame:              &AckFrame{},
+		SupportsDatagrams:     supportsDatagrams,
+		SupportsResetStreamAt: supportsResetStreamAt,
+		AckFrame:              &AckFrame{},
 	}
 }
 
@@ -123,20 +124,20 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 	var err error
 	var l int
 	if typ&0xf8 == 0x8 {
-		frame, l, err = parseStreamFrame(b, typ, v)
+		frame, l, err = ParseStreamFrame(b, FrameType(typ), v)
 	} else {
 		frameTyp := FrameType(typ)
 		switch frameTyp {
 		case PingFrameType:
 			frame = &PingFrame{}
 		case AckFrameType, AckECNFrameType:
-			ackDelayExponent := p.ackDelayExponent
+			ackDelayExponent := p.AckDelayExponent
 			if encLevel != protocol.Encryption1RTT {
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
-			p.ackFrame.Reset()
-			l, err = ParseAckFrame(p.ackFrame, b, frameTyp, ackDelayExponent, v)
-			frame = p.ackFrame
+			p.AckFrame.Reset()
+			l, err = ParseAckFrame(p.AckFrame, b, frameTyp, ackDelayExponent, v)
+			frame = p.AckFrame
 		case ResetStreamFrameType:
 			frame, l, err = ParseResetStreamFrame(b, false, v)
 		case StopSendingFrameType:
@@ -170,29 +171,29 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 		case HandshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
 		case 0x30, 0x31:
-			if !p.supportsDatagrams {
-				return nil, 0, errUnknownFrameType
+			if !p.SupportsDatagrams {
+				return nil, 0, ErrUnknownFrameType
 			}
-			frame, l, err = ParseDatagramFrame(b, typ, v)
+			frame, l, err = ParseDatagramFrame(b, frameTyp, v)
 		case ResetStreamAtFrameType:
-			if !p.supportsResetStreamAt {
-				return nil, 0, errUnknownFrameType
+			if !p.SupportsResetStreamAt {
+				return nil, 0, ErrUnknownFrameType
 			}
 			frame, l, err = ParseResetStreamFrame(b, true, v)
 		default:
-			err = errUnknownFrameType
+			err = ErrUnknownFrameType
 		}
 	}
 	if err != nil {
 		return nil, 0, err
 	}
-	if !p.isAllowedAtEncLevel(frame, encLevel) {
+	if !p.IsAllowedAtEncLevel(frame, encLevel) {
 		return nil, l, fmt.Errorf("%s not allowed at encryption level %s", reflect.TypeOf(frame).Elem().Name(), encLevel)
 	}
 	return frame, l, nil
 }
 
-func (p *FrameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionLevel) bool {
+func (p *FrameParser) IsAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionLevel) bool {
 	switch encLevel {
 	case protocol.EncryptionInitial, protocol.EncryptionHandshake:
 		switch f.(type) {
@@ -218,7 +219,7 @@ func (p *FrameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionL
 // SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).
 // This value is used to scale the ACK Delay field in the ACK frame.
 func (p *FrameParser) SetAckDelayExponent(exp uint8) {
-	p.ackDelayExponent = exp
+	p.AckDelayExponent = exp
 }
 
 func replaceUnexpectedEOF(e error) error {

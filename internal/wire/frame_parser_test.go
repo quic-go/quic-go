@@ -212,7 +212,7 @@ func TestFrameParserFrames(t *testing.T) {
 
 func checkFrameUnsupported(t *testing.T, err error, expectedFrameType uint64) {
 	t.Helper()
-	require.ErrorContains(t, err, errUnknownFrameType.Error())
+	require.ErrorContains(t, err, ErrUnknownFrameType.Error())
 	var transportErr *qerr.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
