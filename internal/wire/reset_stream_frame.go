@@ -56,9 +56,9 @@ func parseResetStreamFrame(b []byte, isResetStreamAt bool, _ protocol.Version) (
 
 func (f *ResetStreamFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	if f.ReliableSize == 0 {
-		b = quicvarint.Append(b, resetStreamFrameType)
+		b = quicvarint.Append(b, ResetStreamFrameType)
 	} else {
-		b = quicvarint.Append(b, resetStreamAtFrameType)
+		b = quicvarint.Append(b, ResetStreamAtFrameType)
 	}
 	b = quicvarint.Append(b, uint64(f.StreamID))
 	b = quicvarint.Append(b, uint64(f.ErrorCode))

@@ -11,30 +11,32 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+type FrameType uint8
+
 const (
-	pingFrameType               = 0x1
-	ackFrameType                = 0x2
-	ackECNFrameType             = 0x3
-	resetStreamFrameType        = 0x4
-	stopSendingFrameType        = 0x5
-	cryptoFrameType             = 0x6
-	newTokenFrameType           = 0x7
-	maxDataFrameType            = 0x10
-	maxStreamDataFrameType      = 0x11
-	bidiMaxStreamsFrameType     = 0x12
-	uniMaxStreamsFrameType      = 0x13
-	dataBlockedFrameType        = 0x14
-	streamDataBlockedFrameType  = 0x15
-	bidiStreamBlockedFrameType  = 0x16
-	uniStreamBlockedFrameType   = 0x17
-	newConnectionIDFrameType    = 0x18
-	retireConnectionIDFrameType = 0x19
-	pathChallengeFrameType      = 0x1a
-	pathResponseFrameType       = 0x1b
-	connectionCloseFrameType    = 0x1c
-	applicationCloseFrameType   = 0x1d
-	handshakeDoneFrameType      = 0x1e
-	resetStreamAtFrameType      = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
+	PingFrameType               FrameType = 0x1
+	AckFrameType                FrameType = 0x2
+	AckECNFrameType             FrameType = 0x3
+	ResetStreamFrameType        FrameType = 0x4
+	StopSendingFrameType        FrameType = 0x5
+	CryptoFrameType             FrameType = 0x6
+	NewTokenFrameType           FrameType = 0x7
+	MaxDataFrameType            FrameType = 0x10
+	MaxStreamDataFrameType      FrameType = 0x11
+	BidiMaxStreamsFrameType     FrameType = 0x12
+	UniMaxStreamsFrameType      FrameType = 0x13
+	DataBlockedFrameType        FrameType = 0x14
+	StreamDataBlockedFrameType  FrameType = 0x15
+	BidiStreamBlockedFrameType  FrameType = 0x16
+	UniStreamBlockedFrameType   FrameType = 0x17
+	NewConnectionIDFrameType    FrameType = 0x18
+	RetireConnectionIDFrameType FrameType = 0x19
+	PathChallengeFrameType      FrameType = 0x1a
+	PathResponseFrameType       FrameType = 0x1b
+	ConnectionCloseFrameType    FrameType = 0x1c
+	ApplicationCloseFrameType   FrameType = 0x1d
+	HandshakeDoneFrameType      FrameType = 0x1e
+	ResetStreamAtFrameType      FrameType = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
 )
 
 var errUnknownFrameType = errors.New("unknown frame type")
@@ -57,6 +59,26 @@ func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser 
 		supportsResetStreamAt: supportsResetStreamAt,
 		ackFrame:              &AckFrame{},
 	}
+}
+
+func (p *FrameParser) ParseTyp(b []byte) (FrameType, int, error) {
+	var parsed int
+	for len(b) != 0 {
+		typ, l, err := quicvarint.Parse(b)
+		parsed += l
+		if err != nil {
+			return 0, parsed, &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				ErrorMessage: err.Error(),
+			}
+		}
+		b = b[l:]
+		if typ == 0x0 { // skip PADDING frames
+			continue
+		}
+		return FrameType(typ), parsed, nil
+	}
+	return 0, parsed, nil
 }
 
 // ParseNext parses the next frame.
@@ -104,9 +126,9 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 		frame, l, err = parseStreamFrame(b, typ, v)
 	} else {
 		switch typ {
-		case pingFrameType:
+		case PingFrameType:
 			frame = &PingFrame{}
-		case ackFrameType, ackECNFrameType:
+		case AckFrameType, AckECNFrameType:
 			ackDelayExponent := p.ackDelayExponent
 			if encLevel != protocol.Encryption1RTT {
 				ackDelayExponent = protocol.DefaultAckDelayExponent
@@ -114,44 +136,44 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 			p.ackFrame.Reset()
 			l, err = parseAckFrame(p.ackFrame, b, typ, ackDelayExponent, v)
 			frame = p.ackFrame
-		case resetStreamFrameType:
+		case ResetStreamFrameType:
 			frame, l, err = parseResetStreamFrame(b, false, v)
-		case stopSendingFrameType:
+		case StopSendingFrameType:
 			frame, l, err = parseStopSendingFrame(b, v)
-		case cryptoFrameType:
+		case CryptoFrameType:
 			frame, l, err = parseCryptoFrame(b, v)
-		case newTokenFrameType:
+		case NewTokenFrameType:
 			frame, l, err = parseNewTokenFrame(b, v)
-		case maxDataFrameType:
+		case MaxDataFrameType:
 			frame, l, err = parseMaxDataFrame(b, v)
-		case maxStreamDataFrameType:
+		case MaxStreamDataFrameType:
 			frame, l, err = parseMaxStreamDataFrame(b, v)
-		case bidiMaxStreamsFrameType, uniMaxStreamsFrameType:
+		case BidiMaxStreamsFrameType, UniMaxStreamsFrameType:
 			frame, l, err = parseMaxStreamsFrame(b, typ, v)
-		case dataBlockedFrameType:
+		case DataBlockedFrameType:
 			frame, l, err = parseDataBlockedFrame(b, v)
-		case streamDataBlockedFrameType:
+		case StreamDataBlockedFrameType:
 			frame, l, err = parseStreamDataBlockedFrame(b, v)
-		case bidiStreamBlockedFrameType, uniStreamBlockedFrameType:
+		case BidiStreamBlockedFrameType, UniStreamBlockedFrameType:
 			frame, l, err = parseStreamsBlockedFrame(b, typ, v)
-		case newConnectionIDFrameType:
+		case NewConnectionIDFrameType:
 			frame, l, err = parseNewConnectionIDFrame(b, v)
-		case retireConnectionIDFrameType:
+		case RetireConnectionIDFrameType:
 			frame, l, err = parseRetireConnectionIDFrame(b, v)
-		case pathChallengeFrameType:
+		case PathChallengeFrameType:
 			frame, l, err = parsePathChallengeFrame(b, v)
-		case pathResponseFrameType:
+		case PathResponseFrameType:
 			frame, l, err = parsePathResponseFrame(b, v)
-		case connectionCloseFrameType, applicationCloseFrameType:
+		case ConnectionCloseFrameType, ApplicationCloseFrameType:
 			frame, l, err = parseConnectionCloseFrame(b, typ, v)
-		case handshakeDoneFrameType:
+		case HandshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
 		case 0x30, 0x31:
 			if !p.supportsDatagrams {
 				return nil, 0, errUnknownFrameType
 			}
 			frame, l, err = parseDatagramFrame(b, typ, v)
-		case resetStreamAtFrameType:
+		case ResetStreamAtFrameType:
 			if !p.supportsResetStreamAt {
 				return nil, 0, errUnknownFrameType
 			}

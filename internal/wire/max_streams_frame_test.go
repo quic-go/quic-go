@@ -13,7 +13,7 @@ import (
 
 func TestParseMaxStreamsFrameBidirectional(t *testing.T) {
 	data := encodeVarInt(0xdecaf)
-	f, l, err := parseMaxStreamsFrame(data, bidiMaxStreamsFrameType, protocol.Version1)
+	f, l, err := parseMaxStreamsFrame(data, BidiMaxStreamsFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamTypeBidi, f.Type)
 	require.EqualValues(t, 0xdecaf, f.MaxStreamNum)
@@ -22,7 +22,7 @@ func TestParseMaxStreamsFrameBidirectional(t *testing.T) {
 
 func TestParseMaxStreamsFrameUnidirectional(t *testing.T) {
 	data := encodeVarInt(0xdecaf)
-	f, l, err := parseMaxStreamsFrame(data, uniMaxStreamsFrameType, protocol.Version1)
+	f, l, err := parseMaxStreamsFrame(data, UniMaxStreamsFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamTypeUni, f.Type)
 	require.EqualValues(t, 0xdecaf, f.MaxStreamNum)
@@ -97,7 +97,7 @@ func TestWriteMaxStreamsBidirectional(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{bidiMaxStreamsFrameType}
+	expected := []byte{BidiMaxStreamsFrameType}
 	expected = append(expected, encodeVarInt(0xdeadbeef)...)
 	require.Equal(t, expected, b)
 	require.Len(t, b, int(f.Length(protocol.Version1)))
@@ -110,7 +110,7 @@ func TestWriteMaxStreamsUnidirectional(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{uniMaxStreamsFrameType}
+	expected := []byte{UniMaxStreamsFrameType}
 	expected = append(expected, encodeVarInt(0xdecafbad)...)
 	require.Equal(t, expected, b)
 	require.Len(t, b, int(f.Length(protocol.Version1)))
