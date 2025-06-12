@@ -3,7 +3,6 @@ package wire
 import (
 	"bytes"
 	"crypto/rand"
-	"fmt"
 	"testing"
 	"time"
 
@@ -329,7 +328,7 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 		maxStreamsFrame,
 		maxStreamDataFrame,
 		cryptoFrame,
-		// &PingFrame{},
+		&PingFrame{},
 		resetStreamFrame,
 	}
 	var buf []byte
@@ -385,113 +384,6 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 					rst.FinalSize != resetStreamFrame.FinalSize {
 					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", rst, resetStreamFrame)
 				}
-			default:
-				b.Fatal(fmt.Errorf("unknown frame type"))
-			}
-		}
-	}
-}
-
-func BenchmarkParseOtherFrames2(b *testing.B) {
-	maxDataFrame := &MaxDataFrame{MaximumData: 123456}
-	maxStreamsFrame := &MaxStreamsFrame{MaxStreamNum: 10}
-	maxStreamDataFrame := &MaxStreamDataFrame{StreamID: 1337, MaximumStreamData: 1e6}
-	cryptoFrame := &CryptoFrame{Offset: 1000, Data: make([]byte, 128)}
-	resetStreamFrame := &ResetStreamFrame{StreamID: 87654, ErrorCode: 1234, FinalSize: 1e8}
-	rand.Read(cryptoFrame.Data)
-	frames := []Frame{
-		maxDataFrame,
-		maxStreamsFrame,
-		maxStreamDataFrame,
-		cryptoFrame,
-		// I've disabled the ping frame here (and also in the other benchmark), as the case later could be optimized away
-		// &PingFrame{},
-		resetStreamFrame,
-	}
-	var buf []byte
-	for i, frame := range frames {
-		var err error
-		buf, err = frame.Append(buf, protocol.Version1)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		if i == len(frames)/2 {
-			// add 3 PADDING frames
-			buf = append(buf, 0)
-			buf = append(buf, 0)
-			buf = append(buf, 0)
-		}
-	}
-
-	parser := NewFrameParser(false, false)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		data := buf
-		for j := 0; j < len(frames)+3; j++ {
-			typ, l, err := parser.GetNextTyp(data)
-			if err != nil {
-				b.Fatal(err)
-			}
-			data = data[l:]
-
-			switch typ {
-			case 0x0: // Padding frames
-				continue
-			case 0x1: // Ping frame
-				_ = &PingFrame{}
-			case 0x10:
-				frame, l, err := parseMaxDataFrame(data, protocol.Version1)
-				if err != nil {
-					b.Fatal(err)
-				}
-				data = data[l:]
-				if frame.MaximumData != maxDataFrame.MaximumData {
-					b.Fatalf("MAX_DATA frame does not match: %v vs %v", frame, maxDataFrame)
-				}
-			case 0x12, 0x13:
-				frame, l, err := parseMaxStreamsFrame(data, uint64(typ), protocol.Version1)
-				if err != nil {
-					b.Fatal(err)
-				}
-				data = data[l:]
-				if frame.MaxStreamNum != maxStreamsFrame.MaxStreamNum {
-					b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", frame, maxStreamsFrame)
-				}
-
-			case 0x11:
-				frame, l, err := parseMaxStreamDataFrame(data, protocol.Version1)
-				if err != nil {
-					b.Fatal(err)
-				}
-				data = data[l:]
-				if frame.StreamID != maxStreamDataFrame.StreamID ||
-					frame.MaximumStreamData != frame.MaximumStreamData {
-					b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", frame, maxStreamDataFrame)
-				}
-			case 0x6:
-				frame, l, err := parseCryptoFrame(data, protocol.Version1)
-				if err != nil {
-					b.Fatal(err)
-				}
-				data = data[l:]
-				if frame.Offset != cryptoFrame.Offset || !bytes.Equal(frame.Data, cryptoFrame.Data) {
-					b.Fatalf("CRYPTO frame does not match: %v vs %v", frame, cryptoFrame)
-				}
-			case 0x4:
-				frame, l, err := parseResetStreamFrame(data, false, protocol.Version1)
-				if err != nil {
-					b.Fatal(err)
-				}
-				data = data[l:]
-				if frame.StreamID != resetStreamFrame.StreamID || frame.ErrorCode != resetStreamFrame.ErrorCode ||
-					frame.FinalSize != resetStreamFrame.FinalSize {
-					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
-				}
-			default:
-				b.Fatal(fmt.Errorf("unknown frame type: %v", typ))
 			}
 		}
 	}
