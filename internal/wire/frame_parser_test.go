@@ -3,7 +3,7 @@ package wire
 import (
 	"bytes"
 	"crypto/rand"
-	"github.com/quic-go/quic-go/quicvarint"
+	"fmt"
 	"testing"
 	"time"
 
@@ -329,7 +329,7 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 		maxStreamsFrame,
 		maxStreamDataFrame,
 		cryptoFrame,
-		&PingFrame{},
+		// &PingFrame{},
 		resetStreamFrame,
 	}
 	var buf []byte
@@ -359,32 +359,34 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 				b.Fatal(err)
 			}
 			data = data[l:]
-			switch j {
-			case 0:
+			switch f.(type) {
+			case *MaxDataFrame:
 				if f.(*MaxDataFrame).MaximumData != maxDataFrame.MaximumData {
 					b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
 				}
-			case 1:
+			case *MaxStreamsFrame:
 				if f.(*MaxStreamsFrame).MaxStreamNum != maxStreamsFrame.MaxStreamNum {
 					b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
 				}
-			case 2:
+			case *MaxStreamDataFrame:
 				if f.(*MaxStreamDataFrame).StreamID != maxStreamDataFrame.StreamID ||
 					f.(*MaxStreamDataFrame).MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
 					b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
 				}
-			case 3:
+			case *CryptoFrame:
 				if f.(*CryptoFrame).Offset != cryptoFrame.Offset || !bytes.Equal(f.(*CryptoFrame).Data, cryptoFrame.Data) {
 					b.Fatalf("CRYPTO frame does not match: %v vs %v", f, cryptoFrame)
 				}
-			case 4:
+			case *PingFrame:
 				_ = f.(*PingFrame)
-			case 5:
+			case *ResetStreamFrame:
 				rst := f.(*ResetStreamFrame)
 				if rst.StreamID != resetStreamFrame.StreamID || rst.ErrorCode != resetStreamFrame.ErrorCode ||
 					rst.FinalSize != resetStreamFrame.FinalSize {
 					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", rst, resetStreamFrame)
 				}
+			default:
+				b.Fatal(fmt.Errorf("unknown frame type"))
 			}
 		}
 	}
@@ -402,7 +404,8 @@ func BenchmarkParseOtherFrames2(b *testing.B) {
 		maxStreamsFrame,
 		maxStreamDataFrame,
 		cryptoFrame,
-		&PingFrame{},
+		// I've disabled the ping frame here (and also in the other benchmark), as the case later could be optimized away
+		// &PingFrame{},
 		resetStreamFrame,
 	}
 	var buf []byte
@@ -412,6 +415,7 @@ func BenchmarkParseOtherFrames2(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		if i == len(frames)/2 {
 			// add 3 PADDING frames
 			buf = append(buf, 0)
@@ -426,7 +430,7 @@ func BenchmarkParseOtherFrames2(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		data := buf
-		for j := 0; j < len(frames); j++ {
+		for j := 0; j < len(frames)+3; j++ {
 			typ, l, err := parser.GetNextTyp(data)
 			if err != nil {
 				b.Fatal(err)
@@ -436,6 +440,8 @@ func BenchmarkParseOtherFrames2(b *testing.B) {
 			switch typ {
 			case 0x0: // Padding frames
 				continue
+			case 0x1: // Ping frame
+				_ = &PingFrame{}
 			case 0x10:
 				frame, l, err := parseMaxDataFrame(data, protocol.Version1)
 				if err != nil {
@@ -474,11 +480,8 @@ func BenchmarkParseOtherFrames2(b *testing.B) {
 				if frame.Offset != cryptoFrame.Offset || !bytes.Equal(frame.Data, cryptoFrame.Data) {
 					b.Fatalf("CRYPTO frame does not match: %v vs %v", frame, cryptoFrame)
 				}
-			case 0x24:
-				if !parser.supportsResetStreamAt {
-					b.Fatal(errUnknownFrameType)
-				}
-				frame, l, err := parseResetStreamFrame(data, true, protocol.Version1)
+			case 0x4:
+				frame, l, err := parseResetStreamFrame(data, false, protocol.Version1)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -487,6 +490,8 @@ func BenchmarkParseOtherFrames2(b *testing.B) {
 					frame.FinalSize != resetStreamFrame.FinalSize {
 					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
 				}
+			default:
+				b.Fatal(fmt.Errorf("unknown frame type: %v", typ))
 			}
 		}
 	}
