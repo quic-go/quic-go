@@ -59,19 +59,6 @@ func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser 
 	}
 }
 
-type FrameType uint8
-
-func (p *FrameParser) GetNextTyp(data []byte) (FrameType, int, error) {
-	typ, l, err := quicvarint.Parse(data)
-	if err != nil {
-		return 0, l, &qerr.TransportError{
-			ErrorCode:    qerr.FrameEncodingError,
-			ErrorMessage: err.Error(),
-		}
-	}
-	return FrameType(typ), l, nil
-}
-
 // ParseNext parses the next frame.
 // It skips PADDING frames.
 func (p *FrameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, v protocol.Version) (int, Frame, error) {
