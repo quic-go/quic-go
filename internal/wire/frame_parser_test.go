@@ -384,6 +384,8 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 					rst.FinalSize != resetStreamFrame.FinalSize {
 					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", rst, resetStreamFrame)
 				}
+			default:
+				b.Fatalf("Frame type should not occur: %v", f)
 			}
 		}
 	}
