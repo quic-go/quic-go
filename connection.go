@@ -1443,11 +1443,9 @@ func (c *Conn) handleFrames(
 			return false, false, nil, err
 		}
 		data = data[l:]
+		l = 0
 
 		frame, l, err = (func() (wire.Frame, int, error) {
-			var frame wire.Frame
-			var err error
-			var l int
 			if frameType&0xf8 == 0x8 {
 				frame, l, err = wire.ParseStreamFrame(data, frameType, c.version)
 			} else {
