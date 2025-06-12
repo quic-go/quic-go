@@ -1414,8 +1414,6 @@ func (c *Conn) handleUnpackedShortHeaderPacket(
 	return isNonProbing, pathChallenge, nil
 }
 
-var errUnknownFrameType = wire.ErrUnknownFrameType
-
 // handleFrames parses the frames, one after the other, and handles them.
 // It returns the last PATH_CHALLENGE frame contained in the packet, if any.
 func (c *Conn) handleFrames(
@@ -1500,17 +1498,17 @@ func (c *Conn) handleFrames(
 				frame = &wire.HandshakeDoneFrame{}
 			case 0x30, 0x31:
 				if !c.frameParser.SupportsDatagrams {
-					err = errUnknownFrameType
+					err = wire.ErrUnknownFrameType
 				}
 				frame, l, err = wire.ParseDatagramFrame(data, frameType, c.version)
 			case wire.ResetStreamAtFrameType:
 				if !c.frameParser.SupportsResetStreamAt {
-					err = errUnknownFrameType
+					err = wire.ErrUnknownFrameType
 				}
 				frame, l, err = wire.ParseResetStreamFrame(data, true, c.version)
 			default:
 				l = 0
-				err = errUnknownFrameType
+				err = wire.ErrUnknownFrameType
 			}
 		}
 		if err != nil {
