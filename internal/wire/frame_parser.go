@@ -125,7 +125,7 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 	if typ&0xf8 == 0x8 {
 		frame, l, err = parseStreamFrame(b, typ, v)
 	} else {
-		switch typ {
+		switch FrameType(typ) {
 		case PingFrameType:
 			frame = &PingFrame{}
 		case AckFrameType, AckECNFrameType:
