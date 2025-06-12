@@ -17,7 +17,7 @@ type NewConnectionIDFrame struct {
 	StatelessResetToken protocol.StatelessResetToken
 }
 
-func parseNewConnectionIDFrame(b []byte, _ protocol.Version) (*NewConnectionIDFrame, int, error) {
+func ParseNewConnectionIDFrame(b []byte, _ protocol.Version) (*NewConnectionIDFrame, int, error) {
 	startLen := len(b)
 	seq, l, err := quicvarint.Parse(b)
 	if err != nil {

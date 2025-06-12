@@ -20,8 +20,8 @@ type AckFrame struct {
 	ECT0, ECT1, ECNCE uint64
 }
 
-// parseAckFrame reads an ACK frame
-func parseAckFrame(frame *AckFrame, b []byte, typ FrameType, ackDelayExponent uint8, _ protocol.Version) (int, error) {
+// ParseAckFrame reads an ACK frame
+func ParseAckFrame(frame *AckFrame, b []byte, typ FrameType, ackDelayExponent uint8, _ protocol.Version) (int, error) {
 	startLen := len(b)
 	ecn := typ == AckECNFrameType
 

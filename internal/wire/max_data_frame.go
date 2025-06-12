@@ -10,8 +10,8 @@ type MaxDataFrame struct {
 	MaximumData protocol.ByteCount
 }
 
-// parseMaxDataFrame parses a MAX_DATA frame
-func parseMaxDataFrame(b []byte, _ protocol.Version) (*MaxDataFrame, int, error) {
+// ParseMaxDataFrame parses a MAX_DATA frame
+func ParseMaxDataFrame(b []byte, _ protocol.Version) (*MaxDataFrame, int, error) {
 	frame := &MaxDataFrame{}
 	byteOffset, l, err := quicvarint.Parse(b)
 	if err != nil {

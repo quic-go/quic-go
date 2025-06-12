@@ -12,8 +12,8 @@ type StopSendingFrame struct {
 	ErrorCode qerr.StreamErrorCode
 }
 
-// parseStopSendingFrame parses a STOP_SENDING frame
-func parseStopSendingFrame(b []byte, _ protocol.Version) (*StopSendingFrame, int, error) {
+// ParseStopSendingFrame parses a STOP_SENDING frame
+func ParseStopSendingFrame(b []byte, _ protocol.Version) (*StopSendingFrame, int, error) {
 	startLen := len(b)
 	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {

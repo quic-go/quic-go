@@ -15,7 +15,7 @@ func TestParseNewConnectionIDFrame(t *testing.T) {
 	data = append(data, 10)                                       // connection ID length
 	data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 	data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
-	frame, l, err := parseNewConnectionIDFrame(data, protocol.Version1)
+	frame, l, err := ParseNewConnectionIDFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0xdeadbeef), frame.SequenceNumber)
 	require.Equal(t, uint64(0xcafe), frame.RetirePriorTo)
@@ -30,7 +30,7 @@ func TestParseNewConnectionIDRetirePriorToLargerThanSequenceNumber(t *testing.T)
 	data = append(data, 3)
 	data = append(data, []byte{1, 2, 3}...)
 	data = append(data, []byte("deadbeefdecafbad")...) // stateless reset token
-	_, _, err := parseNewConnectionIDFrame(data, protocol.Version1)
+	_, _, err := ParseNewConnectionIDFrame(data, protocol.Version1)
 	require.EqualError(t, err, "Retire Prior To value (1001) larger than Sequence Number (1000)")
 }
 
@@ -38,7 +38,7 @@ func TestParseNewConnectionIDZeroLengthConnID(t *testing.T) {
 	data := encodeVarInt(42)                 // sequence number
 	data = append(data, encodeVarInt(12)...) // retire prior to
 	data = append(data, 0)                   // connection ID length
-	_, _, err := parseNewConnectionIDFrame(data, protocol.Version1)
+	_, _, err := ParseNewConnectionIDFrame(data, protocol.Version1)
 	require.EqualError(t, err, "invalid zero-length connection ID")
 }
 
@@ -48,7 +48,7 @@ func TestParseNewConnectionIDInvalidConnIDLength(t *testing.T) {
 	data = append(data, 21)                                                                                   // connection ID length
 	data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}...) // connection ID
 	data = append(data, []byte("deadbeefdecafbad")...)                                                        // stateless reset token
-	_, _, err := parseNewConnectionIDFrame(data, protocol.Version1)
+	_, _, err := ParseNewConnectionIDFrame(data, protocol.Version1)
 	require.Equal(t, protocol.ErrInvalidConnectionIDLen, err)
 }
 
@@ -58,11 +58,11 @@ func TestParseNewConnectionIDErrorsOnEOFs(t *testing.T) {
 	data = append(data, 10)                                       // connection ID length
 	data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 	data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
-	_, l, err := parseNewConnectionIDFrame(data, protocol.Version1)
+	_, l, err := ParseNewConnectionIDFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := parseNewConnectionIDFrame(data[:i], protocol.Version1)
+		_, _, err := ParseNewConnectionIDFrame(data[:i], protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }

@@ -13,7 +13,7 @@ import (
 
 func TestParseMaxStreamsFrameBidirectional(t *testing.T) {
 	data := encodeVarInt(0xdecaf)
-	f, l, err := parseMaxStreamsFrame(data, BidiMaxStreamsFrameType, protocol.Version1)
+	f, l, err := ParseMaxStreamsFrame(data, BidiMaxStreamsFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamTypeBidi, f.Type)
 	require.EqualValues(t, 0xdecaf, f.MaxStreamNum)
@@ -22,7 +22,7 @@ func TestParseMaxStreamsFrameBidirectional(t *testing.T) {
 
 func TestParseMaxStreamsFrameUnidirectional(t *testing.T) {
 	data := encodeVarInt(0xdecaf)
-	f, l, err := parseMaxStreamsFrame(data, UniMaxStreamsFrameType, protocol.Version1)
+	f, l, err := ParseMaxStreamsFrame(data, UniMaxStreamsFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamTypeUni, f.Type)
 	require.EqualValues(t, 0xdecaf, f.MaxStreamNum)
@@ -32,11 +32,11 @@ func TestParseMaxStreamsFrameUnidirectional(t *testing.T) {
 func TestParseMaxStreamsErrorsOnEOF(t *testing.T) {
 	const typ = 0x1d
 	data := encodeVarInt(0xdeadbeefcafe13)
-	_, l, err := parseMaxStreamsFrame(data, typ, protocol.Version1)
+	_, l, err := ParseMaxStreamsFrame(data, typ, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := parseMaxStreamsFrame(data[:i], typ, protocol.Version1)
+		_, _, err := ParseMaxStreamsFrame(data[:i], typ, protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
@@ -59,7 +59,7 @@ func TestParseMaxStreamsMaxValue(t *testing.T) {
 			typ, l, err := quicvarint.Parse(b)
 			require.NoError(t, err)
 			b = b[l:]
-			frame, _, err := parseMaxStreamsFrame(b, FrameType(typ), protocol.Version1)
+			frame, _, err := ParseMaxStreamsFrame(b, FrameType(typ), protocol.Version1)
 			require.NoError(t, err)
 			require.Equal(t, f, frame)
 		})
@@ -84,7 +84,7 @@ func TestParseMaxStreamsErrorsOnTooLargeStreamCount(t *testing.T) {
 			typ, l, err := quicvarint.Parse(b)
 			require.NoError(t, err)
 			b = b[l:]
-			_, _, err = parseMaxStreamsFrame(b, FrameType(typ), protocol.Version1)
+			_, _, err = ParseMaxStreamsFrame(b, FrameType(typ), protocol.Version1)
 			require.EqualError(t, err, fmt.Sprintf("%d exceeds the maximum stream count", protocol.MaxStreamCount+1))
 		})
 	}

@@ -13,7 +13,7 @@ type MaxStreamsFrame struct {
 	MaxStreamNum protocol.StreamNum
 }
 
-func parseMaxStreamsFrame(b []byte, typ FrameType, _ protocol.Version) (*MaxStreamsFrame, int, error) {
+func ParseMaxStreamsFrame(b []byte, typ FrameType, _ protocol.Version) (*MaxStreamsFrame, int, error) {
 	f := &MaxStreamsFrame{}
 	switch typ {
 	case BidiMaxStreamsFrameType:

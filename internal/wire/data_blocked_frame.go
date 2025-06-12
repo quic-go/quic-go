@@ -10,7 +10,7 @@ type DataBlockedFrame struct {
 	MaximumData protocol.ByteCount
 }
 
-func parseDataBlockedFrame(b []byte, _ protocol.Version) (*DataBlockedFrame, int, error) {
+func ParseDataBlockedFrame(b []byte, _ protocol.Version) (*DataBlockedFrame, int, error) {
 	offset, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)

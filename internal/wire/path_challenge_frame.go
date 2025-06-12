@@ -11,7 +11,7 @@ type PathChallengeFrame struct {
 	Data [8]byte
 }
 
-func parsePathChallengeFrame(b []byte, _ protocol.Version) (*PathChallengeFrame, int, error) {
+func ParsePathChallengeFrame(b []byte, _ protocol.Version) (*PathChallengeFrame, int, error) {
 	f := &PathChallengeFrame{}
 	if len(b) < 8 {
 		return nil, 0, io.EOF

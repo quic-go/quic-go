@@ -135,50 +135,50 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
 			p.ackFrame.Reset()
-			l, err = parseAckFrame(p.ackFrame, b, frameTyp, ackDelayExponent, v)
+			l, err = ParseAckFrame(p.ackFrame, b, frameTyp, ackDelayExponent, v)
 			frame = p.ackFrame
 		case ResetStreamFrameType:
-			frame, l, err = parseResetStreamFrame(b, false, v)
+			frame, l, err = ParseResetStreamFrame(b, false, v)
 		case StopSendingFrameType:
-			frame, l, err = parseStopSendingFrame(b, v)
+			frame, l, err = ParseStopSendingFrame(b, v)
 		case CryptoFrameType:
-			frame, l, err = parseCryptoFrame(b, v)
+			frame, l, err = ParseCryptoFrame(b, v)
 		case NewTokenFrameType:
-			frame, l, err = parseNewTokenFrame(b, v)
+			frame, l, err = ParseNewTokenFrame(b, v)
 		case MaxDataFrameType:
-			frame, l, err = parseMaxDataFrame(b, v)
+			frame, l, err = ParseMaxDataFrame(b, v)
 		case MaxStreamDataFrameType:
-			frame, l, err = parseMaxStreamDataFrame(b, v)
+			frame, l, err = ParseMaxStreamDataFrame(b, v)
 		case BidiMaxStreamsFrameType, UniMaxStreamsFrameType:
-			frame, l, err = parseMaxStreamsFrame(b, frameTyp, v)
+			frame, l, err = ParseMaxStreamsFrame(b, frameTyp, v)
 		case DataBlockedFrameType:
-			frame, l, err = parseDataBlockedFrame(b, v)
+			frame, l, err = ParseDataBlockedFrame(b, v)
 		case StreamDataBlockedFrameType:
-			frame, l, err = parseStreamDataBlockedFrame(b, v)
+			frame, l, err = ParseStreamDataBlockedFrame(b, v)
 		case BidiStreamBlockedFrameType, UniStreamBlockedFrameType:
-			frame, l, err = parseStreamsBlockedFrame(b, frameTyp, v)
+			frame, l, err = ParseStreamsBlockedFrame(b, frameTyp, v)
 		case NewConnectionIDFrameType:
-			frame, l, err = parseNewConnectionIDFrame(b, v)
+			frame, l, err = ParseNewConnectionIDFrame(b, v)
 		case RetireConnectionIDFrameType:
-			frame, l, err = parseRetireConnectionIDFrame(b, v)
+			frame, l, err = ParseRetireConnectionIDFrame(b, v)
 		case PathChallengeFrameType:
-			frame, l, err = parsePathChallengeFrame(b, v)
+			frame, l, err = ParsePathChallengeFrame(b, v)
 		case PathResponseFrameType:
-			frame, l, err = parsePathResponseFrame(b, v)
+			frame, l, err = ParsePathResponseFrame(b, v)
 		case ConnectionCloseFrameType, ApplicationCloseFrameType:
-			frame, l, err = parseConnectionCloseFrame(b, frameTyp, v)
+			frame, l, err = ParseConnectionCloseFrame(b, frameTyp, v)
 		case HandshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
 		case 0x30, 0x31:
 			if !p.supportsDatagrams {
 				return nil, 0, errUnknownFrameType
 			}
-			frame, l, err = parseDatagramFrame(b, typ, v)
+			frame, l, err = ParseDatagramFrame(b, typ, v)
 		case ResetStreamAtFrameType:
 			if !p.supportsResetStreamAt {
 				return nil, 0, errUnknownFrameType
 			}
-			frame, l, err = parseResetStreamFrame(b, true, v)
+			frame, l, err = ParseResetStreamFrame(b, true, v)
 		default:
 			err = errUnknownFrameType
 		}

@@ -12,7 +12,7 @@ import (
 
 func TestParseDataBlocked(t *testing.T) {
 	data := encodeVarInt(0x12345678)
-	frame, l, err := parseDataBlockedFrame(data, protocol.Version1)
+	frame, l, err := ParseDataBlockedFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.ByteCount(0x12345678), frame.MaximumData)
 	require.Equal(t, len(data), l)
@@ -20,11 +20,11 @@ func TestParseDataBlocked(t *testing.T) {
 
 func TestParseDataBlockedErrorsOnEOFs(t *testing.T) {
 	data := encodeVarInt(0x12345678)
-	_, l, err := parseDataBlockedFrame(data, protocol.Version1)
+	_, l, err := ParseDataBlockedFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := parseDataBlockedFrame(data[:i], protocol.Version1)
+		_, _, err := ParseDataBlockedFrame(data[:i], protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
