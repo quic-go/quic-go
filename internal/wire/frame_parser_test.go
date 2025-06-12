@@ -358,31 +358,30 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 				b.Fatal(err)
 			}
 			data = data[l:]
-			switch f.(type) {
+			switch frame := f.(type) {
 			case *MaxDataFrame:
-				if f.(*MaxDataFrame).MaximumData != maxDataFrame.MaximumData {
+				if frame.MaximumData != maxDataFrame.MaximumData {
 					b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
 				}
 			case *MaxStreamsFrame:
-				if f.(*MaxStreamsFrame).MaxStreamNum != maxStreamsFrame.MaxStreamNum {
+				if frame.MaxStreamNum != maxStreamsFrame.MaxStreamNum {
 					b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
 				}
 			case *MaxStreamDataFrame:
-				if f.(*MaxStreamDataFrame).StreamID != maxStreamDataFrame.StreamID ||
-					f.(*MaxStreamDataFrame).MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
+				if frame.StreamID != maxStreamDataFrame.StreamID ||
+					frame.MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
 					b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
 				}
 			case *CryptoFrame:
-				if f.(*CryptoFrame).Offset != cryptoFrame.Offset || !bytes.Equal(f.(*CryptoFrame).Data, cryptoFrame.Data) {
+				if frame.Offset != cryptoFrame.Offset || !bytes.Equal(frame.Data, cryptoFrame.Data) {
 					b.Fatalf("CRYPTO frame does not match: %v vs %v", f, cryptoFrame)
 				}
 			case *PingFrame:
-				_ = f.(*PingFrame)
+				_ = frame
 			case *ResetStreamFrame:
-				rst := f.(*ResetStreamFrame)
-				if rst.StreamID != resetStreamFrame.StreamID || rst.ErrorCode != resetStreamFrame.ErrorCode ||
-					rst.FinalSize != resetStreamFrame.FinalSize {
-					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", rst, resetStreamFrame)
+				if frame.StreamID != resetStreamFrame.StreamID || frame.ErrorCode != resetStreamFrame.ErrorCode ||
+					frame.FinalSize != resetStreamFrame.FinalSize {
+					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
 				}
 			default:
 				b.Fatalf("Frame type should not occur: %v", f)
