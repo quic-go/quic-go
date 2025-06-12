@@ -322,14 +322,24 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 	maxStreamDataFrame := &MaxStreamDataFrame{StreamID: 1337, MaximumStreamData: 1e6}
 	cryptoFrame := &CryptoFrame{Offset: 1000, Data: make([]byte, 128)}
 	resetStreamFrame := &ResetStreamFrame{StreamID: 87654, ErrorCode: 1234, FinalSize: 1e8}
+	streamFrame := &StreamFrame{StreamID: 1337, Offset: 1e7, Data: make([]byte, 200), DataLenPresent: true}
+	ackFrame := &AckFrame{AckRanges: []AckRange{{Smallest: 5000, Largest: 5200}}}
 	rand.Read(cryptoFrame.Data)
 	frames := []Frame{
 		maxDataFrame,
 		maxStreamsFrame,
 		maxStreamDataFrame,
 		cryptoFrame,
+		streamFrame,
+		streamFrame,
+		streamFrame,
+		ackFrame,
 		&PingFrame{},
 		resetStreamFrame,
+		streamFrame,
+		streamFrame,
+		ackFrame,
+		ackFrame,
 	}
 	var buf []byte
 	for i, frame := range frames {
@@ -358,7 +368,20 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 				b.Fatal(err)
 			}
 			data = data[l:]
+
 			switch frame := f.(type) {
+			case *StreamFrame:
+				if frame.StreamID != streamFrame.StreamID || frame.Offset != streamFrame.Offset {
+					b.Fatalf("STREAM frame does not match: %v vs %v", streamFrame, frame)
+				}
+			case *AckFrame:
+				if len(frame.AckRanges) != 1 {
+					b.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", streamFrame, frame)
+				}
+				if frame.AckRanges[0].Smallest != ackFrame.AckRanges[0].Smallest ||
+					frame.AckRanges[0].Largest != ackFrame.AckRanges[0].Largest {
+					b.Fatalf("ACK frame does not match: %v vs %v", streamFrame, frame)
+				}
 			case *MaxDataFrame:
 				if frame.MaximumData != maxDataFrame.MaximumData {
 					b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
