@@ -11,34 +11,6 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
-type FrameType uint8
-
-const (
-	PingFrameType               FrameType = 0x1
-	AckFrameType                FrameType = 0x2
-	AckECNFrameType             FrameType = 0x3
-	ResetStreamFrameType        FrameType = 0x4
-	StopSendingFrameType        FrameType = 0x5
-	CryptoFrameType             FrameType = 0x6
-	NewTokenFrameType           FrameType = 0x7
-	MaxDataFrameType            FrameType = 0x10
-	MaxStreamDataFrameType      FrameType = 0x11
-	BidiMaxStreamsFrameType     FrameType = 0x12
-	UniMaxStreamsFrameType      FrameType = 0x13
-	DataBlockedFrameType        FrameType = 0x14
-	StreamDataBlockedFrameType  FrameType = 0x15
-	BidiStreamBlockedFrameType  FrameType = 0x16
-	UniStreamBlockedFrameType   FrameType = 0x17
-	NewConnectionIDFrameType    FrameType = 0x18
-	RetireConnectionIDFrameType FrameType = 0x19
-	PathChallengeFrameType      FrameType = 0x1a
-	PathResponseFrameType       FrameType = 0x1b
-	ConnectionCloseFrameType    FrameType = 0x1c
-	ApplicationCloseFrameType   FrameType = 0x1d
-	HandshakeDoneFrameType      FrameType = 0x1e
-	ResetStreamAtFrameType      FrameType = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
-)
-
 // TODO: What to do with this, maybe migrate into the connection? But I also don't like this idea
 var ErrUnknownFrameType = errors.New("unknown frame type")
 
@@ -62,7 +34,7 @@ func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser 
 	}
 }
 
-func (p *FrameParser) ParseTyp(b []byte) (FrameType, int, error) {
+func (p *FrameParser) ParseType(b []byte) (FrameType, int, error) {
 	var parsed int
 	for len(b) != 0 {
 		typ, l, err := quicvarint.Parse(b)
@@ -105,7 +77,7 @@ func (p *FrameParser) parseNext(b []byte, encLevel protocol.EncryptionLevel, v p
 			continue
 		}
 
-		f, l, err := p.parseFrame(b, typ, encLevel, v)
+		f, l, err := p.ParseFrame(b, FrameType(typ), encLevel, v)
 		parsed += l
 		if err != nil {
 			return nil, parsed, &qerr.TransportError{
@@ -119,14 +91,13 @@ func (p *FrameParser) parseNext(b []byte, encLevel protocol.EncryptionLevel, v p
 	return nil, parsed, nil
 }
 
-func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, int, error) {
+func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, int, error) {
 	var frame Frame
 	var err error
 	var l int
-	if typ&0xf8 == 0x8 {
-		frame, l, err = ParseStreamFrame(b, FrameType(typ), v)
+	if byte(frameTyp)&0xf8 == 0x8 {
+		frame, l, err = ParseStreamFrame(b, frameTyp, v)
 	} else {
-		frameTyp := FrameType(typ)
 		switch frameTyp {
 		case PingFrameType:
 			frame = &PingFrame{}
@@ -187,33 +158,10 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 	if err != nil {
 		return nil, 0, err
 	}
-	if !p.IsAllowedAtEncLevel(frame, encLevel) {
+	if !frameTyp.isAllowedAtEncLevel(encLevel) {
 		return nil, l, fmt.Errorf("%s not allowed at encryption level %s", reflect.TypeOf(frame).Elem().Name(), encLevel)
 	}
 	return frame, l, nil
-}
-
-func (p *FrameParser) IsAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionLevel) bool {
-	switch encLevel {
-	case protocol.EncryptionInitial, protocol.EncryptionHandshake:
-		switch f.(type) {
-		case *CryptoFrame, *AckFrame, *ConnectionCloseFrame, *PingFrame:
-			return true
-		default:
-			return false
-		}
-	case protocol.Encryption0RTT:
-		switch f.(type) {
-		case *CryptoFrame, *AckFrame, *ConnectionCloseFrame, *NewTokenFrame, *PathResponseFrame, *RetireConnectionIDFrame:
-			return false
-		default:
-			return true
-		}
-	case protocol.Encryption1RTT:
-		return true
-	default:
-		panic("unknown encryption level")
-	}
 }
 
 // SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).
