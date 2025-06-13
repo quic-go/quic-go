@@ -13,7 +13,7 @@ func TestParseResetStream(t *testing.T) {
 	data := encodeVarInt(0xdeadbeef)                  // stream ID
 	data = append(data, encodeVarInt(0x1337)...)      // error code
 	data = append(data, encodeVarInt(0x987654321)...) // byte offset
-	frame, l, err := ParseResetStreamFrame(data, false, protocol.Version1)
+	frame, l, err := parseResetStreamFrame(data, false, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0xdeadbeef), frame.StreamID)
 	require.Equal(t, protocol.ByteCount(0x987654321), frame.FinalSize)
@@ -26,7 +26,7 @@ func TestParseResetStreamAt(t *testing.T) {
 	data = append(data, encodeVarInt(0x2468)...)      // error code
 	data = append(data, encodeVarInt(0x123456789)...) // byte offset
 	data = append(data, encodeVarInt(0x789abc)...)    // reliable size
-	frame, l, err := ParseResetStreamFrame(data, true, protocol.Version1)
+	frame, l, err := parseResetStreamFrame(data, true, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0xabcdef12), frame.StreamID)
 	require.Equal(t, protocol.ByteCount(0x123456789), frame.FinalSize)
@@ -40,7 +40,7 @@ func TestParseResetStreamAtSizeTooLarge(t *testing.T) {
 	data = append(data, encodeVarInt(0x2468)...) // error code
 	data = append(data, encodeVarInt(1000)...)   // byte offset
 	data = append(data, encodeVarInt(1001)...)   // reliable size
-	_, _, err := ParseResetStreamFrame(data, true, protocol.Version1)
+	_, _, err := parseResetStreamFrame(data, true, protocol.Version1)
 	require.EqualError(t, err, "RESET_STREAM_AT: reliable size can't be larger than final size (1001 vs 1000)")
 }
 
@@ -60,11 +60,11 @@ func testParseResetStreamErrorsOnEOFs(t *testing.T, isResetStreamAt bool) {
 	if isResetStreamAt {
 		data = append(data, encodeVarInt(0x123456)...) // reliable size
 	}
-	_, l, err := ParseResetStreamFrame(data, isResetStreamAt, protocol.Version1)
+	_, l, err := parseResetStreamFrame(data, isResetStreamAt, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := ParseResetStreamFrame(data[:i], isResetStreamAt, protocol.Version1)
+		_, _, err := parseResetStreamFrame(data[:i], isResetStreamAt, protocol.Version1)
 		require.Error(t, err)
 	}
 }

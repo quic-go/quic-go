@@ -13,7 +13,7 @@ type NewTokenFrame struct {
 	Token []byte
 }
 
-func ParseNewTokenFrame(b []byte, _ protocol.Version) (*NewTokenFrame, int, error) {
+func parseNewTokenFrame(b []byte, _ protocol.Version) (*NewTokenFrame, int, error) {
 	tokenLen, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)

@@ -12,7 +12,7 @@ import (
 func TestParseMaxStreamFrame(t *testing.T) {
 	data := encodeVarInt(0xdeadbeef)                 // Stream ID
 	data = append(data, encodeVarInt(0x12345678)...) // Offset
-	frame, l, err := ParseMaxStreamDataFrame(data, protocol.Version1)
+	frame, l, err := parseMaxStreamDataFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0xdeadbeef), frame.StreamID)
 	require.Equal(t, protocol.ByteCount(0x12345678), frame.MaximumStreamData)
@@ -22,11 +22,11 @@ func TestParseMaxStreamFrame(t *testing.T) {
 func TestParseMaxStreamDataErrorsOnEOFs(t *testing.T) {
 	data := encodeVarInt(0xdeadbeef)                 // Stream ID
 	data = append(data, encodeVarInt(0x12345678)...) // Offset
-	_, l, err := ParseMaxStreamDataFrame(data, protocol.Version1)
+	_, l, err := parseMaxStreamDataFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := ParseMaxStreamDataFrame(data[:i], protocol.Version1)
+		_, _, err := parseMaxStreamDataFrame(data[:i], protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }

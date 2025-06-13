@@ -15,7 +15,7 @@ type ConnectionCloseFrame struct {
 	ReasonPhrase       string
 }
 
-func ParseConnectionCloseFrame(b []byte, typ FrameType, _ protocol.Version) (*ConnectionCloseFrame, int, error) {
+func parseConnectionCloseFrame(b []byte, typ FrameType, _ protocol.Version) (*ConnectionCloseFrame, int, error) {
 	startLen := len(b)
 	f := &ConnectionCloseFrame{IsApplicationError: typ == ApplicationCloseFrameType}
 	ec, l, err := quicvarint.Parse(b)

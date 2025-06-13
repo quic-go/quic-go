@@ -13,7 +13,7 @@ func TestParseNewTokenFrame(t *testing.T) {
 	token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
 	data := encodeVarInt(uint64(len(token)))
 	data = append(data, token...)
-	f, l, err := ParseNewTokenFrame(data, protocol.Version1)
+	f, l, err := parseNewTokenFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, token, string(f.Token))
 	require.Equal(t, len(data), l)
@@ -21,7 +21,7 @@ func TestParseNewTokenFrame(t *testing.T) {
 
 func TestParseNewTokenFrameRejectsEmptyTokens(t *testing.T) {
 	data := encodeVarInt(0)
-	_, _, err := ParseNewTokenFrame(data, protocol.Version1)
+	_, _, err := parseNewTokenFrame(data, protocol.Version1)
 	require.EqualError(t, err, "token must not be empty")
 }
 
@@ -29,11 +29,11 @@ func TestParseNewTokenFrameErrorsOnEOFs(t *testing.T) {
 	token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit"
 	data := encodeVarInt(uint64(len(token)))
 	data = append(data, token...)
-	_, l, err := ParseNewTokenFrame(data, protocol.Version1)
+	_, l, err := parseNewTokenFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := ParseNewTokenFrame(data[:i], protocol.Version1)
+		_, _, err := parseNewTokenFrame(data[:i], protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }

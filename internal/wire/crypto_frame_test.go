@@ -13,7 +13,7 @@ func TestParseCryptoFrame(t *testing.T) {
 	data := encodeVarInt(0xdecafbad)        // offset
 	data = append(data, encodeVarInt(6)...) // length
 	data = append(data, []byte("foobar")...)
-	frame, l, err := ParseCryptoFrame(data, protocol.Version1)
+	frame, l, err := parseCryptoFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.ByteCount(0xdecafbad), frame.Offset)
 	require.Equal(t, []byte("foobar"), frame.Data)
@@ -24,11 +24,11 @@ func TestParseCryptoFrameErrorsOnEOFs(t *testing.T) {
 	data := encodeVarInt(0xdecafbad)        // offset
 	data = append(data, encodeVarInt(6)...) // data length
 	data = append(data, []byte("foobar")...)
-	_, l, err := ParseCryptoFrame(data, protocol.Version1)
+	_, l, err := parseCryptoFrame(data, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := ParseCryptoFrame(data[:i], protocol.Version1)
+		_, _, err := parseCryptoFrame(data[:i], protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }

@@ -11,7 +11,7 @@ type MaxStreamDataFrame struct {
 	MaximumStreamData protocol.ByteCount
 }
 
-func ParseMaxStreamDataFrame(b []byte, _ protocol.Version) (*MaxStreamDataFrame, int, error) {
+func parseMaxStreamDataFrame(b []byte, _ protocol.Version) (*MaxStreamDataFrame, int, error) {
 	startLen := len(b)
 	sid, l, err := quicvarint.Parse(b)
 	if err != nil {

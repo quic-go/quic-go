@@ -1443,24 +1443,14 @@ func (c *Conn) handleFrames(
 	}
 
 	for len(data) > 0 {
-		frameType, l, err = c.frameParser.ParseType(data)
+		frameType, l, err = c.frameParser.ParseType(data, encLevel)
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return false, false, nil, err
 		}
 		data = data[l:]
-
-		// Here, frameType == 0 does not equal the padding frame, ParseType only returns a 0 if it did not find a frame.
-		// This is in the hot path, I did not want to introduce another variable for this.
-		if frameType == 0 {
-			break
-		}
-
-		if !frameType.IsAllowedAtEncLevel(encLevel) {
-			return false, false, nil, &qerr.TransportError{
-				ErrorCode:    qerr.FrameEncodingError,
-				ErrorMessage: fmt.Sprintf("%d not allowed at encryption level %s", frameType, encLevel),
-			}
-		}
 
 		if ackhandler.IsFrameTypeAckEliciting(frameType) {
 			isAckEliciting = true
@@ -1469,9 +1459,9 @@ func (c *Conn) handleFrames(
 			isNonProbing = true
 		}
 
+		// Fast path: We're inlining common cases, to avoid using interfaces
 		if frameType.IsStreamFrameType() {
 			streamFrame, l, err := wire.ParseStreamFrame(data, frameType, c.version)
-			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
 				return wrapError(err)
 			}
@@ -1498,125 +1488,100 @@ func (c *Conn) handleFrames(
 				handleErr = err
 			}
 			continue
-		} else {
-			switch frameType {
-			case wire.AckFrameType, wire.AckECNFrameType:
-				ackDelayExponent := c.frameParser.AckDelayExponent
-				if encLevel != protocol.Encryption1RTT {
-					ackDelayExponent = protocol.DefaultAckDelayExponent
+		}
+		//nolint:exhaustive // StreamFrame has already been handled. We now need to handle a few more hot paths,
+		// the rest will be handled by the default clause.
+		switch frameType {
+		case wire.AckFrameType, wire.AckECNFrameType:
+			ackFrame, l, err := c.frameParser.ParseAckFrame(data, frameType, c.version, encLevel)
+			// Fast path: We inline the frame handling logic, to avoid using interfaces
+			if err != nil {
+				return wrapError(err)
+			}
+			data = data[l:]
+			if log != nil {
+				frames = append(frames, toLoggingFrame(ackFrame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+			err = c.handleAckFrame(ackFrame, encLevel, rcvTime)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
 				}
-				c.frameParser.AckFrame.Reset()
-				l, err = wire.ParseAckFrame(c.frameParser.AckFrame, data, frameType, ackDelayExponent, c.version)
-				ackFrame := c.frameParser.AckFrame
-				// Fast path: We inline the frame handling logic, to avoid using interfaces
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
+			continue
+		case wire.DatagramNoLengthFrameType, wire.DatagramWithLengthFrameType:
+			if !c.frameParser.SupportsDatagrams {
+				err = wire.ErrUnknownFrameType
 				if err != nil {
 					return wrapError(err)
 				}
+			}
+			datagramFrame, l, err := wire.ParseDatagramFrame(data, frameType, c.version)
+			// Fast path: We inline the frame handling logic, to avoid using interfaces
+			if err != nil {
+				return wrapError(err)
+			}
 
-				data = data[l:]
-				/*
-					if ackFrame == nil {
-						break
-					}
-				*/
+			data = data[l:]
+			if datagramFrame == nil {
+				break
+			}
 
-				if log != nil {
-					frames = append(frames, toLoggingFrame(ackFrame))
-				}
-				// An error occurred handling a previous frame.
-				// Don't handle the current frame.
-				if handleErr != nil {
-					continue
-				}
-				err = c.handleAckFrame(ackFrame, encLevel, rcvTime)
-				if err != nil {
-					if log == nil {
-						return false, false, nil, err
-					}
-					// If we're logging, we need to keep parsing (but not handling) all frames.
-					handleErr = err
-				}
+			if log != nil {
+				frames = append(frames, toLoggingFrame(datagramFrame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
 				continue
-			case wire.PingFrameType:
-				frame = &wire.PingFrame{}
-				l = 0
-			case wire.ResetStreamFrameType:
-				frame, l, err = wire.ParseResetStreamFrame(data, false, c.version)
-			case wire.StopSendingFrameType:
-				frame, l, err = wire.ParseStopSendingFrame(data, c.version)
-			case wire.CryptoFrameType:
-				frame, l, err = wire.ParseCryptoFrame(data, c.version)
-			case wire.NewTokenFrameType:
-				frame, l, err = wire.ParseNewTokenFrame(data, c.version)
-			case wire.MaxDataFrameType:
-				frame, l, err = wire.ParseMaxDataFrame(data, c.version)
-			case wire.MaxStreamDataFrameType:
-				frame, l, err = wire.ParseMaxStreamDataFrame(data, c.version)
-			case wire.BidiMaxStreamsFrameType, wire.UniMaxStreamsFrameType:
-				frame, l, err = wire.ParseMaxStreamsFrame(data, frameType, c.version)
-			case wire.DataBlockedFrameType:
-				frame, l, err = wire.ParseDataBlockedFrame(data, c.version)
-			case wire.StreamDataBlockedFrameType:
-				frame, l, err = wire.ParseStreamDataBlockedFrame(data, c.version)
-			case wire.BidiStreamBlockedFrameType, wire.UniStreamBlockedFrameType:
-				frame, l, err = wire.ParseStreamsBlockedFrame(data, frameType, c.version)
-			case wire.NewConnectionIDFrameType:
-				frame, l, err = wire.ParseNewConnectionIDFrame(data, c.version)
-			case wire.RetireConnectionIDFrameType:
-				frame, l, err = wire.ParseRetireConnectionIDFrame(data, c.version)
-			case wire.PathChallengeFrameType:
-				frame, l, err = wire.ParsePathChallengeFrame(data, c.version)
-			case wire.PathResponseFrameType:
-				frame, l, err = wire.ParsePathResponseFrame(data, c.version)
-			case wire.ConnectionCloseFrameType, wire.ApplicationCloseFrameType:
-				frame, l, err = wire.ParseConnectionCloseFrame(data, frameType, c.version)
-			case wire.HandshakeDoneFrameType:
-				frame = &wire.HandshakeDoneFrame{}
-				l = 0
-			case 0x30, 0x31:
-				if !c.frameParser.SupportsDatagrams {
-					err = wire.ErrUnknownFrameType
-				} else {
-					frame, l, err = wire.ParseDatagramFrame(data, frameType, c.version)
-				}
-			case wire.ResetStreamAtFrameType:
-				if !c.frameParser.SupportsResetStreamAt {
-					err = wire.ErrUnknownFrameType
-				} else {
-					frame, l, err = wire.ParseResetStreamFrame(data, true, c.version)
-				}
-			default:
-				err = wire.ErrUnknownFrameType
 			}
-		}
-
-		if err != nil {
-			return wrapError(err)
-		}
-
-		data = data[l:]
-		if frame == nil {
-			break
-		}
-
-		if log != nil {
-			frames = append(frames, toLoggingFrame(frame))
-		}
-		// An error occurred handling a previous frame.
-		// Don't handle the current frame.
-		if handleErr != nil {
+			err = c.handleDatagramFrame(datagramFrame)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
+				}
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
 			continue
-		}
-		pc, err := c.handleFrame(frameType, frame, encLevel, destConnID, rcvTime)
-		if err != nil {
-			if log == nil {
-				return false, false, nil, err
+		// Slower path: All other frame types
+		default:
+			frame, l, err = c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
+			if err != nil {
+				return wrapError(err)
 			}
-			// If we're logging, we need to keep parsing (but not handling) all frames.
-			handleErr = err
-		}
-		if pc != nil {
-			pathChallenge = pc
+
+			data = data[l:]
+			if frame == nil {
+				break
+			}
+
+			if log != nil {
+				frames = append(frames, toLoggingFrame(frame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+			pc, err := c.handleFrame(frameType, frame, encLevel, destConnID, rcvTime)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
+				}
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
+			if pc != nil {
+				pathChallenge = pc
+			}
 		}
 	}
 
@@ -1648,6 +1613,9 @@ func (c *Conn) handleFrame(
 ) (pathChallenge *wire.PathChallengeFrame, _ error) {
 	var err error
 	wire.LogFrame(c.logger, f, false)
+	//nolint:exhaustive // wire.StreamFrame, wire.DatagramFrameTypeWithLength, wire.DatagramFrameTypeNoLength,
+	// wire.AckFrameType and wire.AckECNFrameType are not handled on purpose. They're in the hot path, and should
+	// not be stored in a variable of type wire.Frame interface and thus should never be passed to here.
 	switch frameType {
 	case wire.CryptoFrameType:
 		err = c.handleCryptoFrame(f.(*wire.CryptoFrame), encLevel, rcvTime)
@@ -1681,11 +1649,7 @@ func (c *Conn) handleFrame(
 		err = c.connIDGenerator.Retire(f.(*wire.RetireConnectionIDFrame).SequenceNumber, destConnID, rcvTime.Add(3*c.rttStats.PTO(false)))
 	case wire.HandshakeDoneFrameType:
 		err = c.handleHandshakeDoneFrame(rcvTime)
-	case 0x30, 0x31:
-		err = c.handleDatagramFrame(f.(*wire.DatagramFrame))
 	default:
-		// wire.StreamFrame, wire.AckFrameType and wire.AckECNFrameType are not handeled on purpose.
-		// They're in the hot path, and should not be casted to the wire.Frame interface
 		err = fmt.Errorf("unexpected frame type: %d", frameType)
 	}
 	return pathChallenge, err

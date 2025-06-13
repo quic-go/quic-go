@@ -11,7 +11,7 @@ type StreamDataBlockedFrame struct {
 	MaximumStreamData protocol.ByteCount
 }
 
-func ParseStreamDataBlockedFrame(b []byte, _ protocol.Version) (*StreamDataBlockedFrame, int, error) {
+func parseStreamDataBlockedFrame(b []byte, _ protocol.Version) (*StreamDataBlockedFrame, int, error) {
 	startLen := len(b)
 	sid, l, err := quicvarint.Parse(b)
 	if err != nil {

@@ -11,7 +11,7 @@ type PathResponseFrame struct {
 	Data [8]byte
 }
 
-func ParsePathResponseFrame(b []byte, _ protocol.Version) (*PathResponseFrame, int, error) {
+func parsePathResponseFrame(b []byte, _ protocol.Version) (*PathResponseFrame, int, error) {
 	f := &PathResponseFrame{}
 	if len(b) < 8 {
 		return nil, 0, io.EOF

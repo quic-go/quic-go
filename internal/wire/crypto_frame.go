@@ -13,7 +13,7 @@ type CryptoFrame struct {
 	Data   []byte
 }
 
-func ParseCryptoFrame(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
+func parseCryptoFrame(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
 	startLen := len(b)
 	frame := &CryptoFrame{}
 	offset, l, err := quicvarint.Parse(b)

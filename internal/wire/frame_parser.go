@@ -22,7 +22,7 @@ type FrameParser struct {
 
 	// To avoid allocating when parsing, keep a single ACK frame struct.
 	// It is used over and over again.
-	AckFrame *AckFrame
+	ackFrame *AckFrame
 }
 
 // NewFrameParser creates a new frame parser.
@@ -30,11 +30,11 @@ func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser 
 	return &FrameParser{
 		SupportsDatagrams:     supportsDatagrams,
 		SupportsResetStreamAt: supportsResetStreamAt,
-		AckFrame:              &AckFrame{},
+		ackFrame:              &AckFrame{},
 	}
 }
 
-func (p *FrameParser) ParseType(b []byte) (FrameType, int, error) {
+func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (FrameType, int, error) {
 	var parsed int
 	for len(b) != 0 {
 		typ, l, err := quicvarint.Parse(b)
@@ -49,9 +49,81 @@ func (p *FrameParser) ParseType(b []byte) (FrameType, int, error) {
 		if typ == 0x0 { // skip PADDING frames
 			continue
 		}
+
+		frameType, ok := NewFrameType(typ)
+		if !ok {
+			return 0, parsed, &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				ErrorMessage: fmt.Sprintf("unknown frame type: %d", typ),
+			}
+		}
+
+		if !frameType.isAllowedAtEncLevel(encLevel) {
+			return 0, parsed, &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				ErrorMessage: fmt.Sprintf("%d not allowed at encryption level %s", frameType, encLevel),
+			}
+		}
+
 		return FrameType(typ), parsed, nil
 	}
-	return 0, parsed, nil
+	return 0, parsed, io.EOF
+}
+
+// ParseLessCommonFrame parses everything except StreamFrame, AckFrame or DatagramFrame.
+// These cases should be handled separately for performance reasons.
+func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v protocol.Version) (Frame, int, error) {
+	var frame Frame
+	var l int
+	var err error
+	//nolint:exhaustive // Common frames should already be handled.
+	switch frameType {
+	case PingFrameType:
+		frame = &PingFrame{}
+		l = 0
+	case ResetStreamFrameType:
+		frame, l, err = parseResetStreamFrame(data, false, v)
+	case StopSendingFrameType:
+		frame, l, err = parseStopSendingFrame(data, v)
+	case CryptoFrameType:
+		frame, l, err = parseCryptoFrame(data, v)
+	case NewTokenFrameType:
+		frame, l, err = parseNewTokenFrame(data, v)
+	case MaxDataFrameType:
+		frame, l, err = parseMaxDataFrame(data, v)
+	case MaxStreamDataFrameType:
+		frame, l, err = parseMaxStreamDataFrame(data, v)
+	case BidiMaxStreamsFrameType, UniMaxStreamsFrameType:
+		frame, l, err = parseMaxStreamsFrame(data, frameType, v)
+	case DataBlockedFrameType:
+		frame, l, err = parseDataBlockedFrame(data, v)
+	case StreamDataBlockedFrameType:
+		frame, l, err = parseStreamDataBlockedFrame(data, v)
+	case BidiStreamBlockedFrameType, UniStreamBlockedFrameType:
+		frame, l, err = parseStreamsBlockedFrame(data, frameType, v)
+	case NewConnectionIDFrameType:
+		frame, l, err = parseNewConnectionIDFrame(data, v)
+	case RetireConnectionIDFrameType:
+		frame, l, err = parseRetireConnectionIDFrame(data, v)
+	case PathChallengeFrameType:
+		frame, l, err = parsePathChallengeFrame(data, v)
+	case PathResponseFrameType:
+		frame, l, err = parsePathResponseFrame(data, v)
+	case ConnectionCloseFrameType, ApplicationCloseFrameType:
+		frame, l, err = parseConnectionCloseFrame(data, frameType, v)
+	case HandshakeDoneFrameType:
+		frame = &HandshakeDoneFrame{}
+		l = 0
+	case ResetStreamAtFrameType:
+		if !p.SupportsResetStreamAt {
+			err = ErrUnknownFrameType
+		} else {
+			frame, l, err = parseResetStreamFrame(data, true, v)
+		}
+	default:
+		err = ErrUnknownFrameType
+	}
+	return frame, l, err
 }
 
 // ParseNext parses the next frame.
@@ -91,6 +163,7 @@ func (p *FrameParser) parseNext(b []byte, encLevel protocol.EncryptionLevel, v p
 	return nil, parsed, nil
 }
 
+// TODO: Remove function, got replaced by ParseLessCommonFrame
 func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, int, error) {
 	var frame Frame
 	var err error
@@ -106,42 +179,42 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 			if encLevel != protocol.Encryption1RTT {
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
-			p.AckFrame.Reset()
-			l, err = ParseAckFrame(p.AckFrame, b, frameTyp, ackDelayExponent, v)
-			frame = p.AckFrame
+			p.ackFrame.Reset()
+			l, err = ParseAckFrame(p.ackFrame, b, frameTyp, ackDelayExponent, v)
+			frame = p.ackFrame
 		case ResetStreamFrameType:
-			frame, l, err = ParseResetStreamFrame(b, false, v)
+			frame, l, err = parseResetStreamFrame(b, false, v)
 		case StopSendingFrameType:
-			frame, l, err = ParseStopSendingFrame(b, v)
+			frame, l, err = parseStopSendingFrame(b, v)
 		case CryptoFrameType:
-			frame, l, err = ParseCryptoFrame(b, v)
+			frame, l, err = parseCryptoFrame(b, v)
 		case NewTokenFrameType:
-			frame, l, err = ParseNewTokenFrame(b, v)
+			frame, l, err = parseNewTokenFrame(b, v)
 		case MaxDataFrameType:
-			frame, l, err = ParseMaxDataFrame(b, v)
+			frame, l, err = parseMaxDataFrame(b, v)
 		case MaxStreamDataFrameType:
-			frame, l, err = ParseMaxStreamDataFrame(b, v)
+			frame, l, err = parseMaxStreamDataFrame(b, v)
 		case BidiMaxStreamsFrameType, UniMaxStreamsFrameType:
-			frame, l, err = ParseMaxStreamsFrame(b, frameTyp, v)
+			frame, l, err = parseMaxStreamsFrame(b, frameTyp, v)
 		case DataBlockedFrameType:
-			frame, l, err = ParseDataBlockedFrame(b, v)
+			frame, l, err = parseDataBlockedFrame(b, v)
 		case StreamDataBlockedFrameType:
-			frame, l, err = ParseStreamDataBlockedFrame(b, v)
+			frame, l, err = parseStreamDataBlockedFrame(b, v)
 		case BidiStreamBlockedFrameType, UniStreamBlockedFrameType:
-			frame, l, err = ParseStreamsBlockedFrame(b, frameTyp, v)
+			frame, l, err = parseStreamsBlockedFrame(b, frameTyp, v)
 		case NewConnectionIDFrameType:
-			frame, l, err = ParseNewConnectionIDFrame(b, v)
+			frame, l, err = parseNewConnectionIDFrame(b, v)
 		case RetireConnectionIDFrameType:
-			frame, l, err = ParseRetireConnectionIDFrame(b, v)
+			frame, l, err = parseRetireConnectionIDFrame(b, v)
 		case PathChallengeFrameType:
-			frame, l, err = ParsePathChallengeFrame(b, v)
+			frame, l, err = parsePathChallengeFrame(b, v)
 		case PathResponseFrameType:
-			frame, l, err = ParsePathResponseFrame(b, v)
+			frame, l, err = parsePathResponseFrame(b, v)
 		case ConnectionCloseFrameType, ApplicationCloseFrameType:
-			frame, l, err = ParseConnectionCloseFrame(b, frameTyp, v)
+			frame, l, err = parseConnectionCloseFrame(b, frameTyp, v)
 		case HandshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
-		case 0x30, 0x31:
+		case DatagramNoLengthFrameType, DatagramWithLengthFrameType:
 			if !p.SupportsDatagrams {
 				return nil, 0, ErrUnknownFrameType
 			}
@@ -150,7 +223,7 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 			if !p.SupportsResetStreamAt {
 				return nil, 0, ErrUnknownFrameType
 			}
-			frame, l, err = ParseResetStreamFrame(b, true, v)
+			frame, l, err = parseResetStreamFrame(b, true, v)
 		default:
 			err = ErrUnknownFrameType
 		}
@@ -158,10 +231,22 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 	if err != nil {
 		return nil, 0, err
 	}
-	if !frameTyp.IsAllowedAtEncLevel(encLevel) {
+	if !frameTyp.isAllowedAtEncLevel(encLevel) {
 		return nil, l, fmt.Errorf("%s not allowed at encryption level %s", reflect.TypeOf(frame).Elem().Name(), encLevel)
 	}
 	return frame, l, nil
+}
+
+func (p *FrameParser) ParseAckFrame(data []byte, frameType FrameType, v protocol.Version, encLevel protocol.EncryptionLevel) (*AckFrame, int, error) {
+	ackDelayExponent := p.AckDelayExponent
+	if encLevel != protocol.Encryption1RTT {
+		ackDelayExponent = protocol.DefaultAckDelayExponent
+	}
+	p.ackFrame.Reset()
+	l, err := ParseAckFrame(p.ackFrame, data, frameType, ackDelayExponent, v)
+	ackFrame := p.ackFrame
+
+	return ackFrame, l, err
 }
 
 // SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).

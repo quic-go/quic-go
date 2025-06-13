@@ -16,7 +16,7 @@ type ResetStreamFrame struct {
 	ReliableSize protocol.ByteCount
 }
 
-func ParseResetStreamFrame(b []byte, isResetStreamAt bool, _ protocol.Version) (*ResetStreamFrame, int, error) {
+func parseResetStreamFrame(b []byte, isResetStreamAt bool, _ protocol.Version) (*ResetStreamFrame, int, error) {
 	startLen := len(b)
 	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {

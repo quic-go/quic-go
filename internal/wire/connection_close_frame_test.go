@@ -15,7 +15,7 @@ func TestParseConnectionCloseTransportError(t *testing.T) {
 	data = append(data, encodeVarInt(0x1337)...)              // frame type
 	data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 	data = append(data, []byte(reason)...)
-	frame, l, err := ParseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
+	frame, l, err := parseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.False(t, frame.IsApplicationError)
 	require.EqualValues(t, 0x19, frame.ErrorCode)
@@ -29,7 +29,7 @@ func TestParseConnectionCloseWithApplicationError(t *testing.T) {
 	data := encodeVarInt(0xcafe)
 	data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 	data = append(data, reason...)
-	frame, l, err := ParseConnectionCloseFrame(data, ApplicationCloseFrameType, protocol.Version1)
+	frame, l, err := parseConnectionCloseFrame(data, ApplicationCloseFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.True(t, frame.IsApplicationError)
 	require.EqualValues(t, 0xcafe, frame.ErrorCode)
@@ -41,7 +41,7 @@ func TestParseConnectionCloseLongReasonPhrase(t *testing.T) {
 	data := encodeVarInt(0xcafe)
 	data = append(data, encodeVarInt(0x42)...)   // frame type
 	data = append(data, encodeVarInt(0xffff)...) // reason phrase length
-	_, _, err := ParseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
+	_, _, err := parseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
 	require.Equal(t, io.EOF, err)
 }
 
@@ -51,11 +51,11 @@ func TestParseConnectionCloseErrorsOnEOFs(t *testing.T) {
 	data = append(data, encodeVarInt(0x1337)...)              // frame type
 	data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 	data = append(data, []byte(reason)...)
-	_, l, err := ParseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
+	_, l, err := parseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
 	require.Equal(t, len(data), l)
 	require.NoError(t, err)
 	for i := range data {
-		_, _, err = ParseConnectionCloseFrame(data[:i], ConnectionCloseFrameType, protocol.Version1)
+		_, _, err = parseConnectionCloseFrame(data[:i], ConnectionCloseFrameType, protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
@@ -64,7 +64,7 @@ func TestParseConnectionCloseNoReasonPhrase(t *testing.T) {
 	data := encodeVarInt(0xcafe)
 	data = append(data, encodeVarInt(0x42)...) // frame type
 	data = append(data, encodeVarInt(0)...)
-	frame, l, err := ParseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
+	frame, l, err := parseConnectionCloseFrame(data, ConnectionCloseFrameType, protocol.Version1)
 	require.NoError(t, err)
 	require.Empty(t, frame.ReasonPhrase)
 	require.Equal(t, len(data), l)
