@@ -376,11 +376,10 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 				}
 			case *AckFrame:
 				if len(frame.AckRanges) != 1 {
-					b.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", streamFrame, frame)
+					b.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", ackFrame, frame)
 				}
-				if frame.AckRanges[0].Smallest != ackFrame.AckRanges[0].Smallest ||
-					frame.AckRanges[0].Largest != ackFrame.AckRanges[0].Largest {
-					b.Fatalf("ACK frame does not match: %v vs %v", streamFrame, frame)
+				if frame.AckRanges[0] != ackFrame.AckRanges[0] {
+					b.Fatalf("ACK frame does not match: %v vs %v", ackFrame, frame)
 				}
 			case *MaxDataFrame:
 				if frame.MaximumData != maxDataFrame.MaximumData {
