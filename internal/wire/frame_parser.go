@@ -16,9 +16,9 @@ var ErrUnknownFrameType = errors.New("unknown frame type")
 
 // The FrameParser parses QUIC frames, one by one.
 type FrameParser struct {
-	AckDelayExponent      uint8
+	ackDelayExponent      uint8
 	SupportsDatagrams     bool
-	SupportsResetStreamAt bool
+	supportsResetStreamAt bool
 
 	// To avoid allocating when parsing, keep a single ACK frame struct.
 	// It is used over and over again.
@@ -29,7 +29,7 @@ type FrameParser struct {
 func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser {
 	return &FrameParser{
 		SupportsDatagrams:     supportsDatagrams,
-		SupportsResetStreamAt: supportsResetStreamAt,
+		supportsResetStreamAt: supportsResetStreamAt,
 		ackFrame:              &AckFrame{},
 	}
 }
@@ -115,7 +115,7 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 		frame = &HandshakeDoneFrame{}
 		l = 0
 	case ResetStreamAtFrameType:
-		if !p.SupportsResetStreamAt {
+		if !p.supportsResetStreamAt {
 			err = ErrUnknownFrameType
 		} else {
 			frame, l, err = parseResetStreamFrame(data, true, v)
@@ -175,7 +175,7 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 		case PingFrameType:
 			frame = &PingFrame{}
 		case AckFrameType, AckECNFrameType:
-			ackDelayExponent := p.AckDelayExponent
+			ackDelayExponent := p.ackDelayExponent
 			if encLevel != protocol.Encryption1RTT {
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
@@ -220,7 +220,7 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 			}
 			frame, l, err = ParseDatagramFrame(b, frameTyp, v)
 		case ResetStreamAtFrameType:
-			if !p.SupportsResetStreamAt {
+			if !p.supportsResetStreamAt {
 				return nil, 0, ErrUnknownFrameType
 			}
 			frame, l, err = parseResetStreamFrame(b, true, v)
@@ -238,7 +238,7 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 }
 
 func (p *FrameParser) ParseAckFrame(data []byte, frameType FrameType, v protocol.Version, encLevel protocol.EncryptionLevel) (*AckFrame, int, error) {
-	ackDelayExponent := p.AckDelayExponent
+	ackDelayExponent := p.ackDelayExponent
 	if encLevel != protocol.Encryption1RTT {
 		ackDelayExponent = protocol.DefaultAckDelayExponent
 	}
@@ -252,7 +252,7 @@ func (p *FrameParser) ParseAckFrame(data []byte, frameType FrameType, v protocol
 // SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).
 // This value is used to scale the ACK Delay field in the ACK frame.
 func (p *FrameParser) SetAckDelayExponent(exp uint8) {
-	p.AckDelayExponent = exp
+	p.ackDelayExponent = exp
 }
 
 func replaceUnexpectedEOF(e error) error {
