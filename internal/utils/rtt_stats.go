@@ -3,7 +3,7 @@ package utils
 import (
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/protocol"
 )
 
 const (

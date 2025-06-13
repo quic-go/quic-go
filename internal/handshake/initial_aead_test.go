@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )

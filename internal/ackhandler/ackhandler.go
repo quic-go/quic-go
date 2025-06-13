@@ -1,9 +1,9 @@
 package ackhandler
 
 import (
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/utils"
-	"github.com/Noooste/quic-go/logging"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/utils"
+	"github.com/Noooste/uquic-go/logging"
 )
 
 // NewAckHandler creates a new SentPacketHandler and a new ReceivedPacketHandler.

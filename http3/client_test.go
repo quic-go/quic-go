@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/quicvarint"
 	"github.com/quic-go/qpack"
 
 	"github.com/stretchr/testify/assert"

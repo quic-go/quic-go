@@ -3,7 +3,7 @@ package congestion
 import (
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/protocol"
 )
 
 // A SendAlgorithm performs congestion control

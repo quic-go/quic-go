@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/http3"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/http3"
 
 	"github.com/stretchr/testify/require"
 )

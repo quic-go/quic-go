@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

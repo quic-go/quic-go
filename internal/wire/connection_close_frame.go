@@ -3,8 +3,8 @@ package wire
 import (
 	"io"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 // A ConnectionCloseFrame is a CONNECTION_CLOSE frame

@@ -19,8 +19,8 @@ import (
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/utils"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/utils"
 )
 
 const (

@@ -7,8 +7,8 @@ import (
 	"io"
 	"math/rand/v2"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 // FrameType is the frame type of a HTTP/3 frame

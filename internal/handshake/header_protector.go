@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/chacha20"
 
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/protocol"
 )
 
 type headerProtector interface {

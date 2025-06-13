@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	quicproxy "github.com/Noooste/quic-go/integrationtests/tools/proxy"
-	"github.com/Noooste/quic-go/internal/wire"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go"
+	quicproxy "github.com/Noooste/uquic-go/integrationtests/tools/proxy"
+	"github.com/Noooste/uquic-go/internal/wire"
+	"github.com/Noooste/uquic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
 )

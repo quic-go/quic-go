@@ -9,8 +9,8 @@ import (
 	"net"
 	"syscall"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/utils"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/utils"
 )
 
 func setSendBuffer(c net.PacketConn) error {

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 var errInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")

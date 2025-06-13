@@ -1,8 +1,8 @@
 package wire
 
 import (
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 // A MaxStreamDataFrame is a MAX_STREAM_DATA frame

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
+	"github.com/Noooste/uquic-go"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

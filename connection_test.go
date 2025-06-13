@@ -12,16 +12,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/ackhandler"
-	"github.com/Noooste/quic-go/internal/handshake"
-	"github.com/Noooste/quic-go/internal/mocks"
-	mockackhandler "github.com/Noooste/quic-go/internal/mocks/ackhandler"
-	mocklogging "github.com/Noooste/quic-go/internal/mocks/logging"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/internal/utils"
-	"github.com/Noooste/quic-go/internal/wire"
-	"github.com/Noooste/quic-go/logging"
+	"github.com/Noooste/uquic-go/internal/ackhandler"
+	"github.com/Noooste/uquic-go/internal/handshake"
+	"github.com/Noooste/uquic-go/internal/mocks"
+	mockackhandler "github.com/Noooste/uquic-go/internal/mocks/ackhandler"
+	mocklogging "github.com/Noooste/uquic-go/internal/mocks/logging"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/internal/utils"
+	"github.com/Noooste/uquic-go/internal/wire"
+	"github.com/Noooste/uquic-go/logging"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1759,7 +1759,7 @@ func TestConnectionPacketPacing(t *testing.T) {
 }
 
 // When the send queue blocks, we need to reset the pacing timer, otherwise the run loop might busy-loop.
-// See https://github.com/Noooste/quic-go/pull/4943 for more details.
+// See https://github.com/Noooste/uquic-go/pull/4943 for more details.
 func TestConnectionPacingAndSendQueue(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)

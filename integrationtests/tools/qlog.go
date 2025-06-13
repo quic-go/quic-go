@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/internal/utils"
-	"github.com/Noooste/quic-go/logging"
-	"github.com/Noooste/quic-go/qlog"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/internal/utils"
+	"github.com/Noooste/uquic-go/logging"
+	"github.com/Noooste/uquic-go/qlog"
 )
 
 func QlogTracer(logger io.Writer) *logging.Tracer {

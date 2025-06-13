@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 // A NewConnectionIDFrame is a NEW_CONNECTION_ID frame

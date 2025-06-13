@@ -7,7 +7,7 @@ import (
 	"net/textproto"
 	"time"
 
-	"github.com/Noooste/quic-go"
+	"github.com/Noooste/uquic-go"
 )
 
 func traceGetConn(trace *httptrace.ClientTrace, hostPort string) {

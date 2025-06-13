@@ -3,10 +3,10 @@ package quic
 import (
 	"slices"
 
-	"github.com/Noooste/quic-go/internal/ackhandler"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/wire"
-	"github.com/Noooste/quic-go/logging"
+	"github.com/Noooste/uquic-go/internal/ackhandler"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/wire"
+	"github.com/Noooste/uquic-go/logging"
 )
 
 // ConvertFrame converts a wire.Frame into a logging.Frame.

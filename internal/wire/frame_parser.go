@@ -6,9 +6,9 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 const (

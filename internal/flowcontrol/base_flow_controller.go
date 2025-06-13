@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/utils"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/utils"
 )
 
 type baseFlowController struct {

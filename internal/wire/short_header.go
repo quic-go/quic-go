@@ -4,8 +4,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/utils"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/utils"
 )
 
 // ParseShortHeader parses a short header packet.

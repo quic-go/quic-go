@@ -5,14 +5,15 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	tls "github.com/Noooste/utls"
 	"io"
 	"net/netip"
 	"slices"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/quicvarint"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/quicvarint"
 )
 
 // AdditionalTransportParametersClient are additional transport parameters that will be added
@@ -86,6 +87,9 @@ type TransportParameters struct {
 
 	MaxDatagramFrameSize protocol.ByteCount // RFC 9221
 	EnableResetStreamAt  bool               // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
+
+	// only used internally
+	ClientOverride tls.TransportParameters // [UQUIC]
 }
 
 // Unmarshal the transport parameters
@@ -342,6 +346,12 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 
 // Marshal the transport parameters
 func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
+	// [UQUIC]
+	if p.ClientOverride != nil {
+		return p.ClientOverride.Marshal()
+	}
+	// [/UQUIC]
+
 	// Typical Transport Parameters consume around 110 bytes, depending on the exact values,
 	// especially the lengths of the Connection IDs.
 	// Allocate 256 bytes, so we won't have to grow the slice in any case.
@@ -472,6 +482,12 @@ func (p *TransportParameters) marshalVarintParam(b []byte, id transportParameter
 // Since the session ticket is encrypted, the serialization format is defined by the server.
 // For convenience, we use the same format that we also use for sending the transport parameters.
 func (p *TransportParameters) MarshalForSessionTicket(b []byte) []byte {
+	// [UQUIC]
+	if p.ClientOverride != nil {
+		return p.ClientOverride.Marshal() // TODO: does this work as expected? test needed
+	}
+	// [/UQUIC]
+	
 	b = quicvarint.Append(b, transportParameterMarshalingVersion)
 
 	// initial_max_stream_data_bidi_local
@@ -563,4 +579,48 @@ func (p *TransportParameters) String() string {
 	logParams = append(logParams, p.EnableResetStreamAt)
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)
+}
+
+func (tp *TransportParameters) PopulateFromUQUIC(quicparams tls.TransportParameters) {
+	for pIdx, param := range quicparams {
+		switch param.ID() {
+		case uint64(maxIdleTimeoutParameterID):
+			tp.MaxIdleTimeout = time.Duration(param.(tls.MaxIdleTimeout)) * time.Millisecond
+		case uint64(initialMaxDataParameterID):
+			tp.InitialMaxData = protocol.ByteCount(param.(tls.InitialMaxData))
+		case uint64(initialMaxStreamDataBidiLocalParameterID):
+			tp.InitialMaxStreamDataBidiLocal = protocol.ByteCount(param.(tls.InitialMaxStreamDataBidiLocal))
+		case uint64(initialMaxStreamDataBidiRemoteParameterID):
+			tp.InitialMaxStreamDataBidiRemote = protocol.ByteCount(param.(tls.InitialMaxStreamDataBidiRemote))
+		case uint64(initialMaxStreamDataUniParameterID):
+			tp.InitialMaxStreamDataUni = protocol.ByteCount(param.(tls.InitialMaxStreamDataUni))
+		case uint64(initialMaxStreamsBidiParameterID):
+			tp.MaxBidiStreamNum = protocol.StreamNum(param.(tls.InitialMaxStreamsBidi))
+		case uint64(initialMaxStreamsUniParameterID):
+			tp.MaxUniStreamNum = protocol.StreamNum(param.(tls.InitialMaxStreamsUni))
+		case uint64(maxAckDelayParameterID):
+			tp.MaxAckDelay = time.Duration(param.(tls.MaxAckDelay)) * time.Millisecond
+		case uint64(disableActiveMigrationParameterID):
+			tp.DisableActiveMigration = true
+		case uint64(activeConnectionIDLimitParameterID):
+			tp.ActiveConnectionIDLimit = uint64(param.(tls.ActiveConnectionIDLimit))
+		case uint64(initialSourceConnectionIDParameterID):
+			srcConnIDOverride, ok := param.(tls.InitialSourceConnectionID)
+			if ok {
+				if len(srcConnIDOverride) > 0 { // when nil/empty, will leave default srcConnID
+					tp.InitialSourceConnectionID = protocol.ParseConnectionID(srcConnIDOverride)
+				} else {
+					// reversely populate the transport parameter, for it must be written to network
+					quicparams[pIdx] = tls.InitialSourceConnectionID(tp.InitialSourceConnectionID.Bytes())
+				}
+			}
+		case uint64(maxDatagramFrameSizeParameterID):
+			tp.MaxDatagramFrameSize = protocol.ByteCount(param.(tls.MaxDatagramFrameSize))
+		default:
+			// ignore unknown parameters
+			continue
+		}
+	}
+
+	tp.ClientOverride = quicparams
 }

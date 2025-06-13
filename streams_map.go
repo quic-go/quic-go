@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Noooste/quic-go/internal/flowcontrol"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/Noooste/uquic-go/internal/flowcontrol"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/internal/wire"
 )
 
 type streamError struct {

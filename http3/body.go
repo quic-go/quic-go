@@ -6,7 +6,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/Noooste/quic-go"
+	"github.com/Noooste/uquic-go"
 )
 
 // A Hijacker allows hijacking of the stream creating part of a quic.Connection from a http.ResponseWriter.

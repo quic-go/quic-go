@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/ackhandler"
-	"github.com/Noooste/quic-go/internal/flowcontrol"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/Noooste/uquic-go/internal/ackhandler"
+	"github.com/Noooste/uquic-go/internal/flowcontrol"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/wire"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"

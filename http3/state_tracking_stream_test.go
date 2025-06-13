@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
+	"github.com/Noooste/uquic-go"
+	mockquic "github.com/Noooste/uquic-go/internal/mocks/quic"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

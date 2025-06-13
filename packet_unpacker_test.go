@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go/internal/handshake"
-	"github.com/Noooste/quic-go/internal/mocks"
-	"github.com/Noooste/quic-go/internal/protocol"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/internal/wire"
+	"github.com/Noooste/uquic-go/internal/handshake"
+	"github.com/Noooste/uquic-go/internal/mocks"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/internal/wire"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"

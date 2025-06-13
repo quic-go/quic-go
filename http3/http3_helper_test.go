@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/integrationtests/tools"
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/integrationtests/tools"
+	"github.com/Noooste/uquic-go/internal/protocol"
 	"github.com/quic-go/qpack"
 
 	"github.com/stretchr/testify/require"

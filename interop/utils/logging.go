@@ -9,10 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/internal/utils"
-	"github.com/Noooste/quic-go/logging"
-	"github.com/Noooste/quic-go/qlog"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/internal/utils"
+	"github.com/Noooste/uquic-go/logging"
+	"github.com/Noooste/uquic-go/qlog"
 )
 
 // GetSSLKeyLog creates a file for the TLS key log

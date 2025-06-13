@@ -10,9 +10,9 @@ import (
 	"net/http/httptrace"
 	"testing"
 
-	"github.com/Noooste/quic-go"
-	mockquic "github.com/Noooste/quic-go/internal/mocks/quic"
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go"
+	mockquic "github.com/Noooste/uquic-go/internal/mocks/quic"
+	"github.com/Noooste/uquic-go/internal/protocol"
 
 	"github.com/quic-go/qpack"
 

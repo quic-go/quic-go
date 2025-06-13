@@ -7,9 +7,9 @@ import (
 	"github.com/Noooste/utls"
 	"os"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/integrationtests/tools"
-	"github.com/Noooste/quic-go/logging"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/integrationtests/tools"
+	"github.com/Noooste/uquic-go/logging"
 )
 
 var (

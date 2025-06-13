@@ -8,8 +8,8 @@ import (
 	"io"
 	"net/http/httptrace"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/internal/protocol"
 
 	"github.com/quic-go/qpack"
 )

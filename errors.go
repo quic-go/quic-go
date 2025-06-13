@@ -3,7 +3,7 @@ package quic
 import (
 	"fmt"
 
-	"github.com/Noooste/quic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/internal/qerr"
 )
 
 type (

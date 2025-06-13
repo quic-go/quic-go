@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/Noooste/quic-go"
-	"github.com/Noooste/quic-go/internal/qerr"
-	"github.com/Noooste/quic-go/logging"
+	"github.com/Noooste/uquic-go"
+	"github.com/Noooste/uquic-go/internal/qerr"
+	"github.com/Noooste/uquic-go/logging"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

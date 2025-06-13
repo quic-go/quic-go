@@ -1,7 +1,7 @@
 package logging
 
 import (
-	"github.com/Noooste/quic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/protocol"
 )
 
 // PacketTypeFromHeader determines the packet type from a *wire.Header.
