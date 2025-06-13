@@ -1,9 +1,9 @@
 package ackhandler
 
 import (
-	"github.com/Noooste/uquic/internal/protocol"
-	"github.com/Noooste/uquic/internal/utils"
-	"github.com/Noooste/uquic/logging"
+	"github.com/Noooste/uquic-go/internal/protocol"
+	"github.com/Noooste/uquic-go/internal/utils"
+	"github.com/Noooste/uquic-go/logging"
 )
 
 // [UQUIC]

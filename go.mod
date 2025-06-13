@@ -6,7 +6,6 @@ toolchain go1.24.3
 
 require (
 	github.com/Noooste/fhttp v1.0.13
-	github.com/Noooste/quic-go v0.0.23
 	github.com/Noooste/utls v1.3.8
 	github.com/francoispqt/gojay v1.2.13
 	github.com/gaukas/clienthellod v0.4.2

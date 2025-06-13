@@ -1,6 +1,6 @@
 package ackhandler
 
-import "github.com/Noooste/uquic/internal/protocol"
+import "github.com/Noooste/uquic-go/internal/protocol"
 
 type uSentPacketHandler struct {
 	*sentPacketHandler
