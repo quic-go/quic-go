@@ -1447,6 +1447,13 @@ func (c *Conn) handleFrames(
 			break
 		}
 
+		if ackhandler.IsFrameTypeAckEliciting(frameType) {
+			isAckEliciting = true
+		}
+		if !wire.IsProbingFrameType(frameType) {
+			isNonProbing = true
+		}
+
 		frame, l, err = c.frameParser.ParseFrame(data, frameType, encLevel, c.version)
 		if err != nil {
 			return false, false, nil, &qerr.TransportError{
@@ -1459,12 +1466,7 @@ func (c *Conn) handleFrames(
 		if frame == nil {
 			break
 		}
-		if ackhandler.IsFrameAckEliciting(frame) {
-			isAckEliciting = true
-		}
-		if !wire.IsProbingFrame(frame) {
-			isNonProbing = true
-		}
+
 		if log != nil {
 			frames = append(frames, toLoggingFrame(frame))
 		}
