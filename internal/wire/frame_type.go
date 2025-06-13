@@ -34,7 +34,7 @@ func (t FrameType) IsStreamFrameType() bool {
 	return byte(t)&0xf8 == 0x8
 }
 
-func (t FrameType) isAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
+func (t FrameType) IsAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
 	switch encLevel {
 	case protocol.EncryptionInitial, protocol.EncryptionHandshake:
 		switch t {

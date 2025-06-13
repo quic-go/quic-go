@@ -158,7 +158,7 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 	if err != nil {
 		return nil, 0, err
 	}
-	if !frameTyp.isAllowedAtEncLevel(encLevel) {
+	if !frameTyp.IsAllowedAtEncLevel(encLevel) {
 		return nil, l, fmt.Errorf("%s not allowed at encryption level %s", reflect.TypeOf(frame).Elem().Name(), encLevel)
 	}
 	return frame, l, nil
