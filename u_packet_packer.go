@@ -54,6 +54,7 @@ func (p *uPacketPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteC
 			maxSize-protocol.ByteCount(initialSealer.Overhead()),
 			protocol.EncryptionInitial,
 			now,
+			false,
 			onlyAck,
 			true,
 			v,
@@ -81,6 +82,7 @@ func (p *uPacketPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteC
 				maxSize-size-protocol.ByteCount(handshakeSealer.Overhead()),
 				protocol.EncryptionHandshake,
 				now,
+				false,
 				onlyAck,
 				size == 0,
 				v,
@@ -277,9 +279,10 @@ func (p *uPacketPacker) MarshalInitialPacketPayload(pl payload, v protocol.Versi
 	return p.uSpec.InitialPacketSpec.FrameBuilder.Build(cryptoData)
 }
 
-func (p *uPacketPacker) MaybePackPTOProbePacket(
+func (p *uPacketPacker) PackPTOProbePacket(
 	encLevel protocol.EncryptionLevel,
 	maxPacketSize protocol.ByteCount,
+	addPingIfEmpty bool,
 	now time.Time,
 	v protocol.Version,
 ) (*coalescedPacket, error) {
@@ -324,7 +327,14 @@ func (p *uPacketPacker) MaybePackPTOProbePacket(
 	default:
 		panic("unknown encryption level")
 	}
-	hdr, pl := p.maybeGetCryptoPacket(maxPacketSize-protocol.ByteCount(sealer.Overhead()), encLevel, now, false, true, v)
+	hdr, pl := p.maybeGetCryptoPacket(
+		maxPacketSize-protocol.ByteCount(sealer.Overhead()),
+		encLevel,
+		now,
+		addPingIfEmpty,
+		false,
+		true,
+		v)
 	if pl.length == 0 {
 		return nil, nil
 	}
