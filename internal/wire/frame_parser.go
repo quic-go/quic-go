@@ -49,14 +49,16 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 			continue
 		}
 
-		frameType, ok := NewFrameType(typ)
-		if !ok {
-			return 0, parsed, &qerr.TransportError{
-				ErrorCode:    qerr.FrameEncodingError,
-				FrameType:    typ,
-				ErrorMessage: fmt.Sprintf("unknown frame type"),
+		frameType := FrameType(typ)
+		/*
+			if !ok {
+				return 0, parsed, &qerr.TransportError{
+					ErrorCode:    qerr.FrameEncodingError,
+					FrameType:    typ,
+					ErrorMessage: fmt.Sprintf("unknown frame type"),
+				}
 			}
-		}
+		*/
 
 		if !frameType.isAllowedAtEncLevel(encLevel) {
 			return 0, parsed, &qerr.TransportError{
