@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"crypto/rand"
+	"io"
 	"testing"
 	"time"
 
@@ -12,12 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFrameParsingReturnsNilWhenNothingToRead(t *testing.T) {
+func TestFrameTypeParsingReturnsNilWhenNothingToRead(t *testing.T) {
 	parser := NewFrameParser(true, true)
-	l, f, err := parser.ParseNext(nil, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
+	frameType, l, err := parser.ParseType(nil, protocol.Encryption1RTT)
+	require.Equal(t, io.EOF, err)
+	require.Zero(t, frameType)
 	require.Zero(t, l)
-	require.Nil(t, f)
+}
+
+func TestParseLessCommonFrameReturnsNilWhenNothingToRead(t *testing.T) {
+	parser := NewFrameParser(true, true)
+	l, f, err := parser.ParseLessCommonFrame(MaxStreamDataFrameType, nil, protocol.Version1)
+	require.Equal(t, io.EOF, err)
+	require.Zero(t, l)
+	require.Zero(t, f)
 }
 
 func TestFrameParsingSkipsPaddingFrames(t *testing.T) {
@@ -25,18 +34,26 @@ func TestFrameParsingSkipsPaddingFrames(t *testing.T) {
 	b := []byte{0, 0} // 2 PADDING frames
 	b, err := (&PingFrame{}).Append(b, protocol.Version1)
 	require.NoError(t, err)
-	l, f, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
 	require.NoError(t, err)
-	require.Equal(t, &PingFrame{}, f)
-	require.Equal(t, 2+1, l)
+	require.Equal(t, 3, l)
+	require.Equal(t, PingFrameType, frameType)
+
+	frame, l, err := parser.ParseLessCommonFrame(frameType, b[1:], protocol.Version1)
+	require.NoError(t, err)
+	require.Equal(t, 0, l)
+	require.IsType(t, &PingFrame{}, frame)
 }
 
 func TestFrameParsingHandlesPaddingAtEnd(t *testing.T) {
 	parser := NewFrameParser(true, true)
-	l, f, err := parser.ParseNext([]byte{0, 0, 0}, protocol.Encryption1RTT, protocol.Version1)
-	require.NoError(t, err)
-	require.Nil(t, f)
+	b := []byte{0, 0, 0}
+
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.Equal(t, io.EOF, err)
 	require.Equal(t, 3, l)
+	require.Equal(t, FrameType(0), frameType)
 }
 
 func TestFrameParsingParsesSingleFrame(t *testing.T) {
@@ -47,10 +64,15 @@ func TestFrameParsingParsesSingleFrame(t *testing.T) {
 		b, err = (&PingFrame{}).Append(b, protocol.Version1)
 		require.NoError(t, err)
 	}
-	l, f, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
 	require.NoError(t, err)
-	require.IsType(t, &PingFrame{}, f)
+	require.Equal(t, PingFrameType, frameType)
 	require.Equal(t, 1, l)
+
+	frame, l, err := parser.ParseLessCommonFrame(frameType, b, protocol.Version1)
+	require.NoError(t, err)
+	require.Equal(t, 0, l)
+	require.IsType(t, &PingFrame{}, frame)
 }
 
 func TestFrameParserACK(t *testing.T) {
@@ -58,12 +80,16 @@ func TestFrameParserACK(t *testing.T) {
 	f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.Equal(t, AckFrameType, frameType)
+	require.Equal(t, 1, l)
+
+	frame, l, err := parser.ParseAckFrame(frameType, b[l:], protocol.Encryption1RTT, protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, frame)
-	require.IsType(t, f, frame)
-	require.Equal(t, protocol.PacketNumber(0x13), frame.(*AckFrame).LargestAcked())
-	require.Equal(t, len(b), l)
+	require.Equal(t, protocol.PacketNumber(0x13), frame.LargestAcked())
+	require.Equal(t, len(b)-1, l)
 }
 
 func TestFrameParserAckDelay(t *testing.T) {
@@ -84,12 +110,18 @@ func testFrameParserAckDelay(t *testing.T, encLevel protocol.EncryptionLevel) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	_, frame, err := parser.ParseNext(b, encLevel, protocol.Version1)
+	frameType, l, err := parser.ParseType(b, encLevel)
 	require.NoError(t, err)
+	require.Equal(t, AckFrameType, frameType)
+	require.Equal(t, 1, l)
+
+	frame, l, err := parser.ParseAckFrame(frameType, b[l:], encLevel, protocol.Version1)
+	require.NoError(t, err)
+	require.Equal(t, len(b)-1, l)
 	if encLevel == protocol.Encryption1RTT {
-		require.Equal(t, 4*time.Second, frame.(*AckFrame).DelayTime)
+		require.Equal(t, 4*time.Second, frame.DelayTime)
 	} else {
-		require.Equal(t, time.Second, frame.(*AckFrame).DelayTime)
+		require.Equal(t, time.Second, frame.DelayTime)
 	}
 }
 
@@ -103,28 +135,38 @@ func TestFrameParserStreamFrames(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
 	require.NoError(t, err)
-	require.NotNil(t, frame)
-	require.Equal(t, f, frame)
-	require.Equal(t, len(b), l)
+	require.Equal(t, FrameType(0xd), frameType)
+	require.True(t, frameType.IsStreamFrameType())
+	require.Equal(t, 1, l)
+
+	// ParseLessCommonFrame should not handle Stream Frames
+	frame, l, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
+	require.Equal(t, errUnknownFrameType, err)
+	require.Nil(t, frame)
+	require.Zero(t, l)
 }
 
 func TestFrameParserFrames(t *testing.T) {
 	tests := []struct {
-		name  string
-		frame Frame
+		name      string
+		frameType FrameType
+		frame     Frame
 	}{
 		{
-			name:  "MAX_DATA",
-			frame: &MaxDataFrame{MaximumData: 0xcafe},
+			name:      "MAX_DATA",
+			frameType: MaxDataFrameType,
+			frame:     &MaxDataFrame{MaximumData: 0xcafe},
 		},
 		{
-			name:  "MAX_STREAM_DATA",
-			frame: &MaxStreamDataFrame{StreamID: 0xdeadbeef, MaximumStreamData: 0xdecafbad},
+			name:      "MAX_STREAM_DATA",
+			frameType: MaxStreamDataFrameType,
+			frame:     &MaxStreamDataFrame{StreamID: 0xdeadbeef, MaximumStreamData: 0xdecafbad},
 		},
 		{
-			name: "RESET_STREAM",
+			name:      "RESET_STREAM",
+			frameType: ResetStreamFrameType,
 			frame: &ResetStreamFrame{
 				StreamID:  0xdeadbeef,
 				FinalSize: 0xdecafbad1234,
@@ -132,35 +174,43 @@ func TestFrameParserFrames(t *testing.T) {
 			},
 		},
 		{
-			name:  "STOP_SENDING",
-			frame: &StopSendingFrame{StreamID: 0x42},
+			name:      "STOP_SENDING",
+			frameType: StopSendingFrameType,
+			frame:     &StopSendingFrame{StreamID: 0x42},
 		},
 		{
-			name:  "CRYPTO",
-			frame: &CryptoFrame{Offset: 0x1337, Data: []byte("lorem ipsum")},
+			name:      "CRYPTO",
+			frameType: CryptoFrameType,
+			frame:     &CryptoFrame{Offset: 0x1337, Data: []byte("lorem ipsum")},
 		},
 		{
-			name:  "NEW_TOKEN",
-			frame: &NewTokenFrame{Token: []byte("foobar")},
+			name:      "NEW_TOKEN",
+			frameType: NewTokenFrameType,
+			frame:     &NewTokenFrame{Token: []byte("foobar")},
 		},
 		{
-			name:  "MAX_STREAMS",
-			frame: &MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 0x1337},
+			name:      "MAX_STREAMS",
+			frameType: BidiMaxStreamsFrameType,
+			frame:     &MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 0x1337},
 		},
 		{
-			name:  "DATA_BLOCKED",
-			frame: &DataBlockedFrame{MaximumData: 0x1234},
+			name:      "DATA_BLOCKED",
+			frameType: DataBlockedFrameType,
+			frame:     &DataBlockedFrame{MaximumData: 0x1234},
 		},
 		{
-			name:  "STREAM_DATA_BLOCKED",
-			frame: &StreamDataBlockedFrame{StreamID: 0xdeadbeef, MaximumStreamData: 0xdead},
+			name:      "STREAM_DATA_BLOCKED",
+			frameType: StreamDataBlockedFrameType,
+			frame:     &StreamDataBlockedFrame{StreamID: 0xdeadbeef, MaximumStreamData: 0xdead},
 		},
 		{
-			name:  "STREAMS_BLOCKED",
-			frame: &StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 0x1234567},
+			name:      "STREAMS_BLOCKED",
+			frameType: BidiStreamBlockedFrameType,
+			frame:     &StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 0x1234567},
 		},
 		{
-			name: "NEW_CONNECTION_ID",
+			name:      "NEW_CONNECTION_ID",
+			frameType: NewConnectionIDFrameType,
 			frame: &NewConnectionIDFrame{
 				SequenceNumber:      0x1337,
 				ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -168,32 +218,39 @@ func TestFrameParserFrames(t *testing.T) {
 			},
 		},
 		{
-			name:  "RETIRE_CONNECTION_ID",
-			frame: &RetireConnectionIDFrame{SequenceNumber: 0x1337},
+			name:      "RETIRE_CONNECTION_ID",
+			frameType: RetireConnectionIDFrameType,
+			frame:     &RetireConnectionIDFrame{SequenceNumber: 0x1337},
 		},
 		{
-			name:  "PATH_CHALLENGE",
-			frame: &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+			name:      "PATH_CHALLENGE",
+			frameType: PathChallengeFrameType,
+			frame:     &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
 		},
 		{
-			name:  "PATH_RESPONSE",
-			frame: &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+			name:      "PATH_RESPONSE",
+			frameType: PathResponseFrameType,
+			frame:     &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
 		},
 		{
-			name:  "CONNECTION_CLOSE",
-			frame: &ConnectionCloseFrame{IsApplicationError: true, ReasonPhrase: "foobar"},
+			name:      "CONNECTION_CLOSE",
+			frameType: ConnectionCloseFrameType,
+			frame:     &ConnectionCloseFrame{IsApplicationError: false, ReasonPhrase: "foobar"},
 		},
 		{
-			name:  "HANDSHAKE_DONE",
-			frame: &HandshakeDoneFrame{},
+			name:      "APPLICATION_CLOSE",
+			frameType: ApplicationCloseFrameType,
+			frame:     &ConnectionCloseFrame{IsApplicationError: true, ReasonPhrase: "foobar"},
 		},
 		{
-			name:  "DATAGRAM",
-			frame: &DatagramFrame{Data: []byte("foobar")},
+			name:      "HANDSHAKE_DONE",
+			frameType: HandshakeDoneFrameType,
+			frame:     &HandshakeDoneFrame{},
 		},
 		{
-			name:  "RESET_STREAM_AT",
-			frame: &ResetStreamFrame{StreamID: 0x1337, ReliableSize: 0x42, FinalSize: 0xdeadbeef},
+			name:      "RESET_STREAM_AT",
+			frameType: ResetStreamAtFrameType,
+			frame:     &ResetStreamFrame{StreamID: 0x1337, ReliableSize: 0x42, FinalSize: 0xdeadbeef},
 		},
 	}
 
@@ -202,17 +259,48 @@ func TestFrameParserFrames(t *testing.T) {
 			parser := NewFrameParser(true, true)
 			b, err := test.frame.Append(nil, protocol.Version1)
 			require.NoError(t, err)
-			l, frame, err := parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
+
+			frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+			require.NoError(t, err)
+			require.Equal(t, test.frameType, frameType)
+			require.Equal(t, 1, l)
+
+			frame, l, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
 			require.NoError(t, err)
 			require.Equal(t, test.frame, frame)
-			require.Equal(t, len(b), l)
+			require.Equal(t, len(b)-1, l)
 		})
 	}
 }
 
+func TestFrameParserDatagramFrame(t *testing.T) {
+	parser := NewFrameParser(true, true)
+	f := &DatagramFrame{
+		Data: []byte("foobar"),
+	}
+	b, err := f.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.Equal(t, DatagramNoLengthFrameType, frameType)
+	require.Equal(t, 1, l)
+
+	// ParseLessCommonFrame should not be used to handle Datagram Frames
+	frame, lw, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
+	require.Equal(t, errUnknownFrameType, err)
+	require.Nil(t, frame)
+	require.Zero(t, lw)
+
+	// ParseDatagramFrame should be used for this type
+	datagramFrame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
+	require.NoError(t, err)
+	require.IsType(t, &DatagramFrame{}, datagramFrame)
+	require.Equal(t, f.Data, datagramFrame.Data)
+}
+
 func checkFrameUnsupported(t *testing.T, err error, expectedFrameType uint64) {
 	t.Helper()
-	require.ErrorContains(t, err, ErrUnknownFrameType.Error())
+	require.ErrorContains(t, err, errUnknownFrameType.Error())
 	var transportErr *qerr.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)

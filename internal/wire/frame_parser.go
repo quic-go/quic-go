@@ -11,13 +11,12 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
-// TODO: What to do with this, maybe migrate into the connection? But I also don't like this idea
-var ErrUnknownFrameType = errors.New("unknown frame type")
+var errUnknownFrameType = errors.New("unknown frame type")
 
 // The FrameParser parses QUIC frames, one by one.
 type FrameParser struct {
 	ackDelayExponent      uint8
-	SupportsDatagrams     bool
+	supportsDatagrams     bool
 	supportsResetStreamAt bool
 
 	// To avoid allocating when parsing, keep a single ACK frame struct.
@@ -28,7 +27,7 @@ type FrameParser struct {
 // NewFrameParser creates a new frame parser.
 func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser {
 	return &FrameParser{
-		SupportsDatagrams:     supportsDatagrams,
+		supportsDatagrams:     supportsDatagrams,
 		supportsResetStreamAt: supportsResetStreamAt,
 		ackFrame:              &AckFrame{},
 	}
@@ -116,12 +115,12 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 		l = 0
 	case ResetStreamAtFrameType:
 		if !p.supportsResetStreamAt {
-			err = ErrUnknownFrameType
+			err = errUnknownFrameType
 		} else {
 			frame, l, err = parseResetStreamFrame(data, true, v)
 		}
 	default:
-		err = ErrUnknownFrameType
+		err = errUnknownFrameType
 	}
 	return frame, l, err
 }
@@ -215,17 +214,17 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 		case HandshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
 		case DatagramNoLengthFrameType, DatagramWithLengthFrameType:
-			if !p.SupportsDatagrams {
-				return nil, 0, ErrUnknownFrameType
+			if !p.supportsDatagrams {
+				return nil, 0, errUnknownFrameType
 			}
 			frame, l, err = ParseDatagramFrame(b, frameTyp, v)
 		case ResetStreamAtFrameType:
 			if !p.supportsResetStreamAt {
-				return nil, 0, ErrUnknownFrameType
+				return nil, 0, errUnknownFrameType
 			}
 			frame, l, err = parseResetStreamFrame(b, true, v)
 		default:
-			err = ErrUnknownFrameType
+			err = errUnknownFrameType
 		}
 	}
 	if err != nil {
@@ -237,7 +236,7 @@ func (p *FrameParser) ParseFrame(b []byte, frameTyp FrameType, encLevel protocol
 	return frame, l, nil
 }
 
-func (p *FrameParser) ParseAckFrame(data []byte, frameType FrameType, v protocol.Version, encLevel protocol.EncryptionLevel) (*AckFrame, int, error) {
+func (p *FrameParser) ParseAckFrame(frameType FrameType, data []byte, encLevel protocol.EncryptionLevel, v protocol.Version) (*AckFrame, int, error) {
 	ackDelayExponent := p.ackDelayExponent
 	if encLevel != protocol.Encryption1RTT {
 		ackDelayExponent = protocol.DefaultAckDelayExponent
@@ -247,6 +246,16 @@ func (p *FrameParser) ParseAckFrame(data []byte, frameType FrameType, v protocol
 	ackFrame := p.ackFrame
 
 	return ackFrame, l, err
+}
+
+func (p *FrameParser) ParseDatagramFrame(frameType FrameType, data []byte, v protocol.Version) (*DatagramFrame, int, error) {
+	if !p.supportsDatagrams {
+		err := errUnknownFrameType
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	return ParseDatagramFrame(data, frameType, v)
 }
 
 // SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).

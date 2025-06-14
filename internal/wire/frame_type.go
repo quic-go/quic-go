@@ -2,10 +2,10 @@ package wire
 
 import "github.com/quic-go/quic-go/internal/protocol"
 
-type FrameType uint8
+type FrameType uint64
 
-// The constants need to match the ones from the RFC9000
-// This allows us to easily convert a FrameType into the corresponding byte.
+// These constants correspond to those defined in RFC 9000.
+// Stream frame types are not listed explicitly here; use FrameType.IsStreamFrameType() to identify them.
 const (
 	PingFrameType        FrameType = 0x1
 	AckFrameType         FrameType = 0x2
@@ -14,8 +14,6 @@ const (
 	StopSendingFrameType FrameType = 0x5
 	CryptoFrameType      FrameType = 0x6
 	NewTokenFrameType    FrameType = 0x7
-
-	// TODO: Do we list the various StreamFrameTypes here?
 
 	MaxDataFrameType            FrameType = 0x10
 	MaxStreamDataFrameType      FrameType = 0x11

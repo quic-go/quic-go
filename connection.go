@@ -1493,7 +1493,7 @@ func (c *Conn) handleFrames(
 		// the rest will be handled by the default clause.
 		switch frameType {
 		case wire.AckFrameType, wire.AckECNFrameType:
-			ackFrame, l, err := c.frameParser.ParseAckFrame(data, frameType, c.version, encLevel)
+			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
 			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
 				return wrapError(err)
@@ -1517,13 +1517,7 @@ func (c *Conn) handleFrames(
 			}
 			continue
 		case wire.DatagramNoLengthFrameType, wire.DatagramWithLengthFrameType:
-			if !c.frameParser.SupportsDatagrams {
-				err = wire.ErrUnknownFrameType
-				if err != nil {
-					return wrapError(err)
-				}
-			}
-			datagramFrame, l, err := wire.ParseDatagramFrame(data, frameType, c.version)
+			datagramFrame, l, err := c.frameParser.ParseDatagramFrame(frameType, data, c.version)
 			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
 				return wrapError(err)
