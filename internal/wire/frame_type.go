@@ -36,67 +36,6 @@ const (
 	DatagramWithLengthFrameType FrameType = 0x31
 )
 
-func NewFrameType(typ uint64) (FrameType, bool) {
-	if byte(typ)&0xf8 == 0x8 {
-		return FrameType(typ), true
-	} else {
-		switch typ {
-		case 0x1:
-			return PingFrameType, true
-		case 0x2:
-			return AckFrameType, true
-		case 0x3:
-			return AckECNFrameType, true
-		case 0x4:
-			return ResetStreamFrameType, true
-		case 0x5:
-			return StopSendingFrameType, true
-		case 0x6:
-			return CryptoFrameType, true
-		case 0x7:
-			return NewTokenFrameType, true
-		case 0x10:
-			return MaxDataFrameType, true
-		case 0x11:
-			return MaxStreamDataFrameType, true
-		case 0x12:
-			return BidiMaxStreamsFrameType, true
-		case 0x13:
-			return UniMaxStreamsFrameType, true
-		case 0x14:
-			return DataBlockedFrameType, true
-		case 0x15:
-			return StreamDataBlockedFrameType, true
-		case 0x16:
-			return BidiStreamBlockedFrameType, true
-		case 0x17:
-			return UniStreamBlockedFrameType, true
-		case 0x18:
-			return NewConnectionIDFrameType, true
-		case 0x19:
-			return RetireConnectionIDFrameType, true
-		case 0x1a:
-			return PathChallengeFrameType, true
-		case 0x1b:
-			return PathResponseFrameType, true
-		case 0x1c:
-			return ConnectionCloseFrameType, true
-		case 0x1d:
-			return ApplicationCloseFrameType, true
-		case 0x1e:
-			return HandshakeDoneFrameType, true
-		case 0x24:
-			return ResetStreamAtFrameType, true
-		case 0x30:
-			return DatagramNoLengthFrameType, true
-		case 0x31:
-			return DatagramWithLengthFrameType, true
-		default:
-			return 0, false
-		}
-	}
-}
-
 func (t FrameType) IsStreamFrameType() bool {
 	return byte(t)&0xf8 == 0x8
 }
