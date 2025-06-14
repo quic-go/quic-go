@@ -3,10 +3,11 @@ package wire
 import (
 	"errors"
 	"fmt"
+	"io"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/quicvarint"
-	"io"
 )
 
 var errUnknownFrameType = errors.New("unknown frame type")
