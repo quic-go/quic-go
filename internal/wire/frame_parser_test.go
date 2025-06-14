@@ -440,7 +440,7 @@ func BenchmarkParseStreamAndACK(b *testing.B) {
 	}
 }
 
-func BenchmarkParseOtherFrames(b *testing.B) {
+func BenchmarkParseFrames(b *testing.B) {
 	maxDataFrame := &MaxDataFrame{MaximumData: 123456}
 	maxStreamsFrame := &MaxStreamsFrame{MaxStreamNum: 10}
 	maxStreamDataFrame := &MaxStreamDataFrame{StreamID: 1337, MaximumStreamData: 1e6}
