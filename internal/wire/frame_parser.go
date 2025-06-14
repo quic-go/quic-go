@@ -33,6 +33,9 @@ func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser 
 	}
 }
 
+// ParseType retrieves the next non-null byte, assuming it represents a frame type.
+// For performance reasons (1–2% faster parsing), it skips validation.
+// Validation is expected to be handled at the connection level.
 func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (FrameType, int, error) {
 	var parsed int
 	for len(b) != 0 {
@@ -50,16 +53,6 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		}
 
 		frameType := FrameType(typ)
-		/*
-			if !ok {
-				return 0, parsed, &qerr.TransportError{
-					ErrorCode:    qerr.FrameEncodingError,
-					FrameType:    typ,
-					ErrorMessage: fmt.Sprintf("unknown frame type"),
-				}
-			}
-		*/
-
 		if !frameType.isAllowedAtEncLevel(encLevel) {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,

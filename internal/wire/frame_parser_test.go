@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -295,17 +293,8 @@ func TestFrameParserDatagramFrame(t *testing.T) {
 	datagramFrame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
 	require.NoError(t, err)
 	require.IsType(t, &DatagramFrame{}, datagramFrame)
+	require.Equal(t, 6, l)
 	require.Equal(t, f.Data, datagramFrame.Data)
-}
-
-func checkFrameUnsupported(t *testing.T, err error, expectedFrameType uint64) {
-	t.Helper()
-	require.ErrorContains(t, err, errUnknownFrameType.Error())
-	var transportErr *qerr.TransportError
-	require.ErrorAs(t, err, &transportErr)
-	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
-	require.Equal(t, expectedFrameType, transportErr.FrameType)
-	require.Equal(t, "unknown frame type", transportErr.ErrorMessage)
 }
 
 func TestFrameParserDatagramUnsupported(t *testing.T) {
@@ -342,17 +331,16 @@ func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
 	require.Equal(t, errUnknownFrameType, err)
 }
 
-/*
 func TestFrameParserInvalidFrameType(t *testing.T) {
 	parser := NewFrameParser(true, true)
 
 	frameType, l, err := parser.ParseType(encodeVarInt(0x42), protocol.Encryption1RTT)
 
+	// Expected: No validation being handled by parser.ParseType
 	require.Equal(t, 2, l)
-	require.Equal(t, FrameType(0), frameType)
-	checkFrameUnsupported(t, err, 0x42)
+	require.Equal(t, FrameType(0x42), frameType)
+	require.Nil(t, err)
 }
-*/
 
 func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	parser := NewFrameParser(true, true)
@@ -368,7 +356,7 @@ func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	require.Equal(t, MaxStreamDataFrameType, frameType)
 	require.Equal(t, 1, l)
 
-	frame, l, err := parser.ParseLessCommonFrame(frameType, b[1:len(b)-2], protocol.Version1)
+	frame, _, err := parser.ParseLessCommonFrame(frameType, b[1:len(b)-2], protocol.Version1)
 	require.Equal(t, io.EOF, err)
 	require.Nil(t, frame)
 }
@@ -408,7 +396,7 @@ func BenchmarkParseStreamAndACK(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		frameType, l, err := parser.ParseType(data, protocol.Encryption1RTT)
+		frameType, _, err := parser.ParseType(data, protocol.Encryption1RTT)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -432,7 +420,7 @@ func BenchmarkParseStreamAndACK(b *testing.B) {
 			b.Fatalf("frame type is not StreamFrameType: %d", frameType)
 		}
 
-		streamFrame, l, err := ParseStreamFrame(data[l+2:], frameType, protocol.Version1)
+		streamFrame, _, err := ParseStreamFrame(data[l+2:], frameType, protocol.Version1)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -500,7 +488,7 @@ func BenchmarkParseFrames(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				if streamFrame.StreamID != frame.StreamID || streamFrame.Offset != streamFrame.Offset {
+				if streamFrame.StreamID != frame.StreamID || streamFrame.Offset != frame.Offset {
 					b.Fatalf("STREAM frame does not match: %v vs %v", streamFrame, frame)
 				}
 				data = data[l:]
