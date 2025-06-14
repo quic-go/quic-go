@@ -313,8 +313,16 @@ func TestFrameParserDatagramUnsupported(t *testing.T) {
 	f := &DatagramFrame{Data: []byte("foobar")}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	_, _, err = parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	checkFrameUnsupported(t, err, 0x30)
+
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.Equal(t, DatagramNoLengthFrameType, frameType)
+	require.Equal(t, 1, l)
+
+	frame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
+	require.Nil(t, frame)
+	require.Zero(t, l)
+	require.Equal(t, errUnknownFrameType, err)
 }
 
 func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
@@ -322,13 +330,25 @@ func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
 	f := &ResetStreamFrame{StreamID: 0x1337, ReliableSize: 0x42, FinalSize: 0xdeadbeef}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	_, _, err = parser.ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
-	checkFrameUnsupported(t, err, 0x24)
+
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.Equal(t, ResetStreamAtFrameType, frameType)
+	require.Equal(t, 1, l)
+
+	frame, l, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
+	require.Nil(t, frame)
+	require.Zero(t, l)
+	require.Equal(t, errUnknownFrameType, err)
 }
 
 func TestFrameParserInvalidFrameType(t *testing.T) {
 	parser := NewFrameParser(true, true)
-	_, _, err := parser.ParseNext(encodeVarInt(0x42), protocol.Encryption1RTT, protocol.Version1)
+
+	frameType, l, err := parser.ParseType(encodeVarInt(0x42), protocol.Encryption1RTT)
+
+	require.Equal(t, 2, l)
+	require.Equal(t, FrameType(0), frameType)
 	checkFrameUnsupported(t, err, 0x42)
 }
 
@@ -340,11 +360,15 @@ func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	_, _, err = parser.ParseNext(b[:len(b)-2], protocol.Encryption1RTT, protocol.Version1)
-	require.Error(t, err)
-	var transportErr *qerr.TransportError
-	require.ErrorAs(t, err, &transportErr)
-	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
+
+	frameType, l, err := parser.ParseType(b[:len(b)-2], protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.Equal(t, MaxStreamDataFrameType, frameType)
+	require.Equal(t, 1, l)
+
+	frame, l, err := parser.ParseLessCommonFrame(frameType, b[1:len(b)-2], protocol.Version1)
+	require.Equal(t, io.EOF, err)
+	require.Nil(t, frame)
 }
 
 // STREAM and ACK are the most relevant frames for high-throughput transfers.
@@ -382,24 +406,36 @@ func BenchmarkParseStreamAndACK(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		l, f, err := parser.ParseNext(data, protocol.Encryption1RTT, protocol.Version1)
+		frameType, l, err := parser.ParseType(data, protocol.Encryption1RTT)
 		if err != nil {
 			b.Fatal(err)
 		}
-		ackParsed := f.(*AckFrame)
-		if ackParsed.DelayTime != ack.DelayTime || ackParsed.ECNCE != ack.ECNCE {
-			b.Fatalf("incorrect ACK frame: %v vs %v", ack, ackParsed)
+		if frameType != AckECNFrameType {
+			b.Fatalf("frame type is not AckFrameType: %d", frameType)
 		}
-		l2, f, err := parser.ParseNext(data[l:], protocol.Encryption1RTT, protocol.Version1)
+
+		ackFrame, l, err := parser.ParseAckFrame(frameType, data[1:], protocol.Encryption1RTT, protocol.Version1)
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(data[l:]) != l2 {
-			b.Fatal("didn't parse the entire packet")
+		if ackFrame.DelayTime != ack.DelayTime || ackFrame.ECNCE != ack.ECNCE {
+			b.Fatalf("incorrect ACK frame: %v vs %v", ack, ackFrame)
 		}
-		sfParsed := f.(*StreamFrame)
-		if sfParsed.StreamID != sf.StreamID || !bytes.Equal(sfParsed.Data, sf.Data) {
-			b.Fatalf("incorrect STREAM frame: %v vs %v", sf, sfParsed)
+
+		frameType, _, err = parser.ParseType(data[l+1:], protocol.Encryption1RTT)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !frameType.IsStreamFrameType() {
+			b.Fatalf("frame type is not StreamFrameType: %d", frameType)
+		}
+
+		streamFrame, l, err := ParseStreamFrame(data[l+2:], frameType, protocol.Version1)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if streamFrame.StreamID != sf.StreamID || !bytes.Equal(streamFrame.Data, sf.Data) {
+			b.Fatalf("incorrect STREAM frame: %v vs %v", sf, streamFrame)
 		}
 	}
 }
