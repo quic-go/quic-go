@@ -216,7 +216,8 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 		frameType wire.FrameType
 		frame     wire.Frame
 	}{
-		// @TODO: {name: "STREAM", frameType: wire.FrameType(0x8), frame: &wire.StreamFrame{StreamID: id, Data: []byte("foobar")}},
+		// We can't test for StreamFrame, DatagramFrame or AckFrame here. They are handled
+		// directly in handleFrames, in the fast path.
 		{name: "RESET_STREAM", frameType: wire.ResetStreamFrameType, frame: &wire.ResetStreamFrame{StreamID: id, ErrorCode: 42, FinalSize: 1337}},
 		{name: "STOP_SENDING", frameType: wire.StopSendingFrameType, frame: &wire.StopSendingFrame{StreamID: id, ErrorCode: 42}},
 		{name: "MAX_STREAM_DATA", frameType: wire.MaxStreamDataFrameType, frame: &wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1337}},
