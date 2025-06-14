@@ -487,50 +487,72 @@ func BenchmarkParseOtherFrames(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		data := buf
 		for j := 0; j < len(frames); j++ {
-			l, f, err := parser.ParseNext(data, protocol.Encryption1RTT, protocol.Version1)
+			frameType, l, err := parser.ParseType(data, protocol.Encryption1RTT)
 			if err != nil {
 				b.Fatal(err)
 			}
 			data = data[l:]
 
-			switch frame := f.(type) {
-			case *StreamFrame:
-				if frame.StreamID != streamFrame.StreamID || frame.Offset != streamFrame.Offset {
+			if frameType.IsStreamFrameType() {
+				frame, l, err := ParseStreamFrame(data, frameType, protocol.Version1)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if streamFrame.StreamID != frame.StreamID || streamFrame.Offset != streamFrame.Offset {
 					b.Fatalf("STREAM frame does not match: %v vs %v", streamFrame, frame)
 				}
-			case *AckFrame:
+				data = data[l:]
+				continue
+			}
+
+			switch frameType {
+
+			case AckFrameType, AckECNFrameType:
+				frame, l, err := parser.ParseAckFrame(frameType, data, protocol.Encryption1RTT, protocol.Version1)
+				if err != nil {
+					b.Fatal(err)
+				}
 				if len(frame.AckRanges) != 1 {
 					b.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", ackFrame, frame)
 				}
 				if frame.AckRanges[0] != ackFrame.AckRanges[0] {
 					b.Fatalf("ACK frame does not match: %v vs %v", ackFrame, frame)
 				}
-			case *MaxDataFrame:
-				if frame.MaximumData != maxDataFrame.MaximumData {
-					b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
-				}
-			case *MaxStreamsFrame:
-				if frame.MaxStreamNum != maxStreamsFrame.MaxStreamNum {
-					b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
-				}
-			case *MaxStreamDataFrame:
-				if frame.StreamID != maxStreamDataFrame.StreamID ||
-					frame.MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
-					b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
-				}
-			case *CryptoFrame:
-				if frame.Offset != cryptoFrame.Offset || !bytes.Equal(frame.Data, cryptoFrame.Data) {
-					b.Fatalf("CRYPTO frame does not match: %v vs %v", f, cryptoFrame)
-				}
-			case *PingFrame:
-				_ = frame
-			case *ResetStreamFrame:
-				if frame.StreamID != resetStreamFrame.StreamID || frame.ErrorCode != resetStreamFrame.ErrorCode ||
-					frame.FinalSize != resetStreamFrame.FinalSize {
-					b.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
-				}
+				data = data[l:]
 			default:
-				b.Fatalf("Frame type should not occur: %v", f)
+				f, l, err := parser.ParseLessCommonFrame(frameType, data, protocol.Version1)
+				if err != nil {
+					b.Fatal(err)
+				}
+				switch frame := f.(type) {
+				case *MaxDataFrame:
+					if frame.MaximumData != maxDataFrame.MaximumData {
+						b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
+					}
+				case *MaxStreamsFrame:
+					if frame.MaxStreamNum != maxStreamsFrame.MaxStreamNum {
+						b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
+					}
+				case *MaxStreamDataFrame:
+					if frame.StreamID != maxStreamDataFrame.StreamID ||
+						frame.MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
+						b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
+					}
+				case *CryptoFrame:
+					if frame.Offset != cryptoFrame.Offset || !bytes.Equal(frame.Data, cryptoFrame.Data) {
+						b.Fatalf("CRYPTO frame does not match: %v vs %v", f, cryptoFrame)
+					}
+				case *PingFrame:
+					_ = frame
+				case *ResetStreamFrame:
+					if frame.StreamID != resetStreamFrame.StreamID || frame.ErrorCode != resetStreamFrame.ErrorCode ||
+						frame.FinalSize != resetStreamFrame.FinalSize {
+						b.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
+					}
+				default:
+					b.Fatalf("Frame type should not occur: %v", f)
+				}
+				data = data[l:]
 			}
 		}
 	}
