@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"reflect"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -1431,39 +1430,152 @@ func (c *Conn) handleFrames(
 	}
 	handshakeWasComplete := c.handshakeComplete
 	var handleErr error
+	var frame wire.Frame
+	var err error
+	var l int
+	var frameType wire.FrameType
+
+	wrapError := func(err error) (isAckEliciting, isNonProbing bool, pathChallenge *wire.PathChallengeFrame, _ error) {
+		return false, false, nil, &qerr.TransportError{
+			ErrorCode:    qerr.FrameEncodingError,
+			ErrorMessage: err.Error(),
+		}
+	}
+
 	for len(data) > 0 {
-		l, frame, err := c.frameParser.ParseNext(data, encLevel, c.version)
+		frameType, l, err = c.frameParser.ParseType(data, encLevel)
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return false, false, nil, err
 		}
 		data = data[l:]
-		if frame == nil {
-			break
-		}
-		if ackhandler.IsFrameAckEliciting(frame) {
+
+		if ackhandler.IsFrameTypeAckEliciting(frameType) {
 			isAckEliciting = true
 		}
-		if !wire.IsProbingFrame(frame) {
+		if !wire.IsProbingFrameType(frameType) {
 			isNonProbing = true
 		}
-		if log != nil {
-			frames = append(frames, toLoggingFrame(frame))
-		}
-		// An error occurred handling a previous frame.
-		// Don't handle the current frame.
-		if handleErr != nil {
+
+		// Fast path: We're inlining common cases, to avoid using interfaces
+		if frameType.IsStreamFrameType() {
+			streamFrame, l, err := wire.ParseStreamFrame(data, frameType, c.version)
+			if err != nil {
+				return wrapError(err)
+			}
+
+			data = data[l:]
+			if streamFrame == nil {
+				break
+			}
+
+			if log != nil {
+				frames = append(frames, toLoggingFrame(streamFrame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+			err = c.streamsMap.HandleStreamFrame(streamFrame, rcvTime)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
+				}
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
 			continue
 		}
-		pc, err := c.handleFrame(frame, encLevel, destConnID, rcvTime)
-		if err != nil {
-			if log == nil {
-				return false, false, nil, err
+		//nolint:exhaustive // StreamFrame has already been handled. We now need to handle a few more hot paths,
+		// the rest will be handled by the default clause.
+		switch frameType {
+		case wire.AckFrameType, wire.AckECNFrameType:
+			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
+			// Fast path: We inline the frame handling logic, to avoid using interfaces
+			if err != nil {
+				return wrapError(err)
 			}
-			// If we're logging, we need to keep parsing (but not handling) all frames.
-			handleErr = err
-		}
-		if pc != nil {
-			pathChallenge = pc
+			data = data[l:]
+			if log != nil {
+				frames = append(frames, toLoggingFrame(ackFrame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+			err = c.handleAckFrame(ackFrame, encLevel, rcvTime)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
+				}
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
+			continue
+		case wire.DatagramNoLengthFrameType, wire.DatagramWithLengthFrameType:
+			datagramFrame, l, err := c.frameParser.ParseDatagramFrame(frameType, data, c.version)
+			// Fast path: We inline the frame handling logic, to avoid using interfaces
+			if err != nil {
+				return wrapError(err)
+			}
+
+			data = data[l:]
+			if datagramFrame == nil {
+				break
+			}
+
+			if log != nil {
+				frames = append(frames, toLoggingFrame(datagramFrame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+			err = c.handleDatagramFrame(datagramFrame)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
+				}
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
+			continue
+		// Slower path: All other frame types
+		default:
+			frame, l, err = c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
+			if err != nil {
+				return wrapError(err)
+			}
+
+			data = data[l:]
+			if frame == nil {
+				break
+			}
+
+			if log != nil {
+				frames = append(frames, toLoggingFrame(frame))
+			}
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+			pc, err := c.handleFrame(frameType, frame, encLevel, destConnID, rcvTime)
+			if err != nil {
+				if log == nil {
+					return false, false, nil, err
+				}
+				// If we're logging, we need to keep parsing (but not handling) all frames.
+				handleErr = err
+			}
+			if pc != nil {
+				pathChallenge = pc
+			}
 		}
 	}
 
@@ -1487,6 +1599,7 @@ func (c *Conn) handleFrames(
 }
 
 func (c *Conn) handleFrame(
+	frameType wire.FrameType,
 	f wire.Frame,
 	encLevel protocol.EncryptionLevel,
 	destConnID protocol.ConnectionID,
@@ -1494,47 +1607,44 @@ func (c *Conn) handleFrame(
 ) (pathChallenge *wire.PathChallengeFrame, _ error) {
 	var err error
 	wire.LogFrame(c.logger, f, false)
-	switch frame := f.(type) {
-	case *wire.CryptoFrame:
-		err = c.handleCryptoFrame(frame, encLevel, rcvTime)
-	case *wire.StreamFrame:
-		err = c.streamsMap.HandleStreamFrame(frame, rcvTime)
-	case *wire.AckFrame:
-		err = c.handleAckFrame(frame, encLevel, rcvTime)
-	case *wire.ConnectionCloseFrame:
-		err = c.handleConnectionCloseFrame(frame)
-	case *wire.ResetStreamFrame:
-		err = c.streamsMap.HandleResetStreamFrame(frame, rcvTime)
-	case *wire.MaxDataFrame:
-		c.connFlowController.UpdateSendWindow(frame.MaximumData)
-	case *wire.MaxStreamDataFrame:
-		err = c.streamsMap.HandleMaxStreamDataFrame(frame)
-	case *wire.MaxStreamsFrame:
-		c.streamsMap.HandleMaxStreamsFrame(frame)
-	case *wire.DataBlockedFrame:
-	case *wire.StreamDataBlockedFrame:
-		err = c.streamsMap.HandleStreamDataBlockedFrame(frame)
-	case *wire.StreamsBlockedFrame:
-	case *wire.StopSendingFrame:
-		err = c.streamsMap.HandleStopSendingFrame(frame)
-	case *wire.PingFrame:
-	case *wire.PathChallengeFrame:
-		c.handlePathChallengeFrame(frame)
-		pathChallenge = frame
-	case *wire.PathResponseFrame:
-		err = c.handlePathResponseFrame(frame)
-	case *wire.NewTokenFrame:
-		err = c.handleNewTokenFrame(frame)
-	case *wire.NewConnectionIDFrame:
-		err = c.connIDManager.Add(frame)
-	case *wire.RetireConnectionIDFrame:
-		err = c.connIDGenerator.Retire(frame.SequenceNumber, destConnID, rcvTime.Add(3*c.rttStats.PTO(false)))
-	case *wire.HandshakeDoneFrame:
+	//nolint:exhaustive // wire.StreamFrame, wire.DatagramFrameTypeWithLength, wire.DatagramFrameTypeNoLength,
+	// wire.AckFrameType and wire.AckECNFrameType are not handled on purpose. They're in the hot path, and should
+	// not be stored in a variable of type wire.Frame interface and thus should never be passed to here.
+	switch frameType {
+	case wire.CryptoFrameType:
+		err = c.handleCryptoFrame(f.(*wire.CryptoFrame), encLevel, rcvTime)
+	case wire.ConnectionCloseFrameType, wire.ApplicationCloseFrameType:
+		err = c.handleConnectionCloseFrame(f.(*wire.ConnectionCloseFrame))
+	case wire.ResetStreamFrameType:
+		err = c.streamsMap.HandleResetStreamFrame(f.(*wire.ResetStreamFrame), rcvTime)
+	case wire.MaxDataFrameType:
+		c.connFlowController.UpdateSendWindow(f.(*wire.MaxDataFrame).MaximumData)
+	case wire.MaxStreamDataFrameType:
+		err = c.streamsMap.HandleMaxStreamDataFrame(f.(*wire.MaxStreamDataFrame))
+	case wire.BidiMaxStreamsFrameType, wire.UniMaxStreamsFrameType:
+		c.streamsMap.HandleMaxStreamsFrame(f.(*wire.MaxStreamsFrame))
+	case wire.DataBlockedFrameType:
+	case wire.StreamDataBlockedFrameType:
+		err = c.streamsMap.HandleStreamDataBlockedFrame(f.(*wire.StreamDataBlockedFrame))
+	case wire.BidiStreamBlockedFrameType, wire.UniStreamBlockedFrameType:
+	case wire.StopSendingFrameType:
+		err = c.streamsMap.HandleStopSendingFrame(f.(*wire.StopSendingFrame))
+	case wire.PingFrameType:
+	case wire.PathChallengeFrameType:
+		c.handlePathChallengeFrame(f.(*wire.PathChallengeFrame))
+		pathChallenge = f.(*wire.PathChallengeFrame)
+	case wire.PathResponseFrameType:
+		err = c.handlePathResponseFrame(f.(*wire.PathResponseFrame))
+	case wire.NewTokenFrameType:
+		err = c.handleNewTokenFrame(f.(*wire.NewTokenFrame))
+	case wire.NewConnectionIDFrameType:
+		err = c.connIDManager.Add(f.(*wire.NewConnectionIDFrame))
+	case wire.RetireConnectionIDFrameType:
+		err = c.connIDGenerator.Retire(f.(*wire.RetireConnectionIDFrame).SequenceNumber, destConnID, rcvTime.Add(3*c.rttStats.PTO(false)))
+	case wire.HandshakeDoneFrameType:
 		err = c.handleHandshakeDoneFrame(rcvTime)
-	case *wire.DatagramFrame:
-		err = c.handleDatagramFrame(frame)
 	default:
-		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
+		err = fmt.Errorf("unexpected frame type: %d", frameType)
 	}
 	return pathChallenge, err
 }
