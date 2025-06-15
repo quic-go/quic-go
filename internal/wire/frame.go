@@ -19,3 +19,16 @@ func IsProbingFrame(f Frame) bool {
 	}
 	return false
 }
+
+// IsProbingFrameType returns true if the FrameType is a probing frame.
+// See section 9.1 of RFC 9000.
+// TODO: Add tests
+func IsProbingFrameType(f FrameType) bool {
+	//nolint:exhaustive // PATH_CHALLENGE, PATH_RESPONSE and NEW_CONNECTION_ID are the only probing frames
+	switch f {
+	case PathChallengeFrameType, PathResponseFrameType, NewConnectionIDFrameType:
+		return true
+	default:
+		return false
+	}
+}
