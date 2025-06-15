@@ -118,6 +118,13 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 	default:
 		err = errUnknownFrameType
 	}
+	if err != nil {
+		return frame, l, &qerr.TransportError{
+			ErrorCode:    qerr.FrameEncodingError,
+			FrameType:    uint64(frameType),
+			ErrorMessage: err.Error(),
+		}
+	}
 	return frame, l, err
 }
 
@@ -127,8 +134,16 @@ func (p *FrameParser) ParseAckFrame(frameType FrameType, data []byte, encLevel p
 		ackDelayExponent = protocol.DefaultAckDelayExponent
 	}
 	p.ackFrame.Reset()
-	l, err := ParseAckFrame(p.ackFrame, data, frameType, ackDelayExponent, v)
+	l, err := parseAckFrame(p.ackFrame, data, frameType, ackDelayExponent, v)
 	ackFrame := p.ackFrame
+
+	if err != nil {
+		return ackFrame, l, &qerr.TransportError{
+			ErrorCode:    qerr.FrameEncodingError,
+			FrameType:    uint64(frameType),
+			ErrorMessage: err.Error(),
+		}
+	}
 
 	return ackFrame, l, err
 }
@@ -137,10 +152,14 @@ func (p *FrameParser) ParseDatagramFrame(frameType FrameType, data []byte, v pro
 	if !p.supportsDatagrams {
 		err := errUnknownFrameType
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				FrameType:    uint64(frameType),
+				ErrorMessage: err.Error(),
+			}
 		}
 	}
-	return ParseDatagramFrame(data, frameType, v)
+	return parseDatagramFrame(data, frameType, v)
 }
 
 // SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).

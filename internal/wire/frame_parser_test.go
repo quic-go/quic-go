@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,10 +20,10 @@ func TestFrameTypeParsingReturnsNilWhenNothingToRead(t *testing.T) {
 	require.Zero(t, l)
 }
 
-func TestParseLessCommonFrameReturnsNilWhenNothingToRead(t *testing.T) {
+func TestParseLessCommonFrameReturnsEOFWhenNothingToRead(t *testing.T) {
 	parser := NewFrameParser(true, true)
 	l, f, err := parser.ParseLessCommonFrame(MaxStreamDataFrameType, nil, protocol.Version1)
-	require.Equal(t, io.EOF, err)
+	require.IsType(t, &qerr.TransportError{}, err)
 	require.Zero(t, l)
 	require.Zero(t, f)
 }
@@ -123,6 +124,16 @@ func testFrameParserAckDelay(t *testing.T, encLevel protocol.EncryptionLevel) {
 	}
 }
 
+func checkFrameUnsupported(t *testing.T, err error, expectedFrameType uint64) {
+	t.Helper()
+	require.ErrorContains(t, err, errUnknownFrameType.Error())
+	var transportErr *qerr.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
+	require.Equal(t, expectedFrameType, transportErr.FrameType)
+	require.Equal(t, "unknown frame type", transportErr.ErrorMessage)
+}
+
 func TestFrameParserStreamFrames(t *testing.T) {
 	parser := NewFrameParser(true, true)
 	f := &StreamFrame{
@@ -141,7 +152,7 @@ func TestFrameParserStreamFrames(t *testing.T) {
 
 	// ParseLessCommonFrame should not handle Stream Frames
 	frame, l, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
-	require.Equal(t, errUnknownFrameType, err)
+	checkFrameUnsupported(t, err, 0xd)
 	require.Nil(t, frame)
 	require.Zero(t, l)
 }
@@ -285,11 +296,11 @@ func TestFrameParserDatagramFrame(t *testing.T) {
 
 	// ParseLessCommonFrame should not be used to handle Datagram Frames
 	frame, lw, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
-	require.Equal(t, errUnknownFrameType, err)
+	checkFrameUnsupported(t, err, 0x30)
 	require.Nil(t, frame)
 	require.Zero(t, lw)
 
-	// ParseDatagramFrame should be used for this type
+	// parseDatagramFrame should be used for this type
 	datagramFrame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
 	require.NoError(t, err)
 	require.IsType(t, &DatagramFrame{}, datagramFrame)
@@ -311,7 +322,7 @@ func TestFrameParserDatagramUnsupported(t *testing.T) {
 	frame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
 	require.Nil(t, frame)
 	require.Zero(t, l)
-	require.Equal(t, errUnknownFrameType, err)
+	checkFrameUnsupported(t, err, 0x30)
 }
 
 func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
@@ -328,7 +339,7 @@ func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
 	frame, l, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
 	require.Nil(t, frame)
 	require.Zero(t, l)
-	require.Equal(t, errUnknownFrameType, err)
+	checkFrameUnsupported(t, err, 0x24)
 }
 
 func TestFrameParserInvalidFrameType(t *testing.T) {
@@ -357,7 +368,10 @@ func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	require.Equal(t, 1, l)
 
 	frame, _, err := parser.ParseLessCommonFrame(frameType, b[1:len(b)-2], protocol.Version1)
-	require.Equal(t, io.EOF, err)
+	require.Error(t, err)
+	var transportErr *qerr.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
 	require.Nil(t, frame)
 }
 

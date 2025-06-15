@@ -19,7 +19,7 @@ type DatagramFrame struct {
 	Data           []byte
 }
 
-func ParseDatagramFrame(b []byte, typ FrameType, _ protocol.Version) (*DatagramFrame, int, error) {
+func parseDatagramFrame(b []byte, typ FrameType, _ protocol.Version) (*DatagramFrame, int, error) {
 	startLen := len(b)
 	f := &DatagramFrame{}
 	f.DataLenPresent = uint64(typ)&0x1 > 0

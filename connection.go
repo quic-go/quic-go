@@ -1435,13 +1435,6 @@ func (c *Conn) handleFrames(
 	var l int
 	var frameType wire.FrameType
 
-	wrapError := func(err error) (isAckEliciting, isNonProbing bool, pathChallenge *wire.PathChallengeFrame, _ error) {
-		return false, false, nil, &qerr.TransportError{
-			ErrorCode:    qerr.FrameEncodingError,
-			ErrorMessage: err.Error(),
-		}
-	}
-
 	for len(data) > 0 {
 		frameType, l, err = c.frameParser.ParseType(data, encLevel)
 		if err != nil {
@@ -1463,7 +1456,7 @@ func (c *Conn) handleFrames(
 		if frameType.IsStreamFrameType() {
 			streamFrame, l, err := wire.ParseStreamFrame(data, frameType, c.version)
 			if err != nil {
-				return wrapError(err)
+				return false, false, nil, err
 			}
 
 			data = data[l:]
@@ -1496,7 +1489,7 @@ func (c *Conn) handleFrames(
 			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
 			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
-				return wrapError(err)
+				return false, false, nil, err
 			}
 			data = data[l:]
 			if log != nil {
@@ -1520,7 +1513,7 @@ func (c *Conn) handleFrames(
 			datagramFrame, l, err := c.frameParser.ParseDatagramFrame(frameType, data, c.version)
 			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
-				return wrapError(err)
+				return false, false, nil, err
 			}
 
 			data = data[l:]
@@ -1549,7 +1542,7 @@ func (c *Conn) handleFrames(
 		default:
 			frame, l, err = c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
 			if err != nil {
-				return wrapError(err)
+				return false, false, nil, err
 			}
 
 			data = data[l:]
