@@ -375,34 +375,20 @@ func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	require.Nil(t, frame)
 }
 
-// STREAM and ACK are the most relevant frames for high-throughput transfers.
-func BenchmarkParseStreamAndACK(b *testing.B) {
-	ack := &AckFrame{
-		AckRanges: []AckRange{
-			{Smallest: 5000, Largest: 5200},
-			{Smallest: 1, Largest: 4200},
-		},
-		DelayTime: 42 * time.Millisecond,
-		ECT0:      5000,
-		ECT1:      0,
-		ECNCE:     10,
+func benchmarkFrames(b *testing.B, frames ...Frame) {
+	buf := []byte{}
+	for _, frame := range frames {
+		var err error
+		buf, err = frame.Append(buf, protocol.Version1)
+		if err != nil {
+			b.Fatal(err)
+		}
+		// Add 3 padding frames after every frame
+		buf = append(buf, 0)
+		buf = append(buf, 0)
+		buf = append(buf, 0)
 	}
-	sf := &StreamFrame{
-		StreamID:       1337,
-		Offset:         1e7,
-		Data:           make([]byte, 200),
-		DataLenPresent: true,
-	}
-	rand.Read(sf.Data)
-
-	data, err := ack.Append([]byte{}, protocol.Version1)
-	if err != nil {
-		b.Fatal(err)
-	}
-	data, err = sf.Append(data, protocol.Version1)
-	if err != nil {
-		b.Fatal(err)
-	}
+	rand.Read(buf)
 
 	parser := NewFrameParser(false, false)
 	parser.SetAckDelayExponent(3)
@@ -410,38 +396,144 @@ func BenchmarkParseStreamAndACK(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		frameType, _, err := parser.ParseType(data, protocol.Encryption1RTT)
-		if err != nil {
-			b.Fatal(err)
-		}
-		if frameType != AckECNFrameType {
-			b.Fatalf("frame type is not AckFrameType: %d", frameType)
-		}
+		data := buf
+		for j := 0; j < len(frames); j++ {
+			expectedFrame := frames[j]
 
-		ackFrame, l, err := parser.ParseAckFrame(frameType, data[1:], protocol.Encryption1RTT, protocol.Version1)
-		if err != nil {
-			b.Fatal(err)
-		}
-		if ackFrame.DelayTime != ack.DelayTime || ackFrame.ECNCE != ack.ECNCE {
-			b.Fatalf("incorrect ACK frame: %v vs %v", ack, ackFrame)
-		}
+			frameType, l, err := parser.ParseType(data, protocol.Encryption1RTT)
+			if err != nil {
+				b.Fatal(err)
+			}
+			data = data[l:]
 
-		frameType, _, err = parser.ParseType(data[l+1:], protocol.Encryption1RTT)
-		if err != nil {
-			b.Fatal(err)
-		}
-		if !frameType.IsStreamFrameType() {
-			b.Fatalf("frame type is not StreamFrameType: %d", frameType)
-		}
+			if frameType.IsStreamFrameType() {
+				streamFrame, ok := expectedFrame.(*StreamFrame)
+				if !ok {
+					b.Fatalf("Expected StreamFrame but got %v", expectedFrame)
+				}
 
-		streamFrame, _, err := ParseStreamFrame(data[l+2:], frameType, protocol.Version1)
-		if err != nil {
-			b.Fatal(err)
-		}
-		if streamFrame.StreamID != sf.StreamID || !bytes.Equal(streamFrame.Data, sf.Data) {
-			b.Fatalf("incorrect STREAM frame: %v vs %v", sf, streamFrame)
+				frame, l, err := ParseStreamFrame(data, frameType, protocol.Version1)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if streamFrame.StreamID != frame.StreamID || streamFrame.Offset != frame.Offset {
+					b.Fatalf("STREAM frame does not match: %v vs %v", streamFrame, frame)
+				}
+				frame.PutBack()
+				data = data[l:]
+				continue
+			}
+
+			switch frameType {
+
+			case AckFrameType, AckECNFrameType:
+				ackFrame, ok := expectedFrame.(*AckFrame)
+				if !ok {
+					b.Fatalf("Expected AckFrame but got %v", expectedFrame)
+				}
+
+				frame, l, err := parser.ParseAckFrame(frameType, data, protocol.Encryption1RTT, protocol.Version1)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if len(frame.AckRanges) != 1 {
+					b.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", ackFrame, frame)
+				}
+				if frame.AckRanges[0] != ackFrame.AckRanges[0] {
+					b.Fatalf("ACK frame does not match: %v vs %v", ackFrame, frame)
+				}
+				data = data[l:]
+			default:
+				f, l, err := parser.ParseLessCommonFrame(frameType, data, protocol.Version1)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				switch frameType {
+				case MaxDataFrameType:
+					maxDataFrame, ok := expectedFrame.(*MaxDataFrame)
+					if !ok {
+						b.Fatalf("Expected MaxDataFrame but got %v", expectedFrame)
+					}
+
+					frame := f.(*MaxDataFrame)
+					if frame.MaximumData != maxDataFrame.MaximumData {
+						b.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
+					}
+				case UniMaxStreamsFrameType:
+					maxStreamsFrame, ok := expectedFrame.(*MaxStreamsFrame)
+					if !ok {
+						b.Fatalf("Expected MaxStreamsFrame but got %v", expectedFrame)
+					}
+
+					frame := f.(*MaxStreamsFrame)
+					if frame.MaxStreamNum != maxStreamsFrame.MaxStreamNum {
+						b.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
+					}
+				case MaxStreamDataFrameType:
+					maxStreamDataFrame, ok := expectedFrame.(*MaxStreamDataFrame)
+					if !ok {
+						b.Fatalf("Expected MaxStreamDataFrame but got %v", expectedFrame)
+					}
+
+					frame := f.(*MaxStreamDataFrame)
+					if frame.StreamID != maxStreamDataFrame.StreamID ||
+						frame.MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
+						b.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
+					}
+				case CryptoFrameType:
+					cryptoFrame, ok := expectedFrame.(*CryptoFrame)
+					if !ok {
+						b.Fatalf("Expected CryptoFrame but got %v", expectedFrame)
+					}
+
+					frame := f.(*CryptoFrame)
+					if frame.Offset != cryptoFrame.Offset || !bytes.Equal(frame.Data, cryptoFrame.Data) {
+						b.Fatalf("CRYPTO frame does not match: %v vs %v", f, cryptoFrame)
+					}
+				case PingFrameType:
+					_ = f.(*PingFrame)
+				case ResetStreamFrameType:
+					resetStreamFrame, ok := expectedFrame.(*ResetStreamFrame)
+					if !ok {
+						b.Fatalf("Expected ResetStreamFrame but got %v", expectedFrame)
+					}
+
+					frame := f.(*ResetStreamFrame)
+					if frame.StreamID != resetStreamFrame.StreamID || frame.ErrorCode != resetStreamFrame.ErrorCode ||
+						frame.FinalSize != resetStreamFrame.FinalSize {
+						b.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
+					}
+				default:
+					b.Fatalf("Frame type should not occur: %v", frameType)
+				}
+				data = data[l:]
+			}
 		}
 	}
+}
+
+// STREAM and ACK are the most relevant frames for high-throughput transfers.
+func BenchmarkParseStreamAndACK(b *testing.B) {
+	frames := []Frame{
+		&AckFrame{
+			AckRanges: []AckRange{
+				{Smallest: 5000, Largest: 5200},
+				{Smallest: 1, Largest: 4200},
+			},
+			DelayTime: 42 * time.Millisecond,
+			ECT0:      5000,
+			ECT1:      0,
+			ECNCE:     10,
+		},
+		&StreamFrame{
+			StreamID:       1337,
+			Offset:         1e7,
+			Data:           make([]byte, 200),
+			DataLenPresent: true,
+		},
+	}
+	benchmarkFrames(b, frames...)
 }
 
 func BenchmarkParseFrames(b *testing.B) {
@@ -454,16 +546,10 @@ func BenchmarkParseFrames(b *testing.B) {
 	ackFrame := &AckFrame{AckRanges: []AckRange{{Smallest: 5000, Largest: 5200}}}
 	rand.Read(cryptoFrame.Data)
 	frames := []Frame{
-		maxDataFrame,
-		maxStreamsFrame,
-		maxStreamDataFrame,
-		cryptoFrame,
 		streamFrame,
 		streamFrame,
 		streamFrame,
 		ackFrame,
-		&PingFrame{},
-		resetStreamFrame,
 		streamFrame,
 		streamFrame,
 		ackFrame,
@@ -505,6 +591,7 @@ func BenchmarkParseFrames(b *testing.B) {
 				if streamFrame.StreamID != frame.StreamID || streamFrame.Offset != frame.Offset {
 					b.Fatalf("STREAM frame does not match: %v vs %v", streamFrame, frame)
 				}
+				frame.PutBack()
 				data = data[l:]
 				continue
 			}
