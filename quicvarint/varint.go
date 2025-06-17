@@ -70,7 +70,7 @@ func Read(r io.ByteReader) (uint64, error) {
 
 // Parse reads a number in the QUIC varint format.
 // It returns the number of bytes consumed.
-func Parse(b []byte) (uint64, int, error) {
+func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 	if len(b) == 0 {
 		return 0, 0, io.EOF
 	}
