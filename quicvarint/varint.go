@@ -70,27 +70,44 @@ func Read(r io.ByteReader) (uint64, error) {
 
 // Parse reads a number in the QUIC varint format.
 // It returns the number of bytes consumed.
-func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
+func Parse(b []byte) (uint64, int, error) {
 	if len(b) == 0 {
 		return 0, 0, io.EOF
 	}
-	firstByte := b[0]
-	// the first two bits of the first byte encode the length
-	l := 1 << ((firstByte & 0xc0) >> 6)
-	if len(b) < l {
-		return 0, 0, io.ErrUnexpectedEOF
+
+	first := b[0]
+	switch first >> 6 {
+	case 0: // 1-byte encoding: 00xxxxxx
+		return uint64(first & 0x3F), 1, nil
+	case 1: // 2-byte encoding: 01xxxxxx
+		if len(b) < 2 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		return uint64(first&0x3F)<<8 | uint64(b[1]), 2, nil
+	case 2: // 4-byte encoding: 10xxxxxx
+		if len(b) < 4 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		return uint64(first&0x3F)<<24 |
+			uint64(b[1])<<16 |
+			uint64(b[2])<<8 |
+			uint64(b[3]), 4, nil
+	case 3: // 8-byte encoding: 11xxxxxx
+		if len(b) < 8 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		return uint64(first&0x3F)<<56 |
+			uint64(b[1])<<48 |
+			uint64(b[2])<<40 |
+			uint64(b[3])<<32 |
+			uint64(b[4])<<24 |
+			uint64(b[5])<<16 |
+			uint64(b[6])<<8 |
+			uint64(b[7]), 8, nil
 	}
-	b0 := firstByte & (0xff - 0xc0)
-	if l == 1 {
-		return uint64(b0), 1, nil
-	}
-	if l == 2 {
-		return uint64(b[1]) + uint64(b0)<<8, 2, nil
-	}
-	if l == 4 {
-		return uint64(b[3]) + uint64(b[2])<<8 + uint64(b[1])<<16 + uint64(b0)<<24, 4, nil
-	}
-	return uint64(b[7]) + uint64(b[6])<<8 + uint64(b[5])<<16 + uint64(b[4])<<24 + uint64(b[3])<<32 + uint64(b[2])<<40 + uint64(b[1])<<48 + uint64(b0)<<56, 8, nil
+
+	// Should never be reached
+	return 0, 0, io.ErrUnexpectedEOF
 }
 
 // Append appends i in the QUIC varint format.
