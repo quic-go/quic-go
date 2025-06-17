@@ -98,7 +98,7 @@ func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
 		tmp := binary.BigEndian.Uint64(b[0:8])
-		tmp &= 0x3FFFFFFFFFFFFFFF // clear top 2 bits
+		tmp &= 0x3FFFFFFFFFFFFFFF
 		return tmp, 8, nil
 	}
 
