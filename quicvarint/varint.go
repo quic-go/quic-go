@@ -97,7 +97,8 @@ func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 		if len(b) < 8 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
-		tmp := binary.BigEndian.Uint64(b[0:8])
+		// binary.BigEndian.Uint64 only reads the first 8 bytes, so passing the full slice avoids slicing overhead.
+		tmp := binary.BigEndian.Uint64(b)
 		tmp &= 0x3FFFFFFFFFFFFFFF
 		return tmp, 8, nil
 	}
