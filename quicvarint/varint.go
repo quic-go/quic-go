@@ -93,7 +93,7 @@ func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 			uint64(b[1])<<16 |
 			uint64(b[2])<<8 |
 			uint64(b[3]), 4, nil
-	case 3: // 8-byte encoding: 00xxxxxx 
+	case 3: // 8-byte encoding: 00xxxxxx
 		if len(b) < 8 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
