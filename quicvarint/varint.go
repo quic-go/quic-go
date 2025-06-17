@@ -84,15 +84,15 @@ func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 		if len(b) < 2 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
-		return uint64(first&0x3F)<<8 | uint64(b[1]), 2, nil
+		return uint64(b[1]) | uint64(first&0x3F)<<8, 2, nil
 	case 2: // 4-byte encoding: 10xxxxxx
 		if len(b) < 4 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
-		return uint64(first&0x3F)<<24 |
-			uint64(b[1])<<16 |
+		return uint64(b[3]) |
 			uint64(b[2])<<8 |
-			uint64(b[3]), 4, nil
+			uint64(b[1])<<16 |
+			uint64(first&0x3F)<<24, 4, nil
 	case 3: // 8-byte encoding: 00xxxxxx
 		if len(b) < 8 {
 			return 0, 0, io.ErrUnexpectedEOF
