@@ -287,3 +287,34 @@ func TestContextOnClientSide(t *testing.T) {
 	checkContextFromChan(tlsContextChan, false)
 	checkContextFromChan(tracerContextChan, false)
 }
+
+func TestServerAcceptAfterTransportClose(t *testing.T) {
+	tlsServerConf := getTLSConfig()
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	server, err := tr.Listen(tlsServerConf, getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	conn1, err := quic.Dial(
+		ctx,
+		newUDPConnLocalhost(t),
+		server.Addr(),
+		getTLSClientConfig(),
+		nil,
+	)
+	cancel()
+	require.NoError(t, err)
+	defer conn1.CloseWithError(0, "")
+
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+	// Close Transport
+	tr.Close()
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// Server Accept should error after tranpsort close
+	conn2, err := server.Accept(ctx)
+	require.Nil(t, conn2)
+	require.ErrorIs(t, err, quic.ErrTransportClosed)
+}
