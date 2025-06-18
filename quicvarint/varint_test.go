@@ -50,15 +50,27 @@ func TestParsingFailures(t *testing.T) {
 			expectedErr: io.EOF,
 		},
 		{
-			name:        "slice too short",
-			input:       Append(nil, maxVarInt2*10)[:3],
+			name:        "2-byte encoding: not enough bytes",
+			input:       []byte{0b01000001},
+			expectedErr: io.ErrUnexpectedEOF,
+		},
+		{
+			name:        "4-byte encoding: not enough bytes",
+			input:       []byte{0b10000000, 0x0, 0x0},
+			expectedErr: io.ErrUnexpectedEOF,
+		},
+		{
+			name:        "8-byte encoding: not enough bytes",
+			input:       []byte{0b11000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 			expectedErr: io.ErrUnexpectedEOF,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := Parse(tt.input)
+			value, l, err := Parse(tt.input)
+			require.Equal(t, uint64(0), value)
+			require.Equal(t, 0, l)
 			require.Equal(t, tt.expectedErr, err)
 		})
 	}
