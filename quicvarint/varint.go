@@ -79,32 +79,26 @@ func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 	first := b[0]
 	switch first >> 6 {
 	case 0: // 1-byte encoding: 00xxxxxx
-		return uint64(first & 0x3F), 1, nil
+		return uint64(first & 0b00111111), 1, nil
 	case 1: // 2-byte encoding: 01xxxxxx
 		if len(b) < 2 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
-		return uint64(b[1]) | uint64(first&0x3F)<<8, 2, nil
+		return uint64(b[1]) | uint64(first&0b00111111)<<8, 2, nil
 	case 2: // 4-byte encoding: 10xxxxxx
 		if len(b) < 4 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
-		return uint64(b[3]) |
-			uint64(b[2])<<8 |
-			uint64(b[1])<<16 |
-			uint64(first&0x3F)<<24, 4, nil
+		return uint64(b[3]) | uint64(b[2])<<8 | uint64(b[1])<<16 | uint64(first&0b00111111)<<24, 4, nil
 	case 3: // 8-byte encoding: 00xxxxxx
 		if len(b) < 8 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
-		// binary.BigEndian.Uint64 only reads the first 8 bytes, so passing the full slice avoids slicing overhead.
-		tmp := binary.BigEndian.Uint64(b)
-		tmp &= 0x3FFFFFFFFFFFFFFF
-		return tmp, 8, nil
+		// binary.BigEndian.Uint64 only reads the first 8 bytes. Passing the full slice avoids slicing overhead.
+		return binary.BigEndian.Uint64(b) & 0x3fffffffffffffff, 8, nil
 	}
 
-	// Should never be reached
-	return 0, 0, io.ErrUnexpectedEOF
+	panic("unreachable")
 }
 
 // Append appends i in the QUIC varint format.
