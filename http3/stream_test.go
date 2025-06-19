@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
+	"strings"
 	"testing"
 	"time"
 
@@ -157,14 +158,27 @@ func TestRequestStream(t *testing.T) {
 		&http.Response{},
 	)
 
-	_, err := str.Read(make([]byte, 100))
-	require.EqualError(t, err, "http3: invalid use of RequestStream.Read: need to call ReadResponse first")
+	_, err := str.Read([]byte{0})
+	require.EqualError(t, err, "http3: invalid use of RequestStream.Read before ReadResponse")
+	_, err = str.Write([]byte{0})
+	require.EqualError(t, err, "http3: invalid use of RequestStream.Write before SendRequestHeader")
+
+	// calling ReadResponse before SendRequestHeader is not valid
+	_, err = str.ReadResponse()
+	require.EqualError(t, err, "http3: invalid duplicate use of RequestStream.ReadResponse before SendRequestHeader")
+	// SendRequestHeader can't be used for requests that have a request body
+	require.EqualError(t,
+		str.SendRequestHeader(
+			httptest.NewRequest(http.MethodGet, "https://quic-go.net", strings.NewReader("foobar")),
+		),
+		"http3: invalid use of RequestStream.SendRequestHeader with a request that has a request body",
+	)
 
 	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 	qstr.EXPECT().Write(gomock.Any()).AnyTimes()
 	require.NoError(t, str.SendRequestHeader(req))
 	// duplicate calls are not allowed
-	require.EqualError(t, str.SendRequestHeader(req), "http3: invalid duplicate use of SendRequestHeader")
+	require.EqualError(t, str.SendRequestHeader(req), "http3: invalid duplicate use of RequestStream.SendRequestHeader")
 
 	buf := bytes.NewBuffer(encodeResponse(t, 200))
 	buf.Write((&dataFrame{Length: 6}).Append(nil))
@@ -173,6 +187,7 @@ func TestRequestStream(t *testing.T) {
 	rsp, err := str.ReadResponse()
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rsp.StatusCode)
+
 	b := make([]byte, 10)
 	n, err := str.Read(b)
 	require.NoError(t, err)

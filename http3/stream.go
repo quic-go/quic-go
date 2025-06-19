@@ -188,7 +188,7 @@ func newRequestStream(
 // and the response has been consumed (using ReadResponse).
 func (s *RequestStream) Read(b []byte) (int, error) {
 	if s.responseBody == nil {
-		return 0, errors.New("http3: invalid use of RequestStream.Read: need to call ReadResponse first")
+		return 0, errors.New("http3: invalid use of RequestStream.Read before ReadResponse")
 	}
 	return s.responseBody.Read(b)
 }
@@ -202,6 +202,9 @@ func (s *RequestStream) StreamID() protocol.StreamID {
 //
 // It can only be used after the request has been sent (using SendRequestHeader).
 func (s *RequestStream) Write(b []byte) (int, error) {
+	if !s.sentRequest {
+		return 0, errors.New("http3: invalid use of RequestStream.Write before SendRequestHeader")
+	}
 	return s.str.Write(b)
 }
 
@@ -264,11 +267,19 @@ func (s *RequestStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 
 // SendRequestHeader sends the HTTP request.
 //
+// It can only used for requests that don't have a request body.
 // It is invalid to call it more than once.
 // It is invalid to call it after Write has been called.
 func (s *RequestStream) SendRequestHeader(req *http.Request) error {
+	if req.Body != nil && req.Body != http.NoBody {
+		return errors.New("http3: invalid use of RequestStream.SendRequestHeader with a request that has a request body")
+	}
+	return s.sendRequestHeader(req)
+}
+
+func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	if s.sentRequest {
-		return errors.New("http3: invalid duplicate use of SendRequestHeader")
+		return errors.New("http3: invalid duplicate use of RequestStream.SendRequestHeader")
 	}
 	if !s.disableCompression && req.Method != http.MethodHead &&
 		req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
@@ -281,10 +292,14 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 
 // ReadResponse reads the HTTP response from the stream.
 //
+// It must be called after sending the request (using SendRequestHeader).
 // It is invalid to call it more than once.
 // It doesn't set Response.Request and Response.TLS.
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
+	if !s.sentRequest {
+		return nil, errors.New("http3: invalid duplicate use of RequestStream.ReadResponse before SendRequestHeader")
+	}
 	frame, err := s.str.frameParser.ParseNext()
 	if err != nil {
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
