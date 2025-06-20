@@ -35,7 +35,8 @@ type datagramStream interface {
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
 type Stream struct {
 	datagramStream
-	conn *Conn
+	conn        *Conn
+	frameParser *frameParser
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
 
@@ -45,12 +46,16 @@ type Stream struct {
 	parsedTrailer bool
 }
 
-func newStream(str datagramStream, conn *Conn, parseTrailer func(io.Reader, uint64) error) *Stream {
+func newStream(str datagramStream, conn *Conn, trace *httptrace.ClientTrace, parseTrailer func(io.Reader, uint64) error) *Stream {
 	return &Stream{
 		datagramStream: str,
 		conn:           conn,
 		buf:            make([]byte, 16),
 		parseTrailer:   parseTrailer,
+		frameParser: &frameParser{
+			closeConn: conn.CloseWithError,
+			r:         &tracingReader{Reader: str, trace: trace},
+		},
 	}
 }
 
@@ -151,12 +156,10 @@ type RequestStream struct {
 	reqDone            chan<- struct{}
 	disableCompression bool
 	response           *http.Response
-	trace              *httptrace.ClientTrace
 
 	sentRequest   bool
 	requestedGzip bool
 	isConnect     bool
-	firstByte     bool
 }
 
 func newRequestStream(
@@ -167,7 +170,6 @@ func newRequestStream(
 	disableCompression bool,
 	maxHeaderBytes uint64,
 	rsp *http.Response,
-	trace *httptrace.ClientTrace,
 ) *RequestStream {
 	return &RequestStream{
 		str:                str,
@@ -177,7 +179,6 @@ func newRequestStream(
 		disableCompression: disableCompression,
 		maxHeaderBytes:     maxHeaderBytes,
 		response:           rsp,
-		trace:              trace,
 	}
 }
 
@@ -284,16 +285,7 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 // It doesn't set Response.Request and Response.TLS.
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
-	qstr := s.str.datagramStream
-	fp := &frameParser{
-		closeConn: s.str.conn.CloseWithError,
-		r: &tracingReader{
-			Reader: qstr,
-			first:  &s.firstByte,
-			trace:  s.trace,
-		},
-	}
-	frame, err := fp.ParseNext()
+	frame, err := s.str.frameParser.ParseNext()
 	if err != nil {
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
@@ -310,7 +302,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
 	}
 	headerBlock := make([]byte, hf.Length)
-	if _, err := io.ReadFull(qstr, headerBlock); err != nil {
+	if _, err := io.ReadFull(s.str.datagramStream, headerBlock); err != nil {
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", err)
@@ -354,15 +346,15 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 
 type tracingReader struct {
 	io.Reader
-	first *bool
-	trace *httptrace.ClientTrace
+	readFirst bool
+	trace     *httptrace.ClientTrace
 }
 
 func (r *tracingReader) Read(b []byte) (int, error) {
 	n, err := r.Reader.Read(b)
-	if n > 0 && r.first != nil && !*r.first {
+	if n > 0 && !r.readFirst {
 		traceGotFirstResponseByte(r.trace)
-		*r.first = true
+		r.readFirst = true
 	}
 	return n, err
 }

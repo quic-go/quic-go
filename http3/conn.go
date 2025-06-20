@@ -165,7 +165,7 @@ func (c *Conn) openRequestStream(
 	rsp := &http.Response{}
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
-		newStream(hstr, c, func(r io.Reader, l uint64) error {
+		newStream(hstr, c, trace, func(r io.Reader, l uint64) error {
 			hdr, err := c.decodeTrailers(r, l, maxHeaderBytes)
 			if err != nil {
 				return err
@@ -179,7 +179,6 @@ func (c *Conn) openRequestStream(
 		disableCompression,
 		maxHeaderBytes,
 		rsp,
-		trace,
 	), nil
 }
 
