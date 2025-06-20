@@ -610,7 +610,7 @@ func (s *Server) handleRequest(conn *Conn, str datagramStream, decoder *qpack.De
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, nil)
+	hstr := newStream(str, conn, nil, nil)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 

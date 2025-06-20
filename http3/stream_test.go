@@ -43,6 +43,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 			nil,
 			0,
 		),
+		nil,
 		func(r io.Reader, u uint64) error { return nil },
 	)
 
@@ -91,6 +92,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 	str := newStream(
 		qstr,
 		newConnection(context.Background(), clientConn, false, protocol.PerspectiveClient, nil, 0),
+		nil,
 		func(r io.Reader, u uint64) error { return nil },
 	)
 
@@ -112,7 +114,7 @@ func TestStreamWrite(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	str := newStream(qstr, nil, func(r io.Reader, u uint64) error { return nil })
+	str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
 	str.Write([]byte("foo"))
 	str.Write([]byte("foobar"))
 
@@ -144,6 +146,7 @@ func TestRequestStream(t *testing.T) {
 		newStream(
 			qstr,
 			newConnection(context.Background(), clientConn, false, protocol.PerspectiveClient, nil, 0),
+			&httptrace.ClientTrace{},
 			func(r io.Reader, u uint64) error { return nil },
 		),
 		requestWriter,
@@ -152,7 +155,6 @@ func TestRequestStream(t *testing.T) {
 		true,
 		math.MaxUint64,
 		&http.Response{},
-		&httptrace.ClientTrace{},
 	)
 
 	_, err := str.Read(make([]byte, 100))
