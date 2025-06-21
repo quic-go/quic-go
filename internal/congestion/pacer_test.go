@@ -6,12 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPacerPacing(t *testing.T) {
 	bandwidth := 50 * initialMaxDatagramSize // 50 full-size packets per second
-	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
+	p := newPacer(
+		func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 },
+		&utils.RTTStats{},
+	)
 	now := time.Now()
 	require.Zero(t, p.TimeUntilSend())
 	budget := p.Budget(now)
@@ -65,7 +69,7 @@ func TestPacerPacing(t *testing.T) {
 
 func TestPacerUpdatePacketSize(t *testing.T) {
 	const bandwidth = 50 * initialMaxDatagramSize // 50 full-size packets per second
-	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
+	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 }, &utils.RTTStats{})
 
 	// consume the initial budget by sending packets
 	now := time.Now()
@@ -83,9 +87,44 @@ func TestPacerUpdatePacketSize(t *testing.T) {
 	require.Equal(t, maxBurstSizePackets*newDatagramSize, p.Budget(now.Add(time.Hour)))
 }
 
+func TestPacerLongRTT(t *testing.T) {
+	const bandwidth = 10000 * initialMaxDatagramSize // 10,000 full-size packets per second
+	rttStats := &utils.RTTStats{}
+	rttStats.UpdateRTT(640*time.Millisecond, 0)
+	require.Equal(t, 640*time.Millisecond, rttStats.SmoothedRTT())
+
+	p := newPacer(
+		func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 },
+		rttStats,
+	)
+
+	// consume the initial budget by sending packets
+	now := time.Now()
+	for p.Budget(now) > 0 {
+		p.SentPacket(now, initialMaxDatagramSize)
+	}
+
+	// we'd expect the next packet to be sent in 1ms, but since we only send
+	// 64 batches per RTT, it's 10ms instead
+	require.Equal(t, 10*time.Millisecond, p.TimeUntilSend().Sub(now))
+	// we should now be allowed to send 100 packets (10,000 / 100)
+	require.Equal(t, 100*initialMaxDatagramSize, p.Budget(now.Add(10*time.Millisecond)))
+
+	now = now.Add(10 * time.Millisecond)
+	for i := 0; i < 100; i++ {
+		require.NotZero(t, p.Budget(now))
+		p.SentPacket(now, initialMaxDatagramSize)
+	}
+	require.Zero(t, p.Budget(now))
+	require.Equal(t, 10*time.Millisecond, p.TimeUntilSend().Sub(now))
+}
+
 func TestPacerFastPacing(t *testing.T) {
 	const bandwidth = 10000 * initialMaxDatagramSize // 10,000 full-size packets per second
-	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
+	p := newPacer(
+		func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 },
+		&utils.RTTStats{},
+	)
 
 	// consume the initial budget by sending packets
 	now := time.Now()
@@ -109,7 +148,10 @@ func TestPacerFastPacing(t *testing.T) {
 }
 
 func TestPacerNoOverflows(t *testing.T) {
-	p := newPacer(func() Bandwidth { return infBandwidth })
+	p := newPacer(
+		func() Bandwidth { return infBandwidth },
+		&utils.RTTStats{},
+	)
 	now := time.Now()
 	p.SentPacket(now, initialMaxDatagramSize)
 	for range 100000 {
