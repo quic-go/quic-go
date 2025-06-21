@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
@@ -14,7 +15,8 @@ import (
 )
 
 func TestKeyUpdates(t *testing.T) {
-	t.Setenv("QUIC_GO_TEST_KEY_UPDATE_INTERVAL", "1") // update keys as frequently as possible
+	reset := handshake.SetKeyUpdateInterval(1) // update keys as frequently as possible
+	t.Cleanup(reset)
 
 	var sentHeaders []*logging.ShortHeader
 	var receivedHeaders []*logging.ShortHeader
