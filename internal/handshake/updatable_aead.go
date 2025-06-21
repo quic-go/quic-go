@@ -22,8 +22,7 @@ func init() {
 }
 
 func SetKeyUpdateInterval(v uint64) (reset func()) {
-	old := keyUpdateInterval.Load()
-	keyUpdateInterval.Store(v)
+	old := keyUpdateInterval.Swap(v)
 	return func() { keyUpdateInterval.Store(old) }
 }
 
