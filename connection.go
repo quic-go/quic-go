@@ -1882,7 +1882,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	c.peerParams = params
 	c.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
-	c.streamsMap.UpdateLimits(params)
+	c.streamsMap.HandleTransportParameters(params)
 	c.connStateMutex.Lock()
 	c.connState.SupportsDatagrams = c.supportsDatagrams()
 	c.connStateMutex.Unlock()
@@ -1961,7 +1961,7 @@ func (c *Conn) applyTransportParameters() {
 		c.idleTimeout = min(c.idleTimeout, params.MaxIdleTimeout)
 	}
 	c.keepAliveInterval = min(c.config.KeepAlivePeriod, c.idleTimeout/2)
-	c.streamsMap.UpdateLimits(params)
+	c.streamsMap.HandleTransportParameters(params)
 	c.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	c.rttStats.SetMaxAckDelay(params.MaxAckDelay)
