@@ -456,8 +456,12 @@ func (t *Transport) runSendQueue() {
 }
 
 // Close stops listening for UDP datagrams on the Transport.Conn.
-// If any listener was started, it will be closed as well.
-// It is invalid to start new listeners or connections after that.
+// It abruptly terminates all existing connections, without sending a CONNECTION_CLOSE
+// to the peers. It is the application's responsibility to cleanly terminate existing
+// connections prior to calling Close.
+//
+// If a server was started, it will be closed as well.
+// It is not possible to start any new server or dial new connections after that.
 func (t *Transport) Close() error {
 	// avoid race condition if the transport is currently being initialized
 	t.init(false)

@@ -288,7 +288,7 @@ func TestContextOnClientSide(t *testing.T) {
 	checkContextFromChan(tracerContextChan, false)
 }
 
-func TestServerAcceptAfterTransportClose(t *testing.T) {
+func TestServerTransportClose(t *testing.T) {
 	tlsServerConf := getTLSConfig()
 	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	server, err := tr.Listen(tlsServerConf, getQuicConfig(nil))
@@ -296,25 +296,59 @@ func TestServerAcceptAfterTransportClose(t *testing.T) {
 	defer server.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// the first conn is accepted by the server...
 	conn1, err := quic.Dial(
 		ctx,
 		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
-		nil,
+		getQuicConfig(&quic.Config{MaxIdleTimeout: scaleDuration(50 * time.Millisecond)}),
 	)
-	cancel()
 	require.NoError(t, err)
-	defer conn1.CloseWithError(0, "")
+	// ...the second conn isn't, it remains in the server's accept queue
+	conn2, err := quic.Dial(
+		ctx,
+		newUDPConnLocalhost(t),
+		server.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{MaxIdleTimeout: scaleDuration(50 * time.Millisecond)}),
+	)
+	require.NoError(t, err)
 
 	time.Sleep(scaleDuration(10 * time.Millisecond))
-	// Close Transport
-	tr.Close()
 
+	sconn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	require.Equal(t, conn1.LocalAddr(), sconn.RemoteAddr())
+
+	// closing the Transport abruptly terminates connections
+	require.NoError(t, tr.Close())
+
+	select {
+	case <-sconn.Context().Done():
+		require.ErrorIs(t, context.Cause(sconn.Context()), quic.ErrTransportClosed)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// no CONNECTION_CLOSE frame is sent to the peers
+	select {
+	case <-conn1.Context().Done():
+		require.ErrorIs(t, context.Cause(conn1.Context()), &quic.IdleTimeoutError{})
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	select {
+	case <-conn2.Context().Done():
+		require.ErrorIs(t, context.Cause(conn1.Context()), &quic.IdleTimeoutError{})
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// Accept should error after the transport was closed
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	// Server Accept should error after tranpsort close
-	conn2, err := server.Accept(ctx)
-	require.Nil(t, conn2)
+	accepted, err := server.Accept(ctx)
 	require.ErrorIs(t, err, quic.ErrTransportClosed)
+	require.Nil(t, accepted)
 }
