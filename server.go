@@ -347,6 +347,8 @@ func (s *baseServer) Close() error {
 	return nil
 }
 
+// close closes the server. The Transport mutex must not be held while calling this method.
+// This method closes any handshaking connections which requires the tranpsort mutex.
 func (s *baseServer) close(e error, notifyOnClose bool) {
 	s.closeMx.Lock()
 	if s.closeErr != nil {
