@@ -745,3 +745,69 @@ func TestNoPacketsSentWhenClientHelloFails(t *testing.T) {
 		// no packets received, as expected
 	}
 }
+
+func TestServerTransportClose(t *testing.T) {
+	tlsServerConf := getTLSConfig()
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	server, err := tr.Listen(tlsServerConf, getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// the first conn is accepted by the server...
+	conn1, err := quic.Dial(
+		ctx,
+		newUDPConnLocalhost(t),
+		server.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{MaxIdleTimeout: scaleDuration(50 * time.Millisecond)}),
+	)
+	require.NoError(t, err)
+	// ...the second conn isn't, it remains in the server's accept queue
+	conn2, err := quic.Dial(
+		ctx,
+		newUDPConnLocalhost(t),
+		server.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{MaxIdleTimeout: scaleDuration(50 * time.Millisecond)}),
+	)
+	require.NoError(t, err)
+
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+
+	sconn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	require.Equal(t, conn1.LocalAddr(), sconn.RemoteAddr())
+
+	// closing the Transport abruptly terminates connections
+	require.NoError(t, tr.Close())
+
+	select {
+	case <-sconn.Context().Done():
+		require.ErrorIs(t, context.Cause(sconn.Context()), quic.ErrTransportClosed)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// no CONNECTION_CLOSE frame is sent to the peers
+	select {
+	case <-conn1.Context().Done():
+		require.ErrorIs(t, context.Cause(conn1.Context()), &quic.IdleTimeoutError{})
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	select {
+	case <-conn2.Context().Done():
+		require.ErrorIs(t, context.Cause(conn1.Context()), &quic.IdleTimeoutError{})
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// Accept should error after the transport was closed
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	accepted, err := server.Accept(ctx)
+	require.ErrorIs(t, err, quic.ErrTransportClosed)
+	require.Nil(t, accepted)
+}
