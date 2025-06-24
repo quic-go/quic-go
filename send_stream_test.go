@@ -10,9 +10,12 @@ import (
 	mrand "math/rand/v2"
 	"net"
 	"os"
+	"runtime"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/mocks"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -173,6 +176,7 @@ func TestSendStreamLargeWrites(t *testing.T) {
 		offset += size
 		require.True(t, mockCtrl.Satisfied())
 	}
+
 	// Write should still be blocked, since there's more than protocol.MaxPacketBufferSize left to send
 	select {
 	case err := <-errChan:
@@ -180,8 +184,13 @@ func TestSendStreamLargeWrites(t *testing.T) {
 	case <-time.After(scaleDuration(5 * time.Millisecond)): // short wait to ensure write is blocked
 	}
 
+	// empty frames are not sent
+	frame, _, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, offset), protocol.Version1)
+	require.Nil(t, frame.Frame)
+	require.True(t, hasMore)
+
 	mockSender.EXPECT().onHasStreamData(streamID, str) // from the Close call
-	frame, _, hasMore := str.popStreamFrame(size+expectedFrameHeaderLen(streamID, offset), protocol.Version1)
+	frame, _, hasMore = str.popStreamFrame(size+expectedFrameHeaderLen(streamID, offset), protocol.Version1)
 	require.NotNil(t, frame.Frame)
 	require.True(t, hasMore)
 	require.Equal(t, data[offset:offset+size], frame.Frame.Data)
@@ -551,6 +560,12 @@ func TestSendStreamUpdateSendWindow(t *testing.T) {
 	// no calls to onHasStreamData if the window size wasn't increased
 	mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(41)).Return(false)
 	str.updateSendWindow(41)
+
+	gomock.InOrder(
+		mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(123)).Return(true),
+		mockSender.EXPECT().onHasStreamData(protocol.StreamID(42), str),
+	)
+	str.updateSendWindow(123)
 }
 
 func TestSendStreamCancellation(t *testing.T) {
@@ -767,7 +782,68 @@ func TestSendStreamCancellationResetStreamRetransmission(t *testing.T) {
 	f2.Handler.OnAcked(f2.Frame)
 }
 
-func TestSendStreamStopSending(t *testing.T) {
+func TestSendStreamStopSendingAfterWrite(t *testing.T) {
+	t.Run("complete by Write", func(t *testing.T) {
+		testSendStreamStopSendingAfterWrite(t, "write")
+	})
+	t.Run("complete by Close", func(t *testing.T) {
+		testSendStreamStopSendingAfterWrite(t, "close")
+	})
+	t.Run("complete by CancelWrite", func(t *testing.T) {
+		testSendStreamStopSendingAfterWrite(t, "cancelwrite")
+	})
+}
+
+func testSendStreamStopSendingAfterWrite(t *testing.T, completeBy string) {
+	const streamID protocol.StreamID = 1000
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str).MaxTimes(2)
+	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+	require.NoError(t, err)
+	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+	mockFC.EXPECT().AddBytesSent(gomock.Any())
+	frame, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
+	require.True(t, mockCtrl.Satisfied())
+
+	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 1337})
+
+	cf, ok, hasMore := str.getControlFrame(time.Now())
+	require.True(t, ok)
+	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 6, ErrorCode: 1337}, cf.Frame)
+	require.False(t, hasMore)
+
+	// acknowledging the RESET_STREAM frame doesn't complete the stream,
+	// since it was neither cancelled nor closed
+	cf.Handler.OnAcked(cf.Frame)
+	require.True(t, mockCtrl.Satisfied())
+
+	mockSender.EXPECT().onStreamCompleted(streamID)
+	switch completeBy {
+	case "write":
+		// calls to Write should return an error
+		_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+		require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
+	case "close":
+		require.ErrorContains(t, str.Close(), "close called for canceled stream")
+	case "cancelwrite":
+		str.CancelWrite(1234)
+	}
+	// error code and remote flag are unchanged
+	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
+	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
+	frame, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
+	_, ok, _ = str.getControlFrame(time.Now())
+	require.False(t, ok)
+}
+
+func TestSendStreamStopSendingDuringWrite(t *testing.T) {
 	const streamID protocol.StreamID = 1000
 	mockCtrl := gomock.NewController(t)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
@@ -785,7 +861,7 @@ func TestSendStreamStopSending(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() {
-		_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write(make([]byte, 2000))
+		_, err := str.Write(make([]byte, 2000))
 		errChan <- err
 	}()
 
@@ -803,6 +879,11 @@ func TestSendStreamStopSending(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 6, ErrorCode: 1337}, cf.Frame)
 	require.False(t, hasMore)
+
+	// acknowledging the RESET_STREAM frame completes the stream
+	mockSender.EXPECT().onStreamCompleted(streamID)
+	cf.Handler.OnAcked(cf.Frame)
+	require.True(t, mockCtrl.Satisfied())
 
 	// calls to Write should return an error
 	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
@@ -1011,20 +1092,36 @@ func TestSendStreamRetransmitDataUntilAcknowledged(t *testing.T) {
 	mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) { completed = true })
 
 	received := make([]byte, dataLen)
-	for !completed {
+	var counter int
+	frameQueue := make([]ackhandler.StreamFrame, 0, 32)
+	for !completed || len(frameQueue) > 0 {
+		counter++
+		if counter > 1e6 {
+			t.Fatal("stream should have completed")
+		}
 		f, _, _ := str.popStreamFrame(protocol.ByteCount(mrand.IntN(300)+100), protocol.Version1)
-		if f.Frame == nil {
-			continue
+		var dequeuedFrame bool
+		if f.Frame != nil {
+			frameQueue = append(frameQueue, f)
+			dequeuedFrame = true
 		}
-		sf := f.Frame
-		// 50%: acknowledge the frame and save the data
-		// 50%: lose the frame
-		if mrand.IntN(100) < 50 {
-			copy(received[sf.Offset:sf.Offset+sf.DataLen()], sf.Data)
-			f.Handler.OnAcked(f.Frame)
-		} else {
-			f.Handler.OnLost(f.Frame)
+
+		// Process one of the queued frames at random.
+		// This simulates potential reordering.
+		if len(frameQueue) > 0 && (!dequeuedFrame || len(frameQueue) == cap(frameQueue)) {
+			idx := mrand.IntN(len(frameQueue))
+			f := frameQueue[idx]
+			// 50%: acknowledge the frame and save the data
+			// 50%: lose the frame
+			if mrand.Int()%2 == 0 {
+				copy(received[f.Frame.Offset:f.Frame.Offset+f.Frame.DataLen()], f.Frame.Data)
+				f.Handler.OnAcked(f.Frame)
+			} else {
+				f.Handler.OnLost(f.Frame)
+			}
+			frameQueue = slices.Delete(frameQueue, idx, idx+1)
 		}
+		runtime.Gosched()
 	}
 	require.Equal(t, data, received)
 }
