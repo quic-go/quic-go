@@ -76,11 +76,11 @@ type ClientConn struct {
 var _ http.RoundTripper = &ClientConn{}
 
 func newClientConn(
-	conn *quic.Conn,
+	conn QUICConn,
 	enableDatagrams bool,
 	additionalSettings map[uint64]uint64,
-	streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error),
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool),
+	streamHijacker func(FrameType, quic.ConnectionTracingID, QUICStream, error) (hijacked bool, err error),
+	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, QUICReceiveStream, error) (hijacked bool),
 	maxResponseHeaderBytes int64,
 	disableCompression bool,
 	logger *slog.Logger,
@@ -141,7 +141,7 @@ func (c *ClientConn) setupConn() error {
 	return err
 }
 
-func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error)) {
+func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, quic.ConnectionTracingID, QUICStream, error) (hijacked bool, err error)) {
 	for {
 		str, err := c.conn.conn.AcceptStream(context.Background())
 		if err != nil {

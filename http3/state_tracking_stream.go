@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/quic-go/quic-go"
 )
@@ -19,7 +20,7 @@ const streamDatagramQueueLen = 32
 // parent connection, this is done through the streamClearer interface when
 // both the send and receive sides are closed
 type stateTrackingStream struct {
-	*quic.Stream
+	Stream QUICStream
 
 	sendDatagram func([]byte) error
 	hasData      chan struct{}
@@ -38,7 +39,7 @@ type streamClearer interface {
 	clearStream(quic.StreamID)
 }
 
-func newStateTrackingStream(s *quic.Stream, clearer streamClearer, sendDatagram func([]byte) error) *stateTrackingStream {
+func newStateTrackingStream(s QUICStream, clearer streamClearer, sendDatagram func([]byte) error) *stateTrackingStream {
 	t := &stateTrackingStream{
 		Stream:       s,
 		clearer:      clearer,
@@ -168,6 +169,26 @@ start:
 	goto start
 }
 
-func (s *stateTrackingStream) QUICStream() *quic.Stream {
+func (s *stateTrackingStream) QUICStream() QUICStream {
 	return s.Stream
+}
+
+func (s *stateTrackingStream) Context() context.Context {
+	return s.Stream.Context()
+}
+
+func (s *stateTrackingStream) StreamID() quic.StreamID {
+	return s.Stream.StreamID()
+}
+
+func (s *stateTrackingStream) SetDeadline(t time.Time) error {
+	return s.Stream.SetDeadline(t)
+}
+
+func (s *stateTrackingStream) SetReadDeadline(t time.Time) error {
+	return s.Stream.SetReadDeadline(t)
+}
+
+func (s *stateTrackingStream) SetWriteDeadline(t time.Time) error {
+	return s.Stream.SetWriteDeadline(t)
 }
