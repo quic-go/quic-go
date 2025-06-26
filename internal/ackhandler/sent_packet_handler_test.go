@@ -1166,6 +1166,7 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 
 	// send one more non-probe packet
 	pn := sendPacket(now, false)
+	packets.Lost = packets.Lost[:0]
 	// the timeout is now based on this packet
 	require.Less(t, sph.GetLossDetectionTimeout(), pathProbeTimeout)
 	_, err = sph.ReceivedAck(
@@ -1175,7 +1176,9 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	packets.Lost = packets.Lost[:0]
+	// Migrating the path declares all packets lost.
+	// Note that if the packet number generator decided to skip a packet number,
+	// pn1 might already have been declared lost when processing the ACK.
 	sph.MigratedPath(now, 1200)
 	require.Zero(t, sph.getBytesInFlight())
 	require.Zero(t, rttStats.SmoothedRTT())
