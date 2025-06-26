@@ -179,7 +179,10 @@ type Config struct {
 	Allow0RTT bool
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
-	Tracer          func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
+	// Enable QUIC Stream Resets with Partial Delivery.
+	// See https://datatracker.ietf.org/doc/html/draft-ietf-quic-reliable-stream-reset-07.
+	EnableStreamResetPartialDelivery bool
+	Tracer                           func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer
 }
 
 // ClientHelloInfo contains information about an incoming connection attempt.
@@ -207,6 +210,8 @@ type ConnectionState struct {
 	// This is a unilateral declaration by the peer - receiving datagrams is only possible if
 	// datagram support was enabled locally via Config.EnableDatagrams.
 	SupportsDatagrams bool
+	// SupportsStreamResetPartialDelivery indicates whether the peer advertised support for QUIC Stream Resets with Partial Delivery.
+	SupportsStreamResetPartialDelivery bool
 	// Used0RTT says if 0-RTT resumption was used.
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.

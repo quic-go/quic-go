@@ -126,6 +126,8 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			f.Set(reflect.ValueOf(true))
 		case "Allow0RTT":
 			f.Set(reflect.ValueOf(true))
+		case "EnableStreamResetPartialDelivery":
+			f.Set(reflect.ValueOf(true))
 		default:
 			t.Fatalf("all fields must be accounted for, but saw unknown field %q", fn)
 		}
@@ -133,7 +135,7 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 	return c
 }
 
-func TestConfigCloning(t *testing.T) {
+func TestConfigClone(t *testing.T) {
 	t.Run("function fields", func(t *testing.T) {
 		var calledAllowConnectionWindowIncrease, calledTracer bool
 		c1 := &Config{
@@ -153,7 +155,7 @@ func TestConfigCloning(t *testing.T) {
 		require.True(t, calledTracer)
 	})
 
-	t.Run("clones non-function fields", func(t *testing.T) {
+	t.Run("non-function fields", func(t *testing.T) {
 		c := configWithNonZeroNonFunctionFields(t)
 		require.Equal(t, c, c.Clone())
 	})
