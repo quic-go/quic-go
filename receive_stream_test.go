@@ -738,3 +738,38 @@ func TestReceiveStreamMultipleResetStreamAt(t *testing.T) {
 	require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: true})
 	require.Zero(t, n)
 }
+
+func TestReceiveStreamResetStreamAtAfterResetStream(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newReceiveStream(42, mockSender, mockFC)
+
+	mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false, gomock.Any())
+	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar")}, time.Now()))
+
+	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(3))
+	b := make([]byte, 3)
+	n, err := str.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	require.Equal(t, []byte("foo"), b)
+	require.True(t, mockCtrl.Satisfied())
+
+	mockFC.EXPECT().Abandon()
+	mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(10), true, gomock.Any())
+	str.handleResetStreamFrame(&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 1337, FinalSize: 10}, time.Now())
+	require.True(t, mockCtrl.Satisfied())
+
+	// receiving a reordered RESET_STREAM_AT frame has no effect
+	mockFC.EXPECT().Abandon()
+	mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(10), true, gomock.Any())
+	str.handleResetStreamFrame(&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 1337, FinalSize: 10, ReliableSize: 8}, time.Now())
+	require.True(t, mockCtrl.Satisfied())
+
+	// Read returns the error
+	mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
+	n, err = str.Read(b)
+	require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: true})
+	require.Zero(t, n)
+}

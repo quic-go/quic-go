@@ -70,7 +70,6 @@ func newReceiveStream(
 		readChan:       make(chan struct{}, 1),
 		readOnce:       make(chan struct{}, 1),
 		finalOffset:    protocol.MaxByteCount,
-		reliableSize:   protocol.InvalidByteCount,
 	}
 }
 
@@ -132,7 +131,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 		s.errorRead = true
 		return false, false, 0, io.EOF
 	}
-	if s.cancelledLocally || (s.cancelledRemotely && s.reliableSize != protocol.InvalidByteCount && s.readPos >= s.reliableSize) {
+	if s.cancelledLocally || (s.cancelledRemotely && s.readPos >= s.reliableSize) {
 		s.errorRead = true
 		return false, false, 0, s.cancelErr
 	}
@@ -155,7 +154,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			if s.closeForShutdownErr != nil {
 				return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, s.closeForShutdownErr
 			}
-			if s.cancelledLocally || (s.cancelledRemotely && s.reliableSize != protocol.InvalidByteCount && s.readPos >= s.reliableSize) {
+			if s.cancelledLocally || (s.cancelledRemotely && s.readPos >= s.reliableSize) {
 				s.errorRead = true
 				return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, s.cancelErr
 			}
@@ -202,7 +201,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 
 		// when a RESET_STREAM was received, the flow controller was already
 		// informed about the final offset for this stream
-		if !s.cancelledRemotely || (s.reliableSize != protocol.InvalidByteCount && s.readPos < s.reliableSize) {
+		if !s.cancelledRemotely || s.readPos < s.reliableSize {
 			hasStream, hasConn := s.flowController.AddBytesRead(protocol.ByteCount(m))
 			if hasStream {
 				s.queuedMaxStreamData = true
@@ -217,7 +216,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 		s.readPos += protocol.ByteCount(m)
 		bytesRead += m
 
-		if s.cancelledRemotely && s.reliableSize != protocol.InvalidByteCount && s.readPos >= s.reliableSize {
+		if s.cancelledRemotely && s.readPos >= s.reliableSize {
 			s.flowController.Abandon()
 		}
 
@@ -337,10 +336,10 @@ func (s *ReceiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame,
 	s.finalOffset = frame.FinalSize
 
 	// senders are allowed to reduce the reliable size, but frames might have been reordered
-	if s.reliableSize == protocol.InvalidByteCount || frame.ReliableSize < s.reliableSize {
+	if (!s.cancelledRemotely && s.reliableSize == 0) || frame.ReliableSize < s.reliableSize {
 		s.reliableSize = frame.ReliableSize
 	}
-	if s.reliableSize != protocol.InvalidByteCount && s.readPos >= s.reliableSize {
+	if s.readPos >= s.reliableSize {
 		// calling Abandon multiple times is a no-op
 		s.flowController.Abandon()
 	}
