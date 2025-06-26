@@ -319,6 +319,8 @@ func (m *streamsMap) HandleStreamFrame(f *wire.StreamFrame, rcvTime time.Time) e
 
 func (m *streamsMap) HandleTransportParameters(p *wire.TransportParameters) {
 	m.supportsResetStreamAt = p.EnableResetStreamAt
+	m.outgoingBidiStreams.EnableResetStreamAt()
+	m.outgoingUniStreams.EnableResetStreamAt()
 	m.outgoingBidiStreams.UpdateSendWindow(p.InitialMaxStreamDataBidiRemote)
 	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamNum.StreamID(protocol.StreamTypeBidi, m.perspective))
 	m.outgoingUniStreams.UpdateSendWindow(p.InitialMaxStreamDataUni)

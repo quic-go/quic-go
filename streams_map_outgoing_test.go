@@ -54,6 +54,11 @@ func testStreamsMapOutgoingOpenAndDelete(t *testing.T, perspective protocol.Pers
 	require.Equal(t, protocol.ByteCount(1000), str1.sendWindow)
 	require.Equal(t, protocol.ByteCount(1000), str2.sendWindow)
 
+	// enable reset stream at
+	m.EnableResetStreamAt()
+	require.True(t, str1.supportsResetStreamAt)
+	require.True(t, str2.supportsResetStreamAt)
+
 	err = m.DeleteStream(firstStream + 1337*4)
 	require.Error(t, err)
 	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})

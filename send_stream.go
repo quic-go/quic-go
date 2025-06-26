@@ -26,6 +26,11 @@ type SendStream struct {
 	streamID protocol.StreamID
 	sender   streamSender
 
+	// reliableSize is the portion of the stream that needs to be transmitted reliably,
+	// even if the stream is cancelled.
+	// This requires the peer to support RESET_STREAM_AT.
+	// This value should not be accessed directly, but only through the reliableOffset method.
+	// This method returns 0 if the peer doesn't support the RESET_STREAM_AT extension.
 	reliableSize protocol.ByteCount
 	writeOffset  protocol.ByteCount
 
@@ -237,7 +242,8 @@ func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 		return nil, nil, false
 	}
 	if s.resetErr != nil {
-		if s.reliableSize == 0 || (s.writeOffset >= s.reliableSize && len(s.retransmissionQueue) == 0) {
+		reliableOffset := s.reliableOffset()
+		if reliableOffset == 0 || (s.writeOffset >= reliableOffset && len(s.retransmissionQueue) == 0) {
 			return nil, nil, false
 		}
 	}
@@ -273,8 +279,9 @@ func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	}
 
 	// if the stream is canceled, only data up to the reliable size needs to be sent
-	if s.resetErr != nil && s.reliableSize > 0 {
-		maxDataLen = min(maxDataLen, s.reliableSize-s.writeOffset)
+	reliableOffset := s.reliableOffset()
+	if s.resetErr != nil && reliableOffset > 0 {
+		maxDataLen = min(maxDataLen, reliableOffset-s.writeOffset)
 	}
 	f, hasMoreData := s.popNewStreamFrame(maxBytes, maxDataLen, v)
 	if f == nil {
@@ -284,7 +291,7 @@ func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 		s.writeOffset += f.DataLen()
 		s.flowController.AddBytesSent(f.DataLen())
 	}
-	if s.resetErr != nil && s.writeOffset >= s.reliableSize {
+	if s.resetErr != nil && s.writeOffset >= reliableOffset {
 		hasMoreData = false
 	}
 	var blocked *wire.StreamDataBlockedFrame
@@ -438,15 +445,13 @@ func (s *SendStream) Close() error {
 // It only has an effect if the peer enabled support for the RESET_STREAM_AT extension,
 // otherwise, it is a no-op.
 func (s *SendStream) SetReliableBoundary() {
-	if !s.supportsResetStreamAt {
-		return
-	}
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	s.reliableSize = s.writeOffset
 	if s.nextFrame != nil {
 		s.reliableSize += s.nextFrame.DataLen()
 	}
-	s.mutex.Unlock()
 }
 
 // CancelWrite aborts sending on this stream.
@@ -477,37 +482,38 @@ func (s *SendStream) CancelWrite(errorCode StreamErrorCode) {
 	s.resetErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: false}
 	s.ctxCancel(s.resetErr)
 
-	if s.reliableSize == 0 {
+	reliableOffset := s.reliableOffset()
+	if reliableOffset == 0 {
 		s.numOutstandingFrames = 0
 		s.retransmissionQueue = nil
 	}
 	s.queuedResetStreamFrame = &wire.ResetStreamFrame{
 		StreamID:  s.streamID,
-		FinalSize: max(s.writeOffset, s.reliableSize),
+		FinalSize: max(s.writeOffset, reliableOffset),
 		ErrorCode: errorCode,
-		// if the peer doesn't support the extension, the reliable size will always be 0
-		ReliableSize: s.reliableSize,
+		// if the peer doesn't support the extension, the reliable offset will always be 0
+		ReliableSize: reliableOffset,
 	}
-	if s.reliableSize > 0 {
+	if reliableOffset > 0 {
 		if s.nextFrame != nil {
-			if s.nextFrame.Offset >= s.reliableSize {
+			if s.nextFrame.Offset >= reliableOffset {
 				s.nextFrame.PutBack()
 				s.nextFrame = nil
-			} else if s.nextFrame.Offset+s.nextFrame.DataLen() > s.reliableSize {
-				s.nextFrame.Data = s.nextFrame.Data[:s.reliableSize-s.nextFrame.Offset]
+			} else if s.nextFrame.Offset+s.nextFrame.DataLen() > reliableOffset {
+				s.nextFrame.Data = s.nextFrame.Data[:reliableOffset-s.nextFrame.Offset]
 			}
 		}
 		if len(s.retransmissionQueue) > 0 {
 			retransmissionQueue := make([]*wire.StreamFrame, 0, len(s.retransmissionQueue))
 			for _, f := range s.retransmissionQueue {
-				if f.Offset >= s.reliableSize {
+				if f.Offset >= reliableOffset {
 					f.PutBack()
 					continue
 				}
-				if f.Offset+f.DataLen() <= s.reliableSize {
+				if f.Offset+f.DataLen() <= reliableOffset {
 					retransmissionQueue = append(retransmissionQueue, f)
 				} else {
-					f.Data = f.Data[:s.reliableSize-f.Offset]
+					f.Data = f.Data[:reliableOffset-f.Offset]
 					retransmissionQueue = append(retransmissionQueue, f)
 				}
 			}
@@ -518,6 +524,12 @@ func (s *SendStream) CancelWrite(errorCode StreamErrorCode) {
 
 	s.signalWrite()
 	s.sender.onHasStreamControlFrame(s.streamID, s)
+}
+
+func (s *SendStream) enableResetStreamAt() {
+	s.mutex.Lock()
+	s.supportsResetStreamAt = true
+	s.mutex.Unlock()
 }
 
 func (s *SendStream) updateSendWindow(limit protocol.ByteCount) {
@@ -542,7 +554,7 @@ func (s *SendStream) handleStopSendingFrame(f *wire.StopSendingFrame) {
 
 	// If the stream was already cancelled (either locally, or due to a previous STOP_SENDING frame),
 	// there's nothing else to do.
-	if s.resetErr != nil && s.reliableSize == 0 {
+	if s.resetErr != nil && s.reliableOffset() == 0 {
 		s.mutex.Unlock()
 		return
 	}
@@ -579,6 +591,13 @@ func (s *SendStream) getControlFrame(time.Time) (_ ackhandler.Frame, ok, hasMore
 	}
 	s.queuedResetStreamFrame = nil
 	return f, true, false
+}
+
+func (s *SendStream) reliableOffset() protocol.ByteCount {
+	if !s.supportsResetStreamAt {
+		return 0
+	}
+	return s.reliableSize
 }
 
 // The Context is canceled as soon as the write-side of the stream is closed.
@@ -632,7 +651,7 @@ func (s *sendStreamAckHandler) OnAcked(f wire.Frame) {
 	sf.PutBack()
 
 	s.mutex.Lock()
-	if s.resetErr != nil && s.reliableSize == 0 {
+	if s.resetErr != nil && (*SendStream)(s).reliableOffset() == 0 {
 		s.mutex.Unlock()
 		return
 	}
@@ -653,7 +672,7 @@ func (s *sendStreamAckHandler) OnLost(f wire.Frame) {
 	s.mutex.Lock()
 	// If the reliable size was 0 when the stream was cancelled,
 	// the number of outstanding frames was immediately set to 0, and the retransmission queue was dropped.
-	if s.resetErr != nil && s.reliableSize == 0 {
+	if s.resetErr != nil && (*SendStream)(s).reliableOffset() == 0 {
 		s.mutex.Unlock()
 		return
 	}
@@ -662,10 +681,10 @@ func (s *sendStreamAckHandler) OnLost(f wire.Frame) {
 		panic("numOutStandingFrames negative")
 	}
 
-	if s.resetErr != nil && s.reliableSize > 0 {
+	if s.resetErr != nil && (*SendStream)(s).reliableOffset() > 0 {
 		// If the stream was reset, and this frame is beyond the reliable offset,
 		// it doesn't need to be retransmitted.
-		if sf.Offset >= s.reliableSize {
+		if sf.Offset >= (*SendStream)(s).reliableOffset() {
 			sf.PutBack()
 			// If this frame was the last one tracked, losing it might cause the stream to be completed.
 			completed := (*SendStream)(s).isNewlyCompleted()
@@ -677,8 +696,8 @@ func (s *sendStreamAckHandler) OnLost(f wire.Frame) {
 		}
 		// If the payload of the frame extends beyond the reliable size,
 		// truncate the frame to the reliable size.
-		if sf.Offset+sf.DataLen() > s.reliableSize {
-			sf.Data = sf.Data[:s.reliableSize-sf.Offset]
+		if sf.Offset+sf.DataLen() > (*SendStream)(s).reliableOffset() {
+			sf.Data = sf.Data[:(*SendStream)(s).reliableOffset()-sf.Offset]
 		}
 	}
 
@@ -699,7 +718,7 @@ func (s *sendStreamResetStreamHandler) OnAcked(f wire.Frame) {
 	// If the peer sent a STOP_SENDING after we sent a RESET_STREAM_AT frame,
 	// we sent 1. reduced the reliable size to 0 and 2. sent a RESET_STREAM frame.
 	// In this case, we don't care about the acknowledgment of this frame.
-	if rsf.ReliableSize != s.reliableSize {
+	if rsf.ReliableSize != (*SendStream)(s).reliableOffset() {
 		s.mutex.Unlock()
 		return
 	}
@@ -721,7 +740,7 @@ func (s *sendStreamResetStreamHandler) OnLost(f wire.Frame) {
 	// If the peer sent a STOP_SENDING after we sent a RESET_STREAM_AT frame,
 	// we sent 1. reduced the reliable size to 0 and 2. sent a RESET_STREAM frame.
 	// In this case, the loss of the RESET_STREAM_AT frame can be ignored.
-	if rsf.ReliableSize != s.reliableSize {
+	if rsf.ReliableSize != (*SendStream)(s).reliableOffset() {
 		s.mutex.Unlock()
 		return
 	}

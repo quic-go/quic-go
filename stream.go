@@ -163,6 +163,10 @@ func (s *Stream) updateSendWindow(limit protocol.ByteCount) {
 	s.sendStr.updateSendWindow(limit)
 }
 
+func (s *Stream) enableResetStreamAt() {
+	s.sendStr.enableResetStreamAt()
+}
+
 func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
 	return s.sendStr.popStreamFrame(maxBytes, v)
 }
