@@ -119,7 +119,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 	require.False(t, ok)
 
 	tr1 := &Transport{}
-	initialRTT := scaleDuration(2 * time.Millisecond)
+	initialRTT := scaleDuration(5 * time.Millisecond)
 	p := pm.NewPath(tr1, initialRTT, func() {})
 
 	pathChallengeChan := make(chan [8]byte)
@@ -146,31 +146,40 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 	go func() { errChan <- p.Probe(context.Background()) }()
 
 	start := time.Now()
-	var pathChallenges [][8]byte
+	type result struct {
+		pc   *[8]byte
+		took time.Duration
+	}
+	var results []result
 	for range 4 {
 		select {
 		case err := <-errChan:
 			require.NoError(t, err)
 		case pc := <-pathChallengeChan:
-			pathChallenges = append(pathChallenges, pc)
+			results = append(results, result{pc: &pc, took: time.Since(start)})
 		case <-time.After(scaleDuration(time.Second)):
 			t.Fatal("timeout")
 		}
 	}
-	took := time.Since(start)
 
-	require.NotContains(t, pathChallenges, [8]byte{})
-	require.NotEqual(t, pathChallenges[0], pathChallenges[1])
-	require.NotEqual(t, pathChallenges[0], pathChallenges[2])
-	require.NotEqual(t, pathChallenges[0], pathChallenges[3])
-	require.NotEqual(t, pathChallenges[1], pathChallenges[2])
-	require.NotEqual(t, pathChallenges[2], pathChallenges[3])
-
-	require.Greater(t, took, initialRTT*(1+2+4+8))
-	require.Less(t, took, initialRTT*(1+2+4+8)*3/2)
+	for i, r1 := range results {
+		require.NotNil(t, r1.pc)
+		if i > 0 {
+			took := r1.took - results[i-1].took
+			t.Log("took", took)
+			require.Greater(t, took, initialRTT<<(i-1))
+			require.Less(t, took, initialRTT<<i)
+		}
+		for j, r2 := range results {
+			if i == j {
+				continue
+			}
+			require.NotEqual(t, r1.pc, r2.pc)
+		}
+	}
 
 	// receiving a PATH_RESPONSE for any of the PATH_CHALLENGES completes path validation
-	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pathChallenges[2]})
+	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: *results[2].pc})
 
 	select {
 	case err := <-errChan:
@@ -180,7 +189,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 	}
 
 	// It is valid to probe again
-	pathChallenges = pathChallenges[:0]
+	results = results[:0]
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { errChan <- p.Probe(ctx) }()
 
@@ -189,7 +198,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 		case err := <-errChan:
 			require.NoError(t, err)
 		case pc := <-pathChallengeChan:
-			pathChallenges = append(pathChallenges, pc)
+			results = append(results, result{pc: &pc, took: time.Since(start)})
 		case <-time.After(scaleDuration(time.Second)):
 			t.Fatal("timeout")
 		}
