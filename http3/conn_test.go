@@ -213,6 +213,8 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 		conn.handleUnidirectionalStreams(nil)
 	}()
 
+	conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+
 	switch readErr {
 	case nil:
 		_, err = controlStr.Write(data)
@@ -226,8 +228,6 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 		time.Sleep(scaleDuration(10 * time.Millisecond))
 		controlStr.CancelWrite(1337)
 	}
-
-	conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 
 	select {
 	case <-serverConn.Context().Done():
