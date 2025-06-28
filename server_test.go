@@ -858,7 +858,9 @@ func TestServerGetConfigForClientReject(t *testing.T) {
 func TestServerReceiveQueue(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	acceptConn := make(chan struct{})
+	defer close(acceptConn)
 	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	newConnChan := make(chan struct{}, protocol.MaxServerUnprocessedPackets+2)
 	server := newTestServer(t, &serverOpts{
 		tracer: tracer,
 		newConn: func(
@@ -882,14 +884,23 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ utils.Logger,
 			_ protocol.Version,
 		) *wrappedConn {
+			newConnChan <- struct{}{}
 			<-acceptConn
 			return &wrappedConn{testHooks: &connTestHooks{handlePacket: func(receivedPacket) {}}}
 		},
 	})
 
 	conn := newUDPConnLocalhost(t)
-	for range protocol.MaxServerUnprocessedPackets + 1 {
+	for i := range protocol.MaxServerUnprocessedPackets + 1 {
 		server.handlePacket(getValidInitialPacket(t, conn.LocalAddr(), randConnID(6), randConnID(8)))
+		// newConn blocks on the acceptConn channel, so this blocks the server's run loop
+		if i == 0 {
+			select {
+			case <-newConnChan:
+			case <-time.After(time.Second):
+				t.Fatal("timeout")
+			}
+		}
 	}
 
 	done := make(chan struct{})
@@ -904,7 +915,6 @@ func TestServerReceiveQueue(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-	close(acceptConn)
 }
 
 func TestServerAccept(t *testing.T) {
