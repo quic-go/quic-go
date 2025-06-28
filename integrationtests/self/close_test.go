@@ -95,7 +95,7 @@ func TestDrainServerAcceptQueue(t *testing.T) {
 	defer cancel()
 	// fill up the accept queue
 	conns := make([]*quic.Conn, 0, protocol.MaxAcceptQueueSize)
-	for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+	for range protocol.MaxAcceptQueueSize {
 		conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
 		conns = append(conns, conn)
@@ -107,9 +107,8 @@ func TestDrainServerAcceptQueue(t *testing.T) {
 		c, err := server.Accept(ctx)
 		require.NoError(t, err)
 		// make sure the connection is not closed
-		require.NoError(t, conns[i].Context().Err(), "client connection closed")
-		require.NoError(t, c.Context().Err(), "server connection closed")
-		conns[i].CloseWithError(0, "")
+		require.NoError(t, context.Cause(conns[i].Context()), "client connection closed")
+		require.NoError(t, context.Cause(c.Context()), "server connection closed")
 		c.CloseWithError(0, "")
 	}
 	_, err = server.Accept(ctx)
