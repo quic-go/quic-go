@@ -17,9 +17,10 @@ import (
 type mockStream struct {
 	id protocol.StreamID
 
-	closed     bool
-	closeErr   error
-	sendWindow protocol.ByteCount
+	closed                bool
+	closeErr              error
+	sendWindow            protocol.ByteCount
+	supportsResetStreamAt bool
 }
 
 func (s *mockStream) closeForShutdown(err error) {
@@ -29,6 +30,10 @@ func (s *mockStream) closeForShutdown(err error) {
 
 func (s *mockStream) updateSendWindow(limit protocol.ByteCount) {
 	s.sendWindow = limit
+}
+
+func (s *mockStream) enableResetStreamAt() {
+	s.supportsResetStreamAt = true
 }
 
 func TestStreamsMapIncomingGettingStreams(t *testing.T) {
