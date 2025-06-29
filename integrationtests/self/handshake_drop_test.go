@@ -17,7 +17,6 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
 )
@@ -277,8 +276,10 @@ func TestPostQuantumClientHello(t *testing.T) {
 	b := make([]byte, 2500) // the ClientHello will now span across 3 packets
 	rand.Read(b)
 	wire.AdditionalTransportParametersClient = map[uint64][]byte{
-		// Avoid random collisions with the greased transport parameters.
-		uint64(27+31*(1000+mrand.IntN(31))/31) % quicvarint.Max: b,
+		// We don't use a greased transport parameter here, since the transport parameter serialization function
+		// will add a greased transport parameter, and therefore there's a risk of a collision.
+		// Instead, we just use pseudorandom constant value.
+		1234567: b,
 	}
 
 	ln, proxyPort := startDropTestListenerAndProxy(t, 10*time.Millisecond, 20*time.Second, dropCallbackDropOneThird(quicproxy.DirectionIncoming), false, false)
