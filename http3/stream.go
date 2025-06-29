@@ -27,7 +27,7 @@ type datagramStream interface {
 	SendDatagram(b []byte) error
 	ReceiveDatagram(ctx context.Context) ([]byte, error)
 
-	QUICStream() *quic.Stream
+	QUICStream() QUICStream
 }
 
 // A Stream is an HTTP/3 stream.

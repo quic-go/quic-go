@@ -37,15 +37,6 @@ const (
 	streamTypeQPACKDecoderStream = 3
 )
 
-// A QUICListener listens for incoming QUIC connections.
-type QUICListener interface {
-	Accept(context.Context) (*quic.Conn, error)
-	Addr() net.Addr
-	io.Closer
-}
-
-var _ QUICListener = &quic.EarlyListener{}
-
 // ConfigureTLSConfig creates a new tls.Config which can be used
 // to create a quic.Listener meant for serving HTTP/3.
 func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
@@ -156,12 +147,12 @@ type Server struct {
 	// Callers can either ignore the frame and return control of the stream back to HTTP/3
 	// (by returning hijacked false).
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
-	StreamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error)
+	StreamHijacker func(FrameType, quic.ConnectionTracingID, QUICStream, error) (hijacked bool, err error)
 
 	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
 	// If parsing the stream type fails, the error is passed to the callback.
 	// In that case, the stream type will not be set.
-	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool)
+	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, QUICReceiveStream, error) (hijacked bool)
 
 	// IdleTimeout specifies how long until idle clients connection should be
 	// closed. Idle refers only to the HTTP/3 layer, activity at the QUIC layer
@@ -171,7 +162,7 @@ type Server struct {
 
 	// ConnContext optionally specifies a function that modifies the context used for a new connection c.
 	// The provided ctx has a ServerContextKey value.
-	ConnContext func(ctx context.Context, c *quic.Conn) context.Context
+	ConnContext func(ctx context.Context, c QUICConn) context.Context
 
 	Logger *slog.Logger
 
@@ -252,8 +243,7 @@ func (s *Server) decreaseConnCount() {
 	}
 }
 
-// ServeQUICConn serves a single QUIC connection.
-func (s *Server) ServeQUICConn(conn *quic.Conn) error {
+func (s *Server) ServeQUICConnInterface(conn QUICConn) error {
 	s.mutex.Lock()
 	if s.closed {
 		s.mutex.Unlock()
@@ -269,12 +259,12 @@ func (s *Server) ServeQUICConn(conn *quic.Conn) error {
 	return s.handleConn(conn)
 }
 
-// ServeListener serves an existing QUIC listener.
-// Make sure you use http3.ConfigureTLSConfig to configure a tls.Config
-// and use it to construct a http3-friendly QUIC listener.
-// Closing the server does close the listener.
-// ServeListener always returns a non-nil error. After Shutdown or Close, the returned error is http.ErrServerClosed.
-func (s *Server) ServeListener(ln QUICListener) error {
+// ServeQUICConn serves a single QUIC connection.
+func (s *Server) ServeQUICConn(conn *quic.Conn) error {
+	return s.ServeQUICConnInterface(&connAdapter{conn})
+}
+
+func (s *Server) ServeListenerInterface(ln QUICListener) error {
 	s.mutex.Lock()
 	if err := s.addListener(&ln, false); err != nil {
 		s.mutex.Unlock()
@@ -284,6 +274,15 @@ func (s *Server) ServeListener(ln QUICListener) error {
 	defer s.removeListener(&ln)
 
 	return s.serveListener(ln)
+}
+
+// ServeListener serves an existing QUIC listener.
+// Make sure you use http3.ConfigureTLSConfig to configure a tls.Config
+// and use it to construct a http3-friendly QUIC listener.
+// Closing the server does close the listener.
+// ServeListener always returns a non-nil error. After Shutdown or Close, the returned error is http.ErrServerClosed.
+func (s *Server) ServeListener(ln *quic.EarlyListener) error {
+	return s.ServeListenerInterface(&quicListenerAdapter{ln})
 }
 
 func (s *Server) serveListener(ln QUICListener) error {
@@ -334,19 +333,24 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 	}
 
 	var ln QUICListener
-	var err error
 	if conn == nil {
 		addr := s.Addr
 		if addr == "" {
 			addr = ":https"
 		}
-		ln, err = quic.ListenAddrEarly(addr, baseConf, quicConf)
+		l, err := quic.ListenAddrEarly(addr, baseConf, quicConf)
+		if err != nil {
+			return nil, err
+		}
+		ln = &quicListenerAdapter{l}
 	} else {
-		ln, err = quic.ListenEarly(conn, baseConf, quicConf)
+		l, err := quic.ListenEarly(conn, baseConf, quicConf)
+		if err != nil {
+			return nil, err
+		}
+		ln = &quicListenerAdapter{l}
 	}
-	if err != nil {
-		return nil, err
-	}
+
 	if err := s.addListener(&ln, true); err != nil {
 		return nil, err
 	}
@@ -437,7 +441,7 @@ func (s *Server) removeListener(l *QUICListener) {
 
 // handleConn handles the HTTP/3 exchange on a QUIC connection.
 // It blocks until all HTTP handlers for all streams have returned.
-func (s *Server) handleConn(conn *quic.Conn) error {
+func (s *Server) handleConn(conn QUICConn) error {
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
 	// when the server is gracefully closed
 	ctrlStr, err := conn.OpenUniStream()
