@@ -21,7 +21,6 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )
@@ -134,8 +133,8 @@ func newConnPair(t *testing.T) (client, server *quic.Conn) {
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
-			InitialStreamReceiveWindow:     uint64(protocol.MaxByteCount),
-			InitialConnectionReceiveWindow: uint64(protocol.MaxByteCount),
+			InitialStreamReceiveWindow:     uint64(quic.MaxByteCount),
+			InitialConnectionReceiveWindow: uint64(quic.MaxByteCount),
 		},
 	)
 	require.NoError(t, err)
@@ -164,8 +163,8 @@ func newConnPairWithDatagrams(t *testing.T) (client, server *quic.Conn) {
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
-			InitialStreamReceiveWindow:     uint64(protocol.MaxByteCount),
-			InitialConnectionReceiveWindow: uint64(protocol.MaxByteCount),
+			InitialStreamReceiveWindow:     uint64(quic.MaxByteCount),
+			InitialConnectionReceiveWindow: uint64(quic.MaxByteCount),
 			EnableDatagrams:                true,
 		},
 	)

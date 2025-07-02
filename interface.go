@@ -15,6 +15,9 @@ import (
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
+// InvalidStreamID is a stream ID that is invalid. The first valid stream ID in QUIC is 0.
+const InvalidStreamID = protocol.InvalidStreamID
+
 // A Version is a QUIC version number.
 type Version = protocol.Version
 
@@ -24,6 +27,22 @@ const (
 	// Version2 is RFC 9369
 	Version2 = protocol.Version2
 )
+
+// SupportedVersions lists the versions that the server supports must be in sorted descending order
+var SupportedVersions = protocol.SupportedVersions
+
+// Perspective determines if we're acting as a server or a client
+type Perspective = protocol.Perspective
+
+const (
+	// A perspective of acting as a server.
+	PerspectiveServer = protocol.PerspectiveServer
+	// A perspective of acting as a client.
+	PerspectiveClient = protocol.PerspectiveClient
+)
+
+// MaxByteCount is the maximum value of a ByteCount
+const MaxByteCount = protocol.MaxByteCount
 
 // A ClientToken is a token received by the client.
 // It can be used to skip address validation on future connection attempts.

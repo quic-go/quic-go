@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -208,7 +207,7 @@ func TestTransportDatagrams(t *testing.T) {
 
 func TestTransportMultipleQUICVersions(t *testing.T) {
 	qconf := &quic.Config{
-		Versions: []quic.Version{protocol.Version2, protocol.Version1},
+		Versions: []quic.Version{quic.Version2, quic.Version1},
 	}
 	tr := &Transport{QUICConfig: qconf}
 	req := httptest.NewRequest(http.MethodGet, "https://example.com", nil)
