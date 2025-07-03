@@ -23,6 +23,9 @@ const maxQuarterStreamID = 1<<60 - 1
 
 var errGoAway = errors.New("connection in graceful shutdown")
 
+// invalidStreamID is a stream ID that is invalid. The first valid stream ID in QUIC is 0.
+const invalidStreamID = quic.StreamID(-1)
+
 // Conn is an HTTP/3 connection.
 // It has all methods from the quic.Conn expect for AcceptStream, AcceptUniStream,
 // SendDatagram and ReceiveDatagram.
@@ -31,7 +34,7 @@ type Conn struct {
 
 	ctx context.Context
 
-	perspective quic.Perspective
+	perspective perspective
 	logger      *slog.Logger
 
 	enableDatagrams bool
@@ -50,11 +53,22 @@ type Conn struct {
 	idleTimer   *time.Timer
 }
 
+type perspective int
+
+func (p perspective) opposite() perspective {
+	return 3 - p
+}
+
+const (
+	perspectiveServer perspective = 1
+	perspectiveClient perspective = 2
+)
+
 func newConnection(
 	ctx context.Context,
 	quicConn *quic.Conn,
 	enableDatagrams bool,
-	perspective quic.Perspective,
+	perspective perspective,
 	logger *slog.Logger,
 	idleTimeout time.Duration,
 ) *Conn {
@@ -68,8 +82,8 @@ func newConnection(
 		decoder:          qpack.NewDecoder(func(hf qpack.HeaderField) {}),
 		receivedSettings: make(chan struct{}),
 		streams:          make(map[quic.StreamID]*stateTrackingStream),
-		maxStreamID:      quic.InvalidStreamID,
-		lastStreamID:     quic.InvalidStreamID,
+		maxStreamID:      invalidStreamID,
+		lastStreamID:     invalidStreamID,
 	}
 	if idleTimeout > 0 {
 		c.idleTimer = time.AfterFunc(idleTimeout, c.onIdleTimer)
@@ -123,7 +137,7 @@ func (c *Conn) clearStream(id quic.StreamID) {
 	}
 	// The server is performing a graceful shutdown.
 	// If no more streams are remaining, close the connection.
-	if c.maxStreamID != quic.InvalidStreamID {
+	if c.maxStreamID != invalidStreamID {
 		if len(c.streams) == 0 {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 		}
@@ -140,7 +154,7 @@ func (c *Conn) openRequestStream(
 	c.streamMx.Lock()
 	maxStreamID := c.maxStreamID
 	var nextStreamID quic.StreamID
-	if c.lastStreamID == quic.InvalidStreamID {
+	if c.lastStreamID == invalidStreamID {
 		nextStreamID = 0
 	} else {
 		nextStreamID = c.lastStreamID + 4
@@ -148,7 +162,7 @@ func (c *Conn) openRequestStream(
 	c.streamMx.Unlock()
 	// Streams with stream ID equal to or greater than the stream ID carried in the GOAWAY frame
 	// will be rejected, see section 5.2 of RFC 9114.
-	if maxStreamID != quic.InvalidStreamID && nextStreamID >= maxStreamID {
+	if maxStreamID != invalidStreamID && nextStreamID >= maxStreamID {
 		return nil, errGoAway
 	}
 
@@ -268,10 +282,10 @@ func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.Connecti
 				return
 			case streamTypePushStream:
 				switch c.perspective {
-				case quic.PerspectiveClient:
+				case perspectiveClient:
 					// we never increased the Push ID, so we don't expect any push streams
 					c.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
-				case quic.PerspectiveServer:
+				case perspectiveServer:
 					// only the server can push
 					c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "")
 				}
@@ -341,7 +355,7 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 	}
 
 	// we don't support server push, hence we don't expect any GOAWAY frames from the client
-	if c.perspective == quic.PerspectiveServer {
+	if c.perspective == perspectiveServer {
 		return
 	}
 
@@ -369,7 +383,7 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 			return
 		}
 		c.streamMx.Lock()
-		if c.maxStreamID != quic.InvalidStreamID && goaway.StreamID > c.maxStreamID {
+		if c.maxStreamID != invalidStreamID && goaway.StreamID > c.maxStreamID {
 			c.streamMx.Unlock()
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 			return

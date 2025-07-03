@@ -25,6 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// maxByteCount is the maximum value of a ByteCount
+const maxByteCount = uint64(1<<62 - 1)
+
 func newUDPConnLocalhost(t testing.TB) *net.UDPConn {
 	t.Helper()
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
@@ -133,8 +136,8 @@ func newConnPair(t *testing.T) (client, server *quic.Conn) {
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
-			InitialStreamReceiveWindow:     uint64(quic.MaxByteCount),
-			InitialConnectionReceiveWindow: uint64(quic.MaxByteCount),
+			InitialStreamReceiveWindow:     maxByteCount,
+			InitialConnectionReceiveWindow: maxByteCount,
 		},
 	)
 	require.NoError(t, err)
@@ -163,8 +166,8 @@ func newConnPairWithDatagrams(t *testing.T) (client, server *quic.Conn) {
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
-			InitialStreamReceiveWindow:     uint64(quic.MaxByteCount),
-			InitialConnectionReceiveWindow: uint64(quic.MaxByteCount),
+			InitialStreamReceiveWindow:     maxByteCount,
+			InitialConnectionReceiveWindow: maxByteCount,
 			EnableDatagrams:                true,
 		},
 	)
