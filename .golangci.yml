@@ -48,7 +48,8 @@ linters:
               desc: "use standard Go tests"
         http3-internal:
           list-mode: lax
-          files: '**/github.com/quic-go/quic-go/http3/*'
+          files:
+            - '**/github.com/quic-go/quic-go/http3/*'
           deny:
             - pkg: 'github.com/quic-go/quic-go/internal'
               desc: 'no dependency on quic-go/internal'
