@@ -101,7 +101,7 @@ func newClientConn(
 		conn.Context(),
 		conn,
 		c.enableDatagrams,
-		perspectiveClient,
+		false, // client
 		c.logger,
 		0,
 	)

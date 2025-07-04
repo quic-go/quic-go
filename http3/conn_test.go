@@ -20,7 +20,7 @@ func TestConnReceiveSettings(t *testing.T) {
 		serverConn.Context(),
 		serverConn,
 		false,
-		perspectiveServer,
+		true, // server
 		nil,
 		0,
 	)
@@ -70,7 +70,7 @@ func testConnRejectDuplicateStreams(t *testing.T, typ uint64) {
 		context.Background(),
 		serverConn,
 		false,
-		perspectiveServer,
+		true, // server
 		nil,
 		0,
 	)
@@ -115,7 +115,7 @@ func TestConnResetUnknownUniStream(t *testing.T) {
 		context.Background(),
 		serverConn,
 		false,
-		perspectiveServer,
+		true, // server
 		nil,
 		0,
 	)
@@ -197,7 +197,7 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 		clientConn.Context(),
 		clientConn,
 		false,
-		perspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -260,7 +260,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 		clientConn.Context(),
 		clientConn,
 		false,
-		perspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -317,21 +317,21 @@ func testConnGoAway(t *testing.T, withStream bool) {
 
 func TestConnRejectPushStream(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
-		testConnRejectPushStream(t, perspectiveClient, ErrCodeStreamCreationError)
+		testConnRejectPushStream(t, false, ErrCodeStreamCreationError)
 	})
 	t.Run("server", func(t *testing.T) {
-		testConnRejectPushStream(t, perspectiveServer, ErrCodeIDError)
+		testConnRejectPushStream(t, true, ErrCodeIDError)
 	})
 }
 
-func testConnRejectPushStream(t *testing.T, pers perspective, expectedErr ErrCode) {
+func testConnRejectPushStream(t *testing.T, isServer bool, expectedErr ErrCode) {
 	clientConn, serverConn := newConnPair(t)
 
 	conn := newConnection(
 		clientConn.Context(),
 		clientConn,
 		false,
-		pers.opposite(),
+		!isServer,
 		nil,
 		0,
 	)
@@ -369,7 +369,7 @@ func TestConnInconsistentDatagramSupport(t *testing.T) {
 		clientConn.Context(),
 		clientConn,
 		true,
-		perspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -399,7 +399,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 		clientConn.Context(),
 		clientConn,
 		true,
-		perspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -466,7 +466,7 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 		clientConn.Context(),
 		clientConn,
 		true,
-		perspectiveClient,
+		false, // client
 		nil,
 		0,
 	)

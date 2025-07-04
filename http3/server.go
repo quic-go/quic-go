@@ -467,7 +467,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		connCtx,
 		conn,
 		s.EnableDatagrams,
-		perspectiveServer,
+		true, // server
 		s.Logger,
 		s.IdleTimeout,
 	)

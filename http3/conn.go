@@ -34,8 +34,8 @@ type Conn struct {
 
 	ctx context.Context
 
-	perspective perspective
-	logger      *slog.Logger
+	isServer bool
+	logger   *slog.Logger
 
 	enableDatagrams bool
 
@@ -53,29 +53,18 @@ type Conn struct {
 	idleTimer   *time.Timer
 }
 
-type perspective int
-
-func (p perspective) opposite() perspective {
-	return 3 - p
-}
-
-const (
-	perspectiveServer perspective = 1
-	perspectiveClient perspective = 2
-)
-
 func newConnection(
 	ctx context.Context,
 	quicConn *quic.Conn,
 	enableDatagrams bool,
-	perspective perspective,
+	isServer bool,
 	logger *slog.Logger,
 	idleTimeout time.Duration,
 ) *Conn {
 	c := &Conn{
 		ctx:              ctx,
 		conn:             quicConn,
-		perspective:      perspective,
+		isServer:         isServer,
 		logger:           logger,
 		idleTimeout:      idleTimeout,
 		enableDatagrams:  enableDatagrams,
@@ -281,13 +270,12 @@ func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.Connecti
 				// Our QPACK implementation doesn't use the dynamic table yet.
 				return
 			case streamTypePushStream:
-				switch c.perspective {
-				case perspectiveClient:
-					// we never increased the Push ID, so we don't expect any push streams
-					c.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
-				case perspectiveServer:
+				if c.isServer {
 					// only the server can push
 					c.CloseWithError(quic.ApplicationErrorCode(ErrCodeStreamCreationError), "")
+				} else {
+					// we never increased the Push ID, so we don't expect any push streams
+					c.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				}
 				return
 			default:
@@ -355,7 +343,7 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 	}
 
 	// we don't support server push, hence we don't expect any GOAWAY frames from the client
-	if c.perspective == perspectiveServer {
+	if c.isServer {
 		return
 	}
 

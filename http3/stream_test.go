@@ -39,7 +39,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 			clientConn.Context(),
 			clientConn,
 			false,
-			perspectiveClient,
+			false, // client
 			nil,
 			0,
 		),
@@ -91,7 +91,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 
 	str := newStream(
 		qstr,
-		newConnection(context.Background(), clientConn, false, perspectiveClient, nil, 0),
+		newConnection(context.Background(), clientConn, false, false, nil, 0),
 		nil,
 		func(r io.Reader, u uint64) error { return nil },
 	)
@@ -145,7 +145,7 @@ func TestRequestStream(t *testing.T) {
 	str := newRequestStream(
 		newStream(
 			qstr,
-			newConnection(context.Background(), clientConn, false, perspectiveClient, nil, 0),
+			newConnection(context.Background(), clientConn, false, false, nil, 0),
 			&httptrace.ClientTrace{},
 			func(r io.Reader, u uint64) error { return nil },
 		),

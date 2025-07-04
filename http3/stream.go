@@ -78,7 +78,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 				s.bytesRemainingInFrame = f.Length
 				break parseLoop
 			case *headersFrame:
-				if s.conn.perspective == perspectiveServer {
+				if s.conn.isServer {
 					continue
 				}
 				if s.parsedTrailer {
