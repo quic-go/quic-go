@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -25,9 +26,10 @@ const (
 	Version2 = protocol.Version2
 )
 
-// SupportedVersions returns the versions that the server supports, sorted in descending order.
+// SupportedVersions returns the support versions, sorted in descending order of preference.
 func SupportedVersions() []Version {
-	return protocol.SupportedVersions
+	// clone the slice to prevent the caller from modifying the slice
+	return slices.Clone(protocol.SupportedVersions)
 }
 
 // A ClientToken is a token received by the client.
