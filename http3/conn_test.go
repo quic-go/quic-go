@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
@@ -21,7 +20,7 @@ func TestConnReceiveSettings(t *testing.T) {
 		serverConn.Context(),
 		serverConn,
 		false,
-		protocol.PerspectiveServer,
+		true, // server
 		nil,
 		0,
 	)
@@ -71,7 +70,7 @@ func testConnRejectDuplicateStreams(t *testing.T, typ uint64) {
 		context.Background(),
 		serverConn,
 		false,
-		protocol.PerspectiveServer,
+		true, // server
 		nil,
 		0,
 	)
@@ -116,7 +115,7 @@ func TestConnResetUnknownUniStream(t *testing.T) {
 		context.Background(),
 		serverConn,
 		false,
-		protocol.PerspectiveServer,
+		true, // server
 		nil,
 		0,
 	)
@@ -198,7 +197,7 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 		clientConn.Context(),
 		clientConn,
 		false,
-		protocol.PerspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -261,7 +260,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 		clientConn.Context(),
 		clientConn,
 		false,
-		protocol.PerspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -318,21 +317,21 @@ func testConnGoAway(t *testing.T, withStream bool) {
 
 func TestConnRejectPushStream(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
-		testConnRejectPushStream(t, protocol.PerspectiveClient, ErrCodeStreamCreationError)
+		testConnRejectPushStream(t, false, ErrCodeStreamCreationError)
 	})
 	t.Run("server", func(t *testing.T) {
-		testConnRejectPushStream(t, protocol.PerspectiveServer, ErrCodeIDError)
+		testConnRejectPushStream(t, true, ErrCodeIDError)
 	})
 }
 
-func testConnRejectPushStream(t *testing.T, pers protocol.Perspective, expectedErr ErrCode) {
+func testConnRejectPushStream(t *testing.T, isServer bool, expectedErr ErrCode) {
 	clientConn, serverConn := newConnPair(t)
 
 	conn := newConnection(
 		clientConn.Context(),
 		clientConn,
 		false,
-		pers.Opposite(),
+		!isServer,
 		nil,
 		0,
 	)
@@ -370,7 +369,7 @@ func TestConnInconsistentDatagramSupport(t *testing.T) {
 		clientConn.Context(),
 		clientConn,
 		true,
-		protocol.PerspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -400,7 +399,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 		clientConn.Context(),
 		clientConn,
 		true,
-		protocol.PerspectiveClient,
+		false, // client
 		nil,
 		0,
 	)
@@ -429,7 +428,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 
 	str, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
 	require.NoError(t, err)
-	require.Equal(t, protocol.StreamID(strID), str.StreamID())
+	require.Equal(t, quic.StreamID(strID), str.StreamID())
 
 	// now open the stream...
 	require.NoError(t, serverConn.SendDatagram(append(quarterStreamID, []byte("bar")...)))
@@ -467,7 +466,7 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 		clientConn.Context(),
 		clientConn,
 		true,
-		protocol.PerspectiveClient,
+		false, // client
 		nil,
 		0,
 	)

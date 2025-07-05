@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -24,6 +25,12 @@ const (
 	// Version2 is RFC 9369
 	Version2 = protocol.Version2
 )
+
+// SupportedVersions returns the support versions, sorted in descending order of preference.
+func SupportedVersions() []Version {
+	// clone the slice to prevent the caller from modifying the slice
+	return slices.Clone(protocol.SupportedVersions)
+}
 
 // A ClientToken is a token received by the client.
 // It can be used to skip address validation on future connection attempts.
