@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/quic-go/qpack"
 
@@ -40,7 +39,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 			clientConn.Context(),
 			clientConn,
 			false,
-			protocol.PerspectiveClient,
+			false, // client
 			nil,
 			0,
 		),
@@ -92,7 +91,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 
 	str := newStream(
 		qstr,
-		newConnection(context.Background(), clientConn, false, protocol.PerspectiveClient, nil, 0),
+		newConnection(context.Background(), clientConn, false, false, nil, 0),
 		nil,
 		func(r io.Reader, u uint64) error { return nil },
 	)
@@ -146,7 +145,7 @@ func TestRequestStream(t *testing.T) {
 	str := newRequestStream(
 		newStream(
 			qstr,
-			newConnection(context.Background(), clientConn, false, protocol.PerspectiveClient, nil, 0),
+			newConnection(context.Background(), clientConn, false, false, nil, 0),
 			&httptrace.ClientTrace{},
 			func(r io.Reader, u uint64) error { return nil },
 		),
