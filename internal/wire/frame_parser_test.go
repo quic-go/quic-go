@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -277,6 +278,321 @@ func TestFrameParserFrames(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.frame, frame)
 			require.Equal(t, len(b)-1, l)
+		})
+	}
+}
+
+func TestFrameAllowedAtEncLevelMatrix(t *testing.T) {
+	tests := []struct {
+		name        string
+		frameType   FrameType
+		frame       Frame
+		encLevel    protocol.EncryptionLevel
+		shouldAllow bool
+	}{
+		{
+			name:        "CRYPTO_FRAME",
+			frameType:   CryptoFrameType,
+			frame:       &CryptoFrame{Offset: 0, Data: []byte("foo")},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: true,
+		},
+		{
+			name:        "CRYPTO_FRAME",
+			frameType:   CryptoFrameType,
+			frame:       &CryptoFrame{Offset: 0, Data: []byte("foo")},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: true,
+		},
+		{
+			name:        "CRYPTO_FRAME",
+			frameType:   CryptoFrameType,
+			frame:       &CryptoFrame{Offset: 0, Data: []byte("foo")},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "CRYPTO_FRAME",
+			frameType:   CryptoFrameType,
+			frame:       &CryptoFrame{Offset: 0, Data: []byte("foo")},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "ACK_FRAME",
+			frameType:   AckFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: true,
+		},
+		{
+			name:        "ACK_FRAME",
+			frameType:   AckFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: true,
+		},
+		{
+			name:        "ACK_FRAME",
+			frameType:   AckFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "ACK_FRAME",
+			frameType:   AckFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "ACK_ECN_FRAME",
+			frameType:   AckECNFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}, ECT0: 1, ECT1: 1, ECNCE: 1},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: true,
+		},
+		{
+			name:        "ACK_ECN_FRAME",
+			frameType:   AckECNFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}, ECT0: 1, ECT1: 1, ECNCE: 1},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: true,
+		},
+		{
+			name:        "ACK_ECN_FRAME",
+			frameType:   AckECNFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}, ECT0: 1, ECT1: 1, ECNCE: 1},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "ACK_ECN_FRAME",
+			frameType:   AckECNFrameType,
+			frame:       &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 1}}, ECT0: 1, ECT1: 1, ECNCE: 1},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "CONNECTION_CLOSE_FRAME",
+			frameType:   ConnectionCloseFrameType,
+			frame:       &ConnectionCloseFrame{IsApplicationError: false, ReasonPhrase: "err"},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: true,
+		},
+		{
+			name:        "CONNECTION_CLOSE_FRAME",
+			frameType:   ConnectionCloseFrameType,
+			frame:       &ConnectionCloseFrame{IsApplicationError: false, ReasonPhrase: "err"},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: true,
+		},
+		{
+			name:        "CONNECTION_CLOSE_FRAME",
+			frameType:   ConnectionCloseFrameType,
+			frame:       &ConnectionCloseFrame{IsApplicationError: false, ReasonPhrase: "err"},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "CONNECTION_CLOSE_FRAME",
+			frameType:   ConnectionCloseFrameType,
+			frame:       &ConnectionCloseFrame{IsApplicationError: false, ReasonPhrase: "err"},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "PING_FRAME",
+			frameType:   PingFrameType,
+			frame:       &PingFrame{},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: true,
+		},
+		{
+			name:        "PING_FRAME",
+			frameType:   PingFrameType,
+			frame:       &PingFrame{},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: true,
+		},
+		{
+			name:        "PING_FRAME",
+			frameType:   PingFrameType,
+			frame:       &PingFrame{},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: true,
+		},
+		{
+			name:        "PING_FRAME",
+			frameType:   PingFrameType,
+			frame:       &PingFrame{},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "NEW_TOKEN_FRAME",
+			frameType:   NewTokenFrameType,
+			frame:       &NewTokenFrame{Token: []byte("tok")},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: false,
+		},
+		{
+			name:        "NEW_TOKEN_FRAME",
+			frameType:   NewTokenFrameType,
+			frame:       &NewTokenFrame{Token: []byte("tok")},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: false,
+		},
+		{
+			name:        "NEW_TOKEN_FRAME",
+			frameType:   NewTokenFrameType,
+			frame:       &NewTokenFrame{Token: []byte("tok")},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "NEW_TOKEN_FRAME",
+			frameType:   NewTokenFrameType,
+			frame:       &NewTokenFrame{Token: []byte("tok")},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "PATH_RESPONSE_FRAME",
+			frameType:   PathResponseFrameType,
+			frame:       &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: false,
+		},
+		{
+			name:        "PATH_RESPONSE_FRAME",
+			frameType:   PathResponseFrameType,
+			frame:       &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: false,
+		},
+		{
+			name:        "PATH_RESPONSE_FRAME",
+			frameType:   PathResponseFrameType,
+			frame:       &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "PATH_RESPONSE_FRAME",
+			frameType:   PathResponseFrameType,
+			frame:       &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "RETIRE_CONNECTION_ID_FRAME",
+			frameType:   RetireConnectionIDFrameType,
+			frame:       &RetireConnectionIDFrame{SequenceNumber: 1},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: false,
+		},
+		{
+			name:        "RETIRE_CONNECTION_ID_FRAME",
+			frameType:   RetireConnectionIDFrameType,
+			frame:       &RetireConnectionIDFrame{SequenceNumber: 1},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: false,
+		},
+		{
+			name:        "RETIRE_CONNECTION_ID_FRAME",
+			frameType:   RetireConnectionIDFrameType,
+			frame:       &RetireConnectionIDFrame{SequenceNumber: 1},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: false,
+		},
+		{
+			name:        "RETIRE_CONNECTION_ID_FRAME",
+			frameType:   RetireConnectionIDFrameType,
+			frame:       &RetireConnectionIDFrame{SequenceNumber: 1},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "MAX_DATA_FRAME",
+			frameType:   MaxDataFrameType,
+			frame:       &MaxDataFrame{MaximumData: 1},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: false,
+		},
+		{
+			name:        "MAX_DATA_FRAME",
+			frameType:   MaxDataFrameType,
+			frame:       &MaxDataFrame{MaximumData: 1},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: false,
+		},
+		{
+			name:        "MAX_DATA_FRAME",
+			frameType:   MaxDataFrameType,
+			frame:       &MaxDataFrame{MaximumData: 1},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: true,
+		},
+		{
+			name:        "MAX_DATA_FRAME",
+			frameType:   MaxDataFrameType,
+			frame:       &MaxDataFrame{MaximumData: 1},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+
+		{
+			name:        "STREAM_FRAME",
+			frameType:   FrameType(0x8),
+			frame:       &StreamFrame{StreamID: 1, Data: []byte("x")},
+			encLevel:    protocol.EncryptionInitial,
+			shouldAllow: false,
+		},
+		{
+			name:        "STREAM_FRAME",
+			frameType:   FrameType(0x8),
+			frame:       &StreamFrame{StreamID: 1, Data: []byte("x")},
+			encLevel:    protocol.EncryptionHandshake,
+			shouldAllow: false,
+		},
+		{
+			name:        "STREAM_FRAME",
+			frameType:   FrameType(0x8),
+			frame:       &StreamFrame{StreamID: 1, Data: []byte("x")},
+			encLevel:    protocol.Encryption0RTT,
+			shouldAllow: true,
+		},
+		{
+			name:        "STREAM_FRAME",
+			frameType:   FrameType(0x8),
+			frame:       &StreamFrame{StreamID: 1, Data: []byte("x")},
+			encLevel:    protocol.Encryption1RTT,
+			shouldAllow: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s/%v", test.name, test.encLevel), func(t *testing.T) {
+			parser := NewFrameParser(true, true)
+			b, err := test.frame.Append(nil, protocol.Version1)
+			require.NoError(t, err)
+			frameType, _, err := parser.ParseType(b, test.encLevel)
+			if test.shouldAllow {
+				require.NoError(t, err)
+				require.Equal(t, test.frameType, frameType)
+			} else {
+				require.Error(t, err)
+			}
 		})
 	}
 }
