@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -468,7 +467,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		connCtx,
 		conn,
 		s.EnableDatagrams,
-		protocol.PerspectiveServer,
+		true, // server
 		s.Logger,
 		s.IdleTimeout,
 	)
@@ -610,7 +609,7 @@ func (s *Server) handleRequest(conn *Conn, str datagramStream, decoder *qpack.De
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, nil)
+	hstr := newStream(str, conn, nil, nil)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 

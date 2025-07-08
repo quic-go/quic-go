@@ -314,6 +314,7 @@ var newConnection = func(
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
 		RetrySourceConnectionID:   retrySrcConnID,
+		EnableResetStreamAt:       conf.EnableStreamResetPartialDelivery,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
@@ -424,6 +425,7 @@ var newClientConnection = func(
 		// See https://github.com/quic-go/quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
+		EnableResetStreamAt:       conf.EnableStreamResetPartialDelivery,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = wire.MaxDatagramSize
@@ -467,7 +469,10 @@ func (c *Conn) preSetup() {
 	c.handshakeStream = newCryptoStream()
 	c.sendQueue = newSendQueue(c.conn)
 	c.retransmissionQueue = newRetransmissionQueue()
-	c.frameParser = *wire.NewFrameParser(c.config.EnableDatagrams, false)
+	c.frameParser = *wire.NewFrameParser(
+		c.config.EnableDatagrams,
+		c.config.EnableStreamResetPartialDelivery,
+	)
 	c.rttStats = &utils.RTTStats{}
 	c.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(c.config.InitialConnectionReceiveWindow),
@@ -721,6 +726,7 @@ func (c *Conn) ConnectionState() ConnectionState {
 	cs := c.cryptoStreamHandler.ConnectionState()
 	c.connState.TLS = cs.ConnectionState
 	c.connState.Used0RTT = cs.Used0RTT
+	c.connState.SupportsStreamResetPartialDelivery = c.peerParams.EnableResetStreamAt
 	c.connState.GSO = c.conn.capabilities().GSO
 	return c.connState
 }
@@ -1985,7 +1991,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	c.peerParams = params
 	c.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
-	c.streamsMap.UpdateLimits(params)
+	c.streamsMap.HandleTransportParameters(params)
 	c.connStateMutex.Lock()
 	c.connState.SupportsDatagrams = c.supportsDatagrams()
 	c.connStateMutex.Unlock()
@@ -2064,7 +2070,7 @@ func (c *Conn) applyTransportParameters() {
 		c.idleTimeout = min(c.idleTimeout, params.MaxIdleTimeout)
 	}
 	c.keepAliveInterval = min(c.config.KeepAlivePeriod, c.idleTimeout/2)
-	c.streamsMap.UpdateLimits(params)
+	c.streamsMap.HandleTransportParameters(params)
 	c.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	c.rttStats.SetMaxAckDelay(params.MaxAckDelay)

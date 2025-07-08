@@ -20,7 +20,7 @@ func TestStreamDeadlines(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockSender := NewMockStreamSender(mockCtrl)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
-	str := newStream(context.Background(), streamID, mockSender, mockFC)
+	str := newStream(context.Background(), streamID, mockSender, mockFC, false)
 
 	// SetDeadline sets both read and write deadlines
 	str.SetDeadline(time.Now().Add(-time.Second))
@@ -82,7 +82,7 @@ func TestStreamCompletion(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
-		str := newStream(context.Background(), streamID, mockSender, mockFC)
+		str := newStream(context.Background(), streamID, mockSender, mockFC, false)
 
 		completeReadSide(t, str, mockCtrl, mockFC)
 		mockSender.EXPECT().onStreamCompleted(streamID)
@@ -93,7 +93,7 @@ func TestStreamCompletion(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
-		str := newStream(context.Background(), streamID, mockSender, mockFC)
+		str := newStream(context.Background(), streamID, mockSender, mockFC, false)
 
 		completeWriteSide(t, str, mockCtrl, mockFC, mockSender)
 		mockSender.EXPECT().onStreamCompleted(streamID)

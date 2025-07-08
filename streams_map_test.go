@@ -58,7 +58,7 @@ func testStreamsMapCreatingStreams(t *testing.T,
 		1,
 		perspective,
 	)
-	m.UpdateLimits(&wire.TransportParameters{
+	m.HandleTransportParameters(&wire.TransportParameters{
 		MaxBidiStreamNum: protocol.MaxStreamCount,
 		MaxUniStreamNum:  protocol.MaxStreamCount,
 	})
@@ -135,7 +135,7 @@ func testStreamsMapDeletingStreams(t *testing.T,
 		100,
 		perspective,
 	)
-	m.UpdateLimits(&wire.TransportParameters{
+	m.HandleTransportParameters(&wire.TransportParameters{
 		MaxBidiStreamNum: 10,
 		MaxUniStreamNum:  10,
 	})
@@ -227,7 +227,7 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 	_, err := m.OpenStream()
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
 	require.ErrorContains(t, err, "too many open streams")
-	m.UpdateLimits(&wire.TransportParameters{MaxBidiStreamNum: 1})
+	m.HandleTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 1})
 	_, err = m.OpenStream()
 	require.NoError(t, err)
 	_, err = m.OpenStream()
@@ -235,7 +235,7 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 
 	_, err = m.OpenUniStream()
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
-	m.UpdateLimits(&wire.TransportParameters{MaxUniStreamNum: 1})
+	m.HandleTransportParameters(&wire.TransportParameters{MaxUniStreamNum: 1})
 	_, err = m.OpenUniStream()
 	require.NoError(t, err)
 	_, err = m.OpenUniStream()
@@ -261,7 +261,7 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
 
 	// decrease via transport parameters
-	m.UpdateLimits(&wire.TransportParameters{MaxBidiStreamNum: 0})
+	m.HandleTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 0})
 	_, err = m.OpenStream()
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
 }
@@ -544,7 +544,7 @@ func TestStreamsMap0RTT(t *testing.T) {
 		protocol.PerspectiveClient,
 	)
 	// restored transport parameters
-	m.UpdateLimits(&wire.TransportParameters{
+	m.HandleTransportParameters(&wire.TransportParameters{
 		MaxBidiStreamNum: 1,
 		MaxUniStreamNum:  1,
 	})
@@ -556,7 +556,7 @@ func TestStreamsMap0RTT(t *testing.T) {
 	fcBidi.EXPECT().UpdateSendWindow(protocol.ByteCount(1234))
 	fcUni.EXPECT().UpdateSendWindow(protocol.ByteCount(4321))
 	// new transport parameters
-	m.UpdateLimits(&wire.TransportParameters{
+	m.HandleTransportParameters(&wire.TransportParameters{
 		MaxBidiStreamNum:               1000,
 		InitialMaxStreamDataBidiRemote: 1234,
 		MaxUniStreamNum:                1000,
