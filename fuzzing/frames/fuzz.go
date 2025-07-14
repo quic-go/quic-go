@@ -53,7 +53,17 @@ func Fuzz(data []byte) int {
 		data = data[l:]
 		numFrames++
 
-		f, l, err := parser.ParseLessCommonFrame(frameType, data, protocol.Version1)
+		var f wire.Frame
+		switch {
+		case frameType.IsStreamFrameType():
+			f, l, err = parser.ParseStreamFrame(frameType, data, version)
+		case frameType == wire.AckFrameType || frameType == wire.AckECNFrameType:
+			f, l, err = parser.ParseAckFrame(frameType, data, encLevel, version)
+		case frameType == wire.DatagramNoLengthFrameType || frameType == wire.DatagramWithLengthFrameType:
+			f, l, err = parser.ParseDatagramFrame(frameType, data, version)
+		default:
+			f, l, err = parser.ParseLessCommonFrame(frameType, data, version)
+		}
 		if err != nil {
 			break
 		}

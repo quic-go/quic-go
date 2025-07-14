@@ -40,6 +40,44 @@ func (t FrameType) IsStreamFrameType() bool {
 	return byte(t)&0xf8 == 0x8
 }
 
+func (ft FrameType) isValid() bool {
+	if ft.IsStreamFrameType() {
+		return true
+	}
+
+	switch ft {
+	case
+		PingFrameType,
+		AckFrameType,
+		AckECNFrameType,
+		ResetStreamFrameType,
+		StopSendingFrameType,
+		CryptoFrameType,
+		NewTokenFrameType,
+		MaxDataFrameType,
+		MaxStreamDataFrameType,
+		BidiMaxStreamsFrameType,
+		UniMaxStreamsFrameType,
+		DataBlockedFrameType,
+		StreamDataBlockedFrameType,
+		BidiStreamBlockedFrameType,
+		UniStreamBlockedFrameType,
+		NewConnectionIDFrameType,
+		RetireConnectionIDFrameType,
+		PathChallengeFrameType,
+		PathResponseFrameType,
+		ConnectionCloseFrameType,
+		ApplicationCloseFrameType,
+		HandshakeDoneFrameType,
+		ResetStreamAtFrameType,
+		DatagramNoLengthFrameType,
+		DatagramWithLengthFrameType:
+		return true
+	default:
+		return false
+	}
+}
+
 func (t FrameType) isAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
 	//nolint:exhaustive
 	switch encLevel {

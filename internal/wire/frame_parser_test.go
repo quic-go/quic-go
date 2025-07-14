@@ -157,6 +157,63 @@ func TestFrameParserStreamFrames(t *testing.T) {
 	require.Zero(t, l)
 }
 
+func TestParseStreamFrameWrapsError(t *testing.T) {
+	parser := NewFrameParser(true, true)
+	f := &StreamFrame{
+		StreamID:       0x1234,
+		Offset:         0x1000,
+		Data:           []byte("hello world"),
+		DataLenPresent: true,
+	}
+	b, err := f.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+
+	// Corrupt the buffer to trigger a parse error
+	b = b[:len(b)-2] // Remove last 2 bytes to cause an EOF
+
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.NoError(t, err)
+
+	frame, n, err := parser.ParseStreamFrame(frameType, b[l:], protocol.Version1)
+	require.Nil(t, frame)
+	require.Zero(t, n)
+
+	var transportErr *qerr.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
+	require.Equal(t, uint64(frameType), transportErr.FrameType)
+	require.Contains(t, transportErr.Error(), "EOF")
+}
+
+func TestParseStreamFrameSuccess(t *testing.T) {
+	parser := NewFrameParser(true, true)
+	original := &StreamFrame{
+		StreamID:       0x1234,
+		Offset:         0x1000,
+		Fin:            true,
+		Data:           []byte("hello world"),
+		DataLenPresent: true,
+	}
+	b, err := original.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+
+	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.True(t, frameType.IsStreamFrameType())
+	require.Equal(t, FrameType(0x0f), frameType) // STREAM | OFF | LEN | FIN
+
+	parsed, n, err := parser.ParseStreamFrame(frameType, b[l:], protocol.Version1)
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.Equal(t, len(b)-l, n)
+
+	require.Equal(t, original.StreamID, parsed.StreamID)
+	require.Equal(t, original.Offset, parsed.Offset)
+	require.Equal(t, original.Fin, parsed.Fin)
+	require.Equal(t, original.DataLenPresent, parsed.DataLenPresent)
+	require.Equal(t, original.Data, parsed.Data)
+}
+
 func TestFrameParserFrames(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -592,6 +649,9 @@ func TestFrameAllowedAtEncLevelMatrix(t *testing.T) {
 				require.Equal(t, test.frameType, frameType)
 			} else {
 				require.Error(t, err)
+				var transportErr *qerr.TransportError
+				require.ErrorAs(t, err, &transportErr)
+				require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
 			}
 		})
 	}
@@ -664,8 +724,12 @@ func TestFrameParserInvalidFrameType(t *testing.T) {
 
 	// Expected: No validation being handled by parser.ParseType
 	require.Equal(t, 2, l)
-	require.Equal(t, FrameType(0x42), frameType)
-	require.Nil(t, err)
+	require.Equal(t, FrameType(0), frameType)
+
+	require.Error(t, err)
+	var transportErr *qerr.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
 }
 
 func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {

@@ -1436,14 +1436,12 @@ func (c *Conn) handleFrames(
 	}
 	handshakeWasComplete := c.handshakeComplete
 	var handleErr error
-	var frame wire.Frame
-	var err error
-	var l int
-	var frameType wire.FrameType
 
 	for len(data) > 0 {
-		frameType, l, err = c.frameParser.ParseType(data, encLevel)
+		frameType, l, err := c.frameParser.ParseType(data, encLevel)
 		if err != nil {
+			// The frame parser skips over PADDING frames, and returns an io.EOF if the PADDING
+			// frames were the last frames in this packet.
 			if err == io.EOF {
 				break
 			}
@@ -1458,17 +1456,15 @@ func (c *Conn) handleFrames(
 			isNonProbing = true
 		}
 
-		// Fast path: We're inlining common cases, to avoid using interfaces
+		// We're inlining common cases, to avoid using interfaces
+		// Fast path: STREAM, DATAGRAM and ACK
 		if frameType.IsStreamFrameType() {
-			streamFrame, l, err := wire.ParseStreamFrame(data, frameType, c.version)
+			streamFrame, l, err := c.frameParser.ParseStreamFrame(frameType, data, c.version)
 			if err != nil {
 				return false, false, nil, err
 			}
 
 			data = data[l:]
-			if streamFrame == nil {
-				break
-			}
 
 			if log != nil {
 				frames = append(frames, toLoggingFrame(streamFrame))
@@ -1478,8 +1474,7 @@ func (c *Conn) handleFrames(
 			if handleErr != nil {
 				continue
 			}
-			err = c.streamsMap.HandleStreamFrame(streamFrame, rcvTime)
-			if err != nil {
+			if err := c.streamsMap.HandleStreamFrame(streamFrame, rcvTime); err != nil {
 				if log == nil {
 					return false, false, nil, err
 				}
@@ -1493,7 +1488,6 @@ func (c *Conn) handleFrames(
 		switch frameType {
 		case wire.AckFrameType, wire.AckECNFrameType:
 			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
-			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
 				return false, false, nil, err
 			}
@@ -1517,7 +1511,6 @@ func (c *Conn) handleFrames(
 			continue
 		case wire.DatagramNoLengthFrameType, wire.DatagramWithLengthFrameType:
 			datagramFrame, l, err := c.frameParser.ParseDatagramFrame(frameType, data, c.version)
-			// Fast path: We inline the frame handling logic, to avoid using interfaces
 			if err != nil {
 				return false, false, nil, err
 			}
@@ -1546,7 +1539,7 @@ func (c *Conn) handleFrames(
 			continue
 		// Slower path: All other frame types
 		default:
-			frame, l, err = c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
+			frame, l, err := c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
 			if err != nil {
 				return false, false, nil, err
 			}

@@ -52,6 +52,13 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		}
 
 		frameType := FrameType(typ)
+		if !frameType.isValid() {
+			return 0, parsed, &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				FrameType:    typ,
+				ErrorMessage: fmt.Sprintf("%d is not a valid frame type", typ),
+			}
+		}
 		if !frameType.isAllowedAtEncLevel(encLevel) {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,
@@ -60,12 +67,24 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 			}
 		}
 
-		return FrameType(typ), parsed, nil
+		return frameType, parsed, nil
 	}
 	return 0, parsed, io.EOF
 }
 
-// ParseLessCommonFrame parses everything except StreamFrame, AckFrame or DatagramFrame.
+func (p *FrameParser) ParseStreamFrame(frameType FrameType, data []byte, v protocol.Version) (*StreamFrame, int, error) {
+	frame, n, err := ParseStreamFrame(data, frameType, v)
+	if err != nil {
+		return nil, n, &qerr.TransportError{
+			ErrorCode:    qerr.FrameEncodingError,
+			FrameType:    uint64(frameType),
+			ErrorMessage: err.Error(),
+		}
+	}
+	return frame, n, nil
+}
+
+// ParseLessCommonFrame parses everything except STREAM, ACK or DATAGRAM.
 // These cases should be handled separately for performance reasons.
 func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v protocol.Version) (Frame, int, error) {
 	var frame Frame
