@@ -9,6 +9,8 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+const reorderingThreshold = 1
+
 // The receivedPacketTracker tracks packets for the Initial and Handshake packet number space.
 // Every received packet is acknowledged immediately.
 type receivedPacketTracker struct {
@@ -150,11 +152,18 @@ func (h *appDataReceivedPacketTracker) isMissing(p protocol.PacketNumber) bool {
 }
 
 func (h *appDataReceivedPacketTracker) hasNewMissingPackets() bool {
-	if h.lastAck == nil {
+	if h.largestObserved < reorderingThreshold {
 		return false
 	}
-	highestRange := h.packetHistory.GetHighestAckRange()
-	return highestRange.Smallest > h.lastAck.LargestAcked()+1 && highestRange.Len() == 1
+	highestMissing := h.packetHistory.HighestMissingUpTo(h.largestObserved - reorderingThreshold)
+	if highestMissing == protocol.InvalidPacketNumber {
+		return false
+	}
+	if highestMissing < h.lastAck.LargestAcked() {
+		// the packet was already reported missing in the last ACK
+		return false
+	}
+	return highestMissing > h.lastAck.LargestAcked()-reorderingThreshold
 }
 
 func (h *appDataReceivedPacketTracker) shouldQueueACK(pn protocol.PacketNumber, ecn protocol.ECN, wasMissing bool) bool {
