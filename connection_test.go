@@ -212,22 +212,19 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 	connID := protocol.ConnectionID{}
 
 	tests := []struct {
-		name      string
-		frameType wire.FrameType
-		frame     wire.Frame
+		name  string
+		frame wire.Frame
 	}{
-		// We can't test for StreamFrame, DatagramFrame or AckFrame here. They are handled
-		// directly in handleFrames, in the fast path.
-		{name: "RESET_STREAM", frameType: wire.ResetStreamFrameType, frame: &wire.ResetStreamFrame{StreamID: id, ErrorCode: 42, FinalSize: 1337}},
-		{name: "STOP_SENDING", frameType: wire.StopSendingFrameType, frame: &wire.StopSendingFrame{StreamID: id, ErrorCode: 42}},
-		{name: "MAX_STREAM_DATA", frameType: wire.MaxStreamDataFrameType, frame: &wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1337}},
-		{name: "STREAM_DATA_BLOCKED", frameType: wire.StreamDataBlockedFrameType, frame: &wire.StreamDataBlockedFrame{StreamID: id, MaximumStreamData: 42}},
+		{name: "RESET_STREAM", frame: &wire.ResetStreamFrame{StreamID: id, ErrorCode: 42, FinalSize: 1337}},
+		{name: "STOP_SENDING", frame: &wire.StopSendingFrame{StreamID: id, ErrorCode: 42}},
+		{name: "MAX_STREAM_DATA", frame: &wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1337}},
+		{name: "STREAM_DATA_BLOCKED", frame: &wire.StreamDataBlockedFrame{StreamID: id, MaximumStreamData: 42}},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tc := newServerTestConnection(t, gomock.NewController(t), nil, false)
-			_, err := tc.conn.handleFrame(test.frameType, test.frame, protocol.Encryption1RTT, connID, time.Now())
+			_, err := tc.conn.handleFrame(test.frame, protocol.Encryption1RTT, connID, time.Now())
 			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 		})
 	}
@@ -241,11 +238,11 @@ func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	now := time.Now()
 	connID := protocol.ConnectionID{}
 	// MAX_DATA frame
-	_, err := tc.conn.handleFrame(wire.MaxDataFrameType, &wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)
 	require.Equal(t, protocol.ByteCount(1337), connFC.SendWindowSize())
 	// DATA_BLOCKED frame
-	_, err = tc.conn.handleFrame(wire.DataBlockedFrameType, &wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)
 }
 
@@ -254,16 +251,15 @@ func TestConnectionServerInvalidFrames(t *testing.T) {
 	tc := newServerTestConnection(t, mockCtrl, nil, false)
 
 	for _, test := range []struct {
-		Name      string
-		FrameType wire.FrameType
-		Frame     wire.Frame
+		Name  string
+		Frame wire.Frame
 	}{
-		{Name: "NEW_TOKEN", FrameType: wire.NewTokenFrameType, Frame: &wire.NewTokenFrame{Token: []byte("foobar")}},
-		{Name: "HANDSHAKE_DONE", FrameType: wire.HandshakeDoneFrameType, Frame: &wire.HandshakeDoneFrame{}},
-		{Name: "PATH_RESPONSE", FrameType: wire.PathResponseFrameType, Frame: &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
+		{Name: "NEW_TOKEN", Frame: &wire.NewTokenFrame{Token: []byte("foobar")}},
+		{Name: "HANDSHAKE_DONE", Frame: &wire.HandshakeDoneFrame{}},
+		{Name: "PATH_RESPONSE", Frame: &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
 	} {
 		t.Run(test.Name, func(t *testing.T) {
-			_, err := tc.conn.handleFrame(test.FrameType, test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now())
+			_, err := tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, time.Now())
 			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
 		})
 	}
@@ -933,7 +929,6 @@ func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 
 	// MAX_STREAMS frame for bidirectional stream
 	_, err := tc.conn.handleFrame(
-		wire.BidiMaxStreamsFrameType,
 		&wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 10},
 		protocol.Encryption1RTT,
 		protocol.ConnectionID{},
@@ -955,7 +950,6 @@ func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 
 	// MAX_STREAMS frame for bidirectional stream
 	_, err = tc.conn.handleFrame(
-		wire.UniMaxStreamsFrameType,
 		&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 10},
 		protocol.Encryption1RTT,
 		protocol.ConnectionID{},
@@ -2967,7 +2961,7 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	).AnyTimes()
 	tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any())
 	// add a new connection ID, so the path can be probed
-	_, err = tc.conn.handleFrame(wire.NewConnectionIDFrameType, &wire.NewConnectionIDFrame{
+	_, err = tc.conn.handleFrame(&wire.NewConnectionIDFrame{
 		SequenceNumber: 1,
 		ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 	}, protocol.EncryptionInitial, tc.destConnID, time.Now())

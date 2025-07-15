@@ -13,3 +13,17 @@ func TestIsStreamFrameType(t *testing.T) {
 
 	require.False(t, FrameType(0x1).IsStreamFrameType())
 }
+
+func TestIsAckFrameType(t *testing.T) {
+	require.True(t, AckFrameType.IsAckFrameType(), "AckFrameType should be recognized as ACK")
+	require.True(t, AckECNFrameType.IsAckFrameType(), "AckECNFrameType should be recognized as ACK")
+	require.False(t, PingFrameType.IsAckFrameType(), "PingFrameType should not be recognized as ACK")
+	require.False(t, FrameType(0x10).IsAckFrameType(), "MaxDataFrameType should not be recognized as ACK")
+}
+
+func TestIsDatagramFrameType(t *testing.T) {
+	require.True(t, DatagramNoLengthFrameType.IsDatagramFrameType(), "DatagramNoLengthFrameType should be recognized as datagram")
+	require.True(t, DatagramWithLengthFrameType.IsDatagramFrameType(), "DatagramWithLengthFrameType should be recognized as datagram")
+	require.False(t, PingFrameType.IsDatagramFrameType(), "PingFrameType should not be recognized as datagram")
+	require.False(t, FrameType(0x1e).IsDatagramFrameType(), "HandshakeDoneFrameType should not be recognized as datagram")
+}

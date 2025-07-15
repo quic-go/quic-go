@@ -78,6 +78,14 @@ func (ft FrameType) isValid() bool {
 	}
 }
 
+func (t FrameType) IsAckFrameType() bool {
+	return t == AckFrameType || t == AckECNFrameType
+}
+
+func (t FrameType) IsDatagramFrameType() bool {
+	return t == DatagramNoLengthFrameType || t == DatagramWithLengthFrameType
+}
+
 func (t FrameType) isAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
 	//nolint:exhaustive
 	switch encLevel {
