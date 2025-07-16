@@ -32,9 +32,8 @@ func NewFrameParser(supportsDatagrams, supportsResetStreamAt bool) *FrameParser 
 	}
 }
 
-// ParseType retrieves the next non-null byte, assuming it represents a frame type.
-// For performance reasons (1–2% faster parsing), it skips validation.
-// Validation is expected to be handled at the connection level.
+// ParseType parses the frame type of the next frame.
+// It skips over PADDING frames.
 func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (FrameType, int, error) {
 	var parsed int
 	for len(b) != 0 {

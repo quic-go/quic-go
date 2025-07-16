@@ -22,8 +22,8 @@ func TestIsAckFrameType(t *testing.T) {
 }
 
 func TestIsDatagramFrameType(t *testing.T) {
-	require.True(t, DatagramNoLengthFrameType.IsDatagramFrameType(), "DatagramNoLengthFrameType should be recognized as datagram")
-	require.True(t, DatagramWithLengthFrameType.IsDatagramFrameType(), "DatagramWithLengthFrameType should be recognized as datagram")
-	require.False(t, PingFrameType.IsDatagramFrameType(), "PingFrameType should not be recognized as datagram")
-	require.False(t, FrameType(0x1e).IsDatagramFrameType(), "HandshakeDoneFrameType should not be recognized as datagram")
+	require.True(t, DatagramNoLengthFrameType.IsDatagramFrameType(), "DatagramNoLengthFrameType should be recognized as DATAGRAM")
+	require.True(t, DatagramWithLengthFrameType.IsDatagramFrameType(), "DatagramWithLengthFrameType should be recognized as DATAGRAM")
+	require.False(t, PingFrameType.IsDatagramFrameType(), "PingFrameType should not be recognized as DATAGRAM")
+	require.False(t, FrameType(0x1e).IsDatagramFrameType(), "HandshakeDoneFrameType should not be recognized as DATAGRAM")
 }
