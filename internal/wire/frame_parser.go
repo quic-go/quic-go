@@ -49,24 +49,25 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		if typ == 0x0 { // skip PADDING frames
 			continue
 		}
-
-		frameType := FrameType(typ)
-		if !frameType.isValid() {
+		ft := FrameType(typ)
+		valid := ft.isValidRFC9000() ||
+			(p.supportsDatagrams && ft.IsDatagramFrameType()) ||
+			(p.supportsResetStreamAt && ft == ResetStreamAtFrameType)
+		if !valid {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,
 				FrameType:    typ,
-				ErrorMessage: fmt.Sprintf("%d is not a valid frame type", typ),
+				ErrorMessage: errUnknownFrameType.Error(),
 			}
 		}
-		if !frameType.isAllowedAtEncLevel(encLevel) {
+		if !ft.isAllowedAtEncLevel(encLevel) {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,
 				FrameType:    typ,
-				ErrorMessage: fmt.Sprintf("%d not allowed at encryption level %s", frameType, encLevel),
+				ErrorMessage: fmt.Sprintf("%d not allowed at encryption level %s", ft, encLevel),
 			}
 		}
-
-		return frameType, parsed, nil
+		return ft, parsed, nil
 	}
 	return 0, parsed, io.EOF
 }
@@ -102,17 +103,15 @@ func (p *FrameParser) ParseAckFrame(frameType FrameType, data []byte, encLevel p
 }
 
 func (p *FrameParser) ParseDatagramFrame(frameType FrameType, data []byte, v protocol.Version) (*DatagramFrame, int, error) {
-	if !p.supportsDatagrams {
-		err := errUnknownFrameType
-		if err != nil {
-			return nil, 0, &qerr.TransportError{
-				ErrorCode:    qerr.FrameEncodingError,
-				FrameType:    uint64(frameType),
-				ErrorMessage: err.Error(),
-			}
+	f, l, err := parseDatagramFrame(data, frameType, v)
+	if err != nil {
+		return nil, 0, &qerr.TransportError{
+			ErrorCode:    qerr.FrameEncodingError,
+			FrameType:    uint64(frameType),
+			ErrorMessage: err.Error(),
 		}
 	}
-	return parseDatagramFrame(data, frameType, v)
+	return f, l, nil
 }
 
 // ParseLessCommonFrame parses everything except STREAM, ACK or DATAGRAM.
@@ -125,7 +124,6 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 	switch frameType {
 	case PingFrameType:
 		frame = &PingFrame{}
-		l = 0
 	case ResetStreamFrameType:
 		frame, l, err = parseResetStreamFrame(data, false, v)
 	case StopSendingFrameType:
@@ -158,13 +156,8 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 		frame, l, err = parseConnectionCloseFrame(data, frameType, v)
 	case HandshakeDoneFrameType:
 		frame = &HandshakeDoneFrame{}
-		l = 0
 	case ResetStreamAtFrameType:
-		if !p.supportsResetStreamAt {
-			err = errUnknownFrameType
-		} else {
-			frame, l, err = parseResetStreamFrame(data, true, v)
-		}
+		frame, l, err = parseResetStreamFrame(data, true, v)
 	default:
 		err = errUnknownFrameType
 	}
