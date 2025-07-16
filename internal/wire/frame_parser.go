@@ -156,14 +156,14 @@ func (p *FrameParser) ParseAckFrame(frameType FrameType, data []byte, encLevel p
 	ackFrame := p.ackFrame
 
 	if err != nil {
-		return ackFrame, l, &qerr.TransportError{
+		return nil, l, &qerr.TransportError{
 			ErrorCode:    qerr.FrameEncodingError,
 			FrameType:    uint64(frameType),
 			ErrorMessage: err.Error(),
 		}
 	}
 
-	return ackFrame, l, err
+	return ackFrame, l, nil
 }
 
 func (p *FrameParser) ParseDatagramFrame(frameType FrameType, data []byte, v protocol.Version) (*DatagramFrame, int, error) {

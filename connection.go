@@ -1523,8 +1523,7 @@ func (c *Conn) handleFrames(
 			if handleErr != nil {
 				continue
 			}
-			err = c.handleDatagramFrame(datagramFrame)
-			if err != nil {
+			if err := c.handleDatagramFrame(datagramFrame); err != nil {
 				if log == nil {
 					return false, false, nil, err
 				}
