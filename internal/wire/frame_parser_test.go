@@ -650,7 +650,7 @@ func evaluateFrames(tb testing.TB, parser *FrameParser, buf []byte, frames ...Fr
 				}
 
 				frame := f.(*MaxDataFrame)
-				if frame != maxDataFrame {
+				if frame.MaximumData != maxDataFrame.MaximumData {
 					tb.Fatalf("MAX_DATA frame does not match: %v vs %v", f, maxDataFrame)
 				}
 			case UniMaxStreamsFrameType:
@@ -660,7 +660,7 @@ func evaluateFrames(tb testing.TB, parser *FrameParser, buf []byte, frames ...Fr
 				}
 
 				frame := f.(*MaxStreamsFrame)
-				if frame != maxStreamsFrame {
+				if frame.Type != maxStreamsFrame.Type || frame.MaxStreamNum != maxStreamsFrame.MaxStreamNum {
 					tb.Fatalf("MAX_STREAMS frame does not match: %v vs %v", f, maxStreamsFrame)
 				}
 			case MaxStreamDataFrameType:
@@ -670,7 +670,7 @@ func evaluateFrames(tb testing.TB, parser *FrameParser, buf []byte, frames ...Fr
 				}
 
 				frame := f.(*MaxStreamDataFrame)
-				if frame != maxStreamDataFrame {
+				if frame.StreamID != maxStreamDataFrame.StreamID || frame.MaximumStreamData != maxStreamDataFrame.MaximumStreamData {
 					tb.Fatalf("MAX_STREAM_DATA frame does not match: %v vs %v", f, maxStreamDataFrame)
 				}
 			case CryptoFrameType:
@@ -692,7 +692,8 @@ func evaluateFrames(tb testing.TB, parser *FrameParser, buf []byte, frames ...Fr
 				}
 
 				frame := f.(*ResetStreamFrame)
-				if frame != resetStreamFrame {
+				if frame.StreamID != resetStreamFrame.StreamID || frame.FinalSize != resetStreamFrame.FinalSize ||
+					frame.ErrorCode != resetStreamFrame.ErrorCode || frame.ReliableSize != resetStreamFrame.ReliableSize {
 					tb.Fatalf("RESET_STREAM frame does not match: %v vs %v", frame, resetStreamFrame)
 				}
 			default:
