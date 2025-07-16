@@ -782,7 +782,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 	frameType, l, err := frameParser.ParseType(payload[1:], protocol.Encryption1RTT)
 	require.NoError(t, err)
 	require.Equal(t, 1, l)
-	require.True(t, wire.IsStreamFrameType(frameType))
+	require.True(t, frameType.IsStreamFrameType())
 
 	frame, frameLen, err := wire.ParseStreamFrame(payload[1+l:], frameType, protocol.Version1)
 	require.NoError(t, err)
