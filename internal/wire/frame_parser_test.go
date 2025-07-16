@@ -476,9 +476,9 @@ func TestFrameParserDatagramFrame(t *testing.T) {
 	require.Equal(t, DatagramNoLengthFrameType, frameType)
 	require.Equal(t, 1, l)
 
-	// ParseLessCommonFrame should not be used to handle Datagram Frames
+	// ParseLessCommonFrame should not be used to handle DATAGRAM frames
 	_, _, err = parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
-	checkFrameUnsupported(t, err, 0x30)
+	require.Error(t, err)
 
 	// parseDatagramFrame should be used for this type
 	datagramFrame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
@@ -494,14 +494,7 @@ func TestFrameParserDatagramUnsupported(t *testing.T) {
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 
-	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
-	require.NoError(t, err)
-	require.Equal(t, DatagramNoLengthFrameType, frameType)
-	require.Equal(t, 1, l)
-
-	frame, l, err := parser.ParseDatagramFrame(frameType, b[l:], protocol.Version1)
-	require.Nil(t, frame)
-	require.Zero(t, l)
+	_, _, err = parser.ParseType(b, protocol.Encryption1RTT)
 	checkFrameUnsupported(t, err, 0x30)
 }
 
@@ -511,14 +504,7 @@ func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 
-	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
-	require.NoError(t, err)
-	require.Equal(t, ResetStreamAtFrameType, frameType)
-	require.Equal(t, 1, l)
-
-	frame, l, err := parser.ParseLessCommonFrame(frameType, b[l:], protocol.Version1)
-	require.Nil(t, frame)
-	require.Zero(t, l)
+	_, _, err = parser.ParseType(b, protocol.Encryption1RTT)
 	checkFrameUnsupported(t, err, 0x24)
 }
 

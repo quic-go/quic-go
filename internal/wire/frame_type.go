@@ -40,8 +40,8 @@ func (t FrameType) IsStreamFrameType() bool {
 	return byte(t)&0xf8 == 0x8
 }
 
-func (t FrameType) isValid() bool {
-	return t <= 0x1e || t == DatagramNoLengthFrameType || t == DatagramWithLengthFrameType || t == ResetStreamAtFrameType
+func (t FrameType) isValidRFC9000() bool {
+	return t <= 0x1e
 }
 
 func (t FrameType) IsAckFrameType() bool {
