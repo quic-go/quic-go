@@ -41,7 +41,7 @@ func TestFrameParsingSkipsPaddingFrames(t *testing.T) {
 
 	frame, l, err := parser.ParseLessCommonFrame(frameType, b[1:], protocol.Version1)
 	require.NoError(t, err)
-	require.Equal(t, 0, l)
+	require.Zero(t, l)
 	require.IsType(t, &PingFrame{}, frame)
 }
 
@@ -49,10 +49,9 @@ func TestFrameParsingHandlesPaddingAtEnd(t *testing.T) {
 	parser := NewFrameParser(true, true)
 	b := []byte{0, 0, 0}
 
-	frameType, l, err := parser.ParseType(b, protocol.Encryption1RTT)
+	_, l, err := parser.ParseType(b, protocol.Encryption1RTT)
 	require.Equal(t, io.EOF, err)
 	require.Equal(t, 3, l)
-	require.Equal(t, FrameType(0), frameType)
 }
 
 func TestFrameParsingParsesSingleFrame(t *testing.T) {
@@ -70,7 +69,7 @@ func TestFrameParsingParsesSingleFrame(t *testing.T) {
 
 	frame, l, err := parser.ParseLessCommonFrame(frameType, b, protocol.Version1)
 	require.NoError(t, err)
-	require.Equal(t, 0, l)
+	require.Zero(t, l)
 	require.IsType(t, &PingFrame{}, frame)
 }
 

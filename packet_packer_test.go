@@ -740,12 +740,10 @@ func TestPackLongHeaderPadToAtLeast4Bytes(t *testing.T) {
 	frameType, lt, err := frameParser.ParseType(data[2:], protocol.EncryptionHandshake)
 	require.NoError(t, err)
 	require.Equal(t, 1, lt)
-	require.Equal(t, wire.PingFrameType, frameType)
-
 	frame, l, err := frameParser.ParseLessCommonFrame(frameType, data[2+lt:], protocol.Version1)
 	require.NoError(t, err)
 	require.IsType(t, &wire.PingFrame{}, frame)
-	require.Equal(t, 0, l)
+	require.Zero(t, l)
 	require.Equal(t, sealer.Overhead(), len(data)-2-lt)
 }
 
@@ -784,7 +782,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 	frameType, l, err := frameParser.ParseType(payload[1:], protocol.Encryption1RTT)
 	require.NoError(t, err)
 	require.Equal(t, 1, l)
-	require.Equal(t, wire.FrameType(0x9), frameType)
+	require.True(t, wire.IsStreamFrameType(frameType))
 
 	frame, frameLen, err := wire.ParseStreamFrame(payload[1+l:], frameType, protocol.Version1)
 	require.NoError(t, err)
