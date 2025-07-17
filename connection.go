@@ -1437,6 +1437,7 @@ func (c *Conn) handleFrames(
 	}
 	handshakeWasComplete := c.handshakeComplete
 	var handleErr error
+	var skipHandling bool
 
 	for len(data) > 0 {
 		frameType, l, err := c.frameParser.ParseType(data, encLevel)
@@ -1464,24 +1465,16 @@ func (c *Conn) handleFrames(
 			if err != nil {
 				return false, false, nil, err
 			}
-
 			data = data[l:]
 
 			if log != nil {
 				frames = append(frames, toLoggingFrame(streamFrame))
 			}
-			// An error occurred handling a previous frame.
-			// Don't handle the current frame.
-			if handleErr != nil {
+			// an error occurred handling a previous frame, don't handle the current frame
+			if skipHandling {
 				continue
 			}
-			if err := c.streamsMap.HandleStreamFrame(streamFrame, rcvTime); err != nil {
-				if log == nil {
-					return false, false, nil, err
-				}
-				// If we're logging, we need to keep parsing (but not handling) all frames.
-				handleErr = err
-			}
+			handleErr = c.streamsMap.HandleStreamFrame(streamFrame, rcvTime)
 		} else if frameType.IsAckFrameType() {
 			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
 			if err != nil {
@@ -1491,74 +1484,52 @@ func (c *Conn) handleFrames(
 			if log != nil {
 				frames = append(frames, toLoggingFrame(ackFrame))
 			}
-			// An error occurred handling a previous frame.
-			// Don't handle the current frame.
-			if handleErr != nil {
+			// an error occurred handling a previous frame, don't handle the current frame
+			if skipHandling {
 				continue
 			}
-			err = c.handleAckFrame(ackFrame, encLevel, rcvTime)
-			if err != nil {
-				if log == nil {
-					return false, false, nil, err
-				}
-				// If we're logging, we need to keep parsing (but not handling) all frames.
-				handleErr = err
-			}
+			handleErr = c.handleAckFrame(ackFrame, encLevel, rcvTime)
 		} else if frameType.IsDatagramFrameType() {
 			datagramFrame, l, err := c.frameParser.ParseDatagramFrame(frameType, data, c.version)
 			if err != nil {
 				return false, false, nil, err
 			}
-
 			data = data[l:]
-			if datagramFrame == nil {
-				break
-			}
 
 			if log != nil {
 				frames = append(frames, toLoggingFrame(datagramFrame))
 			}
-			// An error occurred handling a previous frame.
-			// Don't handle the current frame.
-			if handleErr != nil {
+			// an error occurred handling a previous frame, don't handle the current frame
+			if skipHandling {
 				continue
 			}
-			if err := c.handleDatagramFrame(datagramFrame); err != nil {
-				if log == nil {
-					return false, false, nil, err
-				}
-				// If we're logging, we need to keep parsing (but not handling) all frames.
-				handleErr = err
-			}
+			handleErr = c.handleDatagramFrame(datagramFrame)
 		} else {
 			frame, l, err := c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
 			if err != nil {
 				return false, false, nil, err
 			}
-
 			data = data[l:]
-			if frame == nil {
-				break
-			}
 
 			if log != nil {
 				frames = append(frames, toLoggingFrame(frame))
 			}
-			// An error occurred handling a previous frame.
-			// Don't handle the current frame.
-			if handleErr != nil {
+			// an error occurred handling a previous frame, don't handle the current frame
+			if skipHandling {
 				continue
 			}
 			pc, err := c.handleFrame(frame, encLevel, destConnID, rcvTime)
-			if err != nil {
-				if log == nil {
-					return false, false, nil, err
-				}
-				// If we're logging, we need to keep parsing (but not handling) all frames.
-				handleErr = err
-			}
 			if pc != nil {
 				pathChallenge = pc
+			}
+			handleErr = err
+		}
+
+		if handleErr != nil {
+			// if we're logging, we need to keep parsing (but not handling) all frames
+			skipHandling = true
+			if log == nil {
+				return false, false, nil, handleErr
 			}
 		}
 	}
