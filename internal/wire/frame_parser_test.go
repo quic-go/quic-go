@@ -285,10 +285,14 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 		// Use type switch approach (like master branch)
 		switch f := frame.(type) {
 		case *StreamFrame:
-			streamFrame := expectedFrame.(*StreamFrame)
-			if streamFrame.StreamID != f.StreamID || streamFrame.Offset != f.Offset {
-				tb.Fatalf("STREAM frame does not match: %v vs %v", streamFrame, f)
+			sf := expectedFrame.(*StreamFrame)
+			if sf.StreamID != f.StreamID || sf.Offset != f.Offset {
+				tb.Fatalf("STREAM frame does not match: %v vs %v", sf, f)
 			}
+			if !bytes.Equal(sf.Data, f.Data) {
+				tb.Fatalf("STREAM frame does not match: %v vs %v", sf, f)
+			}
+			f.PutBack()
 		case *AckFrame:
 			af, ok := expectedFrame.(*AckFrame)
 			if !ok {
