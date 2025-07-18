@@ -374,29 +374,6 @@ func benchmarkFrames(b *testing.B, frames ...Frame) {
 	}
 }
 
-// STREAM and ACK are the most relevant frames for high-throughput transfers.
-func BenchmarkParseStreamAndACK(b *testing.B) {
-	frames := []Frame{
-		&AckFrame{
-			AckRanges: []AckRange{
-				{Smallest: 5000, Largest: 5200},
-				{Smallest: 1, Largest: 4200},
-			},
-			DelayTime: 42 * time.Millisecond,
-			ECT0:      5000,
-			ECT1:      0,
-			ECNCE:     10,
-		},
-		&StreamFrame{
-			StreamID:       1337,
-			Offset:         1e7,
-			Data:           make([]byte, 200),
-			DataLenPresent: true,
-		},
-	}
-	benchmarkFrames(b, frames...)
-}
-
 func BenchmarkParseOtherFrames(b *testing.B) {
 	frames := []Frame{
 		&MaxDataFrame{MaximumData: 123456},
