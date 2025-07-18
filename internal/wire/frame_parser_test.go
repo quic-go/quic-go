@@ -577,8 +577,7 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 			continue
 		}
 
-		switch frameType {
-		case AckFrameType, AckECNFrameType:
+		if frameType.IsAckFrameType() {
 			af, ok := expectedFrame.(*AckFrame)
 			if !ok {
 				tb.Fatalf("expected ACK, but got %v", expectedFrame)
@@ -595,7 +594,7 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 				tb.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", af, f)
 			}
 			data = data[l:]
-		case DatagramWithLengthFrameType, DatagramNoLengthFrameType:
+		} else if frameType.IsDatagramFrameType() {
 			df, ok := expectedFrame.(*DatagramFrame)
 			if !ok {
 				tb.Fatalf("expected DATAGRAM, but got %v", expectedFrame)
@@ -609,7 +608,7 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 				tb.Fatalf("DATAGRAM frame does not match: %v vs %v", df, f)
 			}
 			data = data[l:]
-		default:
+		} else {
 			f, l, err := parser.ParseLessCommonFrame(frameType, data, protocol.Version1)
 			if err != nil {
 				tb.Fatal(err)
