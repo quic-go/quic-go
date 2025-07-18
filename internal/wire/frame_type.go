@@ -37,7 +37,7 @@ const (
 )
 
 func (t FrameType) IsStreamFrameType() bool {
-	return byte(t)&0xf8 == 0x8
+	return t >= 0x8 && t <= 0xf
 }
 
 func (t FrameType) isValidRFC9000() bool {
