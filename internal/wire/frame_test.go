@@ -30,9 +30,9 @@ func TestProbingFrames(t *testing.T) {
 
 func TestIsProbingFrameType(t *testing.T) {
 	tests := map[FrameType]bool{
-		PathChallengeFrameType:   true,
-		PathResponseFrameType:    true,
-		NewConnectionIDFrameType: true,
+		FrameTypePathChallenge:   true,
+		FrameTypePathResponse:    true,
+		FrameTypeNewConnectionID: true,
 		FrameType(0x01):          false,
 		FrameType(0xFF):          false,
 	}

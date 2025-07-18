@@ -17,9 +17,9 @@ func parseMaxStreamsFrame(b []byte, typ FrameType, _ protocol.Version) (*MaxStre
 	f := &MaxStreamsFrame{}
 	//nolint:exhaustive // Function will only be called with BidiMaxStreamsFrameType or UniMaxStreamsFrameType
 	switch typ {
-	case BidiMaxStreamsFrameType:
+	case FrameTypeBidiMaxStreams:
 		f.Type = protocol.StreamTypeBidi
-	case UniMaxStreamsFrameType:
+	case FrameTypeUniMaxStreams:
 		f.Type = protocol.StreamTypeUni
 	}
 	streamID, l, err := quicvarint.Parse(b)
@@ -36,9 +36,9 @@ func parseMaxStreamsFrame(b []byte, typ FrameType, _ protocol.Version) (*MaxStre
 func (f *MaxStreamsFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
-		b = append(b, byte(BidiMaxStreamsFrameType))
+		b = append(b, byte(FrameTypeBidiMaxStreams))
 	case protocol.StreamTypeUni:
-		b = append(b, byte(UniMaxStreamsFrameType))
+		b = append(b, byte(FrameTypeUniMaxStreams))
 	}
 	b = quicvarint.Append(b, uint64(f.MaxStreamNum))
 	return b, nil

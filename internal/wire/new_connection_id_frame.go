@@ -61,7 +61,7 @@ func parseNewConnectionIDFrame(b []byte, _ protocol.Version) (*NewConnectionIDFr
 }
 
 func (f *NewConnectionIDFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
-	b = append(b, byte(NewConnectionIDFrameType))
+	b = append(b, byte(FrameTypeNewConnectionID))
 	b = quicvarint.Append(b, f.SequenceNumber)
 	b = quicvarint.Append(b, f.RetirePriorTo)
 	connIDLen := f.ConnectionID.Len()

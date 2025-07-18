@@ -17,9 +17,9 @@ func parseStreamsBlockedFrame(b []byte, typ FrameType, _ protocol.Version) (*Str
 	f := &StreamsBlockedFrame{}
 	//nolint:exhaustive // This will only be called with a BidiStreamBlockedFrameType or a UniStreamBlockedFrameType.
 	switch typ {
-	case BidiStreamBlockedFrameType:
+	case FrameTypeBidiStreamBlocked:
 		f.Type = protocol.StreamTypeBidi
-	case UniStreamBlockedFrameType:
+	case FrameTypeUniStreamBlocked:
 		f.Type = protocol.StreamTypeUni
 	}
 	streamLimit, l, err := quicvarint.Parse(b)
@@ -36,9 +36,9 @@ func parseStreamsBlockedFrame(b []byte, typ FrameType, _ protocol.Version) (*Str
 func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
-		b = append(b, byte(BidiStreamBlockedFrameType))
+		b = append(b, byte(FrameTypeBidiStreamBlocked))
 	case protocol.StreamTypeUni:
-		b = append(b, byte(UniStreamBlockedFrameType))
+		b = append(b, byte(FrameTypeUniStreamBlocked))
 	}
 	b = quicvarint.Append(b, uint64(f.StreamLimit))
 	return b, nil

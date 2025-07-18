@@ -25,7 +25,7 @@ func IsProbingFrame(f Frame) bool {
 func IsProbingFrameType(f FrameType) bool {
 	//nolint:exhaustive // PATH_CHALLENGE, PATH_RESPONSE and NEW_CONNECTION_ID are the only probing frames
 	switch f {
-	case PathChallengeFrameType, PathResponseFrameType, NewConnectionIDFrameType:
+	case FrameTypePathChallenge, FrameTypePathResponse, FrameTypeNewConnectionID:
 		return true
 	default:
 		return false

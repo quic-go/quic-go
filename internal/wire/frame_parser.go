@@ -52,7 +52,7 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		ft := FrameType(typ)
 		valid := ft.isValidRFC9000() ||
 			(p.supportsDatagrams && ft.IsDatagramFrameType()) ||
-			(p.supportsResetStreamAt && ft == ResetStreamAtFrameType)
+			(p.supportsResetStreamAt && ft == FrameTypeResetStreamAt)
 		if !valid {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,
@@ -122,41 +122,41 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 	var err error
 	//nolint:exhaustive // Common frames should already be handled.
 	switch frameType {
-	case PingFrameType:
+	case FrameTypePing:
 		frame = &PingFrame{}
-	case ResetStreamFrameType:
+	case FrameTypeResetStream:
 		frame, l, err = parseResetStreamFrame(data, false, v)
-	case StopSendingFrameType:
+	case FrameTypeStopSending:
 		frame, l, err = parseStopSendingFrame(data, v)
-	case CryptoFrameType:
+	case FrameTypeCrypto:
 		frame, l, err = parseCryptoFrame(data, v)
-	case NewTokenFrameType:
+	case FrameTypeNewToken:
 		frame, l, err = parseNewTokenFrame(data, v)
-	case MaxDataFrameType:
+	case FrameTypeMaxData:
 		frame, l, err = parseMaxDataFrame(data, v)
-	case MaxStreamDataFrameType:
+	case FrameTypeMaxStreamData:
 		frame, l, err = parseMaxStreamDataFrame(data, v)
-	case BidiMaxStreamsFrameType, UniMaxStreamsFrameType:
+	case FrameTypeBidiMaxStreams, FrameTypeUniMaxStreams:
 		frame, l, err = parseMaxStreamsFrame(data, frameType, v)
-	case DataBlockedFrameType:
+	case FrameTypeDataBlocked:
 		frame, l, err = parseDataBlockedFrame(data, v)
-	case StreamDataBlockedFrameType:
+	case FrameTypeStreamDataBlocked:
 		frame, l, err = parseStreamDataBlockedFrame(data, v)
-	case BidiStreamBlockedFrameType, UniStreamBlockedFrameType:
+	case FrameTypeBidiStreamBlocked, FrameTypeUniStreamBlocked:
 		frame, l, err = parseStreamsBlockedFrame(data, frameType, v)
-	case NewConnectionIDFrameType:
+	case FrameTypeNewConnectionID:
 		frame, l, err = parseNewConnectionIDFrame(data, v)
-	case RetireConnectionIDFrameType:
+	case FrameTypeRetireConnectionID:
 		frame, l, err = parseRetireConnectionIDFrame(data, v)
-	case PathChallengeFrameType:
+	case FrameTypePathChallenge:
 		frame, l, err = parsePathChallengeFrame(data, v)
-	case PathResponseFrameType:
+	case FrameTypePathResponse:
 		frame, l, err = parsePathResponseFrame(data, v)
-	case ConnectionCloseFrameType, ApplicationCloseFrameType:
+	case FrameTypeConnectionClose, FrameTypeApplicationClose:
 		frame, l, err = parseConnectionCloseFrame(data, frameType, v)
-	case HandshakeDoneFrameType:
+	case FrameTypeHandshakeDone:
 		frame = &HandshakeDoneFrame{}
-	case ResetStreamAtFrameType:
+	case FrameTypeResetStreamAt:
 		frame, l, err = parseResetStreamFrame(data, true, v)
 	default:
 		err = errUnknownFrameType

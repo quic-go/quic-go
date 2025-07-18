@@ -7,33 +7,33 @@ type FrameType uint64
 // These constants correspond to those defined in RFC 9000.
 // Stream frame types are not listed explicitly here; use FrameType.IsStreamFrameType() to identify them.
 const (
-	PingFrameType        FrameType = 0x1
-	AckFrameType         FrameType = 0x2
-	AckECNFrameType      FrameType = 0x3
-	ResetStreamFrameType FrameType = 0x4
-	StopSendingFrameType FrameType = 0x5
-	CryptoFrameType      FrameType = 0x6
-	NewTokenFrameType    FrameType = 0x7
+	FrameTypePing        FrameType = 0x1
+	FrameTypeAck         FrameType = 0x2
+	FrameTypeAckECN      FrameType = 0x3
+	FrameTypeResetStream FrameType = 0x4
+	FrameTypeStopSending FrameType = 0x5
+	FrameTypeCrypto      FrameType = 0x6
+	FrameTypeNewToken    FrameType = 0x7
 
-	MaxDataFrameType            FrameType = 0x10
-	MaxStreamDataFrameType      FrameType = 0x11
-	BidiMaxStreamsFrameType     FrameType = 0x12
-	UniMaxStreamsFrameType      FrameType = 0x13
-	DataBlockedFrameType        FrameType = 0x14
-	StreamDataBlockedFrameType  FrameType = 0x15
-	BidiStreamBlockedFrameType  FrameType = 0x16
-	UniStreamBlockedFrameType   FrameType = 0x17
-	NewConnectionIDFrameType    FrameType = 0x18
-	RetireConnectionIDFrameType FrameType = 0x19
-	PathChallengeFrameType      FrameType = 0x1a
-	PathResponseFrameType       FrameType = 0x1b
-	ConnectionCloseFrameType    FrameType = 0x1c
-	ApplicationCloseFrameType   FrameType = 0x1d
-	HandshakeDoneFrameType      FrameType = 0x1e
-	ResetStreamAtFrameType      FrameType = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
+	FrameTypeMaxData            FrameType = 0x10
+	FrameTypeMaxStreamData      FrameType = 0x11
+	FrameTypeBidiMaxStreams     FrameType = 0x12
+	FrameTypeUniMaxStreams      FrameType = 0x13
+	FrameTypeDataBlocked        FrameType = 0x14
+	FrameTypeStreamDataBlocked  FrameType = 0x15
+	FrameTypeBidiStreamBlocked  FrameType = 0x16
+	FrameTypeUniStreamBlocked   FrameType = 0x17
+	FrameTypeNewConnectionID    FrameType = 0x18
+	FrameTypeRetireConnectionID FrameType = 0x19
+	FrameTypePathChallenge      FrameType = 0x1a
+	FrameTypePathResponse       FrameType = 0x1b
+	FrameTypeConnectionClose    FrameType = 0x1c
+	FrameTypeApplicationClose   FrameType = 0x1d
+	FrameTypeHandshakeDone      FrameType = 0x1e
+	FrameTypeResetStreamAt      FrameType = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
 
-	DatagramNoLengthFrameType   FrameType = 0x30
-	DatagramWithLengthFrameType FrameType = 0x31
+	FrameTypeDatagramNoLength   FrameType = 0x30
+	FrameTypeDatagramWithLength FrameType = 0x31
 )
 
 func (t FrameType) IsStreamFrameType() bool {
@@ -45,11 +45,11 @@ func (t FrameType) isValidRFC9000() bool {
 }
 
 func (t FrameType) IsAckFrameType() bool {
-	return t == AckFrameType || t == AckECNFrameType
+	return t == FrameTypeAck || t == FrameTypeAckECN
 }
 
 func (t FrameType) IsDatagramFrameType() bool {
-	return t == DatagramNoLengthFrameType || t == DatagramWithLengthFrameType
+	return t == FrameTypeDatagramNoLength || t == FrameTypeDatagramWithLength
 }
 
 func (t FrameType) isAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
@@ -57,14 +57,14 @@ func (t FrameType) isAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
 	switch encLevel {
 	case protocol.EncryptionInitial, protocol.EncryptionHandshake:
 		switch t {
-		case CryptoFrameType, AckFrameType, AckECNFrameType, ConnectionCloseFrameType, PingFrameType:
+		case FrameTypeCrypto, FrameTypeAck, FrameTypeAckECN, FrameTypeConnectionClose, FrameTypePing:
 			return true
 		default:
 			return false
 		}
 	case protocol.Encryption0RTT:
 		switch t {
-		case CryptoFrameType, AckFrameType, AckECNFrameType, ConnectionCloseFrameType, NewTokenFrameType, PathResponseFrameType, RetireConnectionIDFrameType:
+		case FrameTypeCrypto, FrameTypeAck, FrameTypeAckECN, FrameTypeConnectionClose, FrameTypeNewToken, FrameTypePathResponse, FrameTypeRetireConnectionID:
 			return false
 		default:
 			return true

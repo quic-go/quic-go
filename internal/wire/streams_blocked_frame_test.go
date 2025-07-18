@@ -13,7 +13,7 @@ import (
 
 func TestParseStreamsBlockedFrameBidirectional(t *testing.T) {
 	data := encodeVarInt(0x1337)
-	f, l, err := parseStreamsBlockedFrame(data, BidiStreamBlockedFrameType, protocol.Version1)
+	f, l, err := parseStreamsBlockedFrame(data, FrameTypeBidiStreamBlocked, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamTypeBidi, f.Type)
 	require.EqualValues(t, 0x1337, f.StreamLimit)
@@ -22,7 +22,7 @@ func TestParseStreamsBlockedFrameBidirectional(t *testing.T) {
 
 func TestParseStreamsBlockedFrameUnidirectional(t *testing.T) {
 	data := encodeVarInt(0x7331)
-	f, l, err := parseStreamsBlockedFrame(data, UniStreamBlockedFrameType, protocol.Version1)
+	f, l, err := parseStreamsBlockedFrame(data, FrameTypeUniStreamBlocked, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamTypeUni, f.Type)
 	require.EqualValues(t, 0x7331, f.StreamLimit)
@@ -31,11 +31,11 @@ func TestParseStreamsBlockedFrameUnidirectional(t *testing.T) {
 
 func TestParseStreamsBlockedFrameErrorsOnEOFs(t *testing.T) {
 	data := encodeVarInt(0x12345678)
-	_, l, err := parseStreamsBlockedFrame(data, BidiStreamBlockedFrameType, protocol.Version1)
+	_, l, err := parseStreamsBlockedFrame(data, FrameTypeBidiStreamBlocked, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), l)
 	for i := range data {
-		_, _, err := parseStreamsBlockedFrame(data[:i], BidiStreamBlockedFrameType, protocol.Version1)
+		_, _, err := parseStreamsBlockedFrame(data[:i], FrameTypeBidiStreamBlocked, protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
@@ -97,7 +97,7 @@ func TestWriteStreamsBlockedFrameBidirectional(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{byte(BidiStreamBlockedFrameType)}
+	expected := []byte{byte(FrameTypeBidiStreamBlocked)}
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 	require.Equal(t, expected, b)
 	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
@@ -110,7 +110,7 @@ func TestWriteStreamsBlockedFrameUnidirectional(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{byte(UniStreamBlockedFrameType)}
+	expected := []byte{byte(FrameTypeUniStreamBlocked)}
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 	require.Equal(t, expected, b)
 	require.Equal(t, int(f.Length(protocol.Version1)), len(b))

@@ -17,7 +17,7 @@ type ConnectionCloseFrame struct {
 
 func parseConnectionCloseFrame(b []byte, typ FrameType, _ protocol.Version) (*ConnectionCloseFrame, int, error) {
 	startLen := len(b)
-	f := &ConnectionCloseFrame{IsApplicationError: typ == ApplicationCloseFrameType}
+	f := &ConnectionCloseFrame{IsApplicationError: typ == FrameTypeApplicationClose}
 	ec, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)
@@ -60,9 +60,9 @@ func (f *ConnectionCloseFrame) Length(protocol.Version) protocol.ByteCount {
 
 func (f *ConnectionCloseFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	if f.IsApplicationError {
-		b = append(b, byte(ApplicationCloseFrameType))
+		b = append(b, byte(FrameTypeApplicationClose))
 	} else {
-		b = append(b, byte(ConnectionCloseFrameType))
+		b = append(b, byte(FrameTypeConnectionClose))
 	}
 
 	b = quicvarint.Append(b, f.ErrorCode)

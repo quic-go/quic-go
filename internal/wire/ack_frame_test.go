@@ -17,7 +17,7 @@ func TestParseACKWithoutRanges(t *testing.T) {
 	data = append(data, encodeVarInt(0)...)  // num blocks
 	data = append(data, encodeVarInt(10)...) // first ack block
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	require.Equal(t, protocol.PacketNumber(100), frame.LargestAcked())
@@ -31,7 +31,7 @@ func TestParseACKSinglePacket(t *testing.T) {
 	data = append(data, encodeVarInt(0)...) // num blocks
 	data = append(data, encodeVarInt(0)...) // first ack block
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	require.Equal(t, protocol.PacketNumber(55), frame.LargestAcked())
@@ -45,7 +45,7 @@ func TestParseACKAllPacketsFrom0ToLargest(t *testing.T) {
 	data = append(data, encodeVarInt(0)...)  // num blocks
 	data = append(data, encodeVarInt(20)...) // first ack block
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	require.Equal(t, protocol.PacketNumber(20), frame.LargestAcked())
@@ -59,7 +59,7 @@ func TestParseACKRejectFirstBlockLargerThanLargestAcked(t *testing.T) {
 	data = append(data, encodeVarInt(0)...)  // num blocks
 	data = append(data, encodeVarInt(21)...) // first ack block
 	var frame AckFrame
-	_, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	_, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.EqualError(t, err, "invalid first ACK range")
 }
 
@@ -71,7 +71,7 @@ func TestParseACKWithSingleBlock(t *testing.T) {
 	data = append(data, encodeVarInt(98)...)  // gap
 	data = append(data, encodeVarInt(50)...)  // ack block
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	require.Equal(t, protocol.PacketNumber(1000), frame.LargestAcked())
@@ -93,7 +93,7 @@ func TestParseACKWithMultipleBlocks(t *testing.T) {
 	data = append(data, encodeVarInt(1)...) // gap
 	data = append(data, encodeVarInt(1)...) // ack block
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	require.Equal(t, protocol.PacketNumber(100), frame.LargestAcked())
@@ -131,7 +131,7 @@ func TestParseACKHandleDelayTimeOverflow(t *testing.T) {
 	data = append(data, encodeVarInt(0)...)                // num blocks
 	data = append(data, encodeVarInt(0)...)                // first ack block
 	var frame AckFrame
-	_, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	_, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Greater(t, frame.DelayTime, time.Duration(0))
 	// The maximum encodable duration is ~292 years.
@@ -146,11 +146,11 @@ func TestParseACKErrorOnEOF(t *testing.T) {
 	data = append(data, encodeVarInt(98)...)  // gap
 	data = append(data, encodeVarInt(50)...)  // ack block
 	var frame AckFrame
-	_, err := parseAckFrame(&frame, data, AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+	_, err := parseAckFrame(&frame, data, FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	for i := range data {
 		var frame AckFrame
-		_, err := parseAckFrame(&frame, data[:i], AckFrameType, protocol.AckDelayExponent, protocol.Version1)
+		_, err := parseAckFrame(&frame, data[:i], FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
@@ -164,7 +164,7 @@ func TestParseACKECN(t *testing.T) {
 	data = append(data, encodeVarInt(0x12345)...)    // ECT(1)
 	data = append(data, encodeVarInt(0x12345678)...) // ECN-CE
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckECNFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAckECN, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	require.Equal(t, protocol.PacketNumber(100), frame.LargestAcked())
@@ -186,12 +186,12 @@ func TestParseACKECNErrorOnEOF(t *testing.T) {
 	data = append(data, encodeVarInt(0x12345)...)    // ECT(1)
 	data = append(data, encodeVarInt(0x12345678)...) // ECN-CE
 	var frame AckFrame
-	n, err := parseAckFrame(&frame, data, AckECNFrameType, protocol.AckDelayExponent, protocol.Version1)
+	n, err := parseAckFrame(&frame, data, FrameTypeAckECN, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, len(data), n)
 	for i := range data {
 		var frame AckFrame
-		_, err := parseAckFrame(&frame, data[:i], AckECNFrameType, protocol.AckDelayExponent, protocol.Version1)
+		_, err := parseAckFrame(&frame, data[:i], FrameTypeAckECN, protocol.AckDelayExponent, protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
@@ -202,7 +202,7 @@ func TestWriteACKSimpleFrame(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{byte(AckFrameType)}
+	expected := []byte{byte(FrameTypeAck)}
 	expected = append(expected, encodeVarInt(1337)...) // largest acked
 	expected = append(expected, 0)                     // delay
 	expected = append(expected, encodeVarInt(0)...)    // num ranges
@@ -220,7 +220,7 @@ func TestWriteACKECNFrame(t *testing.T) {
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	require.Len(t, b, int(f.Length(protocol.Version1)))
-	expected := []byte{byte(AckECNFrameType)}
+	expected := []byte{byte(FrameTypeAckECN)}
 	expected = append(expected, encodeVarInt(2000)...) // largest acked
 	expected = append(expected, 0)                     // delay
 	expected = append(expected, encodeVarInt(0)...)    // num ranges
