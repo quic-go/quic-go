@@ -32,7 +32,7 @@ func TestWriteMaxDataFrame(t *testing.T) {
 	f := &MaxDataFrame{MaximumData: 0xdeadbeefcafe}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{maxDataFrameType}
+	expected := []byte{byte(FrameTypeMaxData)}
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 	require.Equal(t, expected, b)
 	require.Len(t, b, int(f.Length(protocol.Version1)))

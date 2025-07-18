@@ -27,3 +27,16 @@ func TestProbingFrames(t *testing.T) {
 		require.Equal(t, expected, IsProbingFrame(f))
 	}
 }
+
+func TestIsProbingFrameType(t *testing.T) {
+	tests := map[FrameType]bool{
+		FrameTypePathChallenge:   true,
+		FrameTypePathResponse:    true,
+		FrameTypeNewConnectionID: true,
+		FrameType(0x01):          false,
+		FrameType(0xFF):          false,
+	}
+	for ft, expected := range tests {
+		require.Equal(t, expected, IsProbingFrameType(ft))
+	}
+}

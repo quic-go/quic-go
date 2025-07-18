@@ -32,6 +32,6 @@ func TestWritePathChallenge(t *testing.T) {
 	frame := PathChallengeFrame{Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	require.Equal(t, []byte{pathChallengeFrameType, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}, b)
+	require.Equal(t, []byte{byte(FrameTypePathChallenge), 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}, b)
 	require.Len(t, b, int(frame.Length(protocol.Version1)))
 }

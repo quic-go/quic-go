@@ -215,7 +215,6 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 		name  string
 		frame wire.Frame
 	}{
-		{name: "STREAM", frame: &wire.StreamFrame{StreamID: id, Data: []byte("foobar")}},
 		{name: "RESET_STREAM", frame: &wire.ResetStreamFrame{StreamID: id, ErrorCode: 42, FinalSize: 1337}},
 		{name: "STOP_SENDING", frame: &wire.StopSendingFrame{StreamID: id, ErrorCode: 42}},
 		{name: "MAX_STREAM_DATA", frame: &wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1337}},

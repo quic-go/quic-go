@@ -43,7 +43,7 @@ func TestWriteNewTokenFrame(t *testing.T) {
 	f := &NewTokenFrame{Token: []byte(token)}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{newTokenFrameType}
+	expected := []byte{byte(FrameTypeNewToken)}
 	expected = append(expected, encodeVarInt(uint64(len(token)))...)
 	expected = append(expected, token...)
 	require.Equal(t, expected, b)

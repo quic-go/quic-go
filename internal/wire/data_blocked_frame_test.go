@@ -33,7 +33,7 @@ func TestWriteDataBlocked(t *testing.T) {
 	frame := DataBlockedFrame{MaximumData: 0xdeadbeef}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{dataBlockedFrameType}
+	expected := []byte{byte(FrameTypeDataBlocked)}
 	expected = append(expected, encodeVarInt(0xdeadbeef)...)
 	require.Equal(t, expected, b)
 	require.Equal(t, protocol.ByteCount(1+quicvarint.Len(uint64(frame.MaximumData))), frame.Length(protocol.Version1))
