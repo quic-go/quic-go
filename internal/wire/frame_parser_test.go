@@ -270,8 +270,8 @@ func writeFrames(tb testing.TB, frames ...Frame) []byte {
 	return b
 }
 
-// This function is used in a benchmark, and also to ensure 0 allocations for StreamFrames
-// require causes allocations, we thus need to test manually.
+// This function is used in benchmarks, and also to ensure zero allocation for STREAM frame parsing.
+// We can therefore not use the require framework, as it allocates.
 func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Frame) {
 	for _, expectedFrame := range frames {
 		l, frame, err := parser.ParseNext(data, protocol.Encryption1RTT, protocol.Version1)
