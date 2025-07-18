@@ -351,7 +351,7 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 		allowedOneRTT    bool
 	}
 
-	frames := []testCase{
+	for _, tc := range []testCase{
 		{
 			name:             "CRYPTO_FRAME",
 			frameType:        FrameTypeCrypto,
@@ -433,35 +433,33 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 			allowedZeroRTT:   true,
 			allowedOneRTT:    true,
 		},
-	}
-
-	for _, f := range frames {
+	} {
 		for _, encLevel := range []protocol.EncryptionLevel{
 			protocol.EncryptionInitial,
 			protocol.EncryptionHandshake,
 			protocol.Encryption0RTT,
 			protocol.Encryption1RTT,
 		} {
-			t.Run(fmt.Sprintf("%s/%v", f.name, encLevel), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%v", tc.name, encLevel), func(t *testing.T) {
 				var allowed bool
 				switch encLevel {
 				case protocol.EncryptionInitial:
-					allowed = f.allowedInitial
+					allowed = tc.allowedInitial
 				case protocol.EncryptionHandshake:
-					allowed = f.allowedHandshake
+					allowed = tc.allowedHandshake
 				case protocol.Encryption0RTT:
-					allowed = f.allowedZeroRTT
+					allowed = tc.allowedZeroRTT
 				case protocol.Encryption1RTT:
-					allowed = f.allowedOneRTT
+					allowed = tc.allowedOneRTT
 				}
 
 				parser := NewFrameParser(true, true)
-				b, err := f.frame.Append(nil, protocol.Version1)
+				b, err := tc.frame.Append(nil, protocol.Version1)
 				require.NoError(t, err)
 				frameType, _, err := parser.ParseType(b, encLevel)
 				if allowed {
 					require.NoError(t, err)
-					require.Equal(t, f.frameType, frameType)
+					require.Equal(t, tc.frameType, frameType)
 				} else {
 					require.Error(t, err)
 					var transportErr *qerr.TransportError
