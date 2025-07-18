@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
 	"slices"
 	"testing"
 	"time"
@@ -286,10 +287,7 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 		switch f := frame.(type) {
 		case *StreamFrame:
 			sf := expectedFrame.(*StreamFrame)
-			if sf.StreamID != f.StreamID || sf.Offset != f.Offset {
-				tb.Fatalf("STREAM frame does not match: %v vs %v", sf, f)
-			}
-			if !bytes.Equal(sf.Data, f.Data) {
+			if sf.StreamID != f.StreamID || sf.Offset != f.Offset || !bytes.Equal(sf.Data, f.Data) {
 				tb.Fatalf("STREAM frame does not match: %v vs %v", sf, f)
 			}
 			f.PutBack()
@@ -298,11 +296,11 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 			if !ok {
 				tb.Fatalf("expected ACK, but got %v", expectedFrame)
 			}
-			if f.DelayTime != af.DelayTime {
+			if f.DelayTime != af.DelayTime || f.ECNCE != af.ECNCE || f.ECT0 != af.ECT0 || f.ECT1 != af.ECT1 {
 				tb.Fatalf("ACK frame does not match: %v vs %v", af, f)
 			}
 			if !slices.Equal(f.AckRanges, af.AckRanges) {
-				tb.Fatalf("ACK frame does not match, len(AckRanges) not equal: %v vs %v", af, f)
+				tb.Fatalf("ACK frame ACK ranges don't match: %v vs %v", af, f)
 			}
 		case *DatagramFrame:
 			df, ok := expectedFrame.(*DatagramFrame)
@@ -406,10 +404,12 @@ func BenchmarkParseAckFrame(b *testing.B) {
 func BenchmarkParseStreamFrame(b *testing.B) {
 	var frames []Frame
 	for i := range 10 {
+		data := make([]byte, 200+i)
+		rand.Read(data)
 		frames = append(frames, &StreamFrame{
 			StreamID:       protocol.StreamID(1337 + i),
 			Offset:         protocol.ByteCount(1e7 + i),
-			Data:           make([]byte, 200+i),
+			Data:           data,
 			DataLenPresent: true,
 		})
 	}
@@ -418,9 +418,11 @@ func BenchmarkParseStreamFrame(b *testing.B) {
 
 func BenchmarkParseDatagramFrame(b *testing.B) {
 	var frames []Frame
-	for range 10 {
+	for i := range 10 {
+		data := make([]byte, 200+i)
+		rand.Read(data)
 		frames = append(frames, &DatagramFrame{
-			Data:           make([]byte, 200),
+			Data:           data,
 			DataLenPresent: true,
 		})
 	}
