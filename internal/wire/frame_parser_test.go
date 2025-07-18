@@ -259,7 +259,6 @@ func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
 }
 
-
 func writeFrames(tb testing.TB, frames ...Frame) []byte {
 	var b []byte
 	for _, f := range frames {
