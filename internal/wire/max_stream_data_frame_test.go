@@ -36,7 +36,7 @@ func TestWriteMaxStreamDataFrame(t *testing.T) {
 		StreamID:          0xdecafbad,
 		MaximumStreamData: 0xdeadbeefcafe42,
 	}
-	expected := []byte{maxStreamDataFrameType}
+	expected := []byte{byte(FrameTypeMaxStreamData)}
 	expected = append(expected, encodeVarInt(0xdecafbad)...)
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe42)...)
 	b, err := f.Append(nil, protocol.Version1)

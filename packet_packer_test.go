@@ -736,10 +736,15 @@ func TestPackLongHeaderPadToAtLeast4Bytes(t *testing.T) {
 	require.Equal(t, []byte{0, 0}, data[:2])
 	// ...followed by the PING frame
 	frameParser := wire.NewFrameParser(false, false)
-	l, frame, err := frameParser.ParseNext(data[2:], protocol.EncryptionHandshake, protocol.Version1)
+
+	frameType, lt, err := frameParser.ParseType(data[2:], protocol.EncryptionHandshake)
+	require.NoError(t, err)
+	require.Equal(t, 1, lt)
+	frame, l, err := frameParser.ParseLessCommonFrame(frameType, data[2+lt:], protocol.Version1)
 	require.NoError(t, err)
 	require.IsType(t, &wire.PingFrame{}, frame)
-	require.Equal(t, sealer.Overhead(), len(data)-2-l)
+	require.Zero(t, l)
+	require.Equal(t, sealer.Overhead(), len(data)-2-lt)
 }
 
 func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
@@ -774,10 +779,15 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 
 	// ... followed by the STREAM frame
 	frameParser := wire.NewFrameParser(false, false)
-	frameLen, frame, err := frameParser.ParseNext(payload[1:], protocol.Encryption1RTT, protocol.Version1)
+	frameType, l, err := frameParser.ParseType(payload[1:], protocol.Encryption1RTT)
+	require.NoError(t, err)
+	require.Equal(t, 1, l)
+	require.True(t, frameType.IsStreamFrameType())
+
+	frame, frameLen, err := wire.ParseStreamFrame(payload[1+l:], frameType, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, f, frame)
-	require.Equal(t, len(payload)-1, frameLen)
+	require.Equal(t, len(payload)-2, frameLen)
 }
 
 func TestPackInitialProbePacket(t *testing.T) {

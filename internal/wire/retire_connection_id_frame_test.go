@@ -32,7 +32,7 @@ func TestWriteRetireConnectionID(t *testing.T) {
 	frame := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{retireConnectionIDFrameType}
+	expected := []byte{byte(FrameTypeRetireConnectionID)}
 	expected = append(expected, encodeVarInt(0x1337)...)
 	require.Equal(t, expected, b)
 	require.Len(t, b, int(frame.Length(protocol.Version1)))

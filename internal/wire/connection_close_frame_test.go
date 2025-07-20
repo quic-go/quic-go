@@ -15,7 +15,7 @@ func TestParseConnectionCloseTransportError(t *testing.T) {
 	data = append(data, encodeVarInt(0x1337)...)              // frame type
 	data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 	data = append(data, []byte(reason)...)
-	frame, l, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
+	frame, l, err := parseConnectionCloseFrame(data, FrameTypeConnectionClose, protocol.Version1)
 	require.NoError(t, err)
 	require.False(t, frame.IsApplicationError)
 	require.EqualValues(t, 0x19, frame.ErrorCode)
@@ -29,7 +29,7 @@ func TestParseConnectionCloseWithApplicationError(t *testing.T) {
 	data := encodeVarInt(0xcafe)
 	data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 	data = append(data, reason...)
-	frame, l, err := parseConnectionCloseFrame(data, applicationCloseFrameType, protocol.Version1)
+	frame, l, err := parseConnectionCloseFrame(data, FrameTypeApplicationClose, protocol.Version1)
 	require.NoError(t, err)
 	require.True(t, frame.IsApplicationError)
 	require.EqualValues(t, 0xcafe, frame.ErrorCode)
@@ -41,7 +41,7 @@ func TestParseConnectionCloseLongReasonPhrase(t *testing.T) {
 	data := encodeVarInt(0xcafe)
 	data = append(data, encodeVarInt(0x42)...)   // frame type
 	data = append(data, encodeVarInt(0xffff)...) // reason phrase length
-	_, _, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
+	_, _, err := parseConnectionCloseFrame(data, FrameTypeConnectionClose, protocol.Version1)
 	require.Equal(t, io.EOF, err)
 }
 
@@ -51,11 +51,11 @@ func TestParseConnectionCloseErrorsOnEOFs(t *testing.T) {
 	data = append(data, encodeVarInt(0x1337)...)              // frame type
 	data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 	data = append(data, []byte(reason)...)
-	_, l, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
+	_, l, err := parseConnectionCloseFrame(data, FrameTypeConnectionClose, protocol.Version1)
 	require.Equal(t, len(data), l)
 	require.NoError(t, err)
 	for i := range data {
-		_, _, err = parseConnectionCloseFrame(data[:i], connectionCloseFrameType, protocol.Version1)
+		_, _, err = parseConnectionCloseFrame(data[:i], FrameTypeConnectionClose, protocol.Version1)
 		require.Equal(t, io.EOF, err)
 	}
 }
@@ -64,7 +64,7 @@ func TestParseConnectionCloseNoReasonPhrase(t *testing.T) {
 	data := encodeVarInt(0xcafe)
 	data = append(data, encodeVarInt(0x42)...) // frame type
 	data = append(data, encodeVarInt(0)...)
-	frame, l, err := parseConnectionCloseFrame(data, connectionCloseFrameType, protocol.Version1)
+	frame, l, err := parseConnectionCloseFrame(data, FrameTypeConnectionClose, protocol.Version1)
 	require.NoError(t, err)
 	require.Empty(t, frame.ReasonPhrase)
 	require.Equal(t, len(data), l)
@@ -77,7 +77,7 @@ func TestWriteConnectionCloseNoReasonPhrase(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{connectionCloseFrameType}
+	expected := []byte{byte(FrameTypeConnectionClose)}
 	expected = append(expected, encodeVarInt(0xbeef)...)
 	expected = append(expected, encodeVarInt(0x12345)...) // frame type
 	expected = append(expected, encodeVarInt(0)...)       // reason phrase length
@@ -91,7 +91,7 @@ func TestWriteConnectionCloseWithReasonPhrase(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{connectionCloseFrameType}
+	expected := []byte{byte(FrameTypeConnectionClose)}
 	expected = append(expected, encodeVarInt(0xdead)...)
 	expected = append(expected, encodeVarInt(0)...) // frame type
 	expected = append(expected, encodeVarInt(6)...) // reason phrase length
@@ -107,7 +107,7 @@ func TestWriteConnectionCloseWithApplicationError(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{applicationCloseFrameType}
+	expected := []byte{byte(FrameTypeApplicationClose)}
 	expected = append(expected, encodeVarInt(0xdead)...)
 	expected = append(expected, encodeVarInt(6)...) // reason phrase length
 	expected = append(expected, []byte("foobar")...)

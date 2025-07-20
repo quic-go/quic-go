@@ -38,7 +38,7 @@ func TestWriteStreamDataBlocked(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{streamDataBlockedFrameType}
+	expected := []byte{byte(FrameTypeStreamDataBlocked)}
 	expected = append(expected, encodeVarInt(uint64(f.StreamID))...)
 	expected = append(expected, encodeVarInt(uint64(f.MaximumStreamData))...)
 	require.Equal(t, expected, b)

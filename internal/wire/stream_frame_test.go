@@ -14,7 +14,7 @@ func TestParseStreamFrameWithOffBit(t *testing.T) {
 	data := encodeVarInt(0x12345)                    // stream ID
 	data = append(data, encodeVarInt(0xdecafbad)...) // offset
 	data = append(data, []byte("foobar")...)
-	frame, l, err := parseStreamFrame(data, 0x8^0x4, protocol.Version1)
+	frame, l, err := ParseStreamFrame(data, 0x8^0x4, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0x12345), frame.StreamID)
 	require.Equal(t, []byte("foobar"), frame.Data)
@@ -27,7 +27,7 @@ func TestParseStreamFrameRespectsLEN(t *testing.T) {
 	data := encodeVarInt(0x12345)           // stream ID
 	data = append(data, encodeVarInt(4)...) // data length
 	data = append(data, []byte("foobar")...)
-	frame, l, err := parseStreamFrame(data, 0x8^0x2, protocol.Version1)
+	frame, l, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0x12345), frame.StreamID)
 	require.Equal(t, []byte("foob"), frame.Data)
@@ -39,7 +39,7 @@ func TestParseStreamFrameRespectsLEN(t *testing.T) {
 func TestParseStreamFrameWithFINBit(t *testing.T) {
 	data := encodeVarInt(9) // stream ID
 	data = append(data, []byte("foobar")...)
-	frame, l, err := parseStreamFrame(data, 0x8^0x1, protocol.Version1)
+	frame, l, err := ParseStreamFrame(data, 0x8^0x1, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(9), frame.StreamID)
 	require.Equal(t, []byte("foobar"), frame.Data)
@@ -51,7 +51,7 @@ func TestParseStreamFrameWithFINBit(t *testing.T) {
 func TestParseStreamFrameAllowsEmpty(t *testing.T) {
 	data := encodeVarInt(0x1337)                  // stream ID
 	data = append(data, encodeVarInt(0x12345)...) // offset
-	f, l, err := parseStreamFrame(data, 0x8^0x4, protocol.Version1)
+	f, l, err := ParseStreamFrame(data, 0x8^0x4, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0x1337), f.StreamID)
 	require.Equal(t, protocol.ByteCount(0x12345), f.Offset)
@@ -64,7 +64,7 @@ func TestParseStreamFrameRejectsOverflow(t *testing.T) {
 	data := encodeVarInt(0x12345)                                         // stream ID
 	data = append(data, encodeVarInt(uint64(protocol.MaxByteCount-5))...) // offset
 	data = append(data, []byte("foobar")...)
-	_, _, err := parseStreamFrame(data, 0x8^0x4, protocol.Version1)
+	_, _, err := ParseStreamFrame(data, 0x8^0x4, protocol.Version1)
 	require.EqualError(t, err, "stream data overflows maximum offset")
 }
 
@@ -72,7 +72,7 @@ func TestParseStreamFrameRejectsLongFrames(t *testing.T) {
 	data := encodeVarInt(0x12345)                                                // stream ID
 	data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
 	data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
-	_, _, err := parseStreamFrame(data, 0x8^0x2, protocol.Version1)
+	_, _, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
 	require.Equal(t, io.EOF, err)
 }
 
@@ -80,7 +80,7 @@ func TestParseStreamFrameRejectsFramesExceedingRemainingSize(t *testing.T) {
 	data := encodeVarInt(0x12345)           // stream ID
 	data = append(data, encodeVarInt(7)...) // data length
 	data = append(data, []byte("foobar")...)
-	_, _, err := parseStreamFrame(data, 0x8^0x2, protocol.Version1)
+	_, _, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
 	require.Equal(t, io.EOF, err)
 }
 
@@ -90,10 +90,10 @@ func TestParseStreamFrameErrorsOnEOFs(t *testing.T) {
 	data = append(data, encodeVarInt(0xdecafbad)...) // offset
 	data = append(data, encodeVarInt(6)...)          // data length
 	data = append(data, []byte("foobar")...)
-	_, _, err := parseStreamFrame(data, typ, protocol.Version1)
+	_, _, err := ParseStreamFrame(data, FrameType(typ), protocol.Version1)
 	require.NoError(t, err)
 	for i := range data {
-		_, _, err = parseStreamFrame(data[:i], typ, protocol.Version1)
+		_, _, err = ParseStreamFrame(data[:i], FrameType(typ), protocol.Version1)
 		require.Error(t, err)
 	}
 }
@@ -101,7 +101,7 @@ func TestParseStreamFrameErrorsOnEOFs(t *testing.T) {
 func TestParseStreamUsesBufferForLongFrames(t *testing.T) {
 	data := encodeVarInt(0x12345) // stream ID
 	data = append(data, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize)...)
-	frame, l, err := parseStreamFrame(data, 0x8, protocol.Version1)
+	frame, l, err := ParseStreamFrame(data, 0x8, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0x12345), frame.StreamID)
 	require.Equal(t, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize), frame.Data)
@@ -115,7 +115,7 @@ func TestParseStreamUsesBufferForLongFrames(t *testing.T) {
 func TestParseStreamDoesNotUseBufferForShortFrames(t *testing.T) {
 	data := encodeVarInt(0x12345) // stream ID
 	data = append(data, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1)...)
-	frame, l, err := parseStreamFrame(data, 0x8, protocol.Version1)
+	frame, l, err := ParseStreamFrame(data, 0x8, protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, protocol.StreamID(0x12345), frame.StreamID)
 	require.Equal(t, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1), frame.Data)

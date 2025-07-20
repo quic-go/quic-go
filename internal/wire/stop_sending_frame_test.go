@@ -39,7 +39,7 @@ func TestWriteStopSendingFrame(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{stopSendingFrameType}
+	expected := []byte{byte(FrameTypeStopSending)}
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 	expected = append(expected, encodeVarInt(0xdecafbad)...)
 	require.Equal(t, expected, b)

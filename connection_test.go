@@ -215,17 +215,19 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 		name  string
 		frame wire.Frame
 	}{
-		{name: "STREAM", frame: &wire.StreamFrame{StreamID: id, Data: []byte("foobar")}},
 		{name: "RESET_STREAM", frame: &wire.ResetStreamFrame{StreamID: id, ErrorCode: 42, FinalSize: 1337}},
 		{name: "STOP_SENDING", frame: &wire.StopSendingFrame{StreamID: id, ErrorCode: 42}},
 		{name: "MAX_STREAM_DATA", frame: &wire.MaxStreamDataFrame{StreamID: id, MaximumStreamData: 1337}},
 		{name: "STREAM_DATA_BLOCKED", frame: &wire.StreamDataBlockedFrame{StreamID: id, MaximumStreamData: 42}},
+		{name: "STREAM_FRAME", frame: &wire.StreamFrame{StreamID: id, Data: []byte{1, 2, 3, 4, 5, 6, 7, 8}, Offset: 1337}},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tc := newServerTestConnection(t, gomock.NewController(t), nil, false)
-			_, err := tc.conn.handleFrame(test.frame, protocol.Encryption1RTT, connID, time.Now())
+			data, err := test.frame.Append(nil, protocol.Version1)
+			require.NoError(t, err)
+			_, _, _, err = tc.conn.handleFrames(data, connID, protocol.Encryption1RTT, nil, time.Now())
 			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 		})
 	}
@@ -2995,4 +2997,38 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestConnectionDatagrams(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		testConnectionDatagrams(t, false)
+	})
+	t.Run("enabled", func(t *testing.T) {
+		testConnectionDatagrams(t, true)
+	})
+}
+
+func testConnectionDatagrams(t *testing.T, enabled bool) {
+	tc := newServerTestConnection(t, nil, &Config{EnableDatagrams: enabled}, false)
+
+	data, err := (&wire.DatagramFrame{Data: []byte("foo"), DataLenPresent: true}).Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	data, err = (&wire.DatagramFrame{Data: []byte("bar")}).Append(data, protocol.Version1)
+	require.NoError(t, err)
+	_, _, _, err = tc.conn.handleFrames(data, protocol.ConnectionID{}, protocol.Encryption1RTT, nil, time.Now())
+
+	if !enabled {
+		require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.FrameEncodingError, FrameType: uint64(wire.FrameTypeDatagramWithLength)})
+		return
+	}
+
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	d, err := tc.conn.ReceiveDatagram(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), d)
+	d, err = tc.conn.ReceiveDatagram(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []byte("bar"), d)
 }

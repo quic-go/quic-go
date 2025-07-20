@@ -77,7 +77,7 @@ func TestWriteNewConnectionIDFrame(t *testing.T) {
 	}
 	b, err := frame.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	expected := []byte{newConnectionIDFrameType}
+	expected := []byte{byte(FrameTypeNewConnectionID)}
 	expected = append(expected, encodeVarInt(0x1337)...)
 	expected = append(expected, encodeVarInt(0x42)...)
 	expected = append(expected, 6)
