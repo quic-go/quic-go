@@ -670,7 +670,6 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 			if *f.(*ResetStreamFrame) != *rsf {
 				tb.Fatalf("RESET_STREAM frame does not match: %v vs %v", f, rsf)
 			}
-			data = data[l:]
 			continue
 		default:
 			tb.Fatalf("Frame type not supported in benchmark or should not occur: %v", frameType)
