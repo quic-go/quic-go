@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"math"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -26,10 +27,14 @@ func parseAckFrequencyFrame(b []byte, _ protocol.Version) (*AckFrequencyFrame, i
 		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
-	// TODO: fix possible overflow here by imposing a limit (see https://github.com/janaiyengar/ack-frequency/issues/43).
 	mad, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)
+	}
+	// prevents overflows if the peer sends a very large value
+	maxAckDelay := time.Duration(mad) * time.Microsecond
+	if maxAckDelay < 0 {
+		maxAckDelay = math.MaxInt64
 	}
 	b = b[l:]
 	rth, l, err := quicvarint.Parse(b)
@@ -41,7 +46,7 @@ func parseAckFrequencyFrame(b []byte, _ protocol.Version) (*AckFrequencyFrame, i
 	return &AckFrequencyFrame{
 		SequenceNumber:        seq,
 		AckElicitingThreshold: aeth,
-		RequestMaxAckDelay:    time.Duration(mad) * time.Microsecond,
+		RequestMaxAckDelay:    maxAckDelay,
 		ReorderingThreshold:   protocol.PacketNumber(rth),
 	}, startLen - len(b), nil
 }
