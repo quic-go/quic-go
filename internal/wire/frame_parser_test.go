@@ -330,6 +330,11 @@ func TestFrameParserFrames(t *testing.T) {
 				ReorderingThreshold:   0xcafe,
 			},
 		},
+		{
+			name:      "IMMEDIATE_ACK",
+			frameType: FrameTypeImmediateAck,
+			frame:     &ImmediateAckFrame{},
+		},
 	}
 
 	for _, test := range tests {
@@ -523,7 +528,32 @@ func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = parser.ParseType(b, protocol.Encryption1RTT)
-	checkFrameUnsupported(t, err, 0x24)
+	checkFrameUnsupported(t, err, uint64(FrameTypeResetStreamAt))
+}
+
+func TestFrameParserAckFrequencyUnsupported(t *testing.T) {
+	parser := NewFrameParser(true, true, false)
+
+	t.Run("ACK_FREQUENCY", func(t *testing.T) {
+		f := &AckFrequencyFrame{
+			SequenceNumber:        1337,
+			AckElicitingThreshold: 42,
+			RequestMaxAckDelay:    42 * time.Millisecond,
+			ReorderingThreshold:   1234,
+		}
+		b, err := f.Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		_, _, err = parser.ParseType(b, protocol.Encryption1RTT)
+		checkFrameUnsupported(t, err, uint64(FrameTypeAckFrequency))
+	})
+
+	t.Run("IMMEDIATE_ACK", func(t *testing.T) {
+		f := &ImmediateAckFrame{}
+		b, err := f.Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		_, _, err = parser.ParseType(b, protocol.Encryption1RTT)
+		checkFrameUnsupported(t, err, uint64(FrameTypeImmediateAck))
+	})
 }
 
 func TestFrameParserInvalidFrameType(t *testing.T) {
