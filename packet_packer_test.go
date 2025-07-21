@@ -735,7 +735,7 @@ func TestPackLongHeaderPadToAtLeast4Bytes(t *testing.T) {
 	// first bytes should be 2 PADDING frames...
 	require.Equal(t, []byte{0, 0}, data[:2])
 	// ...followed by the PING frame
-	frameParser := wire.NewFrameParser(false, false)
+	frameParser := wire.NewFrameParser(false, false, false)
 
 	frameType, lt, err := frameParser.ParseType(data[2:], protocol.EncryptionHandshake)
 	require.NoError(t, err)
@@ -778,7 +778,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 	require.Equal(t, byte(0), payload[0])
 
 	// ... followed by the STREAM frame
-	frameParser := wire.NewFrameParser(false, false)
+	frameParser := wire.NewFrameParser(false, false, false)
 	frameType, l, err := frameParser.ParseType(payload[1:], protocol.Encryption1RTT)
 	require.NoError(t, err)
 	require.Equal(t, 1, l)

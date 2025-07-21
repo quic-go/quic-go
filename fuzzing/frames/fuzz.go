@@ -35,7 +35,7 @@ func Fuzz(data []byte) int {
 	encLevel := toEncLevel(data[0])
 	data = data[PrefixLen:]
 
-	parser := wire.NewFrameParser(true, true)
+	parser := wire.NewFrameParser(true, true, true)
 	parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
 
 	var numFrames int
@@ -152,6 +152,10 @@ func validateFrame(frame wire.Frame) {
 	case *wire.ResetStreamFrame:
 		if f.FinalSize < f.ReliableSize {
 			panic("RESET_STREAM frame with a FinalSize smaller than the ReliableSize")
+		}
+	case *wire.AckFrequencyFrame:
+		if f.RequestMaxAckDelay < 0 {
+			panic("ACK_FREQUENCY frame with a negative RequestMaxAckDelay")
 		}
 	}
 }
