@@ -23,7 +23,9 @@ type receivedPacketHistory struct {
 }
 
 func newReceivedPacketHistory() *receivedPacketHistory {
-	return &receivedPacketHistory{}
+	return &receivedPacketHistory{
+		deletedBelow: protocol.InvalidPacketNumber,
+	}
 }
 
 // ReceivedPacket registers a packet with PacketNumber p and updates the ranges
@@ -115,13 +117,25 @@ func (h *receivedPacketHistory) AppendAckRanges(ackRanges []wire.AckRange) []wir
 	return ackRanges
 }
 
-func (h *receivedPacketHistory) GetHighestAckRange() wire.AckRange {
-	ackRange := wire.AckRange{}
-	if len(h.ranges) > 0 {
-		ackRange.Smallest = h.ranges[len(h.ranges)-1].Start
-		ackRange.Largest = h.ranges[len(h.ranges)-1].End
+func (h *receivedPacketHistory) HighestMissingUpTo(p protocol.PacketNumber) protocol.PacketNumber {
+	if len(h.ranges) == 0 || (h.deletedBelow != protocol.InvalidPacketNumber && p < h.deletedBelow) {
+		return protocol.InvalidPacketNumber
 	}
-	return ackRange
+	p = min(h.ranges[len(h.ranges)-1].End, p)
+	for i := len(h.ranges) - 1; i >= 0; i-- {
+		r := h.ranges[i]
+		if p >= r.Start && p <= r.End {
+			highest := r.Start - 1
+			if h.deletedBelow != protocol.InvalidPacketNumber && highest < h.deletedBelow {
+				return protocol.InvalidPacketNumber
+			}
+			return highest
+		}
+		if i >= 1 && p > h.ranges[i-1].End && p <= r.End {
+			return p
+		}
+	}
+	return p
 }
 
 func (h *receivedPacketHistory) IsPotentiallyDuplicate(p protocol.PacketNumber) bool {
