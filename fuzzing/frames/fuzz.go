@@ -45,7 +45,7 @@ func Fuzz(data []byte) int {
 		frameType, l, err := parser.ParseType(data, encLevel)
 		if err != nil {
 			if err == io.EOF { // the last frame was a PADDING frame
-				continue
+				break
 			}
 			break
 		}
