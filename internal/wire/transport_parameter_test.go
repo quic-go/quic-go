@@ -80,7 +80,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 	var token protocol.StatelessResetToken
 	rand.Read(token[:])
 	rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
-	minAckDelay := 1337 * time.Millisecond
+	minAckDelay := 42 * time.Millisecond
 	params := &TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(getRandomValue()),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(getRandomValue()),
@@ -130,7 +130,9 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 
 func TestMarshalAdditionalTransportParameters(t *testing.T) {
 	origAdditionalTransportParametersClient := AdditionalTransportParametersClient
-	t.Cleanup(func() { AdditionalTransportParametersClient = origAdditionalTransportParametersClient })
+	t.Cleanup(func() {
+		AdditionalTransportParametersClient = origAdditionalTransportParametersClient
+	})
 	AdditionalTransportParametersClient = map[uint64][]byte{1337: []byte("foobar")}
 
 	result := quicvarint.Append([]byte{}, 1337)
@@ -142,24 +144,24 @@ func TestMarshalAdditionalTransportParameters(t *testing.T) {
 	require.False(t, bytes.Contains(params.Marshal(protocol.PerspectiveServer), result))
 }
 
-func TestMarshalWithoutRetrySourceConnectionID(t *testing.T) {
+func TestMarshalRetrySourceConnectionID(t *testing.T) {
+	// no retry source connection ID
 	data := (&TransportParameters{
 		StatelessResetToken:     &protocol.StatelessResetToken{},
 		ActiveConnectionIDLimit: 2,
 	}).Marshal(protocol.PerspectiveServer)
-	p := &TransportParameters{}
+	var p TransportParameters
 	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
 	require.Nil(t, p.RetrySourceConnectionID)
-}
 
-func TestMarshalZeroLengthRetrySourceConnectionID(t *testing.T) {
+	// zero-length retry source connection ID
 	rcid := protocol.ParseConnectionID([]byte{})
-	data := (&TransportParameters{
+	data = (&TransportParameters{
 		RetrySourceConnectionID: &rcid,
 		StatelessResetToken:     &protocol.StatelessResetToken{},
 		ActiveConnectionIDLimit: 2,
 	}).Marshal(protocol.PerspectiveServer)
-	p := &TransportParameters{}
+	p = TransportParameters{}
 	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
 	require.NotNil(t, p.RetrySourceConnectionID)
 	require.Zero(t, p.RetrySourceConnectionID.Len())
@@ -169,7 +171,7 @@ func TestTransportParameterNoMaxAckDelayIfDefault(t *testing.T) {
 	const num = 1000
 	var defaultLen, dataLen int
 	maxAckDelay := protocol.DefaultMaxAckDelay + time.Millisecond
-	for i := 0; i < num; i++ {
+	for range num {
 		dataDefault := (&TransportParameters{
 			MaxAckDelay:         protocol.DefaultMaxAckDelay,
 			StatelessResetToken: &protocol.StatelessResetToken{},
@@ -190,7 +192,7 @@ func TestTransportParameterNoMaxAckDelayIfDefault(t *testing.T) {
 func TestTransportParameterNoAckDelayExponentIfDefault(t *testing.T) {
 	const num = 1000
 	var defaultLen, dataLen int
-	for i := 0; i < num; i++ {
+	for range num {
 		dataDefault := (&TransportParameters{
 			AckDelayExponent:    protocol.DefaultAckDelayExponent,
 			StatelessResetToken: &protocol.StatelessResetToken{},
@@ -388,6 +390,34 @@ func TestTransportParameterErrors(t *testing.T) {
 			}(),
 			perspective:    protocol.PerspectiveClient,
 			expectedErrMsg: "wrong length for reset_stream_at: 1 (expected empty)",
+		},
+		{
+			name: "min ack delay is greater than max ack delay",
+			data: func() []byte {
+				b := quicvarint.Append(nil, uint64(minAckDelayParameterID))
+				b = quicvarint.Append(b, uint64(quicvarint.Len(42001)))
+				b = quicvarint.Append(b, 42001) // 42001 microseconds
+				b = quicvarint.Append(b, uint64(maxAckDelayParameterID))
+				b = quicvarint.Append(b, uint64(quicvarint.Len(42)))
+				b = quicvarint.Append(b, 42) // 42 microseconds
+				return appendInitialSourceConnectionID(b)
+			}(),
+			perspective:    protocol.PerspectiveClient,
+			expectedErrMsg: "min_ack_delay (42.001ms) is greater than max_ack_delay (42ms)",
+		},
+		{
+			name: "huge min ack delay value",
+			data: func() []byte {
+				b := quicvarint.Append(nil, uint64(minAckDelayParameterID))
+				b = quicvarint.Append(b, uint64(quicvarint.Len(quicvarint.Max)))
+				b = quicvarint.Append(b, quicvarint.Max)
+				b = quicvarint.Append(b, uint64(maxAckDelayParameterID))
+				b = quicvarint.Append(b, uint64(quicvarint.Len(42)))
+				b = quicvarint.Append(b, 42) // 42 microseconds
+				return appendInitialSourceConnectionID(b)
+			}(),
+			perspective:    protocol.PerspectiveClient,
+			expectedErrMsg: "min_ack_delay (2562047h47m16.854775807s) is greater than max_ack_delay (42ms)",
 		},
 	}
 
