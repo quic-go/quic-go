@@ -730,17 +730,40 @@ func (c *Conn) ConnectionState() ConnectionState {
 }
 
 type ConnectionStats struct {
-	MinRTT        time.Duration
-	LatestRTT     time.Duration
-	SmoothedRTT   time.Duration
+	// MinRTT is the minimum round-trip time observed on the entire connection.
+	MinRTT time.Duration
+	// LatestRTT is the last round-trip time observed
+	LatestRTT time.Duration
+	// SmoothedRTT is the smoothed round-trip time (RTT) currently observed on
+	// the connection, as defined in RFC 9002 Section 5.3.
+	SmoothedRTT time.Duration
+	// MeanDeviation is the mean deviation in round-trip time samples currently
+	// observed on the connection, as defined in RFC 9002 Section 5.3.
 	MeanDeviation time.Duration
 
-	BytesSent       uint64
-	PacketsSent     uint64
-	BytesReceived   uint64
+	// BytesSent is the number of bytes sent on the underlying connection,
+	// including retransmissions. Does not include UDP or any other outer
+	// framing.
+	BytesSent uint64
+	// PacketsSent is the number of packets sent on the underlying connection,
+	// including those that are determined to have been lost.
+	PacketsSent uint64
+	// BytesReceived is the number of total bytes received on the underlying
+	// connection, including duplicate data for streams. Does not include UDP or
+	// any other outer framing.
+	BytesReceived uint64
+	// PacketsReceived is the number of total packets received on the underlying
+	// connection, including packets that were not processable.
 	PacketsReceived uint64
-	BytesLost       uint64
-	PacketsLost     uint64
+	// BytesLost is the number of bytes lost on the underlying connection (does
+	// not monotonically increase, because packets that are declared lost can
+	// subsequently be received). Does not include UDP or any other outer
+	// framing.
+	BytesLost uint64
+	// PacketsLost is the number of packets lost on the underlying connection
+	// (does not monotonically increase, because packets that are declared lost
+	// can subsequently be received).
+	PacketsLost uint64
 }
 
 func (c *Conn) ConnectionStats() ConnectionStats {
