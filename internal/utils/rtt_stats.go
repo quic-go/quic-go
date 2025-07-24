@@ -78,21 +78,16 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration) {
 	// ackDelay but the raw observed sendDelta, since poor clock granularity at
 	// the client may cause a high ackDelay to result in underestimation of the
 	// r.minRTT.
-	for {
-		currentMin := r.minRTT.Load()
-		if currentMin != 0 && time.Duration(currentMin) <= sendDelta {
-			break
-		}
-		if r.minRTT.CompareAndSwap(currentMin, int64(sendDelta)) {
-			break
-		}
+	minRTT := time.Duration(r.minRTT.Load())
+	if minRTT == 0 || minRTT > sendDelta {
+		minRTT = sendDelta
+		r.minRTT.Store(int64(sendDelta))
 	}
 
 	// Correct for ackDelay if information received from the peer results in a
 	// an RTT sample at least as large as minRTT. Otherwise, only use the
 	// sendDelta.
 	sample := sendDelta
-	minRTT := r.MinRTT()
 	if sample-minRTT >= ackDelay {
 		sample -= ackDelay
 	}
