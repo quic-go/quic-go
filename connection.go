@@ -127,7 +127,8 @@ type Conn struct {
 	connIDManager   *connIDManager
 	connIDGenerator *connIDGenerator
 
-	rttStats *utils.RTTStats
+	rttStats  *utils.RTTStats
+	connStats utils.ConnectionStats
 
 	cryptoStreamManager   *cryptoStreamManager
 	sentPacketHandler     ackhandler.SentPacketHandler
@@ -286,6 +287,7 @@ var newConnection = func(
 		0,
 		protocol.ByteCount(s.config.InitialPacketSize),
 		s.rttStats,
+		&s.connStats,
 		clientAddressValidated,
 		s.conn.capabilities().ECN,
 		s.perspective,
@@ -399,6 +401,7 @@ var newClientConnection = func(
 		initialPacketNumber,
 		protocol.ByteCount(s.config.InitialPacketSize),
 		s.rttStats,
+		&s.connStats,
 		false, // has no effect
 		s.conn.capabilities().ECN,
 		s.perspective,
@@ -724,6 +727,36 @@ func (c *Conn) ConnectionState() ConnectionState {
 	c.connState.Used0RTT = cs.Used0RTT
 	c.connState.GSO = c.conn.capabilities().GSO
 	return c.connState
+}
+
+type ConnectionStats struct {
+	MinRTT        time.Duration
+	LatestRTT     time.Duration
+	SmoothedRTT   time.Duration
+	MeanDeviation time.Duration
+
+	BytesSent       uint64
+	PacketsSent     uint64
+	BytesReceived   uint64
+	PacketsReceived uint64
+	BytesLost       uint64
+	PacketsLost     uint64
+}
+
+func (c *Conn) ConnectionStats() ConnectionStats {
+	return ConnectionStats{
+		MinRTT:        c.rttStats.MinRTT(),
+		LatestRTT:     c.rttStats.LatestRTT(),
+		SmoothedRTT:   c.rttStats.SmoothedRTT(),
+		MeanDeviation: c.rttStats.MeanDeviation(),
+
+		BytesSent:       c.connStats.BytesSent.Load(),
+		PacketsSent:     c.connStats.PacketsSent.Load(),
+		BytesReceived:   c.connStats.BytesReceived.Load(),
+		PacketsReceived: c.connStats.PacketsReceived.Load(),
+		BytesLost:       c.connStats.BytesLost.Load(),
+		PacketsLost:     c.connStats.PacketsLost.Load(),
+	}
 }
 
 // Time when the connection should time out

@@ -90,6 +90,7 @@ type sentPacketHandler struct {
 
 	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *utils.RTTStats
+	connStats  *utils.ConnectionStats
 
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
@@ -121,6 +122,7 @@ func newSentPacketHandler(
 	initialPN protocol.PacketNumber,
 	initialMaxDatagramSize protocol.ByteCount,
 	rttStats *utils.RTTStats,
+	connStats *utils.ConnectionStats,
 	clientAddressValidated bool,
 	enableECN bool,
 	pers protocol.Perspective,
@@ -130,6 +132,7 @@ func newSentPacketHandler(
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
+		connStats,
 		initialMaxDatagramSize,
 		true, // use Reno
 		tracer,
@@ -142,6 +145,7 @@ func newSentPacketHandler(
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
 		rttStats:                       rttStats,
+		connStats:                      connStats,
 		congestion:                     congestion,
 		perspective:                    pers,
 		tracer:                         tracer,
@@ -216,6 +220,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 }
 
 func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t time.Time) {
+	h.connStats.BytesReceived.Add(uint64(n))
 	wasAmplificationLimit := h.isAmplificationLimited()
 	h.bytesReceived += n
 	if wasAmplificationLimit && !h.isAmplificationLimited() {
@@ -224,6 +229,7 @@ func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t time.Time) {
 }
 
 func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel, t time.Time) {
+	h.connStats.PacketsReceived.Add(1)
 	if h.perspective == protocol.PerspectiveServer && l == protocol.EncryptionHandshake && !h.peerAddressValidated {
 		h.peerAddressValidated = true
 		h.setLossDetectionTimer(t)
@@ -253,6 +259,8 @@ func (h *sentPacketHandler) SentPacket(
 	isPathProbePacket bool,
 ) {
 	h.bytesSent += size
+	h.connStats.BytesSent.Add(uint64(size))
+	h.connStats.PacketsSent.Add(1)
 
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	if h.logger.Debug() && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
@@ -992,6 +1000,7 @@ func (h *sentPacketHandler) MigratedPath(now time.Time, initialMaxDatagramSize p
 	h.congestion = congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		h.rttStats,
+		h.connStats,
 		initialMaxDatagramSize,
 		true, // use Reno
 		h.tracer,
