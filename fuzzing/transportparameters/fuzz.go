@@ -93,5 +93,13 @@ func validateTransportParameters(tp *wire.TransportParameters, sentBy protocol.P
 	if tp.PreferredAddress != nil && tp.PreferredAddress.ConnectionID.Len() > 20 {
 		return fmt.Errorf("invalid preferred_address connection ID length: %s", tp.PreferredAddress.ConnectionID)
 	}
+	if tp.MinAckDelay != nil {
+		if *tp.MinAckDelay < 0 {
+			return fmt.Errorf("negative min_ack_delay: %s", *tp.MinAckDelay)
+		}
+		if *tp.MinAckDelay > tp.MaxAckDelay {
+			return fmt.Errorf("min_ack_delay (%s) is greater than max_ack_delay (%s)", *tp.MinAckDelay, tp.MaxAckDelay)
+		}
+	}
 	return nil
 }
