@@ -81,6 +81,22 @@ func TestReaderHandlesEOF(t *testing.T) {
 	require.EqualValues(t, 1337, n2)
 }
 
+// Regression test: empty reads were being converted to successful
+// reads of a zero value.
+func TestReaderHandlesEmptyRead(t *testing.T) {
+	r, w := io.Pipe()
+
+	go func() {
+		// io.Pipe turns empty writes into empty reads.
+		w.Write(nil)
+		w.Close()
+	}()
+
+	br := NewReader(r)
+	_, err := Read(br)
+	require.ErrorIs(t, err, io.EOF)
+}
+
 func TestWriterPassesThroughUnchanged(t *testing.T) {
 	b := &bytes.Buffer{}
 	w := NewWriter(b)
