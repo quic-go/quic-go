@@ -1475,6 +1475,7 @@ func (c *Conn) handleFrames(
 			if skipHandling {
 				continue
 			}
+			wire.LogFrame(c.logger, streamFrame, false)
 			handleErr = c.streamsMap.HandleStreamFrame(streamFrame, rcvTime)
 		} else if frameType.IsAckFrameType() {
 			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
@@ -1489,6 +1490,7 @@ func (c *Conn) handleFrames(
 			if skipHandling {
 				continue
 			}
+			wire.LogFrame(c.logger, ackFrame, false)
 			handleErr = c.handleAckFrame(ackFrame, encLevel, rcvTime)
 		} else if frameType.IsDatagramFrameType() {
 			datagramFrame, l, err := c.frameParser.ParseDatagramFrame(frameType, data, c.version)
@@ -1504,6 +1506,7 @@ func (c *Conn) handleFrames(
 			if skipHandling {
 				continue
 			}
+			wire.LogFrame(c.logger, datagramFrame, false)
 			handleErr = c.handleDatagramFrame(datagramFrame)
 		} else {
 			frame, l, err := c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
