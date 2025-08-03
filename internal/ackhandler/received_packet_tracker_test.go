@@ -13,21 +13,20 @@ import (
 
 func TestReceivedPacketTrackerGenerateACKs(t *testing.T) {
 	tracker := newReceivedPacketTracker()
-	baseTime := time.Now().Add(-10 * time.Second)
 
-	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, baseTime, true))
+	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(3), protocol.ECNNon, true))
 	ack := tracker.GetAckFrame()
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 3, Largest: 3}}, ack.AckRanges)
 	require.Zero(t, ack.DelayTime)
 
-	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(4), protocol.ECNNon, baseTime.Add(time.Second), true))
+	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(4), protocol.ECNNon, true))
 	ack = tracker.GetAckFrame()
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 3, Largest: 4}}, ack.AckRanges)
 	require.Zero(t, ack.DelayTime)
 
-	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(1), protocol.ECNNon, baseTime.Add(time.Second), true))
+	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(1), protocol.ECNNon, true))
 	ack = tracker.GetAckFrame()
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{
@@ -37,10 +36,10 @@ func TestReceivedPacketTrackerGenerateACKs(t *testing.T) {
 	require.Zero(t, ack.DelayTime)
 
 	// non-ack-eliciting packets don't trigger ACKs
-	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(10), protocol.ECNNon, baseTime.Add(5*time.Second), false))
+	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(10), protocol.ECNNon, false))
 	require.Nil(t, tracker.GetAckFrame())
 
-	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(11), protocol.ECNNon, baseTime.Add(10*time.Second), true))
+	require.NoError(t, tracker.ReceivedPacket(protocol.PacketNumber(11), protocol.ECNNon, true))
 	ack = tracker.GetAckFrame()
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{

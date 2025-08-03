@@ -41,14 +41,14 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	h.sentPackets.ReceivedPacket(encLevel, rcvTime)
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return h.initialPackets.ReceivedPacket(pn, ecn, rcvTime, ackEliciting)
+		return h.initialPackets.ReceivedPacket(pn, ecn, ackEliciting)
 	case protocol.EncryptionHandshake:
 		// The Handshake packet number space might already have been dropped as a result
 		// of processing the CRYPTO frame that was contained in this packet.
 		if h.handshakePackets == nil {
 			return nil
 		}
-		return h.handshakePackets.ReceivedPacket(pn, ecn, rcvTime, ackEliciting)
+		return h.handshakePackets.ReceivedPacket(pn, ecn, ackEliciting)
 	case protocol.Encryption0RTT:
 		if h.lowest1RTTPacket != protocol.InvalidPacketNumber && pn > h.lowest1RTTPacket {
 			return fmt.Errorf("received packet number %d on a 0-RTT packet after receiving %d on a 1-RTT packet", pn, h.lowest1RTTPacket)
