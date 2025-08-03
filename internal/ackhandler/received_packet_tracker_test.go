@@ -180,6 +180,6 @@ func TestAppDataReceivedPacketTrackerIgnoreBelow(t *testing.T) {
 	// make sure that old packets are not accepted
 	require.ErrorContains(t,
 		tr.ReceivedPacket(4, protocol.ECNNon, time.Now(), true),
-		"recevedPacketTracker BUG: ReceivedPacket called for old / duplicate packet 4",
+		"receivedPacketTracker BUG: ReceivedPacket called for old / duplicate packet 4",
 	)
 }
