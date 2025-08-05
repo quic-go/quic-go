@@ -24,9 +24,9 @@ func newReceivedPacketTracker() *receivedPacketTracker {
 	return &receivedPacketTracker{packetHistory: *newReceivedPacketHistory()}
 }
 
-func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, ackEliciting bool) error {
+func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, ackEliciting bool) error {
 	if isNew := h.packetHistory.ReceivedPacket(pn); !isNew {
-		return fmt.Errorf("recevedPacketTracker BUG: ReceivedPacket called for old / duplicate packet %d", pn)
+		return fmt.Errorf("receivedPacketTracker BUG: ReceivedPacket called for old / duplicate packet %d", pn)
 	}
 
 	//nolint:exhaustive // Only need to count ECT(0), ECT(1) and ECN-CE.
@@ -102,7 +102,7 @@ func newAppDataReceivedPacketTracker(logger utils.Logger) *appDataReceivedPacket
 }
 
 func (h *appDataReceivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, ackEliciting bool) error {
-	if err := h.receivedPacketTracker.ReceivedPacket(pn, ecn, rcvTime, ackEliciting); err != nil {
+	if err := h.receivedPacketTracker.ReceivedPacket(pn, ecn, ackEliciting); err != nil {
 		return err
 	}
 	if pn >= h.largestObserved {
