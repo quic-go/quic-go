@@ -224,20 +224,41 @@ func randomValues(num int, maxValue uint64) []benchmarkValue {
 	return bv
 }
 
-func BenchmarkRead(b *testing.B) {
-	b.Run("1-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt1)) })
-	b.Run("2-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt2)) })
-	b.Run("4-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt4)) })
-	b.Run("8-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt8)) })
+// using a reader that is also an io.ByteReader
+func BenchmarkReadBytesReader(b *testing.B) {
+	b.Run("1-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt1), false) })
+	b.Run("2-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt2), false) })
+	b.Run("4-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt4), false) })
+	b.Run("8-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt8), false) })
 }
 
-func benchmarkRead(b *testing.B, inputs []benchmarkValue) {
+// using a reader that is not an io.ByteReader
+func BenchmarkReadSimpleReader(b *testing.B) {
+	b.Run("1-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt1), true) })
+	b.Run("2-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt2), true) })
+	b.Run("4-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt4), true) })
+	b.Run("8-byte", func(b *testing.B) { benchmarkRead(b, randomValues(min(b.N, 1024), maxVarInt8), true) })
+}
+
+// simpleReader satisfies io.Reader, but not io.ByteReader
+// This means that NewReader will need to wrap the reader.
+type simpleReader struct {
+	io.Reader
+}
+
+func benchmarkRead(b *testing.B, inputs []benchmarkValue, wrapBytesReader bool) {
 	r := bytes.NewReader([]byte{})
+	var vr Reader
+	if wrapBytesReader {
+		vr = NewReader(&simpleReader{r})
+	} else {
+		vr = NewReader(r)
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		index := i % len(inputs)
 		r.Reset(inputs[index].b)
-		val, err := Read(r)
+		val, err := Read(vr)
 		if err != nil {
 			b.Fatal(err)
 		}
