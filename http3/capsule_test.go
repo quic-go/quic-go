@@ -26,8 +26,38 @@ func TestCapsuleParsing(t *testing.T) {
 	data, err := io.ReadAll(r) // reads until EOF
 	require.NoError(t, err)
 	require.Equal(t, []byte("bar"), data)
+}
 
-	// test EOF vs ErrUnexpectedEOF
+func TestEmptyCapsuleParsing(t *testing.T) {
+	b := quicvarint.Append(nil, 1337)
+	b = quicvarint.Append(b, 0)
+	// Capsule content is empty.
+
+	ct, r, err := ParseCapsule(bytes.NewReader(b))
+	require.NoError(t, err)
+	require.Equal(t, CapsuleType(1337), ct)
+	data, err := io.ReadAll(r) // reads until EOF
+	require.NoError(t, err)
+	require.Equal(t, []byte{}, data)
+}
+
+// test EOF vs ErrUnexpectedEOF
+func TestCapsuleTruncation(t *testing.T) {
+	t.Run("with content", func(t *testing.T) {
+		b := quicvarint.Append(nil, 1337)
+		b = quicvarint.Append(b, 6)
+		b = append(b, []byte("foobar")...)
+		testCapsuleTruncation(t, b)
+	})
+
+	t.Run("empty content", func(t *testing.T) {
+		b := quicvarint.Append(nil, 1337)
+		b = quicvarint.Append(b, 0)
+		testCapsuleTruncation(t, b)
+	})
+}
+
+func testCapsuleTruncation(t *testing.T, b []byte) {
 	for i := range b {
 		ct, r, err := ParseCapsule(bytes.NewReader(b[:i]))
 		if err != nil {
@@ -54,4 +84,24 @@ func TestCapsuleWriting(t *testing.T) {
 	val, err := io.ReadAll(r)
 	require.NoError(t, err)
 	require.Equal(t, "foobar", string(val))
+}
+
+func TestCapsuleWriteEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, WriteCapsule(&buf, 1337, []byte{}))
+	require.NoError(t, WriteCapsule(&buf, 1337, []byte{}))
+
+	ct, r, err := ParseCapsule(&buf)
+	require.NoError(t, err)
+	require.Equal(t, CapsuleType(1337), ct)
+	val, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.Empty(t, val)
+
+	ct, r, err = ParseCapsule(&buf)
+	require.NoError(t, err)
+	require.Equal(t, CapsuleType(1337), ct)
+	val, err = io.ReadAll(r)
+	require.NoError(t, err)
+	require.Empty(t, val)
 }
