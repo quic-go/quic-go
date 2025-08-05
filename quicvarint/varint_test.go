@@ -248,17 +248,17 @@ type simpleReader struct {
 
 func benchmarkRead(b *testing.B, inputs []benchmarkValue, wrapBytesReader bool) {
 	r := bytes.NewReader([]byte{})
-	var br Reader
+	var vr Reader
 	if wrapBytesReader {
-		br = NewReader(&simpleReader{r})
+		vr = NewReader(&simpleReader{r})
 	} else {
-		br = NewReader(r)
+		vr = NewReader(r)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		index := i % len(inputs)
 		r.Reset(inputs[index].b)
-		val, err := Read(br)
+		val, err := Read(vr)
 		if err != nil {
 			b.Fatal(err)
 		}
