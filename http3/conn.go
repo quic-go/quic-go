@@ -30,7 +30,7 @@ const invalidStreamID = quic.StreamID(-1)
 // It has all methods from the quic.Conn expect for AcceptStream, AcceptUniStream,
 // SendDatagram and ReceiveDatagram.
 type Conn struct {
-	conn *quic.Conn
+	conn QUICConn
 
 	ctx context.Context
 
@@ -55,7 +55,7 @@ type Conn struct {
 
 func newConnection(
 	ctx context.Context,
-	quicConn *quic.Conn,
+	quicConn QUICConn,
 	enableDatagrams bool,
 	isServer bool,
 	logger *slog.Logger,
@@ -80,19 +80,19 @@ func newConnection(
 	return c
 }
 
-func (c *Conn) OpenStream() (*quic.Stream, error) {
+func (c *Conn) OpenStream() (QUICStream, error) {
 	return c.conn.OpenStream()
 }
 
-func (c *Conn) OpenStreamSync(ctx context.Context) (*quic.Stream, error) {
+func (c *Conn) OpenStreamSync(ctx context.Context) (QUICStream, error) {
 	return c.conn.OpenStreamSync(ctx)
 }
 
-func (c *Conn) OpenUniStream() (*quic.SendStream, error) {
+func (c *Conn) OpenUniStream() (QUICSendStream, error) {
 	return c.conn.OpenUniStream()
 }
 
-func (c *Conn) OpenUniStreamSync(ctx context.Context) (*quic.SendStream, error) {
+func (c *Conn) OpenUniStreamSync(ctx context.Context) (QUICSendStream, error) {
 	return c.conn.OpenUniStreamSync(ctx)
 }
 
@@ -226,7 +226,7 @@ func (c *Conn) CloseWithError(code quic.ApplicationErrorCode, msg string) error 
 	return c.conn.CloseWithError(code, msg)
 }
 
-func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool)) {
+func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.ConnectionTracingID, QUICReceiveStream, error) (hijacked bool)) {
 	var (
 		rcvdControlStr      atomic.Bool
 		rcvdQPACKEncoderStr atomic.Bool
@@ -242,7 +242,7 @@ func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.Connecti
 			return
 		}
 
-		go func(str *quic.ReceiveStream) {
+		go func(str QUICReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
 				id := c.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
@@ -302,7 +302,7 @@ func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.Connecti
 	}
 }
 
-func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
+func (c *Conn) handleControlStream(str QUICReceiveStream) {
 	fp := &frameParser{closeConn: c.conn.CloseWithError, r: str}
 	f, err := fp.ParseNext()
 	if err != nil {

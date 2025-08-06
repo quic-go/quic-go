@@ -673,7 +673,7 @@ func TestHTTPConnContext(t *testing.T) {
 		mux,
 		func(s *http3.Server) { server = s },
 		func(s *http3.Server) {
-			s.ConnContext = func(ctx context.Context, c *quic.Conn) context.Context {
+			s.ConnContext = func(ctx context.Context, c http3.QUICConn) context.Context {
 				connCtxChan <- ctx
 				ctx = context.WithValue(ctx, "foo", "bar")
 				return ctx

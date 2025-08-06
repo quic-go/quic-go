@@ -6,8 +6,6 @@ import (
 	"net/http/httptrace"
 	"net/textproto"
 	"time"
-
-	"github.com/quic-go/quic-go"
 )
 
 func traceGetConn(trace *httptrace.ClientTrace, hostPort string) {
@@ -19,7 +17,7 @@ func traceGetConn(trace *httptrace.ClientTrace, hostPort string) {
 // fakeConn is a wrapper for quic.EarlyConnection
 // because the quic connection does not implement net.Conn.
 type fakeConn struct {
-	conn *quic.Conn
+	conn QUICConn
 }
 
 func (c *fakeConn) Close() error                       { panic("connection operation prohibited") }
@@ -31,7 +29,7 @@ func (c *fakeConn) SetWriteDeadline(t time.Time) error { panic("connection opera
 func (c *fakeConn) RemoteAddr() net.Addr               { return c.conn.RemoteAddr() }
 func (c *fakeConn) LocalAddr() net.Addr                { return c.conn.LocalAddr() }
 
-func traceGotConn(trace *httptrace.ClientTrace, conn *quic.Conn, reused bool) {
+func traceGotConn(trace *httptrace.ClientTrace, conn QUICConn, reused bool) {
 	if trace != nil && trace.GotConn != nil {
 		trace.GotConn(httptrace.GotConnInfo{
 			Conn:   &fakeConn{conn: conn},
