@@ -729,16 +729,18 @@ func (c *Conn) ConnectionState() ConnectionState {
 	return c.connState
 }
 
+// ConnectionStats contains statistics about the QUIC connection
 type ConnectionStats struct {
-	// MinRTT is the minimum round-trip time observed on the entire connection.
+	// MinRTT is the estimate of the minimum RTT observed on the active network
+	// path.
 	MinRTT time.Duration
-	// LatestRTT is the last round-trip time observed
+	// LatestRTT is the last RTT sample observed on the active network path.
 	LatestRTT time.Duration
-	// SmoothedRTT is the smoothed round-trip time (RTT) currently observed on
-	// the connection, as defined in RFC 9002 Section 5.3.
+	// SmoothedRTT is an exponentially weighted moving average of an endpoint's
+	// RTT samples. See https://www.rfc-editor.org/rfc/rfc9002#section-5.3
 	SmoothedRTT time.Duration
-	// MeanDeviation is the mean deviation in round-trip time samples currently
-	// observed on the connection, as defined in RFC 9002 Section 5.3.
+	// MeanDeviation estimates the variation in the RTT samples using a mean
+	// variation. See https://www.rfc-editor.org/rfc/rfc9002#section-5.3
 	MeanDeviation time.Duration
 
 	// BytesSent is the number of bytes sent on the underlying connection,
