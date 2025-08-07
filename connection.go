@@ -2645,16 +2645,26 @@ func (c *Conn) LocalAddr() net.Addr { return c.conn.LocalAddr() }
 // RemoteAddr returns the remote address of the QUIC connection.
 func (c *Conn) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
 
+// getPathManager lazily initializes the Conn's pathManagerOutgoing.
+// May create multiple pathManagerOutgoing objects if called concurrently.
 func (c *Conn) getPathManager() *pathManagerOutgoing {
-	c.pathManagerOutgoing.CompareAndSwap(nil,
-		func() *pathManagerOutgoing { // this function is only called if a swap is performed
-			return newPathManagerOutgoing(
-				c.connIDManager.GetConnIDForPath,
-				c.connIDManager.RetireConnIDForPath,
-				c.scheduleSending,
-			)
-		}(),
+	old := c.pathManagerOutgoing.Load()
+	if old != nil {
+		// Path manager is already initialized
+		return old
+	}
+
+	// Initialize the path manager
+	new := newPathManagerOutgoing(
+		c.connIDManager.GetConnIDForPath,
+		c.connIDManager.RetireConnIDForPath,
+		c.scheduleSending,
 	)
+	if c.pathManagerOutgoing.CompareAndSwap(old, new) {
+		return new
+	}
+
+	// Swap failed. A concurrent writer wrote first, use their value.
 	return c.pathManagerOutgoing.Load()
 }
 
