@@ -47,7 +47,6 @@ func newTestCubicSender(cubic bool) *testCubicSender {
 		sender: newCubicSender(
 			&clock,
 			&rttStats,
-			&utils.ConnectionStats{},
 			!cubic,
 			protocol.InitialPacketSize,
 			initialCongestionWindowPackets*maxDatagramSize,
@@ -495,7 +494,6 @@ func TestCubicSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 	sender := newCubicSender(
 		&clock,
 		&rttStats,
-		&utils.ConnectionStats{},
 		true,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
@@ -522,7 +520,6 @@ func TestCubicSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 	sender := newCubicSender(
 		&clock,
 		&rttStats,
-		&utils.ConnectionStats{},
 		true,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
@@ -546,7 +543,6 @@ func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
 	sender := newCubicSender(
 		&clock,
 		&rttStats,
-		&utils.ConnectionStats{},
 		false,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
