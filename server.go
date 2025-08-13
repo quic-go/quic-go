@@ -132,7 +132,7 @@ func (l *Listener) Accept(ctx context.Context) (*Conn, error) {
 // Close closes the listener.
 // Accept will return [ErrServerClosed] as soon as all connections in the accept queue have been accepted.
 // QUIC handshakes that are still in flight will be rejected with a CONNECTION_REFUSED error.
-// Already established (accepted)connections will be unaffected.
+// Already established (accepted) connections will be unaffected.
 func (l *Listener) Close() error {
 	return l.baseServer.Close()
 }
@@ -164,7 +164,7 @@ func (l *EarlyListener) Accept(ctx context.Context) (*Conn, error) {
 // Close closes the listener.
 // Accept will return [ErrServerClosed] as soon as all connections in the accept queue have been accepted.
 // Early connections that are still in flight will be rejected with a CONNECTION_REFUSED error.
-// Already established (accepted)connections will be unaffected.
+// Already established (accepted) connections will be unaffected.
 func (l *EarlyListener) Close() error {
 	return l.baseServer.Close()
 }
