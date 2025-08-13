@@ -239,6 +239,8 @@ func TestLogsRetryPacketsWithToken(t *testing.T) {
 }
 
 func BenchmarkParseExtendedHeader(b *testing.B) {
+	b.ReportAllocs()
+
 	data, err := (&ExtendedHeader{
 		Header: Header{
 			Type:             protocol.PacketTypeHandshake,
@@ -255,9 +257,7 @@ func BenchmarkParseExtendedHeader(b *testing.B) {
 	}
 	data = append(data, make([]byte, 1231)...)
 
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		hdr, _, _, err := ParsePacket(data)
 		if err != nil {
 			b.Fatal(err)

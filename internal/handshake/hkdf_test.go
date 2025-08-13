@@ -65,8 +65,8 @@ func benchmarkHKDFExpandLabel(b *testing.B, cipherSuite uint16, useStdLib bool) 
 	cs := cipherSuiteTLS13ByID(cipherSuite)
 	secret := make([]byte, 32)
 	rand.Read(secret)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		if useStdLib {
 			nextTrafficSecret(cs, secret)
 		} else {

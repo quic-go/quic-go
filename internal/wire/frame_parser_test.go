@@ -818,15 +818,13 @@ func BenchmarkParseDatagramFrame(b *testing.B) {
 }
 
 func benchmarkFrames(b *testing.B, frames ...Frame) {
-	buf := writeFrames(b, frames...)
+	b.ReportAllocs()
 
+	buf := writeFrames(b, frames...)
 	parser := NewFrameParser(true, true, true)
 	parser.SetAckDelayExponent(3)
 
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for range b.N {
+	for b.Loop() {
 		parseFrames(b, parser, buf, frames...)
 	}
 }

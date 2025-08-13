@@ -31,8 +31,7 @@ func BenchmarkHandshake(b *testing.B) {
 	tr := &quic.Transport{Conn: newUDPConnLocalhost(b)}
 	defer tr.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		c, err := tr.Dial(context.Background(), ln.Addr(), tlsClientConfig, nil)
 		require.NoError(b, err)
 		serverConn := <-connChan
@@ -68,8 +67,7 @@ func BenchmarkStreamChurn(b *testing.B) {
 		}
 	}()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		str, err := conn.OpenStreamSync(context.Background())
 		require.NoError(b, err)
 		require.NoError(b, str.Close())

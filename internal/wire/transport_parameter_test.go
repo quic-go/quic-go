@@ -878,6 +878,8 @@ func BenchmarkTransportParameters(b *testing.B) {
 }
 
 func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
+	b.ReportAllocs()
+
 	var token protocol.StatelessResetToken
 	rand.Read(token[:])
 	rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
@@ -915,10 +917,8 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 	}
 	data := params.Marshal(protocol.PerspectiveServer)
 
-	b.ResetTimer()
-	b.ReportAllocs()
 	var p TransportParameters
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if err := p.Unmarshal(data, protocol.PerspectiveServer); err != nil {
 			b.Fatal(err)
 		}

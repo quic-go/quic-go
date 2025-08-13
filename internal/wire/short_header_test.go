@@ -94,7 +94,8 @@ func BenchmarkWriteShortHeader(b *testing.B) {
 	b.ReportAllocs()
 	buf := make([]byte, 100)
 	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		var err error
 		buf, err = AppendShortHeader(buf, connID, 1337, protocol.PacketNumberLen4, protocol.KeyPhaseOne)
 		if err != nil {

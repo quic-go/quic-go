@@ -4,9 +4,11 @@ import "testing"
 
 func BenchmarkRingBuffer(b *testing.B) {
 	r := RingBuffer[int]{}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		r.PushBack(i)
+
+	var val int
+	for b.Loop() {
+		r.PushBack(val)
 		r.PopFront()
+		val++
 	}
 }

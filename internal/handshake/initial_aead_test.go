@@ -246,7 +246,8 @@ func TestInitialAEADEncryptsAndDecryptsHeader(t *testing.T) {
 func BenchmarkInitialAEADCreate(b *testing.B) {
 	b.ReportAllocs()
 	connID := protocol.ParseConnectionID([]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef})
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		NewInitialAEAD(connID, protocol.PerspectiveServer, protocol.Version1)
 	}
 }
@@ -282,7 +283,8 @@ func BenchmarkInitialAEAD(b *testing.B) {
 func benchmarkOpen(b *testing.B, aead LongHeaderOpener, msg, hdr []byte) {
 	b.ReportAllocs()
 	dst := make([]byte, 0, 1500)
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		dst = dst[:0]
 		if _, err := aead.Open(dst, msg, 42, hdr); err != nil {
 			b.Fatalf("opening failed: %s", err)
@@ -293,8 +295,11 @@ func benchmarkOpen(b *testing.B, aead LongHeaderOpener, msg, hdr []byte) {
 func benchmarkSeal(b *testing.B, aead LongHeaderSealer, msg, hdr []byte) {
 	b.ReportAllocs()
 	dst := make([]byte, 0, 1500)
-	for i := 0; i < b.N; i++ {
+
+	var pn protocol.PacketNumber
+	for b.Loop() {
 		dst = dst[:0]
-		aead.Seal(dst, msg, protocol.PacketNumber(i), hdr)
+		aead.Seal(dst, msg, pn, hdr)
+		pn++
 	}
 }
