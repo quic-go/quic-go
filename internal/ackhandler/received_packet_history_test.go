@@ -179,17 +179,17 @@ func TestReceivedPacketHistoryDuplicateDetection(t *testing.T) {
 
 func TestReceivedPacketHistoryRandomized(t *testing.T) {
 	hist := newReceivedPacketHistory()
-	packets := make(map[protocol.PacketNumber]int)
+	packets := make(map[protocol.PacketNumber]struct{})
 	const num = 2 * protocol.MaxNumAckRanges
 	numLostPackets := rand.IntN(protocol.MaxNumAckRanges)
 	numRcvdPackets := num - numLostPackets
 
 	for i := range num {
-		packets[protocol.PacketNumber(i)] = 0
+		packets[protocol.PacketNumber(i)] = struct{}{}
 	}
 	lostPackets := make([]protocol.PacketNumber, 0, numLostPackets)
 	for len(lostPackets) < numLostPackets {
-		p := protocol.PacketNumber(rand.IntN(num))
+		p := protocol.PacketNumber(rand.IntN(num - 1)) // lose a random packet, but not the last one
 		if _, ok := packets[p]; ok {
 			lostPackets = append(lostPackets, p)
 			delete(packets, p)
@@ -223,6 +223,28 @@ func TestReceivedPacketHistoryRandomized(t *testing.T) {
 		}
 	}
 	require.Equal(t, numRcvdPackets, counter)
+
+	deletedBelow := protocol.PacketNumber(rand.IntN(num * 2 / 3))
+	t.Logf("Deleting below %d", deletedBelow)
+	hist.DeleteBelow(deletedBelow)
+	for pn := range protocol.PacketNumber(num) {
+		if pn < deletedBelow {
+			require.Equal(t, protocol.InvalidPacketNumber, hist.HighestMissingUpTo(pn))
+			continue
+		}
+		expected := protocol.InvalidPacketNumber
+		for _, lost := range lostPackets {
+			if lost < deletedBelow {
+				continue
+			}
+			if lost > pn {
+				break
+			}
+			expected = lost
+		}
+		hm := hist.HighestMissingUpTo(pn)
+		require.Equalf(t, expected, hm, "highest missing up to %d: %d", pn, hm)
+	}
 }
 
 func BenchmarkHistoryReceiveSequentialPackets(b *testing.B) {
