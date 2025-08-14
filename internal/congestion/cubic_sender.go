@@ -112,7 +112,7 @@ func newCubicSender(
 		tracer:                     tracer,
 		maxDatagramSize:            initialMaxDatagramSize,
 	}
-	c.pacer = newPacer(c.BandwidthEstimate)
+	c.pacer = newPacer(c.BandwidthEstimate, c.rttStats)
 	if c.tracer != nil && c.tracer.UpdatedCongestionState != nil {
 		c.lastState = logging.CongestionStateSlowStart
 		c.tracer.UpdatedCongestionState(logging.CongestionStateSlowStart)
