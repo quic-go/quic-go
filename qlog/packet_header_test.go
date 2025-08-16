@@ -32,7 +32,7 @@ func TestPacketTypeFromEncryptionLevel(t *testing.T) {
 	}
 }
 
-func checkHeader(t *testing.T, hdr *wire.ExtendedHeader, expected map[string]interface{}) {
+func checkHeader(t *testing.T, hdr *wire.ExtendedHeader, expected map[string]any) {
 	buf := &bytes.Buffer{}
 	enc := gojay.NewEncoder(buf)
 	require.NoError(t, enc.Encode(transformLongHeader(hdr)))
@@ -51,7 +51,7 @@ func TestMarshalHeaderWithPayloadLength(t *testing.T) {
 				Version: protocol.Version(0xdecafbad),
 			},
 		},
-		map[string]interface{}{
+		map[string]any{
 			"packet_type":   "initial",
 			"packet_number": 42,
 			"dcil":          0,
@@ -72,13 +72,13 @@ func TestMarshalInitialWithToken(t *testing.T) {
 				Token:   []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 		},
-		map[string]interface{}{
+		map[string]any{
 			"packet_type":   "initial",
 			"packet_number": 4242,
 			"dcil":          0,
 			"scil":          0,
 			"version":       "decafbad",
-			"token":         map[string]interface{}{"data": "deadbeef"},
+			"token":         map[string]any{"data": "deadbeef"},
 		},
 	)
 }
@@ -93,12 +93,12 @@ func TestMarshalRetryPacket(t *testing.T) {
 				Token:           []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 		},
-		map[string]interface{}{
+		map[string]any{
 			"packet_type": "retry",
 			"dcil":        0,
 			"scil":        4,
 			"scid":        "11223344",
-			"token":       map[string]interface{}{"data": "deadbeef"},
+			"token":       map[string]any{"data": "deadbeef"},
 			"version":     "decafbad",
 		},
 	)
@@ -113,7 +113,7 @@ func TestMarshalPacketWithPacketNumber0(t *testing.T) {
 				Version: protocol.Version(0xdecafbad),
 			},
 		},
-		map[string]interface{}{
+		map[string]any{
 			"packet_type":   "handshake",
 			"packet_number": 0,
 			"dcil":          0,
@@ -133,7 +133,7 @@ func TestMarshalHeaderWithSourceConnectionID(t *testing.T) {
 				Version:         protocol.Version(0xdecafbad),
 			},
 		},
-		map[string]interface{}{
+		map[string]any{
 			"packet_type":   "handshake",
 			"packet_number": 42,
 			"dcil":          0,

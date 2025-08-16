@@ -22,31 +22,31 @@ func scaleDuration(t time.Duration) time.Duration {
 	return time.Duration(scaleFactor) * t
 }
 
-func unmarshal(data []byte, v interface{}) error {
+func unmarshal(data []byte, v any) error {
 	if data[0] == recordSeparator {
 		data = data[1:]
 	}
 	return json.Unmarshal(data, v)
 }
 
-func checkEncoding(t *testing.T, data []byte, expected map[string]interface{}) {
-	m := make(map[string]interface{})
+func checkEncoding(t *testing.T, data []byte, expected map[string]any) {
+	m := make(map[string]any)
 	require.NoError(t, json.Unmarshal(data, &m))
 	require.Len(t, m, len(expected))
 
 	for key, value := range expected {
 		switch v := value.(type) {
-		case bool, string, map[string]interface{}:
+		case bool, string, map[string]any:
 			require.Equal(t, v, m[key])
 		case int:
 			require.Equal(t, float64(v), m[key])
 		case [][]float64: // used in the ACK frame
 			require.Contains(t, m, key)
-			outerSlice, ok := m[key].([]interface{})
+			outerSlice, ok := m[key].([]any)
 			require.True(t, ok)
 			require.Len(t, outerSlice, len(v))
 			for i, innerExpected := range v {
-				innerSlice, ok := outerSlice[i].([]interface{})
+				innerSlice, ok := outerSlice[i].([]any)
 				require.True(t, ok)
 				require.Len(t, innerSlice, len(innerExpected))
 				for j, expectedValue := range innerExpected {
@@ -64,19 +64,19 @@ func checkEncoding(t *testing.T, data []byte, expected map[string]interface{}) {
 type entry struct {
 	Time  time.Time
 	Name  string
-	Event map[string]interface{}
+	Event map[string]any
 }
 
 func exportAndParse(t *testing.T, buf *bytes.Buffer) []entry {
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	line, err := buf.ReadBytes('\n')
 	require.NoError(t, err)
 	require.NoError(t, unmarshal(line, &m))
 	require.Contains(t, m, "trace")
 	var entries []entry
-	trace := m["trace"].(map[string]interface{})
+	trace := m["trace"].(map[string]any)
 	require.Contains(t, trace, "common_fields")
-	commonFields := trace["common_fields"].(map[string]interface{})
+	commonFields := trace["common_fields"].(map[string]any)
 	require.Contains(t, commonFields, "reference_time")
 	referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
 	require.NotContains(t, trace, "events")
@@ -84,7 +84,7 @@ func exportAndParse(t *testing.T, buf *bytes.Buffer) []entry {
 	for buf.Len() > 0 {
 		line, err := buf.ReadBytes('\n')
 		require.NoError(t, err)
-		ev := make(map[string]interface{})
+		ev := make(map[string]any)
 		require.NoError(t, unmarshal(line, &ev))
 		require.Len(t, ev, 3)
 		require.Contains(t, ev, "time")
@@ -93,7 +93,7 @@ func exportAndParse(t *testing.T, buf *bytes.Buffer) []entry {
 		entries = append(entries, entry{
 			Time:  referenceTime.Add(time.Duration(ev["time"].(float64)*1e6) * time.Nanosecond),
 			Name:  ev["name"].(string),
-			Event: ev["data"].(map[string]interface{}),
+			Event: ev["data"].(map[string]any),
 		})
 	}
 	return entries

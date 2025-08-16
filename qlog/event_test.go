@@ -28,7 +28,7 @@ func TestEventMarshaling(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var decoded map[string]interface{}
+	var decoded map[string]any
 	err = json.Unmarshal(buf.Bytes(), &decoded)
 	require.NoError(t, err)
 	require.Len(t, decoded, 3)
@@ -37,7 +37,7 @@ func TestEventMarshaling(t *testing.T) {
 	require.Equal(t, "connectivity:mevent", decoded["name"])
 	require.Contains(t, decoded, "data")
 
-	data, ok := decoded["data"].(map[string]interface{})
+	data, ok := decoded["data"].(map[string]any)
 	require.True(t, ok)
 	require.Len(t, data, 1)
 	require.Equal(t, "details", data["event"])
