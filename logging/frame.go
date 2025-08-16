@@ -3,7 +3,7 @@ package logging
 import "github.com/quic-go/quic-go/internal/wire"
 
 // A Frame is a QUIC frame
-type Frame interface{}
+type Frame any
 
 // The AckRange is used within the AckFrame.
 // It is a range of packet numbers that is being acknowledged.

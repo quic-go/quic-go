@@ -21,15 +21,15 @@ func TestTraceMetadata(t *testing.T) {
 	tracer, buf := newTracer()
 	tracer.Close()
 
-	var m map[string]interface{}
+	var m map[string]any
 	err := unmarshal(buf.Bytes(), &m)
 	require.NoError(t, err)
 	require.Equal(t, "0.3", m["qlog_version"])
 	require.Contains(t, m, "title")
 	require.Contains(t, m, "trace")
-	trace := m["trace"].(map[string]interface{})
+	trace := m["trace"].(map[string]any)
 	require.Contains(t, trace, "common_fields")
-	commonFields := trace["common_fields"].(map[string]interface{})
+	commonFields := trace["common_fields"].(map[string]any)
 	require.NotContains(t, commonFields, "ODCID")
 	require.NotContains(t, commonFields, "group_id")
 	require.Contains(t, commonFields, "reference_time")
@@ -37,7 +37,7 @@ func TestTraceMetadata(t *testing.T) {
 	require.WithinDuration(t, time.Now(), referenceTime, scaleDuration(10*time.Millisecond))
 	require.Equal(t, "relative", commonFields["time_format"])
 	require.Contains(t, trace, "vantage_point")
-	vantagePoint := trace["vantage_point"].(map[string]interface{})
+	vantagePoint := trace["vantage_point"].(map[string]any)
 	require.Equal(t, "transport", vantagePoint["type"])
 }
 
@@ -64,17 +64,17 @@ func TestTracerSentLongHeaderPacket(t *testing.T) {
 	require.Equal(t, "transport:packet_sent", entry.Name)
 	ev := entry.Event
 	require.Contains(t, ev, "raw")
-	raw := ev["raw"].(map[string]interface{})
+	raw := ev["raw"].(map[string]any)
 	require.Equal(t, float64(1234), raw["length"])
 	require.Contains(t, ev, "header")
-	hdr := ev["header"].(map[string]interface{})
+	hdr := ev["header"].(map[string]any)
 	require.Equal(t, "handshake", hdr["packet_type"])
 	require.Equal(t, "04030201", hdr["scid"])
 	require.Contains(t, ev, "frames")
-	frames := ev["frames"].([]interface{})
+	frames := ev["frames"].([]any)
 	require.Len(t, frames, 2)
-	require.Equal(t, "max_stream_data", frames[0].(map[string]interface{})["frame_type"])
-	require.Equal(t, "stream", frames[1].(map[string]interface{})["frame_type"])
+	require.Equal(t, "max_stream_data", frames[0].(map[string]any)["frame_type"])
+	require.Equal(t, "stream", frames[1].(map[string]any)["frame_type"])
 }
 
 func TestSendingVersionNegotiationPacket(t *testing.T) {
@@ -93,13 +93,13 @@ func TestSendingVersionNegotiationPacket(t *testing.T) {
 	require.Contains(t, ev, "header")
 	require.NotContains(t, ev, "frames")
 	require.Contains(t, ev, "supported_versions")
-	require.Equal(t, []interface{}{"deadbeef", "decafbad"}, ev["supported_versions"].([]interface{}))
+	require.Equal(t, []any{"deadbeef", "decafbad"}, ev["supported_versions"].([]any))
 	header := ev["header"]
-	require.Equal(t, "version_negotiation", header.(map[string]interface{})["packet_type"])
+	require.Equal(t, "version_negotiation", header.(map[string]any)["packet_type"])
 	require.NotContains(t, header, "packet_number")
 	require.NotContains(t, header, "version")
-	require.Equal(t, "0102030405060708", header.(map[string]interface{})["dcid"])
-	require.Equal(t, "04030201", header.(map[string]interface{})["scid"])
+	require.Equal(t, "0102030405060708", header.(map[string]any)["dcid"])
+	require.Equal(t, "04030201", header.(map[string]any)["scid"])
 }
 
 func TestDroppedPackets(t *testing.T) {
@@ -112,9 +112,9 @@ func TestDroppedPackets(t *testing.T) {
 	require.Equal(t, "transport:packet_dropped", entry.Name)
 	ev := entry.Event
 	require.Contains(t, ev, "raw")
-	require.Equal(t, float64(1337), ev["raw"].(map[string]interface{})["length"])
+	require.Equal(t, float64(1337), ev["raw"].(map[string]any)["length"])
 	require.Contains(t, ev, "header")
-	hdr := ev["header"].(map[string]interface{})
+	hdr := ev["header"].(map[string]any)
 	require.Len(t, hdr, 1)
 	require.Equal(t, "initial", hdr["packet_type"])
 	require.Equal(t, "payload_decrypt_error", ev["trigger"])
