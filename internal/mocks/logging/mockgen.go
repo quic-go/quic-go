@@ -9,7 +9,7 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
-//go:generate sh -c "go run go.uber.org/mock/mockgen -typed -build_flags=\"-tags=gomock\" -package internal -destination internal/tracer.go github.com/quic-go/quic-go/internal/mocks/logging Tracer"
+//go:generate sh -c "go tool mockgen -typed -build_flags=\"-tags=gomock\" -package internal -destination internal/tracer.go github.com/quic-go/quic-go/internal/mocks/logging Tracer"
 type Tracer interface {
 	SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame)
 	SentVersionNegotiationPacket(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, _ []logging.Version)
@@ -18,7 +18,7 @@ type Tracer interface {
 	Close()
 }
 
-//go:generate sh -c "go run go.uber.org/mock/mockgen -typed -build_flags=\"-tags=gomock\" -package internal -destination internal/connection_tracer.go github.com/quic-go/quic-go/internal/mocks/logging ConnectionTracer"
+//go:generate sh -c "go tool mockgen -typed -build_flags=\"-tags=gomock\" -package internal -destination internal/connection_tracer.go github.com/quic-go/quic-go/internal/mocks/logging ConnectionTracer"
 type ConnectionTracer interface {
 	StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID)
 	NegotiatedVersion(chosen logging.Version, clientVersions, serverVersions []logging.Version)
