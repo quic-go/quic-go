@@ -603,8 +603,10 @@ func BenchmarkPacketEncryption(b *testing.B) {
 	ad := make([]byte, 32)
 	rand.Read(ad)
 
-	for i := 0; i < b.N; i++ {
-		src = client.Seal(src[:0], src[:l], protocol.PacketNumber(i), ad)
+	var pn protocol.PacketNumber
+	for b.Loop() {
+		src = client.Seal(src[:0], src[:l], pn, ad)
+		pn++
 	}
 }
 
@@ -618,7 +620,7 @@ func BenchmarkPacketDecryption(b *testing.B) {
 	rand.Read(ad)
 	src = client.Seal(src[:0], src[:l], 1337, ad)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := server.Open(dst[:0], src, time.Time{}, 1337, protocol.KeyPhaseZero, ad); err != nil {
 			b.Fatalf("opening failed: %v", err)
 		}
@@ -627,7 +629,8 @@ func BenchmarkPacketDecryption(b *testing.B) {
 
 func BenchmarkRollKeys(b *testing.B) {
 	client, _ := getClientAndServer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		client.rollKeys()
 	}
 	if int(client.keyPhase) != b.N {

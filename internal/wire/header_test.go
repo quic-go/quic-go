@@ -452,14 +452,15 @@ func BenchmarkIs0RTTPacket(b *testing.B) {
 	src := mrand.NewChaCha8([32]byte{'f', 'o', 'o', 'b', 'a', 'r'})
 	random := mrand.New(src)
 	packets := make([][]byte, 1024)
-	for i := 0; i < len(packets); i++ {
+	for i := range len(packets) {
 		packets[i] = make([]byte, random.IntN(256))
 		src.Read(packets[i])
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	var i int
+	for b.Loop() {
 		Is0RTTPacket(packets[i%len(packets)])
+		i++
 	}
 }
 
@@ -475,6 +476,8 @@ func BenchmarkParseInitial(b *testing.B) {
 }
 
 func benchmarkInitialPacketParsing(b *testing.B, token []byte) {
+	b.ReportAllocs()
+
 	hdr := Header{
 		Type:             protocol.PacketTypeInitial,
 		DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
@@ -493,9 +496,7 @@ func benchmarkInitialPacketParsing(b *testing.B, token []byte) {
 	}
 	data = append(data, make([]byte, 1000)...)
 
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		h, _, _, err := ParsePacket(data)
 		if err != nil {
 			b.Fatal(err)
@@ -508,6 +509,8 @@ func benchmarkInitialPacketParsing(b *testing.B, token []byte) {
 }
 
 func BenchmarkParseRetry(b *testing.B) {
+	b.ReportAllocs()
+
 	token := make([]byte, 64)
 	rand.Read(token)
 	hdr := &ExtendedHeader{
@@ -524,9 +527,7 @@ func BenchmarkParseRetry(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		h, _, _, err := ParsePacket(data)
 		if err != nil {
 			b.Fatal(err)
@@ -555,9 +556,8 @@ func benchmarkArbitraryHeaderParsing(b *testing.B, destLen, srcLen int) {
 	buf = append(buf, uint8(srcLen))
 	buf = append(buf, srcConnID...)
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		parsed, d, s, err := ParseArbitraryLenConnectionIDs(buf)
 		if err != nil {
 			b.Fatal(err)

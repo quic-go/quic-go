@@ -98,8 +98,8 @@ func TestReceivedPacketHistoryRanges(t *testing.T) {
 func TestReceivedPacketHistoryMaxNumAckRanges(t *testing.T) {
 	hist := newReceivedPacketHistory()
 
-	for i := protocol.PacketNumber(0); i < protocol.MaxNumAckRanges; i++ {
-		require.True(t, hist.ReceivedPacket(2*i))
+	for i := range protocol.MaxNumAckRanges {
+		require.True(t, hist.ReceivedPacket(protocol.PacketNumber(2*i)))
 	}
 	require.Len(t, hist.ranges, protocol.MaxNumAckRanges)
 	require.Equal(t, interval{Start: 0, End: 0}, hist.ranges[0])
@@ -249,8 +249,10 @@ func TestReceivedPacketHistoryRandomized(t *testing.T) {
 
 func BenchmarkHistoryReceiveSequentialPackets(b *testing.B) {
 	hist := newReceivedPacketHistory()
-	for i := 0; i < b.N; i++ {
-		hist.ReceivedPacket(protocol.PacketNumber(i))
+	var pn protocol.PacketNumber
+	for b.Loop() {
+		hist.ReceivedPacket(pn)
+		pn++
 	}
 }
 
@@ -258,10 +260,10 @@ func BenchmarkHistoryReceiveSequentialPackets(b *testing.B) {
 func BenchmarkHistoryReceiveCommonCase(b *testing.B) {
 	hist := newReceivedPacketHistory()
 	var pn protocol.PacketNumber
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		hist.ReceivedPacket(pn)
 		pn++
-		if i%2000 == 0 {
+		if pn%2000 == 0 {
 			pn += 4
 		}
 	}
@@ -269,8 +271,10 @@ func BenchmarkHistoryReceiveCommonCase(b *testing.B) {
 
 func BenchmarkHistoryReceiveSequentialPacketsWithGaps(b *testing.B) {
 	hist := newReceivedPacketHistory()
-	for i := 0; i < b.N; i++ {
-		hist.ReceivedPacket(protocol.PacketNumber(2 * i))
+	var pn protocol.PacketNumber
+	for b.Loop() {
+		hist.ReceivedPacket(pn)
+		pn += 2
 	}
 }
 
@@ -285,16 +289,17 @@ func BenchmarkHistoryIsDuplicate(b *testing.B) {
 	b.ReportAllocs()
 	hist := newReceivedPacketHistory()
 	var pn protocol.PacketNumber
-	for i := 0; i < protocol.MaxNumAckRanges; i++ {
-		for j := 0; j < 5; j++ {
+	for range protocol.MaxNumAckRanges {
+		for range 5 {
 			hist.ReceivedPacket(pn)
 			pn++
 		}
 		pn += 5 // create a gap
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		hist.IsPotentiallyDuplicate(protocol.PacketNumber(i) % pn)
+	var p protocol.PacketNumber
+	for b.Loop() {
+		hist.IsPotentiallyDuplicate(p % pn)
+		p++
 	}
 }
