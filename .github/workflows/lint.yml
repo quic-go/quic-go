@@ -4,6 +4,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GOEXPERIMENT: ${{ matrix.go == '1.24.x' && 'synctest' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -40,6 +42,7 @@ jobs:
         go: [ "1.24.x", "1.25.x" ]
     env:
       GOLANGCI_LINT_VERSION: v2.4.0
+      GOEXPERIMENT: ${{ matrix.go == '1.24.x' && 'synctest' || '' }}
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v4
