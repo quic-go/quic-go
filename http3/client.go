@@ -47,10 +47,6 @@ var defaultQuicConfig = &quic.Config{
 type ClientConn struct {
 	conn *Conn
 
-	// Enable support for HTTP/3 datagrams (RFC 9297).
-	// If a QUICConfig is set, datagram support also needs to be enabled on the QUIC layer by setting enableDatagrams.
-	enableDatagrams bool
-
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	additionalSettings map[uint64]uint64
@@ -85,7 +81,6 @@ func newClientConn(
 	logger *slog.Logger,
 ) *ClientConn {
 	c := &ClientConn{
-		enableDatagrams:    enableDatagrams,
 		additionalSettings: additionalSettings,
 		disableCompression: disableCompression,
 		logger:             logger,
@@ -100,7 +95,7 @@ func newClientConn(
 	c.conn = newConnection(
 		conn.Context(),
 		conn,
-		c.enableDatagrams,
+		enableDatagrams,
 		false, // client
 		c.logger,
 		0,
@@ -135,7 +130,7 @@ func (c *ClientConn) setupConn() error {
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream)
 	// send the SETTINGS frame
-	b = (&settingsFrame{Datagram: c.enableDatagrams, Other: c.additionalSettings}).Append(b)
+	b = (&settingsFrame{Datagram: c.conn.enableDatagrams, Other: c.additionalSettings}).Append(b)
 	_, err = str.Write(b)
 	return err
 }
@@ -251,6 +246,12 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		return nil, maybeReplaceError(err)
 	}
 	return rsp, maybeReplaceError(err)
+}
+
+// EnabledDatagrams returns whether datagram support was enabled locally.
+// Datagrams can only be used if both peers enable them.
+func (c *ClientConn) EnabledDatagrams() bool {
+	return c.conn.EnabledDatagrams()
 }
 
 // ReceivedSettings returns a channel that is closed once the server's HTTP/3 settings were received.

@@ -422,6 +422,12 @@ func (c *Conn) receiveDatagrams() error {
 	}
 }
 
+// EnabledDatagrams returns whether datagram support was enabled locally.
+// Datagrams can only be used if both peers enable them.
+func (c *Conn) EnabledDatagrams() bool {
+	return c.enableDatagrams
+}
+
 // ReceivedSettings returns a channel that is closed once the peer's SETTINGS frame was received.
 // Settings can be optained from the Settings method after the channel was closed.
 func (c *Conn) ReceivedSettings() <-chan struct{} { return c.receivedSettings }
