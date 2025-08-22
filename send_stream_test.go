@@ -1398,6 +1398,159 @@ func TestSendStreamResetStreamAtStopSendingBeforeCancelation(t *testing.T) {
 	cf.Handler.OnAcked(cf.Frame)
 }
 
+// TestSendStreamCancelWriteZeroReliableOffsetFrameReturn tests that frames are returned to pool when CancelWrite is called with zero reliable offset.
+func TestSendStreamCancelWriteZeroReliableOffsetFrameReturn(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("test data"))
+	require.NoError(t, err)
+
+	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+	mockFC.EXPECT().AddBytesSent(gomock.Any())
+	frame, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
+
+	// lose the frame
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	frame.Handler.OnLost(frame.Frame)
+
+	// verify retransmission queue has frames before cancel
+	str.mutex.Lock()
+	require.Greater(t, len(str.retransmissionQueue), 0)
+	str.mutex.Unlock()
+
+	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	str.CancelWrite(1234)
+
+	// verify frames were returned to pool
+	str.mutex.Lock()
+	require.Nil(t, str.retransmissionQueue)
+	require.Nil(t, str.nextFrame)
+	str.mutex.Unlock()
+}
+
+// TestSendStreamStopSendingFramePoolReturn tests that frames are returned to pool when STOP_SENDING is received.
+func TestSendStreamStopSendingFramePoolReturn(t *testing.T) {
+	const streamID protocol.StreamID = 43
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("test data for STOP_SENDING"))
+	require.NoError(t, err)
+
+	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+	mockFC.EXPECT().AddBytesSent(gomock.Any())
+	frame, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	frame.Handler.OnLost(frame.Frame)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("more data"))
+	require.NoError(t, err)
+
+	// verify we have frames before STOP_SENDING
+	str.mutex.Lock()
+	require.Greater(t, len(str.retransmissionQueue), 0)
+	require.NotNil(t, str.nextFrame)
+	str.mutex.Unlock()
+
+	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	str.handleStopSendingFrame(&wire.StopSendingFrame{
+		StreamID:  streamID,
+		ErrorCode: 5678,
+	})
+
+	// verify frames were returned to pool
+	str.mutex.Lock()
+	require.Nil(t, str.retransmissionQueue)
+	require.Nil(t, str.nextFrame)
+	str.mutex.Unlock()
+}
+
+// TestSendStreamCloseForShutdownFramePoolReturn tests that frames are returned to pool during connection shutdown.
+func TestSendStreamCloseForShutdownFramePoolReturn(t *testing.T) {
+	const streamID protocol.StreamID = 44
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("data before shutdown"))
+	require.NoError(t, err)
+
+	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+	mockFC.EXPECT().AddBytesSent(gomock.Any())
+	frame, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, frame.Frame)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	frame.Handler.OnLost(frame.Frame)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("more"))
+	require.NoError(t, err)
+
+	// verify we have frames before shutdown
+	str.mutex.Lock()
+	require.True(t, str.nextFrame != nil || len(str.retransmissionQueue) > 0)
+	str.mutex.Unlock()
+
+	str.closeForShutdown(context.Canceled)
+
+	// verify frames were returned to pool
+	str.mutex.Lock()
+	require.Nil(t, str.nextFrame)
+	require.Nil(t, str.retransmissionQueue)
+	str.mutex.Unlock()
+}
+
+// TestSendStreamOnLostWithResetFramePoolReturn tests that lost frames are returned to pool when stream is already reset with zero reliable offset.
+func TestSendStreamOnLostWithResetFramePoolReturn(t *testing.T) {
+	const streamID protocol.StreamID = 45
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("test"))
+	require.NoError(t, err)
+
+	mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+	mockFC.EXPECT().AddBytesSent(protocol.ByteCount(4))
+	f, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.NotNil(t, f.Frame)
+
+	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	str.CancelWrite(1234)
+
+	// verify stream is reset with zero reliable offset
+	str.mutex.Lock()
+	require.NotNil(t, str.resetErr)
+	require.Equal(t, protocol.ByteCount(0), str.reliableOffset())
+	str.mutex.Unlock()
+
+	// when OnLost is called, frame should be returned to pool
+	// not added to retransmissionQueue since resetErr != nil && reliableOffset() == 0
+	f.Handler.OnLost(f.Frame)
+
+	// verify frame was returned to pool instead of queued
+	str.mutex.Lock()
+	require.Nil(t, str.retransmissionQueue)
+	str.mutex.Unlock()
+}
+
 func TestSendStreamResetStreamAtStopSendingAfterCancelation(t *testing.T) {
 	t.Run("RESET_STREAM_AT lost", func(t *testing.T) {
 		testSendStreamResetStreamAtStopSendingAfterCancelation(t, true)
