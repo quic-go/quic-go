@@ -12,3 +12,7 @@ func Test(t *testing.T, f func(t *testing.T)) {
 		f(t)
 	})
 }
+
+func Wait() {
+	synctest.Wait()
+}
