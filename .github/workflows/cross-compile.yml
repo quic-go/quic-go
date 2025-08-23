@@ -20,6 +20,8 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ matrix.go }}-crosscompile-${{ hashFiles('**/go.sum') }}
           restore-keys: go-${{ matrix.go }}-crosscompile-
+          # only store cache when on master
+          lookup-only: ${{ github.event_name != 'push' || github.ref_name != 'master' }}
       - name: Install build utils
         run: |
           sudo apt-get update
