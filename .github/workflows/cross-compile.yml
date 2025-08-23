@@ -13,6 +13,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
+      - name: Load Go cache
+        id: load-go-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ matrix.go }}-crosscompile-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ matrix.go }}-crosscompile-
       - name: Install build utils
         run: |
           sudo apt-get update
