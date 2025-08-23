@@ -10,3 +10,7 @@ import (
 func Test(t *testing.T, f func(t *testing.T)) {
 	synctest.Test(t, f)
 }
+
+func Wait() {
+	synctest.Wait()
+}
