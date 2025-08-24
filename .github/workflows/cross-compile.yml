@@ -13,15 +13,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - name: Load Go cache
+      - name: Load Go build cache
         id: load-go-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
           key: go-${{ matrix.go }}-crosscompile
-          restore-keys: go-${{ matrix.go }}-crosscompile
-          # only store cache when on master
-          lookup-only: ${{ github.event_name != 'push' || github.ref_name != 'master' }}
       - name: Install build utils
         run: |
           sudo apt-get update
@@ -31,3 +28,10 @@ jobs:
       - name: Run cross compilation
         # run in parallel on as many cores as are available on the machine
         run: go tool dist list | xargs -I % -P "$(nproc)" .github/workflows/cross-compile.sh %
+      - name: Save Go build cache
+        # only store cache when on master
+        if: github.event_name == 'push' && github.ref_name == 'master'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ matrix.go }}-crosscompile
