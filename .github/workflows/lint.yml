@@ -20,12 +20,7 @@ jobs:
           fi
       - name: Check that go.mod is tidied
         if: success() || failure() # run this step even if the previous one failed
-        run: |
-          cp go.mod go.mod.orig
-          cp go.sum go.sum.orig
-          go mod tidy
-          diff go.mod go.mod.orig
-          diff go.sum go.sum.orig
+        run: go mod tidy -diff
       - name: Run code generators
         if: success() || failure() # run this step even if the previous one failed
         run: .github/workflows/go-generate.sh
