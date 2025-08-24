@@ -516,3 +516,51 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 		require.Equal(t, limits, blockedAt)
 	})
 }
+
+func TestStreamsMapConcurrent(t *testing.T) {
+	for i := range 5 {
+		t.Run(fmt.Sprintf("iteration %d", i+1), func(t *testing.T) {
+			testStreamsMapConcurrent(t)
+		})
+	}
+}
+
+func testStreamsMapConcurrent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := newOutgoingStreamsMap(
+			protocol.StreamTypeBidi,
+			func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
+			func(f wire.Frame) {},
+			protocol.PerspectiveClient,
+		)
+
+		const num = 100
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		errChan := make(chan error, num)
+		for range num {
+			go func() {
+				_, err := m.OpenStreamSync(ctx)
+				errChan <- err
+			}()
+		}
+
+		go m.CloseWithError(assert.AnError)
+		go cancel()
+		go m.SetMaxStream(protocol.FirstOutgoingBidiStreamClient + 4*num/2)
+
+		synctest.Wait()
+
+		for range num {
+			select {
+			case err := <-errChan:
+				if err != nil {
+					require.True(t, errors.Is(err, assert.AnError) || errors.Is(err, context.Canceled))
+				}
+			default:
+				t.Fatal("OpenStreamSync should have returned")
+			}
+		}
+	})
+}
