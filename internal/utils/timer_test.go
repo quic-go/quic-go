@@ -27,7 +27,7 @@ func TestTimerResets(t *testing.T) {
 		case <-timer.Chan():
 			require.Zero(t, time.Since(start))
 			timer.SetRead()
-		default:
+		case <-time.After(time.Hour): // this can be replaced with a default once we drop support for Go 1.24
 			t.Fatal("timer should have fired")
 		}
 
