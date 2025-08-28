@@ -406,7 +406,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 	// After this point, we must not use ackedPackets any longer!
 	// We've already returned the buffers.
-	ackedPackets = nil //nolint:ineffassign // This is just to be on the safe side.
+	ackedPackets = nil    //nolint:ineffassign // This is just to be on the safe side.
+	clear(h.ackedPackets) // make sure the memory is released
+	h.ackedPackets = h.ackedPackets[:0]
 
 	// Reset the pto_count unless the client is unsure if the server has validated the client's address.
 	if h.peerCompletedAddressValidation {
@@ -432,7 +434,6 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 // Packets are returned in ascending packet number order.
 func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*packet, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
-	h.ackedPackets = h.ackedPackets[:0]
 	ackRangeIndex := 0
 	lowestAcked := ack.LowestAcked()
 	largestAcked := ack.LargestAcked()
