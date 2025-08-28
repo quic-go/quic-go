@@ -1,10 +1,10 @@
 package ackhandler
 
 import (
+	"iter"
 	"slices"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/wire"
 )
 
 // interval is an interval from one PacketNumber to the other
@@ -109,12 +109,15 @@ func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
 	}
 }
 
-// AppendAckRanges appends to a slice of all AckRanges that can be used in an AckFrame
-func (h *receivedPacketHistory) AppendAckRanges(ackRanges []wire.AckRange) []wire.AckRange {
-	for i := len(h.ranges) - 1; i >= 0; i-- {
-		ackRanges = append(ackRanges, wire.AckRange{Smallest: h.ranges[i].Start, Largest: h.ranges[i].End})
+// Backward returns an iterator over the ranges in reverse order
+func (h *receivedPacketHistory) Backward() iter.Seq[interval] {
+	return func(yield func(interval) bool) {
+		for i := len(h.ranges) - 1; i >= 0; i-- {
+			if !yield(h.ranges[i]) {
+				return
+			}
+		}
 	}
-	return ackRanges
 }
 
 func (h *receivedPacketHistory) HighestMissingUpTo(p protocol.PacketNumber) protocol.PacketNumber {

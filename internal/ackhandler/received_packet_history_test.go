@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/wire"
 
 	"github.com/stretchr/testify/require"
 )
@@ -15,24 +14,24 @@ func TestReceivedPacketHistorySingleRange(t *testing.T) {
 	hist := newReceivedPacketHistory()
 
 	require.True(t, hist.ReceivedPacket(4))
-	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 4}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 4, End: 4}}, slices.Collect(hist.Backward()))
 
 	// add a duplicate packet
 	require.False(t, hist.ReceivedPacket(4))
-	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 4}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 4, End: 4}}, slices.Collect(hist.Backward()))
 
 	// add a few more packets to extend the range
 	require.True(t, hist.ReceivedPacket(5))
 	require.True(t, hist.ReceivedPacket(6))
-	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 6}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 4, End: 6}}, slices.Collect(hist.Backward()))
 
 	// add a duplicate within this range
 	require.False(t, hist.ReceivedPacket(5))
-	require.Equal(t, []wire.AckRange{{Smallest: 4, Largest: 6}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 4, End: 6}}, slices.Collect(hist.Backward()))
 
 	// extend the range at the front
 	require.True(t, hist.ReceivedPacket(3))
-	require.Equal(t, []wire.AckRange{{Smallest: 3, Largest: 6}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 3, End: 6}}, slices.Collect(hist.Backward()))
 }
 
 func TestReceivedPacketHistoryRanges(t *testing.T) {
@@ -46,53 +45,53 @@ func TestReceivedPacketHistoryRanges(t *testing.T) {
 	require.Equal(t, protocol.PacketNumber(2), hist.HighestMissingUpTo(2))
 	require.True(t, hist.ReceivedPacket(10))
 	require.Equal(t, protocol.PacketNumber(9), hist.HighestMissingUpTo(1000))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 4, Largest: 4},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 4, End: 4},
+	}, slices.Collect(hist.Backward()))
 
 	// create a new range in the middle
 	require.True(t, hist.ReceivedPacket(7))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 7, Largest: 7},
-		{Smallest: 4, Largest: 4},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 7, End: 7},
+		{Start: 4, End: 4},
+	}, slices.Collect(hist.Backward()))
 
 	// create a new range at the front
 	require.True(t, hist.ReceivedPacket(1))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 7, Largest: 7},
-		{Smallest: 4, Largest: 4},
-		{Smallest: 1, Largest: 1},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 7, End: 7},
+		{Start: 4, End: 4},
+		{Start: 1, End: 1},
+	}, slices.Collect(hist.Backward()))
 
 	// extend an existing range at the end
 	require.True(t, hist.ReceivedPacket(8))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 7, Largest: 8},
-		{Smallest: 4, Largest: 4},
-		{Smallest: 1, Largest: 1},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 7, End: 8},
+		{Start: 4, End: 4},
+		{Start: 1, End: 1},
+	}, slices.Collect(hist.Backward()))
 
 	// extend an existing range at the front
 	require.True(t, hist.ReceivedPacket(6))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 6, Largest: 8},
-		{Smallest: 4, Largest: 4},
-		{Smallest: 1, Largest: 1},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 6, End: 8},
+		{Start: 4, End: 4},
+		{Start: 1, End: 1},
+	}, slices.Collect(hist.Backward()))
 
 	// close a range
 	require.True(t, hist.ReceivedPacket(9))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 6, Largest: 10},
-		{Smallest: 4, Largest: 4},
-		{Smallest: 1, Largest: 1},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 6, End: 10},
+		{Start: 4, End: 4},
+		{Start: 1, End: 1},
+	}, slices.Collect(hist.Backward()))
 }
 
 func TestReceivedPacketHistoryMaxNumAckRanges(t *testing.T) {
@@ -114,7 +113,7 @@ func TestReceivedPacketHistoryDeleteBelow(t *testing.T) {
 	hist := newReceivedPacketHistory()
 
 	hist.DeleteBelow(2)
-	require.Empty(t, hist.AppendAckRanges(nil))
+	require.Empty(t, slices.Collect(hist.Backward()))
 
 	require.True(t, hist.ReceivedPacket(2))
 	require.True(t, hist.ReceivedPacket(4))
@@ -126,27 +125,27 @@ func TestReceivedPacketHistoryDeleteBelow(t *testing.T) {
 	hist.DeleteBelow(6)
 	require.Equal(t, protocol.InvalidPacketNumber, hist.HighestMissingUpTo(6))
 	require.Equal(t, protocol.PacketNumber(9), hist.HighestMissingUpTo(10))
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 6, Largest: 6},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 6, End: 6},
+	}, slices.Collect(hist.Backward()))
 
 	// deleting from an existing range
 	require.True(t, hist.ReceivedPacket(7))
 	require.True(t, hist.ReceivedPacket(8))
 	hist.DeleteBelow(7)
-	require.Equal(t, []wire.AckRange{
-		{Smallest: 10, Largest: 10},
-		{Smallest: 7, Largest: 8},
-	}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{
+		{Start: 10, End: 10},
+		{Start: 7, End: 8},
+	}, slices.Collect(hist.Backward()))
 
 	// keep a one-packet range
 	hist.DeleteBelow(10)
-	require.Equal(t, []wire.AckRange{{Smallest: 10, Largest: 10}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 10, End: 10}}, slices.Collect(hist.Backward()))
 
 	// delayed packets below deleted ranges are ignored
 	require.False(t, hist.ReceivedPacket(5))
-	require.Equal(t, []wire.AckRange{{Smallest: 10, Largest: 10}}, hist.AppendAckRanges(nil))
+	require.Equal(t, []interval{{Start: 10, End: 10}}, slices.Collect(hist.Backward()))
 }
 
 func TestReceivedPacketHistoryDuplicateDetection(t *testing.T) {
@@ -213,11 +212,11 @@ func TestReceivedPacketHistoryRandomized(t *testing.T) {
 		}
 	}
 	var counter int
-	ackRanges := hist.AppendAckRanges(nil)
+	ackRanges := slices.Collect(hist.Backward())
 	t.Logf("ACK ranges: %v", ackRanges)
 	require.LessOrEqual(t, len(ackRanges), numLostPackets+1)
 	for _, ackRange := range ackRanges {
-		for p := ackRange.Smallest; p <= ackRange.Largest; p++ {
+		for p := ackRange.Start; p <= ackRange.End; p++ {
 			counter++
 			require.Contains(t, packets, p)
 		}
