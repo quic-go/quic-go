@@ -109,8 +109,8 @@ func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
 	}
 }
 
-// AppendAckRanges appends to a slice of all AckRanges that can be used in an AckFrame
-func (h *receivedPacketHistory) Reverse() iter.Seq[interval] {
+// Backward returns an iterator over the ranges in reverse order
+func (h *receivedPacketHistory) Backward() iter.Seq[interval] {
 	return func(yield func(interval) bool) {
 		for i := len(h.ranges) - 1; i >= 0; i-- {
 			if !yield(h.ranges[i]) {
