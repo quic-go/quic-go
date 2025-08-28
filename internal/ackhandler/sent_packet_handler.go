@@ -435,6 +435,9 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*packet, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	ackRangeIndex := 0
+	if len(h.ackedPackets) > 0 {
+		return nil, errors.New("ackhandler BUG: ackedPackets slice not empty")
+	}
 	lowestAcked := ack.LowestAcked()
 	largestAcked := ack.LargestAcked()
 	for p := range pnSpace.history.Packets() {
