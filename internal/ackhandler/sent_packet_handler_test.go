@@ -1058,7 +1058,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	// Receive an ACK with a short RTT, such that the first packet is lost.
 	cong.EXPECT().OnCongestionEvent(gomock.Any(), gomock.Any(), gomock.Any())
 	ecnHandler.EXPECT().LostPacket(pns[0])
-	ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(10), int64(11), int64(12)).DoAndReturn(func(packets []*packetWithPacketNumber, _, _, _ int64) bool {
+	ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(10), int64(11), int64(12)).DoAndReturn(func(packets []packetWithPacketNumber, _, _, _ int64) bool {
 		require.Len(t, packets, 2)
 		require.Equal(t, pns[2], packets[0].PacketNumber)
 		require.Equal(t, pns[3], packets[1].PacketNumber)
@@ -1089,7 +1089,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	pns[0] = sendPacket(now, protocol.ECT1)
 	pns[1] = sendPacket(now, protocol.ECT1)
 	ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(packets []*packetWithPacketNumber, _, _, _ int64) bool {
+		func(packets []packetWithPacketNumber, _, _, _ int64) bool {
 			require.Len(t, packets, 1)
 			require.Equal(t, pns[1], packets[0].PacketNumber)
 			return false

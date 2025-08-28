@@ -9,7 +9,7 @@ import (
 
 type sentPacketHistory struct {
 	packets          []*packet
-	pathProbePackets []*packetWithPacketNumber
+	pathProbePackets []packetWithPacketNumber
 
 	numOutstanding int
 
@@ -62,10 +62,10 @@ func (h *sentPacketHistory) SentAckElicitingPacket(pn protocol.PacketNumber, p *
 	}
 }
 
-func (h *sentPacketHistory) SentPathProbePacket(p *packetWithPacketNumber) {
-	h.checkSequentialPacketNumberUse(p.PacketNumber)
+func (h *sentPacketHistory) SentPathProbePacket(pn protocol.PacketNumber, p *packet) {
+	h.checkSequentialPacketNumberUse(pn)
 	h.packets = append(h.packets, &packet{isPathProbePacket: true})
-	h.pathProbePackets = append(h.pathProbePackets, p)
+	h.pathProbePackets = append(h.pathProbePackets, packetWithPacketNumber{PacketNumber: pn, packet: p})
 }
 
 func (h *sentPacketHistory) Packets() iter.Seq2[protocol.PacketNumber, *packet] {
@@ -84,10 +84,10 @@ func (h *sentPacketHistory) Packets() iter.Seq2[protocol.PacketNumber, *packet] 
 	}
 }
 
-func (h *sentPacketHistory) PathProbes() iter.Seq[*packetWithPacketNumber] {
-	return func(yield func(*packetWithPacketNumber) bool) {
+func (h *sentPacketHistory) PathProbes() iter.Seq2[protocol.PacketNumber, *packet] {
+	return func(yield func(protocol.PacketNumber, *packet) bool) {
 		for _, p := range h.pathProbePackets {
-			if !yield(p) {
+			if !yield(p.PacketNumber, p.packet) {
 				return
 			}
 		}
@@ -108,11 +108,11 @@ func (h *sentPacketHistory) FirstOutstanding() (protocol.PacketNumber, *packet) 
 }
 
 // FirstOutstandingPathProbe returns the first outstanding path probe packet
-func (h *sentPacketHistory) FirstOutstandingPathProbe() *packetWithPacketNumber {
+func (h *sentPacketHistory) FirstOutstandingPathProbe() (protocol.PacketNumber, *packet) {
 	if len(h.pathProbePackets) == 0 {
-		return nil
+		return protocol.InvalidPacketNumber, nil
 	}
-	return h.pathProbePackets[0]
+	return h.pathProbePackets[0].PacketNumber, h.pathProbePackets[0].packet
 }
 
 func (h *sentPacketHistory) Len() int {
@@ -153,12 +153,12 @@ func (h *sentPacketHistory) Remove(pn protocol.PacketNumber) error {
 // RemovePathProbe removes a path probe packet.
 // It scales O(N), but that's ok, since we don't expect to send many path probe packets.
 // It is not valid to call this function in IteratePathProbes.
-func (h *sentPacketHistory) RemovePathProbe(pn protocol.PacketNumber) *packetWithPacketNumber {
-	var packetToDelete *packetWithPacketNumber
+func (h *sentPacketHistory) RemovePathProbe(pn protocol.PacketNumber) *packet {
+	var packetToDelete *packet
 	idx := -1
 	for i, p := range h.pathProbePackets {
 		if p.PacketNumber == pn {
-			packetToDelete = p
+			packetToDelete = p.packet
 			idx = i
 			break
 		}

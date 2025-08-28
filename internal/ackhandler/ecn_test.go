@@ -12,10 +12,10 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func getAckedPackets(pns ...protocol.PacketNumber) []*packetWithPacketNumber {
-	var packets []*packetWithPacketNumber
+func getAckedPackets(pns ...protocol.PacketNumber) []packetWithPacketNumber {
+	var packets []packetWithPacketNumber
 	for _, p := range pns {
-		packets = append(packets, &packetWithPacketNumber{PacketNumber: p})
+		packets = append(packets, packetWithPacketNumber{PacketNumber: p})
 	}
 	return packets
 }
@@ -131,7 +131,7 @@ func TestECNValidationFailures(t *testing.T) {
 
 func testECNValidationFailure(
 	t *testing.T,
-	ackedPackets []*packetWithPacketNumber,
+	ackedPackets []packetWithPacketNumber,
 	ect0, ect1, ecnce int64,
 	expectedTrigger logging.ECNStateTrigger,
 ) {

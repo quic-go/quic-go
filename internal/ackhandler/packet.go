@@ -9,7 +9,7 @@ import (
 
 type packetWithPacketNumber struct {
 	PacketNumber protocol.PacketNumber
-	packet
+	*packet
 }
 
 // A Packet is a packet

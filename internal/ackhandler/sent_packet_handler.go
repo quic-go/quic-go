@@ -84,7 +84,7 @@ type sentPacketHandler struct {
 	// Only applies to the application-data packet number space.
 	lowestNotConfirmedAcked protocol.PacketNumber
 
-	ackedPackets []*packetWithPacketNumber // to avoid allocations in detectAndRemoveAckedPackets
+	ackedPackets []packetWithPacketNumber // to avoid allocations in detectAndRemoveAckedPackets
 
 	bytesInFlight protocol.ByteCount
 
@@ -273,13 +273,13 @@ func (h *sentPacketHandler) SentPacket(
 	isAckEliciting := len(streamFrames) > 0 || len(frames) > 0
 
 	if isPathProbePacket {
-		p := &packetWithPacketNumber{PacketNumber: pn, packet: *getPacket()}
+		p := getPacket()
 		p.SendTime = t
 		p.EncryptionLevel = encLevel
 		p.Length = size
 		p.Frames = frames
 		p.isPathProbePacket = true
-		pnSpace.history.SentPathProbePacket(p)
+		pnSpace.history.SentPathProbePacket(pn, p)
 		h.setLossDetectionTimer(t)
 		return
 	}
@@ -397,9 +397,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		if p.EncryptionLevel == protocol.Encryption1RTT {
 			acked1RTTPacket = true
 		}
-		h.removeFromBytesInFlight(&p.packet)
+		h.removeFromBytesInFlight(p.packet)
 		if !p.isPathProbePacket {
-			putPacket(&p.packet)
+			putPacket(p.packet)
 		}
 	}
 	// After this point, we must not use ackedPackets any longer!
@@ -430,7 +430,7 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 }
 
 // Packets are returned in ascending packet number order.
-func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*packetWithPacketNumber, error) {
+func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]packetWithPacketNumber, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	ackRangeIndex := 0
 	if len(h.ackedPackets) > 0 {
@@ -472,11 +472,11 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			probePacket := pnSpace.history.RemovePathProbe(pn)
 			// the probe packet might already have been declared lost
 			if probePacket != nil {
-				h.ackedPackets = append(h.ackedPackets, probePacket)
+				h.ackedPackets = append(h.ackedPackets, packetWithPacketNumber{PacketNumber: pn, packet: probePacket})
 			}
 			continue
 		}
-		h.ackedPackets = append(h.ackedPackets, &packetWithPacketNumber{PacketNumber: pn, packet: *p})
+		h.ackedPackets = append(h.ackedPackets, packetWithPacketNumber{PacketNumber: pn, packet: p})
 	}
 	if h.logger.Debug() && len(h.ackedPackets) > 0 {
 		pns := make([]protocol.PacketNumber, len(h.ackedPackets))
@@ -621,7 +621,7 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 
 	var pathProbeLossTime time.Time
 	if h.appDataPackets.history.HasOutstandingPathProbes() {
-		if p := h.appDataPackets.history.FirstOutstandingPathProbe(); p != nil {
+		if _, p := h.appDataPackets.history.FirstOutstandingPathProbe(); p != nil {
 			pathProbeLossTime = p.SendTime.Add(pathProbePacketLossTimeout)
 		}
 	}
@@ -660,9 +660,9 @@ func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {
 	lossTime := now.Add(-pathProbePacketLossTimeout)
 	// RemovePathProbe cannot be called while iterating.
 	var lostPathProbes []packetWithPacketNumber
-	for p := range h.appDataPackets.history.PathProbes() {
+	for pn, p := range h.appDataPackets.history.PathProbes() {
 		if !p.SendTime.After(lossTime) {
-			lostPathProbes = append(lostPathProbes, *p)
+			lostPathProbes = append(lostPathProbes, packetWithPacketNumber{PacketNumber: pn, packet: p})
 		}
 	}
 	for _, p := range lostPathProbes {
@@ -996,8 +996,8 @@ func (h *sentPacketHandler) MigratedPath(now time.Time, initialMaxDatagramSize p
 			h.queueFramesForRetransmission(p)
 		}
 	}
-	for p := range h.appDataPackets.history.PathProbes() {
-		h.appDataPackets.history.RemovePathProbe(p.PacketNumber)
+	for pn := range h.appDataPackets.history.PathProbes() {
+		h.appDataPackets.history.RemovePathProbe(pn)
 	}
 	h.congestion = congestion.NewCubicSender(
 		congestion.DefaultClock{},
