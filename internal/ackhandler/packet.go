@@ -44,6 +44,7 @@ func getPacket() *packet {
 	p.includedInBytesInFlight = false
 	p.declaredLost = false
 	p.skippedPacket = false
+	p.isPathProbePacket = false
 	return p
 }
 
