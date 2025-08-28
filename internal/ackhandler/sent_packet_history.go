@@ -254,3 +254,24 @@ func (h *sentPacketHistory) DeclareLost(pn protocol.PacketNumber) {
 		h.cleanupStart()
 	}
 }
+
+// Difference returns the difference between two packet numbers a and b (a - b),
+// taking into account any skipped packet numbers between them.
+//
+// Note that old skipped packets are garbage collected at some point,
+// so this function is not guaranteed to return the correct result after a while.
+func (h *sentPacketHistory) Difference(a, b protocol.PacketNumber) protocol.PacketNumber {
+	diff := a - b
+	if len(h.skippedPackets) == 0 {
+		return diff
+	}
+	if a < h.skippedPackets[0] || b > h.skippedPackets[len(h.skippedPackets)-1] {
+		return diff
+	}
+	for _, p := range h.skippedPackets {
+		if p > b && p < a {
+			diff--
+		}
+	}
+	return diff
+}

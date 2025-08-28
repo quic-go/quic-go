@@ -710,7 +710,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 					h.tracer.LostPacket(p.EncryptionLevel, pn, logging.PacketLossTimeThreshold)
 				}
 			}
-		} else if pnSpace.largestAcked >= pn+packetThreshold {
+		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
 			packetLost = true
 			if !p.isPathProbePacket {
 				if h.logger.Debug() {

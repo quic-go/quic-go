@@ -296,3 +296,29 @@ func TestSentPacketHistoryPathProbes(t *testing.T) {
 	require.Equal(t, protocol.InvalidPacketNumber, pn)
 	require.Nil(t, p)
 }
+
+func TestSentPacketHistoryDifference(t *testing.T) {
+	hist := newSentPacketHistory(true)
+	hist.SentNonAckElicitingPacket(0)
+	hist.SentAckElicitingPacket(1, &packet{})
+	hist.SentAckElicitingPacket(2, &packet{})
+	hist.SentAckElicitingPacket(3, &packet{})
+	hist.SkippedPacket(4)
+	hist.SkippedPacket(5)
+	hist.SentAckElicitingPacket(6, &packet{})
+	hist.SentNonAckElicitingPacket(7)
+	hist.SkippedPacket(8)
+	hist.SentAckElicitingPacket(9, &packet{})
+
+	require.Zero(t, hist.Difference(1, 1))
+	require.Zero(t, hist.Difference(2, 2))
+	require.Zero(t, hist.Difference(7, 7))
+
+	require.Equal(t, protocol.PacketNumber(1), hist.Difference(2, 1))
+	require.Equal(t, protocol.PacketNumber(2), hist.Difference(3, 1))
+	require.Equal(t, protocol.PacketNumber(3), hist.Difference(4, 1))
+	require.Equal(t, protocol.PacketNumber(3), hist.Difference(6, 1)) // 4 and 5 were skipped
+	require.Equal(t, protocol.PacketNumber(4), hist.Difference(7, 1)) // 4 and 5 were skipped
+	require.Equal(t, protocol.PacketNumber(3), hist.Difference(7, 2)) // 4 and 5 were skipped
+	require.Equal(t, protocol.PacketNumber(5), hist.Difference(9, 1)) // 4, 5 and 8 were skipped
+}
