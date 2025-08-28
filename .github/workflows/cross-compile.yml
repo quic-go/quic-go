@@ -20,9 +20,7 @@ jobs:
         id: load-go-cache
         uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+          path: ~/.cache/go-build
           key: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
           restore-keys: go-${{ matrix.go }}-crosscompile-
       - name: Install build utils
