@@ -13,12 +13,18 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
+      - name: Get Date
+        id: get-date
+        run: echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
       - name: Load Go build cache
         id: load-go-cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/go-build
-          key: go-${{ matrix.go }}-crosscompile
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
+          restore-keys: go-${{ matrix.go }}-crosscompile-
       - name: Install build utils
         run: |
           sudo apt-get update
@@ -34,4 +40,6 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/go-build
-          key: go-${{ matrix.go }}-crosscompile
+          # Caches are immutable, so we only update it once per day (at most).
+          # See https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+          key: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
