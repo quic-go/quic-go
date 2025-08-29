@@ -69,7 +69,7 @@ func TestReadECNFlagsIPv4(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(20*time.Millisecond))
+		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(20*time.Millisecond))
 		require.Equal(t, []byte("foobar"), p.data)
 		require.Equal(t, sentFrom, p.remoteAddr)
 		require.Equal(t, protocol.ECT0, p.ecn)
@@ -91,7 +91,7 @@ func TestReadECNFlagsIPv6(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(20*time.Millisecond))
+		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(20*time.Millisecond))
 		require.Equal(t, []byte("foobar"), p.data)
 		require.Equal(t, sentFrom, p.remoteAddr)
 		require.Equal(t, protocol.ECNCE, p.ecn)
@@ -192,7 +192,7 @@ func TestSysConnPacketInfoIPv4(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(50*time.Millisecond))
+		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(50*time.Millisecond))
 		require.Equal(t, []byte("foobar"), p.data)
 		require.Equal(t, conn.LocalAddr(), p.remoteAddr)
 		require.True(t, p.info.addr.IsValid())
@@ -215,7 +215,7 @@ func TestSysConnPacketInfoIPv6(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(20*time.Millisecond))
+		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(20*time.Millisecond))
 		require.Equal(t, []byte("foobar"), p.data)
 		require.Equal(t, conn.LocalAddr(), p.remoteAddr)
 		require.NotNil(t, p.info)

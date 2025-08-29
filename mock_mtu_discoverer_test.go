@@ -11,9 +11,9 @@ package quic
 
 import (
 	reflect "reflect"
-	time "time"
 
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -81,7 +81,7 @@ func (c *MockMTUDiscovererCurrentSizeCall) DoAndReturn(f func() protocol.ByteCou
 }
 
 // GetPing mocks base method.
-func (m *MockMTUDiscoverer) GetPing(now time.Time) (ackhandler.Frame, protocol.ByteCount) {
+func (m *MockMTUDiscoverer) GetPing(now monotime.Time) (ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPing", now)
 	ret0, _ := ret[0].(ackhandler.Frame)
@@ -108,19 +108,19 @@ func (c *MockMTUDiscovererGetPingCall) Return(ping ackhandler.Frame, datagramSiz
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockMTUDiscovererGetPingCall) Do(f func(time.Time) (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
+func (c *MockMTUDiscovererGetPingCall) Do(f func(monotime.Time) (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockMTUDiscovererGetPingCall) DoAndReturn(f func(time.Time) (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
+func (c *MockMTUDiscovererGetPingCall) DoAndReturn(f func(monotime.Time) (ackhandler.Frame, protocol.ByteCount)) *MockMTUDiscovererGetPingCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Reset mocks base method.
-func (m *MockMTUDiscoverer) Reset(now time.Time, start, max protocol.ByteCount) {
+func (m *MockMTUDiscoverer) Reset(now monotime.Time, start, max protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Reset", now, start, max)
 }
@@ -144,19 +144,19 @@ func (c *MockMTUDiscovererResetCall) Return() *MockMTUDiscovererResetCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockMTUDiscovererResetCall) Do(f func(time.Time, protocol.ByteCount, protocol.ByteCount)) *MockMTUDiscovererResetCall {
+func (c *MockMTUDiscovererResetCall) Do(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount)) *MockMTUDiscovererResetCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockMTUDiscovererResetCall) DoAndReturn(f func(time.Time, protocol.ByteCount, protocol.ByteCount)) *MockMTUDiscovererResetCall {
+func (c *MockMTUDiscovererResetCall) DoAndReturn(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount)) *MockMTUDiscovererResetCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // ShouldSendProbe mocks base method.
-func (m *MockMTUDiscoverer) ShouldSendProbe(now time.Time) bool {
+func (m *MockMTUDiscoverer) ShouldSendProbe(now monotime.Time) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ShouldSendProbe", now)
 	ret0, _ := ret[0].(bool)
@@ -182,19 +182,19 @@ func (c *MockMTUDiscovererShouldSendProbeCall) Return(arg0 bool) *MockMTUDiscove
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockMTUDiscovererShouldSendProbeCall) Do(f func(time.Time) bool) *MockMTUDiscovererShouldSendProbeCall {
+func (c *MockMTUDiscovererShouldSendProbeCall) Do(f func(monotime.Time) bool) *MockMTUDiscovererShouldSendProbeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockMTUDiscovererShouldSendProbeCall) DoAndReturn(f func(time.Time) bool) *MockMTUDiscovererShouldSendProbeCall {
+func (c *MockMTUDiscovererShouldSendProbeCall) DoAndReturn(f func(monotime.Time) bool) *MockMTUDiscovererShouldSendProbeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // Start mocks base method.
-func (m *MockMTUDiscoverer) Start(now time.Time) {
+func (m *MockMTUDiscoverer) Start(now monotime.Time) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Start", now)
 }
@@ -218,13 +218,13 @@ func (c *MockMTUDiscovererStartCall) Return() *MockMTUDiscovererStartCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockMTUDiscovererStartCall) Do(f func(time.Time)) *MockMTUDiscovererStartCall {
+func (c *MockMTUDiscovererStartCall) Do(f func(monotime.Time)) *MockMTUDiscovererStartCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockMTUDiscovererStartCall) DoAndReturn(f func(time.Time)) *MockMTUDiscovererStartCall {
+func (c *MockMTUDiscovererStartCall) DoAndReturn(f func(monotime.Time)) *MockMTUDiscovererStartCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

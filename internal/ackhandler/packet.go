@@ -2,8 +2,8 @@ package ackhandler
 
 import (
 	"sync"
-	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -14,7 +14,7 @@ type packetWithPacketNumber struct {
 
 // A Packet is a packet
 type packet struct {
-	SendTime        time.Time
+	SendTime        monotime.Time
 	StreamFrames    []StreamFrame
 	Frames          []Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
@@ -41,7 +41,7 @@ func getPacket() *packet {
 	p.LargestAcked = 0
 	p.Length = 0
 	p.EncryptionLevel = protocol.EncryptionLevel(0)
-	p.SendTime = time.Time{}
+	p.SendTime = 0
 	p.IsPathMTUProbePacket = false
 	p.includedInBytesInFlight = false
 	p.declaredLost = false

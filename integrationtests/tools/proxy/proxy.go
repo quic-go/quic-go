@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 )
@@ -27,7 +28,7 @@ type connection struct {
 	Outgoing *queue
 }
 
-func (c *connection) queuePacket(t time.Time, b []byte) {
+func (c *connection) queuePacket(t monotime.Time, b []byte) {
 	c.incomingPackets <- packetEntry{Time: t, Raw: b}
 }
 
@@ -60,7 +61,7 @@ const (
 )
 
 type packetEntry struct {
-	Time time.Time
+	Time monotime.Time
 	Raw  []byte
 }
 
@@ -286,7 +287,7 @@ func (p *Proxy) runProxy() error {
 				return err
 			}
 		} else {
-			now := time.Now()
+			now := monotime.Now()
 			if p.logger.Debug() {
 				p.logger.Debugf("delaying incoming packet (%d bytes) to %s by %s", len(raw), conn.ServerAddr, delay)
 			}
@@ -331,7 +332,7 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 					return
 				}
 			} else {
-				now := time.Now()
+				now := monotime.Now()
 				if p.logger.Debug() {
 					p.logger.Debugf("delaying outgoing packet (%d bytes) to %s by %s", len(raw), conn.ClientAddr, delay)
 				}
