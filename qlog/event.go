@@ -355,6 +355,23 @@ func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("trigger", e.Trigger.String())
 }
 
+type eventSpuriousLoss struct {
+	EncLevel     protocol.EncryptionLevel
+	PacketNumber protocol.PacketNumber
+	Reordering   uint64
+	Duration     time.Duration
+}
+
+func (e eventSpuriousLoss) Name() string { return "recovery:spurious_loss" }
+func (e eventSpuriousLoss) IsNil() bool  { return false }
+
+func (e eventSpuriousLoss) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_number_space", encLevelToPacketNumberSpace(e.EncLevel))
+	enc.Uint64Key("packet_number", uint64(e.PacketNumber))
+	enc.Uint64Key("reordering_packets", e.Reordering)
+	enc.Float64Key("reordering_time", milliseconds(e.Duration))
+}
+
 type eventKeyUpdated struct {
 	Trigger  keyUpdateTrigger
 	KeyType  keyType
