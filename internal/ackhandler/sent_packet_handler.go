@@ -66,6 +66,7 @@ type sentPacketHandler struct {
 	initialPackets   *packetNumberSpace
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
+	lostPackets      lostPacketTracker // only for application-data packet number space
 
 	// Do we know that the peer completed address validation yet?
 	// Always true for the server.
@@ -144,6 +145,7 @@ func newSentPacketHandler(
 		initialPackets:                 newPacketNumberSpace(initialPN, false),
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
+		lostPackets:                    *newLostPacketTracker(64),
 		rttStats:                       rttStats,
 		connStats:                      connStats,
 		congestion:                     congestion,
@@ -402,6 +404,17 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			putPacket(p.packet)
 		}
 	}
+
+	// detect spurious losses for application data packets, if the ACK was not reordered
+	if encLevel == protocol.Encryption1RTT && largestAcked == pnSpace.largestAcked {
+		h.detectSpuriousLosses(
+			ack,
+			rcvTime.Add(-min(ack.DelayTime, h.rttStats.MaxAckDelay())),
+		)
+		// clean up lost packet history
+		h.lostPackets.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
+	}
+
 	// After this point, we must not use ackedPackets any longer!
 	// We've already returned the buffers.
 	ackedPackets = nil    //nolint:ineffassign // This is just to be on the safe side.
@@ -423,6 +436,32 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	h.setLossDetectionTimer(rcvTime)
 	return acked1RTTPacket, nil
+}
+
+func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime time.Time) {
+	var maxPacketReordering protocol.PacketNumber
+	var maxTimeReordering time.Duration
+	ackRangeIdx := len(ack.AckRanges) - 1
+	for pn, sendTime := range h.lostPackets.All() {
+		ackRange := ack.AckRanges[ackRangeIdx]
+		for pn > ackRange.Largest {
+			ackRangeIdx--
+			ackRange = ack.AckRanges[ackRangeIdx]
+		}
+		if pn < ackRange.Smallest {
+			continue
+		}
+		if pn <= ackRange.Largest {
+			packetReordering := h.appDataPackets.history.Difference(ack.LargestAcked(), pn)
+			timeReordering := ackTime.Sub(sendTime)
+			maxPacketReordering = max(maxPacketReordering, packetReordering)
+			maxTimeReordering = max(maxTimeReordering, timeReordering)
+
+			if h.tracer != nil && h.tracer.DetectedSpuriousLoss != nil {
+				h.tracer.DetectedSpuriousLoss(protocol.Encryption1RTT, pn, uint64(packetReordering), timeReordering)
+			}
+		}
+	}
 }
 
 func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNumber {
@@ -729,6 +768,9 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			pnSpace.lossTime = lossTime
 		}
 		if packetLost {
+			if encLevel == protocol.Encryption0RTT || encLevel == protocol.Encryption1RTT {
+				h.lostPackets.Add(pn, p.SendTime)
+			}
 			pnSpace.history.DeclareLost(pn)
 			if !p.isPathProbePacket {
 				// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
