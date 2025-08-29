@@ -1411,6 +1411,24 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16]}, packets.Acked)
 	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13]}, packets.Lost)
+
+	require.True(t, mockCtrl.Satisfied())
+
+	gomock.InOrder(
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[7], uint64(18-7), rtt+2*secondAckDelay-70*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[8], uint64(18-8), rtt+2*secondAckDelay-80*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[9], uint64(18-9), rtt+2*secondAckDelay-90*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[10], uint64(18-10), rtt+2*secondAckDelay-100*time.Millisecond),
+	)
+	now = now.Add(secondAckDelay)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[5], pns[6], pns[7], pns[8], pns[9], pns[10], pns[16], pns[17], pns[18])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16], pns[17], pns[18]}, packets.Acked)
+	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13], pns[14], pns[15]}, packets.Lost)
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {
