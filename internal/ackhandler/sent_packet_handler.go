@@ -443,6 +443,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	var maxPacketReordering protocol.PacketNumber
 	var maxTimeReordering time.Duration
 	ackRangeIdx := len(ack.AckRanges) - 1
+	var spuriousLosses []protocol.PacketNumber
 	for pn, sendTime := range h.lostPackets.All() {
 		ackRange := ack.AckRanges[ackRangeIdx]
 		for pn > ackRange.Largest {
@@ -461,7 +462,11 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 			if h.tracer != nil && h.tracer.DetectedSpuriousLoss != nil {
 				h.tracer.DetectedSpuriousLoss(protocol.Encryption1RTT, pn, uint64(packetReordering), timeReordering)
 			}
+			spuriousLosses = append(spuriousLosses, pn)
 		}
+	}
+	for _, pn := range spuriousLosses {
+		h.lostPackets.Delete(pn)
 	}
 }
 

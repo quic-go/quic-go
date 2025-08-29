@@ -33,6 +33,13 @@ func TestLostPacketTracker(t *testing.T) {
 		10: start.Add(3 * time.Second),
 		11: start.Add(4 * time.Second),
 	}, maps.Collect(lt.All()))
+
+	lt.Delete(5)
+	lt.Delete(10)
+	require.Equal(t, map[protocol.PacketNumber]monotime.Time{
+		8:  start.Add(2 * time.Second),
+		11: start.Add(4 * time.Second),
+	}, maps.Collect(lt.All()))
 }
 
 func TestLostPacketTrackerDeleteBefore(t *testing.T) {
