@@ -3,14 +3,15 @@ package quic
 import (
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
-var deadlineSendImmediately = time.Time{}.Add(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
+var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
 
 type connectionTimer struct {
 	timer *utils.Timer
-	last  time.Time
+	last  monotime.Time
 }
 
 func newTimer() *connectionTimer {
@@ -32,7 +33,7 @@ func (t *connectionTimer) Chan() <-chan time.Time {
 // It makes sure that the deadline is strictly increasing.
 // This prevents busy-looping in cases where the timer fires, but we can't actually send out a packet.
 // This doesn't apply to the pacing deadline, which can be set multiple times to deadlineSendImmediately.
-func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, connIDRetirement, ackAlarm, lossTime, pacing time.Time) {
+func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, connIDRetirement, ackAlarm, lossTime, pacing monotime.Time) {
 	deadline := idleTimeoutOrKeepAlive
 	if !connIDRetirement.IsZero() && connIDRetirement.Before(deadline) && connIDRetirement.After(t.last) {
 		deadline = connIDRetirement

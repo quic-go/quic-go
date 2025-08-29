@@ -11,8 +11,8 @@ package mocks
 
 import (
 	reflect "reflect"
-	time "time"
 
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -153,7 +153,7 @@ func (c *MockStreamFlowControllerAddBytesSentCall) DoAndReturn(f func(protocol.B
 }
 
 // GetWindowUpdate mocks base method.
-func (m *MockStreamFlowController) GetWindowUpdate(arg0 time.Time) protocol.ByteCount {
+func (m *MockStreamFlowController) GetWindowUpdate(arg0 monotime.Time) protocol.ByteCount {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWindowUpdate", arg0)
 	ret0, _ := ret[0].(protocol.ByteCount)
@@ -179,13 +179,13 @@ func (c *MockStreamFlowControllerGetWindowUpdateCall) Return(arg0 protocol.ByteC
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamFlowControllerGetWindowUpdateCall) Do(f func(time.Time) protocol.ByteCount) *MockStreamFlowControllerGetWindowUpdateCall {
+func (c *MockStreamFlowControllerGetWindowUpdateCall) Do(f func(monotime.Time) protocol.ByteCount) *MockStreamFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamFlowControllerGetWindowUpdateCall) DoAndReturn(f func(time.Time) protocol.ByteCount) *MockStreamFlowControllerGetWindowUpdateCall {
+func (c *MockStreamFlowControllerGetWindowUpdateCall) DoAndReturn(f func(monotime.Time) protocol.ByteCount) *MockStreamFlowControllerGetWindowUpdateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -267,7 +267,7 @@ func (c *MockStreamFlowControllerSendWindowSizeCall) DoAndReturn(f func() protoc
 }
 
 // UpdateHighestReceived mocks base method.
-func (m *MockStreamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now time.Time) error {
+func (m *MockStreamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now monotime.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateHighestReceived", offset, final, now)
 	ret0, _ := ret[0].(error)
@@ -293,13 +293,13 @@ func (c *MockStreamFlowControllerUpdateHighestReceivedCall) Return(arg0 error) *
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamFlowControllerUpdateHighestReceivedCall) Do(f func(protocol.ByteCount, bool, time.Time) error) *MockStreamFlowControllerUpdateHighestReceivedCall {
+func (c *MockStreamFlowControllerUpdateHighestReceivedCall) Do(f func(protocol.ByteCount, bool, monotime.Time) error) *MockStreamFlowControllerUpdateHighestReceivedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamFlowControllerUpdateHighestReceivedCall) DoAndReturn(f func(protocol.ByteCount, bool, time.Time) error) *MockStreamFlowControllerUpdateHighestReceivedCall {
+func (c *MockStreamFlowControllerUpdateHighestReceivedCall) DoAndReturn(f func(protocol.ByteCount, bool, monotime.Time) error) *MockStreamFlowControllerUpdateHighestReceivedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

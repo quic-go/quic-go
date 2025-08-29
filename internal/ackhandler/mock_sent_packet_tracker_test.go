@@ -11,8 +11,8 @@ package ackhandler
 
 import (
 	reflect "reflect"
-	time "time"
 
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -80,7 +80,7 @@ func (c *MockSentPacketTrackerGetLowestPacketNotConfirmedAckedCall) DoAndReturn(
 }
 
 // ReceivedPacket mocks base method.
-func (m *MockSentPacketTracker) ReceivedPacket(arg0 protocol.EncryptionLevel, rcvTime time.Time) {
+func (m *MockSentPacketTracker) ReceivedPacket(arg0 protocol.EncryptionLevel, rcvTime monotime.Time) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ReceivedPacket", arg0, rcvTime)
 }
@@ -104,13 +104,13 @@ func (c *MockSentPacketTrackerReceivedPacketCall) Return() *MockSentPacketTracke
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketTrackerReceivedPacketCall) Do(f func(protocol.EncryptionLevel, time.Time)) *MockSentPacketTrackerReceivedPacketCall {
+func (c *MockSentPacketTrackerReceivedPacketCall) Do(f func(protocol.EncryptionLevel, monotime.Time)) *MockSentPacketTrackerReceivedPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketTrackerReceivedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, time.Time)) *MockSentPacketTrackerReceivedPacketCall {
+func (c *MockSentPacketTrackerReceivedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, monotime.Time)) *MockSentPacketTrackerReceivedPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

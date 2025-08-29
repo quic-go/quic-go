@@ -11,8 +11,8 @@ package quic
 
 import (
 	reflect "reflect"
-	time "time"
 
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	wire "github.com/quic-go/quic-go/internal/wire"
 	gomock "go.uber.org/mock/gomock"
@@ -82,7 +82,7 @@ func (c *MockUnpackerUnpackLongHeaderCall) DoAndReturn(f func(*wire.Header, []by
 }
 
 // UnpackShortHeader mocks base method.
-func (m *MockUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
+func (m *MockUnpacker) UnpackShortHeader(rcvTime monotime.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnpackShortHeader", rcvTime, data)
 	ret0, _ := ret[0].(protocol.PacketNumber)
@@ -112,13 +112,13 @@ func (c *MockUnpackerUnpackShortHeaderCall) Return(arg0 protocol.PacketNumber, a
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockUnpackerUnpackShortHeaderCall) Do(f func(time.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)) *MockUnpackerUnpackShortHeaderCall {
+func (c *MockUnpackerUnpackShortHeaderCall) Do(f func(monotime.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)) *MockUnpackerUnpackShortHeaderCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockUnpackerUnpackShortHeaderCall) DoAndReturn(f func(time.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)) *MockUnpackerUnpackShortHeaderCall {
+func (c *MockUnpackerUnpackShortHeaderCall) DoAndReturn(f func(monotime.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)) *MockUnpackerUnpackShortHeaderCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
