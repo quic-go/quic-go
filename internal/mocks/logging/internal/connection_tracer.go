@@ -258,6 +258,42 @@ func (c *MockConnectionTracerDebugCall) DoAndReturn(f func(string, string)) *Moc
 	return c
 }
 
+// DetectedSpuriousLoss mocks base method.
+func (m *MockConnectionTracer) DetectedSpuriousLoss(arg0 logging.EncryptionLevel, arg1 logging.PacketNumber, arg2 uint64, arg3 time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DetectedSpuriousLoss", arg0, arg1, arg2, arg3)
+}
+
+// DetectedSpuriousLoss indicates an expected call of DetectedSpuriousLoss.
+func (mr *MockConnectionTracerMockRecorder) DetectedSpuriousLoss(arg0, arg1, arg2, arg3 any) *MockConnectionTracerDetectedSpuriousLossCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DetectedSpuriousLoss", reflect.TypeOf((*MockConnectionTracer)(nil).DetectedSpuriousLoss), arg0, arg1, arg2, arg3)
+	return &MockConnectionTracerDetectedSpuriousLossCall{Call: call}
+}
+
+// MockConnectionTracerDetectedSpuriousLossCall wrap *gomock.Call
+type MockConnectionTracerDetectedSpuriousLossCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockConnectionTracerDetectedSpuriousLossCall) Return() *MockConnectionTracerDetectedSpuriousLossCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockConnectionTracerDetectedSpuriousLossCall) Do(f func(logging.EncryptionLevel, logging.PacketNumber, uint64, time.Duration)) *MockConnectionTracerDetectedSpuriousLossCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockConnectionTracerDetectedSpuriousLossCall) DoAndReturn(f func(logging.EncryptionLevel, logging.PacketNumber, uint64, time.Duration)) *MockConnectionTracerDetectedSpuriousLossCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // DroppedEncryptionLevel mocks base method.
 func (m *MockConnectionTracer) DroppedEncryptionLevel(arg0 logging.EncryptionLevel) {
 	m.ctrl.T.Helper()
