@@ -10,6 +10,7 @@ import (
 type sentPacketHistory struct {
 	packets          []*packet
 	pathProbePackets []packetWithPacketNumber
+	skippedPackets   []protocol.PacketNumber
 
 	numOutstanding int
 
@@ -44,7 +45,10 @@ func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNum
 
 func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
 	h.checkSequentialPacketNumberUse(pn)
-	h.packets = append(h.packets, &packet{skippedPacket: true})
+	if len(h.packets) > 0 {
+		h.packets = append(h.packets, nil)
+	}
+	h.skippedPackets = append(h.skippedPackets, pn)
 }
 
 func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber) {
@@ -115,10 +119,22 @@ func (h *sentPacketHistory) FirstOutstandingPathProbe() (protocol.PacketNumber, 
 	return h.pathProbePackets[0].PacketNumber, h.pathProbePackets[0].packet
 }
 
+func (h *sentPacketHistory) SkippedPackets() iter.Seq[protocol.PacketNumber] {
+	return func(yield func(protocol.PacketNumber) bool) {
+		for _, p := range h.skippedPackets {
+			if !yield(p) {
+				return
+			}
+		}
+	}
+}
+
 func (h *sentPacketHistory) Len() int {
 	return len(h.packets)
 }
 
+// Remove removes a packet from the sent packet history.
+// It must not be used for skipped packet numbers.
 func (h *sentPacketHistory) Remove(pn protocol.PacketNumber) error {
 	idx, ok := h.getIndex(pn)
 	if !ok {
@@ -133,19 +149,26 @@ func (h *sentPacketHistory) Remove(pn protocol.PacketNumber) error {
 	}
 	h.packets[idx] = nil
 	// clean up all skipped packets directly before this packet number
+	var hasPacketBefore bool
 	for idx > 0 {
 		idx--
-		p := h.packets[idx]
-		if p == nil || !p.skippedPacket {
+		if h.packets[idx] != nil {
+			hasPacketBefore = true
 			break
 		}
-		h.packets[idx] = nil
 	}
-	if idx == 0 {
+	if !hasPacketBefore {
 		h.cleanupStart()
 	}
 	if len(h.packets) > 0 && h.packets[0] == nil {
-		panic("remove failed")
+		panic("cleanup failed")
+	}
+	if len(h.packets) > 0 && len(h.skippedPackets) > 0 {
+		for _, p := range h.skippedPackets {
+			if p < h.firstPacketNumber {
+				h.skippedPackets = h.skippedPackets[1:]
+			}
+		}
 	}
 	return nil
 }

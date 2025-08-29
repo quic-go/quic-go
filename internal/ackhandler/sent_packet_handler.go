@@ -201,7 +201,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 		// When 0-RTT is rejected, all application data sent so far becomes invalid.
 		// Delete the packets from the history and remove them from bytes_in_flight.
 		for pn, p := range h.appDataPackets.history.Packets() {
-			if p.EncryptionLevel != protocol.Encryption0RTT && !p.skippedPacket {
+			if p.EncryptionLevel != protocol.Encryption0RTT {
 				break
 			}
 			h.removeFromBytesInFlight(p)
@@ -431,11 +431,24 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 
 // Packets are returned in ascending packet number order.
 func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]packetWithPacketNumber, error) {
-	pnSpace := h.getPacketNumberSpace(encLevel)
-	ackRangeIndex := 0
 	if len(h.ackedPackets) > 0 {
 		return nil, errors.New("ackhandler BUG: ackedPackets slice not empty")
 	}
+
+	pnSpace := h.getPacketNumberSpace(encLevel)
+
+	if encLevel == protocol.Encryption1RTT {
+		for p := range pnSpace.history.SkippedPackets() {
+			if ack.AcksPacket(p) {
+				return nil, &qerr.TransportError{
+					ErrorCode:    qerr.ProtocolViolation,
+					ErrorMessage: fmt.Sprintf("received an ACK for skipped packet number: %d (%s)", p, encLevel),
+				}
+			}
+		}
+	}
+
+	var ackRangeIndex int
 	lowestAcked := ack.LowestAcked()
 	largestAcked := ack.LargestAcked()
 	for pn, p := range pnSpace.history.Packets() {
@@ -460,12 +473,6 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			}
 			if pn > ackRange.Largest {
 				return nil, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", pn, ackRange.Smallest, ackRange.Largest)
-			}
-		}
-		if p.skippedPacket {
-			return nil, &qerr.TransportError{
-				ErrorCode:    qerr.ProtocolViolation,
-				ErrorMessage: fmt.Sprintf("received an ACK for skipped packet number: %d (%s)", pn, encLevel),
 			}
 		}
 		if p.isPathProbePacket {
@@ -692,11 +699,10 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			break
 		}
 
-		isRegularPacket := !p.skippedPacket && !p.isPathProbePacket
 		var packetLost bool
 		if !p.SendTime.After(lostSendTime) {
 			packetLost = true
-			if isRegularPacket {
+			if !p.isPathProbePacket {
 				if h.logger.Debug() {
 					h.logger.Debugf("\tlost packet %d (time threshold)", pn)
 				}
@@ -706,7 +712,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			}
 		} else if pnSpace.largestAcked >= pn+packetThreshold {
 			packetLost = true
-			if isRegularPacket {
+			if !p.isPathProbePacket {
 				if h.logger.Debug() {
 					h.logger.Debugf("\tlost packet %d (reordering threshold)", pn)
 				}
@@ -724,7 +730,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		}
 		if packetLost {
 			pnSpace.history.DeclareLost(pn)
-			if isRegularPacket {
+			if !p.isPathProbePacket {
 				// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
 				h.removeFromBytesInFlight(p)
 				h.queueFramesForRetransmission(p)
@@ -948,14 +954,14 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 		if firstPacketSendTime.IsZero() {
 			firstPacketSendTime = p.SendTime
 		}
-		if !p.declaredLost && !p.skippedPacket {
+		if !p.declaredLost {
 			h.queueFramesForRetransmission(p)
 		}
 	}
 	// All application data packets sent at this point are 0-RTT packets.
 	// In the case of a Retry, we can assume that the server dropped all of them.
 	for _, p := range h.appDataPackets.history.Packets() {
-		if !p.declaredLost && !p.skippedPacket {
+		if !p.declaredLost {
 			h.queueFramesForRetransmission(p)
 		}
 	}
@@ -991,7 +997,7 @@ func (h *sentPacketHandler) MigratedPath(now time.Time, initialMaxDatagramSize p
 	h.rttStats.ResetForPathMigration()
 	for pn, p := range h.appDataPackets.history.Packets() {
 		h.appDataPackets.history.DeclareLost(pn)
-		if !p.skippedPacket && !p.isPathProbePacket {
+		if !p.isPathProbePacket {
 			h.removeFromBytesInFlight(p)
 			h.queueFramesForRetransmission(p)
 		}
