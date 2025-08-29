@@ -651,7 +651,7 @@ runLoop:
 		} else {
 			idleTimeoutStartTime := c.idleTimeoutStartTime()
 			if (!c.handshakeComplete && now.Sub(idleTimeoutStartTime) >= c.config.HandshakeIdleTimeout) ||
-				(c.handshakeComplete && now.After(c.nextIdleTimeoutTime())) {
+				(c.handshakeComplete && !now.Before(c.nextIdleTimeoutTime())) {
 				c.destroyImpl(qerr.ErrIdleTimeout)
 				break runLoop
 			}
