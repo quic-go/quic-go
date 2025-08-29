@@ -3,13 +3,15 @@ package utils
 import (
 	"math"
 	"time"
+
+	"github.com/quic-go/quic-go/internal/monotime"
 )
 
 // A Timer wrapper that behaves correctly when resetting
 type Timer struct {
 	t        *time.Timer
 	read     bool
-	deadline time.Time
+	deadline monotime.Time
 }
 
 // NewTimer creates a new timer that is not set
@@ -23,7 +25,7 @@ func (t *Timer) Chan() <-chan time.Time {
 }
 
 // Reset the timer, no matter whether the value was read or not
-func (t *Timer) Reset(deadline time.Time) {
+func (t *Timer) Reset(deadline monotime.Time) {
 	if deadline.Equal(t.deadline) && !t.read {
 		// No need to reset the timer
 		return
@@ -35,7 +37,7 @@ func (t *Timer) Reset(deadline time.Time) {
 		<-t.t.C
 	}
 	if !deadline.IsZero() {
-		t.t.Reset(time.Until(deadline))
+		t.t.Reset(monotime.Until(deadline))
 	}
 
 	t.read = false
@@ -47,7 +49,7 @@ func (t *Timer) SetRead() {
 	t.read = true
 }
 
-func (t *Timer) Deadline() time.Time {
+func (t *Timer) Deadline() monotime.Time {
 	return t.deadline
 }
 
