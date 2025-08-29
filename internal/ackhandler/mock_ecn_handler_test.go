@@ -41,7 +41,7 @@ func (m *MockECNHandler) EXPECT() *MockECNHandlerMockRecorder {
 }
 
 // HandleNewlyAcked mocks base method.
-func (m *MockECNHandler) HandleNewlyAcked(packets []*packet, ect0, ect1, ecnce int64) bool {
+func (m *MockECNHandler) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ect1, ecnce int64) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleNewlyAcked", packets, ect0, ect1, ecnce)
 	ret0, _ := ret[0].(bool)
@@ -67,13 +67,13 @@ func (c *MockECNHandlerHandleNewlyAckedCall) Return(congested bool) *MockECNHand
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockECNHandlerHandleNewlyAckedCall) Do(f func([]*packet, int64, int64, int64) bool) *MockECNHandlerHandleNewlyAckedCall {
+func (c *MockECNHandlerHandleNewlyAckedCall) Do(f func([]packetWithPacketNumber, int64, int64, int64) bool) *MockECNHandlerHandleNewlyAckedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockECNHandlerHandleNewlyAckedCall) DoAndReturn(f func([]*packet, int64, int64, int64) bool) *MockECNHandlerHandleNewlyAckedCall {
+func (c *MockECNHandlerHandleNewlyAckedCall) DoAndReturn(f func([]packetWithPacketNumber, int64, int64, int64) bool) *MockECNHandlerHandleNewlyAckedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

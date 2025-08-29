@@ -7,10 +7,14 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
+type packetWithPacketNumber struct {
+	PacketNumber protocol.PacketNumber
+	*packet
+}
+
 // A Packet is a packet
 type packet struct {
 	SendTime        time.Time
-	PacketNumber    protocol.PacketNumber
 	StreamFrames    []StreamFrame
 	Frames          []Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
@@ -33,7 +37,6 @@ var packetPool = sync.Pool{New: func() any { return &packet{} }}
 
 func getPacket() *packet {
 	p := packetPool.Get().(*packet)
-	p.PacketNumber = 0
 	p.StreamFrames = nil
 	p.Frames = nil
 	p.LargestAcked = 0

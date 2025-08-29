@@ -12,10 +12,10 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func getAckedPackets(pns ...protocol.PacketNumber) []*packet {
-	var packets []*packet
+func getAckedPackets(pns ...protocol.PacketNumber) []packetWithPacketNumber {
+	var packets []packetWithPacketNumber
 	for _, p := range pns {
-		packets = append(packets, &packet{PacketNumber: p})
+		packets = append(packets, packetWithPacketNumber{PacketNumber: p})
 	}
 	return packets
 }
@@ -129,7 +129,12 @@ func TestECNValidationFailures(t *testing.T) {
 	})
 }
 
-func testECNValidationFailure(t *testing.T, ackedPackets []*packet, ect0, ect1, ecnce int64, expectedTrigger logging.ECNStateTrigger) {
+func testECNValidationFailure(
+	t *testing.T,
+	ackedPackets []packetWithPacketNumber,
+	ect0, ect1, ecnce int64,
+	expectedTrigger logging.ECNStateTrigger,
+) {
 	mockCtrl := gomock.NewController(t)
 	tr, tracer := mocklogging.NewMockConnectionTracer(mockCtrl)
 	ecnTracker := newECNTracker(utils.DefaultLogger, tr)
