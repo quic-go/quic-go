@@ -37,6 +37,15 @@ func (t *lostPacketTracker) Add(p protocol.PacketNumber, sendTime time.Time) {
 	})
 }
 
+// Delete deletes a packet from the lost packet tracker.
+// This function is not optimized for performance if many packets are lost,
+// but it is only used when a spurious loss is detected, which is rare.
+func (t *lostPacketTracker) Delete(pn protocol.PacketNumber) {
+	t.lostPackets = slices.DeleteFunc(t.lostPackets, func(p lostPacket) bool {
+		return p.PacketNumber == pn
+	})
+}
+
 func (t *lostPacketTracker) All() iter.Seq2[protocol.PacketNumber, time.Time] {
 	return func(yield func(protocol.PacketNumber, time.Time) bool) {
 		for _, p := range t.lostPackets {
