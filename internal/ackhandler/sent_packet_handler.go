@@ -17,9 +17,9 @@ import (
 const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// Specified as an RTT multiplier.
-	timeThreshold = 9.0 / 8
+	defaultTimeThreshold = 9.0 / 8
 	// Maximum reordering in packets before packet threshold loss detection considers a packet lost.
-	packetThreshold = 3
+	defaultPacketThreshold = 3
 	// Before validating the client's address, the server won't send more than 3x bytes than it received.
 	amplificationFactor = 3
 	// We use Retry packets to derive an RTT estimate. Make sure we don't set the RTT to a super low value yet.
@@ -90,6 +90,9 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
+	timeThreshold   float64
+	packetThreshold protocol.PacketNumber
+
 	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *utils.RTTStats
 	connStats  *utils.ConnectionStats
@@ -147,6 +150,8 @@ func newSentPacketHandler(
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
 		lostPackets:                    *newLostPacketTracker(64),
+		timeThreshold:                  defaultTimeThreshold,
+		packetThreshold:                defaultPacketThreshold,
 		rttStats:                       rttStats,
 		connStats:                      connStats,
 		congestion:                     congestion,
@@ -460,6 +465,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 			maxTimeReordering = max(maxTimeReordering, timeReordering)
 
 			if h.tracer != nil && h.tracer.DetectedSpuriousLoss != nil {
+				fmt.Println("detected spurious loss", pn, packetReordering, timeReordering)
 				h.tracer.DetectedSpuriousLoss(protocol.Encryption1RTT, pn, uint64(packetReordering), timeReordering)
 			}
 			spuriousLosses = append(spuriousLosses, pn)
@@ -467,6 +473,15 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	}
 	for _, pn := range spuriousLosses {
 		h.lostPackets.Delete(pn)
+	}
+	timeReorderingFraction := float64(maxTimeReordering) / float64(h.rttStats.SmoothedRTT())
+	if maxPacketReordering > h.packetThreshold || timeReorderingFraction > h.timeThreshold {
+		h.packetThreshold = maxPacketReordering
+		h.timeThreshold = timeReorderingFraction
+		// if h.tracer != nil && h.tracer.UpdatedLossThreshold != nil {
+		// 	h.tracer.UpdatedLossThreshold(uint64(h.packetThreshold), h.timeThreshold)
+		// }
+		fmt.Println("updated loss threshold", h.packetThreshold, h.timeThreshold)
 	}
 }
 
