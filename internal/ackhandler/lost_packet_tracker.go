@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"fmt"
 	"iter"
 	"slices"
 
@@ -41,6 +42,11 @@ func (t *lostPacketTracker) Add(p protocol.PacketNumber, sendTime monotime.Time)
 // This function is not optimized for performance if many packets are lost,
 // but it is only used when a spurious loss is detected, which is rare.
 func (t *lostPacketTracker) Delete(pn protocol.PacketNumber) {
+	if !slices.ContainsFunc(t.lostPackets, func(p lostPacket) bool {
+		return p.PacketNumber == pn
+	}) {
+		panic(fmt.Sprintf("packet %d not found in lost packet tracker", pn))
+	}
 	t.lostPackets = slices.DeleteFunc(t.lostPackets, func(p lostPacket) bool {
 		return p.PacketNumber == pn
 	})
