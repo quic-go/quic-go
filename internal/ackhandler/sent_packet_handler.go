@@ -465,7 +465,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 			maxTimeReordering = max(maxTimeReordering, timeReordering)
 
 			if h.tracer != nil && h.tracer.DetectedSpuriousLoss != nil {
-				fmt.Println("detected spurious loss", pn, packetReordering, timeReordering)
+				fmt.Println("detected spurious loss", pn, packetReordering, float64(timeReordering)/float64(h.rttStats.SmoothedRTT()))
 				h.tracer.DetectedSpuriousLoss(protocol.Encryption1RTT, pn, uint64(packetReordering), timeReordering)
 			}
 			spuriousLosses = append(spuriousLosses, pn)
