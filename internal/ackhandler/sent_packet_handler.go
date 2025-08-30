@@ -744,7 +744,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	pnSpace.lossTime = time.Time{}
 
 	maxRTT := float64(max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
-	lossDelay := time.Duration(timeThreshold * maxRTT)
+	lossDelay := time.Duration(h.timeThreshold * maxRTT)
 
 	// Minimum time of granularity before packets are deemed lost.
 	lossDelay = max(lossDelay, protocol.TimerGranularity)
@@ -769,7 +769,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 					h.tracer.LostPacket(p.EncryptionLevel, pn, logging.PacketLossTimeThreshold)
 				}
 			}
-		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
+		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= h.packetThreshold {
 			packetLost = true
 			if !p.isPathProbePacket {
 				if h.logger.Debug() {
