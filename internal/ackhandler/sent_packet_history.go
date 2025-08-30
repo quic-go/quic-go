@@ -3,9 +3,12 @@ package ackhandler
 import (
 	"fmt"
 	"iter"
+	"slices"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 )
+
+const maxSkippedPackets = 4
 
 type sentPacketHistory struct {
 	packets          []*packet
@@ -25,6 +28,7 @@ func newSentPacketHistory(isAppData bool) *sentPacketHistory {
 	}
 	if isAppData {
 		h.packets = make([]*packet, 0, 32)
+		h.skippedPackets = make([]protocol.PacketNumber, 0, maxSkippedPackets)
 	} else {
 		h.packets = make([]*packet, 0, 6)
 	}
@@ -47,6 +51,9 @@ func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
 	h.checkSequentialPacketNumberUse(pn)
 	if len(h.packets) > 0 {
 		h.packets = append(h.packets, nil)
+	}
+	if len(h.skippedPackets) == maxSkippedPackets {
+		h.skippedPackets = slices.Delete(h.skippedPackets, 0, 1)
 	}
 	h.skippedPackets = append(h.skippedPackets, pn)
 }
@@ -162,13 +169,6 @@ func (h *sentPacketHistory) Remove(pn protocol.PacketNumber) error {
 	}
 	if len(h.packets) > 0 && h.packets[0] == nil {
 		panic("cleanup failed")
-	}
-	if len(h.packets) > 0 && len(h.skippedPackets) > 0 {
-		for _, p := range h.skippedPackets {
-			if p < h.firstPacketNumber {
-				h.skippedPackets = h.skippedPackets[1:]
-			}
-		}
 	}
 	return nil
 }
