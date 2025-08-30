@@ -98,7 +98,8 @@ func TestSentPacketHistoryRemovePackets(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{2, 3, 5}, slices.Collect(hist.SkippedPackets()))
 	require.NoError(t, hist.Remove(1))
 	require.Equal(t, []protocol.PacketNumber{4, 6}, hist.getPacketNumbers())
-	require.Equal(t, []protocol.PacketNumber{5}, slices.Collect(hist.SkippedPackets()))
+	// skipped packets should be preserved
+	require.Equal(t, []protocol.PacketNumber{2, 3, 5}, slices.Collect(hist.SkippedPackets()))
 
 	// add one more packet
 	hist.SentAckElicitingPacket(7, &packet{})
@@ -114,12 +115,20 @@ func TestSentPacketHistoryRemovePackets(t *testing.T) {
 	require.Error(t, err)
 	require.EqualError(t, err, "packet 9 not found in sent packet history")
 
+	// only the last 4 skipped packets should be preserved
+	hist.SkippedPacket(9)
+	hist.SkippedPacket(10)
+	hist.SentAckElicitingPacket(11, &packet{})
+	hist.SkippedPacket(12)
+	require.Equal(t, []protocol.PacketNumber{5, 9, 10, 12}, slices.Collect(hist.SkippedPackets()))
+
 	// Remove all packets
 	require.NoError(t, hist.Remove(4))
 	require.NoError(t, hist.Remove(6))
 	require.NoError(t, hist.Remove(8))
+	require.NoError(t, hist.Remove(11))
 	require.Empty(t, hist.getPacketNumbers())
-	require.Empty(t, slices.Collect(hist.SkippedPackets()))
+	require.Len(t, slices.Collect(hist.SkippedPackets()), 4)
 	require.False(t, hist.HasOutstandingPackets())
 }
 
@@ -171,7 +180,7 @@ func TestSentPacketHistoryIterating(t *testing.T) {
 	}
 
 	require.Equal(t, []protocol.PacketNumber{1, 2, 6}, packets)
-	require.Equal(t, []protocol.PacketNumber{4, 5}, slices.Collect(hist.SkippedPackets()))
+	require.Equal(t, []protocol.PacketNumber{0, 4, 5}, slices.Collect(hist.SkippedPackets()))
 }
 
 func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
