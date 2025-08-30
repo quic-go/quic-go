@@ -448,6 +448,7 @@ func (t *Transport) Close() error {
 			return err
 		}
 		t.transport = nil
+		t.initOnce = sync.Once{}
 	}
 	return nil
 }
