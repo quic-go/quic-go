@@ -476,8 +476,8 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	}
 	timeReorderingFraction := float64(maxTimeReordering) / float64(h.rttStats.SmoothedRTT())
 	if maxPacketReordering > h.packetThreshold || timeReorderingFraction > h.timeThreshold {
-		h.packetThreshold = maxPacketReordering
-		h.timeThreshold = timeReorderingFraction
+		h.packetThreshold = max(h.packetThreshold, maxPacketReordering)
+		h.timeThreshold = max(h.timeThreshold, timeReorderingFraction)
 		// if h.tracer != nil && h.tracer.UpdatedLossThreshold != nil {
 		// 	h.tracer.UpdatedLossThreshold(uint64(h.packetThreshold), h.timeThreshold)
 		// }
