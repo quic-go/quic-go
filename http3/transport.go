@@ -111,6 +111,7 @@ type Transport struct {
 
 	clients   map[string]*roundTripperWithCount
 	transport *quic.Transport
+	closed    bool
 }
 
 var (
@@ -118,8 +119,12 @@ var (
 	_ io.Closer         = &Transport{}
 )
 
-// ErrNoCachedConn is returned when Transport.OnlyCachedConn is set
-var ErrNoCachedConn = errors.New("http3: no cached connection was available")
+var (
+	// ErrNoCachedConn is returned when Transport.OnlyCachedConn is set
+	ErrNoCachedConn = errors.New("http3: no cached connection was available")
+	// ErrTransportClosed is returned when attempting to use a closed Transport
+	ErrTransportClosed = errors.New("http3: transport is closed")
+)
 
 func (t *Transport) init() error {
 	if t.newClientConn == nil {
@@ -292,6 +297,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached bool) (rtc *roundTripperWithCount, isReused bool, err error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
+	if t.closed {
+		return nil, false, ErrTransportClosed
+	}
 
 	if t.clients == nil {
 		t.clients = make(map[string]*roundTripperWithCount)
@@ -431,6 +439,7 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 }
 
 // Close closes the QUIC connections that this Transport has used.
+// A Transport should not be used after it has been closed.
 func (t *Transport) Close() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -448,8 +457,8 @@ func (t *Transport) Close() error {
 			return err
 		}
 		t.transport = nil
-		t.initOnce = sync.Once{}
 	}
+	t.closed = true
 	return nil
 }
 
