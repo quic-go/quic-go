@@ -1219,3 +1219,19 @@ func testHTTPRequestAfterGracefulShutdown(t *testing.T, setGetBody bool) {
 	require.Equal(t, 2, dialCount)
 	require.Equal(t, 2, headersCount)
 }
+
+func TestHTTPTransportClose(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello, world!\n"))
+	})
+	port := startHTTPServer(t, mux)
+
+	client := newHTTP3Client(t)
+	resp, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, client.Transport.(*http3.Transport).Close())
+	_, err = client.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+	require.ErrorIs(t, err, http3.ErrTransportClosed)
+}
