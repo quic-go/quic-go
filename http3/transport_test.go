@@ -551,16 +551,13 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 
 func TestTransportClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	conn, _ := newConnPair(t)
 	tr := &Transport{
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			return conn, nil
+			return nil, nil
 		},
 		newClientConn: func(*quic.Conn) clientConn {
 			cl := NewMockClientConn(mockCtrl)
-			cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
-				return nil, nil
-			})
+			cl.EXPECT().RoundTrip(gomock.Any()).Return(nil, nil)
 			return cl
 		},
 	}
