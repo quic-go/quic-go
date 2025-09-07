@@ -548,3 +548,24 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 		t.Fatal("timeout")
 	}
 }
+
+func TestTransportClose(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	tr := &Transport{
+		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			return nil, nil
+		},
+		newClientConn: func(*quic.Conn) clientConn {
+			cl := NewMockClientConn(mockCtrl)
+			cl.EXPECT().RoundTrip(gomock.Any()).Return(nil, nil)
+			return cl
+		},
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	_, err = tr.RoundTrip(req)
+	require.NoError(t, err)
+	require.NoError(t, tr.Close())
+	_, err = tr.RoundTrip(req)
+	require.ErrorIs(t, err, ErrTransportClosed)
+}

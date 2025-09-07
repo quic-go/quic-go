@@ -38,15 +38,19 @@ func TestHTTP3ServerHotswap(t *testing.T) {
 	require.NoError(t, err)
 	port := strconv.Itoa(ln.Addr().(*net.UDPAddr).Port)
 
-	rt := &http3.Transport{
-		TLSClientConfig:    getTLSClientConfig(),
-		DisableCompression: true,
-		QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
+	newClient := func() *http.Client {
+		return &http.Client{
+			Transport: &http3.Transport{
+				TLSClientConfig:    getTLSClientConfig(),
+				DisableCompression: true,
+				QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
+			},
+		}
 	}
-	client := &http.Client{Transport: rt}
+
+	client := newClient()
 
 	defer func() {
-		require.NoError(t, rt.Close())
 		require.NoError(t, ln.Close())
 	}()
 
@@ -83,6 +87,10 @@ func TestHTTP3ServerHotswap(t *testing.T) {
 		t.Fatal("timed out waiting for server1 to stop")
 	}
 	require.NoError(t, client.Transport.(*http3.Transport).Close())
+	client = newClient()
+	defer func() {
+		require.NoError(t, client.Transport.(*http3.Transport).Close())
+	}()
 
 	// verify that new connections are handled by the second server now
 	resp, err = client.Get("https://localhost:" + port + "/hello2")
