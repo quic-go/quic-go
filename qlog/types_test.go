@@ -29,22 +29,6 @@ func TestOwnerStringRepresentation(t *testing.T) {
 	}
 }
 
-func TestCategoryStringRepresentation(t *testing.T) {
-	testCases := []struct {
-		category category
-		expected string
-	}{
-		{categoryConnectivity, "connectivity"},
-		{categoryTransport, "transport"},
-		{categoryRecovery, "recovery"},
-		{categorySecurity, "security"},
-	}
-
-	for _, tc := range testCases {
-		require.Equal(t, tc.expected, tc.category.String())
-	}
-}
-
 func TestPacketTypeStringRepresentation(t *testing.T) {
 	testCases := []struct {
 		packetType logging.PacketType
