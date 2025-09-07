@@ -439,7 +439,7 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 }
 
 // Close closes the QUIC connections that this Transport has used.
-// A Transport should not be used after it has been closed.
+// A Transport cannot be used after it has been closed.
 func (t *Transport) Close() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
