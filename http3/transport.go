@@ -153,6 +153,13 @@ func (t *Transport) init() error {
 	if t.QUICConfig.MaxIncomingStreams == 0 {
 		t.QUICConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
 	}
+	if t.Dial == nil {
+		udpConn, err := net.ListenUDP("udp", nil)
+		if err != nil {
+			return err
+		}
+		t.transport = &quic.Transport{Conn: udpConn}
+	}
 	return nil
 }
 
@@ -350,13 +357,6 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 
 	dial := t.Dial
 	if dial == nil {
-		if t.transport == nil {
-			udpConn, err := net.ListenUDP("udp", nil)
-			if err != nil {
-				return nil, nil, err
-			}
-			t.transport = &quic.Transport{Conn: udpConn}
-		}
 		dial = func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			network := "udp"
 			udpAddr, err := t.resolveUDPAddr(ctx, network, addr)
@@ -448,6 +448,7 @@ func (t *Transport) Close() error {
 			return err
 		}
 		t.transport = nil
+		t.initOnce = sync.Once{}
 	}
 	return nil
 }
