@@ -923,3 +923,58 @@ func TestGenericConnectionTracerEvent(t *testing.T) {
 	require.Len(t, ev, 1)
 	require.Equal(t, "bar", ev["details"])
 }
+
+// BenchmarkConnectionTracing aims to benchmark a somewhat realistic connection that sends and receives packets.
+func BenchmarkConnectionTracing(b *testing.B) {
+	b.ReportAllocs()
+
+	destConnID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+	srcConnID := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
+	tracer := NewConnectionTracer(
+		nopWriteCloser(io.Discard),
+		logging.PerspectiveServer,
+		destConnID,
+	)
+
+	var rttStats utils.RTTStats
+	rttStats.UpdateRTT(1337*time.Millisecond, 0)
+	rttStats.UpdateRTT(1000*time.Millisecond, 10*time.Millisecond)
+	rttStats.UpdateRTT(800*time.Millisecond, 100*time.Millisecond)
+
+	var i int
+	for b.Loop() {
+		i++
+		tracer.SentShortHeaderPacket(
+			&logging.ShortHeader{
+				DestConnectionID: srcConnID,
+				PacketNumber:     1234 + protocol.PacketNumber(i),
+				PacketNumberLen:  protocol.PacketNumberLen4,
+				KeyPhase:         protocol.KeyPhaseZero,
+			},
+			1337,
+			logging.ECT0,
+			nil,
+			[]logging.Frame{
+				&logging.AckFrame{AckRanges: []logging.AckRange{{Largest: 12345 + protocol.PacketNumber(2*i), Smallest: 1234 + protocol.PacketNumber(i)}}},
+				&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987 + protocol.ByteCount(i)},
+			},
+		)
+		tracer.UpdatedMetrics(&rttStats, 12345+protocol.ByteCount(2*i), 12345+protocol.ByteCount(i), i)
+
+		if i%2 == 0 {
+			tracer.ReceivedShortHeaderPacket(
+				&logging.ShortHeader{
+					DestConnectionID: srcConnID,
+					PacketNumber:     1337 + protocol.PacketNumber(i),
+					PacketNumberLen:  protocol.PacketNumberLen3,
+					KeyPhase:         protocol.KeyPhaseOne,
+				},
+				1337,
+				logging.ECT0,
+				[]logging.Frame{
+					&logging.StreamFrame{StreamID: 123, Offset: 1234 + protocol.ByteCount(100*i), Length: 100, Fin: true},
+				},
+			)
+		}
+	}
+}
