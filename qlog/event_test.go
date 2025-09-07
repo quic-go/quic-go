@@ -14,8 +14,7 @@ type mevent struct{}
 
 var _ eventDetails = mevent{}
 
-func (mevent) Category() category                   { return categoryConnectivity }
-func (mevent) Name() string                         { return "mevent" }
+func (mevent) Name() string                         { return "foobar:mevent" }
 func (mevent) IsNil() bool                          { return false }
 func (mevent) MarshalJSONObject(enc *gojay.Encoder) { enc.StringKey("event", "details") }
 
@@ -34,7 +33,7 @@ func TestEventMarshaling(t *testing.T) {
 	require.Len(t, decoded, 3)
 
 	require.Equal(t, 1.337, decoded["time"])
-	require.Equal(t, "connectivity:mevent", decoded["name"])
+	require.Equal(t, "foobar:mevent", decoded["name"])
 	require.Contains(t, decoded, "data")
 
 	data, ok := decoded["data"].(map[string]any)
