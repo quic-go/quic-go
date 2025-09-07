@@ -3,6 +3,8 @@ package qlog
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
+	"fmt"
 	"testing"
 	"time"
 
@@ -41,4 +43,57 @@ func TestEventMarshaling(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, data, 1)
 	require.Equal(t, "details", data["event"])
+}
+
+func TestEncodingJSONv2(t *testing.T) {
+	buf := &bytes.Buffer{}
+	enc := jsontext.NewEncoder(buf)
+
+	ev := eventKeyUpdated{
+		Trigger: keyUpdateLocal,
+		KeyType: keyTypeServerInitial,
+	}
+	ev.MarshalJSONTo(enc)
+	fmt.Println(buf.String())
+}
+
+func TestEncodingGojay(t *testing.T) {
+	buf := bytes.NewBuffer(make([]byte, 1000))
+	enc := gojay.NewEncoder(buf)
+
+	ev := &eventKeyUpdated{
+		Trigger: keyUpdateLocal,
+		KeyType: keyTypeServerInitial,
+	}
+	enc.Encode(ev)
+	fmt.Println(buf.String())
+}
+
+func BenchmarkEncodingJSONv2(b *testing.B) {
+	buf := bytes.NewBuffer(make([]byte, 1000))
+
+	enc := jsontext.NewEncoder(buf)
+
+	ev := eventKeyUpdated{
+		Trigger: keyUpdateLocal,
+		KeyType: keyTypeServerInitial,
+	}
+	for b.Loop() {
+		ev.MarshalJSONTo(enc)
+		buf.Reset()
+	}
+}
+
+func BenchmarkEncodingGojay(b *testing.B) {
+	buf := bytes.NewBuffer(make([]byte, 1000))
+	enc := gojay.NewEncoder(buf)
+
+	ev := &eventKeyUpdated{
+		Trigger: keyUpdateLocal,
+		KeyType: keyTypeServerInitial,
+	}
+	for b.Loop() {
+		enc.Encode(ev)
+		buf.Reset()
+	}
 }

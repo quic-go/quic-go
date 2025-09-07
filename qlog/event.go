@@ -1,6 +1,7 @@
 package qlog
 
 import (
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"net"
@@ -387,6 +388,15 @@ func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
 		enc.Uint64Key("key_phase", uint64(e.KeyPhase))
 	}
+}
+
+func (e eventKeyUpdated) MarshalJSONTo(enc *jsontext.Encoder) {
+	enc.WriteToken(jsontext.BeginObject)
+	enc.WriteToken(jsontext.String("trigger"))
+	enc.WriteToken(jsontext.String(e.Trigger.String()))
+	enc.WriteToken(jsontext.String("key_type"))
+	enc.WriteToken(jsontext.String(e.KeyType.String()))
+	enc.WriteToken(jsontext.EndObject)
 }
 
 type eventKeyDiscarded struct {
