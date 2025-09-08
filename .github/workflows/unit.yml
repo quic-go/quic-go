@@ -15,7 +15,7 @@ jobs:
       GOEXPERIMENT: ${{ matrix.go == '1.24.x' && 'synctest' || '' }}
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
       - run: go version

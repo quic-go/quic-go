@@ -33,7 +33,7 @@ jobs:
     name: "Integration (${{ matrix.os }}, Go ${{ matrix.go }}${{ matrix.race && ', race' || '' }}${{ matrix.use32bit && ', 32-bit' || '' }})"
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
       - name: Install go-junit-report
