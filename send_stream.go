@@ -459,6 +459,7 @@ func (s *SendStream) returnFramesToPool() {
 	for _, f := range s.retransmissionQueue {
 		f.PutBack()
 	}
+	clear(s.retransmissionQueue)
 	s.retransmissionQueue = nil
 	if s.nextFrame != nil {
 		s.nextFrame.PutBack()
