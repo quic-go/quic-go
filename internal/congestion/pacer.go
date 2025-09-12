@@ -4,20 +4,29 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils"
 )
 
 const maxBurstSizePackets = 10
+
+// Resetting the pacing timer can be expensive if done too frequently.
+// We therefore limit the minimum duration of the timer to the maximum of:
+// - the minimum pacing delay (1ms)
+// - the smoothed RTT divided by 64 (i.e. 64 events per RTT)
+const maxPacingEventsPerRTT = 64
 
 // The pacer implements a token bucket pacing algorithm.
 type pacer struct {
 	budgetAtLastSent  protocol.ByteCount
 	maxDatagramSize   protocol.ByteCount
 	lastSentTime      time.Time
+	rttStats          *utils.RTTStats
 	adjustedBandwidth func() uint64 // in bytes/s
 }
 
-func newPacer(getBandwidth func() Bandwidth) *pacer {
+func newPacer(getBandwidth func() Bandwidth, rttStats *utils.RTTStats) *pacer {
 	p := &pacer{
+		rttStats:        rttStats,
 		maxDatagramSize: initialMaxDatagramSize,
 		adjustedBandwidth: func() uint64 {
 			// Bandwidth is in bits/s. We need the value in bytes/s.
@@ -56,9 +65,13 @@ func (p *pacer) Budget(now time.Time) protocol.ByteCount {
 
 func (p *pacer) maxBurstSize() protocol.ByteCount {
 	return max(
-		protocol.ByteCount(uint64((protocol.MinPacingDelay+protocol.TimerGranularity).Nanoseconds())*p.adjustedBandwidth())/1e9,
+		protocol.ByteCount(uint64((p.minPacingDelay()+protocol.TimerGranularity).Nanoseconds())*p.adjustedBandwidth())/1e9,
 		maxBurstSizePackets*p.maxDatagramSize,
 	)
+}
+
+func (p *pacer) minPacingDelay() time.Duration {
+	return max(protocol.MinPacingDelay, p.rttStats.SmoothedRTT()/maxPacingEventsPerRTT)
 }
 
 // TimeUntilSend returns when the next packet should be sent.
@@ -76,7 +89,7 @@ func (p *pacer) TimeUntilSend() time.Time {
 	if diff%bw > 0 {
 		d++
 	}
-	return p.lastSentTime.Add(max(protocol.MinPacingDelay, time.Duration(d)*time.Nanosecond))
+	return p.lastSentTime.Add(max(p.minPacingDelay(), time.Duration(d)*time.Nanosecond))
 }
 
 func (p *pacer) SetMaxDatagramSize(s protocol.ByteCount) {
