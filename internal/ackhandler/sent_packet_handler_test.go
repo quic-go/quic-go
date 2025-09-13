@@ -61,13 +61,16 @@ func (h *sentPacketHandler) getBytesInFlight() protocol.ByteCount {
 }
 
 func ackRanges(pns ...protocol.PacketNumber) []wire.AckRange {
+	return appendAckRanges(nil, pns...)
+}
+
+func appendAckRanges(ranges []wire.AckRange, pns ...protocol.PacketNumber) []wire.AckRange {
 	if len(pns) == 0 {
-		return nil
+		return ranges
 	}
 	slices.Sort(pns)
 	slices.Reverse(pns)
 
-	var ranges []wire.AckRange
 	start := pns[0]
 	for i := 1; i < len(pns); i++ {
 		if pns[i-1]-pns[i] > 1 {
@@ -1338,4 +1341,68 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 	}
 	t.Logf("t=%dms: loss detection timeout (lost: %v)", now.Sub(start).Milliseconds(), packets.Lost)
 	sph.OnLossDetectionTimeout(now)
+}
+
+func BenchmarkSendAndAcknowledge(b *testing.B) {
+	b.Run("acknowledging every other packet", func(b *testing.B) {
+		benchmarkSendAndAcknowledge(b, 2, 0)
+	})
+	b.Run("acknowledging every 10th packet, with 100 packets in flight", func(b *testing.B) {
+		benchmarkSendAndAcknowledge(b, 10, 100)
+	})
+	b.Run("acknowledging every 100th packet, with 1000 packets in flight", func(b *testing.B) {
+		benchmarkSendAndAcknowledge(b, 100, 1000)
+	})
+}
+
+func benchmarkSendAndAcknowledge(b *testing.B, ackEvery, inFlight int) {
+	var rttStats utils.RTTStats
+	sph := newSentPacketHandler(
+		0,
+		1200,
+		&rttStats,
+		&utils.ConnectionStats{},
+		true,
+		false,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+	now := time.Now()
+	sph.DropPackets(protocol.EncryptionInitial, now)
+	sph.DropPackets(protocol.EncryptionHandshake, now)
+
+	streamFrames := []StreamFrame{{Frame: &wire.StreamFrame{}}}
+
+	pns := make([]protocol.PacketNumber, 0, ackEvery+inFlight)
+
+	var counter int
+	ranges := make([]wire.AckRange, 0, ackEvery)
+	for b.Loop() {
+		counter++
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(
+			now,
+			pn,
+			protocol.InvalidPacketNumber,
+			streamFrames,
+			nil,
+			protocol.Encryption1RTT,
+			protocol.ECNNon,
+			1200,
+			false, false,
+		)
+		now = now.Add(time.Millisecond)
+		pns = append(pns, pn)
+
+		if counter > inFlight && counter%ackEvery == 0 {
+			sph.ReceivedAck(
+				&wire.AckFrame{AckRanges: appendAckRanges(ranges, pns[:ackEvery]...)},
+				protocol.Encryption1RTT,
+				now,
+			)
+			pns = append(pns[:0], pns[ackEvery:]...)
+			ranges = ranges[:0]
+		}
+	}
 }
