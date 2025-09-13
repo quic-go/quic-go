@@ -17,6 +17,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/mocks"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/synctest"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -511,7 +512,7 @@ func TestSendStreamFlowControlBlocked(t *testing.T) {
 	require.Nil(t, blocked)
 	require.True(t, hasMore)
 
-	_, ok, hasMore := str.getControlFrame(time.Now())
+	_, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.False(t, ok)
 	require.False(t, hasMore)
 }
@@ -546,7 +547,7 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 
 		// STOP_SENDING frames are ignored
 		str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 1337})
-		_, ok, hasMore := str.getControlFrame(time.Now())
+		_, ok, hasMore := str.getControlFrame(monotime.Now())
 		require.False(t, ok)
 		require.False(t, hasMore)
 
@@ -630,7 +631,7 @@ func TestSendStreamCancellation(t *testing.T) {
 		str.CancelWrite(1234)
 		require.True(t, mockCtrl.Satisfied())
 
-		cf, ok, hasMore := str.getControlFrame(time.Now())
+		cf, ok, hasMore := str.getControlFrame(monotime.Now())
 		require.True(t, ok)
 		// only the "foo" was sent out, so the final size is 3
 		require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 3, ErrorCode: 1234}, cf.Frame)
@@ -646,7 +647,7 @@ func TestSendStreamCancellation(t *testing.T) {
 
 		// duplicate calls to CancelWrite don't do anything
 		str.CancelWrite(1234)
-		_, ok, _ = str.getControlFrame(time.Now())
+		_, ok, _ = str.getControlFrame(monotime.Now())
 		require.False(t, ok)
 
 		synctest.Wait()
@@ -708,7 +709,7 @@ func TestSendStreamCancellationAfterClose(t *testing.T) {
 	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
 
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 0, ErrorCode: 1337}, cf.Frame)
 	require.False(t, hasMore)
@@ -753,7 +754,7 @@ func testSendStreamCancellationStreamRetransmission(t *testing.T, remote bool) {
 	} else {
 		str.CancelWrite(1337)
 	}
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.IsType(t, &wire.ResetStreamFrame{}, cf.Frame)
 	require.False(t, hasMore)
@@ -788,7 +789,7 @@ func TestSendStreamCancellationResetStreamRetransmission(t *testing.T) {
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 	str.CancelWrite(1337)
 
-	f1, ok, hasMore := str.getControlFrame(time.Now())
+	f1, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 0, ErrorCode: 1337}, f1.Frame)
 	require.False(t, hasMore)
@@ -798,7 +799,7 @@ func TestSendStreamCancellationResetStreamRetransmission(t *testing.T) {
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 	f1.Handler.OnLost(f1.Frame)
 	// get the retransmission
-	f2, ok, hasMore := str.getControlFrame(time.Now())
+	f2, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 0, ErrorCode: 1337}, f2.Frame)
 	require.False(t, hasMore)
@@ -840,7 +841,7 @@ func testSendStreamStopSendingAfterWrite(t *testing.T, completeBy string) {
 	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 	str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 1337})
 
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 6, ErrorCode: 1337}, cf.Frame)
 	require.False(t, hasMore)
@@ -866,7 +867,7 @@ func testSendStreamStopSendingAfterWrite(t *testing.T, completeBy string) {
 	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
 	frame, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.Nil(t, frame.Frame)
-	_, ok, _ = str.getControlFrame(time.Now())
+	_, ok, _ = str.getControlFrame(monotime.Now())
 	require.False(t, ok)
 }
 
@@ -905,14 +906,14 @@ func TestSendStreamStopSendingDuringWrite(t *testing.T) {
 			t.Fatal("write should have returned")
 		}
 
-		cf, ok, hasMore := str.getControlFrame(time.Now())
+		cf, ok, hasMore := str.getControlFrame(monotime.Now())
 		require.True(t, ok)
 		require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 6, ErrorCode: 1337}, cf.Frame)
 		require.False(t, hasMore)
 
 		// receiving another STOP_SENDING frame has no effect
 		str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 1234})
-		_, ok, hasMore = str.getControlFrame(time.Now())
+		_, ok, hasMore = str.getControlFrame(monotime.Now())
 		require.False(t, ok)
 		require.False(t, hasMore)
 
@@ -932,7 +933,7 @@ func TestSendStreamStopSendingDuringWrite(t *testing.T) {
 		_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 		// error code and remote flag are unchanged
 		require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
-		_, ok, _ = str.getControlFrame(time.Now())
+		_, ok, _ = str.getControlFrame(monotime.Now())
 		require.False(t, ok)
 
 		// Close has no effect
@@ -1182,7 +1183,7 @@ func TestSendStreamResetStreamAtCancelBeforeSend(t *testing.T) {
 
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.CancelWrite(1337)
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: 1337, FinalSize: 6, ErrorCode: 1337, ReliableSize: 6}, cf.Frame)
 	require.False(t, hasMore)
@@ -1248,7 +1249,7 @@ func TestSendStreamResetStreamAtCancelAfterSend(t *testing.T) {
 
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.CancelWrite(42)
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: 1337, FinalSize: 9, ErrorCode: 42, ReliableSize: 6}, cf.Frame)
 	require.False(t, hasMore)
@@ -1350,7 +1351,7 @@ func TestSendStreamResetStreamAtRetransmissions(t *testing.T) {
 	// but f3 and the data in the buffer should not.
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.CancelWrite(42)
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: 1337, FinalSize: 22, ErrorCode: 42, ReliableSize: 10}, cf.Frame)
 	require.False(t, hasMore)
@@ -1409,7 +1410,7 @@ func TestSendStreamResetStreamAtStopSendingBeforeCancelation(t *testing.T) {
 
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: 1337, ErrorCode: 42})
-	cf, ok, hasMore := str.getControlFrame(time.Now())
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	// Since the peer reset the stream, the resulting RESET_STREAM frame has a reliable size of 0
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: 1337, FinalSize: 9, ErrorCode: 42, ReliableSize: 0}, cf.Frame)
@@ -1456,7 +1457,7 @@ func testSendStreamResetStreamAtStopSendingAfterCancelation(t *testing.T, loseRe
 	// Canceling the stream results in a RESET_STREAM_AT frame.
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.CancelWrite(42)
-	cf1, ok, hasMore := str.getControlFrame(time.Now())
+	cf1, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, &wire.ResetStreamFrame{StreamID: 1337, FinalSize: 9, ErrorCode: 42, ReliableSize: 6}, cf1.Frame)
 	require.False(t, hasMore)
@@ -1465,7 +1466,7 @@ func testSendStreamResetStreamAtStopSendingAfterCancelation(t *testing.T, loseRe
 	// effectively reducing the reliable size to 0.
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: 1337, ErrorCode: 1234})
-	cf2, ok, hasMore := str.getControlFrame(time.Now())
+	cf2, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	// Since the peer reset the stream, the resulting RESET_STREAM frame has a reliable size of 0.
 	// The error code is still the one used for the CancelWrite call.
@@ -1481,13 +1482,13 @@ func testSendStreamResetStreamAtStopSendingAfterCancelation(t *testing.T, loseRe
 		// the RESET_STREAM frame still needs to be transmitted reliably
 		cf1.Handler.OnAcked(cf1.Frame)
 	}
-	_, ok, _ = str.getControlFrame(time.Now())
+	_, ok, _ = str.getControlFrame(monotime.Now())
 	require.False(t, ok)
 
 	// but when the RESET_STREAM frame is lost, it needs to be retransmitted
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	cf2.Handler.OnLost(cf2.Frame)
-	cf3, ok, _ := str.getControlFrame(time.Now())
+	cf3, ok, _ := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	require.Equal(t, cf2, cf3)
 
@@ -1555,7 +1556,7 @@ func TestSendStreamResetStreamAtRandomized(t *testing.T) {
 			t.Fatal("stream should have completed")
 		}
 		var dequeuedFrame bool
-		cf, ok, _ := str.getControlFrame(time.Now())
+		cf, ok, _ := str.getControlFrame(monotime.Now())
 		if ok {
 			dequeuedFrame = true
 			frameQueue = append(frameQueue, cf)

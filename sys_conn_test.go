@@ -27,6 +27,6 @@ func TestBasicConn(t *testing.T) {
 	p, err := conn.ReadPacket()
 	require.NoError(t, err)
 	require.Equal(t, []byte("foobar"), p.data)
-	require.WithinDuration(t, time.Now(), p.rcvTime, scaleDuration(100*time.Millisecond))
+	require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(100*time.Millisecond))
 	require.Equal(t, addr, p.remoteAddr)
 }

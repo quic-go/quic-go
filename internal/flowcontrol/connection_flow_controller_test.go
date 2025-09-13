@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -20,9 +21,9 @@ func TestConnectionFlowControlWindowUpdate(t *testing.T) {
 		utils.DefaultLogger,
 	)
 	require.False(t, fc.AddBytesRead(1))
-	require.Zero(t, fc.GetWindowUpdate(time.Now()))
+	require.Zero(t, fc.GetWindowUpdate(monotime.Now()))
 	require.True(t, fc.AddBytesRead(99))
-	require.Equal(t, protocol.ByteCount(200), fc.GetWindowUpdate(time.Now()))
+	require.Equal(t, protocol.ByteCount(200), fc.GetWindowUpdate(monotime.Now()))
 }
 
 func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
@@ -42,7 +43,7 @@ func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
 		rttStats,
 		utils.DefaultLogger,
 	)
-	now := time.Now()
+	now := monotime.Now()
 	require.NoError(t, fc.IncrementHighestReceived(100, now))
 	fc.AddBytesRead(90)
 	require.Equal(t, protocol.InvalidByteCount, callbackCalledWith)
@@ -52,9 +53,9 @@ func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
 
 func TestConnectionFlowControlViolation(t *testing.T) {
 	fc := NewConnectionFlowController(100, 100, nil, &utils.RTTStats{}, utils.DefaultLogger)
-	require.NoError(t, fc.IncrementHighestReceived(40, time.Now()))
-	require.NoError(t, fc.IncrementHighestReceived(60, time.Now()))
-	err := fc.IncrementHighestReceived(1, time.Now())
+	require.NoError(t, fc.IncrementHighestReceived(40, monotime.Now()))
+	require.NoError(t, fc.IncrementHighestReceived(60, monotime.Now()))
+	err := fc.IncrementHighestReceived(1, monotime.Now())
 	var terr *qerr.TransportError
 	require.ErrorAs(t, err, &terr)
 	require.Equal(t, qerr.FlowControlError, terr.ErrorCode)

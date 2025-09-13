@@ -8,6 +8,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/mocks"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -79,8 +80,8 @@ func testStreamsMapCreatingStreams(t *testing.T,
 	assert.Equal(t, ustr2.StreamID(), firstOutgoingUniStream+4)
 
 	// accepting streams is triggered by receiving a frame referencing this stream
-	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, time.Now()))
-	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, time.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, monotime.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, monotime.Now()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -156,7 +157,7 @@ func testStreamsMapDeletingStreams(t *testing.T,
 
 	require.Empty(t, frameQueue)
 	// deleting incoming bidirectional streams
-	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, time.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, monotime.Now()))
 	require.NoError(t, m.DeleteStream(firstIncomingBidiStream))
 	err = m.DeleteStream(firstIncomingBidiStream + 400)
 	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
@@ -176,7 +177,7 @@ func testStreamsMapDeletingStreams(t *testing.T,
 	frameQueue = frameQueue[:0]
 
 	// deleting incoming unidirectional streams
-	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, time.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, monotime.Now()))
 	require.NoError(t, m.DeleteStream(firstIncomingUniStream))
 	err = m.DeleteStream(firstIncomingUniStream + 400)
 	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
@@ -273,7 +274,7 @@ func TestStreamsMapHandleReceiveStreamFrames(t *testing.T) {
 				testStreamsMapHandleReceiveStreamFrames(t,
 					pers,
 					func(m *streamsMap, id protocol.StreamID) error {
-						return m.HandleStreamFrame(&wire.StreamFrame{StreamID: id}, time.Now())
+						return m.HandleStreamFrame(&wire.StreamFrame{StreamID: id}, monotime.Now())
 					},
 				)
 			})
@@ -291,7 +292,7 @@ func TestStreamsMapHandleReceiveStreamFrames(t *testing.T) {
 				testStreamsMapHandleReceiveStreamFrames(t,
 					pers,
 					func(m *streamsMap, id protocol.StreamID) error {
-						return m.HandleResetStreamFrame(&wire.ResetStreamFrame{StreamID: id}, time.Now())
+						return m.HandleResetStreamFrame(&wire.ResetStreamFrame{StreamID: id}, monotime.Now())
 					},
 				)
 			})
@@ -592,7 +593,7 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 	require.ErrorIs(t, err, Err0RTTRejected)
 
 	// make sure that we can still get new streams, as the server might be sending us data
-	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: 3}, time.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: 3}, monotime.Now()))
 
 	// now switch to using the new streams map
 	m.UseResetMaps()

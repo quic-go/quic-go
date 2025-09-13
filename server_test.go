@@ -12,6 +12,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/handshake"
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -1170,7 +1171,7 @@ func TestServer0RTTQueueing(t *testing.T) {
 		tracer:      tracer,
 	})
 
-	firstRcvTime := time.Now()
+	firstRcvTime := monotime.Now()
 	otherRcvTime := firstRcvTime.Add(protocol.Max0RTTQueueingDuration / 2)
 	var sizes []protocol.ByteCount
 	for i := range protocol.Max0RTTQueues {

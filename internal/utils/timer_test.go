@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/synctest"
 
 	"github.com/stretchr/testify/require"
@@ -19,13 +20,13 @@ func TestTimerResets(t *testing.T) {
 		default:
 		}
 
-		start := time.Now()
+		start := monotime.Now()
 
 		// timer fires immediately for a deadline in the past
-		timer.Reset(time.Now().Add(-time.Second))
+		timer.Reset(monotime.Now().Add(-time.Second))
 		select {
 		case <-timer.Chan():
-			require.Zero(t, time.Since(start))
+			require.Zero(t, monotime.Since(start))
 			timer.SetRead()
 		case <-time.After(time.Hour): // this can be replaced with a default once we drop support for Go 1.24
 			t.Fatal("timer should have fired")
@@ -34,11 +35,11 @@ func TestTimerResets(t *testing.T) {
 		// timer reset without getting read
 		for range 10 {
 			time.Sleep(time.Second)
-			timer.Reset(time.Now().Add(time.Hour))
+			timer.Reset(monotime.Now().Add(time.Hour))
 		}
 		select {
 		case <-timer.Chan():
-			require.Equal(t, time.Since(start), time.Hour+10*time.Second)
+			require.Equal(t, monotime.Since(start), time.Hour+10*time.Second)
 			timer.SetRead()
 		case <-time.After(2 * time.Hour):
 			t.Fatal("timer should have fired")
@@ -46,12 +47,12 @@ func TestTimerResets(t *testing.T) {
 
 		const d = 10 * time.Minute
 		for i := range 10 {
-			start := time.Now()
-			timer.Reset(time.Now().Add(d))
+			start := monotime.Now()
+			timer.Reset(monotime.Now().Add(d))
 			if i%2 == 0 {
 				select {
 				case <-timer.Chan():
-					require.Equal(t, time.Since(start), d)
+					require.Equal(t, monotime.Since(start), d)
 				case <-time.After(2 * d):
 					t.Fatal("timer should have fired")
 				}
@@ -72,7 +73,7 @@ func TestTimerResets(t *testing.T) {
 func TestTimerClearDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		timer := NewTimer()
-		timer.Reset(time.Time{})
+		timer.Reset(0)
 
 		// we don't expect the timer to be set for a zero deadline
 		select {
@@ -85,7 +86,7 @@ func TestTimerClearDeadline(t *testing.T) {
 
 func TestTimerSameDeadline(t *testing.T) {
 	t.Run("timer read in between", func(t *testing.T) {
-		deadline := time.Now().Add(-time.Millisecond)
+		deadline := monotime.Now().Add(-time.Millisecond)
 		timer := NewTimer()
 		timer.Reset(deadline)
 
@@ -106,7 +107,7 @@ func TestTimerSameDeadline(t *testing.T) {
 	})
 
 	t.Run("timer not read in between", func(t *testing.T) {
-		deadline := time.Now().Add(-time.Millisecond)
+		deadline := monotime.Now().Add(-time.Millisecond)
 		timer := NewTimer()
 		timer.Reset(deadline)
 
@@ -127,7 +128,7 @@ func TestTimerSameDeadline(t *testing.T) {
 func TestTimerStop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		timer := NewTimer()
-		timer.Reset(time.Now().Add(time.Second))
+		timer.Reset(monotime.Now().Add(time.Second))
 		timer.Stop()
 
 		select {

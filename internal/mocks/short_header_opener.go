@@ -11,8 +11,8 @@ package mocks
 
 import (
 	reflect "reflect"
-	time "time"
 
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -116,7 +116,7 @@ func (c *MockShortHeaderOpenerDecryptHeaderCall) DoAndReturn(f func([]byte, *byt
 }
 
 // Open mocks base method.
-func (m *MockShortHeaderOpener) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, associatedData []byte) ([]byte, error) {
+func (m *MockShortHeaderOpener) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, associatedData []byte) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", dst, src, rcvTime, pn, kp, associatedData)
 	ret0, _ := ret[0].([]byte)
@@ -143,13 +143,13 @@ func (c *MockShortHeaderOpenerOpenCall) Return(arg0 []byte, arg1 error) *MockSho
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockShortHeaderOpenerOpenCall) Do(f func([]byte, []byte, time.Time, protocol.PacketNumber, protocol.KeyPhaseBit, []byte) ([]byte, error)) *MockShortHeaderOpenerOpenCall {
+func (c *MockShortHeaderOpenerOpenCall) Do(f func([]byte, []byte, monotime.Time, protocol.PacketNumber, protocol.KeyPhaseBit, []byte) ([]byte, error)) *MockShortHeaderOpenerOpenCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockShortHeaderOpenerOpenCall) DoAndReturn(f func([]byte, []byte, time.Time, protocol.PacketNumber, protocol.KeyPhaseBit, []byte) ([]byte, error)) *MockShortHeaderOpenerOpenCall {
+func (c *MockShortHeaderOpenerOpenCall) DoAndReturn(f func([]byte, []byte, monotime.Time, protocol.PacketNumber, protocol.KeyPhaseBit, []byte) ([]byte, error)) *MockShortHeaderOpenerOpenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

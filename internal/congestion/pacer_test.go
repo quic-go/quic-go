@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPacerPacing(t *testing.T) {
 	bandwidth := 50 * initialMaxDatagramSize // 50 full-size packets per second
 	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
-	now := time.Now()
+	now := monotime.Now()
 	require.Zero(t, p.TimeUntilSend())
 	budget := p.Budget(now)
 	require.Equal(t, maxBurstSizePackets*initialMaxDatagramSize, budget)
@@ -68,7 +69,7 @@ func TestPacerUpdatePacketSize(t *testing.T) {
 	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
 
 	// consume the initial budget by sending packets
-	now := time.Now()
+	now := monotime.Now()
 	for p.Budget(now) > 0 {
 		p.SentPacket(now, initialMaxDatagramSize)
 	}
@@ -88,7 +89,7 @@ func TestPacerFastPacing(t *testing.T) {
 	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
 
 	// consume the initial budget by sending packets
-	now := time.Now()
+	now := monotime.Now()
 	for p.Budget(now) > 0 {
 		p.SentPacket(now, initialMaxDatagramSize)
 	}
@@ -110,7 +111,7 @@ func TestPacerFastPacing(t *testing.T) {
 
 func TestPacerNoOverflows(t *testing.T) {
 	p := newPacer(func() Bandwidth { return infBandwidth })
-	now := time.Now()
+	now := monotime.Now()
 	p.SentPacket(now, initialMaxDatagramSize)
 	for range 100000 {
 		require.NotZero(t, p.Budget(now.Add(time.Duration(rand.Int64N(math.MaxInt64)))))
