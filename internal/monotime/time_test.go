@@ -10,25 +10,21 @@ import (
 )
 
 func TestTimeRelations(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		time.Sleep(time.Hour)
+	t1 := Now()
+	require.Equal(t, t1, t1)
+	require.False(t, t1.IsZero())
 
-		t1 := Now()
-		require.Equal(t, t1, t1)
-		require.False(t, t1.IsZero())
+	t2 := t1.Add(time.Second)
 
-		t2 := t1.Add(time.Second)
+	require.False(t, t1.Equal(t2))
+	require.False(t, t2.Equal(t1))
 
-		require.False(t, t1.Equal(t2))
-		require.False(t, t2.Equal(t1))
+	require.True(t, t2.After(t1))
+	require.False(t, t1.After(t2))
+	require.False(t, t2.Before(t1))
 
-		require.True(t, t2.After(t1))
-		require.False(t, t1.After(t2))
-		require.False(t, t2.Before(t1))
-
-		require.Equal(t, t2.Sub(t1), time.Second)
-		require.Equal(t, t1.Sub(t2), -time.Second)
-	})
+	require.Equal(t, t2.Sub(t1), time.Second)
+	require.Equal(t, t1.Sub(t2), -time.Second)
 }
 
 func TestSince(t *testing.T) {

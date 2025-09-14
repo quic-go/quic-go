@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-var start = time.Now()
+// The absolute value doesn't matter, but it should be in the past,
+// so that every timestamp obtained with Now() is non-zero,
+// even on systems with low timer resolutions (e.g. Windows).
+var start = time.Now().Add(-time.Hour)
 
 // A Time represents an instant in monotonic time.
 // Times can be compared using the comparison operators, but the specific
