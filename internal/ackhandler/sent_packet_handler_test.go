@@ -1344,18 +1344,20 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {
-	b.Run("acknowledging every other packet", func(b *testing.B) {
+	b.Run("ack every: 2, in flight: 0", func(b *testing.B) {
 		benchmarkSendAndAcknowledge(b, 2, 0)
 	})
-	b.Run("acknowledging every 10th packet, with 100 packets in flight", func(b *testing.B) {
+	b.Run("ack every: 10, in flight: 100", func(b *testing.B) {
 		benchmarkSendAndAcknowledge(b, 10, 100)
 	})
-	b.Run("acknowledging every 100th packet, with 1000 packets in flight", func(b *testing.B) {
+	b.Run("ack every: 100, in flight: 1000", func(b *testing.B) {
 		benchmarkSendAndAcknowledge(b, 100, 1000)
 	})
 }
 
 func benchmarkSendAndAcknowledge(b *testing.B, ackEvery, inFlight int) {
+	b.ReportAllocs()
+
 	var rttStats utils.RTTStats
 	sph := newSentPacketHandler(
 		0,
