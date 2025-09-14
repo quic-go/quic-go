@@ -541,17 +541,10 @@ func (c *Conn) run() (err error) {
 	if err := c.handleHandshakeEvents(monotime.Now()); err != nil {
 		return err
 	}
-	go func() {
-		if err := c.sendQueue.Run(); err != nil {
-			c.destroyImpl(err)
-		}
-	}()
 
 	if c.perspective == protocol.PerspectiveClient {
 		c.scheduleSending() // so the ClientHello actually gets sent
 	}
-
-	var sendQueueAvailable <-chan struct{}
 
 runLoop:
 	for {
@@ -603,7 +596,7 @@ runLoop:
 		// We don't need to wait for new events if:
 		// * we processed packets: we probably need to send an ACK, and potentially more data
 		// * the pacer allows us to send more packets immediately
-		shouldProceedImmediately := sendQueueAvailable == nil && (processed || c.pacingDeadline.Equal(deadlineSendImmediately))
+		shouldProceedImmediately := processed || c.pacingDeadline.Equal(deadlineSendImmediately)
 		if !shouldProceedImmediately {
 			// 3rd: wait for something to happen:
 			// * closing of the connection
@@ -617,7 +610,6 @@ runLoop:
 			case <-c.timer.Chan():
 				c.timer.SetRead()
 			case <-c.sendingScheduled:
-			case <-sendQueueAvailable:
 			case <-c.notifyReceivedPacket:
 				wasProcessed, err := c.handlePackets()
 				if err != nil {
@@ -670,14 +662,6 @@ runLoop:
 			}
 		}
 
-		if c.sendQueue.WouldBlock() {
-			// The send queue is still busy sending out packets. Wait until there's space to enqueue new packets.
-			sendQueueAvailable = c.sendQueue.Available()
-			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
-			c.pacingDeadline = 0
-			continue
-		}
-
 		if c.closeErr.Load() != nil {
 			break runLoop
 		}
@@ -686,19 +670,10 @@ runLoop:
 			c.setCloseError(&closeError{err: err})
 			break runLoop
 		}
-		if c.sendQueue.WouldBlock() {
-			// The send queue is still busy sending out packets. Wait until there's space to enqueue new packets.
-			sendQueueAvailable = c.sendQueue.Available()
-			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
-			c.pacingDeadline = 0
-		} else {
-			sendQueueAvailable = nil
-		}
 	}
 
 	closeErr := c.closeErr.Load()
 	c.cryptoStreamHandler.Close()
-	c.sendQueue.Close() // close the send queue before sending the CONNECTION_CLOSE
 	c.handleCloseError(closeErr)
 	if c.tracer != nil && c.tracer.Close != nil {
 		if e := (&errCloseForRecreating{}); !errors.As(closeErr.err, &e) {
@@ -849,13 +824,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	}
 	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
-	c.sendQueue.Close()
 	c.sendQueue = newSendQueue(c.conn)
-	go func() {
-		if err := c.sendQueue.Run(); err != nil {
-			c.destroyImpl(err)
-		}
-	}()
 }
 
 func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
@@ -2138,10 +2107,6 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 		if err := c.sendProbePacket(sendMode, now); err != nil {
 			return err
 		}
-		if c.sendQueue.WouldBlock() {
-			c.scheduleSending()
-			return nil
-		}
 		return c.triggerSending(now)
 	default:
 		return fmt.Errorf("BUG: invalid send mode %d", sendMode)
@@ -2231,11 +2196,10 @@ func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 			return err
 		}
 
-		c.sendQueue.Send(buf, 0, ecn)
-
-		if c.sendQueue.WouldBlock() {
-			return nil
+		if err := c.sendQueue.Send(buf, 0, ecn); err != nil {
+			return err
 		}
+
 		sendMode := c.sentPacketHandler.SendMode(now)
 		if sendMode == ackhandler.SendPacingLimited {
 			c.resetPacingDeadline()
@@ -2299,9 +2263,6 @@ func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
 		c.sendQueue.Send(buf, uint16(maxSize), ecn)
 
 		if dontSendMore {
-			return nil
-		}
-		if c.sendQueue.WouldBlock() {
 			return nil
 		}
 
