@@ -11,9 +11,9 @@ package quic
 
 import (
 	reflect "reflect"
-	time "time"
 
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,7 +43,7 @@ func (m *MockFrameSource) EXPECT() *MockFrameSourceMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockFrameSource) Append(arg0 []ackhandler.Frame, arg1 []ackhandler.StreamFrame, arg2 protocol.ByteCount, arg3 time.Time, arg4 protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+func (m *MockFrameSource) Append(arg0 []ackhandler.Frame, arg1 []ackhandler.StreamFrame, arg2 protocol.ByteCount, arg3 monotime.Time, arg4 protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Append", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].([]ackhandler.Frame)
@@ -71,13 +71,13 @@ func (c *MockFrameSourceAppendCall) Return(arg0 []ackhandler.Frame, arg1 []ackha
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockFrameSourceAppendCall) Do(f func([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, time.Time, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)) *MockFrameSourceAppendCall {
+func (c *MockFrameSourceAppendCall) Do(f func([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, monotime.Time, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)) *MockFrameSourceAppendCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFrameSourceAppendCall) DoAndReturn(f func([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, time.Time, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)) *MockFrameSourceAppendCall {
+func (c *MockFrameSourceAppendCall) DoAndReturn(f func([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, monotime.Time, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)) *MockFrameSourceAppendCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

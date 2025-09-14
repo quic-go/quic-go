@@ -2,8 +2,8 @@ package ackhandler
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -35,7 +35,7 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	pn protocol.PacketNumber,
 	ecn protocol.ECN,
 	encLevel protocol.EncryptionLevel,
-	rcvTime time.Time,
+	rcvTime monotime.Time,
 	ackEliciting bool,
 ) error {
 	h.sentPackets.ReceivedPacket(encLevel, rcvTime)
@@ -83,11 +83,11 @@ func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	}
 }
 
-func (h *receivedPacketHandler) GetAlarmTimeout() time.Time {
+func (h *receivedPacketHandler) GetAlarmTimeout() monotime.Time {
 	return h.appDataPackets.GetAlarmTimeout()
 }
 
-func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, now time.Time, onlyIfQueued bool) *wire.AckFrame {
+func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, now monotime.Time, onlyIfQueued bool) *wire.AckFrame {
 	//nolint:exhaustive // 0-RTT packets can't contain ACK frames.
 	switch encLevel {
 	case protocol.EncryptionInitial:

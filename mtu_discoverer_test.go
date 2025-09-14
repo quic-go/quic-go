@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
@@ -19,7 +20,7 @@ func TestMTUDiscovererTiming(t *testing.T) {
 	rttStats.UpdateRTT(rtt, 0)
 	d := newMTUDiscoverer(&rttStats, 1000, 2000, nil)
 
-	now := time.Now()
+	now := monotime.Now()
 	require.False(t, d.ShouldSendProbe(now))
 	d.Start(now)
 	require.False(t, d.ShouldSendProbe(now))
@@ -39,7 +40,7 @@ func TestMTUDiscovererTiming(t *testing.T) {
 func TestMTUDiscovererAckAndLoss(t *testing.T) {
 	d := newMTUDiscoverer(&utils.RTTStats{}, 1000, 2000, nil)
 	// we use an RTT of 0 here, so we don't have to advance the timer on every step
-	now := time.Now()
+	now := monotime.Now()
 	ping, size := d.GetPing(now)
 	require.Equal(t, protocol.ByteCount(1500), size)
 	// the MTU is reduced if the frame is lost
@@ -100,7 +101,7 @@ func testMTUDiscovererMTUDiscovery(t *testing.T) {
 			},
 		},
 	)
-	now := time.Now()
+	now := monotime.Now()
 	d.Start(now)
 	realMTU := protocol.ByteCount(rand.IntN(int(maxMTU-startMTU))) + startMTU
 	t.Logf("MTU: %d, max: %d", realMTU, maxMTU)
@@ -158,8 +159,8 @@ func testMTUDiscovererWithRandomLoss(t *testing.T) {
 			},
 		},
 	)
-	d.Start(time.Now())
-	now := time.Now()
+	d.Start(monotime.Now())
+	now := monotime.Now()
 	realMTU := protocol.ByteCount(rand.IntN(int(maxMTU-startMTU))) + startMTU
 	t.Logf("MTU: %d, max: %d", realMTU, maxMTU)
 	now = now.Add(mtuProbeDelay * rtt)
@@ -215,7 +216,7 @@ func testMTUDiscovererReset(t *testing.T, ackLastProbe bool) {
 	rttStats := &utils.RTTStats{}
 	rttStats.SetInitialRTT(rtt)
 
-	now := time.Now()
+	now := monotime.Now()
 	d := newMTUDiscoverer(rttStats, startMTU, maxMTU, nil)
 	d.Start(now)
 

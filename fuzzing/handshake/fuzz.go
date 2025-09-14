@@ -13,7 +13,6 @@ import (
 	"math"
 	mrand "math/rand/v2"
 	"net"
-	"time"
 
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -391,7 +390,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	}
 	const msg = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
 	encrypted := sealer.Seal(nil, []byte(msg), 1337, []byte("foobar"))
-	decrypted, err := opener.Open(nil, encrypted, time.Time{}, 1337, protocol.KeyPhaseZero, []byte("foobar"))
+	decrypted, err := opener.Open(nil, encrypted, 0, 1337, protocol.KeyPhaseZero, []byte("foobar"))
 	if err != nil {
 		panic(fmt.Sprintf("Decrypting message failed: %s", err.Error()))
 	}

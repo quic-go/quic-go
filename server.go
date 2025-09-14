@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/handshake"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -34,7 +35,7 @@ type packetHandler interface {
 
 type zeroRTTQueue struct {
 	packets    []receivedPacket
-	expiration time.Time
+	expiration monotime.Time
 }
 
 type rejectedPacket struct {
@@ -62,7 +63,7 @@ type baseServer struct {
 
 	receivedPackets chan receivedPacket
 
-	nextZeroRTTCleanup time.Time
+	nextZeroRTTCleanup monotime.Time
 	zeroRTTQueues      map[protocol.ConnectionID]*zeroRTTQueue // only initialized if acceptEarlyConns == true
 
 	connContext func(context.Context, *ClientInfo) (context.Context, error)
@@ -538,10 +539,10 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 	return true
 }
 
-func (s *baseServer) cleanupZeroRTTQueues(now time.Time) {
+func (s *baseServer) cleanupZeroRTTQueues(now monotime.Time) {
 	// Iterate over all queues to find those that are expired.
 	// This is ok since we're placing a pretty low limit on the number of queues.
-	var nextCleanup time.Time
+	var nextCleanup monotime.Time
 	for connID, q := range s.zeroRTTQueues {
 		if q.expiration.After(now) {
 			if nextCleanup.IsZero() || nextCleanup.After(q.expiration) {

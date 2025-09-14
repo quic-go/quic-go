@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/congestion"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -34,8 +35,8 @@ type packetNumberSpace struct {
 	history sentPacketHistory
 	pns     packetNumberGenerator
 
-	lossTime                   time.Time
-	lastAckElicitingPacketTime time.Time
+	lossTime                   monotime.Time
+	lastAckElicitingPacketTime monotime.Time
 
 	largestAcked protocol.PacketNumber
 	largestSent  protocol.PacketNumber
@@ -57,7 +58,7 @@ func newPacketNumberSpace(initialPN protocol.PacketNumber, isAppData bool) *pack
 }
 
 type alarmTimer struct {
-	Time            time.Time
+	Time            monotime.Time
 	TimerType       logging.TimerType
 	EncryptionLevel protocol.EncryptionLevel
 }
@@ -168,7 +169,7 @@ func (h *sentPacketHandler) removeFromBytesInFlight(p *packet) {
 	}
 }
 
-func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now time.Time) {
+func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now monotime.Time) {
 	// The server won't await address validation after the handshake is confirmed.
 	// This applies even if we didn't receive an ACK for a Handshake packet.
 	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake {
@@ -219,7 +220,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now t
 	h.setLossDetectionTimer(now)
 }
 
-func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t time.Time) {
+func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t monotime.Time) {
 	h.connStats.BytesReceived.Add(uint64(n))
 	wasAmplificationLimit := h.isAmplificationLimited()
 	h.bytesReceived += n
@@ -228,7 +229,7 @@ func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount, t time.Time) {
 	}
 }
 
-func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel, t time.Time) {
+func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel, t monotime.Time) {
 	h.connStats.PacketsReceived.Add(1)
 	if h.perspective == protocol.PerspectiveServer && l == protocol.EncryptionHandshake && !h.peerAddressValidated {
 		h.peerAddressValidated = true
@@ -248,7 +249,7 @@ func (h *sentPacketHandler) packetsInFlight() int {
 }
 
 func (h *sentPacketHandler) SentPacket(
-	t time.Time,
+	t monotime.Time,
 	pn, largestAcked protocol.PacketNumber,
 	streamFrames []StreamFrame,
 	frames []Frame,
@@ -334,7 +335,7 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 	}
 }
 
-func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) (bool /* contained 1-RTT packet */, error) {
+func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool /* contained 1-RTT packet */, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
 	largestAcked := ack.LargestAcked()
@@ -518,9 +519,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	return h.ackedPackets, nil
 }
 
-func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
+func (h *sentPacketHandler) getLossTimeAndSpace() (monotime.Time, protocol.EncryptionLevel) {
 	var encLevel protocol.EncryptionLevel
-	var lossTime time.Time
+	var lossTime monotime.Time
 
 	if h.initialPackets != nil {
 		lossTime = h.initialPackets.lossTime
@@ -546,7 +547,7 @@ func (h *sentPacketHandler) getScaledPTO(includeMaxAckDelay bool) time.Duration 
 }
 
 // same logic as getLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
-func (h *sentPacketHandler) getPTOTimeAndSpace(now time.Time) (pto time.Time, encLevel protocol.EncryptionLevel) {
+func (h *sentPacketHandler) getPTOTimeAndSpace(now monotime.Time) (pto monotime.Time, encLevel protocol.EncryptionLevel) {
 	// We only send application data probe packets once the handshake is confirmed,
 	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
 	if !h.handshakeConfirmed && !h.hasOutstandingCryptoPackets() {
@@ -596,7 +597,7 @@ func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 	return false
 }
 
-func (h *sentPacketHandler) setLossDetectionTimer(now time.Time) {
+func (h *sentPacketHandler) setLossDetectionTimer(now monotime.Time) {
 	oldAlarm := h.alarm // only needed in case tracing is enabled
 	newAlarm := h.lossDetectionTime(now)
 	h.alarm = newAlarm
@@ -610,11 +611,11 @@ func (h *sentPacketHandler) setLossDetectionTimer(now time.Time) {
 	}
 
 	if hasAlarm && h.tracer != nil && h.tracer.SetLossTimer != nil && newAlarm != oldAlarm {
-		h.tracer.SetLossTimer(newAlarm.TimerType, newAlarm.EncryptionLevel, newAlarm.Time)
+		h.tracer.SetLossTimer(newAlarm.TimerType, newAlarm.EncryptionLevel, newAlarm.Time.ToTime())
 	}
 }
 
-func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
+func (h *sentPacketHandler) lossDetectionTime(now monotime.Time) alarmTimer {
 	// cancel the alarm if no packets are outstanding
 	if h.peerCompletedAddressValidation && !h.hasOutstandingCryptoPackets() &&
 		!h.appDataPackets.history.HasOutstandingPackets() && !h.appDataPackets.history.HasOutstandingPathProbes() {
@@ -626,7 +627,7 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 		return alarmTimer{}
 	}
 
-	var pathProbeLossTime time.Time
+	var pathProbeLossTime monotime.Time
 	if h.appDataPackets.history.HasOutstandingPathProbes() {
 		if _, p := h.appDataPackets.history.FirstOutstandingPathProbe(); p != nil {
 			pathProbeLossTime = p.SendTime.Add(pathProbePacketLossTimeout)
@@ -660,7 +661,7 @@ func (h *sentPacketHandler) lossDetectionTime(now time.Time) alarmTimer {
 	return alarmTimer{}
 }
 
-func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {
+func (h *sentPacketHandler) detectLostPathProbes(now monotime.Time) {
 	if !h.appDataPackets.history.HasOutstandingPathProbes() {
 		return
 	}
@@ -680,9 +681,9 @@ func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {
 	}
 }
 
-func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) {
+func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protocol.EncryptionLevel) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
-	pnSpace.lossTime = time.Time{}
+	pnSpace.lossTime = 0
 
 	maxRTT := float64(max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	lossDelay := time.Duration(timeThreshold * maxRTT)
@@ -745,7 +746,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	}
 }
 
-func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
+func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 	defer h.setLossDetectionTimer(now)
 
 	if h.handshakeConfirmed {
@@ -821,7 +822,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now time.Time) error {
 	return nil
 }
 
-func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
+func (h *sentPacketHandler) GetLossDetectionTimeout() monotime.Time {
 	return h.alarm.Time
 }
 
@@ -855,7 +856,7 @@ func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) p
 	return pn
 }
 
-func (h *sentPacketHandler) SendMode(now time.Time) SendMode {
+func (h *sentPacketHandler) SendMode(now monotime.Time) SendMode {
 	numTrackedPackets := h.appDataPackets.history.Len()
 	if h.initialPackets != nil {
 		numTrackedPackets += h.initialPackets.history.Len()
@@ -900,7 +901,7 @@ func (h *sentPacketHandler) SendMode(now time.Time) SendMode {
 	return SendAny
 }
 
-func (h *sentPacketHandler) TimeUntilSend() time.Time {
+func (h *sentPacketHandler) TimeUntilSend() monotime.Time {
 	return h.congestion.TimeUntilSend(h.bytesInFlight)
 }
 
@@ -947,9 +948,9 @@ func (h *sentPacketHandler) queueFramesForRetransmission(p *packet) {
 	p.Frames = nil
 }
 
-func (h *sentPacketHandler) ResetForRetry(now time.Time) {
+func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 	h.bytesInFlight = 0
-	var firstPacketSendTime time.Time
+	var firstPacketSendTime monotime.Time
 	for _, p := range h.initialPackets.history.Packets() {
 		if firstPacketSendTime.IsZero() {
 			firstPacketSendTime = p.SendTime
@@ -993,7 +994,7 @@ func (h *sentPacketHandler) ResetForRetry(now time.Time) {
 	h.ptoCount = 0
 }
 
-func (h *sentPacketHandler) MigratedPath(now time.Time, initialMaxDatagramSize protocol.ByteCount) {
+func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSize protocol.ByteCount) {
 	h.rttStats.ResetForPathMigration()
 	for pn, p := range h.appDataPackets.history.Packets() {
 		h.appDataPackets.history.DeclareLost(pn)

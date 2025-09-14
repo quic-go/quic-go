@@ -8,6 +8,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/flowcontrol"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -52,7 +53,7 @@ type SendStream struct {
 
 	writeChan chan struct{}
 	writeOnce chan struct{}
-	deadline  time.Time
+	deadline  monotime.Time
 
 	flowController flowcontrol.StreamFlowController
 }
@@ -118,7 +119,7 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 	if s.finishedWriting {
 		return false, 0, fmt.Errorf("write on closed stream %d", s.streamID)
 	}
-	if !s.deadline.IsZero() && !time.Now().Before(s.deadline) {
+	if !s.deadline.IsZero() && !monotime.Now().Before(s.deadline) {
 		return false, 0, errDeadline
 	}
 	if len(p) == 0 {
@@ -134,7 +135,7 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 	)
 	for {
 		var copied bool
-		var deadline time.Time
+		var deadline monotime.Time
 		// As soon as dataForWriting becomes smaller than a certain size x, we copy all the data to a STREAM frame (s.nextFrame),
 		// which can then be popped the next time we assemble a packet.
 		// This allows us to return Write() when all data but x bytes have been sent out.
@@ -161,7 +162,7 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 			bytesWritten = len(p) - len(s.dataForWriting)
 			deadline = s.deadline
 			if !deadline.IsZero() {
-				if !time.Now().Before(deadline) {
+				if !monotime.Now().Before(deadline) {
 					s.dataForWriting = nil
 					return false, bytesWritten, errDeadline
 				}
@@ -590,7 +591,7 @@ func (s *SendStream) handleStopSendingFrame(f *wire.StopSendingFrame) {
 	s.sender.onHasStreamControlFrame(s.streamID, s)
 }
 
-func (s *SendStream) getControlFrame(time.Time) (_ ackhandler.Frame, ok, hasMore bool) {
+func (s *SendStream) getControlFrame(monotime.Time) (_ ackhandler.Frame, ok, hasMore bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -629,7 +630,7 @@ func (s *SendStream) Context() context.Context {
 // A zero value for t means Write will not time out.
 func (s *SendStream) SetWriteDeadline(t time.Time) error {
 	s.mutex.Lock()
-	s.deadline = t
+	s.deadline = monotime.FromTime(t)
 	s.mutex.Unlock()
 	s.signalWrite()
 	return nil

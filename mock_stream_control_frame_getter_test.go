@@ -11,9 +11,9 @@ package quic
 
 import (
 	reflect "reflect"
-	time "time"
 
 	ackhandler "github.com/quic-go/quic-go/internal/ackhandler"
+	monotime "github.com/quic-go/quic-go/internal/monotime"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,7 +42,7 @@ func (m *MockStreamControlFrameGetter) EXPECT() *MockStreamControlFrameGetterMoc
 }
 
 // getControlFrame mocks base method.
-func (m *MockStreamControlFrameGetter) getControlFrame(arg0 time.Time) (ackhandler.Frame, bool, bool) {
+func (m *MockStreamControlFrameGetter) getControlFrame(arg0 monotime.Time) (ackhandler.Frame, bool, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getControlFrame", arg0)
 	ret0, _ := ret[0].(ackhandler.Frame)
@@ -70,13 +70,13 @@ func (c *MockStreamControlFrameGettergetControlFrameCall) Return(arg0 ackhandler
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamControlFrameGettergetControlFrameCall) Do(f func(time.Time) (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
+func (c *MockStreamControlFrameGettergetControlFrameCall) Do(f func(monotime.Time) (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamControlFrameGettergetControlFrameCall) DoAndReturn(f func(time.Time) (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
+func (c *MockStreamControlFrameGettergetControlFrameCall) DoAndReturn(f func(monotime.Time) (ackhandler.Frame, bool, bool)) *MockStreamControlFrameGettergetControlFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -17,7 +18,7 @@ func TestGenerateACKsForPacketNumberSpaces(t *testing.T) {
 	sentPackets := NewMockSentPacketTracker(ctrl)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	now := time.Now()
+	now := monotime.Now()
 	sendTime := now.Add(-time.Second)
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 	sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial, sendTime).Times(2)
@@ -64,7 +65,7 @@ func TestReceive0RTTAnd1RTT(t *testing.T) {
 	sentPackets := NewMockSentPacketTracker(mockCtrl)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	sendTime := time.Now().Add(-time.Second)
+	sendTime := monotime.Now().Add(-time.Second)
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption0RTT, sendTime).AnyTimes()
 	sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT, sendTime)
@@ -72,7 +73,7 @@ func TestReceive0RTTAnd1RTT(t *testing.T) {
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption0RTT, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	ack := handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true)
+	ack := handler.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), true)
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 3}}, ack.AckRanges)
 
@@ -89,24 +90,24 @@ func TestDropPackets(t *testing.T) {
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	sendTime := time.Now().Add(-time.Second)
+	sendTime := monotime.Now().Add(-time.Second)
 
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.EncryptionInitial, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(1, protocol.ECNNon, protocol.EncryptionHandshake, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
 	// Initial
-	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionInitial, time.Now(), true))
+	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionInitial, monotime.Now(), true))
 	handler.DropPackets(protocol.EncryptionInitial)
-	require.Nil(t, handler.GetAckFrame(protocol.EncryptionInitial, time.Now(), true))
+	require.Nil(t, handler.GetAckFrame(protocol.EncryptionInitial, monotime.Now(), true))
 
 	// Handshake
-	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionHandshake, time.Now(), true))
+	require.NotNil(t, handler.GetAckFrame(protocol.EncryptionHandshake, monotime.Now(), true))
 	handler.DropPackets(protocol.EncryptionHandshake)
-	require.Nil(t, handler.GetAckFrame(protocol.EncryptionHandshake, time.Now(), true))
+	require.Nil(t, handler.GetAckFrame(protocol.EncryptionHandshake, monotime.Now(), true))
 
 	// 1-RTT
-	require.NotNil(t, handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true))
+	require.NotNil(t, handler.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), true))
 
 	// 0-RTT is a no-op
 	handler.DropPackets(protocol.Encryption0RTT)
@@ -119,11 +120,11 @@ func TestAckRangePruning(t *testing.T) {
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Times(3)
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
 
-	sendTime := time.Now()
+	sendTime := monotime.Now()
 	require.NoError(t, handler.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 	require.NoError(t, handler.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	ack := handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true)
+	ack := handler.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), true)
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 1, Largest: 2}}, ack.AckRanges)
 
@@ -131,7 +132,7 @@ func TestAckRangePruning(t *testing.T) {
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(2))
 	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
 
-	ack = handler.GetAckFrame(protocol.Encryption1RTT, time.Now(), true)
+	ack = handler.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), true)
 	require.NotNil(t, ack)
 	require.Equal(t, []wire.AckRange{{Smallest: 2, Largest: 4}}, ack.AckRanges)
 }
@@ -143,7 +144,7 @@ func TestPacketDuplicateDetection(t *testing.T) {
 	sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 
 	handler := newReceivedPacketHandler(sentPackets, utils.DefaultLogger)
-	sendTime := time.Now()
+	sendTime := monotime.Now()
 
 	// 1-RTT is tested separately at the end
 	encLevels := []protocol.EncryptionLevel{
