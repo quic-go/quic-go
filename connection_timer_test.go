@@ -51,6 +51,6 @@ func TestConnectionTimerReset(t *testing.T) {
 	require.Equal(t, now.Add(time.Minute), timer.Deadline())
 	timer.SetRead()
 
-	timer.SetTimer(now.Add(time.Hour), 0, now.Add(time.Minute), 0, 0)
-	require.Equal(t, now.Add(time.Hour), timer.Deadline())
+	timer.SetTimer(now.Add(time.Hour), 0, now.Add(2*time.Minute), 0, 0)
+	require.Equal(t, now.Add(2*time.Minute), timer.Deadline())
 }
