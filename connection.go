@@ -615,7 +615,6 @@ runLoop:
 			case <-c.closeChan:
 				break runLoop
 			case <-c.timer.Chan():
-				c.timer.SetRead()
 			case <-c.sendingScheduled:
 			case <-sendQueueAvailable:
 			case <-c.notifyReceivedPacket:

@@ -4,29 +4,22 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/monotime"
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
 
 type connectionTimer struct {
-	timer *utils.Timer
+	timer *time.Timer
 	last  monotime.Time
 }
 
 func newTimer() *connectionTimer {
-	return &connectionTimer{timer: utils.NewTimer()}
-}
-
-func (t *connectionTimer) SetRead() {
-	if deadline := t.timer.Deadline(); deadline != deadlineSendImmediately {
-		t.last = deadline
-	}
-	t.timer.SetRead()
+	// TODO: think about initializing the timer with a better default value
+	return &connectionTimer{timer: time.NewTimer(time.Hour)}
 }
 
 func (t *connectionTimer) Chan() <-chan time.Time {
-	return t.timer.Chan()
+	return t.timer.C
 }
 
 // SetTimer resets the timer.
@@ -47,7 +40,8 @@ func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, connIDRetirement, ack
 	if !pacing.IsZero() && pacing.Before(deadline) {
 		deadline = pacing
 	}
-	t.timer.Reset(deadline)
+	t.last = deadline
+	t.timer.Reset(monotime.Until(deadline))
 }
 
 func (t *connectionTimer) Stop() {
