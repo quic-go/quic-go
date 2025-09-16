@@ -618,6 +618,7 @@ runLoop:
 				c.timer.SetRead()
 			case <-c.sendingScheduled:
 			case <-sendQueueAvailable:
+				c.timer.Unblock()
 			case <-c.notifyReceivedPacket:
 				wasProcessed, err := c.handlePackets()
 				if err != nil {
@@ -675,6 +676,7 @@ runLoop:
 			sendQueueAvailable = c.sendQueue.Available()
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
+			c.timer.SetBlocked()
 			continue
 		}
 
@@ -691,8 +693,10 @@ runLoop:
 			sendQueueAvailable = c.sendQueue.Available()
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
+			c.timer.SetBlocked()
 		} else {
 			sendQueueAvailable = nil
+			c.timer.Unblock()
 		}
 	}
 
@@ -809,22 +813,20 @@ func (c *Conn) nextKeepAliveTime() monotime.Time {
 }
 
 func (c *Conn) maybeResetTimer() {
-	var deadline monotime.Time
+	var idleTimeout, keepAlive monotime.Time
 	if !c.handshakeComplete {
-		deadline = c.creationTime.Add(c.config.handshakeTimeout())
-		if t := c.idleTimeoutStartTime().Add(c.config.HandshakeIdleTimeout); t.Before(deadline) {
-			deadline = t
+		idleTimeout = c.creationTime.Add(c.config.handshakeTimeout())
+		if t := c.idleTimeoutStartTime().Add(c.config.HandshakeIdleTimeout); t.Before(idleTimeout) {
+			idleTimeout = t
 		}
 	} else {
-		if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() {
-			deadline = keepAliveTime
-		} else {
-			deadline = c.nextIdleTimeoutTime()
-		}
+		keepAlive = c.nextKeepAliveTime()
+		idleTimeout = c.nextIdleTimeoutTime()
 	}
 
 	c.timer.SetTimer(
-		deadline,
+		idleTimeout,
+		keepAlive,
 		c.connIDGenerator.NextRetireTime(),
 		c.receivedPacketHandler.GetAlarmTimeout(),
 		c.sentPacketHandler.GetLossDetectionTimeout(),
@@ -963,6 +965,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 }
 
 func (c *Conn) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ error) {
+	c.timer.Unblock()
 	c.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
@@ -2118,6 +2121,7 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 	case ackhandler.SendAny:
 		return c.sendPackets(now)
 	case ackhandler.SendNone:
+		c.timer.SetBlocked()
 		return nil
 	case ackhandler.SendPacingLimited:
 		deadline := c.sentPacketHandler.TimeUntilSend()

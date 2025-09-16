@@ -11,7 +11,8 @@ var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value 
 
 type connectionTimer struct {
 	timer *utils.Timer
-	last  monotime.Time
+
+	blocked bool
 }
 
 func newTimer() *connectionTimer {
@@ -19,9 +20,6 @@ func newTimer() *connectionTimer {
 }
 
 func (t *connectionTimer) SetRead() {
-	if deadline := t.timer.Deadline(); deadline != deadlineSendImmediately {
-		t.last = deadline
-	}
 	t.timer.SetRead()
 }
 
@@ -29,19 +27,32 @@ func (t *connectionTimer) Chan() <-chan time.Time {
 	return t.timer.Chan()
 }
 
+func (t *connectionTimer) SetBlocked() {
+	t.blocked = true
+}
+
+func (t *connectionTimer) Unblock() {
+	t.blocked = false
+}
+
 // SetTimer resets the timer.
-// It makes sure that the deadline is strictly increasing.
-// This prevents busy-looping in cases where the timer fires, but we can't actually send out a packet.
-// This doesn't apply to the pacing deadline, which can be set multiple times to deadlineSendImmediately.
-func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, connIDRetirement, ackAlarm, lossTime, pacing monotime.Time) {
-	deadline := idleTimeoutOrKeepAlive
-	if !connIDRetirement.IsZero() && connIDRetirement.Before(deadline) && connIDRetirement.After(t.last) {
+func (t *connectionTimer) SetTimer(idleTimeout, keepAlive, connIDRetirement, ackAlarm, lossTime, pacing monotime.Time) {
+	if t.blocked {
+		t.timer.Reset(idleTimeout)
+		return
+	}
+
+	deadline := idleTimeout
+	if keepAlive.IsZero() && keepAlive.Before(deadline) {
+		deadline = keepAlive
+	}
+	if !connIDRetirement.IsZero() && connIDRetirement.Before(deadline) {
 		deadline = connIDRetirement
 	}
-	if !ackAlarm.IsZero() && ackAlarm.Before(deadline) && ackAlarm.After(t.last) {
+	if !ackAlarm.IsZero() && ackAlarm.Before(deadline) {
 		deadline = ackAlarm
 	}
-	if !lossTime.IsZero() && lossTime.Before(deadline) && lossTime.After(t.last) {
+	if !lossTime.IsZero() && lossTime.Before(deadline) {
 		deadline = lossTime
 	}
 	if !pacing.IsZero() && pacing.Before(deadline) {
