@@ -10,7 +10,6 @@ var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value 
 
 type connectionTimer struct {
 	timer *time.Timer
-	last  monotime.Time
 }
 
 func newTimer() *connectionTimer {
@@ -28,19 +27,18 @@ func (t *connectionTimer) Chan() <-chan time.Time {
 // This doesn't apply to the pacing deadline, which can be set multiple times to deadlineSendImmediately.
 func (t *connectionTimer) SetTimer(idleTimeoutOrKeepAlive, connIDRetirement, ackAlarm, lossTime, pacing monotime.Time) {
 	deadline := idleTimeoutOrKeepAlive
-	if !connIDRetirement.IsZero() && connIDRetirement.Before(deadline) && connIDRetirement.After(t.last) {
+	if !connIDRetirement.IsZero() && connIDRetirement.Before(deadline) {
 		deadline = connIDRetirement
 	}
-	if !ackAlarm.IsZero() && ackAlarm.Before(deadline) && ackAlarm.After(t.last) {
+	if !ackAlarm.IsZero() && ackAlarm.Before(deadline) {
 		deadline = ackAlarm
 	}
-	if !lossTime.IsZero() && lossTime.Before(deadline) && lossTime.After(t.last) {
+	if !lossTime.IsZero() && lossTime.Before(deadline) {
 		deadline = lossTime
 	}
 	if !pacing.IsZero() && pacing.Before(deadline) {
 		deadline = pacing
 	}
-	t.last = deadline
 	t.timer.Reset(monotime.Until(deadline))
 }
 
