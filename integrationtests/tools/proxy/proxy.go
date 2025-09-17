@@ -73,8 +73,8 @@ type queue struct {
 }
 
 func newQueue() *queue {
-	// TODO: think about initializing the timer with a better default value
-	return &queue{timer: time.NewTimer(time.Hour)}
+	// there's no way to initialize a time.Timer that's not running
+	return &queue{timer: time.NewTimer(24 * time.Hour)}
 }
 
 func (q *queue) Add(e packetEntry) {

@@ -91,6 +91,8 @@ func (e *errCloseForRecreating) Error() string {
 	return "closing connection in order to recreate it"
 }
 
+var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
+
 var connTracingID atomic.Uint64              // to be accessed atomically
 func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTracingID.Add(1)) }
 
@@ -178,6 +180,12 @@ type Conn struct {
 	versionNegotiated   bool
 	receivedFirstPacket bool
 
+	// isBlocked is set to true when the connection is blocked. This can happen when:
+	// * the send queue is full
+	// * the SentPacketHandler returns SendNone, e.g. when congestion limited
+	// In that case, the timer will be set to the idle timeout.
+	isBlocked bool
+
 	// the minimum of the max_idle_timeout values advertised by both endpoints
 	idleTimeout  time.Duration
 	creationTime monotime.Time
@@ -190,7 +198,7 @@ type Conn struct {
 
 	peerParams *wire.TransportParameters
 
-	timer connectionTimer
+	timer *time.Timer
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
 	// It is reset as soon as we receive a packet from the peer.
 	keepAlivePingSent bool
@@ -533,7 +541,7 @@ func (c *Conn) run() (err error) {
 		}
 	}()
 
-	c.timer = *newTimer()
+	c.timer = time.NewTimer(monotime.Until(c.idleTimeoutStartTime().Add(c.config.HandshakeIdleTimeout)))
 
 	if err := c.cryptoStreamHandler.StartHandshake(c.ctx); err != nil {
 		return err
@@ -614,8 +622,9 @@ runLoop:
 			select {
 			case <-c.closeChan:
 				break runLoop
-			case <-c.timer.Chan():
+			case <-c.timer.C:
 			case <-c.sendingScheduled:
+				c.isBlocked = false
 			case <-sendQueueAvailable:
 			case <-c.notifyReceivedPacket:
 				wasProcessed, err := c.handlePackets()
@@ -674,6 +683,7 @@ runLoop:
 			sendQueueAvailable = c.sendQueue.Available()
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
+			c.isBlocked = true
 			continue
 		}
 
@@ -690,8 +700,10 @@ runLoop:
 			sendQueueAvailable = c.sendQueue.Available()
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
+			c.isBlocked = true
 		} else {
 			sendQueueAvailable = nil
+			c.isBlocked = false
 		}
 	}
 
@@ -815,20 +827,35 @@ func (c *Conn) maybeResetTimer() {
 			deadline = t
 		}
 	} else {
-		if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() {
-			deadline = keepAliveTime
-		} else {
+		if c.isBlocked {
 			deadline = c.nextIdleTimeoutTime()
+		} else {
+			if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() {
+				deadline = keepAliveTime
+			} else {
+				deadline = c.nextIdleTimeoutTime()
+			}
 		}
 	}
+	if c.isBlocked {
+		c.timer.Reset(monotime.Until(deadline))
+		return
+	}
 
-	c.timer.SetTimer(
-		deadline,
-		c.connIDGenerator.NextRetireTime(),
-		c.receivedPacketHandler.GetAlarmTimeout(),
-		c.sentPacketHandler.GetLossDetectionTimeout(),
-		c.pacingDeadline,
-	)
+	if t := c.connIDGenerator.NextRetireTime(); !t.IsZero() && t.Before(deadline) {
+		deadline = t
+	}
+	if t := c.receivedPacketHandler.GetAlarmTimeout(); !t.IsZero() && t.Before(deadline) {
+		deadline = t
+	}
+	if t := c.sentPacketHandler.GetLossDetectionTimeout(); !t.IsZero() && t.Before(deadline) {
+		deadline = t
+	}
+	if !c.pacingDeadline.IsZero() && c.pacingDeadline.Before(deadline) {
+		deadline = c.pacingDeadline
+	}
+
+	c.timer.Reset(monotime.Until(deadline))
 }
 
 func (c *Conn) idleTimeoutStartTime() monotime.Time {
@@ -1054,6 +1081,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ error) {
 	}
 
 	p.buffer.MaybeRelease()
+	c.isBlocked = false
 	return wasProcessed, nil
 }
 
@@ -2117,6 +2145,7 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 	case ackhandler.SendAny:
 		return c.sendPackets(now)
 	case ackhandler.SendNone:
+		c.isBlocked = true
 		return nil
 	case ackhandler.SendPacingLimited:
 		deadline := c.sentPacketHandler.TimeUntilSend()
@@ -2132,6 +2161,7 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 		// We can at most send a single ACK only packet.
 		// There will only be a new ACK after receiving new packets.
 		// SendAck is only returned when we're congestion limited, so we don't need to set the pacing timer.
+		c.isBlocked = true
 		return c.maybeSendAckOnlyPacket(now)
 	case ackhandler.SendPTOInitial, ackhandler.SendPTOHandshake, ackhandler.SendPTOAppData:
 		if err := c.sendProbePacket(sendMode, now); err != nil {
