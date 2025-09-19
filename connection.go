@@ -2155,7 +2155,7 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 		// Allow sending of an ACK if we're pacing limit.
 		// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
 		// sends enough ACKs to allow its peer to utilize the bandwidth.
-		fallthrough
+		return c.maybeSendAckOnlyPacket(now)
 	case ackhandler.SendAck:
 		// We can at most send a single ACK only packet.
 		// There will only be a new ACK after receiving new packets.
