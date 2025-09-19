@@ -690,6 +690,7 @@ runLoop:
 			break runLoop
 		}
 
+		c.isBlocked = false // sending might set it back to true if we're congestion limited
 		if err := c.triggerSending(now); err != nil {
 			c.setCloseError(&closeError{err: err})
 			break runLoop
@@ -702,7 +703,6 @@ runLoop:
 			c.isBlocked = true
 		} else {
 			sendQueueAvailable = nil
-			c.isBlocked = false
 		}
 	}
 
