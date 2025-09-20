@@ -10,7 +10,6 @@ import (
 	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -129,7 +128,7 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 	s.dataForWriting = p
 
 	var (
-		deadlineTimer  *utils.Timer
+		deadlineTimer  *time.Timer
 		bytesWritten   int
 		notifiedSender bool
 	)
@@ -167,10 +166,11 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 					return false, bytesWritten, errDeadline
 				}
 				if deadlineTimer == nil {
-					deadlineTimer = utils.NewTimer()
+					deadlineTimer = time.NewTimer(monotime.Until(deadline))
 					defer deadlineTimer.Stop()
+				} else {
+					deadlineTimer.Reset(monotime.Until(deadline))
 				}
-				deadlineTimer.Reset(deadline)
 			}
 			if s.dataForWriting == nil || s.shutdownErr != nil || s.resetErr != nil {
 				break
@@ -191,8 +191,7 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 		} else {
 			select {
 			case <-s.writeChan:
-			case <-deadlineTimer.Chan():
-				deadlineTimer.SetRead()
+			case <-deadlineTimer.C:
 			}
 		}
 		s.mutex.Lock()

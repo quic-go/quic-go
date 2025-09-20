@@ -11,7 +11,6 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -141,7 +140,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 	}
 
 	var bytesRead int
-	var deadlineTimer *utils.Timer
+	var deadlineTimer *time.Timer
 	for bytesRead < len(p) {
 		if s.currentFrame == nil || s.readPosInFrame >= len(s.currentFrame) {
 			s.dequeueNextFrame()
@@ -166,10 +165,11 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 					return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, errDeadline
 				}
 				if deadlineTimer == nil {
-					deadlineTimer = utils.NewTimer()
+					deadlineTimer = time.NewTimer(monotime.Until(deadline))
 					defer deadlineTimer.Stop()
+				} else {
+					deadlineTimer.Reset(monotime.Until(deadline))
 				}
-				deadlineTimer.Reset(deadline)
 			}
 
 			if s.currentFrame != nil || s.currentFrameIsLast {
@@ -182,8 +182,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			} else {
 				select {
 				case <-s.readChan:
-				case <-deadlineTimer.Chan():
-					deadlineTimer.SetRead()
+				case <-deadlineTimer.C:
 				}
 			}
 			s.mutex.Lock()
