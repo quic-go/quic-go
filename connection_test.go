@@ -1102,7 +1102,7 @@ func TestConnectionHandshakeServer(t *testing.T) {
 	data, err := (&wire.CryptoFrame{Data: []byte("foobar")}).Append(nil, protocol.Version1)
 	require.NoError(t, err)
 
-	cs.EXPECT().DiscardInitialKeys()
+	cs.EXPECT().DiscardInitialKeys().Times(2)
 	tc.connRunner.EXPECT().Retire(gomock.Any())
 	gomock.InOrder(
 		cs.EXPECT().StartHandshake(gomock.Any()),
@@ -1254,6 +1254,7 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 		unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(
 			&unpackedPacket{hdr: hdr, encryptionLevel: protocol.Encryption1RTT, data: data}, nil,
 		),
+		cs.EXPECT().DiscardInitialKeys(),
 		cs.EXPECT().SetHandshakeConfirmed(),
 		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 			func(buf *packetBuffer, _ protocol.ByteCount, _ time.Time, _ protocol.Version) (shortHeaderPacket, error) {

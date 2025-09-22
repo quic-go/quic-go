@@ -789,6 +789,9 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 }
 
 func (s *connection) handleHandshakeConfirmed(now time.Time) error {
+	if err := s.dropEncryptionLevel(protocol.EncryptionInitial, now); err != nil {
+		return err
+	}
 	if err := s.dropEncryptionLevel(protocol.EncryptionHandshake, now); err != nil {
 		return err
 	}
