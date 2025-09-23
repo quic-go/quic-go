@@ -29,24 +29,22 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 
 func TestWritingStopping(t *testing.T) {
 	buf := &bytes.Buffer{}
-	t.Run("stops writing when encountering an error", func(t *testing.T) {
-		tracer := NewConnectionTracer(
-			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
-			protocol.PerspectiveServer,
-			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-		)
+	tracer := NewConnectionTracer(
+		&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
+		protocol.PerspectiveServer,
+		protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+	)
 
-		for i := uint32(0); i < 1000; i++ {
-			tracer.UpdatedPTOCount(i)
-		}
+	for i := range 1000 {
+		tracer.UpdatedPTOCount(uint32(i))
+	}
 
-		// Capture log output
-		var logBuf bytes.Buffer
-		log.SetOutput(&logBuf)
-		defer log.SetOutput(os.Stdout)
+	// Capture log output
+	var logBuf bytes.Buffer
+	log.SetOutput(&logBuf)
+	defer log.SetOutput(os.Stdout)
 
-		tracer.Close()
+	tracer.Close()
 
-		require.Contains(t, logBuf.String(), "writer full")
-	})
+	require.Contains(t, logBuf.String(), "writer full")
 }

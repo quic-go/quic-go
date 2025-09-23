@@ -12,7 +12,7 @@ import (
 )
 
 type connectionTracer struct {
-	w           writer
+	w           *Writer
 	lastMetrics *metrics
 
 	perspective logging.Perspective
@@ -20,19 +20,13 @@ type connectionTracer struct {
 
 // NewConnectionTracer creates a new tracer to record a qlog for a connection.
 func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
-	tr := &trace{
-		VantagePoint: vantagePoint{Type: p.String()},
-		CommonFields: commonFields{
-			ODCID:         &odcid,
-			GroupID:       &odcid,
-			ReferenceTime: time.Now(),
-		},
-	}
+	tr := NewConnectionTrace(w, p, odcid)
+	go tr.Run()
+
 	t := connectionTracer{
-		w:           *newWriter(w, tr),
+		w:           tr.AddProducer(),
 		perspective: p,
 	}
-	go t.w.Run()
 	return &logging.ConnectionTracer{
 		StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 			t.StartedConnection(local, remote, srcConnID, destConnID)
