@@ -2,97 +2,170 @@ package qlog
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/francoispqt/gojay"
+	"github.com/quic-go/quic-go/logging"
 )
 
 const eventChanSize = 50
 
-const recordSeparator = 0x1e
+var (
+	recordSeparator = []byte{0x1e}
+	newline         = []byte{'\n'}
+)
 
-func writeRecordSeparator(w io.Writer) error {
-	_, err := w.Write([]byte{recordSeparator})
-	return err
-}
-
-type writer struct {
-	w io.WriteCloser
-
+// Trace represents a qlog trace.
+// qlog event producers can be created by calling AddProducer.
+// The underlying io.WriteCloser is closed when the last producer is removed.
+type Trace struct {
+	w             io.WriteCloser
+	enc           *gojay.Encoder
 	referenceTime time.Time
-	tr            *trace
 
-	events     chan event
-	encodeErr  error
 	runStopped chan struct{}
+	encodeErr  error
+	events     chan event
+
+	mx        sync.Mutex
+	producers int
+	closed    bool
 }
 
-func newWriter(w io.WriteCloser, tr *trace) *writer {
-	return &writer{
-		w:             w,
-		tr:            tr,
-		referenceTime: tr.CommonFields.ReferenceTime,
-		runStopped:    make(chan struct{}),
-		events:        make(chan event, eventChanSize),
+func NewTrace(w io.WriteCloser) *Trace {
+	return newTrace(w, "transport", nil)
+}
+
+// NewConnectionTrace creates a new qlog trace to log connection events..
+func NewConnectionTrace(w io.WriteCloser, pers logging.Perspective, odcid logging.ConnectionID) *Trace {
+	return newTrace(w, pers.String(), &odcid)
+}
+
+func newTrace(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *Trace {
+	now := time.Now()
+	tr := &trace{
+		VantagePoint: vantagePoint{Type: pers},
+		CommonFields: commonFields{
+			ODCID:         odcid,
+			GroupID:       odcid,
+			ReferenceTime: now,
+		},
 	}
-}
-
-func (w *writer) RecordEvent(eventTime time.Time, details eventDetails) {
-	w.events <- event{
-		RelativeTime: eventTime.Sub(w.referenceTime),
-		eventDetails: details,
-	}
-}
-
-func (w *writer) Run() {
-	defer close(w.runStopped)
 	buf := &bytes.Buffer{}
 	enc := gojay.NewEncoder(buf)
-	if err := writeRecordSeparator(buf); err != nil {
+	if _, err := buf.Write(recordSeparator); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
-	if err := enc.Encode(&topLevel{trace: *w.tr}); err != nil {
+	if err := enc.Encode(&topLevel{trace: *tr}); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
 	if err := buf.WriteByte('\n'); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
-	if _, err := w.w.Write(buf.Bytes()); err != nil {
-		w.encodeErr = err
+	_, encodeErr := w.Write(buf.Bytes())
+
+	return &Trace{
+		w:             w,
+		referenceTime: now,
+		enc:           gojay.NewEncoder(w),
+		runStopped:    make(chan struct{}),
+		encodeErr:     encodeErr,
+		events:        make(chan event, eventChanSize),
 	}
-	enc = gojay.NewEncoder(w.w)
-	for ev := range w.events {
-		if w.encodeErr != nil { // if encoding failed, just continue draining the event channel
+}
+
+func (t *Trace) AddProducer() *Writer {
+	t.mx.Lock()
+	defer t.mx.Unlock()
+	if t.closed {
+		return nil
+	}
+
+	t.producers++
+
+	return &Writer{
+		t: t,
+	}
+}
+
+func (t *Trace) record(eventTime time.Time, details eventDetails) error {
+	t.mx.Lock()
+
+	if t.closed {
+		t.mx.Unlock()
+		return errors.New("trace closed")
+	}
+	t.mx.Unlock()
+
+	t.events <- event{
+		RelativeTime: eventTime.Sub(t.referenceTime),
+		eventDetails: details,
+	}
+	return nil
+}
+
+func (t *Trace) Run() {
+	defer close(t.runStopped)
+
+	enc := gojay.NewEncoder(t.w)
+	for ev := range t.events {
+		if t.encodeErr != nil { // if encoding failed, just continue draining the event channel
 			continue
 		}
-		if err := writeRecordSeparator(w.w); err != nil {
-			w.encodeErr = err
+		if _, err := t.w.Write(recordSeparator); err != nil {
+			t.encodeErr = err
 			continue
 		}
 		if err := enc.Encode(ev); err != nil {
-			w.encodeErr = err
+			t.encodeErr = err
 			continue
 		}
-		if _, err := w.w.Write([]byte{'\n'}); err != nil {
-			w.encodeErr = err
+		if _, err := t.w.Write(newline); err != nil {
+			t.encodeErr = err
 		}
 	}
 }
 
-func (w *writer) Close() {
-	if err := w.close(); err != nil {
-		log.Printf("exporting qlog failed: %s\n", err)
+func (t *Trace) removeProducer() {
+	t.mx.Lock()
+	defer t.mx.Unlock()
+
+	if t.closed {
+		return
+	}
+	t.producers--
+	if t.producers == 0 {
+		t.closed = true
+		t.close()
+		t.w.Close()
 	}
 }
 
-func (w *writer) close() error {
-	close(w.events)
-	<-w.runStopped
-	if w.encodeErr != nil {
-		return w.encodeErr
+func (t *Trace) close() {
+	close(t.events)
+	<-t.runStopped
+	defer t.w.Close()
+	if t.encodeErr != nil {
+		log.Printf("exporting qlog failed: %s\n", t.encodeErr)
+		return
 	}
-	return w.w.Close()
+}
+
+type Writer struct {
+	t *Trace
+}
+
+func (w *Writer) Close() error {
+	w.t.removeProducer()
+	return nil
+}
+
+func (w *Writer) RecordEvent(time time.Time, details eventDetails) {
+	err := w.t.record(time, details)
+	_ = err
 }
