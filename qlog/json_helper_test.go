@@ -23,7 +23,7 @@ func scaleDuration(t time.Duration) time.Duration {
 }
 
 func unmarshal(data []byte, v any) error {
-	if data[0] == recordSeparator {
+	if bytes.Equal(data[:1], recordSeparator) {
 		data = data[1:]
 	}
 	return json.Unmarshal(data, v)
