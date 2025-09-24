@@ -670,7 +670,7 @@ runLoop:
 		} else {
 			idleTimeoutStartTime := c.idleTimeoutStartTime()
 			if (!c.handshakeComplete && now.Sub(idleTimeoutStartTime) >= c.config.HandshakeIdleTimeout) ||
-				(c.handshakeComplete && now.After(c.nextIdleTimeoutTime())) {
+				(c.handshakeComplete && !now.Before(c.nextIdleTimeoutTime())) {
 				c.destroyImpl(qerr.ErrIdleTimeout)
 				break runLoop
 			}
@@ -878,7 +878,7 @@ func (c *Conn) maybeResetTimer() {
 
 func (c *Conn) idleTimeoutStartTime() monotime.Time {
 	startTime := c.lastPacketReceivedTime
-	if t := c.firstAckElicitingPacketAfterIdleSentTime; t.After(startTime) {
+	if t := c.firstAckElicitingPacketAfterIdleSentTime; !t.IsZero() && t.After(startTime) {
 		startTime = t
 	}
 	return startTime
