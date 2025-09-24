@@ -68,12 +68,13 @@ type packetEntry struct {
 type queue struct {
 	sync.Mutex
 
-	timer   *utils.Timer
+	timer   *time.Timer
 	Packets []packetEntry // sorted by the packetEntry.Time
 }
 
 func newQueue() *queue {
-	return &queue{timer: utils.NewTimer()}
+	// there's no way to initialize a time.Timer that's not running
+	return &queue{timer: time.NewTimer(24 * time.Hour)}
 }
 
 func (q *queue) Add(e packetEntry) {
@@ -82,7 +83,7 @@ func (q *queue) Add(e packetEntry) {
 
 	if len(q.Packets) == 0 {
 		q.Packets = append(q.Packets, e)
-		q.timer.Reset(e.Time)
+		q.timer.Reset(monotime.Until(e.Time))
 		return
 	}
 
@@ -97,7 +98,7 @@ func (q *queue) Add(e packetEntry) {
 		q.Packets = slices.Insert(q.Packets, idx, e)
 	}
 	if idx == 0 {
-		q.timer.Reset(q.Packets[0].Time)
+		q.timer.Reset(monotime.Until(q.Packets[0].Time))
 	}
 }
 
@@ -106,14 +107,13 @@ func (q *queue) Get() []byte {
 	raw := q.Packets[0].Raw
 	q.Packets = q.Packets[1:]
 	if len(q.Packets) > 0 {
-		q.timer.Reset(q.Packets[0].Time)
+		q.timer.Reset(monotime.Until(q.Packets[0].Time))
 	}
 	q.Unlock()
 	return raw
 }
 
-func (q *queue) Timer() <-chan time.Time { return q.timer.Chan() }
-func (q *queue) SetTimerRead()           { q.timer.SetRead() }
+func (q *queue) Timer() <-chan time.Time { return q.timer.C }
 
 func (q *queue) Close() { q.timer.Stop() }
 
@@ -348,7 +348,6 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 		case e := <-outgoingPackets:
 			conn.Outgoing.Add(e)
 		case <-conn.Outgoing.Timer():
-			conn.Outgoing.SetTimerRead()
 			if _, err := p.Conn.WriteTo(conn.Outgoing.Get(), conn.ClientAddr); err != nil {
 				return err
 			}
@@ -365,7 +364,6 @@ func (p *Proxy) runIncomingConnection(conn *connection) error {
 			// Send the packet to the server
 			conn.Incoming.Add(e)
 		case <-conn.Incoming.Timer():
-			conn.Incoming.SetTimerRead()
 			if _, err := conn.GetServerConn().WriteTo(conn.Incoming.Get(), conn.ServerAddr); err != nil {
 				return err
 			}

@@ -91,8 +91,25 @@ func (e *errCloseForRecreating) Error() string {
 	return "closing connection in order to recreate it"
 }
 
+var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
+
 var connTracingID atomic.Uint64              // to be accessed atomically
 func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTracingID.Add(1)) }
+
+type blockMode uint8
+
+const (
+	// blockModeNone means that the connection is not blocked.
+	blockModeNone blockMode = iota
+	// blockModeCongestionLimited means that the connection is congestion limited.
+	// In that case, we can still send acknowledgments and PTO probe packets.
+	blockModeCongestionLimited
+	// blockModeHardBlocked means that no packet can be sent, under no circumstances. This can happen when:
+	// * the send queue is full
+	// * the SentPacketHandler returns SendNone, e.g. when we are tracking the maximum number of packets
+	// In that case, the timer will be set to the idle timeout.
+	blockModeHardBlocked
+)
 
 // A Conn is a QUIC connection between two peers.
 // Calls to the connection (and to streams) can return the following types of errors:
@@ -178,6 +195,8 @@ type Conn struct {
 	versionNegotiated   bool
 	receivedFirstPacket bool
 
+	blocked blockMode
+
 	// the minimum of the max_idle_timeout values advertised by both endpoints
 	idleTimeout  time.Duration
 	creationTime monotime.Time
@@ -190,7 +209,7 @@ type Conn struct {
 
 	peerParams *wire.TransportParameters
 
-	timer connectionTimer
+	timer *time.Timer
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
 	// It is reset as soon as we receive a packet from the peer.
 	keepAlivePingSent bool
@@ -533,7 +552,7 @@ func (c *Conn) run() (err error) {
 		}
 	}()
 
-	c.timer = *newTimer()
+	c.timer = time.NewTimer(monotime.Until(c.idleTimeoutStartTime().Add(c.config.HandshakeIdleTimeout)))
 
 	if err := c.cryptoStreamHandler.StartHandshake(c.ctx); err != nil {
 		return err
@@ -614,8 +633,7 @@ runLoop:
 			select {
 			case <-c.closeChan:
 				break runLoop
-			case <-c.timer.Chan():
-				c.timer.SetRead()
+			case <-c.timer.C:
 			case <-c.sendingScheduled:
 			case <-sendQueueAvailable:
 			case <-c.notifyReceivedPacket:
@@ -675,6 +693,7 @@ runLoop:
 			sendQueueAvailable = c.sendQueue.Available()
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
+			c.blocked = blockModeHardBlocked
 			continue
 		}
 
@@ -682,6 +701,7 @@ runLoop:
 			break runLoop
 		}
 
+		c.blocked = blockModeNone // sending might set it back to true if we're congestion limited
 		if err := c.triggerSending(now); err != nil {
 			c.setCloseError(&closeError{err: err})
 			break runLoop
@@ -691,6 +711,7 @@ runLoop:
 			sendQueueAvailable = c.sendQueue.Available()
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
+			c.blocked = blockModeHardBlocked
 		} else {
 			sendQueueAvailable = nil
 		}
@@ -816,20 +837,43 @@ func (c *Conn) maybeResetTimer() {
 			deadline = t
 		}
 	} else {
-		if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() {
-			deadline = keepAliveTime
-		} else {
+		// A keep-alive packet is ack-eliciting, so it can only be sent if the connection is
+		// neither congestion limited nor hard-blocked.
+		if c.blocked != blockModeNone {
 			deadline = c.nextIdleTimeoutTime()
+		} else {
+			if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() {
+				deadline = keepAliveTime
+			} else {
+				deadline = c.nextIdleTimeoutTime()
+			}
 		}
 	}
+	// If the connection is hard-blocked, we can't even send acknowledgments,
+	// nor can we send PTO probe packets.
+	if c.blocked == blockModeHardBlocked {
+		c.timer.Reset(monotime.Until(deadline))
+		return
+	}
 
-	c.timer.SetTimer(
-		deadline,
-		c.connIDGenerator.NextRetireTime(),
-		c.receivedPacketHandler.GetAlarmTimeout(),
-		c.sentPacketHandler.GetLossDetectionTimeout(),
-		c.pacingDeadline,
-	)
+	if t := c.receivedPacketHandler.GetAlarmTimeout(); !t.IsZero() && t.Before(deadline) {
+		deadline = t
+	}
+	if t := c.sentPacketHandler.GetLossDetectionTimeout(); !t.IsZero() && t.Before(deadline) {
+		deadline = t
+	}
+	if c.blocked == blockModeCongestionLimited {
+		c.timer.Reset(monotime.Until(deadline))
+		return
+	}
+
+	if t := c.connIDGenerator.NextRetireTime(); !t.IsZero() && t.Before(deadline) {
+		deadline = t
+	}
+	if !c.pacingDeadline.IsZero() && c.pacingDeadline.Before(deadline) {
+		deadline = c.pacingDeadline
+	}
+	c.timer.Reset(monotime.Until(deadline))
 }
 
 func (c *Conn) idleTimeoutStartTime() monotime.Time {
@@ -1055,6 +1099,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket) (wasProcessed bool, _ error) {
 	}
 
 	p.buffer.MaybeRelease()
+	c.blocked = blockModeNone
 	return wasProcessed, nil
 }
 
@@ -2118,6 +2163,7 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 	case ackhandler.SendAny:
 		return c.sendPackets(now)
 	case ackhandler.SendNone:
+		c.blocked = blockModeHardBlocked
 		return nil
 	case ackhandler.SendPacingLimited:
 		deadline := c.sentPacketHandler.TimeUntilSend()
@@ -2128,11 +2174,12 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 		// Allow sending of an ACK if we're pacing limit.
 		// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
 		// sends enough ACKs to allow its peer to utilize the bandwidth.
-		fallthrough
+		return c.maybeSendAckOnlyPacket(now)
 	case ackhandler.SendAck:
 		// We can at most send a single ACK only packet.
 		// There will only be a new ACK after receiving new packets.
 		// SendAck is only returned when we're congestion limited, so we don't need to set the pacing timer.
+		c.blocked = blockModeCongestionLimited
 		return c.maybeSendAckOnlyPacket(now)
 	case ackhandler.SendPTOInitial, ackhandler.SendPTOHandshake, ackhandler.SendPTOAppData:
 		if err := c.sendProbePacket(sendMode, now); err != nil {
