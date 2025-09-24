@@ -99,6 +99,7 @@ func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTr
 type blockMode uint8
 
 const (
+	// blockModeNone means that the connection is not blocked.
 	blockModeNone blockMode = iota
 	// blockModeCongestionLimited means that the connection is congestion limited.
 	// In that case, we can still send acknowledgments and PTO probe packets.
@@ -194,10 +195,6 @@ type Conn struct {
 	versionNegotiated   bool
 	receivedFirstPacket bool
 
-	// isBlocked is set to true when the connection is blocked. This can happen when:
-	// * the send queue is full
-	// * the SentPacketHandler returns SendNone, e.g. when congestion limited
-	// In that case, the timer will be set to the idle timeout.
 	blocked blockMode
 
 	// the minimum of the max_idle_timeout values advertised by both endpoints
