@@ -12,7 +12,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogevents"
 )
 
 func QlogTracer(logger io.Writer) *logging.Tracer {
@@ -24,7 +24,7 @@ func QlogTracer(logger io.Writer) *logging.Tracer {
 		return nil
 	}
 	bw := bufio.NewWriter(f)
-	return qlog.NewTracer(utils.NewBufferedWriteCloser(bw, f))
+	return qlogevents.NewTracer(utils.NewBufferedWriteCloser(bw, f))
 }
 
 func NewQlogConnectionTracer(logger io.Writer) func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
@@ -37,6 +37,6 @@ func NewQlogConnectionTracer(logger io.Writer) func(context.Context, logging.Per
 			return nil
 		}
 		bw := bufio.NewWriter(f)
-		return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bw, f), p, connID)
+		return qlogevents.NewConnectionTracer(utils.NewBufferedWriteCloser(bw, f), p, connID)
 	}
 }
