@@ -22,7 +22,7 @@ type connectionTracer struct {
 
 // NewConnectionTracer creates a new tracer to record a qlog for a connection.
 func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
-	tr := NewConnectionTrace(w, p, odcid)
+	tr := NewConnectionFileSeq(w, p, odcid)
 	go tr.Run()
 
 	t := connectionTracer{
