@@ -1,4 +1,4 @@
-package qlog
+package qlogevents
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+var recordSeparator = []byte{0x1e}
 
 func scaleDuration(t time.Duration) time.Duration {
 	scaleFactor := 1

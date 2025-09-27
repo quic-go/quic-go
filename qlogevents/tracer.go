@@ -1,16 +1,16 @@
-package qlog
+package qlogevents
 
 import (
 	"io"
 	"net"
-	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 )
 
 func NewTracer(w io.WriteCloser) *logging.Tracer {
-	tr := NewFileSeq(w)
+	tr := qlog.NewFileSeq(w)
 	go tr.Run()
 
 	wr := tr.AddProducer()
@@ -20,7 +20,7 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 			for _, f := range frames {
 				fs = append(fs, frame{Frame: f})
 			}
-			wr.RecordEvent(time.Now(), &eventPacketSent{
+			wr.RecordEvent(&eventPacketSent{
 				Header: transformHeader(hdr),
 				Length: size,
 				Frames: fs,
@@ -31,7 +31,7 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 			for i, v := range versions {
 				ver[i] = version(v)
 			}
-			wr.RecordEvent(time.Now(), &eventVersionNegotiationSent{
+			wr.RecordEvent(&eventVersionNegotiationSent{
 				Header: packetHeaderVersionNegotiation{
 					SrcConnectionID:  src,
 					DestConnectionID: dest,
@@ -40,7 +40,7 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 			})
 		},
 		DroppedPacket: func(addr net.Addr, p logging.PacketType, count logging.ByteCount, reason logging.PacketDropReason) {
-			wr.RecordEvent(time.Now(), eventPacketDropped{
+			wr.RecordEvent(eventPacketDropped{
 				PacketType:   p,
 				PacketNumber: protocol.InvalidPacketNumber,
 				PacketSize:   count,
@@ -48,7 +48,7 @@ func NewTracer(w io.WriteCloser) *logging.Tracer {
 			})
 		},
 		Debug: func(name, msg string) {
-			wr.RecordEvent(time.Now(), &eventGeneric{
+			wr.RecordEvent(&eventGeneric{
 				name: name,
 				msg:  msg,
 			})

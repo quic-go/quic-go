@@ -16,7 +16,7 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
 	"github.com/quic-go/quic-go/metrics"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogevents"
 
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +37,7 @@ func TestTracerHandshake(t *testing.T) {
 					return nil
 				}
 				t.Logf("%s qlog tracing connection %s", p, connID)
-				return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil)), p, connID)
+				return qlogevents.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil)), p, connID)
 			})
 		}
 		if enableMetrics {
