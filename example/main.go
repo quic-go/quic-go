@@ -18,7 +18,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/internal/testdata"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogevents"
 )
 
 type binds []string
@@ -169,7 +169,7 @@ func main() {
 					Handler: handler,
 					Addr:    bCap,
 					QUICConfig: &quic.Config{
-						Tracer: qlog.DefaultConnectionTracer,
+						Tracer: qlogevents.DefaultConnectionTracer,
 					},
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)

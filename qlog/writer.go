@@ -95,7 +95,7 @@ func (t *FileSeq) AddProducer() *Writer {
 	}
 }
 
-func (t *FileSeq) record(eventTime time.Time, details eventDetails) error {
+func (t *FileSeq) record(eventTime time.Time, details Event) error {
 	t.mx.Lock()
 
 	if t.closed {
@@ -106,7 +106,7 @@ func (t *FileSeq) record(eventTime time.Time, details eventDetails) error {
 
 	t.events <- event{
 		RelativeTime: eventTime.Sub(t.referenceTime),
-		eventDetails: details,
+		Event:        details,
 	}
 	return nil
 }
@@ -123,7 +123,8 @@ func (t *FileSeq) Run() {
 			t.encodeErr = err
 			continue
 		}
-		if err := enc.Encode(ev); err != nil {
+		if err := enc.Encode(&ev); err != nil {
+			fmt.Println(err)
 			t.encodeErr = err
 			continue
 		}
@@ -167,7 +168,7 @@ func (w *Writer) Close() error {
 	return nil
 }
 
-func (w *Writer) RecordEvent(time time.Time, details eventDetails) {
-	err := w.t.record(time, details)
+func (w *Writer) RecordEvent(time time.Time, ev Event) {
+	err := w.t.record(time, ev)
 	_ = err
 }

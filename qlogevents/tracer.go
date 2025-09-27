@@ -1,4 +1,4 @@
-package qlog
+package qlogevents
 
 import (
 	"io"
@@ -7,10 +7,11 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 )
 
 func NewTracer(w io.WriteCloser) *logging.Tracer {
-	tr := NewFileSeq(w)
+	tr := qlog.NewFileSeq(w)
 	go tr.Run()
 
 	wr := tr.AddProducer()

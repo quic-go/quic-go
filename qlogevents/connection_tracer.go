@@ -1,4 +1,4 @@
-package qlog
+package qlogevents
 
 import (
 	"io"
@@ -9,12 +9,13 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 
 	"github.com/francoispqt/gojay"
 )
 
 type connectionTracer struct {
-	w           *Writer
+	w           *qlog.Writer
 	lastMetrics *metrics
 
 	perspective logging.Perspective
@@ -22,7 +23,7 @@ type connectionTracer struct {
 
 // NewConnectionTracer creates a new tracer to record a qlog for a connection.
 func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol.ConnectionID) *logging.ConnectionTracer {
-	tr := NewConnectionFileSeq(w, p, odcid)
+	tr := qlog.NewConnectionFileSeq(w, p, odcid)
 	go tr.Run()
 
 	t := connectionTracer{
@@ -115,8 +116,8 @@ func NewConnectionTracer(w io.WriteCloser, p logging.Perspective, odcid protocol
 	}
 }
 
-func (t *connectionTracer) recordEvent(eventTime time.Time, details eventDetails) {
-	t.w.RecordEvent(eventTime, details)
+func (t *connectionTracer) recordEvent(eventTime time.Time, ev qlog.Event) {
+	t.w.RecordEvent(eventTime, ev)
 }
 
 func (t *connectionTracer) Close() {

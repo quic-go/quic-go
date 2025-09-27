@@ -3,14 +3,36 @@ package qlog
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"testing"
+	"time"
 
-	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/francoispqt/gojay"
 	"github.com/stretchr/testify/require"
 )
+
+type testEvent struct {
+	message string
+}
+
+func (e testEvent) Name() string {
+	return "transport:test_event"
+}
+
+func (e testEvent) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("message", e.message)
+}
+
+type nopWriteCloserImpl struct{ io.Writer }
+
+func (nopWriteCloserImpl) Close() error { return nil }
+
+func nopWriteCloser(w io.Writer) io.WriteCloser {
+	return &nopWriteCloserImpl{Writer: w}
+}
 
 type limitedWriter struct {
 	io.WriteCloser
@@ -29,22 +51,19 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 
 func TestWritingStopping(t *testing.T) {
 	buf := &bytes.Buffer{}
-	tracer := NewConnectionTracer(
-		&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
-		protocol.PerspectiveServer,
-		protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-	)
+	fileSeq := NewFileSeq(&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250})
+	writer := fileSeq.AddProducer()
+	go fileSeq.Run()
 
 	for i := range 1000 {
-		tracer.UpdatedPTOCount(uint32(i))
+		writer.RecordEvent(time.Now(), testEvent{message: fmt.Sprintf("test message %d", i)})
 	}
 
-	// Capture log output
 	var logBuf bytes.Buffer
 	log.SetOutput(&logBuf)
 	defer log.SetOutput(os.Stdout)
 
-	tracer.Close()
+	writer.Close()
 
 	require.Contains(t, logBuf.String(), "writer full")
 }

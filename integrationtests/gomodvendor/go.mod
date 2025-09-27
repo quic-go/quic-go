@@ -6,7 +6,6 @@ go 1.24
 require github.com/quic-go/quic-go v0.21.0
 
 require (
-	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/mod v0.27.0 // indirect
