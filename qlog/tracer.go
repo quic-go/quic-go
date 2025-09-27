@@ -10,7 +10,7 @@ import (
 )
 
 func NewTracer(w io.WriteCloser) *logging.Tracer {
-	tr := NewTrace(w)
+	tr := NewFileSeq(w)
 	go tr.Run()
 
 	wr := tr.AddProducer()
