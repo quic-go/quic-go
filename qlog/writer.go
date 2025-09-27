@@ -17,10 +17,11 @@ const eventChanSize = 50
 
 var recordSeparator = []byte{0x1e}
 
-// Trace represents a qlog trace.
+// FileSeq represents a qlog trace using the JSON-SEQ format,
+// https://www.ietf.org/archive/id/draft-ietf-quic-qlog-main-schema-12.html#section-5
 // qlog event producers can be created by calling AddProducer.
 // The underlying io.WriteCloser is closed when the last producer is removed.
-type Trace struct {
+type FileSeq struct {
 	w             io.WriteCloser
 	enc           *jsontext.Encoder
 	referenceTime time.Time
@@ -34,16 +35,17 @@ type Trace struct {
 	closed    bool
 }
 
-func NewTrace(w io.WriteCloser) *Trace {
-	return newTrace(w, "transport", nil)
+// NewFileSeq creates a new JSON-SEQ qlog trace to log transport events.
+func NewFileSeq(w io.WriteCloser) *FileSeq {
+	return newFileSeq(w, "transport", nil)
 }
 
-// NewConnectionTrace creates a new qlog trace to log connection events..
-func NewConnectionTrace(w io.WriteCloser, pers logging.Perspective, odcid logging.ConnectionID) *Trace {
-	return newTrace(w, pers.String(), &odcid)
+// NewConnectionFileSeq creates a new qlog trace to log connection events.
+func NewConnectionFileSeq(w io.WriteCloser, pers logging.Perspective, odcid logging.ConnectionID) *FileSeq {
+	return newFileSeq(w, pers.String(), &odcid)
 }
 
-func newTrace(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *Trace {
+func newFileSeq(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *FileSeq {
 	now := time.Now()
 	tr := &trace{
 		VantagePoint: vantagePoint{Type: pers},
@@ -63,7 +65,7 @@ func newTrace(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *Trace
 	}
 	_, encodeErr := w.Write(buf.Bytes())
 
-	return &Trace{
+	return &FileSeq{
 		w:             w,
 		referenceTime: now,
 		enc:           jsontext.NewEncoder(w),
@@ -73,7 +75,7 @@ func newTrace(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *Trace
 	}
 }
 
-func (t *Trace) AddProducer() *Writer {
+func (t *FileSeq) AddProducer() *Writer {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 	if t.closed {
@@ -87,7 +89,7 @@ func (t *Trace) AddProducer() *Writer {
 	}
 }
 
-func (t *Trace) record(eventTime time.Time, details eventDetails) error {
+func (t *FileSeq) record(eventTime time.Time, details eventDetails) error {
 	t.mx.Lock()
 
 	if t.closed {
@@ -103,7 +105,7 @@ func (t *Trace) record(eventTime time.Time, details eventDetails) error {
 	return nil
 }
 
-func (t *Trace) Run() {
+func (t *FileSeq) Run() {
 	defer close(t.runStopped)
 
 	enc := jsontext.NewEncoder(t.w)
@@ -122,7 +124,7 @@ func (t *Trace) Run() {
 	}
 }
 
-func (t *Trace) removeProducer() {
+func (t *FileSeq) removeProducer() {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
@@ -137,7 +139,7 @@ func (t *Trace) removeProducer() {
 	}
 }
 
-func (t *Trace) close() {
+func (t *FileSeq) close() {
 	close(t.events)
 	<-t.runStopped
 	defer t.w.Close()
@@ -148,7 +150,7 @@ func (t *Trace) close() {
 }
 
 type Writer struct {
-	t *Trace
+	t *FileSeq
 }
 
 func (w *Writer) Close() error {
