@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/mocks"
-	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -228,7 +229,8 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 		utils.DefaultLogger,
 	)
 
-	sendPacket := func(ti monotime.Time) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(encLevel)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1200, false, false)
 		return pn
@@ -243,10 +245,10 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 	var packets []protocol.PacketNumber
 	now := monotime.Now()
 	// send some packets and receive ACKs with 0 ack delay
-	for i := 0; i < 5; i++ {
-		packets = append(packets, sendPacket(now))
+	for range 5 {
+		packets = append(packets, sendPacket(t, now))
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		expectedRTTStats.UpdateRTT(time.Duration(i+1)*time.Second, 0)
 		now = now.Add(time.Second)
 		ackPacket(packets[i], now, 0)
@@ -257,11 +259,11 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 	packets = packets[:0]
 
 	// send some more packets and receive ACKs with non-zero ack delay
-	for i := 0; i < 5; i++ {
-		packets = append(packets, sendPacket(now))
+	for range 5 {
+		packets = append(packets, sendPacket(t, now))
 	}
 	expectedRTTStatsNoAckDelay := expectedRTTStats.Clone()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		const ackDelay = 500 * time.Millisecond
 		expectedRTTStats.UpdateRTT(time.Duration(i+1)*time.Second, ackDelay)
 		expectedRTTStatsNoAckDelay.UpdateRTT(time.Duration(i+1)*time.Second, 0)
@@ -280,15 +282,15 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 
 	// Send two more packets, and acknowledge them in opposite order.
 	// This tests that the RTT is updated even if the ACK doesn't increase the largest acked.
-	packets = append(packets, sendPacket(now))
-	packets = append(packets, sendPacket(now))
+	packets = append(packets, sendPacket(t, now))
+	packets = append(packets, sendPacket(t, now))
 	ackPacket(packets[1], now.Add(time.Second), 0)
 	rtt := rttStats.SmoothedRTT()
 	ackPacket(packets[0], now.Add(10*time.Second), 0)
 	require.NotEqual(t, rtt, rttStats.SmoothedRTT())
 
 	// Send one more packet, and send where the largest acked is acknowledged twice.
-	pn := sendPacket(now)
+	pn := sendPacket(t, now)
 	ackPacket(pn, now.Add(time.Second), 0)
 	rtt = rttStats.SmoothedRTT()
 	ackPacket(pn, now.Add(10*time.Second), 0)
@@ -443,7 +445,8 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	)
 
 	var packets packetTracker
-	sendPacket := func(ti monotime.Time, isPathMTUProbePacket bool) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, isPathMTUProbePacket bool) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, isPathMTUProbePacket, false)
 		return pn
@@ -454,12 +457,12 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	t1 := now.Add(-rtt)
 	t2 := now.Add(-10 * time.Millisecond)
 	// Send 3 packets
-	pn1 := sendPacket(t1, false)
-	pn2 := sendPacket(t2, false)
+	pn1 := sendPacket(t, t1, false)
+	pn2 := sendPacket(t, t2, false)
 	// Also send a Path MTU probe packet.
 	// We expect the same loss recovery logic to be applied to it.
-	pn3 := sendPacket(t2, true)
-	pn4 := sendPacket(now, false)
+	pn3 := sendPacket(t, t2, true)
+	pn4 := sendPacket(t, now, false)
 
 	_, err := sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pn4)},
@@ -537,11 +540,7 @@ func TestSentPacketHandlerPTO(t *testing.T) {
 
 func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, ptoMode SendMode) {
 	var packets packetTracker
-
-	mockCtrl := gomock.NewController(t)
-	tracer, tr := mocklogging.NewMockConnectionTracer(mockCtrl)
-	tr.EXPECT().UpdatedCongestionState(gomock.Any()).AnyTimes()
-	tr.EXPECT().UpdatedMetrics(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	var eventRecorder events.Recorder
 
 	var rttStats utils.RTTStats
 	rttStats.SetMaxAckDelay(25 * time.Millisecond)
@@ -556,7 +555,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 		true,
 		false,
 		protocol.PerspectiveServer,
-		tracer,
+		&eventRecorder,
 		utils.DefaultLogger,
 	)
 
@@ -566,13 +565,26 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 		sph.DropPackets(protocol.EncryptionHandshake, monotime.Now())
 	}
 
-	sendPacket := func(ti monotime.Time, ackEliciting bool) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, ackEliciting bool) protocol.PacketNumber {
+		t.Helper()
+
 		pn := sph.PopPacketNumber(encLevel)
 		if ackEliciting {
-			tr.EXPECT().SetLossTimer(logging.TimerTypePTO, encLevel, gomock.Any())
 			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
+			require.Equal(t,
+				[]qlogwriter.Event{
+					qlog.LossTimerUpdated{
+						Type:      qlog.LossTimerUpdateTypeSet,
+						TimerType: qlog.TimerTypePTO,
+						EncLevel:  encLevel,
+					},
+				},
+				eventRecorder.Events(qlog.LossTimerUpdated{}),
+			)
+			eventRecorder.Clear()
 		} else {
 			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, nil, encLevel, protocol.ECNNon, 1000, true, false)
+			require.Empty(t, eventRecorder.Events(qlog.LossTimerUpdated{}))
 		}
 		return pn
 	}
@@ -587,9 +599,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	var pns []protocol.PacketNumber
 	// send packet 0, 1, 2, 3
 	for i := range 3 {
-		pns = append(pns, sendPacket(sendTimes[i], true))
+		pns = append(pns, sendPacket(t, sendTimes[i], true))
 	}
-	pns = append(pns, sendPacket(sendTimes[3], false))
+	pns = append(pns, sendPacket(t, sendTimes[3], false))
 
 	// The PTO includes the max_ack_delay only for the application-data packet number space.
 	// Make sure that the value is actually different, so this test is meaningful.
@@ -599,12 +611,26 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	// the PTO is based on the *last* ack-eliciting packet
 	require.Equal(t, sendTimes[2].Add(rttStats.PTO(encLevel == protocol.Encryption1RTT)), timeout)
 
-	gomock.InOrder(
-		tr.EXPECT().LossTimerExpired(logging.TimerTypePTO, encLevel),
-		tr.EXPECT().UpdatedPTOCount(uint32(1)),
-		tr.EXPECT().SetLossTimer(logging.TimerTypePTO, encLevel, gomock.Any()),
-	)
+	eventRecorder.Clear()
 	sph.OnLossDetectionTimeout(timeout)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.LossTimerUpdated{
+				Type:      qlog.LossTimerUpdateTypeExpired,
+				TimerType: qlog.TimerTypePTO,
+				EncLevel:  encLevel,
+			},
+			qlog.MetricsUpdated{
+				PTOCount: pointer(uint32(1)),
+			},
+			qlog.LossTimerUpdated{
+				Type:      qlog.LossTimerUpdateTypeSet,
+				TimerType: qlog.TimerTypePTO,
+				EncLevel:  encLevel,
+			},
+		},
+		eventRecorder.Events(qlog.MetricsUpdated{}, qlog.LossTimerUpdated{}),
+	)
 	// PTO timer expiration doesn't declare packets lost
 	require.Empty(t, packets.Lost)
 
@@ -621,17 +647,19 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	require.Equal(t, pns[:3], packets.Lost)
 	packets.Lost = packets.Lost[:0]
 
+	eventRecorder.Clear()
+
 	// send packet 4 and 6 as probe packets
 	// 5 doesn't count, since it's not an ack-eliciting packet
 	sendTimes = append(sendTimes, now.Add(100*time.Millisecond))
 	sendTimes = append(sendTimes, now.Add(200*time.Millisecond))
 	sendTimes = append(sendTimes, now.Add(300*time.Millisecond))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[4])) // first probe packet
-	pns = append(pns, sendPacket(sendTimes[4], true))
+	pns = append(pns, sendPacket(t, sendTimes[4], true))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[5])) // next probe packet
-	pns = append(pns, sendPacket(sendTimes[5], false))
+	pns = append(pns, sendPacket(t, sendTimes[5], false))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[6])) // non-ack-eliciting packet didn't count as a probe packet
-	pns = append(pns, sendPacket(sendTimes[6], true))
+	pns = append(pns, sendPacket(t, sendTimes[6], true))
 	require.Equal(t, SendAny, sph.SendMode(sendTimes[6])) // enough probe packets sent
 
 	timeout = sph.GetLossDetectionTimeout()
@@ -639,12 +667,26 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	require.Equal(t, sendTimes[6].Add(2*rttStats.PTO(encLevel == protocol.Encryption1RTT)), timeout)
 	now = timeout
 
-	gomock.InOrder(
-		tr.EXPECT().LossTimerExpired(logging.TimerTypePTO, encLevel),
-		tr.EXPECT().UpdatedPTOCount(uint32(2)),
-		tr.EXPECT().SetLossTimer(logging.TimerTypePTO, encLevel, gomock.Any()),
-	)
 	sph.OnLossDetectionTimeout(timeout)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.LossTimerUpdated{
+				Type:      qlog.LossTimerUpdateTypeExpired,
+				TimerType: qlog.TimerTypePTO,
+				EncLevel:  encLevel,
+			},
+			qlog.MetricsUpdated{
+				PTOCount: pointer(uint32(2)),
+			},
+			qlog.LossTimerUpdated{
+				Type:      qlog.LossTimerUpdateTypeSet,
+				TimerType: qlog.TimerTypePTO,
+				EncLevel:  encLevel,
+			},
+		},
+		eventRecorder.Events(qlog.LossTimerUpdated{}, qlog.MetricsUpdated{}),
+	)
+	eventRecorder.Clear()
 	// PTO timer expiration doesn't declare packets lost
 	require.Empty(t, packets.Lost)
 
@@ -652,9 +694,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	sendTimes = append(sendTimes, now.Add(100*time.Millisecond))
 	sendTimes = append(sendTimes, now.Add(200*time.Millisecond))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[7])) // first probe packet
-	pns = append(pns, sendPacket(sendTimes[7], true))
+	pns = append(pns, sendPacket(t, sendTimes[7], true))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[8])) // next probe packet
-	pns = append(pns, sendPacket(sendTimes[8], true))
+	pns = append(pns, sendPacket(t, sendTimes[8], true))
 	require.Equal(t, SendAny, sph.SendMode(sendTimes[8])) // enough probe packets sent
 
 	timeout = sph.GetLossDetectionTimeout()
@@ -662,14 +704,10 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	// exponential backoff, again
 	require.Equal(t, sendTimes[8].Add(4*rttStats.PTO(encLevel == protocol.Encryption1RTT)), timeout)
 
+	eventRecorder.Clear()
+
 	// Receive an ACK for packet 7.
 	// This now declares packets lost, and leads to arming of a timer for packet 8.
-	tr.EXPECT().LostPacket(gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
-	gomock.InOrder(
-		tr.EXPECT().AcknowledgedPacket(encLevel, pns[7]),
-		tr.EXPECT().UpdatedPTOCount(uint32(0)),
-		tr.EXPECT().SetLossTimer(logging.TimerTypePTO, encLevel, gomock.Any()),
-	)
 	_, err := sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[7])},
 		encLevel,
@@ -678,6 +716,24 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[7]}, packets.Acked)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[6]}, packets.Lost)
+	require.Len(t, eventRecorder.Events(qlog.PacketLost{}), 2)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.MetricsUpdated{PTOCount: pointer(uint32(0))},
+		},
+		eventRecorder.Events(qlog.MetricsUpdated{})[:1],
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.LossTimerUpdated{
+				Type:      qlog.LossTimerUpdateTypeSet,
+				TimerType: qlog.TimerTypePTO,
+				EncLevel:  encLevel,
+			},
+		},
+		eventRecorder.Events(qlog.LossTimerUpdated{}),
+	)
+	require.Contains(t, packets.Acked, pns[7])
 
 	// the PTO timer is now set for the last remaining packet (8),
 	// with no exponential backoff
@@ -700,7 +756,8 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 		utils.DefaultLogger,
 	)
 
-	sendPacket := func(ti monotime.Time, encLevel protocol.EncryptionLevel) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, encLevel protocol.EncryptionLevel) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(encLevel)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1000, false, false)
 		return pn
@@ -709,16 +766,16 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	var initialPNs, handshakePNs [4]protocol.PacketNumber
 	var initialTimes, handshakeTimes [4]monotime.Time
 	now := monotime.Now()
-	initialPNs[0] = sendPacket(now, protocol.EncryptionInitial)
+	initialPNs[0] = sendPacket(t, now, protocol.EncryptionInitial)
 	initialTimes[0] = now
 	now = now.Add(100 * time.Millisecond)
-	handshakePNs[0] = sendPacket(now, protocol.EncryptionHandshake)
+	handshakePNs[0] = sendPacket(t, now, protocol.EncryptionHandshake)
 	handshakeTimes[0] = now
 	now = now.Add(100 * time.Millisecond)
-	initialPNs[1] = sendPacket(now, protocol.EncryptionInitial)
+	initialPNs[1] = sendPacket(t, now, protocol.EncryptionInitial)
 	initialTimes[1] = now
 	now = now.Add(100 * time.Millisecond)
-	handshakePNs[1] = sendPacket(now, protocol.EncryptionHandshake)
+	handshakePNs[1] = sendPacket(t, now, protocol.EncryptionHandshake)
 	handshakeTimes[1] = now
 	require.Equal(t, protocol.ByteCount(4000), sph.getBytesInFlight())
 
@@ -730,7 +787,7 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	require.Equal(t, SendPTOInitial, sph.SendMode(timeout))
 	// send a PTO probe packet (Initial)
 	now = timeout.Add(100 * time.Millisecond)
-	initialPNs[2] = sendPacket(now, protocol.EncryptionInitial)
+	initialPNs[2] = sendPacket(t, now, protocol.EncryptionInitial)
 	initialTimes[2] = now
 
 	// the earliest PTO time is now the 2nd Handshake packet
@@ -741,7 +798,7 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	require.Equal(t, SendPTOHandshake, sph.SendMode(timeout))
 	// send a PTO probe packet (Handshake)
 	now = timeout.Add(100 * time.Millisecond)
-	handshakePNs[2] = sendPacket(now, protocol.EncryptionHandshake)
+	handshakePNs[2] = sendPacket(t, now, protocol.EncryptionHandshake)
 	handshakeTimes[2] = now
 
 	// the earliest PTO time is now the 3rd Initial packet
@@ -765,7 +822,7 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	// send a 1-RTT packet
 	now = timeout.Add(100 * time.Millisecond)
 	sendTime := now
-	sendPacket(now, protocol.Encryption1RTT)
+	sendPacket(t, now, protocol.Encryption1RTT)
 
 	// until handshake confirmation, the PTO timer is based on the Handshake packet number space
 	require.Equal(t, timeout, sph.GetLossDetectionTimeout())
@@ -792,7 +849,8 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	)
 
 	var appDataPackets packetTracker
-	sendPacket := func(ti monotime.Time, encLevel protocol.EncryptionLevel) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, encLevel protocol.EncryptionLevel) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(encLevel)
 		var frames []Frame
 		if encLevel == protocol.Encryption0RTT || encLevel == protocol.Encryption1RTT {
@@ -805,11 +863,11 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	}
 
 	now := monotime.Now()
-	sendPacket(now, protocol.Encryption0RTT)
-	sendPacket(now.Add(100*time.Millisecond), protocol.EncryptionHandshake)
-	sendPacket(now.Add(200*time.Millisecond), protocol.Encryption0RTT)
-	sendPacket(now.Add(300*time.Millisecond), protocol.Encryption1RTT)
-	sendPacket(now.Add(400*time.Millisecond), protocol.Encryption1RTT)
+	sendPacket(t, now, protocol.Encryption0RTT)
+	sendPacket(t, now.Add(100*time.Millisecond), protocol.EncryptionHandshake)
+	sendPacket(t, now.Add(200*time.Millisecond), protocol.Encryption0RTT)
+	sendPacket(t, now.Add(300*time.Millisecond), protocol.Encryption1RTT)
+	sendPacket(t, now.Add(400*time.Millisecond), protocol.Encryption1RTT)
 	require.Equal(t, protocol.ByteCount(5000), sph.getBytesInFlight())
 
 	// The PTO timer is based on the Handshake packet number space, not the 0-RTT packets
@@ -1044,7 +1102,8 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	sph.SentPacket(monotime.Now(), sph.PopPacketNumber(protocol.Encryption0RTT), protocol.InvalidPacketNumber, nil, nil, protocol.Encryption0RTT, protocol.ECNCE, 1200, false, false)
 
 	var packets packetTracker
-	sendPacket := func(ti monotime.Time, ecn protocol.ECN) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, ecn protocol.ECN) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		ecnHandler.EXPECT().SentPacket(pn, ecn)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, ecn, 1200, false, false)
@@ -1053,11 +1112,11 @@ func TestSentPacketHandlerECN(t *testing.T) {
 
 	pns := make([]protocol.PacketNumber, 4)
 	now := monotime.Now()
-	pns[0] = sendPacket(now, protocol.ECT1)
+	pns[0] = sendPacket(t, now, protocol.ECT1)
 	now = now.Add(time.Second)
-	pns[1] = sendPacket(now, protocol.ECT0)
-	pns[2] = sendPacket(now, protocol.ECT0)
-	pns[3] = sendPacket(now, protocol.ECT0)
+	pns[1] = sendPacket(t, now, protocol.ECT0)
+	pns[2] = sendPacket(t, now, protocol.ECT0)
+	pns[3] = sendPacket(t, now, protocol.ECT0)
 
 	// Receive an ACK with a short RTT, such that the first packet is lost.
 	cong.EXPECT().OnCongestionEvent(gomock.Any(), gomock.Any(), gomock.Any())
@@ -1090,8 +1149,8 @@ func TestSentPacketHandlerECN(t *testing.T) {
 
 	// Send two more packets, and receive an ACK for the second one.
 	pns = pns[:2]
-	pns[0] = sendPacket(now, protocol.ECT1)
-	pns[1] = sendPacket(now, protocol.ECT1)
+	pns[0] = sendPacket(t, now, protocol.ECT1)
+	pns[1] = sendPacket(t, now, protocol.ECT1)
 	ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(packets []packetWithPacketNumber, _, _, _ int64) bool {
 			require.Len(t, packets, 1)
@@ -1112,7 +1171,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	// This needs to be reported to the congestion controller.
 	pns = pns[:1]
 	now = now.Add(time.Second)
-	pns[0] = sendPacket(now, protocol.ECT1)
+	pns[0] = sendPacket(t, now, protocol.ECT1)
 
 	gomock.InOrder(
 		ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true),
@@ -1142,7 +1201,8 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	sph.DropPackets(protocol.EncryptionHandshake, monotime.Now())
 
 	var packets packetTracker
-	sendPacket := func(ti monotime.Time, isPathProbe bool) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, isPathProbe bool) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, isPathProbe)
 		return pn
@@ -1151,15 +1211,15 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	// send 5 packets: 2 non-probe packets, 1 probe packet, 2 non-probe packets
 	now := monotime.Now()
 	var pns [5]protocol.PacketNumber
-	pns[0] = sendPacket(now, false)
+	pns[0] = sendPacket(t, now, false)
 	now = now.Add(rtt)
-	pns[1] = sendPacket(now, false)
-	pns[2] = sendPacket(now, true)
+	pns[1] = sendPacket(t, now, false)
+	pns[2] = sendPacket(t, now, true)
 	pathProbeTimeout := now.Add(pathProbePacketLossTimeout)
 	now = now.Add(rtt)
-	pns[3] = sendPacket(now, false)
+	pns[3] = sendPacket(t, now, false)
 	now = now.Add(rtt)
-	pns[4] = sendPacket(now, false)
+	pns[4] = sendPacket(t, now, false)
 	require.Less(t, sph.GetLossDetectionTimeout(), pathProbeTimeout)
 
 	now = now.Add(100 * time.Millisecond)
@@ -1179,12 +1239,12 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	timeout := sph.GetLossDetectionTimeout()
 	require.Equal(t, pathProbeTimeout, timeout)
 	require.Zero(t, sph.getBytesInFlight())
-	pn1 := sendPacket(now, false)
-	pn2 := sendPacket(now, false)
+	pn1 := sendPacket(t, now, false)
+	pn2 := sendPacket(t, now, false)
 	require.Equal(t, protocol.ByteCount(2400), sph.getBytesInFlight())
 
 	// send one more non-probe packet
-	pn := sendPacket(now, false)
+	pn := sendPacket(t, now, false)
 	// the timeout is now based on this packet
 	require.Less(t, sph.GetLossDetectionTimeout(), pathProbeTimeout)
 	_, err = sph.ReceivedAck(
@@ -1221,20 +1281,21 @@ func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
 	sph.DropPackets(protocol.EncryptionHandshake, monotime.Now())
 
 	var packets packetTracker
-	sendPacket := func(ti monotime.Time, isPathProbe bool) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, isPathProbe bool) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, isPathProbe)
 		return pn
 	}
 
 	now := monotime.Now()
-	pn1 := sendPacket(now, true)
+	pn1 := sendPacket(t, now, true)
 	t1 := now
 	now = now.Add(100 * time.Millisecond)
-	_ = sendPacket(now, true)
+	_ = sendPacket(t, now, true)
 	t2 := now
 	now = now.Add(100 * time.Millisecond)
-	pn3 := sendPacket(now, true)
+	pn3 := sendPacket(t, now, true)
 
 	now = now.Add(100 * time.Millisecond)
 	require.Equal(t, t1.Add(pathProbePacketLossTimeout), sph.GetLossDetectionTimeout())
@@ -1296,7 +1357,8 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 	sph.DropPackets(protocol.EncryptionHandshake, monotime.Now())
 
 	var packets packetTracker
-	sendPacket := func(ti monotime.Time, isPathProbe bool) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, isPathProbe bool) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, isPathProbe)
 		return pn
@@ -1307,7 +1369,7 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 	var pns []protocol.PacketNumber
 	for range 4 {
 		isProbe := r.Int()%2 == 0
-		pn := sendPacket(now, isProbe)
+		pn := sendPacket(t, now, isProbe)
 		t.Logf("t=%dms: sending packet %d (probe packet: %t)", now.Sub(start).Milliseconds(), pn, isProbe)
 		pns = append(pns, pn)
 		now = now.Add(randDuration(0, 500*time.Millisecond))
@@ -1347,14 +1409,7 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	const rtt = time.Second
 
-	mockCtrl := gomock.NewController(t)
-	tracer, tr := mocklogging.NewMockConnectionTracer(mockCtrl)
-	tr.EXPECT().UpdatedCongestionState(gomock.Any()).AnyTimes()
-	tr.EXPECT().UpdatedMetrics(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	tr.EXPECT().SetLossTimer(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	tr.EXPECT().LossTimerCanceled().AnyTimes()
-	tr.EXPECT().AcknowledgedPacket(gomock.Any(), gomock.Any()).AnyTimes()
-	tr.EXPECT().LostPacket(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	var eventRecorder events.Recorder
 
 	sph := newSentPacketHandler(
 		0,
@@ -1364,12 +1419,13 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		true,
 		false,
 		protocol.PerspectiveClient,
-		tracer,
+		&eventRecorder,
 		utils.DefaultLogger,
 	)
 
 	var packets packetTracker
-	sendPacket := func(ti monotime.Time) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time) protocol.PacketNumber {
+		t.Helper()
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
 		return pn
@@ -1379,7 +1435,7 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	now := start
 	var pns []protocol.PacketNumber
 	for range 20 {
-		pns = append(pns, sendPacket(now))
+		pns = append(pns, sendPacket(t, now))
 		now = now.Add(10 * time.Millisecond)
 	}
 
@@ -1395,13 +1451,10 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{pns[1], pns[2], pns[3]}, packets.Lost)
 
 	packets.Reset()
+	eventRecorder.Clear()
 
 	const secondAckDelay = 50 * time.Millisecond
-	gomock.InOrder(
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[1], uint64(16-1), rtt+secondAckDelay-10*time.Millisecond),
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[2], uint64(16-2), rtt+secondAckDelay-20*time.Millisecond),
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[3], uint64(16-3), rtt+secondAckDelay-30*time.Millisecond),
-	)
+
 	now = now.Add(secondAckDelay)
 	_, err = sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[5], pns[6], pns[12], pns[16])},
@@ -1411,15 +1464,31 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16]}, packets.Acked)
 	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13]}, packets.Lost)
-
-	require.True(t, mockCtrl.Satisfied())
-
-	gomock.InOrder(
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[7], uint64(18-7), rtt+2*secondAckDelay-70*time.Millisecond),
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[8], uint64(18-8), rtt+2*secondAckDelay-80*time.Millisecond),
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[9], uint64(18-9), rtt+2*secondAckDelay-90*time.Millisecond),
-		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[10], uint64(18-10), rtt+2*secondAckDelay-100*time.Millisecond),
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[1],
+				PacketReordering: 16 - 1,
+				TimeReordering:   rtt + secondAckDelay - 10*time.Millisecond,
+			},
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[2],
+				PacketReordering: 16 - 2,
+				TimeReordering:   rtt + secondAckDelay - 20*time.Millisecond,
+			},
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[3],
+				PacketReordering: 16 - 3,
+				TimeReordering:   rtt + secondAckDelay - 30*time.Millisecond,
+			},
+		},
+		eventRecorder.Events(qlog.SpuriousLoss{}),
 	)
+	eventRecorder.Clear()
+
 	now = now.Add(secondAckDelay)
 	_, err = sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[5], pns[6], pns[7], pns[8], pns[9], pns[10], pns[16], pns[17], pns[18])},
@@ -1429,6 +1498,36 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16], pns[17], pns[18]}, packets.Acked)
 	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13], pns[14], pns[15]}, packets.Lost)
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[7],
+				PacketReordering: 18 - 7,
+				TimeReordering:   rtt + 2*secondAckDelay - 70*time.Millisecond,
+			},
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[8],
+				PacketReordering: 18 - 8,
+				TimeReordering:   rtt + 2*secondAckDelay - 80*time.Millisecond,
+			},
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[9],
+				PacketReordering: 18 - 9,
+				TimeReordering:   rtt + 2*secondAckDelay - 90*time.Millisecond,
+			},
+			qlog.SpuriousLoss{
+				EncryptionLevel:  protocol.Encryption1RTT,
+				PacketNumber:     pns[10],
+				PacketReordering: 18 - 10,
+				TimeReordering:   rtt + 2*secondAckDelay - 100*time.Millisecond,
+			},
+		},
+		eventRecorder.Events(qlog.SpuriousLoss{}),
+	)
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {

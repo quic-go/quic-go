@@ -11,7 +11,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +81,7 @@ func testTransferWithConnectionIDs(
 	ln, err := serverTr.Listen(
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
-			Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+			Tracer: func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace {
 				return serverTracer
 			},
 		}),
@@ -94,9 +94,7 @@ func testTransferWithConnectionIDs(
 	var conn *quic.Conn
 	clientCounter, clientTracer := newPacketTracer()
 	clientQUICConf := getQuicConfig(&quic.Config{
-		Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
-			return clientTracer
-		},
+		Tracer: func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return clientTracer },
 	})
 	if clientConnIDGenerator == nil && clientConnIDLen == 0 {
 		conn, err = quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), clientQUICConf)

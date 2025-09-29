@@ -12,7 +12,8 @@ import (
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +28,9 @@ func TestNATRebinding(t *testing.T) {
 	server, err := quic.Listen(
 		newUDPConnLocalhost(t),
 		tlsConf,
-		getQuicConfig(&quic.Config{Tracer: newTracer(tracer)}),
+		getQuicConfig(&quic.Config{
+			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace { return tracer },
+		}),
 	)
 	require.NoError(t, err)
 	defer server.Close()
@@ -99,8 +102,8 @@ func TestNATRebinding(t *testing.T) {
 	var foundPathChallenge bool
 	for _, p := range tr.getSentShortHeaderPackets() {
 		for _, f := range p.frames {
-			switch fr := f.(type) {
-			case *logging.PathChallengeFrame:
+			switch fr := f.Frame.(type) {
+			case *qlog.PathChallengeFrame:
 				pathChallenge = fr.Data
 				foundPathChallenge = true
 			}
@@ -112,8 +115,8 @@ func TestNATRebinding(t *testing.T) {
 	var foundPathResponse bool
 	for _, p := range tr.getRcvdShortHeaderPackets() {
 		for _, f := range p.frames {
-			switch fr := f.(type) {
-			case *logging.PathResponseFrame:
+			switch fr := f.Frame.(type) {
+			case *qlog.PathResponseFrame:
 				require.Equal(t, pathChallenge, fr.Data)
 				foundPathResponse = true
 			}

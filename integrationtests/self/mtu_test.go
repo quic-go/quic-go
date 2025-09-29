@@ -13,7 +13,8 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 )
@@ -108,7 +109,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
 	defer tr.Close()
 
-	var mtus []logging.ByteCount
+	var eventRecorder events.Recorder
 	conn, err := tr.Dial(
 		context.Background(),
 		proxy.LocalAddr(),
@@ -116,11 +117,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 		getQuicConfig(&quic.Config{
 			InitialPacketSize: protocol.MinInitialPacketSize,
 			EnableDatagrams:   true,
-			Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
-				return &logging.ConnectionTracer{
-					UpdatedMTU: func(mtu logging.ByteCount, _ bool) { mtus = append(mtus, mtu) },
-				}
-			},
+			Tracer:            newTracer(&eventRecorder),
 		}),
 	)
 	require.NoError(t, err)
@@ -169,9 +166,14 @@ func TestPathMTUDiscovery(t *testing.T) {
 
 	mx.Lock()
 	defer mx.Unlock()
-	require.NotEmpty(t, mtus)
+	require.NotEmpty(t, eventRecorder.Events(qlog.MTUUpdated{}))
 
-	maxPacketSizeClient := int(mtus[len(mtus)-1])
+	var mtus []int
+	for _, ev := range eventRecorder.Events(qlog.MTUUpdated{}) {
+		mtus = append(mtus, ev.(qlog.MTUUpdated).Value)
+	}
+
+	maxPacketSizeClient := mtus[len(mtus)-1]
 	t.Logf("max client packet size: %d, MTU: %d", maxPacketSizeClient, mtu)
 	t.Logf("max datagram size: initial: %d, final: %d", initialMaxDatagramSize, finalMaxDatagramSize)
 	t.Logf("max server packet size: %d, MTU: %d", maxPacketSizeServer, mtu)

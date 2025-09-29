@@ -11,23 +11,23 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/handshake"
-	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 type testServer struct{ *baseServer }
 
 type serverOpts struct {
-	tracer                    *logging.Tracer
+	eventRecorder             *events.Recorder
 	config                    *Config
 	tokenGeneratorKey         TokenGeneratorKey
 	maxTokenAge               time.Duration
@@ -51,7 +51,7 @@ type serverOpts struct {
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
 		time.Duration,
-		*logging.ConnectionTracer,
+		qlogwriter.Recorder,
 		utils.Logger,
 		protocol.Version,
 	) *wrappedConn
@@ -73,7 +73,7 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 		func(ctx context.Context, _ *ClientInfo) (context.Context, error) { return ctx, nil },
 		&tls.Config{},
 		config,
-		serverOpts.tracer,
+		serverOpts.eventRecorder,
 		func() {},
 		serverOpts.tokenGeneratorKey,
 		serverOpts.maxTokenAge,
@@ -126,35 +126,18 @@ func getValidInitialPacket(t *testing.T, raddr net.Addr, srcConnID, destConnID p
 	)
 }
 
-type sentPacketCallArgs struct {
-	hdr    *logging.Header
-	frames []logging.Frame
-}
-
 // checkConnectionClose checks
 //  1. the arguments of the SentPacket tracer call, and
 //  2. reads and parses the packet sent by the server
 func checkConnectionClose(
 	t *testing.T,
 	conn *net.UDPConn,
-	argChan <-chan sentPacketCallArgs,
+	eventRecorder *events.Recorder,
 	expectedSrcConnID protocol.ConnectionID,
 	expectedDestConnID protocol.ConnectionID,
 	expectedErrorCode qerr.TransportErrorCode,
 ) {
 	t.Helper()
-	select {
-	case args := <-argChan:
-		require.Equal(t, protocol.PacketTypeInitial, args.hdr.Type)
-		require.Equal(t, expectedSrcConnID, args.hdr.SrcConnectionID)
-		require.Equal(t, expectedDestConnID, args.hdr.DestConnectionID)
-		require.Len(t, args.frames, 1)
-		require.IsType(t, &wire.ConnectionCloseFrame{}, args.frames[0])
-		ccf := args.frames[0].(*logging.ConnectionCloseFrame)
-		require.EqualValues(t, expectedErrorCode, ccf.ErrorCode)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
 
 	conn.SetReadDeadline(time.Now().Add(time.Second))
 	b := make([]byte, 1500)
@@ -165,23 +148,32 @@ func checkConnectionClose(
 	require.Equal(t, protocol.PacketTypeInitial, parsedHdr.Type)
 	require.Equal(t, expectedSrcConnID, parsedHdr.SrcConnectionID)
 	require.Equal(t, expectedDestConnID, parsedHdr.DestConnectionID)
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketSent{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketTypeInitial,
+					SrcConnectionID:  expectedSrcConnID,
+					DestConnectionID: expectedDestConnID,
+					Version:          protocol.Version1,
+				},
+				Raw: qlog.RawInfo{Length: n, PayloadLength: int(parsedHdr.Length)},
+				Frames: []qlog.Frame{
+					{Frame: &qlog.ConnectionCloseFrame{ErrorCode: uint64(expectedErrorCode)}},
+				},
+			},
+		},
+		eventRecorder.Events(qlog.PacketSent{}),
+	)
 }
 
 func checkRetry(t *testing.T,
 	conn *net.UDPConn,
-	argChan <-chan sentPacketCallArgs,
+	eventRecorder *events.Recorder,
 	expectedDestConnID protocol.ConnectionID,
 ) {
 	t.Helper()
-	select {
-	case args := <-argChan:
-		require.Equal(t, protocol.PacketTypeRetry, args.hdr.Type)
-		require.Equal(t, expectedDestConnID, args.hdr.DestConnectionID)
-		require.NotNil(t, args.hdr.Token)
-		require.Empty(t, args.frames)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
 
 	conn.SetReadDeadline(time.Now().Add(time.Second))
 	b := make([]byte, 1500)
@@ -192,6 +184,22 @@ func checkRetry(t *testing.T,
 	require.Equal(t, protocol.PacketTypeRetry, parsedHdr.Type)
 	require.Equal(t, expectedDestConnID, parsedHdr.DestConnectionID)
 	require.NotNil(t, parsedHdr.Token)
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketSent{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketTypeRetry,
+					DestConnectionID: expectedDestConnID,
+					SrcConnectionID:  parsedHdr.SrcConnectionID,
+					Version:          parsedHdr.Version,
+					Token:            &qlog.Token{Raw: parsedHdr.Token},
+				},
+				Raw: qlog.RawInfo{Length: n},
+			},
+		},
+		eventRecorder.Events(qlog.PacketSent{}),
+	)
 }
 
 func TestListen(t *testing.T) {
@@ -224,8 +232,9 @@ func TestServerPacketDropping(t *testing.T) {
 		testServerDroppedPacket(t,
 			conn,
 			getValidInitialPacket(t, conn.LocalAddr(), randConnID(5), randConnID(7)),
-			logging.PacketTypeInitial,
-			logging.PacketDropUnexpectedPacket,
+			protocol.Version1,
+			qlog.PacketTypeInitial,
+			qlog.PacketDropUnexpectedPacket,
 		)
 	})
 
@@ -248,8 +257,9 @@ func TestServerPacketDropping(t *testing.T) {
 		testServerDroppedPacket(t,
 			conn,
 			p,
-			logging.PacketTypeInitial,
-			logging.PacketDropUnexpectedPacket,
+			protocol.Version1,
+			qlog.PacketTypeInitial,
+			qlog.PacketDropUnexpectedPacket,
 		)
 	})
 
@@ -273,8 +283,9 @@ func TestServerPacketDropping(t *testing.T) {
 		testServerDroppedPacket(t,
 			conn,
 			p,
-			logging.PacketTypeNotDetermined,
-			logging.PacketDropUnexpectedPacket,
+			0x42,
+			"",
+			qlog.PacketDropUnexpectedPacket,
 		)
 	})
 
@@ -294,8 +305,9 @@ func TestServerPacketDropping(t *testing.T) {
 				},
 				nil,
 			),
-			logging.PacketTypeHandshake,
-			logging.PacketDropUnexpectedPacket,
+			protocol.Version1,
+			qlog.PacketTypeHandshake,
+			qlog.PacketDropUnexpectedPacket,
 		)
 	})
 
@@ -314,8 +326,9 @@ func TestServerPacketDropping(t *testing.T) {
 				data:       data,
 				buffer:     getPacketBuffer(),
 			},
-			logging.PacketTypeVersionNegotiation,
-			logging.PacketDropUnexpectedPacket,
+			0, // version negotiation packets don't have a version
+			qlog.PacketTypeVersionNegotiation,
+			qlog.PacketDropUnexpectedPacket,
 		)
 	})
 }
@@ -323,19 +336,18 @@ func TestServerPacketDropping(t *testing.T) {
 func testServerDroppedPacket(t *testing.T,
 	conn *net.UDPConn,
 	p receivedPacket,
-	expectedPacketType logging.PacketType,
-	expectedDropReason logging.PacketDropReason,
+	expectedVersion qlog.Version,
+	expectedPacketType qlog.PacketType,
+	expectedDropReason qlog.PacketDropReason,
 ) {
 	readChan := make(chan struct{})
 	go func() {
 		defer close(readChan)
 		conn.ReadFrom(make([]byte, 1000))
 	}()
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
-	server := newTestServer(t, &serverOpts{tracer: tracer})
+	var eventRecorder events.Recorder
+	server := newTestServer(t, &serverOpts{eventRecorder: &eventRecorder})
 
-	mockTracer.EXPECT().DroppedPacket(p.remoteAddr, expectedPacketType, p.Size(), expectedDropReason)
 	server.handlePacket(p)
 
 	select {
@@ -343,6 +355,26 @@ func testServerDroppedPacket(t *testing.T,
 		t.Fatal("didn't expect to receive a packet")
 	case <-time.After(scaleDuration(5 * time.Millisecond)):
 	}
+
+	var expectedPacketNumber protocol.PacketNumber
+	if expectedPacketType != qlog.PacketTypeVersionNegotiation && expectedPacketType != "" {
+		expectedPacketNumber = protocol.InvalidPacketNumber
+	}
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:   expectedPacketType,
+					PacketNumber: expectedPacketNumber,
+					Version:      expectedVersion,
+				},
+				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Trigger: expectedDropReason,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 }
 
 func TestServerVersionNegotiation(t *testing.T) {
@@ -355,11 +387,10 @@ func TestServerVersionNegotiation(t *testing.T) {
 }
 
 func testServerVersionNegotiation(t *testing.T, enabled bool) {
-	mockCtrl := gomock.NewController(t)
 	conn := newUDPConnLocalhost(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	var eventRecorder events.Recorder
 	server := newTestServer(t, &serverOpts{
-		tracer:                    tracer,
+		eventRecorder:             &eventRecorder,
 		disableVersionNegotiation: !enabled,
 	})
 
@@ -377,13 +408,6 @@ func testServerVersionNegotiation(t *testing.T, enabled bool) {
 		},
 		make([]byte, protocol.MinUnknownVersionPacketSize),
 	)
-
-	switch enabled {
-	case true:
-		mockTracer.EXPECT().SentVersionNegotiationPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any())
-	case false:
-		mockTracer.EXPECT().DroppedPacket(packet.remoteAddr, logging.PacketTypeNotDetermined, packet.Size(), logging.PacketDropUnexpectedVersion)
-	}
 
 	written := make(chan []byte, 1)
 	go func() {
@@ -403,6 +427,19 @@ func testServerVersionNegotiation(t *testing.T, enabled bool) {
 			require.Equal(t, protocol.ArbitraryLenConnectionID(srcConnID.Bytes()), dest)
 			require.Equal(t, protocol.ArbitraryLenConnectionID(destConnID.Bytes()), src)
 			require.NotContains(t, versions, protocol.Version(0x42))
+
+			require.Equal(t,
+				[]qlogwriter.Event{
+					qlog.VersionNegotiationSent{
+						Header: qlog.PacketHeaderVersionNegotiation{
+							SrcConnectionID:  src,
+							DestConnectionID: dest,
+						},
+						SupportedVersions: server.config.Versions,
+					},
+				},
+				eventRecorder.Events(qlog.VersionNegotiationSent{}),
+			)
 		case <-time.After(time.Second):
 			t.Fatal("timeout")
 		}
@@ -411,15 +448,23 @@ func testServerVersionNegotiation(t *testing.T, enabled bool) {
 		case <-written:
 			t.Fatal("expected no version negotiation packet")
 		case <-time.After(scaleDuration(10 * time.Millisecond)):
+			require.Equal(t,
+				[]qlogwriter.Event{
+					qlog.PacketDropped{
+						Header:  qlog.PacketHeader{Version: 0x42},
+						Raw:     qlog.RawInfo{Length: int(packet.Size())},
+						Trigger: qlog.PacketDropUnexpectedVersion,
+					},
+				},
+				eventRecorder.Events(qlog.PacketDropped{}),
+			)
 		}
 	}
 }
 
 func TestServerRetry(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
-	server := newTestServer(t, &serverOpts{tracer: tracer, useRetry: true})
-
+	var eventRecorder events.Recorder
+	server := newTestServer(t, &serverOpts{eventRecorder: &eventRecorder, useRetry: true})
 	conn := newUDPConnLocalhost(t)
 
 	packet := getLongHeaderPacket(t, conn.LocalAddr(),
@@ -434,14 +479,9 @@ func TestServerRetry(t *testing.T) {
 		},
 		make([]byte, protocol.MinUnknownVersionPacketSize),
 	)
-	argsChan := make(chan sentPacketCallArgs, 1)
-	mockTracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), nil).Do(
-		func(_ net.Addr, hdr *logging.Header, _ logging.ByteCount, _ []logging.Frame) {
-			argsChan <- sentPacketCallArgs{hdr: hdr}
-		},
-	)
+
 	server.handlePacket(packet)
-	checkRetry(t, conn, argsChan, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}))
+	checkRetry(t, conn, &eventRecorder, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}))
 }
 
 func TestServerTokenValidation(t *testing.T) {
@@ -450,30 +490,28 @@ func TestServerTokenValidation(t *testing.T) {
 	tg := handshake.NewTokenGenerator(tokenGeneratorKey)
 
 	t.Run("retry token with invalid address", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
 		token, err := tg.NewRetryToken(
 			&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
 			protocol.ConnectionID{},
 			protocol.ConnectionID{},
 		)
 		require.NoError(t, err)
-		tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+		var eventRecorder events.Recorder
 		server := newTestServer(t, &serverOpts{
 			useRetry:          true,
-			tracer:            tracer,
+			eventRecorder:     &eventRecorder,
 			tokenGeneratorKey: tokenGeneratorKey,
 		})
 
-		testServerTokenValidation(t, server, mockTracer, newUDPConnLocalhost(t), token, false, true, false)
+		testServerTokenValidation(t, server, &eventRecorder, newUDPConnLocalhost(t), token, false, true, false)
 	})
 
 	t.Run("expired retry token", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
 		conn := newUDPConnLocalhost(t)
-		tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+		var eventRecorder events.Recorder
 		server := newTestServer(t, &serverOpts{
 			useRetry:          true,
-			tracer:            tracer,
+			eventRecorder:     &eventRecorder,
 			config:            &Config{HandshakeIdleTimeout: time.Millisecond / 2},
 			tokenGeneratorKey: tokenGeneratorKey,
 		})
@@ -482,16 +520,15 @@ func TestServerTokenValidation(t *testing.T) {
 		require.NoError(t, err)
 		// the maximum retry token age is equivalent to the handshake timeout
 		time.Sleep(time.Millisecond) // make sure the token is expired
-		testServerTokenValidation(t, server, mockTracer, conn, token, false, true, false)
+		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, true, false)
 	})
 
 	// if the packet is corrupted, it will just be dropped (no INVALID_TOKEN nor Retry is sent)
 	t.Run("corrupted packet", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+		var eventRecorder events.Recorder
 		server := newTestServer(t, &serverOpts{
 			useRetry:          true,
-			tracer:            tracer,
+			eventRecorder:     &eventRecorder,
 			config:            &Config{HandshakeIdleTimeout: time.Millisecond / 2},
 			tokenGeneratorKey: tokenGeneratorKey,
 		})
@@ -500,18 +537,17 @@ func TestServerTokenValidation(t *testing.T) {
 		token, err := tg.NewRetryToken(conn.LocalAddr(), protocol.ConnectionID{}, protocol.ConnectionID{})
 		require.NoError(t, err)
 		time.Sleep(time.Millisecond) // make sure the token is expired
-		testServerTokenValidation(t, server, mockTracer, conn, token, true, false, true)
+		testServerTokenValidation(t, server, &eventRecorder, conn, token, true, false, true)
 	})
 
 	t.Run("invalid non-retry token", func(t *testing.T) {
 		var tokenGeneratorKey2 handshake.TokenProtectorKey
 		rand.Read(tokenGeneratorKey2[:])
-		mockCtrl := gomock.NewController(t)
-		tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+		var eventRecorder events.Recorder
 		server := newTestServer(t, &serverOpts{
 			tokenGeneratorKey: tokenGeneratorKey2, // use a different key
 			useRetry:          true,
-			tracer:            tracer,
+			eventRecorder:     &eventRecorder,
 			maxTokenAge:       time.Millisecond,
 		})
 
@@ -519,16 +555,15 @@ func TestServerTokenValidation(t *testing.T) {
 		token, err := tg.NewToken(conn.LocalAddr(), 10*time.Millisecond)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
-		testServerTokenValidation(t, server, mockTracer, conn, token, false, false, true)
+		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, false, true)
 	})
 
 	t.Run("expired non-retry token", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+		var eventRecorder events.Recorder
 		server := newTestServer(t, &serverOpts{
 			tokenGeneratorKey: tokenGeneratorKey,
 			useRetry:          true,
-			tracer:            tracer,
+			eventRecorder:     &eventRecorder,
 			maxTokenAge:       time.Millisecond,
 		})
 
@@ -536,14 +571,14 @@ func TestServerTokenValidation(t *testing.T) {
 		token, err := tg.NewToken(conn.LocalAddr(), 100*time.Millisecond)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
-		testServerTokenValidation(t, server, mockTracer, conn, token, false, false, true)
+		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, false, true)
 	})
 }
 
 func testServerTokenValidation(
 	t *testing.T,
 	server *testServer,
-	mockTracer *mocklogging.MockTracer,
+	eventRecorder *events.Recorder,
 	conn *net.UDPConn,
 	token []byte,
 	corruptedPacket bool,
@@ -565,36 +600,37 @@ func testServerTokenValidation(
 	)
 	if corruptedPacket {
 		packet.data[len(packet.data)-10] ^= 0xff // corrupt the packet
-		done := make(chan struct{})
-		mockTracer.EXPECT().DroppedPacket(packet.remoteAddr, logging.PacketTypeInitial, packet.Size(), logging.PacketDropPayloadDecryptError).Do(
-			func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
-				close(done)
-			},
-		)
 		server.handlePacket(packet)
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Fatal("timeout")
-		}
+
+		require.Eventually(t,
+			func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+			time.Second,
+			10*time.Millisecond,
+		)
+		require.Equal(t,
+			[]qlogwriter.Event{
+				qlog.PacketDropped{
+					Header: qlog.PacketHeader{
+						PacketType:   qlog.PacketTypeInitial,
+						PacketNumber: protocol.InvalidPacketNumber,
+						Version:      hdr.Version,
+					},
+					Raw:     qlog.RawInfo{Length: int(packet.Size())},
+					Trigger: qlog.PacketDropPayloadDecryptError,
+				},
+			},
+			eventRecorder.Events(qlog.PacketDropped{}),
+		)
 		return
 	}
 
-	argsChan := make(chan sentPacketCallArgs, 1)
-	if expectInvalidTokenConnectionClose || expectRetry {
-		mockTracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(
-			func(_ net.Addr, hdr *logging.Header, _ logging.ByteCount, frames []logging.Frame) {
-				argsChan <- sentPacketCallArgs{hdr: hdr, frames: frames}
-			},
-		)
-	}
-
 	server.handlePacket(packet)
+
 	if expectInvalidTokenConnectionClose {
-		checkConnectionClose(t, conn, argsChan, hdr.DestConnectionID, hdr.SrcConnectionID, qerr.InvalidToken)
+		checkConnectionClose(t, conn, eventRecorder, hdr.DestConnectionID, hdr.SrcConnectionID, qerr.InvalidToken)
 	}
 	if expectRetry {
-		checkRetry(t, conn, argsChan, hdr.SrcConnectionID)
+		checkRetry(t, conn, eventRecorder, hdr.SrcConnectionID)
 	}
 }
 
@@ -641,7 +677,7 @@ func (r *connConstructorRecorder) NewConn(
 	_ *handshake.TokenGenerator,
 	_ bool,
 	_ time.Duration,
-	_ *logging.ConnectionTracer,
+	_ qlogwriter.Recorder,
 	_ utils.Logger,
 	_ protocol.Version,
 ) *wrappedConn {
@@ -830,10 +866,9 @@ func TestServerGetConfigForClientAccept(t *testing.T) {
 }
 
 func TestServerGetConfigForClientReject(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	var eventRecorder events.Recorder
 	server := newTestServer(t, &serverOpts{
-		tracer: tracer,
+		eventRecorder: &eventRecorder,
 		config: &Config{
 			GetConfigForClient: func(*ClientInfo) (*Config, error) {
 				return nil, errors.New("rejected")
@@ -844,26 +879,18 @@ func TestServerGetConfigForClientReject(t *testing.T) {
 	conn := newUDPConnLocalhost(t)
 	srcConnID := randConnID(6)
 	destConnID := randConnID(8)
-	p := getValidInitialPacket(t, conn.LocalAddr(), srcConnID, destConnID)
-	argsChan := make(chan sentPacketCallArgs, 1)
-	mockTracer.EXPECT().SentPacket(p.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(_ net.Addr, hdr *logging.Header, _ logging.ByteCount, frames []logging.Frame) {
-			argsChan <- sentPacketCallArgs{hdr: hdr, frames: frames}
-		},
-	)
-	server.handlePacket(p)
+	server.handlePacket(getValidInitialPacket(t, conn.LocalAddr(), srcConnID, destConnID))
 
-	checkConnectionClose(t, conn, argsChan, destConnID, srcConnID, qerr.ConnectionRefused)
+	checkConnectionClose(t, conn, &eventRecorder, destConnID, srcConnID, qerr.ConnectionRefused)
 }
 
 func TestServerReceiveQueue(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
+	var eventRecorder events.Recorder
 	acceptConn := make(chan struct{})
 	defer close(acceptConn)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
 	newConnChan := make(chan struct{}, protocol.MaxServerUnprocessedPackets+2)
 	server := newTestServer(t, &serverOpts{
-		tracer: tracer,
+		eventRecorder: &eventRecorder,
 		newConn: func(
 			_ context.Context,
 			_ context.CancelCauseFunc,
@@ -881,7 +908,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ *handshake.TokenGenerator,
 			_ bool,
 			_ time.Duration,
-			_ *logging.ConnectionTracer,
+			_ qlogwriter.Recorder,
 			_ utils.Logger,
 			_ protocol.Version,
 		) *wrappedConn {
@@ -904,18 +931,23 @@ func TestServerReceiveQueue(t *testing.T) {
 		}
 	}
 
-	done := make(chan struct{})
-	mockTracer.EXPECT().DroppedPacket(gomock.Any(), logging.PacketTypeNotDetermined, gomock.Any(), logging.PacketDropDOSPrevention).Do(
-		func(_ net.Addr, _ logging.PacketType, _ logging.ByteCount, _ logging.PacketDropReason) {
-			close(done)
-		},
+	p := getValidInitialPacket(t, conn.LocalAddr(), randConnID(6), randConnID(8))
+	server.handlePacket(p)
+
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
 	)
-	server.handlePacket(getValidInitialPacket(t, conn.LocalAddr(), randConnID(6), randConnID(8)))
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Trigger: qlog.PacketDropDOSPrevention,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 }
 
 func TestServerAccept(t *testing.T) {
@@ -928,7 +960,6 @@ func TestServerAccept(t *testing.T) {
 }
 
 func testServerAccept(t *testing.T, acceptEarly bool) {
-	mockCtrl := gomock.NewController(t)
 	ready := make(chan struct{})
 	hooks := &connTestHooks{}
 	if acceptEarly {
@@ -937,10 +968,8 @@ func testServerAccept(t *testing.T, acceptEarly bool) {
 		hooks.handshakeComplete = func() <-chan struct{} { return ready }
 	}
 	recorder := newConnConstructorRecorder(hooks)
-	tracer, _ := mocklogging.NewMockTracer(mockCtrl)
 	server := newTestServer(t, &serverOpts{
 		acceptEarly: acceptEarly,
-		tracer:      tracer,
 		newConn:     recorder.NewConn,
 	})
 
@@ -1083,8 +1112,7 @@ func TestServerAcceptQueue(t *testing.T) {
 }
 
 func TestServer0RTTReordering(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	var eventRecorder events.Recorder
 	packets := make(chan receivedPacket, protocol.Max0RTTQueueLen+1)
 	done := make(chan struct{})
 	recorder := newConnConstructorRecorder(&connTestHooks{
@@ -1093,9 +1121,9 @@ func TestServer0RTTReordering(t *testing.T) {
 		run:            func() error { close(done); return nil },
 	})
 	server := newTestServer(t, &serverOpts{
-		acceptEarly: true,
-		tracer:      tracer,
-		newConn:     recorder.NewConn,
+		acceptEarly:   true,
+		eventRecorder: &eventRecorder,
+		newConn:       recorder.NewConn,
 	})
 
 	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
@@ -1136,8 +1164,27 @@ func TestServer0RTTReordering(t *testing.T) {
 		},
 		make([]byte, 100),
 	)
-	mockTracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention)
 	server.handlePacket(p)
+
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:   qlog.PacketType0RTT,
+					PacketNumber: protocol.InvalidPacketNumber,
+					Version:      protocol.Version1,
+				},
+				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Trigger: qlog.PacketDropDOSPrevention,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 
 	// now receive the Initial
 	initial := getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, randConnID(5), connID)
@@ -1164,11 +1211,10 @@ func TestServer0RTTReordering(t *testing.T) {
 }
 
 func TestServer0RTTQueueing(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	var eventRecorder events.Recorder
 	server := newTestServer(t, &serverOpts{
-		acceptEarly: true,
-		tracer:      tracer,
+		acceptEarly:   true,
+		eventRecorder: &eventRecorder,
 	})
 
 	firstRcvTime := monotime.Now()
@@ -1217,25 +1263,31 @@ func TestServer0RTTQueueing(t *testing.T) {
 		},
 		make([]byte, 123),
 	)
-	dropped := make(chan struct{}, protocol.Max0RTTQueues)
-	mockTracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention).Do(
-		func(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) { dropped <- struct{}{} },
-	)
 	server.handlePacket(p)
-	select {
-	case <-dropped:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
-	require.True(t, mockCtrl.Satisfied())
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:   qlog.PacketType0RTT,
+					PacketNumber: protocol.InvalidPacketNumber,
+					Version:      protocol.Version1,
+				},
+				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Trigger: qlog.PacketDropDOSPrevention,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
+	eventRecorder.Clear()
 
 	// There's no cleanup Go routine.
 	// Cleanup is triggered when new packets are received.
 	// 1. Receive one handshake packet, which triggers the cleanup of the first 0-RTT queue
-	mockTracer.EXPECT().DroppedPacket(gomock.Any(), logging.PacketTypeHandshake, gomock.Any(), gomock.Any())
-	mockTracer.EXPECT().DroppedPacket(gomock.Any(), logging.PacketType0RTT, sizes[0], gomock.Any()).Do(
-		func(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) { dropped <- struct{}{} },
-	)
 	triggerPacket := getLongHeaderPacket(t,
 		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42},
 		&wire.ExtendedHeader{
@@ -1252,12 +1304,35 @@ func TestServer0RTTQueueing(t *testing.T) {
 	)
 	triggerPacket.rcvTime = firstRcvTime.Add(protocol.Max0RTTQueueingDuration + time.Nanosecond)
 	server.handlePacket(triggerPacket)
-	select {
-	case <-dropped:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
-	require.True(t, mockCtrl.Satisfied())
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) == 2 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:   qlog.PacketTypeHandshake,
+					PacketNumber: protocol.InvalidPacketNumber,
+					Version:      protocol.Version1,
+				},
+				Raw:     qlog.RawInfo{Length: int(triggerPacket.Size())},
+				Trigger: qlog.PacketDropUnexpectedPacket,
+			},
+			qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:   qlog.PacketType0RTT,
+					PacketNumber: protocol.InvalidPacketNumber,
+					Version:      protocol.Version1,
+				},
+				Raw:     qlog.RawInfo{Length: int(sizes[0])},
+				Trigger: qlog.PacketDropDOSPrevention,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
+	eventRecorder.Clear()
 
 	// 2. Receive another handshake packet, which triggers the cleanup of the other 0-RTT queues
 	triggerPacket = getLongHeaderPacket(t,
@@ -1275,19 +1350,38 @@ func TestServer0RTTQueueing(t *testing.T) {
 		make([]byte, 124),
 	)
 	triggerPacket.rcvTime = otherRcvTime.Add(protocol.Max0RTTQueueingDuration + time.Nanosecond)
-	mockTracer.EXPECT().DroppedPacket(gomock.Any(), logging.PacketTypeHandshake, gomock.Any(), gomock.Any())
-	for i := range sizes[1:] {
-		mockTracer.EXPECT().DroppedPacket(gomock.Any(), logging.PacketType0RTT, sizes[i+1], gomock.Any()).Do(
-			func(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) { dropped <- struct{}{} },
-		)
-	}
 	server.handlePacket(triggerPacket)
 
-	for range protocol.Max0RTTQueues - 1 {
-		select {
-		case <-dropped:
-		case <-time.After(time.Second):
-			t.Fatal("timeout")
-		}
+	expectedEvents := []qlogwriter.Event{
+		qlog.PacketDropped{
+			Header: qlog.PacketHeader{
+				PacketType:   qlog.PacketTypeHandshake,
+				PacketNumber: protocol.InvalidPacketNumber,
+				Version:      protocol.Version1,
+			},
+			Raw:     qlog.RawInfo{Length: int(triggerPacket.Size())},
+			Trigger: qlog.PacketDropUnexpectedPacket,
+		},
+	}
+	for i := range protocol.Max0RTTQueues - 1 {
+		expectedEvents = append(expectedEvents, qlog.PacketDropped{
+			Header: qlog.PacketHeader{
+				PacketType:   qlog.PacketType0RTT,
+				PacketNumber: protocol.InvalidPacketNumber,
+				Version:      protocol.Version1,
+			},
+			Raw:     qlog.RawInfo{Length: int(sizes[i+1])},
+			Trigger: qlog.PacketDropDOSPrevention,
+		})
+	}
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) == len(expectedEvents) },
+		time.Second,
+		10*time.Millisecond,
+	)
+
+	// queues are dropped in random order
+	for _, event := range expectedEvents {
+		require.Contains(t, eventRecorder.Events(qlog.PacketDropped{}), event)
 	}
 }

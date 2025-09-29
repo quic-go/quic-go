@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/qlogevents"
+	"github.com/quic-go/quic-go/qlog"
 
 	"github.com/stretchr/testify/require"
 )
@@ -23,9 +23,7 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 	server, err := quic.Listen(
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
-		&quic.Config{
-			Tracer: qlogevents.DefaultConnectionTracer,
-		},
+		&quic.Config{Tracer: qlog.DefaultConnectionTracer},
 	)
 	require.NoError(t, err)
 
@@ -45,9 +43,7 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
-		&quic.Config{
-			Tracer: qlogevents.DefaultConnectionTracer,
-		},
+		&quic.Config{Tracer: qlog.DefaultConnectionTracer},
 	)
 	require.NoError(t, err)
 	conn.CloseWithError(0, "")

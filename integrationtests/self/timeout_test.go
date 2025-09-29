@@ -16,7 +16,8 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/require"
 )
@@ -256,7 +257,7 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			MaxIdleTimeout:          idleTimeout,
-			Tracer:                  newTracer(tr),
+			Tracer:                  func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tr },
 			DisablePathMTUDiscovery: true,
 		}),
 	)
@@ -274,7 +275,7 @@ func TestTimeoutAfterInactivity(t *testing.T) {
 	for _, p := range counter.getSentShortHeaderPackets() {
 		var hasAckElicitingFrame bool
 		for _, f := range p.frames {
-			if _, ok := f.(*logging.AckFrame); ok {
+			if _, ok := f.Frame.(qlog.AckFrame); ok {
 				continue
 			}
 			hasAckElicitingFrame = true

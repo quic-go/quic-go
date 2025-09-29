@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +70,7 @@ func TestConnContextOnServerSide(t *testing.T) {
 			},
 		},
 		getQuicConfig(&quic.Config{
-			Tracer: func(ctx context.Context, _ logging.Perspective, _ quic.ConnectionID) *logging.ConnectionTracer {
+			Tracer: func(ctx context.Context, _ bool, _ quic.ConnectionID) qlogwriter.Trace {
 				tracerContextChan <- ctx
 				return nil
 			},
@@ -236,7 +236,7 @@ func TestContextOnClientSide(t *testing.T) {
 		server.Addr(),
 		tlsConf,
 		getQuicConfig(&quic.Config{
-			Tracer: func(ctx context.Context, _ logging.Perspective, _ quic.ConnectionID) *logging.ConnectionTracer {
+			Tracer: func(ctx context.Context, _ bool, _ quic.ConnectionID) qlogwriter.Trace {
 				tracerContextChan <- ctx
 				return nil
 			},
