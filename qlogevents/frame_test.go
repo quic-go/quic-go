@@ -9,7 +9,6 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/logging"
-
 	"github.com/quic-go/quic-go/qlog/jsontext"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,7 @@ import (
 func check(t *testing.T, f logging.Frame, expected map[string]any) {
 	buf := &bytes.Buffer{}
 	enc := jsontext.NewEncoder(buf)
-	err := (frame{Frame: f}).Encode(enc)
+	err := (Frame{Frame: f}).Encode(enc)
 	require.NoError(t, err)
 	data := buf.Bytes()
 	require.True(t, json.Valid(data))

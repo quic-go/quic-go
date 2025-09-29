@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quic-go/quic-go/logging"
 	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
@@ -41,11 +40,15 @@ func NewFileSeq(w io.WriteCloser) *FileSeq {
 }
 
 // NewConnectionFileSeq creates a new qlog trace to log connection events.
-func NewConnectionFileSeq(w io.WriteCloser, pers logging.Perspective, odcid logging.ConnectionID) *FileSeq {
-	return newFileSeq(w, pers.String(), &odcid)
+func NewConnectionFileSeq(w io.WriteCloser, isClient bool, odcid ConnectionID) *FileSeq {
+	pers := "server"
+	if isClient {
+		pers = "client"
+	}
+	return newFileSeq(w, pers, &odcid)
 }
 
-func newFileSeq(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *FileSeq {
+func newFileSeq(w io.WriteCloser, pers string, odcid *ConnectionID) *FileSeq {
 	now := time.Now()
 	tr := &trace{
 		VantagePoint: vantagePoint{Type: pers},
@@ -75,7 +78,7 @@ func newFileSeq(w io.WriteCloser, pers string, odcid *logging.ConnectionID) *Fil
 	}
 }
 
-func (t *FileSeq) AddProducer() *Writer {
+func (t *FileSeq) AddProducer() Recorder {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 	if t.closed {
@@ -84,9 +87,7 @@ func (t *FileSeq) AddProducer() *Writer {
 
 	t.producers++
 
-	return &Writer{
-		t: t,
-	}
+	return &Writer{t: t}
 }
 
 func (t *FileSeq) record(eventTime time.Time, details Event) error {

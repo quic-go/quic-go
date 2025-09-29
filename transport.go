@@ -14,7 +14,8 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogevents"
 )
 
 // ErrTransportClosed is returned by the [Transport]'s Listen or Dial method after it was closed.
@@ -123,15 +124,15 @@ type Transport struct {
 	// The context returned from the callback is used to derive every other context used during the
 	// lifetime of the connection:
 	// * the context passed to crypto/tls (and used on the tls.ClientHelloInfo)
-	// * the context used in Config.Tracer
+	// * the context used in Config.QlogTrace
 	// * the context returned from Conn.Context
 	// * the context returned from SendStream.Context
 	// It is not used for dialed connections.
 	ConnContext func(context.Context, *ClientInfo) (context.Context, error)
 
 	// A Tracer traces events that don't belong to a single QUIC connection.
-	// Tracer.Close is called when the transport is closed.
-	Tracer *logging.Tracer
+	// Recorder.Close is called when the transport is closed.
+	QlogRecorder qlog.Recorder
 
 	mutex       sync.Mutex
 	handlers    map[protocol.ConnectionID]packetHandler
@@ -220,7 +221,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.ConnContext,
 		tlsConf,
 		conf,
-		t.Tracer,
+		t.QlogRecorder,
 		t.closeServer,
 		*t.TokenGeneratorKey,
 		maxTokenAge,
@@ -291,12 +292,27 @@ func (t *Transport) doDial(
 		return nil, t.closeErr
 	}
 
-	var tracer *logging.ConnectionTracer
-	if config.Tracer != nil {
-		tracer = config.Tracer(ctx, protocol.PerspectiveClient, destConnID)
+	var qlogger qlog.Recorder
+	if config.QlogTrace != nil {
+		if tr := config.QlogTrace(ctx, true, destConnID); tr != nil {
+			qlogger = tr.AddProducer()
+		}
 	}
-	if tracer != nil && tracer.StartedConnection != nil {
-		tracer.StartedConnection(sendConn.LocalAddr(), sendConn.RemoteAddr(), srcConnID, destConnID)
+
+	if qlogger != nil {
+		var srcAddr, destAddr *net.UDPAddr
+		if addr, ok := sendConn.LocalAddr().(*net.UDPAddr); ok {
+			srcAddr = addr
+		}
+		if addr, ok := sendConn.RemoteAddr().(*net.UDPAddr); ok {
+			destAddr = addr
+		}
+		qlogger.RecordEvent(qlogevents.StartedConnection{
+			SrcAddr:          srcAddr,
+			DestAddr:         destAddr,
+			SrcConnectionID:  srcConnID,
+			DestConnectionID: destConnID,
+		})
 	}
 
 	logger := utils.DefaultLogger.WithPrefix("client")
@@ -315,7 +331,7 @@ func (t *Transport) doDial(
 		initialPacketNumber,
 		use0RTT,
 		hasNegotiatedVersion,
-		tracer,
+		qlogger,
 		logger,
 		version,
 	)
@@ -525,8 +541,8 @@ func (t *Transport) close(e error) {
 	t.mutex.Unlock() // closing connections requires releasing transport mutex
 	wg.Wait()
 
-	if t.Tracer != nil && t.Tracer.Close != nil {
-		t.Tracer.Close()
+	if t.QlogRecorder != nil {
+		t.QlogRecorder.Close()
 	}
 }
 
@@ -579,8 +595,11 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
-		if t.Tracer != nil && t.Tracer.DroppedPacket != nil {
-			t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
+		if t.QlogRecorder != nil {
+			t.QlogRecorder.RecordEvent(qlogevents.PacketDropped{
+				Raw:     qlogevents.RawInfo{Length: int(p.Size())},
+				Trigger: qlogevents.PacketDropHeaderParseError,
+			})
 		}
 		p.buffer.MaybeRelease()
 		return
@@ -603,8 +622,12 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {
 		if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
-			if t.Tracer != nil && t.Tracer.DroppedPacket != nil {
-				t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnknownConnectionID)
+			if t.QlogRecorder != nil {
+				t.QlogRecorder.RecordEvent(qlogevents.PacketDropped{
+					Header:  qlogevents.PacketHeader{PacketType: qlogevents.PacketType1RTT},
+					Raw:     qlogevents.RawInfo{Length: int(p.Size())},
+					Trigger: qlogevents.PacketDropUnknownConnectionID,
+				})
 			}
 			p.buffer.Release()
 		}
@@ -615,8 +638,12 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	defer t.mutex.Unlock()
 	if t.server == nil { // no server set
 		t.logger.Debugf("received a packet with an unexpected connection ID %s", connID)
-		if t.Tracer != nil && t.Tracer.DroppedPacket != nil {
-			t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnknownConnectionID)
+		if t.QlogRecorder != nil {
+			t.QlogRecorder.RecordEvent(qlogevents.PacketDropped{
+				Header:  qlogevents.PacketHeader{PacketType: qlogevents.PacketType1RTT},
+				Raw:     qlogevents.RawInfo{Length: int(p.Size())},
+				Trigger: qlogevents.PacketDropUnknownConnectionID,
+			})
 		}
 		p.buffer.MaybeRelease()
 		return
@@ -694,8 +721,11 @@ func (t *Transport) handleNonQUICPacket(p receivedPacket) {
 	select {
 	case t.nonQUICPackets <- p:
 	default:
-		if t.Tracer != nil && t.Tracer.DroppedPacket != nil {
-			t.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention)
+		if t.QlogRecorder != nil {
+			t.QlogRecorder.RecordEvent(qlogevents.PacketDropped{
+				Raw:     qlogevents.RawInfo{Length: int(p.Size())},
+				Trigger: qlogevents.PacketDropDOSPrevention,
+			})
 		}
 	}
 }

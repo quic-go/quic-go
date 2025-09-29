@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 
 	"github.com/stretchr/testify/require"
 )
@@ -25,18 +25,17 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 	return &nopWriteCloserImpl{Writer: w}
 }
 
-func newConnectionTracer() (*logging.ConnectionTracer, *bytes.Buffer) {
+func newConnectionTracer(t *testing.T) (qlog.Recorder, *bytes.Buffer) {
 	buf := &bytes.Buffer{}
-	tracer := NewConnectionTracer(
-		nopWriteCloser(buf),
-		logging.PerspectiveServer,
-		protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-	)
-	return tracer, buf
+	trace := qlog.NewConnectionFileSeq(nopWriteCloser(buf), false, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}))
+	go trace.Run()
+	recorder := trace.AddProducer()
+	t.Cleanup(func() { recorder.Close() })
+	return recorder, buf
 }
 
 func TestConnectionTraceMetadata(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.Close()
 
 	m := make(map[string]any)
@@ -59,13 +58,13 @@ func TestConnectionTraceMetadata(t *testing.T) {
 }
 
 func TestConnectionStarts(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.StartedConnection(
-		&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
-		&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
-		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-		protocol.ParseConnectionID([]byte{5, 6, 7, 8}),
-	)
+	tracer, buf := newConnectionTracer(t)
+	tracer.RecordEvent(&StartedConnection{
+		SrcAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
+		DstAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
+		SrcCID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		DstCID:  protocol.ParseConnectionID([]byte{5, 6, 7, 8}),
+	})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -81,7 +80,7 @@ func TestConnectionStarts(t *testing.T) {
 }
 
 func TestVersionNegotiation(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.NegotiatedVersion(0x1337, nil, nil)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -93,7 +92,7 @@ func TestVersionNegotiation(t *testing.T) {
 }
 
 func TestVersionNegotiationWithPriorAttempts(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.NegotiatedVersion(0x1337, []logging.Version{1, 2, 3}, []logging.Version{4, 5, 6})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -107,8 +106,8 @@ func TestVersionNegotiationWithPriorAttempts(t *testing.T) {
 }
 
 func TestIdleTimeouts(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.IdleTimeoutError{})
+	tracer, buf := newConnectionTracer(t)
+	tracer.ClosedConnection(&qerr.IdleTimeoutError{})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -120,8 +119,8 @@ func TestIdleTimeouts(t *testing.T) {
 }
 
 func TestHandshakeTimeouts(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.HandshakeTimeoutError{})
+	tracer, buf := newConnectionTracer(t)
+	tracer.ClosedConnection(&qerr.HandshakeTimeoutError{})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -133,8 +132,8 @@ func TestHandshakeTimeouts(t *testing.T) {
 }
 
 func TestReceivedStatelessResetPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.StatelessResetError{})
+	tracer, buf := newConnectionTracer(t)
+	tracer.ClosedConnection(&qerr.StatelessResetError{})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -146,8 +145,8 @@ func TestReceivedStatelessResetPacket(t *testing.T) {
 }
 
 func TestVersionNegotiationFailure(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.VersionNegotiationError{})
+	tracer, buf := newConnectionTracer(t)
+	tracer.ClosedConnection(&qerr.VersionNegotiationError{})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
 	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
@@ -158,8 +157,8 @@ func TestVersionNegotiationFailure(t *testing.T) {
 }
 
 func TestApplicationErrors(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.ApplicationError{
+	tracer, buf := newConnectionTracer(t)
+	tracer.ClosedConnection(&qerr.ApplicationError{
 		Remote:       true,
 		ErrorCode:    1337,
 		ErrorMessage: "foobar",
@@ -176,8 +175,8 @@ func TestApplicationErrors(t *testing.T) {
 }
 
 func TestTransportErrors(t *testing.T) {
-	tracer, buf := newConnectionTracer()
-	tracer.ClosedConnection(&quic.TransportError{
+	tracer, buf := newConnectionTracer(t)
+	tracer.ClosedConnection(&qerr.TransportError{
 		ErrorCode:    qerr.AEADLimitReached,
 		ErrorMessage: "foobar",
 	})
@@ -194,7 +193,7 @@ func TestTransportErrors(t *testing.T) {
 
 func TestSentTransportParameters(t *testing.T) {
 	rcid := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.SentTransportParameters(&logging.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   1000,
 		InitialMaxStreamDataBidiRemote:  2000,
@@ -241,7 +240,7 @@ func TestSentTransportParameters(t *testing.T) {
 }
 
 func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.SentTransportParameters(&logging.TransportParameters{
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
 		ActiveConnectionIDLimit:         7,
@@ -255,7 +254,7 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 }
 
 func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.SentTransportParameters(&logging.TransportParameters{
 		StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 	})
@@ -283,7 +282,7 @@ func TestTransportParametersWithPreferredAddress(t *testing.T) {
 func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 bool) {
 	addr4 := netip.AddrPortFrom(netip.AddrFrom4([4]byte{12, 34, 56, 78}), 123)
 	addr6 := netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 456)
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	preferredAddress := &logging.PreferredAddress{
 		ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
 		StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
@@ -322,7 +321,7 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 }
 
 func TestTransportParametersWithDatagramExtension(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.SentTransportParameters(&logging.TransportParameters{
 		MaxDatagramFrameSize: 1337,
 	})
@@ -335,7 +334,7 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 }
 
 func TestReceivedTransportParameters(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.ReceivedTransportParameters(&logging.TransportParameters{})
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -347,7 +346,7 @@ func TestReceivedTransportParameters(t *testing.T) {
 }
 
 func TestRestoredTransportParameters(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.RestoredTransportParameters(&logging.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  100,
 		InitialMaxStreamDataBidiRemote: 200,
@@ -373,7 +372,7 @@ func TestRestoredTransportParameters(t *testing.T) {
 }
 
 func TestSentLongHeaderPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.SentLongHeaderPacket(
 		&logging.ExtendedHeader{
 			Header: logging.Header{
@@ -416,7 +415,7 @@ func TestSentLongHeaderPacket(t *testing.T) {
 }
 
 func TestSentShortHeaderPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.SentShortHeaderPacket(
 		&logging.ShortHeader{
 			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
@@ -446,7 +445,7 @@ func TestSentShortHeaderPacket(t *testing.T) {
 }
 
 func TestReceivedLongHeaderPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.ReceivedLongHeaderPacket(
 		&logging.ExtendedHeader{
 			Header: logging.Header{
@@ -489,7 +488,7 @@ func TestReceivedLongHeaderPacket(t *testing.T) {
 }
 
 func TestReceivedShortHeaderPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	shdr := &logging.ShortHeader{
 		DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 		PacketNumber:     1337,
@@ -525,7 +524,7 @@ func TestReceivedShortHeaderPacket(t *testing.T) {
 }
 
 func TestReceivedRetryPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.ReceivedRetry(
 		&logging.Header{
 			Type:             protocol.PacketTypeRetry,
@@ -555,7 +554,7 @@ func TestReceivedRetryPacket(t *testing.T) {
 }
 
 func TestReceivedVersionNegotiationPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.ReceivedVersionNegotiationPacket(
 		protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 		protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
@@ -579,7 +578,7 @@ func TestReceivedVersionNegotiationPacket(t *testing.T) {
 }
 
 func TestBufferedPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.BufferedPacket(logging.PacketTypeHandshake, 1337)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -596,7 +595,7 @@ func TestBufferedPacket(t *testing.T) {
 }
 
 func TestDroppedPacket(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.DroppedPacket(logging.PacketTypeRetry, protocol.InvalidPacketNumber, 1337, logging.PacketDropPayloadDecryptError)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -613,7 +612,7 @@ func TestDroppedPacket(t *testing.T) {
 }
 
 func TestDroppedPacketWithPacketNumber(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.DroppedPacket(logging.PacketTypeHandshake, 42, 1337, logging.PacketDropDuplicate)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -635,7 +634,7 @@ func TestUpdatedMetrics(t *testing.T) {
 	rttStats.UpdateRTT(15*time.Millisecond, 0)
 	rttStats.UpdateRTT(20*time.Millisecond, 0)
 	rttStats.UpdateRTT(25*time.Millisecond, 0)
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedMetrics(&rttStats, 4321, 1234, 42)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -664,7 +663,7 @@ func TestUpdatedMetricsDiff(t *testing.T) {
 	rttStats2.UpdateRTT(15*time.Millisecond, 0)
 	rttStats2.UpdateRTT(15*time.Millisecond, 0)
 
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedMetrics(&rttStats, 4321, 1234, 42)
 	tracer.UpdatedMetrics(&rttStats2, 4321, 12345 /* changed */, 42)
 	tracer.UpdatedMetrics(&rttStats2, 0, 0, 0)
@@ -692,7 +691,7 @@ func TestUpdatedMetricsDiff(t *testing.T) {
 }
 
 func TestLostPackets(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -724,7 +723,7 @@ func TestDetectedSpuriousLoss(t *testing.T) {
 }
 
 func TestMTUUpdates(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedMTU(1337, true)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -736,7 +735,7 @@ func TestMTUUpdates(t *testing.T) {
 }
 
 func TestCongestionStateUpdates(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -747,7 +746,7 @@ func TestCongestionStateUpdates(t *testing.T) {
 }
 
 func TestPTOChanges(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedPTOCount(42)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -757,7 +756,7 @@ func TestPTOChanges(t *testing.T) {
 }
 
 func TestTLSKeyUpdates(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedKeyFromTLS(protocol.EncryptionHandshake, protocol.PerspectiveClient)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -772,7 +771,7 @@ func TestTLSKeyUpdates(t *testing.T) {
 }
 
 func TestTLSKeyUpdatesFor1RTTKeys(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedKeyFromTLS(protocol.Encryption1RTT, protocol.PerspectiveServer)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -787,7 +786,7 @@ func TestTLSKeyUpdatesFor1RTTKeys(t *testing.T) {
 }
 
 func TestQUICKeyUpdates(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.UpdatedKey(1337, true)
 	tracer.Close()
 	entries := exportAndParse(t, buf)
@@ -807,7 +806,7 @@ func TestQUICKeyUpdates(t *testing.T) {
 }
 
 func TestDroppedEncryptionLevels(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.DroppedEncryptionLevel(protocol.EncryptionInitial)
 	tracer.Close()
 	entries := exportAndParse(t, buf)
@@ -826,7 +825,7 @@ func TestDroppedEncryptionLevels(t *testing.T) {
 }
 
 func TestDropped0RTTKeys(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.DroppedEncryptionLevel(protocol.Encryption0RTT)
 	tracer.Close()
 	entries := exportAndParse(t, buf)
@@ -840,7 +839,7 @@ func TestDropped0RTTKeys(t *testing.T) {
 }
 
 func TestDroppedKeys(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.DroppedKey(42)
 	tracer.Close()
 	entries := exportAndParse(t, buf)
@@ -860,7 +859,7 @@ func TestDroppedKeys(t *testing.T) {
 }
 
 func TestSetLossTimer(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	timeout := time.Now().Add(137 * time.Millisecond)
 	tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
 	tracer.Close()
@@ -878,7 +877,7 @@ func TestSetLossTimer(t *testing.T) {
 }
 
 func TestExpiredLossTimer(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -892,7 +891,7 @@ func TestExpiredLossTimer(t *testing.T) {
 }
 
 func TestCanceledLossTimer(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.LossTimerCanceled()
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -904,7 +903,7 @@ func TestCanceledLossTimer(t *testing.T) {
 }
 
 func TestECNStateTransitionWithoutTrigger(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.ECNStateUpdated(logging.ECNStateUnknown, logging.ECNTriggerNoTrigger)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -916,7 +915,7 @@ func TestECNStateTransitionWithoutTrigger(t *testing.T) {
 }
 
 func TestECNStateTransitionWithTrigger(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.ECNStateUpdated(logging.ECNStateFailed, logging.ECNFailedNoECNCounts)
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)
@@ -929,7 +928,7 @@ func TestECNStateTransitionWithTrigger(t *testing.T) {
 }
 
 func TestGenericConnectionTracerEvent(t *testing.T) {
-	tracer, buf := newConnectionTracer()
+	tracer, buf := newConnectionTracer(t)
 	tracer.Debug("foo", "bar")
 	tracer.Close()
 	entry := exportAndParseSingle(t, buf)

@@ -17,7 +17,7 @@ import (
 
 func TestOwnerStringRepresentation(t *testing.T) {
 	testCases := []struct {
-		owner    owner
+		owner    Owner
 		expected string
 	}{
 		{ownerLocal, "local"},
@@ -109,7 +109,7 @@ func TestKeyTypeStringRepresentation(t *testing.T) {
 
 func TestKeyUpdateTriggerStringRepresentation(t *testing.T) {
 	testCases := []struct {
-		trigger  keyUpdateTrigger
+		trigger  KeyUpdateTrigger
 		expected string
 	}{
 		{keyUpdateTLS, "tls"},

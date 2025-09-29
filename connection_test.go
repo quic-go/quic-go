@@ -42,7 +42,7 @@ func connectionOptConnFlowController(cfc flowcontrol.ConnectionFlowController) t
 }
 
 func connectionOptTracer(tr *logging.ConnectionTracer) testConnectionOpt {
-	return func(conn *Conn) { conn.tracer = tr }
+	return func(conn *Conn) { conn.qlogger = tr }
 }
 
 func connectionOptSentPacketHandler(sph ackhandler.SentPacketHandler) testConnectionOpt {

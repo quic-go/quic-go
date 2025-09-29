@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/assert"
@@ -86,7 +86,7 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 		}
 
 		switch fn := typ.Field(i).Name; fn {
-		case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Tracer":
+		case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "QlogTrace":
 			// Can't compare functions.
 		case "Versions":
 			f.Set(reflect.ValueOf([]Version{1, 2, 3}))
@@ -141,7 +141,7 @@ func TestConfigClone(t *testing.T) {
 		c1 := &Config{
 			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, assert.AnError },
 			AllowConnectionWindowIncrease: func(*Conn, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
-			Tracer: func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer {
+			QlogTrace: func(context.Context, bool, ConnectionID) qlog.Trace {
 				calledTracer = true
 				return nil
 			},
@@ -151,7 +151,7 @@ func TestConfigClone(t *testing.T) {
 		require.True(t, calledAllowConnectionWindowIncrease)
 		_, err := c2.GetConfigForClient(&ClientInfo{})
 		require.ErrorIs(t, err, assert.AnError)
-		c2.Tracer(context.Background(), logging.PerspectiveClient, protocol.ConnectionID{})
+		c2.QlogTrace(context.Background(), true, protocol.ConnectionID{})
 		require.True(t, calledTracer)
 	})
 

@@ -12,7 +12,8 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogevents"
 )
 
 var keyUpdateInterval atomic.Uint64
@@ -65,7 +66,7 @@ type updatableAEAD struct {
 
 	rttStats *utils.RTTStats
 
-	tracer  *logging.ConnectionTracer
+	qlogger qlog.Recorder
 	logger  utils.Logger
 	version protocol.Version
 
@@ -78,14 +79,14 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlog.Recorder, logger utils.Logger, version protocol.Version) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
 		rttStats:                rttStats,
-		tracer:                  tracer,
+		qlogger:                 qlogger,
 		logger:                  logger,
 		version:                 version,
 	}
@@ -94,8 +95,15 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer
 func (a *updatableAEAD) rollKeys() {
 	if a.prevRcvAEAD != nil {
 		a.logger.Debugf("Dropping key phase %d ahead of scheduled time. Drop time was: %s", a.keyPhase-1, a.prevRcvAEADExpiry)
-		if a.tracer != nil && a.tracer.DroppedKey != nil {
-			a.tracer.DroppedKey(a.keyPhase - 1)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlogevents.KeyDiscarded{
+				KeyType:  qlogevents.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
+			a.qlogger.RecordEvent(qlogevents.KeyDiscarded{
+				KeyType:  qlogevents.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
 		}
 		a.prevRcvAEADExpiry = 0
 	}
@@ -190,8 +198,15 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 		a.prevRcvAEAD = nil
 		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
 		a.prevRcvAEADExpiry = 0
-		if a.tracer != nil && a.tracer.DroppedKey != nil {
-			a.tracer.DroppedKey(a.keyPhase - 1)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlogevents.KeyDiscarded{
+				KeyType:  qlogevents.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
+			a.qlogger.RecordEvent(qlogevents.KeyDiscarded{
+				KeyType:  qlogevents.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
 		}
 	}
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
@@ -224,8 +239,17 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
 		// Start a timer to drop the previous key generation.
 		a.startKeyDropTimer(rcvTime)
-		if a.tracer != nil && a.tracer.UpdatedKey != nil {
-			a.tracer.UpdatedKey(a.keyPhase, true)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlogevents.KeyUpdated{
+				Trigger:  qlogevents.KeyUpdateRemote,
+				KeyType:  qlogevents.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase,
+			})
+			a.qlogger.RecordEvent(qlogevents.KeyUpdated{
+				Trigger:  qlogevents.KeyUpdateRemote,
+				KeyType:  qlogevents.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase,
+			})
 		}
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
@@ -315,9 +339,17 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
 		a.rollKeys()
-		a.logger.Debugf("Initiating key update to key phase %d", a.keyPhase)
-		if a.tracer != nil && a.tracer.UpdatedKey != nil {
-			a.tracer.UpdatedKey(a.keyPhase, false)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlogevents.KeyUpdated{
+				Trigger:  qlogevents.KeyUpdateLocal,
+				KeyType:  qlogevents.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase,
+			})
+			a.qlogger.RecordEvent(qlogevents.KeyUpdated{
+				Trigger:  qlogevents.KeyUpdateLocal,
+				KeyType:  qlogevents.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase,
+			})
 		}
 	}
 	return a.keyPhase.Bit()

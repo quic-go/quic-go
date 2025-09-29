@@ -7,32 +7,10 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
-
 	"github.com/quic-go/quic-go/qlog/jsontext"
 
 	"github.com/stretchr/testify/require"
 )
-
-func TestPacketTypeFromEncryptionLevel(t *testing.T) {
-	tests := []struct {
-		name  string
-		level protocol.EncryptionLevel
-		want  logging.PacketType
-	}{
-		{"Initial", protocol.EncryptionInitial, logging.PacketTypeInitial},
-		{"Handshake", protocol.EncryptionHandshake, logging.PacketTypeHandshake},
-		{"0-RTT", protocol.Encryption0RTT, logging.PacketType0RTT},
-		{"1-RTT", protocol.Encryption1RTT, logging.PacketType1RTT},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := getPacketTypeFromEncryptionLevel(tt.level)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
 
 func checkHeader(t *testing.T, hdr *wire.ExtendedHeader, expected map[string]any) {
 	buf := &bytes.Buffer{}

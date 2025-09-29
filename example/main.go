@@ -169,7 +169,7 @@ func main() {
 					Handler: handler,
 					Addr:    bCap,
 					QUICConfig: &quic.Config{
-						Tracer: qlogevents.DefaultConnectionTracer,
+						QlogTrace: qlogevents.DefaultConnectionTracer,
 					},
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)

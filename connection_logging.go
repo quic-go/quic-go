@@ -6,41 +6,47 @@ import (
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlogevents"
 )
 
 // ConvertFrame converts a wire.Frame into a logging.Frame.
 // This makes it possible for external packages to access the frames.
 // Furthermore, it removes the data slices from CRYPTO and STREAM frames.
-func toLoggingFrame(frame wire.Frame) logging.Frame {
+func toQlogFrame(frame wire.Frame) qlogevents.Frame {
 	switch f := frame.(type) {
 	case *wire.AckFrame:
 		// We use a pool for ACK frames.
 		// Implementations of the tracer interface may hold on to frames, so we need to make a copy here.
-		return toLoggingAckFrame(f)
+		return qlogevents.Frame{Frame: toQlogAckFrame(f)}
 	case *wire.CryptoFrame:
-		return &logging.CryptoFrame{
-			Offset: f.Offset,
-			Length: protocol.ByteCount(len(f.Data)),
+		return qlogevents.Frame{
+			Frame: &qlogevents.CryptoFrame{
+				Offset: int64(f.Offset),
+				Length: int64(len(f.Data)),
+			},
 		}
 	case *wire.StreamFrame:
-		return &logging.StreamFrame{
-			StreamID: f.StreamID,
-			Offset:   f.Offset,
-			Length:   f.DataLen(),
-			Fin:      f.Fin,
+		return qlogevents.Frame{
+			Frame: &qlogevents.StreamFrame{
+				StreamID: f.StreamID,
+				Offset:   int64(f.Offset),
+				Length:   int64(f.DataLen()),
+				Fin:      f.Fin,
+			},
 		}
 	case *wire.DatagramFrame:
-		return &logging.DatagramFrame{
-			Length: logging.ByteCount(len(f.Data)),
+		return qlogevents.Frame{
+			Frame: &qlogevents.DatagramFrame{
+				Length: int64(len(f.Data)),
+			},
 		}
 	default:
-		return logging.Frame(frame)
+		return qlogevents.Frame{Frame: frame}
 	}
 }
 
-func toLoggingAckFrame(f *wire.AckFrame) *logging.AckFrame {
-	ack := &logging.AckFrame{
+func toQlogAckFrame(f *wire.AckFrame) *qlogevents.AckFrame {
+	ack := &qlogevents.AckFrame{
 		AckRanges: slices.Clone(f.AckRanges),
 		DelayTime: f.DelayTime,
 		ECNCE:     f.ECNCE,
@@ -66,19 +72,37 @@ func (c *Conn) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN) {
 	}
 
 	// tracing
-	if c.tracer != nil && c.tracer.SentLongHeaderPacket != nil {
-		frames := make([]logging.Frame, 0, len(p.frames))
+	if c.qlogger != nil {
+		numFrames := len(p.frames) + len(p.streamFrames)
+		if p.ack != nil {
+			numFrames++
+		}
+		frames := make([]qlogevents.Frame, 0, numFrames)
+		if p.ack != nil {
+			frames = append(frames, toQlogFrame(p.ack))
+		}
 		for _, f := range p.frames {
-			frames = append(frames, toLoggingFrame(f.Frame))
+			frames = append(frames, toQlogFrame(f.Frame))
 		}
 		for _, f := range p.streamFrames {
-			frames = append(frames, toLoggingFrame(f.Frame))
+			frames = append(frames, toQlogFrame(f.Frame))
 		}
-		var ack *logging.AckFrame
-		if p.ack != nil {
-			ack = toLoggingAckFrame(p.ack)
-		}
-		c.tracer.SentLongHeaderPacket(p.header, p.length, ecn, ack, frames)
+		c.qlogger.RecordEvent(qlogevents.PacketSent{
+			Header: qlogevents.PacketHeader{
+				PacketType:       toQlogPacketType(p.header.Type),
+				KeyPhaseBit:      p.header.KeyPhase,
+				PacketNumber:     p.header.PacketNumber,
+				Version:          p.header.Version,
+				SrcConnectionID:  p.header.SrcConnectionID,
+				DestConnectionID: p.header.DestConnectionID,
+			},
+			Raw: qlogevents.RawInfo{
+				Length:        int(p.length),
+				PayloadLength: int(p.header.Length),
+			},
+			Frames: frames,
+			ECN:    toQlogECN(ecn),
+		})
 	}
 }
 
@@ -112,25 +136,36 @@ func (c *Conn) logShortHeaderPacket(
 	}
 
 	// tracing
-	if c.tracer != nil && c.tracer.SentShortHeaderPacket != nil {
-		fs := make([]logging.Frame, 0, len(frames)+len(streamFrames))
+	if c.qlogger != nil {
+		numFrames := len(frames) + len(streamFrames)
+		if ackFrame != nil {
+			numFrames++
+		}
+		fs := make([]qlogevents.Frame, 0, numFrames)
+		if ackFrame != nil {
+			fs = append(fs, toQlogFrame(ackFrame))
+		}
 		for _, f := range frames {
-			fs = append(fs, toLoggingFrame(f.Frame))
+			fs = append(fs, toQlogFrame(f.Frame))
 		}
 		for _, f := range streamFrames {
-			fs = append(fs, toLoggingFrame(f.Frame))
+			fs = append(fs, toQlogFrame(f.Frame))
 		}
-		var ack *logging.AckFrame
-		if ackFrame != nil {
-			ack = toLoggingAckFrame(ackFrame)
-		}
-		c.tracer.SentShortHeaderPacket(
-			&logging.ShortHeader{DestConnectionID: destConnID, PacketNumber: pn, PacketNumberLen: pnLen, KeyPhase: kp},
-			size,
-			ecn,
-			ack,
-			fs,
-		)
+		c.qlogger.RecordEvent(qlogevents.PacketSent{
+			Header: qlogevents.PacketHeader{
+				PacketType:       qlogevents.PacketType1RTT,
+				KeyPhaseBit:      kp,
+				PacketNumber:     pn,
+				Version:          c.version,
+				DestConnectionID: destConnID,
+			},
+			Raw: qlogevents.RawInfo{
+				Length:        int(size),
+				PayloadLength: int(pnLen),
+			},
+			Frames: fs,
+			ECN:    toQlogECN(ecn),
+		})
 	}
 }
 
@@ -165,4 +200,70 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 	if p := packet.shortHdrPacket; p != nil {
 		c.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, ecn, p.Length, true)
 	}
+}
+
+func (c *Conn) qlogTransportParameters(tp *wire.TransportParameters, sentBy protocol.Perspective, restore bool) {
+	ev := &qlogevents.ParametersSet{
+		Restore:                         restore,
+		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
+		InitialSourceConnectionID:       tp.InitialSourceConnectionID,
+		RetrySourceConnectionID:         tp.RetrySourceConnectionID,
+		StatelessResetToken:             tp.StatelessResetToken,
+		DisableActiveMigration:          tp.DisableActiveMigration,
+		MaxIdleTimeout:                  tp.MaxIdleTimeout,
+		MaxUDPPayloadSize:               tp.MaxUDPPayloadSize,
+		AckDelayExponent:                tp.AckDelayExponent,
+		MaxAckDelay:                     tp.MaxAckDelay,
+		ActiveConnectionIDLimit:         tp.ActiveConnectionIDLimit,
+		InitialMaxData:                  tp.InitialMaxData,
+		InitialMaxStreamDataBidiLocal:   tp.InitialMaxStreamDataBidiLocal,
+		InitialMaxStreamDataBidiRemote:  tp.InitialMaxStreamDataBidiRemote,
+		InitialMaxStreamDataUni:         tp.InitialMaxStreamDataUni,
+		InitialMaxStreamsBidi:           int64(tp.MaxBidiStreamNum),
+		InitialMaxStreamsUni:            int64(tp.MaxUniStreamNum),
+		MaxDatagramFrameSize:            tp.MaxDatagramFrameSize,
+		EnableResetStreamAt:             tp.EnableResetStreamAt,
+	}
+	if sentBy == c.perspective {
+		ev.Owner = qlogevents.OwnerLocal
+	} else {
+		ev.Owner = qlogevents.OwnerRemote
+	}
+	if tp.PreferredAddress != nil {
+		ev.PreferredAddress = &qlogevents.PreferredAddress{
+			IPv4:                tp.PreferredAddress.IPv4,
+			IPv6:                tp.PreferredAddress.IPv6,
+			ConnectionID:        tp.PreferredAddress.ConnectionID,
+			StatelessResetToken: tp.PreferredAddress.StatelessResetToken,
+		}
+	}
+	c.qlogger.RecordEvent(ev)
+}
+
+func toQlogECN(ecn protocol.ECN) qlogevents.ECN {
+	switch ecn {
+	case protocol.ECT0:
+		return qlogevents.ECT0
+	case protocol.ECT1:
+		return qlogevents.ECT1
+	case protocol.ECNCE:
+		return qlogevents.ECNCE
+	default:
+		return qlogevents.ECNUnsupported
+	}
+}
+
+func toQlogPacketType(pt protocol.PacketType) qlogevents.PacketType {
+	var qpt qlogevents.PacketType
+	switch pt {
+	case protocol.PacketTypeInitial:
+		qpt = qlogevents.PacketTypeInitial
+	case protocol.PacketTypeHandshake:
+		qpt = qlogevents.PacketTypeHandshake
+	case protocol.PacketType0RTT:
+		qpt = qlogevents.PacketType0RTT
+	case protocol.PacketTypeRetry:
+		qpt = qlogevents.PacketTypeRetry
+	}
+	return qpt
 }
