@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/quic-go/json/jsontext"
+	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
 const eventChanSize = 50

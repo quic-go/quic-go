@@ -4,7 +4,6 @@ go 1.24
 
 require (
 	github.com/prometheus/client_golang v1.19.1
-	github.com/quic-go/json v0.0.0-20251001065926-eb100f78c66d
 	github.com/quic-go/qpack v0.5.1
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/mock v0.5.2

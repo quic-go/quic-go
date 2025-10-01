@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
-	"github.com/quic-go/json/jsontext"
+	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
 func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) logging.PacketType {
