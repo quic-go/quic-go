@@ -11,7 +11,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
-	"github.com/quic-go/json/jsontext"
+	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
 func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }

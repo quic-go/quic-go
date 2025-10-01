@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 
-	"github.com/quic-go/json/jsontext"
+	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
 type frame struct {
