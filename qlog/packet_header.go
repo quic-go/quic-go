@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/json/jsontext"
 )
 
 func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) logging.PacketType {
@@ -28,26 +28,29 @@ type token struct {
 	Raw []byte
 }
 
-var _ gojay.MarshalerJSONObject = &token{}
-
-func (t token) IsNil() bool { return false }
-func (t token) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("data", fmt.Sprintf("%x", t.Raw))
+func (t token) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("data")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(fmt.Sprintf("%x", t.Raw))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 // PacketHeader is a QUIC packet header.
 // TODO: make this a long header
 type packetHeader struct {
-	PacketType logging.PacketType
-
-	KeyPhaseBit  logging.KeyPhaseBit
-	PacketNumber logging.PacketNumber
-
+	PacketType       logging.PacketType
+	KeyPhaseBit      logging.KeyPhaseBit
+	PacketNumber     logging.PacketNumber
 	Version          logging.Version
 	SrcConnectionID  logging.ConnectionID
 	DestConnectionID logging.ConnectionID
-
-	Token *token
+	Token            *token
 }
 
 func transformHeader(hdr *logging.Header) *packetHeader {
@@ -70,30 +73,79 @@ func transformLongHeader(hdr *logging.ExtendedHeader) *packetHeader {
 	return h
 }
 
-func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(h.PacketType).String())
+func (h packetHeader) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(packetType(h.PacketType).String())); err != nil {
+		return err
+	}
 	if h.PacketType != logging.PacketTypeRetry {
-		enc.Int64Key("packet_number", int64(h.PacketNumber))
-	}
-	if h.Version != 0 {
-		enc.StringKey("version", version(h.Version).String())
-	}
-	if h.PacketType != logging.PacketType1RTT {
-		enc.IntKey("scil", h.SrcConnectionID.Len())
-		if h.SrcConnectionID.Len() > 0 {
-			enc.StringKey("scid", h.SrcConnectionID.String())
+		if err := enc.WriteToken(jsontext.String("packet_number")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(h.PacketNumber))); err != nil {
+			return err
 		}
 	}
-	enc.IntKey("dcil", h.DestConnectionID.Len())
+	if h.Version != 0 {
+		if err := enc.WriteToken(jsontext.String("version")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(version(h.Version).String())); err != nil {
+			return err
+		}
+	}
+	if h.PacketType != logging.PacketType1RTT {
+		if err := enc.WriteToken(jsontext.String("scil")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(h.SrcConnectionID.Len()))); err != nil {
+			return err
+		}
+		if h.SrcConnectionID.Len() > 0 {
+			if err := enc.WriteToken(jsontext.String("scid")); err != nil {
+				return err
+			}
+			if err := enc.WriteToken(jsontext.String(h.SrcConnectionID.String())); err != nil {
+				return err
+			}
+		}
+	}
+	if err := enc.WriteToken(jsontext.String("dcil")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(h.DestConnectionID.Len()))); err != nil {
+		return err
+	}
 	if h.DestConnectionID.Len() > 0 {
-		enc.StringKey("dcid", h.DestConnectionID.String())
+		if err := enc.WriteToken(jsontext.String("dcid")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(h.DestConnectionID.String())); err != nil {
+			return err
+		}
 	}
 	if h.KeyPhaseBit == logging.KeyPhaseZero || h.KeyPhaseBit == logging.KeyPhaseOne {
-		enc.StringKey("key_phase_bit", h.KeyPhaseBit.String())
+		if err := enc.WriteToken(jsontext.String("key_phase_bit")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(h.KeyPhaseBit.String())); err != nil {
+			return err
+		}
 	}
 	if h.Token != nil {
-		enc.ObjectKey("token", h.Token)
+		if err := enc.WriteToken(jsontext.String("token")); err != nil {
+			return err
+		}
+		if err := h.Token.Encode(enc); err != nil {
+			return err
+		}
 	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type packetHeaderVersionNegotiation struct {
@@ -101,13 +153,41 @@ type packetHeaderVersionNegotiation struct {
 	DestConnectionID logging.ArbitraryLenConnectionID
 }
 
-func (h packetHeaderVersionNegotiation) IsNil() bool { return false }
-func (h packetHeaderVersionNegotiation) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", "version_negotiation")
-	enc.IntKey("scil", h.SrcConnectionID.Len())
-	enc.StringKey("scid", h.SrcConnectionID.String())
-	enc.IntKey("dcil", h.DestConnectionID.Len())
-	enc.StringKey("dcid", h.DestConnectionID.String())
+func (h packetHeaderVersionNegotiation) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("version_negotiation")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("scil")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(h.SrcConnectionID.Len()))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("scid")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(h.SrcConnectionID.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("dcil")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(h.DestConnectionID.Len()))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("dcid")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(h.DestConnectionID.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 // a minimal header that only outputs the packet type, and potentially a packet number
@@ -116,12 +196,25 @@ type packetHeaderWithType struct {
 	PacketNumber logging.PacketNumber
 }
 
-func (h packetHeaderWithType) IsNil() bool { return false }
-func (h packetHeaderWithType) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(h.PacketType).String())
-	if h.PacketNumber != protocol.InvalidPacketNumber {
-		enc.Int64Key("packet_number", int64(h.PacketNumber))
+func (h packetHeaderWithType) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
+	if err := enc.WriteToken(jsontext.String("packet_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(packetType(h.PacketType).String())); err != nil {
+		return err
+	}
+	if h.PacketNumber != protocol.InvalidPacketNumber {
+		if err := enc.WriteToken(jsontext.String("packet_number")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(h.PacketNumber))); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 // a minimal header that only outputs the packet type
@@ -130,10 +223,23 @@ type packetHeaderWithTypeAndPacketNumber struct {
 	PacketNumber logging.PacketNumber
 }
 
-func (h packetHeaderWithTypeAndPacketNumber) IsNil() bool { return false }
-func (h packetHeaderWithTypeAndPacketNumber) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(h.PacketType).String())
-	enc.Int64Key("packet_number", int64(h.PacketNumber))
+func (h packetHeaderWithTypeAndPacketNumber) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(packetType(h.PacketType).String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_number")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(h.PacketNumber))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type shortHeader struct {
@@ -150,12 +256,35 @@ func transformShortHeader(hdr *logging.ShortHeader) *shortHeader {
 	}
 }
 
-func (h shortHeader) IsNil() bool { return false }
-func (h shortHeader) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(logging.PacketType1RTT).String())
-	if h.DestConnectionID.Len() > 0 {
-		enc.StringKey("dcid", h.DestConnectionID.String())
+func (h shortHeader) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
-	enc.Int64Key("packet_number", int64(h.PacketNumber))
-	enc.StringKey("key_phase_bit", h.KeyPhaseBit.String())
+	if err := enc.WriteToken(jsontext.String("packet_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(packetType(logging.PacketType1RTT).String())); err != nil {
+		return err
+	}
+	if h.DestConnectionID.Len() > 0 {
+		if err := enc.WriteToken(jsontext.String("dcid")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(h.DestConnectionID.String())); err != nil {
+			return err
+		}
+	}
+	if err := enc.WriteToken(jsontext.String("packet_number")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(h.PacketNumber))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("key_phase_bit")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(h.KeyPhaseBit.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }

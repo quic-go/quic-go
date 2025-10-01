@@ -11,14 +11,14 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/json/jsontext"
 )
 
 func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
 
 type eventDetails interface {
 	Name() string
-	gojay.MarshalerJSONObject
+	Encode(*jsontext.Encoder) error
 }
 
 type event struct {
@@ -26,22 +26,47 @@ type event struct {
 	eventDetails
 }
 
-var _ gojay.MarshalerJSONObject = event{}
+type jsontextEncoder interface {
+	Encode(*jsontext.Encoder) error
+}
 
-func (e event) IsNil() bool { return false }
-func (e event) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.Float64Key("time", milliseconds(e.RelativeTime))
-	enc.StringKey("name", e.Name())
-	enc.ObjectKey("data", e.eventDetails)
+func (e event) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("time")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Float(milliseconds(e.RelativeTime))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("name")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.Name())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("data")); err != nil {
+		return err
+	}
+	if err := e.eventDetails.Encode(enc); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type versions []version
 
-func (v versions) IsNil() bool { return false }
-func (v versions) MarshalJSONArray(enc *gojay.Encoder) {
-	for _, e := range v {
-		enc.AddString(e.String())
+func (v versions) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginArray); err != nil {
+		return err
 	}
+	for _, e := range v {
+		if err := enc.WriteToken(jsontext.String(e.String())); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndArray)
 }
 
 type rawInfo struct {
@@ -49,37 +74,92 @@ type rawInfo struct {
 	PayloadLength logging.ByteCount // length of the packet payload, excluding AEAD tag
 }
 
-func (i rawInfo) IsNil() bool { return false }
-func (i rawInfo) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.Uint64Key("length", uint64(i.Length))
-	enc.Uint64KeyOmitEmpty("payload_length", uint64(i.PayloadLength))
+func (i rawInfo) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("length")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Uint(uint64(i.Length))); err != nil {
+		return err
+	}
+	if i.PayloadLength != 0 {
+		if err := enc.WriteToken(jsontext.String("payload_length")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(i.PayloadLength))); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventConnectionStarted struct {
-	SrcAddr  *net.UDPAddr
-	DestAddr *net.UDPAddr
-
+	SrcAddr          *net.UDPAddr
+	DestAddr         *net.UDPAddr
 	SrcConnectionID  protocol.ConnectionID
 	DestConnectionID protocol.ConnectionID
 }
 
-var _ eventDetails = &eventConnectionStarted{}
-
 func (e eventConnectionStarted) Name() string { return "transport:connection_started" }
-func (e eventConnectionStarted) IsNil() bool  { return false }
 
-func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
-	if e.SrcAddr.IP.To4() != nil {
-		enc.StringKey("ip_version", "ipv4")
-	} else {
-		enc.StringKey("ip_version", "ipv6")
+func (e eventConnectionStarted) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
-	enc.StringKey("src_ip", e.SrcAddr.IP.String())
-	enc.IntKey("src_port", e.SrcAddr.Port)
-	enc.StringKey("dst_ip", e.DestAddr.IP.String())
-	enc.IntKey("dst_port", e.DestAddr.Port)
-	enc.StringKey("src_cid", e.SrcConnectionID.String())
-	enc.StringKey("dst_cid", e.DestConnectionID.String())
+	if e.SrcAddr.IP.To4() != nil {
+		if err := enc.WriteToken(jsontext.String("ip_version")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("ipv4")); err != nil {
+			return err
+		}
+	} else {
+		if err := enc.WriteToken(jsontext.String("ip_version")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("ipv6")); err != nil {
+			return err
+		}
+	}
+	if err := enc.WriteToken(jsontext.String("src_ip")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.SrcAddr.IP.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("src_port")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(e.SrcAddr.Port))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("dst_ip")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.DestAddr.IP.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("dst_port")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Int(int64(e.DestAddr.Port))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("src_cid")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.SrcConnectionID.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("dst_cid")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.DestConnectionID.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventVersionNegotiated struct {
@@ -88,16 +168,34 @@ type eventVersionNegotiated struct {
 }
 
 func (e eventVersionNegotiated) Name() string { return "transport:version_information" }
-func (e eventVersionNegotiated) IsNil() bool  { return false }
 
-func (e eventVersionNegotiated) MarshalJSONObject(enc *gojay.Encoder) {
+func (e eventVersionNegotiated) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
 	if len(e.clientVersions) > 0 {
-		enc.ArrayKey("client_versions", versions(e.clientVersions))
+		if err := enc.WriteToken(jsontext.String("client_versions")); err != nil {
+			return err
+		}
+		if err := versions(e.clientVersions).Encode(enc); err != nil {
+			return err
+		}
 	}
 	if len(e.serverVersions) > 0 {
-		enc.ArrayKey("server_versions", versions(e.serverVersions))
+		if err := enc.WriteToken(jsontext.String("server_versions")); err != nil {
+			return err
+		}
+		if err := versions(e.serverVersions).Encode(enc); err != nil {
+			return err
+		}
 	}
-	enc.StringKey("chosen_version", e.chosenVersion.String())
+	if err := enc.WriteToken(jsontext.String("chosen_version")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.chosenVersion.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventConnectionClosed struct {
@@ -105,9 +203,12 @@ type eventConnectionClosed struct {
 }
 
 func (e eventConnectionClosed) Name() string { return "transport:connection_closed" }
-func (e eventConnectionClosed) IsNil() bool  { return false }
 
-func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
+func (e eventConnectionClosed) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+
 	var (
 		statelessResetErr     *quic.StatelessResetError
 		handshakeTimeoutErr   *quic.HandshakeTimeoutError
@@ -118,37 +219,103 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 	)
 	switch {
 	case errors.As(e.e, &statelessResetErr):
-		enc.StringKey("owner", ownerRemote.String())
-		enc.StringKey("trigger", "stateless_reset")
+		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(ownerRemote.String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("stateless_reset")); err != nil {
+			return err
+		}
 	case errors.As(e.e, &handshakeTimeoutErr):
-		enc.StringKey("owner", ownerLocal.String())
-		enc.StringKey("trigger", "handshake_timeout")
+		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(ownerLocal.String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("handshake_timeout")); err != nil {
+			return err
+		}
 	case errors.As(e.e, &idleTimeoutErr):
-		enc.StringKey("owner", ownerLocal.String())
-		enc.StringKey("trigger", "idle_timeout")
+		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(ownerLocal.String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("idle_timeout")); err != nil {
+			return err
+		}
 	case errors.As(e.e, &applicationErr):
 		owner := ownerLocal
 		if applicationErr.Remote {
 			owner = ownerRemote
 		}
-		enc.StringKey("owner", owner.String())
-		enc.Uint64Key("application_code", uint64(applicationErr.ErrorCode))
-		enc.StringKey("reason", applicationErr.ErrorMessage)
+		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(owner.String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("application_code")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(applicationErr.ErrorCode))); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("reason")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(applicationErr.ErrorMessage)); err != nil {
+			return err
+		}
 	case errors.As(e.e, &transportErr):
 		owner := ownerLocal
 		if transportErr.Remote {
 			owner = ownerRemote
 		}
-		enc.StringKey("owner", owner.String())
-		enc.StringKey("connection_code", transportError(transportErr.ErrorCode).String())
-		enc.StringKey("reason", transportErr.ErrorMessage)
+		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(owner.String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("connection_code")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(transportError(transportErr.ErrorCode).String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("reason")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(transportErr.ErrorMessage)); err != nil {
+			return err
+		}
 	case errors.As(e.e, &versionNegotiationErr):
-		enc.StringKey("trigger", "version_mismatch")
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("version_mismatch")); err != nil {
+			return err
+		}
 	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventPacketSent struct {
-	Header        gojay.MarshalerJSONObject // either a shortHeader or a packetHeader
+	Header        jsontextEncoder // either a shortHeader or a packetHeader
 	Length        logging.ByteCount
 	PayloadLength logging.ByteCount
 	Frames        frames
@@ -157,24 +324,61 @@ type eventPacketSent struct {
 	Trigger       string
 }
 
-var _ eventDetails = eventPacketSent{}
-
 func (e eventPacketSent) Name() string { return "transport:packet_sent" }
-func (e eventPacketSent) IsNil() bool  { return false }
 
-func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", e.Header)
-	enc.ObjectKey("raw", rawInfo{Length: e.Length, PayloadLength: e.PayloadLength})
-	enc.ArrayKeyOmitEmpty("frames", e.Frames)
-	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
-	if e.ECN != logging.ECNUnsupported {
-		enc.StringKey("ecn", ecn(e.ECN).String())
+func (e eventPacketSent) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
-	enc.StringKeyOmitEmpty("trigger", e.Trigger)
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := e.Header.Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
+		return err
+	}
+	if err := (rawInfo{Length: e.Length, PayloadLength: e.PayloadLength}).Encode(enc); err != nil {
+		return err
+	}
+	if len(e.Frames) > 0 {
+		if err := enc.WriteToken(jsontext.String("frames")); err != nil {
+			return err
+		}
+		if err := e.Frames.Encode(enc); err != nil {
+			return err
+		}
+	}
+	if e.IsCoalesced {
+		if err := enc.WriteToken(jsontext.String("is_coalesced")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.True); err != nil {
+			return err
+		}
+	}
+	if e.ECN != logging.ECNUnsupported {
+		if err := enc.WriteToken(jsontext.String("ecn")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(ecn(e.ECN).String())); err != nil {
+			return err
+		}
+	}
+	if e.Trigger != "" {
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(e.Trigger)); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventPacketReceived struct {
-	Header        gojay.MarshalerJSONObject // either a shortHeader or a packetHeader
+	Header        jsontextEncoder // either a shortHeader or a packetHeader
 	Length        logging.ByteCount
 	PayloadLength logging.ByteCount
 	Frames        frames
@@ -183,20 +387,57 @@ type eventPacketReceived struct {
 	Trigger       string
 }
 
-var _ eventDetails = eventPacketReceived{}
-
 func (e eventPacketReceived) Name() string { return "transport:packet_received" }
-func (e eventPacketReceived) IsNil() bool  { return false }
 
-func (e eventPacketReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", e.Header)
-	enc.ObjectKey("raw", rawInfo{Length: e.Length, PayloadLength: e.PayloadLength})
-	enc.ArrayKeyOmitEmpty("frames", e.Frames)
-	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
-	if e.ECN != logging.ECNUnsupported {
-		enc.StringKey("ecn", ecn(e.ECN).String())
+func (e eventPacketReceived) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
-	enc.StringKeyOmitEmpty("trigger", e.Trigger)
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := e.Header.Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
+		return err
+	}
+	if err := (rawInfo{Length: e.Length, PayloadLength: e.PayloadLength}).Encode(enc); err != nil {
+		return err
+	}
+	if len(e.Frames) > 0 {
+		if err := enc.WriteToken(jsontext.String("frames")); err != nil {
+			return err
+		}
+		if err := e.Frames.Encode(enc); err != nil {
+			return err
+		}
+	}
+	if e.IsCoalesced {
+		if err := enc.WriteToken(jsontext.String("is_coalesced")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.True); err != nil {
+			return err
+		}
+	}
+	if e.ECN != logging.ECNUnsupported {
+		if err := enc.WriteToken(jsontext.String("ecn")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(ecn(e.ECN).String())); err != nil {
+			return err
+		}
+	}
+	if e.Trigger != "" {
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(e.Trigger)); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventRetryReceived struct {
@@ -204,10 +445,18 @@ type eventRetryReceived struct {
 }
 
 func (e eventRetryReceived) Name() string { return "transport:packet_received" }
-func (e eventRetryReceived) IsNil() bool  { return false }
 
-func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", e.Header)
+func (e eventRetryReceived) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := e.Header.Encode(enc); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventVersionNegotiationReceived struct {
@@ -216,11 +465,24 @@ type eventVersionNegotiationReceived struct {
 }
 
 func (e eventVersionNegotiationReceived) Name() string { return "transport:packet_received" }
-func (e eventVersionNegotiationReceived) IsNil() bool  { return false }
 
-func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", e.Header)
-	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
+func (e eventVersionNegotiationReceived) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := e.Header.Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("supported_versions")); err != nil {
+		return err
+	}
+	if err := versions(e.SupportedVersions).Encode(enc); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventVersionNegotiationSent struct {
@@ -229,11 +491,24 @@ type eventVersionNegotiationSent struct {
 }
 
 func (e eventVersionNegotiationSent) Name() string { return "transport:packet_sent" }
-func (e eventVersionNegotiationSent) IsNil() bool  { return false }
 
-func (e eventVersionNegotiationSent) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", e.Header)
-	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
+func (e eventVersionNegotiationSent) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := e.Header.Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("supported_versions")); err != nil {
+		return err
+	}
+	if err := versions(e.SupportedVersions).Encode(enc); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventPacketBuffered struct {
@@ -242,13 +517,33 @@ type eventPacketBuffered struct {
 }
 
 func (e eventPacketBuffered) Name() string { return "transport:packet_buffered" }
-func (e eventPacketBuffered) IsNil() bool  { return false }
 
-func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
-	//nolint:gosimple
-	enc.ObjectKey("header", packetHeaderWithType{PacketType: e.PacketType, PacketNumber: protocol.InvalidPacketNumber})
-	enc.ObjectKey("raw", rawInfo{Length: e.PacketSize})
-	enc.StringKey("trigger", "keys_unavailable")
+func (e eventPacketBuffered) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := (packetHeaderWithType{
+		PacketType:   e.PacketType,
+		PacketNumber: protocol.InvalidPacketNumber,
+	}).Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
+		return err
+	}
+	if err := (rawInfo{Length: e.PacketSize}).Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("keys_unavailable")); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventPacketDropped struct {
@@ -259,23 +554,40 @@ type eventPacketDropped struct {
 }
 
 func (e eventPacketDropped) Name() string { return "transport:packet_dropped" }
-func (e eventPacketDropped) IsNil() bool  { return false }
 
-func (e eventPacketDropped) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", packetHeaderWithType{
+func (e eventPacketDropped) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := (packetHeaderWithType{
 		PacketType:   e.PacketType,
 		PacketNumber: e.PacketNumber,
-	})
-	enc.ObjectKey("raw", rawInfo{Length: e.PacketSize})
-	enc.StringKey("trigger", e.Trigger.String())
+	}.Encode(enc)); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
+		return err
+	}
+	if err := (rawInfo{Length: e.PacketSize}).Encode(enc); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.Trigger.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type metrics struct {
-	MinRTT      time.Duration
-	SmoothedRTT time.Duration
-	LatestRTT   time.Duration
-	RTTVariance time.Duration
-
+	MinRTT           time.Duration
+	SmoothedRTT      time.Duration
+	LatestRTT        time.Duration
+	RTTVariance      time.Duration
 	CongestionWindow protocol.ByteCount
 	BytesInFlight    protocol.ByteCount
 	PacketsInFlight  int
@@ -287,11 +599,30 @@ type eventMTUUpdated struct {
 }
 
 func (e eventMTUUpdated) Name() string { return "recovery:mtu_updated" }
-func (e eventMTUUpdated) IsNil() bool  { return false }
 
-func (e eventMTUUpdated) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.Uint64Key("mtu", uint64(e.mtu))
-	enc.BoolKey("done", e.done)
+func (e eventMTUUpdated) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("mtu")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Uint(uint64(e.mtu))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("done")); err != nil {
+		return err
+	}
+	if e.done {
+		if err := enc.WriteToken(jsontext.True); err != nil {
+			return err
+		}
+	} else {
+		if err := enc.WriteToken(jsontext.False); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventMetricsUpdated struct {
@@ -300,31 +631,68 @@ type eventMetricsUpdated struct {
 }
 
 func (e eventMetricsUpdated) Name() string { return "recovery:metrics_updated" }
-func (e eventMetricsUpdated) IsNil() bool  { return false }
 
-func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+func (e eventMetricsUpdated) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
 	if e.Last == nil || e.Last.MinRTT != e.Current.MinRTT {
-		enc.FloatKey("min_rtt", milliseconds(e.Current.MinRTT))
+		if err := enc.WriteToken(jsontext.String("min_rtt")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.MinRTT))); err != nil {
+			return err
+		}
 	}
 	if e.Last == nil || e.Last.SmoothedRTT != e.Current.SmoothedRTT {
-		enc.FloatKey("smoothed_rtt", milliseconds(e.Current.SmoothedRTT))
+		if err := enc.WriteToken(jsontext.String("smoothed_rtt")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.SmoothedRTT))); err != nil {
+			return err
+		}
 	}
 	if e.Last == nil || e.Last.LatestRTT != e.Current.LatestRTT {
-		enc.FloatKey("latest_rtt", milliseconds(e.Current.LatestRTT))
+		if err := enc.WriteToken(jsontext.String("latest_rtt")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.LatestRTT))); err != nil {
+			return err
+		}
 	}
 	if e.Last == nil || e.Last.RTTVariance != e.Current.RTTVariance {
-		enc.FloatKey("rtt_variance", milliseconds(e.Current.RTTVariance))
+		if err := enc.WriteToken(jsontext.String("rtt_variance")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.RTTVariance))); err != nil {
+			return err
+		}
 	}
-
 	if e.Last == nil || e.Last.CongestionWindow != e.Current.CongestionWindow {
-		enc.Uint64Key("congestion_window", uint64(e.Current.CongestionWindow))
+		if err := enc.WriteToken(jsontext.String("congestion_window")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(e.Current.CongestionWindow))); err != nil {
+			return err
+		}
 	}
 	if e.Last == nil || e.Last.BytesInFlight != e.Current.BytesInFlight {
-		enc.Uint64Key("bytes_in_flight", uint64(e.Current.BytesInFlight))
+		if err := enc.WriteToken(jsontext.String("bytes_in_flight")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(e.Current.BytesInFlight))); err != nil {
+			return err
+		}
 	}
 	if e.Last == nil || e.Last.PacketsInFlight != e.Current.PacketsInFlight {
-		enc.Uint64Key("packets_in_flight", uint64(e.Current.PacketsInFlight))
+		if err := enc.WriteToken(jsontext.String("packets_in_flight")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(e.Current.PacketsInFlight))); err != nil {
+			return err
+		}
 	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventUpdatedPTO struct {
@@ -332,10 +700,18 @@ type eventUpdatedPTO struct {
 }
 
 func (e eventUpdatedPTO) Name() string { return "recovery:metrics_updated" }
-func (e eventUpdatedPTO) IsNil() bool  { return false }
 
-func (e eventUpdatedPTO) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.Uint32Key("pto_count", e.Value)
+func (e eventUpdatedPTO) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("pto_count")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Uint(uint64(e.Value))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventPacketLost struct {
@@ -345,14 +721,27 @@ type eventPacketLost struct {
 }
 
 func (e eventPacketLost) Name() string { return "recovery:packet_lost" }
-func (e eventPacketLost) IsNil() bool  { return false }
 
-func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("header", packetHeaderWithTypeAndPacketNumber{
+func (e eventPacketLost) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("header")); err != nil {
+		return err
+	}
+	if err := (packetHeaderWithTypeAndPacketNumber{
 		PacketType:   e.PacketType,
 		PacketNumber: e.PacketNumber,
-	})
-	enc.StringKey("trigger", e.Trigger.String())
+	}.Encode(enc)); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.Trigger.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventSpuriousLoss struct {
@@ -363,13 +752,36 @@ type eventSpuriousLoss struct {
 }
 
 func (e eventSpuriousLoss) Name() string { return "recovery:spurious_loss" }
-func (e eventSpuriousLoss) IsNil() bool  { return false }
 
-func (e eventSpuriousLoss) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_number_space", encLevelToPacketNumberSpace(e.EncLevel))
-	enc.Uint64Key("packet_number", uint64(e.PacketNumber))
-	enc.Uint64Key("reordering_packets", e.Reordering)
-	enc.Float64Key("reordering_time", milliseconds(e.Duration))
+func (e eventSpuriousLoss) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_number_space")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_number")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Uint(uint64(e.PacketNumber))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("reordering_packets")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Uint(e.Reordering)); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("reordering_time")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Float(milliseconds(e.Duration))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventKeyUpdated struct {
@@ -380,14 +792,32 @@ type eventKeyUpdated struct {
 }
 
 func (e eventKeyUpdated) Name() string { return "security:key_updated" }
-func (e eventKeyUpdated) IsNil() bool  { return false }
 
-func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("trigger", e.Trigger.String())
-	enc.StringKey("key_type", e.KeyType.String())
-	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
-		enc.Uint64Key("key_phase", uint64(e.KeyPhase))
+func (e eventKeyUpdated) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
+	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.Trigger.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("key_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.KeyType.String())); err != nil {
+		return err
+	}
+	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
+		if err := enc.WriteToken(jsontext.String("key_phase")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(e.KeyPhase))); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventKeyDiscarded struct {
@@ -396,46 +826,59 @@ type eventKeyDiscarded struct {
 }
 
 func (e eventKeyDiscarded) Name() string { return "security:key_discarded" }
-func (e eventKeyDiscarded) IsNil() bool  { return false }
 
-func (e eventKeyDiscarded) MarshalJSONObject(enc *gojay.Encoder) {
+func (e eventKeyDiscarded) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
 	if e.KeyType != keyTypeClient1RTT && e.KeyType != keyTypeServer1RTT {
-		enc.StringKey("trigger", "tls")
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("tls")); err != nil {
+			return err
+		}
 	}
-	enc.StringKey("key_type", e.KeyType.String())
+	if err := enc.WriteToken(jsontext.String("key_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.KeyType.String())); err != nil {
+		return err
+	}
 	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
-		enc.Uint64Key("key_phase", uint64(e.KeyPhase))
+		if err := enc.WriteToken(jsontext.String("key_phase")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(e.KeyPhase))); err != nil {
+			return err
+		}
 	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventTransportParameters struct {
-	Restore bool
-	Owner   owner
-	SentBy  protocol.Perspective
-
+	Restore                         bool
+	Owner                           owner
+	SentBy                          protocol.Perspective
 	OriginalDestinationConnectionID protocol.ConnectionID
 	InitialSourceConnectionID       protocol.ConnectionID
 	RetrySourceConnectionID         *protocol.ConnectionID
-
-	StatelessResetToken     *protocol.StatelessResetToken
-	DisableActiveMigration  bool
-	MaxIdleTimeout          time.Duration
-	MaxUDPPayloadSize       protocol.ByteCount
-	AckDelayExponent        uint8
-	MaxAckDelay             time.Duration
-	ActiveConnectionIDLimit uint64
-
-	InitialMaxData                 protocol.ByteCount
-	InitialMaxStreamDataBidiLocal  protocol.ByteCount
-	InitialMaxStreamDataBidiRemote protocol.ByteCount
-	InitialMaxStreamDataUni        protocol.ByteCount
-	InitialMaxStreamsBidi          int64
-	InitialMaxStreamsUni           int64
-
-	PreferredAddress *preferredAddress
-
-	MaxDatagramFrameSize protocol.ByteCount
-	EnableResetStreamAt  bool
+	StatelessResetToken             *protocol.StatelessResetToken
+	DisableActiveMigration          bool
+	MaxIdleTimeout                  time.Duration
+	MaxUDPPayloadSize               protocol.ByteCount
+	AckDelayExponent                uint8
+	MaxAckDelay                     time.Duration
+	ActiveConnectionIDLimit         uint64
+	InitialMaxData                  protocol.ByteCount
+	InitialMaxStreamDataBidiLocal   protocol.ByteCount
+	InitialMaxStreamDataBidiRemote  protocol.ByteCount
+	InitialMaxStreamDataUni         protocol.ByteCount
+	InitialMaxStreamsBidi           int64
+	InitialMaxStreamsUni            int64
+	PreferredAddress                *preferredAddress
+	MaxDatagramFrameSize            protocol.ByteCount
+	EnableResetStreamAt             bool
 }
 
 func (e eventTransportParameters) Name() string {
@@ -445,45 +888,173 @@ func (e eventTransportParameters) Name() string {
 	return "transport:parameters_set"
 }
 
-func (e eventTransportParameters) IsNil() bool { return false }
-
-func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
+func (e eventTransportParameters) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
 	if !e.Restore {
-		enc.StringKey("owner", e.Owner.String())
+		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(e.Owner.String())); err != nil {
+			return err
+		}
 		if e.SentBy == protocol.PerspectiveServer {
-			enc.StringKey("original_destination_connection_id", e.OriginalDestinationConnectionID.String())
+			if err := enc.WriteToken(jsontext.String("original_destination_connection_id")); err != nil {
+				return err
+			}
+			if err := enc.WriteToken(jsontext.String(e.OriginalDestinationConnectionID.String())); err != nil {
+				return err
+			}
 			if e.StatelessResetToken != nil {
-				enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+				if err := enc.WriteToken(jsontext.String("stateless_reset_token")); err != nil {
+					return err
+				}
+				if err := enc.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:]))); err != nil {
+					return err
+				}
 			}
 			if e.RetrySourceConnectionID != nil {
-				enc.StringKey("retry_source_connection_id", (*e.RetrySourceConnectionID).String())
+				if err := enc.WriteToken(jsontext.String("retry_source_connection_id")); err != nil {
+					return err
+				}
+				if err := enc.WriteToken(jsontext.String((*e.RetrySourceConnectionID).String())); err != nil {
+					return err
+				}
 			}
 		}
-		enc.StringKey("initial_source_connection_id", e.InitialSourceConnectionID.String())
+		if err := enc.WriteToken(jsontext.String("initial_source_connection_id")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(e.InitialSourceConnectionID.String())); err != nil {
+			return err
+		}
 	}
-	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
-	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
-	enc.Int64KeyNullEmpty("max_udp_payload_size", int64(e.MaxUDPPayloadSize))
-	enc.Uint8KeyOmitEmpty("ack_delay_exponent", e.AckDelayExponent)
-	enc.FloatKeyOmitEmpty("max_ack_delay", milliseconds(e.MaxAckDelay))
-	enc.Uint64KeyOmitEmpty("active_connection_id_limit", e.ActiveConnectionIDLimit)
-
-	enc.Int64KeyOmitEmpty("initial_max_data", int64(e.InitialMaxData))
-	enc.Int64KeyOmitEmpty("initial_max_stream_data_bidi_local", int64(e.InitialMaxStreamDataBidiLocal))
-	enc.Int64KeyOmitEmpty("initial_max_stream_data_bidi_remote", int64(e.InitialMaxStreamDataBidiRemote))
-	enc.Int64KeyOmitEmpty("initial_max_stream_data_uni", int64(e.InitialMaxStreamDataUni))
-	enc.Int64KeyOmitEmpty("initial_max_streams_bidi", e.InitialMaxStreamsBidi)
-	enc.Int64KeyOmitEmpty("initial_max_streams_uni", e.InitialMaxStreamsUni)
-
+	if err := enc.WriteToken(jsontext.String("disable_active_migration")); err != nil {
+		return err
+	}
+	if e.DisableActiveMigration {
+		if err := enc.WriteToken(jsontext.True); err != nil {
+			return err
+		}
+	} else {
+		if err := enc.WriteToken(jsontext.False); err != nil {
+			return err
+		}
+	}
+	if e.MaxIdleTimeout != 0 {
+		if err := enc.WriteToken(jsontext.String("max_idle_timeout")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(milliseconds(e.MaxIdleTimeout))); err != nil {
+			return err
+		}
+	}
+	if e.MaxUDPPayloadSize != 0 {
+		if err := enc.WriteToken(jsontext.String("max_udp_payload_size")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(e.MaxUDPPayloadSize))); err != nil {
+			return err
+		}
+	}
+	if e.AckDelayExponent != 0 {
+		if err := enc.WriteToken(jsontext.String("ack_delay_exponent")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(e.AckDelayExponent))); err != nil {
+			return err
+		}
+	}
+	if e.MaxAckDelay != 0 {
+		if err := enc.WriteToken(jsontext.String("max_ack_delay")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(milliseconds(e.MaxAckDelay))); err != nil {
+			return err
+		}
+	}
+	if e.ActiveConnectionIDLimit != 0 {
+		if err := enc.WriteToken(jsontext.String("active_connection_id_limit")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(e.ActiveConnectionIDLimit)); err != nil {
+			return err
+		}
+	}
+	if e.InitialMaxData != 0 {
+		if err := enc.WriteToken(jsontext.String("initial_max_data")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxData))); err != nil {
+			return err
+		}
+	}
+	if e.InitialMaxStreamDataBidiLocal != 0 {
+		if err := enc.WriteToken(jsontext.String("initial_max_stream_data_bidi_local")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiLocal))); err != nil {
+			return err
+		}
+	}
+	if e.InitialMaxStreamDataBidiRemote != 0 {
+		if err := enc.WriteToken(jsontext.String("initial_max_stream_data_bidi_remote")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiRemote))); err != nil {
+			return err
+		}
+	}
+	if e.InitialMaxStreamDataUni != 0 {
+		if err := enc.WriteToken(jsontext.String("initial_max_stream_data_uni")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataUni))); err != nil {
+			return err
+		}
+	}
+	if e.InitialMaxStreamsBidi != 0 {
+		if err := enc.WriteToken(jsontext.String("initial_max_streams_bidi")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(e.InitialMaxStreamsBidi)); err != nil {
+			return err
+		}
+	}
+	if e.InitialMaxStreamsUni != 0 {
+		if err := enc.WriteToken(jsontext.String("initial_max_streams_uni")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(e.InitialMaxStreamsUni)); err != nil {
+			return err
+		}
+	}
 	if e.PreferredAddress != nil {
-		enc.ObjectKey("preferred_address", e.PreferredAddress)
+		if err := enc.WriteToken(jsontext.String("preferred_address")); err != nil {
+			return err
+		}
+		if err := e.PreferredAddress.Encode(enc); err != nil {
+			return err
+		}
 	}
 	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
-		enc.Int64Key("max_datagram_frame_size", int64(e.MaxDatagramFrameSize))
+		if err := enc.WriteToken(jsontext.String("max_datagram_frame_size")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(int64(e.MaxDatagramFrameSize))); err != nil {
+			return err
+		}
 	}
 	if e.EnableResetStreamAt {
-		enc.BoolKey("reset_stream_at", true)
+		if err := enc.WriteToken(jsontext.String("reset_stream_at")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.True); err != nil {
+			return err
+		}
 	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type preferredAddress struct {
@@ -492,20 +1063,51 @@ type preferredAddress struct {
 	StatelessResetToken protocol.StatelessResetToken
 }
 
-var _ gojay.MarshalerJSONObject = &preferredAddress{}
-
-func (a preferredAddress) IsNil() bool { return false }
-func (a preferredAddress) MarshalJSONObject(enc *gojay.Encoder) {
+func (a preferredAddress) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
 	if a.IPv4.IsValid() {
-		enc.StringKey("ip_v4", a.IPv4.Addr().String())
-		enc.Uint16Key("port_v4", a.IPv4.Port())
+		if err := enc.WriteToken(jsontext.String("ip_v4")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(a.IPv4.Addr().String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("port_v4")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(a.IPv4.Port()))); err != nil {
+			return err
+		}
 	}
 	if a.IPv6.IsValid() {
-		enc.StringKey("ip_v6", a.IPv6.Addr().String())
-		enc.Uint16Key("port_v6", a.IPv6.Port())
+		if err := enc.WriteToken(jsontext.String("ip_v6")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(a.IPv6.Addr().String())); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("port_v6")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(uint64(a.IPv6.Port()))); err != nil {
+			return err
+		}
 	}
-	enc.StringKey("connection_id", a.ConnectionID.String())
-	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", a.StatelessResetToken))
+	if err := enc.WriteToken(jsontext.String("connection_id")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(a.ConnectionID.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("stateless_reset_token")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(fmt.Sprintf("%x", a.StatelessResetToken))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventLossTimerSet struct {
@@ -515,13 +1117,36 @@ type eventLossTimerSet struct {
 }
 
 func (e eventLossTimerSet) Name() string { return "recovery:loss_timer_updated" }
-func (e eventLossTimerSet) IsNil() bool  { return false }
 
-func (e eventLossTimerSet) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("event_type", "set")
-	enc.StringKey("timer_type", e.TimerType.String())
-	enc.StringKey("packet_number_space", encLevelToPacketNumberSpace(e.EncLevel))
-	enc.Float64Key("delta", milliseconds(e.Delta))
+func (e eventLossTimerSet) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("event_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("set")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("timer_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.TimerType.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_number_space")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel))); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("delta")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.Float(milliseconds(e.Delta))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventLossTimerExpired struct {
@@ -530,21 +1155,47 @@ type eventLossTimerExpired struct {
 }
 
 func (e eventLossTimerExpired) Name() string { return "recovery:loss_timer_updated" }
-func (e eventLossTimerExpired) IsNil() bool  { return false }
 
-func (e eventLossTimerExpired) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("event_type", "expired")
-	enc.StringKey("timer_type", e.TimerType.String())
-	enc.StringKey("packet_number_space", encLevelToPacketNumberSpace(e.EncLevel))
+func (e eventLossTimerExpired) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("event_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("expired")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("timer_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.TimerType.String())); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("packet_number_space")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel))); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventLossTimerCanceled struct{}
 
 func (e eventLossTimerCanceled) Name() string { return "recovery:loss_timer_updated" }
-func (e eventLossTimerCanceled) IsNil() bool  { return false }
 
-func (e eventLossTimerCanceled) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("event_type", "cancelled")
+func (e eventLossTimerCanceled) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("event_type")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("cancelled")); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventCongestionStateUpdated struct {
@@ -552,10 +1203,18 @@ type eventCongestionStateUpdated struct {
 }
 
 func (e eventCongestionStateUpdated) Name() string { return "recovery:congestion_state_updated" }
-func (e eventCongestionStateUpdated) IsNil() bool  { return false }
 
-func (e eventCongestionStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("new", e.state.String())
+func (e eventCongestionStateUpdated) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("new")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.state.String())); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventECNStateUpdated struct {
@@ -564,11 +1223,26 @@ type eventECNStateUpdated struct {
 }
 
 func (e eventECNStateUpdated) Name() string { return "recovery:ecn_state_updated" }
-func (e eventECNStateUpdated) IsNil() bool  { return false }
 
-func (e eventECNStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("new", ecnState(e.state).String())
-	enc.StringKeyOmitEmpty("trigger", ecnStateTrigger(e.trigger).String())
+func (e eventECNStateUpdated) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("new")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(ecnState(e.state).String())); err != nil {
+		return err
+	}
+	if e.trigger != 0 {
+		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(ecnStateTrigger(e.trigger).String())); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventALPNInformation struct {
@@ -576,10 +1250,18 @@ type eventALPNInformation struct {
 }
 
 func (e eventALPNInformation) Name() string { return "transport:alpn_information" }
-func (e eventALPNInformation) IsNil() bool  { return false }
 
-func (e eventALPNInformation) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("chosen_alpn", e.chosenALPN)
+func (e eventALPNInformation) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("chosen_alpn")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.chosenALPN)); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 type eventGeneric struct {
@@ -588,8 +1270,16 @@ type eventGeneric struct {
 }
 
 func (e eventGeneric) Name() string { return "transport:" + e.name }
-func (e eventGeneric) IsNil() bool  { return false }
 
-func (e eventGeneric) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("details", e.msg)
+func (e eventGeneric) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("details")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String(e.msg)); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
