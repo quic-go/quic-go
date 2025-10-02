@@ -1,5 +1,6 @@
 // Package jsontext provides a fast JSON encoder providing only the necessary features
-// for qlog encoding.
+// for qlog encoding. No efforts are made to add any features beyond qlog's requirements.
+//
 // The API aims to be compatible with the standard library's encoding/json/jsontext package.
 package jsontext
 

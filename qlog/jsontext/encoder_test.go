@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/qlog/jsontext"
+
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -197,6 +199,113 @@ func encodeValue(t *testing.T, enc *jsontext.Encoder, v any) {
 		require.NoError(t, enc.WriteToken(jsontext.Bool(val)))
 	default:
 		require.FailNowf(t, "unsupported type", "unsupported type: %T", v)
+	}
+}
+
+type errorWriter struct {
+	N int
+}
+
+func (w *errorWriter) Write(p []byte) (int, error) {
+	n := min(len(p), w.N)
+	w.N -= n
+	if w.N <= 0 {
+		return n, assert.AnError
+	}
+	return n, nil
+}
+
+func TestEncoderComprehensive(t *testing.T) {
+	// encodes an object with all token types and nested structures
+	encode := func(enc *jsontext.Encoder) error {
+		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+			return err
+		}
+
+		if err := enc.WriteToken(jsontext.String("simple")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("value")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("escaped")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String(`"quoted\"string"`)); err != nil {
+			return err
+		}
+
+		if err := enc.WriteToken(jsontext.String("int")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(-42)); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("uint")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Uint(100)); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("float")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Float(3.14)); err != nil {
+			return err
+		}
+
+		if err := enc.WriteToken(jsontext.String("true")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.True); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("false")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.False); err != nil {
+			return err
+		}
+
+		if err := enc.WriteToken(jsontext.String("array")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.BeginArray); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.String("item1")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Int(1)); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.EndArray); err != nil {
+			return err
+		}
+
+		if err := enc.WriteToken(jsontext.String("nested")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.EndObject); err != nil {
+			return err
+		}
+
+		if err := enc.WriteToken(jsontext.EndObject); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	buf := bytes.NewBuffer(nil)
+	enc := jsontext.NewEncoder(buf)
+	require.NoError(t, encode(enc))
+
+	for i := range buf.Len() {
+		enc := jsontext.NewEncoder(&errorWriter{N: i})
+		require.ErrorIs(t, encode(enc), assert.AnError)
 	}
 }
 
