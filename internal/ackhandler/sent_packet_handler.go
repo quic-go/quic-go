@@ -447,6 +447,10 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	for pn, sendTime := range h.lostPackets.All() {
 		ackRange := ack.AckRanges[ackRangeIdx]
 		for pn > ackRange.Largest {
+			// this should never happen, since detectSpuriousLosses is only called for ACKs that increase the largest acked
+			if ackRangeIdx == 0 {
+				break
+			}
 			ackRangeIdx--
 			ackRange = ack.AckRanges[ackRangeIdx]
 		}
