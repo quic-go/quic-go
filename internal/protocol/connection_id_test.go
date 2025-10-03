@@ -68,6 +68,15 @@ func TestConnectionIDZeroValue(t *testing.T) {
 	require.Equal(t, "(empty)", (ConnectionID{}).String())
 }
 
+// The string representation of a connection ID is used in qlog, so it should be fast.
+func BenchmarkConnectionIDStringer(b *testing.B) {
+	c := ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = c.String()
+	}
+}
+
 func TestArbitraryLenConnectionID(t *testing.T) {
 	b := make([]byte, 42)
 	rand.Read(b)
