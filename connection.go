@@ -2054,6 +2054,9 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	if c.logger.Debug() {
 		c.logger.Debugf("Restoring Transport Parameters: %s", params)
 	}
+	if c.tracer != nil && c.tracer.RestoredTransportParameters != nil {
+		c.tracer.RestoredTransportParameters(params)
+	}
 
 	c.peerParams = params
 	c.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
