@@ -707,6 +707,22 @@ func TestLostPackets(t *testing.T) {
 	require.Equal(t, "reordering_threshold", ev["trigger"])
 }
 
+func TestDetectedSpuriousLoss(t *testing.T) {
+	tracer, buf := newConnectionTracer()
+	tracer.DetectedSpuriousLoss(protocol.Encryption1RTT, 42, 1, 1337*time.Millisecond)
+	tracer.Close()
+	entry := exportAndParseSingle(t, buf)
+	require.WithinDuration(t, time.Now(), entry.Time, scaleDuration(10*time.Millisecond))
+	require.Equal(t, "recovery:spurious_loss", entry.Name)
+	ev := entry.Event
+	require.Contains(t, ev, "packet_number")
+	require.Equal(t, float64(42), ev["packet_number"])
+	require.Contains(t, ev, "reordering_packets")
+	require.Equal(t, float64(1), ev["reordering_packets"])
+	require.Contains(t, ev, "reordering_time")
+	require.InDelta(t, 1337, ev["reordering_time"], float64(1))
+}
+
 func TestMTUUpdates(t *testing.T) {
 	tracer, buf := newConnectionTracer()
 	tracer.UpdatedMTU(1337, true)

@@ -1344,6 +1344,93 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 	sph.OnLossDetectionTimeout(now)
 }
 
+func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
+	const rtt = time.Second
+
+	mockCtrl := gomock.NewController(t)
+	tracer, tr := mocklogging.NewMockConnectionTracer(mockCtrl)
+	tr.EXPECT().UpdatedCongestionState(gomock.Any()).AnyTimes()
+	tr.EXPECT().UpdatedMetrics(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	tr.EXPECT().SetLossTimer(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	tr.EXPECT().LossTimerCanceled().AnyTimes()
+	tr.EXPECT().AcknowledgedPacket(gomock.Any(), gomock.Any()).AnyTimes()
+	tr.EXPECT().LostPacket(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	sph := newSentPacketHandler(
+		0,
+		1200,
+		&utils.RTTStats{},
+		&utils.ConnectionStats{},
+		true,
+		false,
+		protocol.PerspectiveClient,
+		tracer,
+		utils.DefaultLogger,
+	)
+
+	var packets packetTracker
+	sendPacket := func(ti monotime.Time) protocol.PacketNumber {
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+		return pn
+	}
+
+	start := monotime.Now()
+	now := start
+	var pns []protocol.PacketNumber
+	for range 20 {
+		pns = append(pns, sendPacket(now))
+		now = now.Add(10 * time.Millisecond)
+	}
+
+	now = start.Add(rtt)
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[6])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[0], pns[6]}, packets.Acked)
+	// pns[4] and pns[5] are not yet declared lost
+	require.Equal(t, []protocol.PacketNumber{pns[1], pns[2], pns[3]}, packets.Lost)
+
+	packets.Reset()
+
+	const secondAckDelay = 50 * time.Millisecond
+	gomock.InOrder(
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[1], uint64(16-1), rtt+secondAckDelay-10*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[2], uint64(16-2), rtt+secondAckDelay-20*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[3], uint64(16-3), rtt+secondAckDelay-30*time.Millisecond),
+	)
+	now = now.Add(secondAckDelay)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[5], pns[6], pns[12], pns[16])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16]}, packets.Acked)
+	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13]}, packets.Lost)
+
+	require.True(t, mockCtrl.Satisfied())
+
+	gomock.InOrder(
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[7], uint64(18-7), rtt+2*secondAckDelay-70*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[8], uint64(18-8), rtt+2*secondAckDelay-80*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[9], uint64(18-9), rtt+2*secondAckDelay-90*time.Millisecond),
+		tr.EXPECT().DetectedSpuriousLoss(protocol.Encryption1RTT, pns[10], uint64(18-10), rtt+2*secondAckDelay-100*time.Millisecond),
+	)
+	now = now.Add(secondAckDelay)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[5], pns[6], pns[7], pns[8], pns[9], pns[10], pns[16], pns[17], pns[18])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16], pns[17], pns[18]}, packets.Acked)
+	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13], pns[14], pns[15]}, packets.Lost)
+}
+
 func BenchmarkSendAndAcknowledge(b *testing.B) {
 	b.Run("ack every: 2, in flight: 0", func(b *testing.B) {
 		benchmarkSendAndAcknowledge(b, 2, 0)

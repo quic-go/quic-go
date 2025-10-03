@@ -38,6 +38,7 @@ type ConnectionTracer interface {
 	UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int)
 	AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber)
 	LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason)
+	DetectedSpuriousLoss(logging.EncryptionLevel, logging.PacketNumber, uint64, time.Duration)
 	UpdatedCongestionState(logging.CongestionState)
 	UpdatedPTOCount(value uint32)
 	UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)
