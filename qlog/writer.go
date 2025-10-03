@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/json/jsontext"
 )
 
 const eventChanSize = 50
@@ -50,20 +50,17 @@ func (w *writer) RecordEvent(eventTime time.Time, details eventDetails) {
 func (w *writer) Run() {
 	defer close(w.runStopped)
 	buf := &bytes.Buffer{}
-	enc := gojay.NewEncoder(buf)
+	enc := jsontext.NewEncoder(buf)
 	if err := writeRecordSeparator(buf); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
-	if err := enc.Encode(&topLevel{trace: *w.tr}); err != nil {
-		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
-	}
-	if err := buf.WriteByte('\n'); err != nil {
+	if err := (&topLevel{trace: *w.tr}).Encode(enc); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
 	if _, err := w.w.Write(buf.Bytes()); err != nil {
 		w.encodeErr = err
 	}
-	enc = gojay.NewEncoder(w.w)
+	enc = jsontext.NewEncoder(w.w)
 	for ev := range w.events {
 		if w.encodeErr != nil { // if encoding failed, just continue draining the event channel
 			continue
@@ -72,12 +69,9 @@ func (w *writer) Run() {
 			w.encodeErr = err
 			continue
 		}
-		if err := enc.Encode(ev); err != nil {
+		if err := ev.Encode(enc); err != nil {
 			w.encodeErr = err
 			continue
-		}
-		if _, err := w.w.Write([]byte{'\n'}); err != nil {
-			w.encodeErr = err
 		}
 	}
 }
