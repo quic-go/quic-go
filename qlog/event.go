@@ -10,7 +10,6 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
-
 	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
@@ -30,43 +29,43 @@ type jsontextEncoder interface {
 	Encode(*jsontext.Encoder) error
 }
 
+type encoderHelper struct {
+	enc *jsontext.Encoder
+	err error
+}
+
+func (h *encoderHelper) WriteToken(t jsontext.Token) {
+	if h.err != nil {
+		return
+	}
+	h.err = h.enc.WriteToken(t)
+}
+
 func (e event) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("time")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Float(milliseconds(e.RelativeTime))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("name")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.Name())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("data")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("time"))
+	h.WriteToken(jsontext.Float(milliseconds(e.RelativeTime)))
+	h.WriteToken(jsontext.String("name"))
+	h.WriteToken(jsontext.String(e.Name()))
+	h.WriteToken(jsontext.String("data"))
 	if err := e.eventDetails.Encode(enc); err != nil {
 		return err
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type versions []version
 
 func (v versions) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginArray); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginArray)
 	for _, e := range v {
-		if err := enc.WriteToken(jsontext.String(e.String())); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String(e.String()))
 	}
-	return enc.WriteToken(jsontext.EndArray)
+	h.WriteToken(jsontext.EndArray)
+	return h.err
 }
 
 type rawInfo struct {
@@ -75,24 +74,16 @@ type rawInfo struct {
 }
 
 func (i rawInfo) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("length")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Uint(uint64(i.Length))); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("length"))
+	h.WriteToken(jsontext.Uint(uint64(i.Length)))
 	if i.PayloadLength != 0 {
-		if err := enc.WriteToken(jsontext.String("payload_length")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(i.PayloadLength))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("payload_length"))
+		h.WriteToken(jsontext.Uint(uint64(i.PayloadLength)))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventConnectionStarted struct {
@@ -105,61 +96,29 @@ type eventConnectionStarted struct {
 func (e eventConnectionStarted) Name() string { return "transport:connection_started" }
 
 func (e eventConnectionStarted) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if e.SrcAddr.IP.To4() != nil {
-		if err := enc.WriteToken(jsontext.String("ip_version")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("ipv4")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ip_version"))
+		h.WriteToken(jsontext.String("ipv4"))
 	} else {
-		if err := enc.WriteToken(jsontext.String("ip_version")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("ipv6")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ip_version"))
+		h.WriteToken(jsontext.String("ipv6"))
 	}
-	if err := enc.WriteToken(jsontext.String("src_ip")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.SrcAddr.IP.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("src_port")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Int(int64(e.SrcAddr.Port))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("dst_ip")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.DestAddr.IP.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("dst_port")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Int(int64(e.DestAddr.Port))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("src_cid")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.SrcConnectionID.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("dst_cid")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.DestConnectionID.String())); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.String("src_ip"))
+	h.WriteToken(jsontext.String(e.SrcAddr.IP.String()))
+	h.WriteToken(jsontext.String("src_port"))
+	h.WriteToken(jsontext.Int(int64(e.SrcAddr.Port)))
+	h.WriteToken(jsontext.String("dst_ip"))
+	h.WriteToken(jsontext.String(e.DestAddr.IP.String()))
+	h.WriteToken(jsontext.String("dst_port"))
+	h.WriteToken(jsontext.Int(int64(e.DestAddr.Port)))
+	h.WriteToken(jsontext.String("src_cid"))
+	h.WriteToken(jsontext.String(e.SrcConnectionID.String()))
+	h.WriteToken(jsontext.String("dst_cid"))
+	h.WriteToken(jsontext.String(e.DestConnectionID.String()))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventVersionNegotiated struct {
@@ -170,32 +129,24 @@ type eventVersionNegotiated struct {
 func (e eventVersionNegotiated) Name() string { return "transport:version_information" }
 
 func (e eventVersionNegotiated) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if len(e.clientVersions) > 0 {
-		if err := enc.WriteToken(jsontext.String("client_versions")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("client_versions"))
 		if err := versions(e.clientVersions).Encode(enc); err != nil {
 			return err
 		}
 	}
 	if len(e.serverVersions) > 0 {
-		if err := enc.WriteToken(jsontext.String("server_versions")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("server_versions"))
 		if err := versions(e.serverVersions).Encode(enc); err != nil {
 			return err
 		}
 	}
-	if err := enc.WriteToken(jsontext.String("chosen_version")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.chosenVersion.String())); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.String("chosen_version"))
+	h.WriteToken(jsontext.String(e.chosenVersion.String()))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventConnectionClosed struct {
@@ -205,10 +156,8 @@ type eventConnectionClosed struct {
 func (e eventConnectionClosed) Name() string { return "transport:connection_closed" }
 
 func (e eventConnectionClosed) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	var (
 		statelessResetErr     *quic.StatelessResetError
 		handshakeTimeoutErr   *quic.HandshakeTimeoutError
@@ -219,99 +168,48 @@ func (e eventConnectionClosed) Encode(enc *jsontext.Encoder) error {
 	)
 	switch {
 	case errors.As(e.e, &statelessResetErr):
-		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(ownerRemote.String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("stateless_reset")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("owner"))
+		h.WriteToken(jsontext.String(ownerRemote.String()))
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String("stateless_reset"))
 	case errors.As(e.e, &handshakeTimeoutErr):
-		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(ownerLocal.String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("handshake_timeout")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("owner"))
+		h.WriteToken(jsontext.String(ownerLocal.String()))
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String("handshake_timeout"))
 	case errors.As(e.e, &idleTimeoutErr):
-		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(ownerLocal.String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("idle_timeout")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("owner"))
+		h.WriteToken(jsontext.String(ownerLocal.String()))
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String("idle_timeout"))
 	case errors.As(e.e, &applicationErr):
 		owner := ownerLocal
 		if applicationErr.Remote {
 			owner = ownerRemote
 		}
-		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(owner.String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("application_code")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(applicationErr.ErrorCode))); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("reason")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(applicationErr.ErrorMessage)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("owner"))
+		h.WriteToken(jsontext.String(owner.String()))
+		h.WriteToken(jsontext.String("application_code"))
+		h.WriteToken(jsontext.Uint(uint64(applicationErr.ErrorCode)))
+		h.WriteToken(jsontext.String("reason"))
+		h.WriteToken(jsontext.String(applicationErr.ErrorMessage))
 	case errors.As(e.e, &transportErr):
 		owner := ownerLocal
 		if transportErr.Remote {
 			owner = ownerRemote
 		}
-		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(owner.String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("connection_code")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(transportError(transportErr.ErrorCode).String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("reason")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(transportErr.ErrorMessage)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("owner"))
+		h.WriteToken(jsontext.String(owner.String()))
+		h.WriteToken(jsontext.String("connection_code"))
+		h.WriteToken(jsontext.String(transportError(transportErr.ErrorCode).String()))
+		h.WriteToken(jsontext.String("reason"))
+		h.WriteToken(jsontext.String(transportErr.ErrorMessage))
 	case errors.As(e.e, &versionNegotiationErr):
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("version_mismatch")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String("version_mismatch"))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventPacketSent struct {
@@ -327,54 +225,36 @@ type eventPacketSent struct {
 func (e eventPacketSent) Name() string { return "transport:packet_sent" }
 
 func (e eventPacketSent) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := e.Header.Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("raw"))
 	if err := (rawInfo{Length: e.Length, PayloadLength: e.PayloadLength}).Encode(enc); err != nil {
 		return err
 	}
 	if len(e.Frames) > 0 {
-		if err := enc.WriteToken(jsontext.String("frames")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("frames"))
 		if err := e.Frames.Encode(enc); err != nil {
 			return err
 		}
 	}
 	if e.IsCoalesced {
-		if err := enc.WriteToken(jsontext.String("is_coalesced")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.True); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("is_coalesced"))
+		h.WriteToken(jsontext.True)
 	}
 	if e.ECN != logging.ECNUnsupported {
-		if err := enc.WriteToken(jsontext.String("ecn")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(ecn(e.ECN).String())); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ecn"))
+		h.WriteToken(jsontext.String(ecn(e.ECN).String()))
 	}
 	if e.Trigger != "" {
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(e.Trigger)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String(e.Trigger))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventPacketReceived struct {
@@ -390,54 +270,36 @@ type eventPacketReceived struct {
 func (e eventPacketReceived) Name() string { return "transport:packet_received" }
 
 func (e eventPacketReceived) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := e.Header.Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("raw"))
 	if err := (rawInfo{Length: e.Length, PayloadLength: e.PayloadLength}).Encode(enc); err != nil {
 		return err
 	}
 	if len(e.Frames) > 0 {
-		if err := enc.WriteToken(jsontext.String("frames")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("frames"))
 		if err := e.Frames.Encode(enc); err != nil {
 			return err
 		}
 	}
 	if e.IsCoalesced {
-		if err := enc.WriteToken(jsontext.String("is_coalesced")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.True); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("is_coalesced"))
+		h.WriteToken(jsontext.True)
 	}
 	if e.ECN != logging.ECNUnsupported {
-		if err := enc.WriteToken(jsontext.String("ecn")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(ecn(e.ECN).String())); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ecn"))
+		h.WriteToken(jsontext.String(ecn(e.ECN).String()))
 	}
 	if e.Trigger != "" {
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(e.Trigger)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String(e.Trigger))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventRetryReceived struct {
@@ -447,16 +309,14 @@ type eventRetryReceived struct {
 func (e eventRetryReceived) Name() string { return "transport:packet_received" }
 
 func (e eventRetryReceived) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := e.Header.Encode(enc); err != nil {
 		return err
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventVersionNegotiationReceived struct {
@@ -467,22 +327,18 @@ type eventVersionNegotiationReceived struct {
 func (e eventVersionNegotiationReceived) Name() string { return "transport:packet_received" }
 
 func (e eventVersionNegotiationReceived) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := e.Header.Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("supported_versions")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("supported_versions"))
 	if err := versions(e.SupportedVersions).Encode(enc); err != nil {
 		return err
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventVersionNegotiationSent struct {
@@ -493,22 +349,18 @@ type eventVersionNegotiationSent struct {
 func (e eventVersionNegotiationSent) Name() string { return "transport:packet_sent" }
 
 func (e eventVersionNegotiationSent) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := e.Header.Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("supported_versions")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("supported_versions"))
 	if err := versions(e.SupportedVersions).Encode(enc); err != nil {
 		return err
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventPacketBuffered struct {
@@ -519,31 +371,23 @@ type eventPacketBuffered struct {
 func (e eventPacketBuffered) Name() string { return "transport:packet_buffered" }
 
 func (e eventPacketBuffered) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := (packetHeaderWithType{
 		PacketType:   e.PacketType,
 		PacketNumber: protocol.InvalidPacketNumber,
 	}).Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("raw"))
 	if err := (rawInfo{Length: e.PacketSize}).Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("keys_unavailable")); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.String("trigger"))
+	h.WriteToken(jsontext.String("keys_unavailable"))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventPacketDropped struct {
@@ -556,31 +400,23 @@ type eventPacketDropped struct {
 func (e eventPacketDropped) Name() string { return "transport:packet_dropped" }
 
 func (e eventPacketDropped) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := (packetHeaderWithType{
 		PacketType:   e.PacketType,
 		PacketNumber: e.PacketNumber,
-	}.Encode(enc)); err != nil {
+	}).Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("raw"))
 	if err := (rawInfo{Length: e.PacketSize}).Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.Trigger.String())); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.String("trigger"))
+	h.WriteToken(jsontext.String(e.Trigger.String()))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type metrics struct {
@@ -601,28 +437,18 @@ type eventMTUUpdated struct {
 func (e eventMTUUpdated) Name() string { return "recovery:mtu_updated" }
 
 func (e eventMTUUpdated) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("mtu")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Uint(uint64(e.mtu))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("done")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("mtu"))
+	h.WriteToken(jsontext.Uint(uint64(e.mtu)))
+	h.WriteToken(jsontext.String("done"))
 	if e.done {
-		if err := enc.WriteToken(jsontext.True); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.True)
 	} else {
-		if err := enc.WriteToken(jsontext.False); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.False)
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventMetricsUpdated struct {
@@ -633,66 +459,38 @@ type eventMetricsUpdated struct {
 func (e eventMetricsUpdated) Name() string { return "recovery:metrics_updated" }
 
 func (e eventMetricsUpdated) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if e.Last == nil || e.Last.MinRTT != e.Current.MinRTT {
-		if err := enc.WriteToken(jsontext.String("min_rtt")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.MinRTT))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("min_rtt"))
+		h.WriteToken(jsontext.Float(milliseconds(e.Current.MinRTT)))
 	}
 	if e.Last == nil || e.Last.SmoothedRTT != e.Current.SmoothedRTT {
-		if err := enc.WriteToken(jsontext.String("smoothed_rtt")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.SmoothedRTT))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("smoothed_rtt"))
+		h.WriteToken(jsontext.Float(milliseconds(e.Current.SmoothedRTT)))
 	}
 	if e.Last == nil || e.Last.LatestRTT != e.Current.LatestRTT {
-		if err := enc.WriteToken(jsontext.String("latest_rtt")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.LatestRTT))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("latest_rtt"))
+		h.WriteToken(jsontext.Float(milliseconds(e.Current.LatestRTT)))
 	}
 	if e.Last == nil || e.Last.RTTVariance != e.Current.RTTVariance {
-		if err := enc.WriteToken(jsontext.String("rtt_variance")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Float(milliseconds(e.Current.RTTVariance))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("rtt_variance"))
+		h.WriteToken(jsontext.Float(milliseconds(e.Current.RTTVariance)))
 	}
 	if e.Last == nil || e.Last.CongestionWindow != e.Current.CongestionWindow {
-		if err := enc.WriteToken(jsontext.String("congestion_window")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(e.Current.CongestionWindow))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("congestion_window"))
+		h.WriteToken(jsontext.Uint(uint64(e.Current.CongestionWindow)))
 	}
 	if e.Last == nil || e.Last.BytesInFlight != e.Current.BytesInFlight {
-		if err := enc.WriteToken(jsontext.String("bytes_in_flight")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(e.Current.BytesInFlight))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("bytes_in_flight"))
+		h.WriteToken(jsontext.Uint(uint64(e.Current.BytesInFlight)))
 	}
 	if e.Last == nil || e.Last.PacketsInFlight != e.Current.PacketsInFlight {
-		if err := enc.WriteToken(jsontext.String("packets_in_flight")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(e.Current.PacketsInFlight))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("packets_in_flight"))
+		h.WriteToken(jsontext.Uint(uint64(e.Current.PacketsInFlight)))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventUpdatedPTO struct {
@@ -702,16 +500,12 @@ type eventUpdatedPTO struct {
 func (e eventUpdatedPTO) Name() string { return "recovery:metrics_updated" }
 
 func (e eventUpdatedPTO) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("pto_count")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Uint(uint64(e.Value))); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("pto_count"))
+	h.WriteToken(jsontext.Uint(uint64(e.Value)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventPacketLost struct {
@@ -723,25 +517,19 @@ type eventPacketLost struct {
 func (e eventPacketLost) Name() string { return "recovery:packet_lost" }
 
 func (e eventPacketLost) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("header")); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("header"))
 	if err := (packetHeaderWithTypeAndPacketNumber{
 		PacketType:   e.PacketType,
 		PacketNumber: e.PacketNumber,
-	}.Encode(enc)); err != nil {
+	}).Encode(enc); err != nil {
 		return err
 	}
-	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.Trigger.String())); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.String("trigger"))
+	h.WriteToken(jsontext.String(e.Trigger.String()))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventSpuriousLoss struct {
@@ -754,34 +542,18 @@ type eventSpuriousLoss struct {
 func (e eventSpuriousLoss) Name() string { return "recovery:spurious_loss" }
 
 func (e eventSpuriousLoss) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("packet_number_space")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("packet_number")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Uint(uint64(e.PacketNumber))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("reordering_packets")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Uint(e.Reordering)); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("reordering_time")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Float(milliseconds(e.Duration))); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("packet_number_space"))
+	h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
+	h.WriteToken(jsontext.String("packet_number"))
+	h.WriteToken(jsontext.Uint(uint64(e.PacketNumber)))
+	h.WriteToken(jsontext.String("reordering_packets"))
+	h.WriteToken(jsontext.Uint(e.Reordering))
+	h.WriteToken(jsontext.String("reordering_time"))
+	h.WriteToken(jsontext.Float(milliseconds(e.Duration)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventKeyUpdated struct {
@@ -794,30 +566,18 @@ type eventKeyUpdated struct {
 func (e eventKeyUpdated) Name() string { return "security:key_updated" }
 
 func (e eventKeyUpdated) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.Trigger.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("key_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.KeyType.String())); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("trigger"))
+	h.WriteToken(jsontext.String(e.Trigger.String()))
+	h.WriteToken(jsontext.String("key_type"))
+	h.WriteToken(jsontext.String(e.KeyType.String()))
 	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
-		if err := enc.WriteToken(jsontext.String("key_phase")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(e.KeyPhase))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("key_phase"))
+		h.WriteToken(jsontext.Uint(uint64(e.KeyPhase)))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventKeyDiscarded struct {
@@ -828,32 +588,20 @@ type eventKeyDiscarded struct {
 func (e eventKeyDiscarded) Name() string { return "security:key_discarded" }
 
 func (e eventKeyDiscarded) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if e.KeyType != keyTypeClient1RTT && e.KeyType != keyTypeServer1RTT {
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("tls")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String("tls"))
 	}
-	if err := enc.WriteToken(jsontext.String("key_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.KeyType.String())); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("key_type"))
+	h.WriteToken(jsontext.String(e.KeyType.String()))
 	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
-		if err := enc.WriteToken(jsontext.String("key_phase")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(e.KeyPhase))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("key_phase"))
+		h.WriteToken(jsontext.Uint(uint64(e.KeyPhase)))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventTransportParameters struct {
@@ -889,172 +637,92 @@ func (e eventTransportParameters) Name() string {
 }
 
 func (e eventTransportParameters) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if !e.Restore {
-		if err := enc.WriteToken(jsontext.String("owner")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(e.Owner.String())); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("owner"))
+		h.WriteToken(jsontext.String(e.Owner.String()))
 		if e.SentBy == protocol.PerspectiveServer {
-			if err := enc.WriteToken(jsontext.String("original_destination_connection_id")); err != nil {
-				return err
-			}
-			if err := enc.WriteToken(jsontext.String(e.OriginalDestinationConnectionID.String())); err != nil {
-				return err
-			}
+			h.WriteToken(jsontext.String("original_destination_connection_id"))
+			h.WriteToken(jsontext.String(e.OriginalDestinationConnectionID.String()))
 			if e.StatelessResetToken != nil {
-				if err := enc.WriteToken(jsontext.String("stateless_reset_token")); err != nil {
-					return err
-				}
-				if err := enc.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:]))); err != nil {
-					return err
-				}
+				h.WriteToken(jsontext.String("stateless_reset_token"))
+				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:])))
 			}
 			if e.RetrySourceConnectionID != nil {
-				if err := enc.WriteToken(jsontext.String("retry_source_connection_id")); err != nil {
-					return err
-				}
-				if err := enc.WriteToken(jsontext.String((*e.RetrySourceConnectionID).String())); err != nil {
-					return err
-				}
+				h.WriteToken(jsontext.String("retry_source_connection_id"))
+				h.WriteToken(jsontext.String((*e.RetrySourceConnectionID).String()))
 			}
 		}
-		if err := enc.WriteToken(jsontext.String("initial_source_connection_id")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(e.InitialSourceConnectionID.String())); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_source_connection_id"))
+		h.WriteToken(jsontext.String(e.InitialSourceConnectionID.String()))
 	}
-	if err := enc.WriteToken(jsontext.String("disable_active_migration")); err != nil {
-		return err
-	}
+	h.WriteToken(jsontext.String("disable_active_migration"))
 	if e.DisableActiveMigration {
-		if err := enc.WriteToken(jsontext.True); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.True)
 	} else {
-		if err := enc.WriteToken(jsontext.False); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.False)
 	}
 	if e.MaxIdleTimeout != 0 {
-		if err := enc.WriteToken(jsontext.String("max_idle_timeout")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Float(milliseconds(e.MaxIdleTimeout))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("max_idle_timeout"))
+		h.WriteToken(jsontext.Float(milliseconds(e.MaxIdleTimeout)))
 	}
 	if e.MaxUDPPayloadSize != 0 {
-		if err := enc.WriteToken(jsontext.String("max_udp_payload_size")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(e.MaxUDPPayloadSize))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("max_udp_payload_size"))
+		h.WriteToken(jsontext.Int(int64(e.MaxUDPPayloadSize)))
 	}
 	if e.AckDelayExponent != 0 {
-		if err := enc.WriteToken(jsontext.String("ack_delay_exponent")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(e.AckDelayExponent))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ack_delay_exponent"))
+		h.WriteToken(jsontext.Uint(uint64(e.AckDelayExponent)))
 	}
 	if e.MaxAckDelay != 0 {
-		if err := enc.WriteToken(jsontext.String("max_ack_delay")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Float(milliseconds(e.MaxAckDelay))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("max_ack_delay"))
+		h.WriteToken(jsontext.Float(milliseconds(e.MaxAckDelay)))
 	}
 	if e.ActiveConnectionIDLimit != 0 {
-		if err := enc.WriteToken(jsontext.String("active_connection_id_limit")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(e.ActiveConnectionIDLimit)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("active_connection_id_limit"))
+		h.WriteToken(jsontext.Uint(e.ActiveConnectionIDLimit))
 	}
 	if e.InitialMaxData != 0 {
-		if err := enc.WriteToken(jsontext.String("initial_max_data")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxData))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_max_data"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxData)))
 	}
 	if e.InitialMaxStreamDataBidiLocal != 0 {
-		if err := enc.WriteToken(jsontext.String("initial_max_stream_data_bidi_local")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiLocal))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_max_stream_data_bidi_local"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiLocal)))
 	}
 	if e.InitialMaxStreamDataBidiRemote != 0 {
-		if err := enc.WriteToken(jsontext.String("initial_max_stream_data_bidi_remote")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiRemote))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_max_stream_data_bidi_remote"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiRemote)))
 	}
 	if e.InitialMaxStreamDataUni != 0 {
-		if err := enc.WriteToken(jsontext.String("initial_max_stream_data_uni")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataUni))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_max_stream_data_uni"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataUni)))
 	}
 	if e.InitialMaxStreamsBidi != 0 {
-		if err := enc.WriteToken(jsontext.String("initial_max_streams_bidi")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(e.InitialMaxStreamsBidi)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_max_streams_bidi"))
+		h.WriteToken(jsontext.Int(e.InitialMaxStreamsBidi))
 	}
 	if e.InitialMaxStreamsUni != 0 {
-		if err := enc.WriteToken(jsontext.String("initial_max_streams_uni")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(e.InitialMaxStreamsUni)); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("initial_max_streams_uni"))
+		h.WriteToken(jsontext.Int(e.InitialMaxStreamsUni))
 	}
 	if e.PreferredAddress != nil {
-		if err := enc.WriteToken(jsontext.String("preferred_address")); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("preferred_address"))
 		if err := e.PreferredAddress.Encode(enc); err != nil {
 			return err
 		}
 	}
 	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
-		if err := enc.WriteToken(jsontext.String("max_datagram_frame_size")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(e.MaxDatagramFrameSize))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("max_datagram_frame_size"))
+		h.WriteToken(jsontext.Int(int64(e.MaxDatagramFrameSize)))
 	}
 	if e.EnableResetStreamAt {
-		if err := enc.WriteToken(jsontext.String("reset_stream_at")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.True); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("reset_stream_at"))
+		h.WriteToken(jsontext.True)
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type preferredAddress struct {
@@ -1064,50 +732,26 @@ type preferredAddress struct {
 }
 
 func (a preferredAddress) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if a.IPv4.IsValid() {
-		if err := enc.WriteToken(jsontext.String("ip_v4")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(a.IPv4.Addr().String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("port_v4")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(a.IPv4.Port()))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ip_v4"))
+		h.WriteToken(jsontext.String(a.IPv4.Addr().String()))
+		h.WriteToken(jsontext.String("port_v4"))
+		h.WriteToken(jsontext.Uint(uint64(a.IPv4.Port())))
 	}
 	if a.IPv6.IsValid() {
-		if err := enc.WriteToken(jsontext.String("ip_v6")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(a.IPv6.Addr().String())); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("port_v6")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Uint(uint64(a.IPv6.Port()))); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("ip_v6"))
+		h.WriteToken(jsontext.String(a.IPv6.Addr().String()))
+		h.WriteToken(jsontext.String("port_v6"))
+		h.WriteToken(jsontext.Uint(uint64(a.IPv6.Port())))
 	}
-	if err := enc.WriteToken(jsontext.String("connection_id")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(a.ConnectionID.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("stateless_reset_token")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(fmt.Sprintf("%x", a.StatelessResetToken))); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.String("connection_id"))
+	h.WriteToken(jsontext.String(a.ConnectionID.String()))
+	h.WriteToken(jsontext.String("stateless_reset_token"))
+	h.WriteToken(jsontext.String(fmt.Sprintf("%x", a.StatelessResetToken)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventLossTimerSet struct {
@@ -1119,34 +763,18 @@ type eventLossTimerSet struct {
 func (e eventLossTimerSet) Name() string { return "recovery:loss_timer_updated" }
 
 func (e eventLossTimerSet) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("event_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("set")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("timer_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.TimerType.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("packet_number_space")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel))); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("delta")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.Float(milliseconds(e.Delta))); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("event_type"))
+	h.WriteToken(jsontext.String("set"))
+	h.WriteToken(jsontext.String("timer_type"))
+	h.WriteToken(jsontext.String(e.TimerType.String()))
+	h.WriteToken(jsontext.String("packet_number_space"))
+	h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
+	h.WriteToken(jsontext.String("delta"))
+	h.WriteToken(jsontext.Float(milliseconds(e.Delta)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventLossTimerExpired struct {
@@ -1157,28 +785,16 @@ type eventLossTimerExpired struct {
 func (e eventLossTimerExpired) Name() string { return "recovery:loss_timer_updated" }
 
 func (e eventLossTimerExpired) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("event_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("expired")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("timer_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.TimerType.String())); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("packet_number_space")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel))); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("event_type"))
+	h.WriteToken(jsontext.String("expired"))
+	h.WriteToken(jsontext.String("timer_type"))
+	h.WriteToken(jsontext.String(e.TimerType.String()))
+	h.WriteToken(jsontext.String("packet_number_space"))
+	h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventLossTimerCanceled struct{}
@@ -1186,16 +802,12 @@ type eventLossTimerCanceled struct{}
 func (e eventLossTimerCanceled) Name() string { return "recovery:loss_timer_updated" }
 
 func (e eventLossTimerCanceled) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("event_type")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("cancelled")); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("event_type"))
+	h.WriteToken(jsontext.String("cancelled"))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventCongestionStateUpdated struct {
@@ -1205,16 +817,12 @@ type eventCongestionStateUpdated struct {
 func (e eventCongestionStateUpdated) Name() string { return "recovery:congestion_state_updated" }
 
 func (e eventCongestionStateUpdated) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("new")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.state.String())); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("new"))
+	h.WriteToken(jsontext.String(e.state.String()))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventECNStateUpdated struct {
@@ -1225,24 +833,16 @@ type eventECNStateUpdated struct {
 func (e eventECNStateUpdated) Name() string { return "recovery:ecn_state_updated" }
 
 func (e eventECNStateUpdated) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("new")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(ecnState(e.state).String())); err != nil {
-		return err
-	}
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("new"))
+	h.WriteToken(jsontext.String(ecnState(e.state).String()))
 	if e.trigger != 0 {
-		if err := enc.WriteToken(jsontext.String("trigger")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String(ecnStateTrigger(e.trigger).String())); err != nil {
-			return err
-		}
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String(ecnStateTrigger(e.trigger).String()))
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventALPNInformation struct {
@@ -1252,16 +852,12 @@ type eventALPNInformation struct {
 func (e eventALPNInformation) Name() string { return "transport:alpn_information" }
 
 func (e eventALPNInformation) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("chosen_alpn")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.chosenALPN)); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("chosen_alpn"))
+	h.WriteToken(jsontext.String(e.chosenALPN))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type eventGeneric struct {
@@ -1272,14 +868,10 @@ type eventGeneric struct {
 func (e eventGeneric) Name() string { return "transport:" + e.name }
 
 func (e eventGeneric) Encode(enc *jsontext.Encoder) error {
-	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String("details")); err != nil {
-		return err
-	}
-	if err := enc.WriteToken(jsontext.String(e.msg)); err != nil {
-		return err
-	}
-	return enc.WriteToken(jsontext.EndObject)
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("details"))
+	h.WriteToken(jsontext.String(e.msg))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
