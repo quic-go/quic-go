@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/quic-go/qlog/jsontext"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,17 +15,27 @@ type mevent struct{}
 
 var _ eventDetails = mevent{}
 
-func (mevent) Name() string                         { return "foobar:mevent" }
-func (mevent) IsNil() bool                          { return false }
-func (mevent) MarshalJSONObject(enc *gojay.Encoder) { enc.StringKey("event", "details") }
+func (mevent) Name() string { return "foobar:mevent" }
+func (mevent) Encode(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("event")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("details")); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
+}
 
 func TestEventMarshaling(t *testing.T) {
 	buf := &bytes.Buffer{}
-	enc := gojay.NewEncoder(buf)
-	err := enc.Encode(event{
+	enc := jsontext.NewEncoder(buf)
+	err := (event{
 		RelativeTime: 1337 * time.Microsecond,
 		eventDetails: mevent{},
-	})
+	}).Encode(enc)
 	require.NoError(t, err)
 
 	var decoded map[string]any

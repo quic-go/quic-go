@@ -9,8 +9,6 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
-
-	"github.com/francoispqt/gojay"
 )
 
 type connectionTracer struct {
@@ -255,7 +253,7 @@ func (t *connectionTracer) SentShortHeaderPacket(
 }
 
 func (t *connectionTracer) sentPacket(
-	hdr gojay.MarshalerJSONObject,
+	hdr jsontextEncoder,
 	size, payloadLen logging.ByteCount,
 	ecn logging.ECN,
 	ack *logging.AckFrame,

@@ -6,17 +6,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/francoispqt/gojay"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/logging"
+
+	"github.com/quic-go/quic-go/qlog/jsontext"
+
 	"github.com/stretchr/testify/require"
 )
 
 func check(t *testing.T, f logging.Frame, expected map[string]any) {
 	buf := &bytes.Buffer{}
-	enc := gojay.NewEncoder(buf)
-	err := enc.Encode(frame{Frame: f})
+	enc := jsontext.NewEncoder(buf)
+	err := (frame{Frame: f}).Encode(enc)
 	require.NoError(t, err)
 	data := buf.Bytes()
 	require.True(t, json.Valid(data))

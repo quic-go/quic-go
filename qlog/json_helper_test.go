@@ -30,6 +30,8 @@ func unmarshal(data []byte, v any) error {
 }
 
 func checkEncoding(t *testing.T, data []byte, expected map[string]any) {
+	t.Helper()
+
 	m := make(map[string]any)
 	require.NoError(t, json.Unmarshal(data, &m))
 	require.Len(t, m, len(expected))
@@ -68,6 +70,8 @@ type entry struct {
 }
 
 func exportAndParse(t *testing.T, buf *bytes.Buffer) []entry {
+	t.Helper()
+
 	m := make(map[string]any)
 	line, err := buf.ReadBytes('\n')
 	require.NoError(t, err)
@@ -100,6 +104,8 @@ func exportAndParse(t *testing.T, buf *bytes.Buffer) []entry {
 }
 
 func exportAndParseSingle(t *testing.T, buf *bytes.Buffer) entry {
+	t.Helper()
+
 	entries := exportAndParse(t, buf)
 	require.Len(t, entries, 1)
 	return entries[0]
