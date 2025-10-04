@@ -172,33 +172,46 @@ func testEncoderEscapedStrings(t *testing.T, key, value string) {
 	require.Equal(t, expected, got)
 }
 
-func encodeValue(t *testing.T, enc *jsontext.Encoder, v any) {
+func encodeValue(t testing.TB, enc *jsontext.Encoder, v any) (isSupported bool) {
+	t.Helper()
+
 	switch val := v.(type) {
 	case map[string]any:
 		require.NoError(t, enc.WriteToken(jsontext.BeginObject))
 		for k, vv := range val {
 			require.NoError(t, enc.WriteToken(jsontext.String(k)))
-			encodeValue(t, enc, vv)
+			if !encodeValue(t, enc, vv) {
+				return false
+			}
 		}
 		require.NoError(t, enc.WriteToken(jsontext.EndObject))
+		return true
 	case []any:
 		require.NoError(t, enc.WriteToken(jsontext.BeginArray))
 		for _, vv := range val {
-			encodeValue(t, enc, vv)
+			if !encodeValue(t, enc, vv) {
+				return false // Propagate unsupported if any nested value fails
+			}
 		}
 		require.NoError(t, enc.WriteToken(jsontext.EndArray))
+		return true
 	case string:
 		require.NoError(t, enc.WriteToken(jsontext.String(val)))
+		return true
 	case int64:
 		require.NoError(t, enc.WriteToken(jsontext.Int(val)))
+		return true
 	case uint64:
 		require.NoError(t, enc.WriteToken(jsontext.Uint(val)))
+		return true
 	case float64:
 		require.NoError(t, enc.WriteToken(jsontext.Float(val)))
+		return true
 	case bool:
 		require.NoError(t, enc.WriteToken(jsontext.Bool(val)))
+		return true
 	default:
-		require.FailNowf(t, "unsupported type", "unsupported type: %T", v)
+		return false
 	}
 }
 
@@ -310,23 +323,42 @@ func TestEncoderComprehensive(t *testing.T) {
 }
 
 func FuzzEncoder(f *testing.F) {
-	f.Add("simple", int64(42), uint64(100), 3.14, true)
-	f.Add(`esc"aped\string`, int64(-1), uint64(0), 0.0, false)
-	f.Add("\b\f\n\r\t\u001f", int64(0), uint64(1), 1.23e-4, true)
-	f.Add("", int64(9223372036854775807), uint64(18446744073709551615), -3.14, false)
+	examples := []string{
+		`{"hello": "world"}`,
+		`{"foo": 123, "bar": [1, 2, 3]}`,
+		`{"nested": {"a": 1, "b": [true, false, "foobar"]}}`,
+		`[{"x": 1}, {"y": "foo"}]`,
+		`["foo", "bar"]`,
+		`["a", {"b": [1, 2, {"c": "d"}]}, 3]`,
+		`{"emptyObj": {}, "emptyArr": []}`,
+		`{"mixed": [1, "two", {"three": 3}]}`,
+	}
+	for _, tc := range examples {
+		// first test that
+		// 1. it's valid JSON
+		d := json.NewDecoder(bytes.NewReader([]byte(tc)))
+		var expected any
+		require.NoError(f, d.Decode(&expected), "corpus entry `%s` is not valid JSON", tc)
+		// 2. the jsontext encoder can handle
+		enc := jsontext.NewEncoder(&bytes.Buffer{})
+		require.True(f, encodeValue(f, enc, expected), "expected `%s` to be supported", tc)
 
-	f.Fuzz(func(t *testing.T, s string, i int64, u uint64, fl float64, b bool) {
-		expected := map[string]any{
-			"string": s,
-			"int":    float64(i), // json decodes to float64
-			"uint":   float64(u),
-			"float":  fl,
-			"bool":   b,
-			"array":  []any{s, float64(i), fl},
-			"object": map[string]any{s: fl},
+		f.Add([]byte(tc))
+	}
+
+	var stdlibBuf, ourBuf bytes.Buffer
+
+	f.Fuzz(func(t *testing.T, b []byte) {
+		stdlibBuf.Truncate(0)
+		ourBuf.Truncate(0)
+		stdlibBuf.Grow(len(b))
+		ourBuf.Grow(len(b))
+
+		d := json.NewDecoder(bytes.NewReader(b))
+		var expected any
+		if err := d.Decode(&expected); err != nil {
+			return // invalid JSON
 		}
-
-		var stdlibBuf, ourBuf bytes.Buffer
 
 		// only attempt to handle inputs that the standard library can handle
 		stdlibEnc := json.NewEncoder(&stdlibBuf)
@@ -337,7 +369,9 @@ func FuzzEncoder(f *testing.F) {
 
 		// then encode using the jsontext encoder
 		enc := jsontext.NewEncoder(&ourBuf)
-		encodeValue(t, enc, expected)
+		if isSupported := encodeValue(t, enc, expected); !isSupported {
+			return
+		}
 
 		output := ourBuf.Bytes()
 		require.Truef(t, json.Valid(output), "produced invalid JSON: %s", output)
