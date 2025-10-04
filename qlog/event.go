@@ -442,11 +442,7 @@ func (e eventMTUUpdated) Encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.String("mtu"))
 	h.WriteToken(jsontext.Uint(uint64(e.mtu)))
 	h.WriteToken(jsontext.String("done"))
-	if e.done {
-		h.WriteToken(jsontext.True)
-	} else {
-		h.WriteToken(jsontext.False)
-	}
+	h.WriteToken(jsontext.Bool(e.done))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
@@ -658,11 +654,7 @@ func (e eventTransportParameters) Encode(enc *jsontext.Encoder) error {
 		h.WriteToken(jsontext.String(e.InitialSourceConnectionID.String()))
 	}
 	h.WriteToken(jsontext.String("disable_active_migration"))
-	if e.DisableActiveMigration {
-		h.WriteToken(jsontext.True)
-	} else {
-		h.WriteToken(jsontext.False)
-	}
+	h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
 	if e.MaxIdleTimeout != 0 {
 		h.WriteToken(jsontext.String("max_idle_timeout"))
 		h.WriteToken(jsontext.Float(milliseconds(e.MaxIdleTimeout)))
