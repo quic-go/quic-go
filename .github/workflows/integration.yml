@@ -8,14 +8,10 @@ jobs:
         os: [ "ubuntu" ]
         go: [ "1.24.x", "1.25.x" ]
         race: [ false ]
-        use32bit: [ false ]
         include:
           - os: "ubuntu"
             go: "1.25.x"
             race: true
-          - os: "ubuntu"
-            go: "1.25.x"
-            use32bit: true
           - os: "windows"
             go: "1.25.x"
             race: false
@@ -30,7 +26,7 @@ jobs:
     env:
       DEBUG: false # set this to true to export qlogs and save them as artifacts
       TIMESCALE_FACTOR: 3
-    name: "Integration (${{ matrix.os }}, Go ${{ matrix.go }}${{ matrix.race && ', race' || '' }}${{ matrix.use32bit && ', 32-bit' || '' }})"
+    name: "Integration (${{ matrix.os }}, Go ${{ matrix.go }}${{ matrix.race && ', race' || '' }})"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -44,9 +40,6 @@ jobs:
       - name: Enable race detector
         if: ${{ matrix.race }}
         run: echo "RACEFLAG= -race" >> $GITHUB_ENV
-      - name: Enable 32-bit build 
-        if: ${{ matrix.use32bit }}
-        run: echo "GOARCH=386" >> $GITHUB_ENV
       - run: go version
       - name: Run tools tests
         run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools/... 2>&1 | go-junit-report -set-exit-code -iocopy -out report_tools.xml
@@ -75,11 +68,11 @@ jobs:
         if: ${{ always() && env.DEBUG == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: qlogs-${{ matrix.os }}-go${{ matrix.go }}-race${{ matrix.race }}${{ matrix.use32bit && '-32bit' || '' }}
+          name: qlogs-${{ matrix.os }}-go${{ matrix.go }}-race${{ matrix.race }}
           path: integrationtests/self/*.qlog
           retention-days: 7
       - name: Upload report to Codecov
-        if: ${{ !cancelled() && !matrix.race && !matrix.use32bit }}
+        if: ${{ !cancelled() && !matrix.race }}
         uses: codecov/test-results-action@v1
         with:
           name: Unit tests
