@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/francoispqt/gojay"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
+
+	"github.com/quic-go/quic-go/qlog/jsontext"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,8 +36,8 @@ func TestPacketTypeFromEncryptionLevel(t *testing.T) {
 
 func checkHeader(t *testing.T, hdr *wire.ExtendedHeader, expected map[string]any) {
 	buf := &bytes.Buffer{}
-	enc := gojay.NewEncoder(buf)
-	require.NoError(t, enc.Encode(transformLongHeader(hdr)))
+	enc := jsontext.NewEncoder(buf)
+	require.NoError(t, transformLongHeader(hdr).Encode(enc))
 	data := buf.Bytes()
 	require.True(t, json.Valid(data))
 	checkEncoding(t, data, expected)

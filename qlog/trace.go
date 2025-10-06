@@ -5,8 +5,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/logging"
-
-	"github.com/francoispqt/gojay"
+	"github.com/quic-go/quic-go/qlog/jsontext"
 )
 
 // Setting of this only works when quic-go is used as a library.
@@ -41,22 +40,38 @@ type topLevel struct {
 	trace trace
 }
 
-func (topLevel) IsNil() bool { return false }
-func (l topLevel) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("qlog_format", "JSON-SEQ")
-	enc.StringKey("qlog_version", "0.3")
-	enc.StringKeyOmitEmpty("title", "quic-go qlog")
-	enc.ObjectKey("configuration", configuration{Version: quicGoVersion})
-	enc.ObjectKey("trace", l.trace)
+func (l topLevel) Encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("qlog_format"))
+	h.WriteToken(jsontext.String("JSON-SEQ"))
+	h.WriteToken(jsontext.String("qlog_version"))
+	h.WriteToken(jsontext.String("0.3"))
+	h.WriteToken(jsontext.String("title"))
+	h.WriteToken(jsontext.String("quic-go qlog"))
+	h.WriteToken(jsontext.String("configuration"))
+	if err := (configuration{Version: quicGoVersion}).Encode(enc); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.String("trace"))
+	if err := l.trace.Encode(enc); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type configuration struct {
 	Version string
 }
 
-func (c configuration) IsNil() bool { return false }
-func (c configuration) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("code_version", c.Version)
+func (c configuration) Encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("code_version"))
+	h.WriteToken(jsontext.String(c.Version))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type vantagePoint struct {
@@ -64,10 +79,19 @@ type vantagePoint struct {
 	Type string
 }
 
-func (p vantagePoint) IsNil() bool { return false }
-func (p vantagePoint) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKeyOmitEmpty("name", p.Name)
-	enc.StringKeyOmitEmpty("type", p.Type)
+func (p vantagePoint) Encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	if p.Name != "" {
+		h.WriteToken(jsontext.String("name"))
+		h.WriteToken(jsontext.String(p.Name))
+	}
+	if p.Type != "" {
+		h.WriteToken(jsontext.String("type"))
+		h.WriteToken(jsontext.String(p.Type))
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 type commonFields struct {
@@ -77,25 +101,43 @@ type commonFields struct {
 	ReferenceTime time.Time
 }
 
-func (f commonFields) MarshalJSONObject(enc *gojay.Encoder) {
+func (f commonFields) Encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
 	if f.ODCID != nil {
-		enc.StringKey("ODCID", f.ODCID.String())
-		enc.StringKey("group_id", f.ODCID.String())
+		h.WriteToken(jsontext.String("ODCID"))
+		h.WriteToken(jsontext.String(f.ODCID.String()))
+		h.WriteToken(jsontext.String("group_id"))
+		h.WriteToken(jsontext.String(f.ODCID.String()))
 	}
-	enc.StringKeyOmitEmpty("protocol_type", f.ProtocolType)
-	enc.Float64Key("reference_time", float64(f.ReferenceTime.UnixNano())/1e6)
-	enc.StringKey("time_format", "relative")
+	if f.ProtocolType != "" {
+		h.WriteToken(jsontext.String("protocol_type"))
+		h.WriteToken(jsontext.String(f.ProtocolType))
+	}
+	h.WriteToken(jsontext.String("reference_time"))
+	h.WriteToken(jsontext.Float(float64(f.ReferenceTime.UnixNano()) / 1e6))
+	h.WriteToken(jsontext.String("time_format"))
+	h.WriteToken(jsontext.String("relative"))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
-
-func (f commonFields) IsNil() bool { return false }
 
 type trace struct {
 	VantagePoint vantagePoint
 	CommonFields commonFields
 }
 
-func (trace) IsNil() bool { return false }
-func (t trace) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.ObjectKey("vantage_point", t.VantagePoint)
-	enc.ObjectKey("common_fields", t.CommonFields)
+func (t trace) Encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("vantage_point"))
+	if err := t.VantagePoint.Encode(enc); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.String("common_fields"))
+	if err := t.CommonFields.Encode(enc); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
