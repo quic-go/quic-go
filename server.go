@@ -87,7 +87,7 @@ type baseServer struct {
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
 		time.Duration,
-		qlogwriter.Recorder,
+		qlogwriter.Trace,
 		utils.Logger,
 		protocol.Version,
 	) *wrappedConn
@@ -801,16 +801,14 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		cancel = cancel1
 	}
 	ctx = context.WithValue(ctx, ConnectionTracingKey, nextConnTracingID())
-	var qlogger qlogwriter.Recorder
+	var qlogTrace qlogwriter.Trace
 	if config.Tracer != nil {
 		// Use the same connection ID that is passed to the client's GetLogWriter callback.
 		connID := hdr.DestConnectionID
 		if origDestConnID.Len() > 0 {
 			connID = origDestConnID
 		}
-		if t := config.Tracer(ctx, false, connID); t != nil {
-			qlogger = t.AddProducer()
-		}
+		qlogTrace = config.Tracer(ctx, false, connID)
 	}
 	connID, err := s.connIDGenerator.GenerateConnectionID()
 	if err != nil {
@@ -834,7 +832,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		s.tokenGenerator,
 		clientAddrVerified,
 		rtt,
-		qlogger,
+		qlogTrace,
 		s.logger,
 		hdr.Version,
 	)

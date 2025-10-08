@@ -221,9 +221,10 @@ type Conn struct {
 	connStateMutex sync.Mutex
 	connState      ConnectionState
 
-	logID   string
-	qlogger qlogwriter.Recorder
-	logger  utils.Logger
+	logID     string
+	qlogTrace qlogwriter.Trace
+	qlogger   qlogwriter.Recorder
+	logger    utils.Logger
 }
 
 var _ streamSender = &Conn{}
@@ -260,7 +261,7 @@ var newConnection = func(
 	tokenGenerator *handshake.TokenGenerator,
 	clientAddressValidated bool,
 	rtt time.Duration,
-	qlogger qlogwriter.Recorder,
+	qlogTrace qlogwriter.Trace,
 	logger utils.Logger,
 	v protocol.Version,
 ) *wrappedConn {
@@ -274,9 +275,12 @@ var newConnection = func(
 		tokenGenerator:      tokenGenerator,
 		oneRTTStream:        newCryptoStream(),
 		perspective:         protocol.PerspectiveServer,
-		qlogger:             qlogger,
+		qlogTrace:           qlogTrace,
 		logger:              logger,
 		version:             v,
+	}
+	if qlogTrace != nil {
+		s.qlogger = qlogTrace.AddProducer()
 	}
 	if origDestConnID.Len() > 0 {
 		s.logID = origDestConnID.String()
@@ -356,7 +360,7 @@ var newConnection = func(
 		tlsConf,
 		conf.Allow0RTT,
 		s.rttStats,
-		qlogger,
+		s.qlogger,
 		logger,
 		s.version,
 	)
@@ -381,7 +385,7 @@ var newClientConnection = func(
 	initialPacketNumber protocol.PacketNumber,
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
-	qlogger qlogwriter.Recorder,
+	qlogTrace qlogwriter.Trace,
 	logger utils.Logger,
 	v protocol.Version,
 ) *wrappedConn {
@@ -394,9 +398,27 @@ var newClientConnection = func(
 		perspective:         protocol.PerspectiveClient,
 		logID:               destConnID.String(),
 		logger:              logger,
-		qlogger:             qlogger,
+		qlogTrace:           qlogTrace,
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
+	}
+	if qlogTrace != nil {
+		s.qlogger = qlogTrace.AddProducer()
+	}
+	if s.qlogger != nil {
+		var srcAddr, destAddr *net.UDPAddr
+		if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+			srcAddr = addr
+		}
+		if addr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
+			destAddr = addr
+		}
+		s.qlogger.RecordEvent(qlog.StartedConnection{
+			SrcAddr:          srcAddr,
+			DestAddr:         destAddr,
+			SrcConnectionID:  srcConnID,
+			DestConnectionID: destConnID,
+		})
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
@@ -466,7 +488,7 @@ var newClientConnection = func(
 		tlsConf,
 		enable0RTT,
 		s.rttStats,
-		qlogger,
+		s.qlogger,
 		logger,
 		s.version,
 	)
@@ -3037,6 +3059,12 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 // however the client's identity is only verified once the handshake completes.
 func (c *Conn) HandshakeComplete() <-chan struct{} {
 	return c.handshakeCompleteChan
+}
+
+// QlogTrace returns the qlog trace of the QUIC connection.
+// It is nil if qlog is not enabled.
+func (c *Conn) QlogTrace() qlogwriter.Trace {
+	return c.qlogTrace
 }
 
 func (c *Conn) NextConnection(ctx context.Context) (*Conn, error) {
