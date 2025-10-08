@@ -40,18 +40,33 @@ func unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-func newTracer() (Trace, *bytes.Buffer) {
-	buf := &bytes.Buffer{}
-	trace := NewFileSeq(nopWriteCloser(buf))
-	go trace.Run()
-	return trace, buf
+func TestTraceMetadata(t *testing.T) {
+	t.Run("non-connection trace", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		trace := NewFileSeq(nopWriteCloser(buf))
+		go trace.Run()
+		producer := trace.AddProducer()
+		producer.Close()
+
+		testTraceMetadata(t, buf, "transport", "")
+	})
+
+	t.Run("connection trace", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		trace := NewConnectionFileSeq(
+			nopWriteCloser(buf),
+			false,
+			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+		)
+		go trace.Run()
+		producer := trace.AddProducer()
+		producer.Close()
+
+		testTraceMetadata(t, buf, "server", "deadbeef")
+	})
 }
 
-func TestTraceMetadata(t *testing.T) {
-	trace, buf := newTracer()
-	producer := trace.AddProducer()
-	producer.Close()
-
+func testTraceMetadata(t *testing.T, buf *bytes.Buffer, expectedVantagePoint, expectedGroupID string) {
 	var m map[string]any
 	require.NoError(t, unmarshal(buf.Bytes(), &m))
 	require.Equal(t, "0.3", m["qlog_version"])
@@ -60,49 +75,24 @@ func TestTraceMetadata(t *testing.T) {
 	tr := m["trace"].(map[string]any)
 	require.Contains(t, tr, "common_fields")
 	commonFields := tr["common_fields"].(map[string]any)
-	require.NotContains(t, commonFields, "ODCID")
-	require.NotContains(t, commonFields, "group_id")
+	if expectedGroupID != "" {
+		require.Contains(t, commonFields, "group_id")
+		require.Equal(t, expectedGroupID, commonFields["group_id"])
+	} else {
+		require.NotContains(t, commonFields, "group_id")
+	}
 	require.Contains(t, commonFields, "reference_time")
-	referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-	require.WithinDuration(t, time.Now(), referenceTime, scaleDuration(10*time.Millisecond))
-	require.Equal(t, "relative", commonFields["time_format"])
+	referenceTimeMap := commonFields["reference_time"].(map[string]any)
+	require.Contains(t, referenceTimeMap, "clock_type")
+	require.Equal(t, "monotonic", referenceTimeMap["clock_type"])
+	require.Contains(t, referenceTimeMap, "epoch")
+	require.Equal(t, "unknown", referenceTimeMap["epoch"])
+	require.Contains(t, referenceTimeMap, "wall_clock_time")
+	wallClockTimeStr := referenceTimeMap["wall_clock_time"].(string)
+	wallClockTime, err := time.Parse(time.RFC3339Nano, wallClockTimeStr)
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now(), wallClockTime, scaleDuration(10*time.Millisecond))
 	require.Contains(t, tr, "vantage_point")
 	vantagePoint := tr["vantage_point"].(map[string]any)
-	require.Equal(t, "transport", vantagePoint["type"])
-}
-
-func newConnectionTracer(t *testing.T) (Recorder, *bytes.Buffer) {
-	buf := &bytes.Buffer{}
-	trace := NewConnectionFileSeq(
-		nopWriteCloser(buf),
-		false,
-		protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-	)
-	go trace.Run()
-	recorder := trace.AddProducer()
-	t.Cleanup(func() { recorder.Close() })
-	return recorder, buf
-}
-
-func TestConnectionTraceMetadata(t *testing.T) {
-	tracer, buf := newConnectionTracer(t)
-	tracer.Close()
-
-	m := make(map[string]any)
-	require.NoError(t, unmarshal(buf.Bytes(), &m))
-	require.Equal(t, "0.3", m["qlog_version"])
-	require.Contains(t, m, "title")
-	require.Contains(t, m, "trace")
-	trace := m["trace"].(map[string]any)
-	require.Contains(t, trace, "common_fields")
-	commonFields := trace["common_fields"].(map[string]any)
-	require.Equal(t, "deadbeef", commonFields["ODCID"])
-	require.Equal(t, "deadbeef", commonFields["group_id"])
-	require.Contains(t, commonFields, "reference_time")
-	referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-	require.WithinDuration(t, time.Now(), referenceTime, scaleDuration(10*time.Millisecond))
-	require.Equal(t, "relative", commonFields["time_format"])
-	require.Contains(t, trace, "vantage_point")
-	vantagePoint := trace["vantage_point"].(map[string]any)
-	require.Equal(t, "server", vantagePoint["type"])
+	require.Equal(t, expectedVantagePoint, vantagePoint["type"])
 }
