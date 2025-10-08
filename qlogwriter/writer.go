@@ -70,20 +70,16 @@ func NewConnectionFileSeq(w io.WriteCloser, isClient bool, odcid ConnectionID) *
 
 func newFileSeq(w io.WriteCloser, pers string, odcid *ConnectionID) *FileSeq {
 	now := time.Now()
-	tr := &trace{
-		VantagePoint: vantagePoint{Type: pers},
-		CommonFields: commonFields{
-			ODCID:         odcid,
-			GroupID:       odcid,
-			ReferenceTime: now,
-		},
-	}
 	buf := &bytes.Buffer{}
 	enc := jsontext.NewEncoder(buf)
 	if _, err := buf.Write(recordSeparator); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
-	if err := (&topLevel{trace: *tr}).Encode(enc); err != nil {
+	if err := (&traceHeader{
+		VantagePointType: pers,
+		GroupID:          odcid,
+		ReferenceTime:    now,
+	}).Encode(enc); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
 	_, encodeErr := w.Write(buf.Bytes())

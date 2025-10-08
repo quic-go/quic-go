@@ -38,108 +38,65 @@ func init() {
 	}
 }
 
-type topLevel struct {
-	trace trace
+type traceHeader struct {
+	VantagePointType string
+	GroupID          *ConnectionID
+	ReferenceTime    time.Time
 }
 
-func (l topLevel) Encode(enc *jsontext.Encoder) error {
+func (l traceHeader) Encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("file_schema"))
+	h.WriteToken(jsontext.String("urn:ietf:params:qlog:file:sequential"))
+	h.WriteToken(jsontext.String("serialization_format"))
+	h.WriteToken(jsontext.String("application/qlog+json-seq"))
+	h.WriteToken(jsontext.String("title"))
+	h.WriteToken(jsontext.String("quic-go qlog"))
+	h.WriteToken(jsontext.String("code_version"))
+	h.WriteToken(jsontext.String(quicGoVersion))
+
+	h.WriteToken(jsontext.String("trace"))
+	// trace
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("vantage_point"))
+	// -- vantage_point
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("type"))
+	h.WriteToken(jsontext.String(l.VantagePointType))
+	// -- end vantage_point
+	h.WriteToken(jsontext.EndObject)
+
+	h.WriteToken(jsontext.String("common_fields"))
+	// -- common_fields
+	h.WriteToken(jsontext.BeginObject)
+	if l.GroupID != nil {
+		h.WriteToken(jsontext.String("group_id"))
+		h.WriteToken(jsontext.String(l.GroupID.String()))
+	}
+	h.WriteToken(jsontext.String("reference_time"))
+	// ---- reference_time
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("clock_type"))
+	h.WriteToken(jsontext.String("monotonic"))
+	h.WriteToken(jsontext.String("epoch"))
+	h.WriteToken(jsontext.String("unknown"))
+	h.WriteToken(jsontext.String("wall_clock_time"))
+	h.WriteToken(jsontext.String(l.ReferenceTime.Format(time.RFC3339Nano)))
+	// ---- end reference_time
+	h.WriteToken(jsontext.EndObject)
+	// -- end common_fields
+	h.WriteToken(jsontext.EndObject)
+	// end trace
+	h.WriteToken(jsontext.EndObject)
+
+	// The following fields are not required by the qlog draft anymore,
+	// but qvis still requires them to be present.
 	h.WriteToken(jsontext.String("qlog_format"))
 	h.WriteToken(jsontext.String("JSON-SEQ"))
 	h.WriteToken(jsontext.String("qlog_version"))
 	h.WriteToken(jsontext.String("0.3"))
-	h.WriteToken(jsontext.String("title"))
-	h.WriteToken(jsontext.String("quic-go qlog"))
-	h.WriteToken(jsontext.String("configuration"))
-	if err := (configuration{Version: quicGoVersion}).Encode(enc); err != nil {
-		return err
-	}
-	h.WriteToken(jsontext.String("trace"))
-	if err := l.trace.Encode(enc); err != nil {
-		return err
-	}
-	h.WriteToken(jsontext.EndObject)
-	return h.err
-}
 
-type configuration struct {
-	Version string
-}
-
-func (c configuration) Encode(enc *jsontext.Encoder) error {
-	h := encoderHelper{enc: enc}
-	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("code_version"))
-	h.WriteToken(jsontext.String(c.Version))
-	h.WriteToken(jsontext.EndObject)
-	return h.err
-}
-
-type vantagePoint struct {
-	Name string
-	Type string
-}
-
-func (p vantagePoint) Encode(enc *jsontext.Encoder) error {
-	h := encoderHelper{enc: enc}
-	h.WriteToken(jsontext.BeginObject)
-	if p.Name != "" {
-		h.WriteToken(jsontext.String("name"))
-		h.WriteToken(jsontext.String(p.Name))
-	}
-	if p.Type != "" {
-		h.WriteToken(jsontext.String("type"))
-		h.WriteToken(jsontext.String(p.Type))
-	}
-	h.WriteToken(jsontext.EndObject)
-	return h.err
-}
-
-type commonFields struct {
-	ODCID         *ConnectionID
-	GroupID       *ConnectionID
-	ProtocolType  string
-	ReferenceTime time.Time
-}
-
-func (f commonFields) Encode(enc *jsontext.Encoder) error {
-	h := encoderHelper{enc: enc}
-	h.WriteToken(jsontext.BeginObject)
-	if f.ODCID != nil {
-		h.WriteToken(jsontext.String("ODCID"))
-		h.WriteToken(jsontext.String(f.ODCID.String()))
-		h.WriteToken(jsontext.String("group_id"))
-		h.WriteToken(jsontext.String(f.ODCID.String()))
-	}
-	if f.ProtocolType != "" {
-		h.WriteToken(jsontext.String("protocol_type"))
-		h.WriteToken(jsontext.String(f.ProtocolType))
-	}
-	h.WriteToken(jsontext.String("reference_time"))
-	h.WriteToken(jsontext.Float(float64(f.ReferenceTime.UnixNano()) / 1e6))
-	h.WriteToken(jsontext.String("time_format"))
-	h.WriteToken(jsontext.String("relative"))
-	h.WriteToken(jsontext.EndObject)
-	return h.err
-}
-
-type trace struct {
-	VantagePoint vantagePoint
-	CommonFields commonFields
-}
-
-func (t trace) Encode(enc *jsontext.Encoder) error {
-	h := encoderHelper{enc: enc}
-	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("vantage_point"))
-	if err := t.VantagePoint.Encode(enc); err != nil {
-		return err
-	}
-	h.WriteToken(jsontext.String("common_fields"))
-	if err := t.CommonFields.Encode(enc); err != nil {
-		return err
-	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
