@@ -42,6 +42,7 @@ type traceHeader struct {
 	VantagePointType string
 	GroupID          *ConnectionID
 	ReferenceTime    time.Time
+	EventSchemas     []string
 }
 
 func (l traceHeader) Encode(enc *jsontext.Encoder) error {
@@ -59,6 +60,15 @@ func (l traceHeader) Encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.String("trace"))
 	// trace
 	h.WriteToken(jsontext.BeginObject)
+	if len(l.EventSchemas) > 0 {
+		h.WriteToken(jsontext.String("event_schemas"))
+		h.WriteToken(jsontext.BeginArray)
+		for _, schema := range l.EventSchemas {
+			h.WriteToken(jsontext.String(schema))
+		}
+		h.WriteToken(jsontext.EndArray)
+	}
+
 	h.WriteToken(jsontext.String("vantage_point"))
 	// -- vantage_point
 	h.WriteToken(jsontext.BeginObject)

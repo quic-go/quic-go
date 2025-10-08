@@ -28,6 +28,7 @@ func BenchmarkConnectionTracing(b *testing.B) {
 		nopWriteCloser(io.Discard),
 		false,
 		protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+		[]string{EventSchema},
 	)
 	go trace.Run()
 	tracer := trace.AddProducer()
