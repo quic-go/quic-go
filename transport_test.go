@@ -13,16 +13,16 @@ import (
 	"testing"
 	"time"
 
-	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 type mockPacketConn struct {
@@ -209,19 +209,15 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 }
 
 func TestTransportStatelessResetSending(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	var eventRecorder events.Recorder
 	tr := &Transport{
 		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 4,
 		StatelessResetKey:  &StatelessResetKey{1, 2, 3, 4},
-		Tracer:             tracer,
+		Tracer:             &eventRecorder,
 	}
 	tr.init(true)
-	defer func() {
-		mockTracer.EXPECT().Close()
-		tr.Close()
-	}()
+	defer tr.Close()
 
 	connID := protocol.ParseConnectionID([]byte{9, 10, 11, 12})
 
@@ -232,19 +228,24 @@ func TestTransportStatelessResetSending(t *testing.T) {
 	conn := newUDPConnLocalhost(t)
 
 	// no stateless reset sent for packets smaller than MinStatelessResetSize
-	dropped := make(chan struct{})
 	smallPacket := append(b, make([]byte, protocol.MinStatelessResetSize-len(b))...)
-	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(smallPacket)), logging.PacketDropUnknownConnectionID).Do(
-		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) { close(dropped) },
-	)
 	_, err = conn.WriteTo(smallPacket, tr.Conn.LocalAddr())
 	require.NoError(t, err)
-	select {
-	case <-dropped:
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for packet to be dropped")
-	}
-	require.True(t, mockCtrl.Satisfied())
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header:  qlog.PacketHeader{PacketType: qlog.PacketType1RTT},
+				Raw:     qlog.RawInfo{Length: len(smallPacket)},
+				Trigger: qlog.PacketDropUnknownConnectionID,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 
 	// but a stateless reset is sent for packets larger than MinStatelessResetSize
 	_, err = conn.WriteTo(append(b, make([]byte, protocol.MinStatelessResetSize-len(b)+1)...), tr.Conn.LocalAddr())
@@ -259,84 +260,86 @@ func TestTransportStatelessResetSending(t *testing.T) {
 }
 
 func TestTransportUnparseableQUICPackets(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	tracer, mockTracer := mocklogging.NewMockTracer(mockCtrl)
+	var eventRecorder events.Recorder
 	tr := &Transport{
 		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 10,
-		Tracer:             tracer,
+		Tracer:             &eventRecorder,
 	}
 	require.NoError(t, tr.init(true))
-	defer func() {
-		mockTracer.EXPECT().Close()
-		tr.Close()
-	}()
+	defer tr.Close()
 
 	conn := newUDPConnLocalhost(t)
-
-	dropped := make(chan struct{})
-	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError).Do(
-		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) { close(dropped) },
-	)
 	_, err := conn.WriteTo([]byte{0x40 /* set the QUIC bit */, 1, 2, 3}, tr.Conn.LocalAddr())
 	require.NoError(t, err)
-	select {
-	case <-dropped:
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for packet to be dropped")
-	}
+
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Raw:     qlog.RawInfo{Length: 4},
+				Trigger: qlog.PacketDropHeaderParseError,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 }
 
 func TestTransportListening(t *testing.T) {
-	tracer, mockTracer := mocklogging.NewMockTracer(gomock.NewController(t))
+	var eventRecorder events.Recorder
 	tr := &Transport{
 		Conn:               newUDPConnLocalhost(t),
 		ConnectionIDLength: 5,
-		Tracer:             tracer,
+		Tracer:             &eventRecorder,
 	}
 	require.NoError(t, tr.init(true))
-	defer func() {
-		mockTracer.EXPECT().Close()
-		tr.Close()
-	}()
+	defer tr.Close()
 
 	conn := newUDPConnLocalhost(t)
 	data := wire.ComposeVersionNegotiation([]byte{1, 2, 3, 4, 5}, []byte{6, 7, 8, 9, 10}, []protocol.Version{protocol.Version1})
-	dropped := make(chan struct{}, 10)
-	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropUnknownConnectionID).Do(
-		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
-			dropped <- struct{}{}
-		},
-	)
 
 	_, err := conn.WriteTo(data, tr.Conn.LocalAddr())
 	require.NoError(t, err)
-	select {
-	case <-dropped:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Raw:     qlog.RawInfo{Length: len(data)},
+				Trigger: qlog.PacketDropUnknownConnectionID,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
+	eventRecorder.Clear()
 
 	ln, err := tr.Listen(&tls.Config{}, nil)
 	require.NoError(t, err)
 
-	// send the packet again
-	lnDropped := make(chan struct{}, 10)
-	mockTracer.EXPECT().DroppedPacket(conn.LocalAddr(), logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(
-		func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
-			lnDropped <- struct{}{}
-		},
-	)
-
 	_, err = conn.WriteTo(data, tr.Conn.LocalAddr())
 	require.NoError(t, err)
-	select {
-	case <-lnDropped:
-	case <-dropped:
-		t.Fatal("packet should have been handled by the listener")
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	require.Eventually(t,
+		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) > 0 },
+		time.Second,
+		10*time.Millisecond,
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+				Raw:     qlog.RawInfo{Length: len(data)},
+				Trigger: qlog.PacketDropUnexpectedPacket,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 
 	// only a single listener can be set
 	_, err = tr.Listen(&tls.Config{}, nil)
@@ -492,7 +495,7 @@ func testTransportDial(t *testing.T, early bool) {
 		_ protocol.PacketNumber,
 		_ bool,
 		_ bool,
-		_ *logging.ConnectionTracer,
+		_ qlogwriter.Recorder,
 		_ utils.Logger,
 		_ protocol.Version,
 	) *wrappedConn {
@@ -562,7 +565,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		pn protocol.PacketNumber,
 		_ bool,
 		hasNegotiatedVersion bool,
-		_ *logging.ConnectionTracer,
+		_ qlogwriter.Recorder,
 		_ utils.Logger,
 		v protocol.Version,
 	) *wrappedConn {

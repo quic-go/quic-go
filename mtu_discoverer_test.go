@@ -9,7 +9,8 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 )
@@ -91,16 +92,8 @@ func testMTUDiscovererMTUDiscovery(t *testing.T) {
 	rttStats.UpdateRTT(rtt, 0)
 
 	maxMTU := protocol.ByteCount(rand.IntN(int(3000-startMTU))) + startMTU + 1
-	var tracedMTU protocol.ByteCount
-	var tracerDone bool
-	d := newMTUDiscoverer(&rttStats, startMTU, maxMTU,
-		&logging.ConnectionTracer{
-			UpdatedMTU: func(mtu logging.ByteCount, done bool) {
-				tracedMTU = mtu
-				tracerDone = done
-			},
-		},
-	)
+	var eventRecorder events.Recorder
+	d := newMTUDiscoverer(&rttStats, startMTU, maxMTU, &eventRecorder)
 	now := monotime.Now()
 	d.Start(now)
 	realMTU := protocol.ByteCount(rand.IntN(int(maxMTU-startMTU))) + startMTU
@@ -122,8 +115,9 @@ func testMTUDiscovererMTUDiscovery(t *testing.T) {
 	diff := realMTU - currentMTU
 	require.GreaterOrEqual(t, diff, protocol.ByteCount(0))
 	if maxMTU > currentMTU+maxMTU {
-		require.Equal(t, currentMTU, tracedMTU)
-		require.True(t, tracerDone)
+		events := eventRecorder.Events(qlog.MTUUpdated{})
+		require.NotEmpty(t, events)
+		require.Equal(t, qlog.MTUUpdated{Value: int(currentMTU), Done: true}, events[0])
 	}
 	t.Logf("MTU discovered: %d (diff: %d)", currentMTU, diff)
 	t.Logf("probes sent (%d): %v", len(probes), probes)
@@ -148,17 +142,8 @@ func testMTUDiscovererWithRandomLoss(t *testing.T) {
 	require.Equal(t, rtt, rttStats.SmoothedRTT())
 
 	maxMTU := protocol.ByteCount(rand.IntN(int(3000-startMTU))) + startMTU + 1
-	var tracedMTU protocol.ByteCount
-	var tracerDone bool
-
-	d := newMTUDiscoverer(rttStats, startMTU, maxMTU,
-		&logging.ConnectionTracer{
-			UpdatedMTU: func(mtu logging.ByteCount, done bool) {
-				tracedMTU = mtu
-				tracerDone = done
-			},
-		},
-	)
+	var eventRecorder events.Recorder
+	d := newMTUDiscoverer(rttStats, startMTU, maxMTU, &eventRecorder)
 	d.Start(monotime.Now())
 	now := monotime.Now()
 	realMTU := protocol.ByteCount(rand.IntN(int(maxMTU-startMTU))) + startMTU
@@ -191,8 +176,9 @@ func testMTUDiscovererWithRandomLoss(t *testing.T) {
 	diff := realMTU - currentMTU
 	require.GreaterOrEqual(t, diff, protocol.ByteCount(0))
 	if maxMTU > currentMTU+maxMTU {
-		require.Equal(t, currentMTU, tracedMTU)
-		require.True(t, tracerDone)
+		events := eventRecorder.Events(qlog.MTUUpdated{})
+		require.NotEmpty(t, events)
+		require.Equal(t, qlog.MTUUpdated{Value: int(currentMTU), Done: true}, events[0])
 	}
 	t.Logf("MTU discovered with random losses %v: %d (diff: %d)", randomLosses, currentMTU, diff)
 	t.Logf("probes sent (%d): %v", len(probes), probes)

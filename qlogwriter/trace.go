@@ -1,16 +1,18 @@
-package qlog
+package qlogwriter
 
 import (
 	"runtime/debug"
 	"time"
 
-	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/qlog/jsontext"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 )
+
+type ConnectionID = protocol.ConnectionID
 
 // Setting of this only works when quic-go is used as a library.
 // When building a binary from this repository, the version can be set using the following go build flag:
-// -ldflags="-X github.com/quic-go/quic-go/qlog.quicGoVersion=foobar"
+// -ldflags="-X github.com/quic-go/quic-go/qlogwriter.quicGoVersion=foobar"
 var quicGoVersion = "(devel)"
 
 func init() {
@@ -95,8 +97,8 @@ func (p vantagePoint) Encode(enc *jsontext.Encoder) error {
 }
 
 type commonFields struct {
-	ODCID         *logging.ConnectionID
-	GroupID       *logging.ConnectionID
+	ODCID         *ConnectionID
+	GroupID       *ConnectionID
 	ProtocolType  string
 	ReferenceTime time.Time
 }

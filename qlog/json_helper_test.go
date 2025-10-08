@@ -1,33 +1,11 @@
 package qlog
 
 import (
-	"bytes"
 	"encoding/json"
-	"os"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
-
-func scaleDuration(t time.Duration) time.Duration {
-	scaleFactor := 1
-	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
-		scaleFactor = f
-	}
-	if scaleFactor == 0 {
-		panic("TIMESCALE_FACTOR must not be 0")
-	}
-	return time.Duration(scaleFactor) * t
-}
-
-func unmarshal(data []byte, v any) error {
-	if data[0] == recordSeparator {
-		data = data[1:]
-	}
-	return json.Unmarshal(data, v)
-}
 
 func checkEncoding(t *testing.T, data []byte, expected map[string]any) {
 	t.Helper()
@@ -61,52 +39,4 @@ func checkEncoding(t *testing.T, data []byte, expected map[string]any) {
 			t.Fatalf("unexpected type: %T", v)
 		}
 	}
-}
-
-type entry struct {
-	Time  time.Time
-	Name  string
-	Event map[string]any
-}
-
-func exportAndParse(t *testing.T, buf *bytes.Buffer) []entry {
-	t.Helper()
-
-	m := make(map[string]any)
-	line, err := buf.ReadBytes('\n')
-	require.NoError(t, err)
-	require.NoError(t, unmarshal(line, &m))
-	require.Contains(t, m, "trace")
-	var entries []entry
-	trace := m["trace"].(map[string]any)
-	require.Contains(t, trace, "common_fields")
-	commonFields := trace["common_fields"].(map[string]any)
-	require.Contains(t, commonFields, "reference_time")
-	referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-	require.NotContains(t, trace, "events")
-
-	for buf.Len() > 0 {
-		line, err := buf.ReadBytes('\n')
-		require.NoError(t, err)
-		ev := make(map[string]any)
-		require.NoError(t, unmarshal(line, &ev))
-		require.Len(t, ev, 3)
-		require.Contains(t, ev, "time")
-		require.Contains(t, ev, "name")
-		require.Contains(t, ev, "data")
-		entries = append(entries, entry{
-			Time:  referenceTime.Add(time.Duration(ev["time"].(float64)*1e6) * time.Nanosecond),
-			Name:  ev["name"].(string),
-			Event: ev["data"].(map[string]any),
-		})
-	}
-	return entries
-}
-
-func exportAndParseSingle(t *testing.T, buf *bytes.Buffer) entry {
-	t.Helper()
-
-	entries := exportAndParse(t, buf)
-	require.Len(t, entries, 1)
-	return entries[0]
 }

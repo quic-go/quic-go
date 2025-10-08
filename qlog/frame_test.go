@@ -8,43 +8,35 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/logging"
-
-	"github.com/quic-go/quic-go/qlog/jsontext"
+	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 
 	"github.com/stretchr/testify/require"
 )
 
-func check(t *testing.T, f logging.Frame, expected map[string]any) {
-	buf := &bytes.Buffer{}
-	enc := jsontext.NewEncoder(buf)
-	err := (frame{Frame: f}).Encode(enc)
-	require.NoError(t, err)
+func check(t *testing.T, f any, expected map[string]any) {
+	var buf bytes.Buffer
+	enc := jsontext.NewEncoder(&buf)
+	require.NoError(t, (Frame{Frame: f}).Encode(enc))
 	data := buf.Bytes()
 	require.True(t, json.Valid(data))
 	checkEncoding(t, data, expected)
 }
 
 func TestPingFrame(t *testing.T) {
-	check(t,
-		&logging.PingFrame{},
-		map[string]any{
-			"frame_type": "ping",
-		},
-	)
+	check(t, &PingFrame{}, map[string]any{"frame_type": "ping"})
 }
 
 func TestAckFrame(t *testing.T) {
 	tests := []struct {
 		name     string
-		frame    *logging.AckFrame
+		frame    *AckFrame
 		expected map[string]any
 	}{
 		{
 			name: "with delay and single packet range",
-			frame: &logging.AckFrame{
+			frame: &AckFrame{
 				DelayTime: 86 * time.Millisecond,
-				AckRanges: []logging.AckRange{{Smallest: 120, Largest: 120}},
+				AckRanges: []AckRange{{Smallest: 120, Largest: 120}},
 			},
 			expected: map[string]any{
 				"frame_type":   "ack",
@@ -54,8 +46,8 @@ func TestAckFrame(t *testing.T) {
 		},
 		{
 			name: "without delay",
-			frame: &logging.AckFrame{
-				AckRanges: []logging.AckRange{{Smallest: 120, Largest: 120}},
+			frame: &AckFrame{
+				AckRanges: []AckRange{{Smallest: 120, Largest: 120}},
 			},
 			expected: map[string]any{
 				"frame_type":   "ack",
@@ -64,8 +56,8 @@ func TestAckFrame(t *testing.T) {
 		},
 		{
 			name: "with ECN counts",
-			frame: &logging.AckFrame{
-				AckRanges: []logging.AckRange{{Smallest: 120, Largest: 120}},
+			frame: &AckFrame{
+				AckRanges: []AckRange{{Smallest: 120, Largest: 120}},
 				ECT0:      10,
 				ECT1:      100,
 				ECNCE:     1000,
@@ -80,9 +72,9 @@ func TestAckFrame(t *testing.T) {
 		},
 		{
 			name: "with multiple ranges",
-			frame: &logging.AckFrame{
+			frame: &AckFrame{
 				DelayTime: 86 * time.Millisecond,
-				AckRanges: []logging.AckRange{
+				AckRanges: []AckRange{
 					{Smallest: 5, Largest: 50},
 					{Smallest: 100, Largest: 120},
 				},
@@ -107,7 +99,7 @@ func TestAckFrame(t *testing.T) {
 
 func TestResetStreamFrame(t *testing.T) {
 	check(t,
-		&logging.ResetStreamFrame{
+		&ResetStreamFrame{
 			StreamID:  987,
 			FinalSize: 1234,
 			ErrorCode: 42,
@@ -123,7 +115,7 @@ func TestResetStreamFrame(t *testing.T) {
 
 func TestResetStreamAtFrame(t *testing.T) {
 	check(t,
-		&logging.ResetStreamFrame{
+		&ResetStreamFrame{
 			StreamID:     987,
 			FinalSize:    1234,
 			ErrorCode:    42,
@@ -141,7 +133,7 @@ func TestResetStreamAtFrame(t *testing.T) {
 
 func TestAckFrequencyFrame(t *testing.T) {
 	check(t,
-		&logging.AckFrequencyFrame{
+		&AckFrequencyFrame{
 			SequenceNumber:        1337,
 			AckElicitingThreshold: 123,
 			RequestMaxAckDelay:    42 * time.Millisecond,
@@ -159,7 +151,7 @@ func TestAckFrequencyFrame(t *testing.T) {
 
 func TestImmediateAckFrame(t *testing.T) {
 	check(t,
-		&logging.ImmediateAckFrame{},
+		&ImmediateAckFrame{},
 		map[string]any{
 			"frame_type": "immediate_ack",
 		},
@@ -168,10 +160,7 @@ func TestImmediateAckFrame(t *testing.T) {
 
 func TestStopSendingFrame(t *testing.T) {
 	check(t,
-		&logging.StopSendingFrame{
-			StreamID:  987,
-			ErrorCode: 42,
-		},
+		&StopSendingFrame{StreamID: 987, ErrorCode: 42},
 		map[string]any{
 			"frame_type": "stop_sending",
 			"stream_id":  987,
@@ -182,10 +171,7 @@ func TestStopSendingFrame(t *testing.T) {
 
 func TestCryptoFrame(t *testing.T) {
 	check(t,
-		&logging.CryptoFrame{
-			Offset: 1337,
-			Length: 6,
-		},
+		&CryptoFrame{Offset: 1337, Length: 6},
 		map[string]any{
 			"frame_type": "crypto",
 			"offset":     1337,
@@ -196,9 +182,7 @@ func TestCryptoFrame(t *testing.T) {
 
 func TestNewTokenFrame(t *testing.T) {
 	check(t,
-		&logging.NewTokenFrame{
-			Token: []byte{0xde, 0xad, 0xbe, 0xef},
-		},
+		&NewTokenFrame{Token: []byte{0xde, 0xad, 0xbe, 0xef}},
 		map[string]any{
 			"frame_type": "new_token",
 			"token":      map[string]any{"data": "deadbeef"},
@@ -209,12 +193,12 @@ func TestNewTokenFrame(t *testing.T) {
 func TestStreamFrame(t *testing.T) {
 	tests := []struct {
 		name     string
-		frame    *logging.StreamFrame
+		frame    *StreamFrame
 		expected map[string]any
 	}{
 		{
 			name: "with FIN",
-			frame: &logging.StreamFrame{
+			frame: &StreamFrame{
 				StreamID: 42,
 				Offset:   1337,
 				Fin:      true,
@@ -230,7 +214,7 @@ func TestStreamFrame(t *testing.T) {
 		},
 		{
 			name: "without FIN",
-			frame: &logging.StreamFrame{
+			frame: &StreamFrame{
 				StreamID: 42,
 				Offset:   1337,
 				Length:   3,
@@ -253,9 +237,7 @@ func TestStreamFrame(t *testing.T) {
 
 func TestMaxDataFrame(t *testing.T) {
 	check(t,
-		&logging.MaxDataFrame{
-			MaximumData: 1337,
-		},
+		&MaxDataFrame{MaximumData: 1337},
 		map[string]any{
 			"frame_type": "max_data",
 			"maximum":    1337,
@@ -265,10 +247,7 @@ func TestMaxDataFrame(t *testing.T) {
 
 func TestMaxStreamDataFrame(t *testing.T) {
 	check(t,
-		&logging.MaxStreamDataFrame{
-			StreamID:          1234,
-			MaximumStreamData: 1337,
-		},
+		&MaxStreamDataFrame{StreamID: 1234, MaximumStreamData: 1337},
 		map[string]any{
 			"frame_type": "max_stream_data",
 			"stream_id":  1234,
@@ -279,7 +258,7 @@ func TestMaxStreamDataFrame(t *testing.T) {
 
 func TestMaxStreamsFrame(t *testing.T) {
 	check(t,
-		&logging.MaxStreamsFrame{
+		&MaxStreamsFrame{
 			Type:         protocol.StreamTypeBidi,
 			MaxStreamNum: 42,
 		},
@@ -293,9 +272,7 @@ func TestMaxStreamsFrame(t *testing.T) {
 
 func TestDataBlockedFrame(t *testing.T) {
 	check(t,
-		&logging.DataBlockedFrame{
-			MaximumData: 1337,
-		},
+		&DataBlockedFrame{MaximumData: 1337},
 		map[string]any{
 			"frame_type": "data_blocked",
 			"limit":      1337,
@@ -305,7 +282,7 @@ func TestDataBlockedFrame(t *testing.T) {
 
 func TestStreamDataBlockedFrame(t *testing.T) {
 	check(t,
-		&logging.StreamDataBlockedFrame{
+		&StreamDataBlockedFrame{
 			StreamID:          42,
 			MaximumStreamData: 1337,
 		},
@@ -319,7 +296,7 @@ func TestStreamDataBlockedFrame(t *testing.T) {
 
 func TestStreamsBlockedFrame(t *testing.T) {
 	check(t,
-		&logging.StreamsBlockedFrame{
+		&StreamsBlockedFrame{
 			Type:        protocol.StreamTypeUni,
 			StreamLimit: 123,
 		},
@@ -333,7 +310,7 @@ func TestStreamsBlockedFrame(t *testing.T) {
 
 func TestNewConnectionIDFrame(t *testing.T) {
 	check(t,
-		&logging.NewConnectionIDFrame{
+		&NewConnectionIDFrame{
 			SequenceNumber:      42,
 			RetirePriorTo:       24,
 			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -352,9 +329,7 @@ func TestNewConnectionIDFrame(t *testing.T) {
 
 func TestRetireConnectionIDFrame(t *testing.T) {
 	check(t,
-		&logging.RetireConnectionIDFrame{
-			SequenceNumber: 1337,
-		},
+		&RetireConnectionIDFrame{SequenceNumber: 1337},
 		map[string]any{
 			"frame_type":      "retire_connection_id",
 			"sequence_number": 1337,
@@ -364,9 +339,7 @@ func TestRetireConnectionIDFrame(t *testing.T) {
 
 func TestPathChallengeFrame(t *testing.T) {
 	check(t,
-		&logging.PathChallengeFrame{
-			Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xc0, 0x01},
-		},
+		&PathChallengeFrame{Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xc0, 0x01}},
 		map[string]any{
 			"frame_type": "path_challenge",
 			"data":       "deadbeefcafec001",
@@ -376,9 +349,7 @@ func TestPathChallengeFrame(t *testing.T) {
 
 func TestPathResponseFrame(t *testing.T) {
 	check(t,
-		&logging.PathResponseFrame{
-			Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xc0, 0x01},
-		},
+		&PathResponseFrame{Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xc0, 0x01}},
 		map[string]any{
 			"frame_type": "path_response",
 			"data":       "deadbeefcafec001",
@@ -389,12 +360,12 @@ func TestPathResponseFrame(t *testing.T) {
 func TestConnectionCloseFrame(t *testing.T) {
 	tests := []struct {
 		name     string
-		frame    *logging.ConnectionCloseFrame
+		frame    *ConnectionCloseFrame
 		expected map[string]any
 	}{
 		{
 			name: "application error code",
-			frame: &logging.ConnectionCloseFrame{
+			frame: &ConnectionCloseFrame{
 				IsApplicationError: true,
 				ErrorCode:          1337,
 				ReasonPhrase:       "lorem ipsum",
@@ -409,7 +380,7 @@ func TestConnectionCloseFrame(t *testing.T) {
 		},
 		{
 			name: "transport error code",
-			frame: &logging.ConnectionCloseFrame{
+			frame: &ConnectionCloseFrame{
 				ErrorCode:    uint64(qerr.FlowControlError),
 				ReasonPhrase: "lorem ipsum",
 			},
@@ -432,7 +403,7 @@ func TestConnectionCloseFrame(t *testing.T) {
 
 func TestHandshakeDoneFrame(t *testing.T) {
 	check(t,
-		&logging.HandshakeDoneFrame{},
+		&HandshakeDoneFrame{},
 		map[string]any{
 			"frame_type": "handshake_done",
 		},
@@ -441,7 +412,7 @@ func TestHandshakeDoneFrame(t *testing.T) {
 
 func TestDatagramFrame(t *testing.T) {
 	check(t,
-		&logging.DatagramFrame{Length: 1337},
+		&DatagramFrame{Length: 1337},
 		map[string]any{
 			"frame_type": "datagram",
 			"length":     1337,

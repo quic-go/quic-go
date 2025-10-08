@@ -23,9 +23,7 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 	server, err := quic.Listen(
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
-		&quic.Config{
-			Tracer: qlog.DefaultConnectionTracer,
-		},
+		&quic.Config{Tracer: qlog.DefaultConnectionTracer},
 	)
 	require.NoError(t, err)
 
@@ -45,9 +43,7 @@ func TestQlogDirEnvironmentVariable(t *testing.T) {
 		newUDPConnLocalhost(t),
 		server.Addr(),
 		getTLSClientConfig(),
-		&quic.Config{
-			Tracer: qlog.DefaultConnectionTracer,
-		},
+		&quic.Config{Tracer: qlog.DefaultConnectionTracer},
 	)
 	require.NoError(t, err)
 	conn.CloseWithError(0, "")

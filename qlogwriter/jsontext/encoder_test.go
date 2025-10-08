@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/quic-go/quic-go/qlog/jsontext"
+	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

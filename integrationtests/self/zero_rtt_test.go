@@ -16,7 +16,8 @@ import (
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/require"
 )
@@ -175,7 +176,10 @@ func Test0RTTTransfer(t *testing.T) {
 	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		tlsConf,
-		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
+		getQuicConfig(&quic.Config{
+			Allow0RTT: true,
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
+		}),
 	)
 	require.NoError(t, err)
 	defer ln.Close()
@@ -202,7 +206,10 @@ func Test0RTTDisabledOnDial(t *testing.T) {
 	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		tlsConf,
-		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
+		getQuicConfig(&quic.Config{
+			Allow0RTT: true,
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
+		}),
 	)
 	require.NoError(t, err)
 	defer ln.Close()
@@ -237,7 +244,7 @@ func Test0RTTWaitForHandshakeCompletion(t *testing.T) {
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT: true,
-			Tracer:    newTracer(tracer),
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -332,11 +339,11 @@ func Test0RTTWaitForHandshakeCompletion(t *testing.T) {
 	// check that 0-RTT packets only contain STREAM frames for the first stream
 	var num0RTT int
 	for _, p := range counter.getRcvdLongHeaderPackets() {
-		if p.hdr.Type != protocol.PacketType0RTT {
+		if p.hdr.PacketType != qlog.PacketType0RTT {
 			continue
 		}
 		for _, f := range p.frames {
-			sf, ok := f.(*logging.StreamFrame)
+			sf, ok := f.Frame.(*qlog.StreamFrame)
 			if !ok {
 				continue
 			}
@@ -357,7 +364,10 @@ func Test0RTTDataLoss(t *testing.T) {
 	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		tlsConf,
-		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
+		getQuicConfig(&quic.Config{
+			Allow0RTT: true,
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
+		}),
 	)
 	require.NoError(t, err)
 	defer ln.Close()
@@ -421,9 +431,11 @@ func Test0RTTRetransmitOnRetry(t *testing.T) {
 		Conn:                newUDPConnLocalhost(t),
 		VerifySourceAddress: func(net.Addr) bool { return true },
 	}
-	addTracer(tr)
 	defer tr.Close()
-	ln, err := tr.ListenEarly(tlsConf, getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}))
+	ln, err := tr.ListenEarly(tlsConf, getQuicConfig(&quic.Config{
+		Allow0RTT: true,
+		Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
+	}))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -603,7 +615,7 @@ func Test0RTTRejectedOnStreamLimitDecrease(t *testing.T) {
 			Allow0RTT:             true,
 			MaxIncomingStreams:    newMaxBidiStreams,
 			MaxIncomingUniStreams: newMaxUniStreams,
-			Tracer:                newTracer(tracer),
+			Tracer:                func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -712,7 +724,7 @@ func Test0RTTRejectedOnALPNChanged(t *testing.T) {
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT: true,
-			Tracer:    newTracer(tracer),
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -744,7 +756,7 @@ func Test0RTTRejectedWhenDisabled(t *testing.T) {
 		tlsConf,
 		getQuicConfig(&quic.Config{
 			Allow0RTT: false,
-			Tracer:    newTracer(tracer),
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -774,7 +786,7 @@ func Test0RTTRejectedOnDatagramsDisabled(t *testing.T) {
 		getQuicConfig(&quic.Config{
 			Allow0RTT:       true,
 			EnableDatagrams: false,
-			Tracer:          newTracer(tracer),
+			Tracer:          func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -904,7 +916,10 @@ func Test0RTTPacketQueueing(t *testing.T) {
 	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		tlsConf,
-		getQuicConfig(&quic.Config{Allow0RTT: true, Tracer: newTracer(tracer)}),
+		getQuicConfig(&quic.Config{
+			Allow0RTT: true,
+			Tracer:    func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
+		}),
 	)
 	require.NoError(t, err)
 	defer ln.Close()
@@ -926,22 +941,22 @@ func Test0RTTPacketQueueing(t *testing.T) {
 	data := GeneratePRData(5000) // ~5 packets
 	transfer0RTTData(t, ln, proxy.LocalAddr(), clientConf, getQuicConfig(nil), data)
 
-	require.Equal(t, protocol.PacketTypeInitial, counter.getRcvdLongHeaderPackets()[0].hdr.Type)
+	require.Equal(t, qlog.PacketTypeInitial, counter.getRcvdLongHeaderPackets()[0].hdr.PacketType)
 	zeroRTTPackets := counter.getRcvd0RTTPacketNumbers()
 	require.GreaterOrEqual(t, len(zeroRTTPackets), 5)
 	// make sure the data wasn't retransmitted
 	var dataSent protocol.ByteCount
 	for _, p := range counter.getRcvdLongHeaderPackets() {
 		for _, f := range p.frames {
-			if sf, ok := f.(*logging.StreamFrame); ok {
-				dataSent += sf.Length
+			if sf, ok := f.Frame.(*qlog.StreamFrame); ok {
+				dataSent += protocol.ByteCount(sf.Length)
 			}
 		}
 	}
 	for _, p := range counter.getRcvdShortHeaderPackets() {
 		for _, f := range p.frames {
-			if sf, ok := f.(*logging.StreamFrame); ok {
-				dataSent += sf.Length
+			if sf, ok := f.Frame.(*qlog.StreamFrame); ok {
+				dataSent += protocol.ByteCount(sf.Length)
 			}
 		}
 	}
@@ -961,7 +976,7 @@ func Test0RTTDatagrams(t *testing.T) {
 		getQuicConfig(&quic.Config{
 			Allow0RTT:       true,
 			EnableDatagrams: true,
-			Tracer:          newTracer(tracer),
+			Tracer:          func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)

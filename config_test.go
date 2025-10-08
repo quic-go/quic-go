@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/assert"
@@ -141,7 +141,7 @@ func TestConfigClone(t *testing.T) {
 		c1 := &Config{
 			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, assert.AnError },
 			AllowConnectionWindowIncrease: func(*Conn, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
-			Tracer: func(context.Context, logging.Perspective, ConnectionID) *logging.ConnectionTracer {
+			Tracer: func(context.Context, bool, ConnectionID) qlogwriter.Trace {
 				calledTracer = true
 				return nil
 			},
@@ -151,7 +151,7 @@ func TestConfigClone(t *testing.T) {
 		require.True(t, calledAllowConnectionWindowIncrease)
 		_, err := c2.GetConfigForClient(&ClientInfo{})
 		require.ErrorIs(t, err, assert.AnError)
-		c2.Tracer(context.Background(), logging.PerspectiveClient, protocol.ConnectionID{})
+		c2.Tracer(context.Background(), true, protocol.ConnectionID{})
 		require.True(t, calledTracer)
 	})
 

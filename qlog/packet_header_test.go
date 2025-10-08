@@ -6,52 +6,28 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
-
-	"github.com/quic-go/quic-go/qlog/jsontext"
+	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestPacketTypeFromEncryptionLevel(t *testing.T) {
-	tests := []struct {
-		name  string
-		level protocol.EncryptionLevel
-		want  logging.PacketType
-	}{
-		{"Initial", protocol.EncryptionInitial, logging.PacketTypeInitial},
-		{"Handshake", protocol.EncryptionHandshake, logging.PacketTypeHandshake},
-		{"0-RTT", protocol.Encryption0RTT, logging.PacketType0RTT},
-		{"1-RTT", protocol.Encryption1RTT, logging.PacketType1RTT},
-	}
+func checkHeader(t *testing.T, hdr *PacketHeader, expected map[string]any) {
+	t.Helper()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := getPacketTypeFromEncryptionLevel(tt.level)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func checkHeader(t *testing.T, hdr *wire.ExtendedHeader, expected map[string]any) {
-	buf := &bytes.Buffer{}
-	enc := jsontext.NewEncoder(buf)
-	require.NoError(t, transformLongHeader(hdr).Encode(enc))
+	var buf bytes.Buffer
+	enc := jsontext.NewEncoder(&buf)
+	require.NoError(t, hdr.Encode(enc))
 	data := buf.Bytes()
 	require.True(t, json.Valid(data))
 	checkEncoding(t, data, expected)
 }
 
-func TestMarshalHeaderWithPayloadLength(t *testing.T) {
+func TestHeaderInitial(t *testing.T) {
 	checkHeader(t,
-		&wire.ExtendedHeader{
+		&PacketHeader{
+			PacketType:   PacketTypeInitial,
 			PacketNumber: 42,
-			Header: wire.Header{
-				Type:    protocol.PacketTypeInitial,
-				Length:  123,
-				Version: protocol.Version(0xdecafbad),
-			},
+			Version:      protocol.Version(0xdecafbad),
 		},
 		map[string]any{
 			"packet_type":   "initial",
@@ -63,41 +39,74 @@ func TestMarshalHeaderWithPayloadLength(t *testing.T) {
 	)
 }
 
-func TestMarshalInitialWithToken(t *testing.T) {
+func TestHeaderInitialWithToken(t *testing.T) {
 	checkHeader(t,
-		&wire.ExtendedHeader{
-			PacketNumber: 4242,
-			Header: wire.Header{
-				Type:    protocol.PacketTypeInitial,
-				Length:  123,
-				Version: protocol.Version(0xdecafbad),
-				Token:   []byte{0xde, 0xad, 0xbe, 0xef},
-			},
+		&PacketHeader{
+			PacketType:       PacketTypeInitial,
+			PacketNumber:     1337,
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{0x11, 0x22, 0x33, 0x44}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{0x55, 0x66, 0x77, 0x88}),
+			Version:          protocol.Version(0xdecafbad),
+			Token:            &Token{Raw: []byte{0xde, 0xad, 0xbe, 0xef}},
 		},
 		map[string]any{
 			"packet_type":   "initial",
-			"packet_number": 4242,
-			"dcil":          0,
-			"scil":          0,
+			"packet_number": 1337,
+			"dcil":          4,
+			"dcid":          "55667788",
+			"scil":          4,
+			"scid":          "11223344",
 			"version":       "decafbad",
 			"token":         map[string]any{"data": "deadbeef"},
 		},
 	)
 }
 
-func TestMarshalRetryPacket(t *testing.T) {
+func TestHeaderLongPacketNumbers(t *testing.T) {
+	t.Run("packet 0", func(t *testing.T) {
+		testHeaderPacketNumbers(t, 0)
+	})
+
+	// This is used for events where the packet number is not yet known,
+	// e.g. the packet_buffered event.
+	t.Run("no packet number", func(t *testing.T) {
+		testHeaderPacketNumbers(t, 1)
+	})
+}
+
+func testHeaderPacketNumbers(t *testing.T, pn protocol.PacketNumber) {
+	expected := map[string]any{
+		"packet_type": "handshake",
+		"dcil":        0,
+		"scil":        0,
+		"version":     "1",
+	}
+	if pn != protocol.InvalidPacketNumber {
+		expected["packet_number"] = int(pn)
+	}
 	checkHeader(t,
-		&wire.ExtendedHeader{
-			Header: wire.Header{
-				Type:            protocol.PacketTypeRetry,
-				SrcConnectionID: protocol.ParseConnectionID([]byte{0x11, 0x22, 0x33, 0x44}),
-				Version:         protocol.Version(0xdecafbad),
-				Token:           []byte{0xde, 0xad, 0xbe, 0xef},
-			},
+		&PacketHeader{
+			PacketType:   PacketTypeHandshake,
+			PacketNumber: pn,
+			Version:      protocol.Version1,
+		},
+		expected,
+	)
+}
+
+func TestHeaderRetry(t *testing.T) {
+	checkHeader(t,
+		&PacketHeader{
+			PacketType:       PacketTypeRetry,
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{0x11, 0x22, 0x33, 0x44}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{0x55, 0x66, 0x77, 0x88, 0x99}),
+			Version:          protocol.Version(0xdecafbad),
+			Token:            &Token{Raw: []byte{0xde, 0xad, 0xbe, 0xef}},
 		},
 		map[string]any{
 			"packet_type": "retry",
-			"dcil":        0,
+			"dcil":        5,
+			"dcid":        "5566778899",
 			"scil":        4,
 			"scid":        "11223344",
 			"token":       map[string]any{"data": "deadbeef"},
@@ -106,42 +115,20 @@ func TestMarshalRetryPacket(t *testing.T) {
 	)
 }
 
-func TestMarshalPacketWithPacketNumber0(t *testing.T) {
+func TestHeader1RTT(t *testing.T) {
 	checkHeader(t,
-		&wire.ExtendedHeader{
-			PacketNumber: 0,
-			Header: wire.Header{
-				Type:    protocol.PacketTypeHandshake,
-				Version: protocol.Version(0xdecafbad),
-			},
+		&PacketHeader{
+			PacketType:       PacketType1RTT,
+			PacketNumber:     42,
+			DestConnectionID: protocol.ParseConnectionID([]byte{0x55, 0x66, 0x77, 0x88}),
+			KeyPhaseBit:      KeyPhaseZero,
 		},
 		map[string]any{
-			"packet_type":   "handshake",
-			"packet_number": 0,
-			"dcil":          0,
-			"scil":          0,
-			"version":       "decafbad",
-		},
-	)
-}
-
-func TestMarshalHeaderWithSourceConnectionID(t *testing.T) {
-	checkHeader(t,
-		&wire.ExtendedHeader{
-			PacketNumber: 42,
-			Header: wire.Header{
-				Type:            protocol.PacketTypeHandshake,
-				SrcConnectionID: protocol.ParseConnectionID([]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}),
-				Version:         protocol.Version(0xdecafbad),
-			},
-		},
-		map[string]any{
-			"packet_type":   "handshake",
+			"packet_type":   "1RTT",
 			"packet_number": 42,
-			"dcil":          0,
-			"scil":          16,
-			"scid":          "00112233445566778899aabbccddeeff",
-			"version":       "decafbad",
+			"dcil":          4,
+			"dcid":          "55667788",
+			"key_phase_bit": "0",
 		},
 	)
 }

@@ -17,23 +17,26 @@ func TestQLOGDIRSet(t *testing.T) {
 	qlogDir := filepath.Join(tmpDir, "qlogs")
 	t.Setenv("QLOGDIR", qlogDir)
 
-	tracer := DefaultConnectionTracer(context.Background(), protocol.PerspectiveClient, connID)
+	tracer := DefaultConnectionTracer(context.Background(), true, connID)
 	require.NotNil(t, tracer)
-	tracer.Close()
+
+	// adddng and closing a producer makes the tracer close the file
+	recorder := tracer.AddProducer()
+	recorder.Close()
 
 	_, err := os.Stat(qlogDir)
 	qlogDirCreated := !os.IsNotExist(err)
 	require.True(t, qlogDirCreated)
 
-	childs, err := os.ReadDir(qlogDir)
+	entries, err := os.ReadDir(qlogDir)
 	require.NoError(t, err)
-	require.Len(t, childs, 1)
+	require.Len(t, entries, 1)
 }
 
 func TestQLOGDIRNotSet(t *testing.T) {
 	connID, _ := protocol.GenerateConnectionIDForInitial()
 	t.Setenv("QLOGDIR", "")
 
-	tracer := DefaultConnectionTracer(context.Background(), protocol.PerspectiveClient, connID)
+	tracer := DefaultConnectionTracer(context.Background(), true, connID)
 	require.Nil(t, tracer)
 }

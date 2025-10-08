@@ -12,7 +12,8 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func TestACKBundling(t *testing.T) {
 		getTLSConfig(),
 		getQuicConfig(&quic.Config{
 			DisablePathMTUDiscovery: true,
-			Tracer:                  newTracer(serverTracer),
+			Tracer:                  func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return serverTracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -54,7 +55,7 @@ func TestACKBundling(t *testing.T) {
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			DisablePathMTUDiscovery: true,
-			Tracer:                  newTracer(clientTracer),
+			Tracer:                  func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return clientTracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -101,14 +102,14 @@ func TestACKBundling(t *testing.T) {
 	require.NoError(t, conn.CloseWithError(0, ""))
 	require.NoError(t, <-serverErrChan)
 
-	countBundledPackets := func(packets []shortHeaderPacket) (numBundled int) {
+	countBundledPackets := func(packets []packet) (numBundled int) {
 		for _, p := range packets {
 			var hasAck, hasStreamFrame bool
 			for _, f := range p.frames {
-				switch f.(type) {
-				case *logging.AckFrame:
+				switch f.Frame.(type) {
+				case *qlog.AckFrame:
 					hasAck = true
-				case *logging.StreamFrame:
+				case *qlog.StreamFrame:
 					hasStreamFrame = true
 				}
 			}
@@ -182,9 +183,7 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
-			Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
-				return tracer
-			},
+			Tracer: func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return tracer },
 		}),
 	)
 	require.NoError(t, err)
@@ -224,22 +223,22 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	conn.CloseWithError(0, "")
 	serverConn.CloseWithError(0, "")
 
-	var streamDataBlockedFrames []logging.StreamDataBlockedFrame
-	var dataBlockedFrames []logging.DataBlockedFrame
+	var streamDataBlockedFrames []qlog.StreamDataBlockedFrame
+	var dataBlockedFrames []qlog.DataBlockedFrame
 	var bundledCounter int
 	for _, p := range counter.getSentShortHeaderPackets() {
 		blockedOffset := protocol.InvalidByteCount
 		for _, f := range p.frames {
-			switch frame := f.(type) {
-			case *logging.StreamDataBlockedFrame:
+			switch frame := f.Frame.(type) {
+			case *qlog.StreamDataBlockedFrame:
 				streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
 				blockedOffset = frame.MaximumStreamData
-			case *logging.DataBlockedFrame:
+			case *qlog.DataBlockedFrame:
 				dataBlockedFrames = append(dataBlockedFrames, *frame)
 				blockedOffset = frame.MaximumData
-			case *logging.StreamFrame:
+			case *qlog.StreamFrame:
 				// the STREAM frame is always packed last
-				if frame.Offset+frame.Length == blockedOffset {
+				if frame.Offset+frame.Length == int64(blockedOffset) {
 					bundledCounter++
 				}
 			}
