@@ -28,7 +28,7 @@ func (h *encoderHelper) WriteToken(t jsontext.Token) {
 
 type versions []Version
 
-func (v versions) Encode(enc *jsontext.Encoder) error {
+func (v versions) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginArray)
 	for _, e := range v {
@@ -43,7 +43,7 @@ type RawInfo struct {
 	PayloadLength int // length of the packet payload, excluding AEAD tag
 }
 
-func (i RawInfo) Encode(enc *jsontext.Encoder) error {
+func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("length"))
@@ -103,13 +103,13 @@ func (e VersionInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.BeginObject)
 	if len(e.ClientVersions) > 0 {
 		h.WriteToken(jsontext.String("client_versions"))
-		if err := versions(e.ClientVersions).Encode(enc); err != nil {
+		if err := versions(e.ClientVersions).encode(enc); err != nil {
 			return err
 		}
 	}
 	if len(e.ServerVersions) > 0 {
 		h.WriteToken(jsontext.String("server_versions"))
-		if err := versions(e.ServerVersions).Encode(enc); err != nil {
+		if err := versions(e.ServerVersions).encode(enc); err != nil {
 			return err
 		}
 	}
@@ -198,16 +198,16 @@ func (e PacketSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("raw"))
-	if err := e.Raw.Encode(enc); err != nil {
+	if err := e.Raw.encode(enc); err != nil {
 		return err
 	}
 	if len(e.Frames) > 0 {
 		h.WriteToken(jsontext.String("frames"))
-		if err := frames(e.Frames).Encode(enc); err != nil {
+		if err := frames(e.Frames).encode(enc); err != nil {
 			return err
 		}
 	}
@@ -242,16 +242,16 @@ func (e PacketReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("raw"))
-	if err := e.Raw.Encode(enc); err != nil {
+	if err := e.Raw.encode(enc); err != nil {
 		return err
 	}
 	if len(e.Frames) > 0 {
 		h.WriteToken(jsontext.String("frames"))
-		if err := frames(e.Frames).Encode(enc); err != nil {
+		if err := frames(e.Frames).encode(enc); err != nil {
 			return err
 		}
 	}
@@ -282,11 +282,11 @@ func (e VersionNegotiationReceived) Encode(enc *jsontext.Encoder, _ time.Time) e
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("supported_versions"))
-	if err := versions(e.SupportedVersions).Encode(enc); err != nil {
+	if err := versions(e.SupportedVersions).encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
@@ -304,11 +304,11 @@ func (e VersionNegotiationSent) Encode(enc *jsontext.Encoder, _ time.Time) error
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("supported_versions"))
-	if err := versions(e.SupportedVersions).Encode(enc); err != nil {
+	if err := versions(e.SupportedVersions).encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
@@ -326,11 +326,11 @@ func (e PacketBuffered) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("raw"))
-	if err := e.Raw.Encode(enc); err != nil {
+	if err := e.Raw.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("trigger"))
@@ -352,11 +352,11 @@ func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("raw"))
-	if err := e.Raw.Encode(enc); err != nil {
+	if err := e.Raw.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("trigger"))
@@ -446,7 +446,7 @@ func (e PacketLost) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
-	if err := e.Header.Encode(enc); err != nil {
+	if err := e.Header.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("trigger"))
@@ -628,7 +628,7 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	}
 	if e.PreferredAddress != nil {
 		h.WriteToken(jsontext.String("preferred_address"))
-		if err := e.PreferredAddress.Encode(enc); err != nil {
+		if err := e.PreferredAddress.encode(enc); err != nil {
 			return err
 		}
 	}
@@ -650,7 +650,7 @@ type PreferredAddress struct {
 	StatelessResetToken protocol.StatelessResetToken
 }
 
-func (a PreferredAddress) Encode(enc *jsontext.Encoder) error {
+func (a PreferredAddress) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if a.IPv4.IsValid() {

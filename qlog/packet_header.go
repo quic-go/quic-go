@@ -11,7 +11,7 @@ type Token struct {
 	Raw []byte
 }
 
-func (t Token) Encode(enc *jsontext.Encoder) error {
+func (t Token) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("data"))
@@ -31,7 +31,7 @@ type PacketHeader struct {
 	Token            *Token
 }
 
-func (h PacketHeader) Encode(enc *jsontext.Encoder) error {
+func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 	helper := encoderHelper{enc: enc}
 	helper.WriteToken(jsontext.BeginObject)
 	helper.WriteToken(jsontext.String("packet_type"))
@@ -65,7 +65,7 @@ func (h PacketHeader) Encode(enc *jsontext.Encoder) error {
 	}
 	if h.Token != nil {
 		helper.WriteToken(jsontext.String("token"))
-		if err := h.Token.Encode(enc); err != nil {
+		if err := h.Token.encode(enc); err != nil {
 			return err
 		}
 	}
@@ -78,7 +78,7 @@ type PacketHeaderVersionNegotiation struct {
 	DestConnectionID ArbitraryLenConnectionID
 }
 
-func (h PacketHeaderVersionNegotiation) Encode(enc *jsontext.Encoder) error {
+func (h PacketHeaderVersionNegotiation) encode(enc *jsontext.Encoder) error {
 	helper := encoderHelper{enc: enc}
 	helper.WriteToken(jsontext.BeginObject)
 	helper.WriteToken(jsontext.String("packet_type"))
