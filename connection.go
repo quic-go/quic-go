@@ -414,10 +414,8 @@ var newClientConnection = func(
 			destAddr = addr
 		}
 		s.qlogger.RecordEvent(qlog.StartedConnection{
-			SrcAddr:          srcAddr,
-			DestAddr:         destAddr,
-			SrcConnectionID:  srcConnID,
-			DestConnectionID: destConnID,
+			Local:  toPathEndpointInfo(srcAddr),
+			Remote: toPathEndpointInfo(destAddr),
 		})
 	}
 	s.connIDManager = newConnIDManager(
@@ -1659,10 +1657,8 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 					destAddr = addr
 				}
 				c.qlogger.RecordEvent(qlog.StartedConnection{
-					SrcAddr:          srcAddr,
-					DestAddr:         destAddr,
-					SrcConnectionID:  packet.hdr.SrcConnectionID,
-					DestConnectionID: packet.hdr.DestConnectionID,
+					Local:  toPathEndpointInfo(srcAddr),
+					Remote: toPathEndpointInfo(destAddr),
 				})
 			}
 		}

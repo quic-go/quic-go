@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"net"
+	"net/netip"
 	"slices"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
@@ -267,4 +269,24 @@ func toQlogPacketType(pt protocol.PacketType) qlog.PacketType {
 		qpt = qlog.PacketTypeRetry
 	}
 	return qpt
+}
+
+func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
+	if addr == nil {
+		return qlog.PathEndpointInfo{}
+	}
+
+	var info qlog.PathEndpointInfo
+	if addr.IP.To4() != nil {
+		addrPort := netip.AddrPortFrom(netip.AddrFrom4([4]byte(addr.IP.To4())), uint16(addr.Port))
+		if addrPort.IsValid() {
+			info.IPv4 = addrPort
+		}
+	} else {
+		addrPort := netip.AddrPortFrom(netip.AddrFrom16([16]byte(addr.IP.To16())), uint16(addr.Port))
+		if addrPort.IsValid() {
+			info.IPv6 = addrPort
+		}
+	}
+	return info
 }
