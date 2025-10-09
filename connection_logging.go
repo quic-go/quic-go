@@ -161,7 +161,7 @@ func (c *Conn) logShortHeaderPacket(
 			},
 			Raw: qlog.RawInfo{
 				Length:        int(size),
-				PayloadLength: int(pnLen),
+				PayloadLength: int(size - wire.ShortHeaderLen(destConnID, pnLen)),
 			},
 			Frames: fs,
 			ECN:    toQlogECN(ecn),
