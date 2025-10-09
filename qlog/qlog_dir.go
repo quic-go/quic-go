@@ -12,6 +12,9 @@ import (
 	"github.com/quic-go/quic-go/qlogwriter"
 )
 
+// EventSchema is the qlog event schema for QUIC
+const EventSchema = "urn:ietf:params:qlog:events:quic-12"
+
 // DefaultConnectionTracer creates a qlog file in the qlog directory specified by the QLOGDIR environment variable.
 // File names are <odcid>_<perspective>.sqlog.
 // Returns nil if QLOGDIR is not set.
@@ -35,7 +38,12 @@ func DefaultConnectionTracer(_ context.Context, isClient bool, connID Connection
 		log.Printf("Failed to create qlog file %s: %s", path, err.Error())
 		return nil
 	}
-	fileSeq := qlogwriter.NewConnectionFileSeq(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), isClient, connID)
+	fileSeq := qlogwriter.NewConnectionFileSeq(
+		utils.NewBufferedWriteCloser(bufio.NewWriter(f), f),
+		isClient,
+		connID,
+		[]string{EventSchema},
+	)
 	go fileSeq.Run()
 	return fileSeq
 }

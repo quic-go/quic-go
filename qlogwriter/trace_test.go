@@ -48,7 +48,7 @@ func TestTraceMetadata(t *testing.T) {
 		producer := trace.AddProducer()
 		producer.Close()
 
-		testTraceMetadata(t, buf, "transport", "")
+		testTraceMetadata(t, buf, "transport", "", []string{})
 	})
 
 	t.Run("connection trace", func(t *testing.T) {
@@ -57,16 +57,27 @@ func TestTraceMetadata(t *testing.T) {
 			nopWriteCloser(buf),
 			false,
 			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
 		)
 		go trace.Run()
 		producer := trace.AddProducer()
 		producer.Close()
 
-		testTraceMetadata(t, buf, "server", "deadbeef")
+		testTraceMetadata(t,
+			buf,
+			"server",
+			"deadbeef",
+			[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
+		)
 	})
 }
 
-func testTraceMetadata(t *testing.T, buf *bytes.Buffer, expectedVantagePoint, expectedGroupID string) {
+func testTraceMetadata(t *testing.T,
+	buf *bytes.Buffer,
+	expectedVantagePoint,
+	expectedGroupID string,
+	expectedEventSchemas []string,
+) {
 	var m map[string]any
 	require.NoError(t, unmarshal(buf.Bytes(), &m))
 	require.Equal(t, "0.3", m["qlog_version"])
@@ -95,4 +106,13 @@ func testTraceMetadata(t *testing.T, buf *bytes.Buffer, expectedVantagePoint, ex
 	require.Contains(t, tr, "vantage_point")
 	vantagePoint := tr["vantage_point"].(map[string]any)
 	require.Equal(t, expectedVantagePoint, vantagePoint["type"])
+	if len(expectedEventSchemas) > 0 {
+		require.Contains(t, tr, "event_schemas")
+		eventSchemas := tr["event_schemas"].([]any)
+		for i, schema := range eventSchemas {
+			require.Equal(t, expectedEventSchemas[i], schema)
+		}
+	} else {
+		require.NotContains(t, tr, "event_schemas")
+	}
 }

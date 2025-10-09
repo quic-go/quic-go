@@ -11,6 +11,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 )
 
@@ -41,7 +42,12 @@ func NewQlogConnectionTracer(logger io.Writer) func(ctx context.Context, isClien
 			log.Fatalf("failed to create qlog file: %s", err)
 			return nil
 		}
-		fileSeq := qlogwriter.NewConnectionFileSeq(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), isClient, connID)
+		fileSeq := qlogwriter.NewConnectionFileSeq(
+			utils.NewBufferedWriteCloser(bufio.NewWriter(f), f),
+			isClient,
+			connID,
+			[]string{qlog.EventSchema},
+		)
 		go fileSeq.Run()
 		return fileSeq
 	}
