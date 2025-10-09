@@ -565,7 +565,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 		sph.DropPackets(protocol.EncryptionHandshake, monotime.Now())
 	}
 
-	sendPacket := func(t *testing.T, ti monotime.Time, ackEliciting bool) protocol.PacketNumber {
+	sendPacket := func(t *testing.T, ti monotime.Time, ackEliciting bool, ptoCount uint) protocol.PacketNumber {
 		t.Helper()
 
 		pn := sph.PopPacketNumber(encLevel)
@@ -577,6 +577,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 						Type:      qlog.LossTimerUpdateTypeSet,
 						TimerType: qlog.TimerTypePTO,
 						EncLevel:  encLevel,
+						Time:      ti.ToTime().Add(rttStats.PTO(encLevel == protocol.Encryption1RTT) << ptoCount),
 					},
 				},
 				eventRecorder.Events(qlog.LossTimerUpdated{}),
@@ -599,9 +600,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	var pns []protocol.PacketNumber
 	// send packet 0, 1, 2, 3
 	for i := range 3 {
-		pns = append(pns, sendPacket(t, sendTimes[i], true))
+		pns = append(pns, sendPacket(t, sendTimes[i], true, 0))
 	}
-	pns = append(pns, sendPacket(t, sendTimes[3], false))
+	pns = append(pns, sendPacket(t, sendTimes[3], false, 0))
 
 	// The PTO includes the max_ack_delay only for the application-data packet number space.
 	// Make sure that the value is actually different, so this test is meaningful.
@@ -627,6 +628,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				Type:      qlog.LossTimerUpdateTypeSet,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
+				Time:      sendTimes[2].Add(2 * rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
 		eventRecorder.Events(qlog.MetricsUpdated{}, qlog.LossTimerUpdated{}),
@@ -655,11 +657,11 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	sendTimes = append(sendTimes, now.Add(200*time.Millisecond))
 	sendTimes = append(sendTimes, now.Add(300*time.Millisecond))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[4])) // first probe packet
-	pns = append(pns, sendPacket(t, sendTimes[4], true))
+	pns = append(pns, sendPacket(t, sendTimes[4], true, 1))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[5])) // next probe packet
-	pns = append(pns, sendPacket(t, sendTimes[5], false))
+	pns = append(pns, sendPacket(t, sendTimes[5], false, 1))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[6])) // non-ack-eliciting packet didn't count as a probe packet
-	pns = append(pns, sendPacket(t, sendTimes[6], true))
+	pns = append(pns, sendPacket(t, sendTimes[6], true, 1))
 	require.Equal(t, SendAny, sph.SendMode(sendTimes[6])) // enough probe packets sent
 
 	timeout = sph.GetLossDetectionTimeout()
@@ -682,6 +684,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				Type:      qlog.LossTimerUpdateTypeSet,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
+				Time:      sendTimes[6].Add(4 * rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
 		eventRecorder.Events(qlog.LossTimerUpdated{}, qlog.MetricsUpdated{}),
@@ -694,9 +697,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	sendTimes = append(sendTimes, now.Add(100*time.Millisecond))
 	sendTimes = append(sendTimes, now.Add(200*time.Millisecond))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[7])) // first probe packet
-	pns = append(pns, sendPacket(t, sendTimes[7], true))
+	pns = append(pns, sendPacket(t, sendTimes[7], true, 2))
 	require.Equal(t, ptoMode, sph.SendMode(sendTimes[8])) // next probe packet
-	pns = append(pns, sendPacket(t, sendTimes[8], true))
+	pns = append(pns, sendPacket(t, sendTimes[8], true, 2))
 	require.Equal(t, SendAny, sph.SendMode(sendTimes[8])) // enough probe packets sent
 
 	timeout = sph.GetLossDetectionTimeout()
@@ -729,6 +732,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				Type:      qlog.LossTimerUpdateTypeSet,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
+				Time:      sendTimes[8].Add(rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
 		eventRecorder.Events(qlog.LossTimerUpdated{}),

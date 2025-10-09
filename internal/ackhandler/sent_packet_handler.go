@@ -697,6 +697,7 @@ func (h *sentPacketHandler) setLossDetectionTimer(now monotime.Time) {
 			Type:      qlog.LossTimerUpdateTypeSet,
 			TimerType: newAlarm.TimerType,
 			EncLevel:  newAlarm.EncryptionLevel,
+			Time:      newAlarm.Time.ToTime(),
 		})
 	}
 }
