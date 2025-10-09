@@ -16,7 +16,7 @@ func checkHeader(t *testing.T, hdr *PacketHeader, expected map[string]any) {
 
 	var buf bytes.Buffer
 	enc := jsontext.NewEncoder(&buf)
-	require.NoError(t, hdr.Encode(enc))
+	require.NoError(t, hdr.encode(enc))
 	data := buf.Bytes()
 	require.True(t, json.Valid(data))
 	checkEncoding(t, data, expected)

@@ -75,7 +75,7 @@ type DatagramFrame struct {
 	Length int64
 }
 
-func (fs frames) Encode(enc *jsontext.Encoder) error {
+func (fs frames) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginArray)
 	for _, f := range fs {
@@ -149,11 +149,11 @@ func encodePingFrame(enc *jsontext.Encoder, _ *PingFrame) error {
 
 type ackRanges []wire.AckRange
 
-func (ars ackRanges) Encode(enc *jsontext.Encoder) error {
+func (ars ackRanges) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginArray)
 	for _, r := range ars {
-		if err := ackRange(r).Encode(enc); err != nil {
+		if err := ackRange(r).encode(enc); err != nil {
 			return err
 		}
 	}
@@ -163,7 +163,7 @@ func (ars ackRanges) Encode(enc *jsontext.Encoder) error {
 
 type ackRange wire.AckRange
 
-func (ar ackRange) Encode(enc *jsontext.Encoder) error {
+func (ar ackRange) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginArray)
 	h.WriteToken(jsontext.Int(int64(ar.Smallest)))
@@ -184,7 +184,7 @@ func encodeAckFrame(enc *jsontext.Encoder, f *AckFrame) error {
 		h.WriteToken(jsontext.Float(milliseconds(f.DelayTime)))
 	}
 	h.WriteToken(jsontext.String("acked_ranges"))
-	if err := ackRanges(f.AckRanges).Encode(enc); err != nil {
+	if err := ackRanges(f.AckRanges).encode(enc); err != nil {
 		return err
 	}
 	hasECN := f.ECT0 > 0 || f.ECT1 > 0 || f.ECNCE > 0
@@ -255,7 +255,7 @@ func encodeNewTokenFrame(enc *jsontext.Encoder, f *NewTokenFrame) error {
 	h.WriteToken(jsontext.String("frame_type"))
 	h.WriteToken(jsontext.String("new_token"))
 	h.WriteToken(jsontext.String("token"))
-	if err := (Token{Raw: f.Token}).Encode(enc); err != nil {
+	if err := (Token{Raw: f.Token}).encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
