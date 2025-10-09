@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 
@@ -22,7 +23,7 @@ func (e testEvent) Name() string {
 	return "transport:test_event"
 }
 
-func (e testEvent) Encode(enc *jsontext.Encoder) error {
+func (e testEvent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("message"))

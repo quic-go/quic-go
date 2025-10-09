@@ -38,6 +38,18 @@ func init() {
 	}
 }
 
+type encoderHelper struct {
+	enc *jsontext.Encoder
+	err error
+}
+
+func (h *encoderHelper) WriteToken(t jsontext.Token) {
+	if h.err != nil {
+		return
+	}
+	h.err = h.enc.WriteToken(t)
+}
+
 type traceHeader struct {
 	VantagePointType string
 	GroupID          *ConnectionID
