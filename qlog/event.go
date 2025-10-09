@@ -26,32 +26,6 @@ func (h *encoderHelper) WriteToken(t jsontext.Token) {
 	h.err = h.enc.WriteToken(t)
 }
 
-type eventDetails interface {
-	Name() string
-	Encode(*jsontext.Encoder) error
-}
-
-type event struct {
-	EventTime    time.Time
-	RelativeTime time.Duration
-	eventDetails
-}
-
-func (e event) Encode(enc *jsontext.Encoder) error {
-	h := encoderHelper{enc: enc}
-	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("time"))
-	h.WriteToken(jsontext.Float(milliseconds(e.RelativeTime)))
-	h.WriteToken(jsontext.String("name"))
-	h.WriteToken(jsontext.String(e.Name()))
-	h.WriteToken(jsontext.String("data"))
-	if err := e.eventDetails.Encode(enc); err != nil {
-		return err
-	}
-	h.WriteToken(jsontext.EndObject)
-	return h.err
-}
-
 type versions []Version
 
 func (v versions) Encode(enc *jsontext.Encoder) error {
@@ -91,7 +65,7 @@ type StartedConnection struct {
 
 func (e StartedConnection) Name() string { return "transport:connection_started" }
 
-func (e StartedConnection) Encode(enc *jsontext.Encoder) error {
+func (e StartedConnection) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if e.SrcAddr.IP.To4() != nil {
@@ -124,7 +98,7 @@ type VersionInformation struct {
 
 func (e VersionInformation) Name() string { return "transport:version_information" }
 
-func (e VersionInformation) Encode(enc *jsontext.Encoder) error {
+func (e VersionInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if len(e.ClientVersions) > 0 {
@@ -151,7 +125,7 @@ type ConnectionClosed struct {
 
 func (e ConnectionClosed) Name() string { return "transport:connection_closed" }
 
-func (e ConnectionClosed) Encode(enc *jsontext.Encoder) error {
+func (e ConnectionClosed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	var (
@@ -220,7 +194,7 @@ type PacketSent struct {
 
 func (e PacketSent) Name() string { return "transport:packet_sent" }
 
-func (e PacketSent) Encode(enc *jsontext.Encoder) error {
+func (e PacketSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -264,7 +238,7 @@ type PacketReceived struct {
 
 func (e PacketReceived) Name() string { return "transport:packet_received" }
 
-func (e PacketReceived) Encode(enc *jsontext.Encoder) error {
+func (e PacketReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -304,7 +278,7 @@ type VersionNegotiationReceived struct {
 
 func (e VersionNegotiationReceived) Name() string { return "transport:packet_received" }
 
-func (e VersionNegotiationReceived) Encode(enc *jsontext.Encoder) error {
+func (e VersionNegotiationReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -326,7 +300,7 @@ type VersionNegotiationSent struct {
 
 func (e VersionNegotiationSent) Name() string { return "transport:packet_sent" }
 
-func (e VersionNegotiationSent) Encode(enc *jsontext.Encoder) error {
+func (e VersionNegotiationSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -348,7 +322,7 @@ type PacketBuffered struct {
 
 func (e PacketBuffered) Name() string { return "transport:packet_buffered" }
 
-func (e PacketBuffered) Encode(enc *jsontext.Encoder) error {
+func (e PacketBuffered) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -374,7 +348,7 @@ type PacketDropped struct {
 
 func (e PacketDropped) Name() string { return "transport:packet_dropped" }
 
-func (e PacketDropped) Encode(enc *jsontext.Encoder) error {
+func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -398,7 +372,7 @@ type MTUUpdated struct {
 
 func (e MTUUpdated) Name() string { return "recovery:mtu_updated" }
 
-func (e MTUUpdated) Encode(enc *jsontext.Encoder) error {
+func (e MTUUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("mtu"))
@@ -422,7 +396,7 @@ type MetricsUpdated struct {
 
 func (e MetricsUpdated) Name() string { return "recovery:metrics_updated" }
 
-func (e MetricsUpdated) Encode(enc *jsontext.Encoder) error {
+func (e MetricsUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if e.MinRTT != nil {
@@ -468,7 +442,7 @@ type PacketLost struct {
 
 func (e PacketLost) Name() string { return "recovery:packet_lost" }
 
-func (e PacketLost) Encode(enc *jsontext.Encoder) error {
+func (e PacketLost) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -490,7 +464,7 @@ type SpuriousLoss struct {
 
 func (e SpuriousLoss) Name() string { return "recovery:spurious_loss" }
 
-func (e SpuriousLoss) Encode(enc *jsontext.Encoder) error {
+func (e SpuriousLoss) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("packet_number_space"))
@@ -514,7 +488,7 @@ type KeyUpdated struct {
 
 func (e KeyUpdated) Name() string { return "security:key_updated" }
 
-func (e KeyUpdated) Encode(enc *jsontext.Encoder) error {
+func (e KeyUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("trigger"))
@@ -536,7 +510,7 @@ type KeyDiscarded struct {
 
 func (e KeyDiscarded) Name() string { return "security:key_discarded" }
 
-func (e KeyDiscarded) Encode(enc *jsontext.Encoder) error {
+func (e KeyDiscarded) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if e.KeyType != KeyTypeClient1RTT && e.KeyType != KeyTypeServer1RTT {
@@ -585,7 +559,7 @@ func (e ParametersSet) Name() string {
 	return "transport:parameters_set"
 }
 
-func (e ParametersSet) Encode(enc *jsontext.Encoder) error {
+func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if !e.Restore {
@@ -708,7 +682,7 @@ type LossTimerUpdated struct {
 
 func (e LossTimerUpdated) Name() string { return "recovery:loss_timer_updated" }
 
-func (e LossTimerUpdated) Encode(enc *jsontext.Encoder) error {
+func (e LossTimerUpdated) Encode(enc *jsontext.Encoder, t time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("event_type"))
@@ -719,7 +693,7 @@ func (e LossTimerUpdated) Encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
 	if e.Type == LossTimerUpdateTypeSet {
 		h.WriteToken(jsontext.String("delta"))
-		h.WriteToken(jsontext.Float(milliseconds(time.Until(e.Time))))
+		h.WriteToken(jsontext.Float(milliseconds(e.Time.Sub(t))))
 	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
@@ -729,7 +703,7 @@ type eventLossTimerCanceled struct{}
 
 func (e eventLossTimerCanceled) Name() string { return "recovery:loss_timer_updated" }
 
-func (e eventLossTimerCanceled) Encode(enc *jsontext.Encoder) error {
+func (e eventLossTimerCanceled) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("event_type"))
@@ -744,7 +718,7 @@ type CongestionStateUpdated struct {
 
 func (e CongestionStateUpdated) Name() string { return "recovery:congestion_state_updated" }
 
-func (e CongestionStateUpdated) Encode(enc *jsontext.Encoder) error {
+func (e CongestionStateUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("new"))
@@ -760,7 +734,7 @@ type ECNStateUpdated struct {
 
 func (e ECNStateUpdated) Name() string { return "recovery:ecn_state_updated" }
 
-func (e ECNStateUpdated) Encode(enc *jsontext.Encoder) error {
+func (e ECNStateUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("new"))
@@ -779,7 +753,7 @@ type ALPNInformation struct {
 
 func (e ALPNInformation) Name() string { return "transport:alpn_information" }
 
-func (e ALPNInformation) Encode(enc *jsontext.Encoder) error {
+func (e ALPNInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("chosen_alpn"))

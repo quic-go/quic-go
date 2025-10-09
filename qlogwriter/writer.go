@@ -30,9 +30,26 @@ type Recorder interface {
 	io.Closer
 }
 
-const eventChanSize = 50
+// Event represents a qlog event that can be encoded to JSON.
+// Each event must provide its name and a method to encode itself using a jsontext.Encoder.
+type Event interface {
+	// Name returns the name of the event, as it should appear in the qlog output
+	Name() string
+	// Encode writes the event's data to the provided jsontext.Encoder
+	Encode(encoder *jsontext.Encoder, eventTime time.Time) error
+}
 
-var recordSeparator = []byte{0x1e}
+// RecordSeparator is the record separator byte for the JSON-SEQ format
+const RecordSeparator byte = 0x1e
+
+var recordSeparator = []byte{RecordSeparator}
+
+type event struct {
+	Time  time.Time
+	Event Event
+}
+
+const eventChanSize = 50
 
 // FileSeq represents a qlog trace using the JSON-SEQ format,
 // https://www.ietf.org/archive/id/draft-ietf-quic-qlog-main-schema-12.html#section-5
@@ -116,17 +133,14 @@ func (t *FileSeq) record(eventTime time.Time, details Event) {
 	}
 	t.mx.Unlock()
 
-	t.events <- event{
-		RelativeTime: eventTime.Sub(t.referenceTime),
-		Event:        details,
-	}
+	t.events <- event{Time: eventTime, Event: details}
 }
 
 func (t *FileSeq) Run() {
 	defer close(t.runStopped)
 
 	enc := jsontext.NewEncoder(t.w)
-	for ev := range t.events {
+	for e := range t.events {
 		if t.encodeErr != nil { // if encoding failed, just continue draining the event channel
 			continue
 		}
@@ -134,9 +148,21 @@ func (t *FileSeq) Run() {
 			t.encodeErr = err
 			continue
 		}
-		if err := ev.Encode(enc); err != nil {
+
+		h := encoderHelper{enc: enc}
+		h.WriteToken(jsontext.BeginObject)
+		h.WriteToken(jsontext.String("time"))
+		h.WriteToken(jsontext.Float(float64(e.Time.Sub(t.referenceTime).Nanoseconds()) / 1e6))
+		h.WriteToken(jsontext.String("name"))
+		h.WriteToken(jsontext.String(e.Event.Name()))
+		h.WriteToken(jsontext.String("data"))
+		if err := e.Event.Encode(enc, e.Time); err != nil {
 			t.encodeErr = err
 			continue
+		}
+		h.WriteToken(jsontext.EndObject)
+		if h.err != nil {
+			t.encodeErr = h.err
 		}
 	}
 }
