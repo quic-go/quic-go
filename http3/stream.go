@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/quic-go/qpack"
 )
@@ -41,15 +43,24 @@ type Stream struct {
 
 	bytesRemainingInFrame uint64
 
+	qlogger qlogwriter.Recorder
+
 	parseTrailer  func(io.Reader, uint64) error
 	parsedTrailer bool
 }
 
-func newStream(str datagramStream, conn *Conn, trace *httptrace.ClientTrace, parseTrailer func(io.Reader, uint64) error) *Stream {
+func newStream(
+	str datagramStream,
+	conn *Conn,
+	trace *httptrace.ClientTrace,
+	parseTrailer func(io.Reader, uint64) error,
+	qlogger qlogwriter.Recorder,
+) *Stream {
 	return &Stream{
 		datagramStream: str,
 		conn:           conn,
 		buf:            make([]byte, 16),
+		qlogger:        qlogger,
 		parseTrailer:   parseTrailer,
 		frameParser: &frameParser{
 			closeConn: conn.CloseWithError,
@@ -82,6 +93,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 					continue
 				}
 				if s.parsedTrailer {
+					maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), f.Length)
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
@@ -113,6 +125,16 @@ func (s *Stream) hasMoreData() bool {
 func (s *Stream) Write(b []byte) (int, error) {
 	s.buf = s.buf[:0]
 	s.buf = (&dataFrame{Length: uint64(len(b))}).Append(s.buf)
+	if s.qlogger != nil {
+		s.qlogger.RecordEvent(qlog.FrameCreated{
+			StreamID: s.StreamID(),
+			Raw: qlog.RawInfo{
+				Length:        len(s.buf) + len(b),
+				PayloadLength: len(b),
+			},
+			Frame: qlog.Frame{Frame: qlog.DataFrame{}},
+		})
+	}
 	if _, err := s.datagramStream.Write(s.buf); err != nil {
 		return 0, err
 	}

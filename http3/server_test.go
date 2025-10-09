@@ -16,7 +16,10 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/internal/testdata"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,12 +114,29 @@ func testServerSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 
 func TestServerRequestHandling(t *testing.T) {
 	t.Run("200 with an empty handler", func(t *testing.T) {
+		var eventRecorder events.Recorder
 		hfs, body := testServerRequestHandling(t,
 			func(w http.ResponseWriter, r *http.Request) {},
 			httptest.NewRequest(http.MethodGet, "https://www.example.com", nil),
+			&eventRecorder,
 		)
 		require.Equal(t, hfs[":status"], []string{"200"})
 		require.Empty(t, body)
+
+		require.Len(t, eventRecorder.Events(qlog.FrameParsed{}), 1)
+		require.IsType(t, qlog.HeadersFrame{}, eventRecorder.Events(qlog.FrameParsed{})[0].(qlog.FrameParsed).Frame.Frame)
+		fp := eventRecorder.Events(qlog.FrameParsed{})[0].(qlog.FrameParsed)
+		require.Equal(t, quic.StreamID(0), fp.StreamID)
+		require.NotZero(t, fp.Raw.PayloadLength)
+		require.Contains(t, fp.Frame.Frame.(qlog.HeadersFrame).HeaderFields, qlog.HeaderField{Name: ":method", Value: "GET"})
+		require.Contains(t, fp.Frame.Frame.(qlog.HeadersFrame).HeaderFields, qlog.HeaderField{Name: ":authority", Value: "www.example.com"})
+
+		require.Len(t, eventRecorder.Events(qlog.FrameCreated{}), 1)
+		require.IsType(t, qlog.HeadersFrame{}, eventRecorder.Events(qlog.FrameCreated{})[0].(qlog.FrameCreated).Frame.Frame)
+		fc := eventRecorder.Events(qlog.FrameCreated{})[0].(qlog.FrameCreated)
+		require.Equal(t, quic.StreamID(0), fp.StreamID)
+		require.NotZero(t, fc.Raw.PayloadLength)
+		require.Contains(t, fc.Frame.Frame.(qlog.HeadersFrame).HeaderFields, qlog.HeaderField{Name: ":status", Value: "200"})
 	})
 
 	t.Run("content-length", func(t *testing.T) {
@@ -126,6 +146,7 @@ func TestServerRequestHandling(t *testing.T) {
 				w.Write([]byte("foobar"))
 			},
 			httptest.NewRequest(http.MethodGet, "https://www.example.com", nil),
+			nil,
 		)
 		require.Equal(t, hfs[":status"], []string{"418"})
 		require.Equal(t, hfs["content-length"], []string{"6"})
@@ -140,6 +161,7 @@ func TestServerRequestHandling(t *testing.T) {
 				w.Write([]byte("bar"))
 			},
 			httptest.NewRequest(http.MethodGet, "https://www.example.com", nil),
+			nil,
 		)
 		require.Equal(t, hfs[":status"], []string{"200"})
 		require.NotContains(t, hfs, "content-length")
@@ -152,6 +174,7 @@ func TestServerRequestHandling(t *testing.T) {
 				w.Write([]byte("foobar"))
 			},
 			httptest.NewRequest(http.MethodHead, "https://www.example.com", nil),
+			nil,
 		)
 		require.Equal(t, hfs[":status"], []string{"200"})
 		require.Empty(t, body)
@@ -165,6 +188,7 @@ func TestServerRequestHandling(t *testing.T) {
 				w.Write(data)
 			},
 			httptest.NewRequest(http.MethodPost, "https://www.example.com", bytes.NewBuffer([]byte("foobar"))),
+			nil,
 		)
 		require.Equal(t, hfs[":status"], []string{"418"})
 		require.Equal(t, []byte("foobar"), body)
@@ -174,8 +198,9 @@ func TestServerRequestHandling(t *testing.T) {
 func testServerRequestHandling(t *testing.T,
 	handler http.HandlerFunc,
 	req *http.Request,
+	rec qlogwriter.Recorder,
 ) (responseHeaders map[string][]string, body []byte) {
-	clientConn, serverConn := newConnPair(t)
+	clientConn, serverConn := newConnPairWithRecorder(t, nil, rec)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
@@ -263,7 +288,6 @@ func testServerHandlerBodyNotRead(t *testing.T, req *http.Request, handler http.
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
 	require.NoError(t, err)
-	// require.NoError(t, str.Close())
 
 	done := make(chan struct{})
 	s := &Server{
@@ -343,24 +367,39 @@ func testServerPanickingHandler(t *testing.T, handler http.HandlerFunc) (logOutp
 
 func TestServerRequestHeaderTooLarge(t *testing.T) {
 	t.Run("default value", func(t *testing.T) {
+		var eventRecorder events.Recorder
 		// use 2*DefaultMaxHeaderBytes here. qpack will compress the request,
 		// but the request will still end up larger than DefaultMaxHeaderBytes.
 		url := bytes.Repeat([]byte{'a'}, http.DefaultMaxHeaderBytes*2)
 		testServerRequestHeaderTooLarge(t,
 			httptest.NewRequest(http.MethodGet, "https://"+string(url), nil),
 			0,
+			&eventRecorder,
 		)
+		events := eventRecorder.Events(qlog.FrameParsed{})
+		require.Len(t, events, 1)
+		require.Equal(t, qlog.HeadersFrame{}, events[0].(qlog.FrameParsed).Frame.Frame)
+		// The request is QPACK-compressed, so it will be smaller than 2*http.DefaultMaxHeaderBytes
+		require.Greater(t, events[0].(qlog.FrameParsed).Raw.PayloadLength, http.DefaultMaxHeaderBytes)
+		require.Less(t, events[0].(qlog.FrameParsed).Raw.PayloadLength, http.DefaultMaxHeaderBytes*2)
 	})
 
 	t.Run("custom value", func(t *testing.T) {
+		var eventRecorder events.Recorder
 		testServerRequestHeaderTooLarge(t,
 			httptest.NewRequest(http.MethodGet, "https://www.example.com", nil),
 			20,
+			&eventRecorder,
 		)
+		events := eventRecorder.Events(qlog.FrameParsed{})
+		require.Len(t, events, 1)
+		require.Equal(t, qlog.HeadersFrame{}, events[0].(qlog.FrameParsed).Frame.Frame)
+		require.Greater(t, events[0].(qlog.FrameParsed).Raw.PayloadLength, 20)
+		require.Less(t, events[0].(qlog.FrameParsed).Raw.PayloadLength, 40)
 	})
 }
 
-func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderBytes int) {
+func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderBytes int, rec qlogwriter.Recorder) {
 	var called bool
 	s := &Server{
 		MaxHeaderBytes: maxHeaderBytes,
@@ -368,7 +407,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 	}
 	s.init()
 
-	clientConn, serverConn := newConnPair(t)
+	clientConn, serverConn := newConnPairWithRecorder(t, nil, rec)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
