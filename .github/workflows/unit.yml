@@ -56,9 +56,12 @@ jobs:
           files: coverage.txt,coverage-root.txt
           env_vars: OS,GO
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Upload report to Codecov
+      - name: Upload test report to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/test-results-action@v1
+        env:
+          OS: ${{ matrix.os }}
+          GO: ${{ matrix.go }}
         with:
           name: Unit tests
           files: report.xml,report_root.xml
