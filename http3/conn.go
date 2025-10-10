@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -51,6 +52,8 @@ type Conn struct {
 
 	idleTimeout time.Duration
 	idleTimer   *time.Timer
+
+	qlogger qlogwriter.Recorder
 }
 
 func newConnection(
@@ -61,6 +64,10 @@ func newConnection(
 	logger *slog.Logger,
 	idleTimeout time.Duration,
 ) *Conn {
+	var qlogger qlogwriter.Recorder
+	if qlogTrace := quicConn.QlogTrace(); qlogTrace != nil {
+		qlogger = qlogTrace.AddProducer()
+	}
 	c := &Conn{
 		ctx:              ctx,
 		conn:             quicConn,
@@ -73,6 +80,7 @@ func newConnection(
 		streams:          make(map[quic.StreamID]*stateTrackingStream),
 		maxStreamID:      invalidStreamID,
 		lastStreamID:     invalidStreamID,
+		qlogger:          qlogger,
 	}
 	if idleTimeout > 0 {
 		c.idleTimer = time.AfterFunc(idleTimeout, c.onIdleTimer)
@@ -168,13 +176,13 @@ func (c *Conn) openRequestStream(
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
 		newStream(hstr, c, trace, func(r io.Reader, l uint64) error {
-			hdr, err := c.decodeTrailers(r, l, maxHeaderBytes)
+			hdr, err := c.decodeTrailers(r, str.StreamID(), l, maxHeaderBytes)
 			if err != nil {
 				return err
 			}
 			rsp.Trailer = hdr
 			return nil
-		}),
+		}, c.qlogger),
 		requestWriter,
 		reqDone,
 		c.decoder,
@@ -184,8 +192,9 @@ func (c *Conn) openRequestStream(
 	), nil
 }
 
-func (c *Conn) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http.Header, error) {
+func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, l, maxHeaderBytes uint64) (http.Header, error) {
 	if l > maxHeaderBytes {
+		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, l)
 		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, maxHeaderBytes)
 	}
 
@@ -195,7 +204,11 @@ func (c *Conn) decodeTrailers(r io.Reader, l, maxHeaderBytes uint64) (http.Heade
 	}
 	fields, err := c.decoder.DecodeFull(b)
 	if err != nil {
+		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, l)
 		return nil, err
+	}
+	if c.qlogger != nil {
+		qlogParsedHeadersFrame(c.qlogger, streamID, l, fields)
 	}
 	return parseTrailers(fields)
 }

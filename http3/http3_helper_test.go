@@ -21,6 +21,7 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/require"
 )
@@ -132,19 +133,46 @@ func getTLSClientConfig() *tls.Config { return tlsClientConfig.Clone() }
 func newConnPair(t *testing.T) (client, server *quic.Conn) {
 	t.Helper()
 
+	return newConnPairWithRecorder(t, nil, nil)
+}
+
+type qlogTrace struct {
+	recorder qlogwriter.Recorder
+}
+
+func (t *qlogTrace) AddProducer() qlogwriter.Recorder {
+	return t.recorder
+}
+
+func newConnPairWithRecorder(t *testing.T, clientRecorder, serverRecorder qlogwriter.Recorder) (client, server *quic.Conn) {
+	t.Helper()
+
 	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
 		getTLSConfig(),
 		&quic.Config{
 			InitialStreamReceiveWindow:     maxByteCount,
 			InitialConnectionReceiveWindow: maxByteCount,
+			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
+				return &qlogTrace{recorder: serverRecorder}
+			},
 		},
 	)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	cl, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{})
+	cl, err := quic.DialEarly(
+		ctx,
+		newUDPConnLocalhost(t),
+		ln.Addr(),
+		getTLSClientConfig(),
+		&quic.Config{
+			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
+				return &qlogTrace{recorder: clientRecorder}
+			},
+		},
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() { cl.CloseWithError(0, "") })
 

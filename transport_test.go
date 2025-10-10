@@ -495,7 +495,7 @@ func testTransportDial(t *testing.T, early bool) {
 		_ protocol.PacketNumber,
 		_ bool,
 		_ bool,
-		_ qlogwriter.Recorder,
+		_ qlogwriter.Trace,
 		_ utils.Logger,
 		_ protocol.Version,
 	) *wrappedConn {
@@ -565,7 +565,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		pn protocol.PacketNumber,
 		_ bool,
 		hasNegotiatedVersion bool,
-		_ qlogwriter.Recorder,
+		_ qlogwriter.Trace,
 		_ utils.Logger,
 		v protocol.Version,
 	) *wrappedConn {

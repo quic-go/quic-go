@@ -292,27 +292,9 @@ func (t *Transport) doDial(
 		return nil, t.closeErr
 	}
 
-	var qlogger qlogwriter.Recorder
+	var qlogTrace qlogwriter.Trace
 	if config.Tracer != nil {
-		if tr := config.Tracer(ctx, true, destConnID); tr != nil {
-			qlogger = tr.AddProducer()
-		}
-	}
-
-	if qlogger != nil {
-		var srcAddr, destAddr *net.UDPAddr
-		if addr, ok := sendConn.LocalAddr().(*net.UDPAddr); ok {
-			srcAddr = addr
-		}
-		if addr, ok := sendConn.RemoteAddr().(*net.UDPAddr); ok {
-			destAddr = addr
-		}
-		qlogger.RecordEvent(qlog.StartedConnection{
-			SrcAddr:          srcAddr,
-			DestAddr:         destAddr,
-			SrcConnectionID:  srcConnID,
-			DestConnectionID: destConnID,
-		})
+		qlogTrace = config.Tracer(ctx, true, destConnID)
 	}
 
 	logger := utils.DefaultLogger.WithPrefix("client")
@@ -331,7 +313,7 @@ func (t *Transport) doDial(
 		initialPacketNumber,
 		use0RTT,
 		hasNegotiatedVersion,
-		qlogger,
+		qlogTrace,
 		logger,
 		version,
 	)

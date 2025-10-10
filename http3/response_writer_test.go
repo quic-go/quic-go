@@ -6,18 +6,24 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/testutils/events"
+
 	"github.com/quic-go/qpack"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
 type testResponseWriter struct {
 	*responseWriter
-	buf *bytes.Buffer
+	eventRecorder *events.Recorder
+	buf           *bytes.Buffer
 }
 
-func (rw *testResponseWriter) DecodeHeaders(t *testing.T) map[string][]string {
+func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]string {
 	t.Helper()
 
 	rw.Flush()
@@ -25,17 +31,34 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T) map[string][]string {
 	fields := make(map[string][]string)
 	decoder := qpack.NewDecoder(nil)
 
+	startLen := rw.buf.Len()
 	frame, err := (&frameParser{r: rw.buf}).ParseNext()
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, frame)
-	data := make([]byte, frame.(*headersFrame).Length)
+	payloadLen := frame.(*headersFrame).Length
+	data := make([]byte, payloadLen)
+	headerFrameLen := startLen - rw.buf.Len() + len(data)
 	_, err = io.ReadFull(rw.buf, data)
 	require.NoError(t, err)
 	hfs, err := decoder.DecodeFull(data)
 	require.NoError(t, err)
+
+	// check that the decoded header fields are properly logged
+	require.GreaterOrEqual(t, len(rw.eventRecorder.Events(qlog.FrameCreated{})), idx+1)
+	require.IsType(t, qlog.HeadersFrame{}, rw.eventRecorder.Events()[idx].(qlog.FrameCreated).Frame.Frame)
+	ev := rw.eventRecorder.Events()[idx].(qlog.FrameCreated)
+	assert.Equal(t, quic.StreamID(42), ev.StreamID)
+	assert.Equal(t, headerFrameLen, ev.Raw.Length, "raw.Length")
+	assert.Equal(t, int(payloadLen), ev.Raw.PayloadLength, "raw.PayloadLength")
+
 	for _, p := range hfs {
 		fields[p.Name] = append(fields[p.Name], p.Value)
+		require.Contains(t,
+			ev.Frame.Frame.(qlog.HeadersFrame).HeaderFields,
+			qlog.HeaderField{Name: p.Name, Value: p.Value},
+		)
 	}
+
 	return fields
 }
 
@@ -55,14 +78,25 @@ func (rw *testResponseWriter) DecodeBody(t *testing.T) []byte {
 }
 
 func newTestResponseWriter(t *testing.T) *testResponseWriter {
+	var eventRecorder events.Recorder
 	buf := &bytes.Buffer{}
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
 	str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
-	rw := newResponseWriter(newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }), nil, false, nil)
-	return &testResponseWriter{responseWriter: rw, buf: buf}
+	rw := newResponseWriter(
+		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, &eventRecorder),
+		nil,
+		false,
+		nil,
+	)
+	return &testResponseWriter{
+		responseWriter: rw,
+		eventRecorder:  &eventRecorder,
+		buf:            buf,
+	}
 }
 
 func TestResponseWriterInvalidStatus(t *testing.T) {
@@ -84,7 +118,7 @@ func TestResponseWriterHeader(t *testing.T) {
 	// write some data
 	rw.Write([]byte("foobar"))
 
-	fields := rw.DecodeHeaders(t)
+	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"418"}, fields[":status"])
 	require.Equal(t, []string{"42"}, fields["content-length"])
 	require.Equal(t,
@@ -98,7 +132,7 @@ func TestResponseWriterDataWithoutHeader(t *testing.T) {
 	rw := newTestResponseWriter(t)
 	rw.Write([]byte("foobar"))
 
-	fields := rw.DecodeHeaders(t)
+	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"200"}, fields[":status"])
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 }
@@ -110,7 +144,7 @@ func TestResponseWriterDataStatusWithoutBody(t *testing.T) {
 	require.Zero(t, n)
 	require.ErrorIs(t, err, http.ErrBodyNotAllowed)
 
-	fields := rw.DecodeHeaders(t)
+	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"304"}, fields[":status"])
 	require.Empty(t, rw.DecodeBody(t))
 }
@@ -126,7 +160,7 @@ func TestResponseWriterContentLength(t *testing.T) {
 	require.Zero(t, n)
 	require.ErrorIs(t, err, http.ErrContentLength)
 
-	fields := rw.DecodeHeaders(t)
+	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"200"}, fields[":status"])
 	require.Equal(t, []string{"6"}, fields["content-length"])
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
@@ -153,7 +187,7 @@ func testContentTypeSniffing(t *testing.T, hdrs map[string]string, expectedConte
 	}
 	rw.Write([]byte("<html></html>"))
 
-	fields := rw.DecodeHeaders(t)
+	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"200"}, fields[":status"])
 	if expectedContentType == "" {
 		require.NotContains(t, fields, "content-type")
@@ -173,7 +207,7 @@ func TestResponseWriterEarlyHints(t *testing.T) {
 	require.NoError(t, err)
 
 	// Early Hints must have been received
-	fields := rw.DecodeHeaders(t)
+	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, 2, len(fields))
 	require.Equal(t, []string{"103"}, fields[":status"])
 	require.Equal(t,
@@ -182,7 +216,7 @@ func TestResponseWriterEarlyHints(t *testing.T) {
 	)
 
 	// headers sent in the informational response must also be included in the final response
-	fields = rw.DecodeHeaders(t)
+	fields = rw.DecodeHeaders(t, 1)
 	require.Equal(t, 4, len(fields))
 	require.Equal(t, []string{"200"}, fields[":status"])
 	require.Contains(t, fields, "date")
@@ -204,7 +238,7 @@ func TestResponseWriterTrailers(t *testing.T) {
 	require.NoError(t, err)
 
 	// writeTrailers needs to be called after writing the full body
-	headers := rw.DecodeHeaders(t)
+	headers := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"key"}, headers["trailer"])
 	require.NotContains(t, headers, "foo")
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
@@ -215,7 +249,7 @@ func TestResponseWriterTrailers(t *testing.T) {
 	rw.Header().Set(http.TrailerPrefix+"lorem", "ipsum") // unannounced trailer with trailer prefix
 	require.NoError(t, rw.writeTrailers())
 
-	trailers := rw.DecodeHeaders(t)
+	trailers := rw.DecodeHeaders(t, 2)
 	require.Equal(t, []string{"value"}, trailers["key"])
 	require.Equal(t, []string{"ipsum"}, trailers["lorem"])
 	// trailers without the trailer prefix that were not announced are ignored

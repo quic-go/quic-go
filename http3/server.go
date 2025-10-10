@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/quic-go/qpack"
@@ -463,6 +464,11 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		}
 	}
 
+	var qlogger qlogwriter.Recorder
+	if qlogTrace := conn.QlogTrace(); qlogTrace != nil {
+		qlogger = qlogTrace.AddProducer()
+	}
+
 	hconn := newConnection(
 		connCtx,
 		conn,
@@ -535,7 +541,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 			// handleRequest will return once the request has been handled,
 			// or the underlying connection is closed
 			defer wg.Done()
-			s.handleRequest(hconn, str, hconn.decoder)
+			s.handleRequest(hconn, str, hconn.decoder, qlogger)
 		}()
 	}
 	wg.Wait()
@@ -549,7 +555,12 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn *Conn, str datagramStream, decoder *qpack.Decoder) {
+func (s *Server) handleRequest(
+	conn *Conn,
+	str datagramStream,
+	decoder *qpack.Decoder,
+	qlogger qlogwriter.Recorder,
+) {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) {
@@ -576,12 +587,14 @@ func (s *Server) handleRequest(conn *Conn, str datagramStream, decoder *qpack.De
 		return
 	}
 	if hf.Length > s.maxHeaderBytes() {
+		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
+		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return
@@ -591,6 +604,9 @@ func (s *Server) handleRequest(conn *Conn, str datagramStream, decoder *qpack.De
 		// TODO: use the right error code
 		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "expected first frame to be a HEADERS frame")
 		return
+	}
+	if qlogger != nil {
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf.Length, hfs)
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {
@@ -609,7 +625,7 @@ func (s *Server) handleRequest(conn *Conn, str datagramStream, decoder *qpack.De
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, nil, nil)
+	hstr := newStream(str, conn, nil, nil, qlogger)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 

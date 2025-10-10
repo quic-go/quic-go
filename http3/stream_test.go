@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/quic-go/qpack"
 
@@ -45,6 +48,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 		),
 		nil,
 		func(r io.Reader, u uint64) error { return nil },
+		nil,
 	)
 
 	buf.Write(getDataFrame([]byte("foobar")))
@@ -94,6 +98,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 		newConnection(context.Background(), clientConn, false, false, nil, 0),
 		nil,
 		func(r io.Reader, u uint64) error { return nil },
+		nil,
 	)
 
 	_, err := str.Read([]byte{0})
@@ -113,28 +118,50 @@ func TestStreamWrite(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil })
+	var eventRecorder events.Recorder
+	str := newStream(qstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, &eventRecorder)
 	str.Write([]byte("foo"))
 	str.Write([]byte("foobar"))
 
+	startLen := buf.Len()
 	fp := frameParser{r: &buf}
 	f, err := fp.ParseNext()
 	require.NoError(t, err)
+	f1Len := startLen - buf.Len()
 	require.Equal(t, &dataFrame{Length: 3}, f)
 	b := make([]byte, 3)
 	_, err = io.ReadFull(&buf, b)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), b)
 
+	startLen = buf.Len()
 	fp = frameParser{r: &buf}
 	f, err = fp.ParseNext()
 	require.NoError(t, err)
+	f2Len := startLen - buf.Len()
 	require.Equal(t, &dataFrame{Length: 6}, f)
 	b = make([]byte, 6)
 	_, err = io.ReadFull(&buf, b)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foobar"), b)
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameCreated{
+				StreamID: 42,
+				Raw:      qlog.RawInfo{Length: f1Len + 3, PayloadLength: 3},
+				Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+			},
+			qlog.FrameCreated{
+				StreamID: 42,
+				Raw:      qlog.RawInfo{Length: f2Len + 6, PayloadLength: 6},
+				Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+			},
+		},
+		eventRecorder.Events(qlog.FrameCreated{}),
+	)
 }
 
 func TestRequestStream(t *testing.T) {
@@ -148,6 +175,7 @@ func TestRequestStream(t *testing.T) {
 			newConnection(context.Background(), clientConn, false, false, nil, 0),
 			&httptrace.ClientTrace{},
 			func(r io.Reader, u uint64) error { return nil },
+			nil,
 		),
 		requestWriter,
 		make(chan struct{}),

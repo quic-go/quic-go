@@ -51,7 +51,7 @@ type serverOpts struct {
 		*handshake.TokenGenerator,
 		bool, /* client address validated by an address validation token */
 		time.Duration,
-		qlogwriter.Recorder,
+		qlogwriter.Trace,
 		utils.Logger,
 		protocol.Version,
 	) *wrappedConn
@@ -677,7 +677,7 @@ func (r *connConstructorRecorder) NewConn(
 	_ *handshake.TokenGenerator,
 	_ bool,
 	_ time.Duration,
-	_ qlogwriter.Recorder,
+	_ qlogwriter.Trace,
 	_ utils.Logger,
 	_ protocol.Version,
 ) *wrappedConn {
@@ -908,7 +908,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ *handshake.TokenGenerator,
 			_ bool,
 			_ time.Duration,
-			_ qlogwriter.Recorder,
+			_ qlogwriter.Trace,
 			_ utils.Logger,
 			_ protocol.Version,
 		) *wrappedConn {
