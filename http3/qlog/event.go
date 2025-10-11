@@ -50,8 +50,6 @@ func (e FrameParsed) Name() string { return "http3:frame_parsed" }
 func (e FrameParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("name"))
-	h.WriteToken(jsontext.String("frame_parsed"))
 	h.WriteToken(jsontext.String("stream_id"))
 	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
 	h.WriteToken(jsontext.String("raw"))
@@ -59,7 +57,7 @@ func (e FrameParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		return err
 	}
 	h.WriteToken(jsontext.String("frame"))
-	if err := e.Frame.Encode(enc); err != nil {
+	if err := e.Frame.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
@@ -77,8 +75,6 @@ func (e FrameCreated) Name() string { return "http3:frame_created" }
 func (e FrameCreated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("name"))
-	h.WriteToken(jsontext.String("frame_created"))
 	h.WriteToken(jsontext.String("stream_id"))
 	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
 	h.WriteToken(jsontext.String("raw"))
@@ -86,7 +82,7 @@ func (e FrameCreated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		return err
 	}
 	h.WriteToken(jsontext.String("frame"))
-	if err := e.Frame.Encode(enc); err != nil {
+	if err := e.Frame.encode(enc); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
