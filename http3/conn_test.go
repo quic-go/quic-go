@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 )
@@ -161,15 +163,18 @@ func TestConnGoAwayFailures(t *testing.T) {
 		b = (&settingsFrame{Other: map[uint64]uint64{settingExtendedConnect: 1337}}).Append(b)
 		testConnControlStreamFailures(t, b, nil, ErrCodeFrameError)
 	})
+
 	t.Run("not a GOAWAY", func(t *testing.T) {
 		b := (&settingsFrame{}).Append(nil)
 		// GOAWAY is the only allowed frame type after SETTINGS
 		b = (&headersFrame{}).Append(b)
 		testConnControlStreamFailures(t, b, nil, ErrCodeFrameUnexpected)
 	})
+
 	t.Run("stream closed before GOAWAY", func(t *testing.T) {
 		testConnControlStreamFailures(t, (&settingsFrame{}).Append(nil), io.EOF, ErrCodeClosedCriticalStream)
 	})
+
 	t.Run("stream reset before GOAWAY", func(t *testing.T) {
 		testConnControlStreamFailures(t,
 			(&settingsFrame{}).Append(nil),
@@ -177,11 +182,13 @@ func TestConnGoAwayFailures(t *testing.T) {
 			ErrCodeClosedCriticalStream,
 		)
 	})
+
 	t.Run("invalid stream ID", func(t *testing.T) {
 		data := (&settingsFrame{}).Append(nil)
 		data = (&goAwayFrame{StreamID: 1}).Append(data)
 		testConnControlStreamFailures(t, data, nil, ErrCodeIDError)
 	})
+
 	t.Run("increased stream ID", func(t *testing.T) {
 		data := (&settingsFrame{}).Append(nil)
 		data = (&goAwayFrame{StreamID: 4}).Append(data)
@@ -254,7 +261,8 @@ func TestConnGoAway(t *testing.T) {
 }
 
 func testConnGoAway(t *testing.T, withStream bool) {
-	clientConn, serverConn := newConnPair(t)
+	var clientEventRecorder events.Recorder
+	clientConn, serverConn := newConnPairWithRecorder(t, &clientEventRecorder, nil)
 
 	conn := newConnection(
 		clientConn.Context(),
@@ -313,6 +321,21 @@ func testConnGoAway(t *testing.T, withStream bool) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for close")
 	}
+
+	framesParsed := clientEventRecorder.Events(qlog.FrameParsed{})
+	var goawayFramesParsed []qlog.FrameParsed
+	for _, ev := range framesParsed {
+		if _, ok := ev.(qlog.FrameParsed).Frame.Frame.(qlog.GoAwayFrame); ok {
+			goawayFramesParsed = append(goawayFramesParsed, ev.(qlog.FrameParsed))
+		}
+	}
+	require.Equal(t,
+		[]qlog.FrameParsed{{
+			StreamID: 3,
+			Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: 8}},
+		}},
+		goawayFramesParsed,
+	)
 }
 
 func TestConnRejectPushStream(t *testing.T) {

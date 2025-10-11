@@ -70,3 +70,10 @@ func TestHeadersFrame(t *testing.T) {
 		},
 	})
 }
+
+func TestGoAwayFrame(t *testing.T) {
+	check(t, GoAwayFrame{StreamID: 1337}, map[string]any{
+		"frame_type": "goaway",
+		"id":         1337,
+	})
+}
