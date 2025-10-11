@@ -28,7 +28,6 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]
 
 	rw.Flush()
 	rw.flushTrailers()
-	fields := make(map[string][]string)
 	decoder := qpack.NewDecoder(nil)
 
 	startLen := rw.buf.Len()
@@ -51,6 +50,7 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]
 	assert.Equal(t, headerFrameLen, ev.Raw.Length, "raw.Length")
 	assert.Equal(t, int(payloadLen), ev.Raw.PayloadLength, "raw.PayloadLength")
 
+	fields := make(map[string][]string)
 	for _, p := range hfs {
 		fields[p.Name] = append(fields[p.Name], p.Value)
 		require.Contains(t,
