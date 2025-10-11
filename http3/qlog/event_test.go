@@ -73,7 +73,7 @@ func TestFrameParsedEvent(t *testing.T) {
 
 	require.Equal(t, "http3:frame_parsed", name)
 	require.Equal(t, float64(4), ev["stream_id"])
-	require.Equal(t, "frame_parsed", ev["name"])
+	require.NotContains(t, ev, "name")
 	require.Contains(t, ev, "frame")
 }
 
@@ -93,6 +93,6 @@ func TestFrameCreatedEvent(t *testing.T) {
 
 	require.Equal(t, "http3:frame_created", name)
 	require.Equal(t, float64(8), ev["stream_id"])
-	require.Equal(t, "frame_created", ev["name"])
+	require.NotContains(t, ev, "name")
 	require.Contains(t, ev, "frame")
 }

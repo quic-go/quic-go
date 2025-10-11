@@ -9,14 +9,16 @@ type Frame struct {
 	Frame any
 }
 
-func (f Frame) Encode(enc *jsontext.Encoder) error {
+func (f Frame) encode(enc *jsontext.Encoder) error {
 	switch frame := f.Frame.(type) {
-	case *DataFrame:
+	case DataFrame:
 		return frame.encode(enc)
-	case *HeadersFrame:
+	case HeadersFrame:
 		return frame.encode(enc)
 	}
-	return nil
+	// This shouldn't happen if the code is correctly logging frames.
+	// Write a null token to produce valid JSON.
+	return enc.WriteToken(jsontext.Null)
 }
 
 // A DataFrame is a DATA frame

@@ -13,7 +13,7 @@ import (
 func check(t *testing.T, f any, expected map[string]any) {
 	var buf bytes.Buffer
 	enc := jsontext.NewEncoder(&buf)
-	require.NoError(t, (Frame{Frame: f}).Encode(enc))
+	require.NoError(t, (Frame{Frame: f}).encode(enc))
 	data := buf.Bytes()
 	require.True(t, json.Valid(data), "invalid JSON: %s", string(data))
 	checkEncoding(t, data, expected)
@@ -51,13 +51,13 @@ func checkEncoding(t *testing.T, data []byte, expected map[string]any) {
 }
 
 func TestDataFrame(t *testing.T) {
-	check(t, &DataFrame{}, map[string]any{
+	check(t, DataFrame{}, map[string]any{
 		"frame_type": "data",
 	})
 }
 
 func TestHeadersFrame(t *testing.T) {
-	check(t, &HeadersFrame{
+	check(t, HeadersFrame{
 		HeaderFields: []HeaderField{
 			{Name: ":status", Value: "200"},
 			{Name: "content-type", Value: "application/json"},
