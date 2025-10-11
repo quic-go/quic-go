@@ -3,7 +3,6 @@ package qlog
 import (
 	"bytes"
 	"encoding/json"
-	"net"
 	"net/netip"
 	"testing"
 	"time"
@@ -58,21 +57,28 @@ func decode(t *testing.T, data string) (string, map[string]any) {
 }
 
 func TestStartedConnection(t *testing.T) {
+	var localInfo, remoteInfo PathEndpointInfo
+	localInfo.IPv4 = netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 13, 37}), 42)
+	ip, err := netip.ParseAddr("2001:db8::1")
+	require.NoError(t, err)
+	remoteInfo.IPv6 = netip.AddrPortFrom(ip, 24)
+
 	name, ev := testEventEncoding(t, &StartedConnection{
-		SrcAddr:          &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
-		DestAddr:         &net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
-		SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-		DestConnectionID: protocol.ParseConnectionID([]byte{5, 6, 7, 8}),
+		Local:  localInfo,
+		Remote: remoteInfo,
 	})
 
 	require.Equal(t, "transport:connection_started", name)
-	require.Equal(t, "ipv4", ev["ip_version"])
-	require.Equal(t, "192.168.13.37", ev["src_ip"])
-	require.Equal(t, float64(42), ev["src_port"])
-	require.Equal(t, "192.168.12.34", ev["dst_ip"])
-	require.Equal(t, float64(24), ev["dst_port"])
-	require.Equal(t, "01020304", ev["src_cid"])
-	require.Equal(t, "05060708", ev["dst_cid"])
+
+	local, ok := ev["local"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "192.168.13.37", local["ip_v4"])
+	require.Equal(t, float64(42), local["port_v4"])
+
+	remote, ok := ev["remote"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "2001:db8::1", remote["ip_v6"])
+	require.Equal(t, float64(24), remote["port_v6"])
 }
 
 func TestVersionInformation(t *testing.T) {

@@ -413,12 +413,7 @@ var newClientConnection = func(
 		if addr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
 			destAddr = addr
 		}
-		s.qlogger.RecordEvent(qlog.StartedConnection{
-			SrcAddr:          srcAddr,
-			DestAddr:         destAddr,
-			SrcConnectionID:  srcConnID,
-			DestConnectionID: destConnID,
-		})
+		s.qlogger.RecordEvent(startedConnectionEvent(srcAddr, destAddr))
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
@@ -1658,12 +1653,7 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 				if addr, ok := c.conn.RemoteAddr().(*net.UDPAddr); ok {
 					destAddr = addr
 				}
-				c.qlogger.RecordEvent(qlog.StartedConnection{
-					SrcAddr:          srcAddr,
-					DestAddr:         destAddr,
-					SrcConnectionID:  packet.hdr.SrcConnectionID,
-					DestConnectionID: packet.hdr.DestConnectionID,
-				})
+				c.qlogger.RecordEvent(startedConnectionEvent(srcAddr, destAddr))
 			}
 		}
 	}

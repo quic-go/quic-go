@@ -3,7 +3,6 @@ package qlog
 import (
 	"errors"
 	"fmt"
-	"net"
 	"net/netip"
 	"time"
 
@@ -56,11 +55,33 @@ func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
+type PathEndpointInfo struct {
+	IPv4 netip.AddrPort
+	IPv6 netip.AddrPort
+}
+
+func (p PathEndpointInfo) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	if p.IPv4.IsValid() {
+		h.WriteToken(jsontext.String("ip_v4"))
+		h.WriteToken(jsontext.String(p.IPv4.Addr().String()))
+		h.WriteToken(jsontext.String("port_v4"))
+		h.WriteToken(jsontext.Int(int64(p.IPv4.Port())))
+	}
+	if p.IPv6.IsValid() {
+		h.WriteToken(jsontext.String("ip_v6"))
+		h.WriteToken(jsontext.String(p.IPv6.Addr().String()))
+		h.WriteToken(jsontext.String("port_v6"))
+		h.WriteToken(jsontext.Int(int64(p.IPv6.Port())))
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
 type StartedConnection struct {
-	SrcAddr          *net.UDPAddr
-	DestAddr         *net.UDPAddr
-	SrcConnectionID  ConnectionID
-	DestConnectionID ConnectionID
+	Local  PathEndpointInfo
+	Remote PathEndpointInfo
 }
 
 func (e StartedConnection) Name() string { return "transport:connection_started" }
@@ -68,25 +89,14 @@ func (e StartedConnection) Name() string { return "transport:connection_started"
 func (e StartedConnection) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	if e.SrcAddr.IP.To4() != nil {
-		h.WriteToken(jsontext.String("ip_version"))
-		h.WriteToken(jsontext.String("ipv4"))
-	} else {
-		h.WriteToken(jsontext.String("ip_version"))
-		h.WriteToken(jsontext.String("ipv6"))
+	h.WriteToken(jsontext.String("local"))
+	if err := e.Local.encode(enc); err != nil {
+		return err
 	}
-	h.WriteToken(jsontext.String("src_ip"))
-	h.WriteToken(jsontext.String(e.SrcAddr.IP.String()))
-	h.WriteToken(jsontext.String("src_port"))
-	h.WriteToken(jsontext.Int(int64(e.SrcAddr.Port)))
-	h.WriteToken(jsontext.String("dst_ip"))
-	h.WriteToken(jsontext.String(e.DestAddr.IP.String()))
-	h.WriteToken(jsontext.String("dst_port"))
-	h.WriteToken(jsontext.Int(int64(e.DestAddr.Port)))
-	h.WriteToken(jsontext.String("src_cid"))
-	h.WriteToken(jsontext.String(e.SrcConnectionID.String()))
-	h.WriteToken(jsontext.String("dst_cid"))
-	h.WriteToken(jsontext.String(e.DestConnectionID.String()))
+	h.WriteToken(jsontext.String("remote"))
+	if err := e.Remote.encode(enc); err != nil {
+		return err
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
