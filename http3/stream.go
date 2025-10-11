@@ -83,6 +83,13 @@ func (s *Stream) Read(b []byte) (int, error) {
 			}
 			switch f := frame.(type) {
 			case *dataFrame:
+				if s.qlogger != nil {
+					s.qlogger.RecordEvent(qlog.FrameParsed{
+						StreamID: s.StreamID(),
+						Raw:      qlog.RawInfo{PayloadLength: int(f.Length)},
+						Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+					})
+				}
 				if s.parsedTrailer {
 					return 0, errors.New("DATA frame received after trailers")
 				}
@@ -308,7 +315,7 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	}
 	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
-	return s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip)
+	return s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip, s.str.StreamID(), s.str.qlogger)
 }
 
 // ReadResponse reads the HTTP response from the stream.
@@ -333,21 +340,27 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
 	}
 	if hf.Length > s.maxHeaderBytes {
+		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(s.str.datagramStream, headerBlock); err != nil {
+		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", err)
 	}
 	hfs, err := s.decoder.DecodeFull(headerBlock)
 	if err != nil {
+		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		// TODO: use the right error code
 		s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "")
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
+	}
+	if s.str.qlogger != nil {
+		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length, hfs)
 	}
 	res := s.response
 	if err := updateResponseFromHeaders(res, hfs); err != nil {

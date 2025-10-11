@@ -8,19 +8,25 @@ import (
 	"testing"
 
 	"github.com/quic-go/qpack"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 )
 
-func decodeRequest(t *testing.T, str io.Reader) map[string]string {
+func decodeRequest(t *testing.T, str io.Reader, streamID quic.StreamID, eventRecorder *events.Recorder) map[string]string {
 	t.Helper()
-	fp := frameParser{r: str}
+
+	r := io.LimitedReader{R: str, N: 1000}
+	fp := frameParser{r: &r}
 	frame, err := fp.ParseNext()
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, frame)
 	headersFrame := frame.(*headersFrame)
 	data := make([]byte, headersFrame.Length)
-	_, err = io.ReadFull(str, data)
+	_, err = io.ReadFull(&r, data)
 	require.NoError(t, err)
 	decoder := qpack.NewDecoder(nil)
 	hfs, err := decoder.DecodeFull(data)
@@ -29,6 +35,25 @@ func decodeRequest(t *testing.T, str io.Reader) map[string]string {
 	for _, hf := range hfs {
 		values[hf.Name] = hf.Value
 	}
+
+	headerFields := make([]qlog.HeaderField, len(hfs))
+	for i, hf := range hfs {
+		headerFields[i] = qlog.HeaderField{Name: hf.Name, Value: hf.Value}
+	}
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameCreated{
+				StreamID: streamID,
+				Raw: qlog.RawInfo{
+					Length:        int(1000 - r.N),
+					PayloadLength: int(headersFrame.Length),
+				},
+				Frame: qlog.Frame{Frame: qlog.HeadersFrame{HeaderFields: headerFields}},
+			},
+		},
+		eventRecorder.Events(qlog.FrameCreated{}),
+	)
+
 	return values
 }
 
@@ -47,9 +72,10 @@ func testRequestWriterGzip(t *testing.T, gzip bool) {
 	req.AddCookie(&http.Cookie{Name: "baz", Value: "lorem ipsum"})
 
 	rw := newRequestWriter()
+	var eventRecorder events.Recorder
 	buf := &bytes.Buffer{}
-	require.NoError(t, rw.WriteRequestHeader(buf, req, gzip))
-	headerFields := decodeRequest(t, buf)
+	require.NoError(t, rw.WriteRequestHeader(buf, req, gzip, 42, &eventRecorder))
+	headerFields := decodeRequest(t, buf, 42, &eventRecorder)
 	require.Equal(t, "quic-go.net", headerFields[":authority"])
 	require.Equal(t, http.MethodGet, headerFields[":method"])
 	require.Equal(t, "/index.html?foo=bar", headerFields[":path"])
@@ -68,7 +94,7 @@ func TestRequestWriterInvalidHostHeader(t *testing.T) {
 	req.Host = "foo@bar" // @ is invalid
 	rw := newRequestWriter()
 	require.EqualError(t,
-		rw.WriteRequestHeader(&bytes.Buffer{}, req, false),
+		rw.WriteRequestHeader(&bytes.Buffer{}, req, false, 0, nil),
 		"http3: invalid Host header",
 	)
 }
@@ -79,8 +105,9 @@ func TestRequestWriterConnect(t *testing.T) {
 	require.NoError(t, err)
 	rw := newRequestWriter()
 	buf := &bytes.Buffer{}
-	require.NoError(t, rw.WriteRequestHeader(buf, req, false))
-	headerFields := decodeRequest(t, buf)
+	var eventRecorder events.Recorder
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false, 1337, &eventRecorder))
+	headerFields := decodeRequest(t, buf, 1337, &eventRecorder)
 	require.Equal(t, http.MethodConnect, headerFields[":method"])
 	require.Equal(t, "quic-go.net", headerFields[":authority"])
 	require.NotContains(t, headerFields, ":path")
@@ -95,8 +122,9 @@ func TestRequestWriterExtendedConnect(t *testing.T) {
 	req.Proto = "webtransport"
 	rw := newRequestWriter()
 	buf := &bytes.Buffer{}
-	require.NoError(t, rw.WriteRequestHeader(buf, req, false))
-	headerFields := decodeRequest(t, buf)
+	var eventRecorder events.Recorder
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false, 1234, &eventRecorder))
+	headerFields := decodeRequest(t, buf, 1234, &eventRecorder)
 	require.Equal(t, "quic-go.net", headerFields[":authority"])
 	require.Equal(t, http.MethodConnect, headerFields[":method"])
 	require.Equal(t, "/", headerFields[":path"])

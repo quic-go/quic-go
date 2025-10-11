@@ -32,10 +32,12 @@ func TestStreamReadDataFrames(t *testing.T) {
 	var buf bytes.Buffer
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
-	clientConn, _ := newConnPair(t)
+	var eventRecorder events.Recorder
+	clientConn, _ := newConnPairWithRecorder(t, &eventRecorder, nil)
 	str := newStream(
 		qstr,
 		newConnection(
@@ -48,7 +50,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 		),
 		nil,
 		func(r io.Reader, u uint64) error { return nil },
-		nil,
+		&eventRecorder,
 	)
 
 	buf.Write(getDataFrame([]byte("foobar")))
@@ -62,12 +64,26 @@ func TestStreamReadDataFrames(t *testing.T) {
 	require.Equal(t, 3, n)
 	require.Equal(t, []byte("bar"), b)
 
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameParsed{
+				StreamID: 42,
+				Raw:      qlog.RawInfo{PayloadLength: 6},
+				Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+			},
+		},
+		eventRecorder.Events(qlog.FrameParsed{}),
+	)
+	eventRecorder.Clear()
+
 	buf.Write(getDataFrame([]byte("baz")))
 	b = make([]byte, 10)
 	n, err = str.Read(b)
 	require.NoError(t, err)
 	require.Equal(t, 3, n)
 	require.Equal(t, []byte("baz"), b[:n])
+	require.Len(t, eventRecorder.Events(qlog.FrameParsed{}), 1)
+	eventRecorder.Clear()
 
 	buf.Write(getDataFrame([]byte("lorem")))
 	buf.Write(getDataFrame([]byte("ipsum")))
@@ -75,11 +91,14 @@ func TestStreamReadDataFrames(t *testing.T) {
 	data, err := io.ReadAll(str)
 	require.NoError(t, err)
 	require.Equal(t, "loremipsum", string(data))
+	require.Len(t, eventRecorder.Events(qlog.FrameParsed{}), 2)
+	eventRecorder.Clear()
 
 	// invalid frame
 	buf.Write([]byte("invalid"))
 	_, err = str.Read([]byte{0})
 	require.Error(t, err)
+	require.Empty(t, eventRecorder.Events(qlog.FrameParsed{}))
 }
 
 func TestStreamInvalidFrame(t *testing.T) {
@@ -167,6 +186,7 @@ func TestStreamWrite(t *testing.T) {
 func TestRequestStream(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	requestWriter := newRequestWriter()
 	clientConn, _ := newConnPair(t)
 	str := newRequestStream(
