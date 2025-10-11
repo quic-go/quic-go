@@ -31,7 +31,7 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]
 	decoder := qpack.NewDecoder(nil)
 
 	startLen := rw.buf.Len()
-	frame, err := (&frameParser{r: rw.buf}).ParseNext()
+	frame, err := (&frameParser{r: rw.buf}).ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, frame)
 	payloadLen := frame.(*headersFrame).Length
@@ -65,7 +65,7 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]
 func (rw *testResponseWriter) DecodeBody(t *testing.T) []byte {
 	t.Helper()
 
-	frame, err := (&frameParser{r: rw.buf}).ParseNext()
+	frame, err := (&frameParser{r: rw.buf}).ParseNext(nil)
 	if err == io.EOF {
 		return nil
 	}

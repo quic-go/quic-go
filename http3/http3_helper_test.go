@@ -292,7 +292,7 @@ func decodeHeader(t *testing.T, r io.Reader) map[string][]string {
 	fields := make(map[string][]string)
 	decoder := qpack.NewDecoder(nil)
 
-	frame, err := (&frameParser{r: r}).ParseNext()
+	frame, err := (&frameParser{r: r}).ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, frame)
 	headersFrame := frame.(*headersFrame)

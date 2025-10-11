@@ -21,7 +21,7 @@ func decodeRequest(t *testing.T, str io.Reader, streamID quic.StreamID, eventRec
 
 	r := io.LimitedReader{R: str, N: 1000}
 	fp := frameParser{r: &r}
-	frame, err := fp.ParseNext()
+	frame, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, frame)
 	headersFrame := frame.(*headersFrame)

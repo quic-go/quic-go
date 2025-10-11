@@ -18,9 +18,14 @@ func TestResponseBodyReading(t *testing.T) {
 	var buf bytes.Buffer
 	buf.Write(getDataFrame([]byte("foobar")))
 	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
 
 	data, err := io.ReadAll(rb)
 	require.NoError(t, err)
@@ -30,9 +35,14 @@ func TestResponseBodyReading(t *testing.T) {
 func TestResponseBodyReadError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	str.EXPECT().Read(gomock.Any()).Return(0, assert.AnError).Times(2)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
 
 	_, err := rb.Read([]byte{0})
 	require.ErrorIs(t, err, assert.AnError)
@@ -49,9 +59,14 @@ func TestResponseBodyReadError(t *testing.T) {
 func TestResponseBodyClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
 	require.NoError(t, rb.Close())
 	select {
 	case <-reqDone:
@@ -66,9 +81,14 @@ func TestResponseBodyClose(t *testing.T) {
 func TestResponseBodyConcurrentClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(3)
 	reqDone := make(chan struct{})
-	rb := newResponseBody(&Stream{datagramStream: str}, -1, reqDone)
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
 
 	for range 3 {
 		go rb.Close()
@@ -101,10 +121,15 @@ func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
 	}
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	rb := newResponseBody(&Stream{datagramStream: str}, l, make(chan struct{}))
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		l,
+		make(chan struct{}),
+	)
 	data, err := io.ReadAll(rb)
 	require.Equal(t, []byte("foobar")[:l], data)
 	require.ErrorIs(t, err, errTooMuchData)

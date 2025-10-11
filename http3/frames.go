@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -21,11 +23,12 @@ var errHijacked = errors.New("hijacked")
 
 type frameParser struct {
 	r                   io.Reader
+	streamID            quic.StreamID
 	closeConn           func(quic.ApplicationErrorCode, string) error
 	unknownFrameHandler unknownFrameHandlerFunc
 }
 
-func (p *frameParser) ParseNext() (frame, error) {
+func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 	qr := quicvarint.NewReader(p.r)
 	for {
 		t, err := quicvarint.Read(qr)
@@ -59,6 +62,13 @@ func (p *frameParser) ParseNext() (frame, error) {
 
 		switch t {
 		case 0x0:
+			if qlogger != nil {
+				qlogger.RecordEvent(qlog.FrameParsed{
+					StreamID: p.streamID,
+					Raw:      qlog.RawInfo{PayloadLength: int(l)},
+					Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+				})
+			}
 			return &dataFrame{Length: l}, nil
 		case 0x1:
 			return &headersFrame{Length: l}, nil
@@ -67,7 +77,17 @@ func (p *frameParser) ParseNext() (frame, error) {
 		case 0x3: // CANCEL_PUSH
 		case 0x5: // PUSH_PROMISE
 		case 0x7:
-			return parseGoAwayFrame(qr, l)
+			f, err := parseGoAwayFrame(qr, l)
+			if err != nil {
+				return nil, err
+			}
+			if qlogger != nil {
+				qlogger.RecordEvent(qlog.FrameParsed{
+					StreamID: p.streamID,
+					Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: f.StreamID}},
+				})
+			}
+			return f, nil
 		case 0xd: // MAX_PUSH_ID
 		case 0x2, 0x6, 0x8, 0x9:
 			p.closeConn(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")

@@ -63,33 +63,23 @@ func newStream(
 		qlogger:        qlogger,
 		parseTrailer:   parseTrailer,
 		frameParser: &frameParser{
-			closeConn: conn.CloseWithError,
 			r:         &tracingReader{Reader: str, trace: trace},
+			streamID:  str.StreamID(),
+			closeConn: conn.CloseWithError,
 		},
 	}
 }
 
 func (s *Stream) Read(b []byte) (int, error) {
-	fp := &frameParser{
-		r:         s.datagramStream,
-		closeConn: s.conn.CloseWithError,
-	}
 	if s.bytesRemainingInFrame == 0 {
 	parseLoop:
 		for {
-			frame, err := fp.ParseNext()
+			frame, err := s.frameParser.ParseNext(s.qlogger)
 			if err != nil {
 				return 0, err
 			}
 			switch f := frame.(type) {
 			case *dataFrame:
-				if s.qlogger != nil {
-					s.qlogger.RecordEvent(qlog.FrameParsed{
-						StreamID: s.StreamID(),
-						Raw:      qlog.RawInfo{PayloadLength: int(f.Length)},
-						Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
-					})
-				}
 				if s.parsedTrailer {
 					return 0, errors.New("DATA frame received after trailers")
 				}
@@ -328,7 +318,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	if !s.sentRequest {
 		return nil, errors.New("http3: invalid duplicate use of RequestStream.ReadResponse before SendRequestHeader")
 	}
-	frame, err := s.str.frameParser.ParseNext()
+	frame, err := s.str.frameParser.ParseNext(s.str.qlogger)
 	if err != nil {
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))

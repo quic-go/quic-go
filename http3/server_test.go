@@ -102,7 +102,7 @@ func testServerSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	require.NoError(t, err)
 	require.EqualValues(t, streamTypeControlStream, typ)
 	fp := (&frameParser{r: bytes.NewReader(b[l:])})
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, f)
 	settingsFrame := f.(*settingsFrame)
@@ -214,7 +214,7 @@ func testServerRequestHandling(t *testing.T,
 	fp := frameParser{r: str}
 	var content []byte
 	for {
-		frame, err := fp.ParseNext()
+		frame, err := fp.ParseNext(nil)
 		if err == io.EOF {
 			break
 		}
@@ -489,7 +489,7 @@ func TestServerHTTPStreamHijacking(t *testing.T) {
 	hfs := decodeHeader(t, r)
 	require.Equal(t, hfs[":status"], []string{"200"})
 	fp := frameParser{r: r}
-	frame, err := fp.ParseNext()
+	frame, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &dataFrame{}, frame)
 	dataFrame := frame.(*dataFrame)
@@ -822,7 +822,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, streamTypeControlStream, typ)
 	fp := &frameParser{r: controlStr}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, f)
 
@@ -832,7 +832,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 		errChan <- s.Shutdown(shutdownCtx)
 	}()
 
-	f, err = fp.ParseNext()
+	f, err = fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, &goAwayFrame{StreamID: 4}, f)
 

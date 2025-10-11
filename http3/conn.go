@@ -317,8 +317,8 @@ func (c *Conn) handleUnidirectionalStreams(hijack func(StreamType, quic.Connecti
 }
 
 func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
-	fp := &frameParser{closeConn: c.conn.CloseWithError, r: str}
-	f, err := fp.ParseNext()
+	fp := &frameParser{closeConn: c.conn.CloseWithError, r: str, streamID: str.StreamID()}
+	f, err := fp.ParseNext(c.qlogger)
 	if err != nil {
 		var serr *quic.StreamError
 		if err == io.EOF || errors.As(err, &serr) {
@@ -362,7 +362,7 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 	}
 
 	for {
-		f, err := fp.ParseNext()
+		f, err := fp.ParseNext(c.qlogger)
 		if err != nil {
 			var serr *quic.StreamError
 			if err == io.EOF || errors.As(err, &serr) {
@@ -379,12 +379,6 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 		if !ok {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			return
-		}
-		if c.qlogger != nil {
-			c.qlogger.RecordEvent(qlog.FrameParsed{
-				StreamID: str.StreamID(),
-				Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: goaway.StreamID}},
-			})
 		}
 		if goaway.StreamID%4 != 0 { // client-initiated, bidirectional streams
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
