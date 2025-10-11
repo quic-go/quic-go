@@ -88,6 +88,8 @@ func TestEncoderNumbersAndBool(t *testing.T) {
 	enc.WriteToken(jsontext.True)
 	enc.WriteToken(jsontext.String("false"))
 	enc.WriteToken(jsontext.False)
+	enc.WriteToken(jsontext.String("nullv"))
+	enc.WriteToken(jsontext.Null)
 	enc.WriteToken(jsontext.EndObject)
 	output := buf.String()
 
@@ -99,6 +101,7 @@ func TestEncoderNumbersAndBool(t *testing.T) {
 		"float": 3.14,
 		"true":  true,
 		"false": false,
+		"nullv": nil,
 	}, got)
 }
 
@@ -124,6 +127,21 @@ func TestEncoderEmptyArray(t *testing.T) {
 	var got []any
 	require.NoError(t, json.Unmarshal([]byte(output), &got))
 	require.Equal(t, []any{}, got)
+}
+
+func TestEncoderArrayWithNulls(t *testing.T) {
+	buf := bytes.NewBuffer(nil)
+	enc := jsontext.NewEncoder(buf)
+	enc.WriteToken(jsontext.BeginArray)
+	enc.WriteToken(jsontext.Null)
+	enc.WriteToken(jsontext.String("x"))
+	enc.WriteToken(jsontext.Null)
+	enc.WriteToken(jsontext.EndArray)
+	output := buf.String()
+
+	var got []any
+	require.NoError(t, json.Unmarshal([]byte(output), &got))
+	require.Equal(t, []any{nil, "x", nil}, got)
 }
 
 func TestEncoderEscapedStrings(t *testing.T) {
@@ -209,6 +227,9 @@ func encodeValue(t testing.TB, enc *jsontext.Encoder, v any) (isSupported bool) 
 		return true
 	case bool:
 		require.NoError(t, enc.WriteToken(jsontext.Bool(val)))
+		return true
+	case nil:
+		require.NoError(t, enc.WriteToken(jsontext.Null))
 		return true
 	default:
 		return false
@@ -326,12 +347,13 @@ func FuzzEncoder(f *testing.F) {
 	examples := []string{
 		`{"hello": "world"}`,
 		`{"foo": 123, "bar": [1, 2, 3]}`,
-		`{"nested": {"a": 1, "b": [true, false, "foobar"]}}`,
+		`{"nested": {"a": 1, "b": [true, false, "foobar", null]}}`,
 		`[{"x": 1}, {"y": "foo"}]`,
 		`["foo", "bar"]`,
 		`["a", {"b": [1, 2, {"c": "d"}]}, 3]`,
 		`{"emptyObj": {}, "emptyArr": []}`,
 		`{"mixed": [1, "two", {"three": 3}]}`,
+		`[null]`,
 	}
 	for _, tc := range examples {
 		// first test that

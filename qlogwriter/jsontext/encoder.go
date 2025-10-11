@@ -19,6 +19,7 @@ const (
 	kindUint
 	kindFloat
 	kindBool
+	kindNull
 	kindObjectStart
 	kindObjectEnd
 	kindArrayStart
@@ -60,6 +61,9 @@ func Bool(b bool) Token {
 	return Token{kind: kindBool, b: b}
 }
 
+// Null is a null token.
+var Null Token = Token{kind: kindNull}
+
 // BeginObject is the begin object token.
 var BeginObject Token = Token{kind: kindObjectStart}
 
@@ -86,6 +90,7 @@ var (
 	colonByte       = []byte(":")
 	trueByte        = []byte("true")
 	falseByte       = []byte("false")
+	nullByte        = []byte("null")
 	openObjectByte  = []byte("{")
 	closeObjectByte = []byte("}")
 	openArrayByte   = []byte("[")
@@ -254,6 +259,11 @@ func (e *Encoder) WriteToken(t Token) error {
 			if _, err = e.w.Write(falseByte); err != nil {
 				return err
 			}
+		}
+		e.afterValue()
+	case kindNull:
+		if _, err = e.w.Write(nullByte); err != nil {
+			return err
 		}
 		e.afterValue()
 	case kindObjectStart:
