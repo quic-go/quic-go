@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -518,6 +519,12 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 
 			// gracefully closed, send GOAWAY frame and wait for requests to complete or grace period to end
 			// new requests will be rejected and shouldn't be sent
+			if qlogger != nil {
+				qlogger.RecordEvent(qlog.FrameCreated{
+					StreamID: ctrlStr.StreamID(),
+					Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: nextStreamID}},
+				})
+			}
 			wg.Add(1)
 			// Send the GOAWAY frame in a separate Goroutine.
 			// Sending might block if the peer didn't grant enough flow control credit.

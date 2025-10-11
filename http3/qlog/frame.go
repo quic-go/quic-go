@@ -1,6 +1,7 @@
 package qlog
 
 import (
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 )
 
@@ -14,6 +15,8 @@ func (f Frame) encode(enc *jsontext.Encoder) error {
 	case DataFrame:
 		return frame.encode(enc)
 	case HeadersFrame:
+		return frame.encode(enc)
+	case GoAwayFrame:
 		return frame.encode(enc)
 	}
 	// This shouldn't happen if the code is correctly logging frames.
@@ -61,6 +64,22 @@ func (f *HeadersFrame) encode(enc *jsontext.Encoder) error {
 		}
 		h.WriteToken(jsontext.EndArray)
 	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// A GoAwayFrame is a GOAWAY frame
+type GoAwayFrame struct {
+	StreamID quic.StreamID
+}
+
+func (f *GoAwayFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("goaway"))
+	h.WriteToken(jsontext.String("id"))
+	h.WriteToken(jsontext.Uint(uint64(f.StreamID)))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

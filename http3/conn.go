@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 
@@ -378,6 +379,12 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 		if !ok {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			return
+		}
+		if c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.FrameParsed{
+				StreamID: str.StreamID(),
+				Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: goaway.StreamID}},
+			})
 		}
 		if goaway.StreamID%4 != 0 { // client-initiated, bidirectional streams
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")

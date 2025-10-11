@@ -24,6 +24,10 @@ type RawInfo struct {
 	PayloadLength int // length of the packet payload, excluding AEAD tag
 }
 
+func (i RawInfo) HasValues() bool {
+	return i.Length != 0 || i.PayloadLength != 0
+}
+
 func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
@@ -52,9 +56,11 @@ func (e FrameParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("stream_id"))
 	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
-	h.WriteToken(jsontext.String("raw"))
-	if err := e.Raw.encode(enc); err != nil {
-		return err
+	if e.Raw.HasValues() {
+		h.WriteToken(jsontext.String("raw"))
+		if err := e.Raw.encode(enc); err != nil {
+			return err
+		}
 	}
 	h.WriteToken(jsontext.String("frame"))
 	if err := e.Frame.encode(enc); err != nil {
@@ -77,9 +83,11 @@ func (e FrameCreated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("stream_id"))
 	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
-	h.WriteToken(jsontext.String("raw"))
-	if err := e.Raw.encode(enc); err != nil {
-		return err
+	if e.Raw.HasValues() {
+		h.WriteToken(jsontext.String("raw"))
+		if err := e.Raw.encode(enc); err != nil {
+			return err
+		}
 	}
 	h.WriteToken(jsontext.String("frame"))
 	if err := e.Frame.encode(enc); err != nil {
