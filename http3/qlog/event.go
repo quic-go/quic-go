@@ -96,3 +96,43 @@ func (e FrameCreated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
+
+type DatagramCreated struct {
+	QuaterStreamID uint64
+	Raw            RawInfo
+}
+
+func (e DatagramCreated) Name() string { return "http3:datagram_created" }
+
+func (e DatagramCreated) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("quater_stream_id"))
+	h.WriteToken(jsontext.Uint(e.QuaterStreamID))
+	h.WriteToken(jsontext.String("raw"))
+	if err := e.Raw.encode(enc); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+type DatagramParsed struct {
+	QuaterStreamID uint64
+	Raw            RawInfo
+}
+
+func (e DatagramParsed) Name() string { return "http3:datagram_parsed" }
+
+func (e DatagramParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("quater_stream_id"))
+	h.WriteToken(jsontext.Uint(e.QuaterStreamID))
+	h.WriteToken(jsontext.String("raw"))
+	if err := e.Raw.encode(enc); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/quic-go/testutils/events"
 
@@ -416,7 +417,8 @@ func TestConnInconsistentDatagramSupport(t *testing.T) {
 }
 
 func TestConnSendAndReceiveDatagram(t *testing.T) {
-	clientConn, serverConn := newConnPairWithDatagrams(t)
+	var eventRecorder events.Recorder
+	clientConn, serverConn := newConnPairWithDatagrams(t, &eventRecorder, nil)
 
 	conn := newConnection(
 		clientConn.Context(),
@@ -441,8 +443,20 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	// since the stream is not open yet, it will be dropped
 	quarterStreamID := quicvarint.Append([]byte{}, strID/4)
 
-	require.NoError(t, serverConn.SendDatagram(append(quarterStreamID, []byte("foo")...)))
+	datagram := append(quarterStreamID, []byte("foo")...)
+	require.NoError(t, serverConn.SendDatagram(datagram))
 	time.Sleep(scaleDuration(10 * time.Millisecond)) // give the datagram a chance to be delivered
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.DatagramParsed{
+				QuaterStreamID: strID / 4,
+				Raw:            qlog.RawInfo{Length: len(datagram), PayloadLength: 3},
+			},
+		},
+		eventRecorder.Events(qlog.DatagramParsed{}),
+	)
+	eventRecorder.Clear()
 
 	// don't use stream 0, since that makes it hard to test that the quarter stream ID is used
 	str1, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
@@ -468,6 +482,17 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	expected := quicvarint.Append([]byte{}, strID/4)
 	expected = append(expected, []byte("foobaz")...)
 
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.DatagramCreated{
+				QuaterStreamID: strID / 4,
+				Raw:            qlog.RawInfo{PayloadLength: 6, Length: len(expected)},
+			},
+		},
+		eventRecorder.Events(qlog.DatagramCreated{}),
+	)
+	eventRecorder.Clear()
+
 	data, err = serverConn.ReceiveDatagram(ctx)
 	require.NoError(t, err)
 	require.Equal(t, expected, data)
@@ -483,7 +508,7 @@ func TestConnDatagramFailures(t *testing.T) {
 }
 
 func testConnDatagramFailures(t *testing.T, datagram []byte) {
-	clientConn, serverConn := newConnPairWithDatagrams(t)
+	clientConn, serverConn := newConnPairWithDatagrams(t, nil, nil)
 
 	conn := newConnection(
 		clientConn.Context(),
