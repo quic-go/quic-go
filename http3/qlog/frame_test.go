@@ -77,3 +77,70 @@ func TestGoAwayFrame(t *testing.T) {
 		"id":         1337,
 	})
 }
+
+func pointer[T any](v T) *T {
+	return &v
+}
+
+func TestSettingsFrame(t *testing.T) {
+	tests := []struct {
+		name     string
+		frame    SettingsFrame
+		expected map[string]any
+	}{
+		{
+			name:  "datagram: true",
+			frame: SettingsFrame{Datagram: pointer(true)},
+			expected: map[string]any{
+				"frame_type": "settings",
+				"settings": []map[string]any{{
+					"name":  "settings_h3_datagram",
+					"value": true,
+				}},
+			},
+		},
+		{
+			name:  "extended_connect: false",
+			frame: SettingsFrame{ExtendedConnect: pointer(false)},
+			expected: map[string]any{
+				"frame_type": "settings",
+				"settings": []map[string]any{{
+					"name":  "settings_enable_connect_protocol",
+					"value": false,
+				}},
+			},
+		},
+		{
+			name:  "datagram: false, extended_connect: false",
+			frame: SettingsFrame{Datagram: pointer(false), ExtendedConnect: pointer(false)},
+			expected: map[string]any{
+				"frame_type": "settings",
+				"settings": []map[string]any{
+					{"name": "settings_h3_datagram", "value": false},
+					{"name": "settings_enable_connect_protocol", "value": false},
+				},
+			},
+		},
+		{
+			name: "unknowns",
+			// Only test a single unknown setting.
+			// Testing multiple unknown settings doesn't add a lot of value,
+			// and would require us to deal with non-deterministic map iteration order.
+			frame: SettingsFrame{Other: map[uint64]uint64{0xdead: 0xbeef}},
+			expected: map[string]any{
+				"frame_type": "settings",
+				"settings": []map[string]any{{
+					"name":       "unknown",
+					"name_bytes": float64(0xdead),
+					"value":      float64(0xbeef),
+				}},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			check(t, tc.frame, tc.expected)
+		})
+	}
+}
