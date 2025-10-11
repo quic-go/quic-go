@@ -411,8 +411,18 @@ func (c *Conn) handleControlStream(str *quic.ReceiveStream) {
 func (c *Conn) sendDatagram(streamID quic.StreamID, b []byte) error {
 	// TODO: this creates a lot of garbage and an additional copy
 	data := make([]byte, 0, len(b)+8)
+	quarterStreamID := uint64(streamID / 4)
 	data = quicvarint.Append(data, uint64(streamID/4))
 	data = append(data, b...)
+	if c.qlogger != nil {
+		c.qlogger.RecordEvent(qlog.DatagramCreated{
+			QuaterStreamID: quarterStreamID,
+			Raw: qlog.RawInfo{
+				Length:        len(data),
+				PayloadLength: len(b),
+			},
+		})
+	}
 	return c.conn.SendDatagram(data)
 }
 
@@ -426,6 +436,15 @@ func (c *Conn) receiveDatagrams() error {
 		if err != nil {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeDatagramError), "")
 			return fmt.Errorf("could not read quarter stream id: %w", err)
+		}
+		if c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.DatagramParsed{
+				QuaterStreamID: quarterStreamID,
+				Raw: qlog.RawInfo{
+					Length:        len(b),
+					PayloadLength: len(b) - n,
+				},
+			})
 		}
 		if quarterStreamID > maxQuarterStreamID {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeDatagramError), "")

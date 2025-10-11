@@ -187,7 +187,7 @@ func newConnPairWithRecorder(t *testing.T, clientRecorder, serverRecorder qlogwr
 	return cl, conn
 }
 
-func newConnPairWithDatagrams(t *testing.T) (client, server *quic.Conn) {
+func newConnPairWithDatagrams(t *testing.T, clientRecorder, serverRecorder qlogwriter.Recorder) (client, server *quic.Conn) {
 	t.Helper()
 
 	ln, err := quic.ListenEarly(
@@ -197,13 +197,27 @@ func newConnPairWithDatagrams(t *testing.T) (client, server *quic.Conn) {
 			InitialStreamReceiveWindow:     maxByteCount,
 			InitialConnectionReceiveWindow: maxByteCount,
 			EnableDatagrams:                true,
+			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
+				return &qlogTrace{recorder: serverRecorder}
+			},
 		},
 	)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	cl, err := quic.DialEarly(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), &quic.Config{EnableDatagrams: true})
+	cl, err := quic.DialEarly(
+		ctx,
+		newUDPConnLocalhost(t),
+		ln.Addr(),
+		getTLSClientConfig(),
+		&quic.Config{
+			EnableDatagrams: true,
+			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
+				return &qlogTrace{recorder: clientRecorder}
+			},
+		},
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() { cl.CloseWithError(0, "") })
 
