@@ -413,10 +413,7 @@ var newClientConnection = func(
 		if addr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
 			destAddr = addr
 		}
-		s.qlogger.RecordEvent(qlog.StartedConnection{
-			Local:  toPathEndpointInfo(srcAddr),
-			Remote: toPathEndpointInfo(destAddr),
-		})
+		s.qlogger.RecordEvent(startedConnectionEvent(srcAddr, destAddr))
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
@@ -1656,10 +1653,7 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 				if addr, ok := c.conn.RemoteAddr().(*net.UDPAddr); ok {
 					destAddr = addr
 				}
-				c.qlogger.RecordEvent(qlog.StartedConnection{
-					Local:  toPathEndpointInfo(srcAddr),
-					Remote: toPathEndpointInfo(destAddr),
-				})
+				c.qlogger.RecordEvent(startedConnectionEvent(srcAddr, destAddr))
 			}
 		}
 	}

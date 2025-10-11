@@ -277,7 +277,7 @@ func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
 	}
 
 	var info qlog.PathEndpointInfo
-	if addr.IP.To4() != nil {
+	if addr.IP == nil || addr.IP.To4() != nil {
 		addrPort := netip.AddrPortFrom(netip.AddrFrom4([4]byte(addr.IP.To4())), uint16(addr.Port))
 		if addrPort.IsValid() {
 			info.IPv4 = addrPort
@@ -289,4 +289,34 @@ func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
 		}
 	}
 	return info
+}
+
+// startedConnectionEvent builds a StartedConnection event using consistent logic
+// for both endpoints. If the local address is unspecified (e.g., dual-stack
+// listener), it selects the family based on the remote address and uses the
+// unspecified address of that family with the local port.
+func startedConnectionEvent(local, remote *net.UDPAddr) qlog.StartedConnection {
+	var localInfo, remoteInfo qlog.PathEndpointInfo
+	if remote != nil {
+		remoteInfo = toPathEndpointInfo(remote)
+	}
+	if local != nil {
+		if local.IP == nil || local.IP.IsUnspecified() {
+			// Choose local family based on the remote address family.
+			if remote != nil && remote.IP.To4() != nil {
+				ap := netip.AddrPortFrom(netip.AddrFrom4([4]byte{}), uint16(local.Port))
+				if ap.IsValid() {
+					localInfo.IPv4 = ap
+				}
+			} else if remote != nil && remote.IP.To16() != nil && remote.IP.To4() == nil {
+				ap := netip.AddrPortFrom(netip.AddrFrom16([16]byte{}), uint16(local.Port))
+				if ap.IsValid() {
+					localInfo.IPv6 = ap
+				}
+			}
+		} else {
+			localInfo = toPathEndpointInfo(local)
+		}
+	}
+	return qlog.StartedConnection{Local: localInfo, Remote: remoteInfo}
 }
