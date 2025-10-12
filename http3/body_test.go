@@ -22,7 +22,7 @@ func TestResponseBodyReading(t *testing.T) {
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	reqDone := make(chan struct{})
 	rb := newResponseBody(
-		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
 		-1,
 		reqDone,
 	)
@@ -39,7 +39,7 @@ func TestResponseBodyReadError(t *testing.T) {
 	str.EXPECT().Read(gomock.Any()).Return(0, assert.AnError).Times(2)
 	reqDone := make(chan struct{})
 	rb := newResponseBody(
-		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
 		-1,
 		reqDone,
 	)
@@ -63,7 +63,7 @@ func TestResponseBodyClose(t *testing.T) {
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
 	reqDone := make(chan struct{})
 	rb := newResponseBody(
-		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
 		-1,
 		reqDone,
 	)
@@ -85,7 +85,7 @@ func TestResponseBodyConcurrentClose(t *testing.T) {
 	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).MaxTimes(3)
 	reqDone := make(chan struct{})
 	rb := newResponseBody(
-		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
 		-1,
 		reqDone,
 	)
@@ -126,7 +126,7 @@ func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
 	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	rb := newResponseBody(
-		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil),
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
 		l,
 		make(chan struct{}),
 	)

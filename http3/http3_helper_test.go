@@ -24,6 +24,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
 )
@@ -327,4 +328,28 @@ func filterQlogEventsForFrame(events []qlogwriter.Event, frame any) []qlogwriter
 		}
 	}
 	return filtered
+}
+
+func expectedFrameLength(t *testing.T, frame any) (length, payloadLength int) {
+	t.Helper()
+
+	switch f := frame.(type) {
+	case *dataFrame:
+		return len(f.Append(nil)) + int(f.Length), int(f.Length)
+	case *headersFrame:
+		return len(f.Append(nil)) + int(f.Length), int(f.Length)
+	case *goAwayFrame:
+		return len(f.Append(nil)), quicvarint.Len(uint64(f.StreamID))
+	case *settingsFrame:
+		data := f.Append(nil)
+		r := bytes.NewReader(data)
+		_, err := quicvarint.Read(r) // type
+		require.NoError(t, err)
+		_, err = quicvarint.Read(r) // length
+		require.NoError(t, err)
+		return len(data), r.Len()
+	default:
+		t.Fatalf("unexpected frame type: %T", frame)
+	}
+	panic("unreachable")
 }

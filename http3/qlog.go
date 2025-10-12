@@ -18,7 +18,7 @@ func maybeQlogInvalidHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.Str
 	}
 }
 
-func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, l uint64, hfs []qpack.HeaderField) {
+func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, hf *headersFrame, hfs []qpack.HeaderField) {
 	headerFields := make([]qlog.HeaderField, len(hfs))
 	for i, hf := range hfs {
 		headerFields[i] = qlog.HeaderField{
@@ -28,7 +28,10 @@ func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID,
 	}
 	qlogger.RecordEvent(qlog.FrameParsed{
 		StreamID: streamID,
-		Raw:      qlog.RawInfo{PayloadLength: int(l)},
+		Raw: qlog.RawInfo{
+			Length:        int(hf.Length) + hf.headerLen,
+			PayloadLength: int(hf.Length),
+		},
 		Frame: qlog.Frame{Frame: qlog.HeadersFrame{
 			HeaderFields: headerFields,
 		}},

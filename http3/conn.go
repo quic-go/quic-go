@@ -176,8 +176,8 @@ func (c *Conn) openRequestStream(
 	rsp := &http.Response{}
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
-		newStream(hstr, c, trace, func(r io.Reader, l uint64) error {
-			hdr, err := c.decodeTrailers(r, str.StreamID(), l, maxHeaderBytes)
+		newStream(hstr, c, trace, func(r io.Reader, hf *headersFrame) error {
+			hdr, err := c.decodeTrailers(r, str.StreamID(), hf, maxHeaderBytes)
 			if err != nil {
 				return err
 			}
@@ -193,23 +193,23 @@ func (c *Conn) openRequestStream(
 	), nil
 }
 
-func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, l, maxHeaderBytes uint64) (http.Header, error) {
-	if l > maxHeaderBytes {
-		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, l)
-		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, maxHeaderBytes)
+func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, hf *headersFrame, maxHeaderBytes uint64) (http.Header, error) {
+	if hf.Length > maxHeaderBytes {
+		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, hf.Length)
+		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
 
-	b := make([]byte, l)
+	b := make([]byte, hf.Length)
 	if _, err := io.ReadFull(r, b); err != nil {
 		return nil, err
 	}
 	fields, err := c.decoder.DecodeFull(b)
 	if err != nil {
-		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, l)
+		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, hf.Length)
 		return nil, err
 	}
 	if c.qlogger != nil {
-		qlogParsedHeadersFrame(c.qlogger, streamID, l, fields)
+		qlogParsedHeadersFrame(c.qlogger, streamID, hf, fields)
 	}
 	return parseTrailers(fields)
 }

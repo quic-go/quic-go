@@ -45,7 +45,7 @@ type Stream struct {
 
 	qlogger qlogwriter.Recorder
 
-	parseTrailer  func(io.Reader, uint64) error
+	parseTrailer  func(io.Reader, *headersFrame) error
 	parsedTrailer bool
 }
 
@@ -53,7 +53,7 @@ func newStream(
 	str datagramStream,
 	conn *Conn,
 	trace *httptrace.ClientTrace,
-	parseTrailer func(io.Reader, uint64) error,
+	parseTrailer func(io.Reader, *headersFrame) error,
 	qlogger qlogwriter.Recorder,
 ) *Stream {
 	return &Stream{
@@ -94,7 +94,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
-				return 0, s.parseTrailer(s.datagramStream, f.Length)
+				return 0, s.parseTrailer(s.datagramStream, f)
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -350,7 +350,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		return nil, fmt.Errorf("http3: failed to decode response headers: %w", err)
 	}
 	if s.str.qlogger != nil {
-		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length, hfs)
+		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, hfs)
 	}
 	res := s.response
 	if err := updateResponseFromHeaders(res, hfs); err != nil {
