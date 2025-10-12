@@ -108,6 +108,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 	clientConn, serverConn := newConnPair(t)
@@ -146,7 +147,7 @@ func TestStreamWrite(t *testing.T) {
 
 	startLen := buf.Len()
 	fp := frameParser{r: &buf}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	f1Len := startLen - buf.Len()
 	require.Equal(t, &dataFrame{Length: 3}, f)
@@ -157,7 +158,7 @@ func TestStreamWrite(t *testing.T) {
 
 	startLen = buf.Len()
 	fp = frameParser{r: &buf}
-	f, err = fp.ParseNext()
+	f, err = fp.ParseNext(nil)
 	require.NoError(t, err)
 	f2Len := startLen - buf.Len()
 	require.Equal(t, &dataFrame{Length: 6}, f)

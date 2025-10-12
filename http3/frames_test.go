@@ -21,7 +21,7 @@ func testFrameParserEOF(t *testing.T, data []byte) {
 		b := make([]byte, i)
 		copy(b, data[:i])
 		fp := frameParser{r: bytes.NewReader(b)}
-		_, err := fp.ParseNext()
+		_, err := fp.ParseNext(nil)
 		require.Error(t, err)
 		require.ErrorIs(t, err, io.EOF)
 	}
@@ -40,7 +40,7 @@ func TestParserReservedFrameType(t *testing.T) {
 				r:         bytes.NewReader(data),
 				closeConn: client.CloseWithError,
 			}
-			_, err := fp.ParseNext()
+			_, err := fp.ParseNext(nil)
 			require.Error(t, err)
 			require.ErrorContains(t, err, "http3: reserved frame type")
 
@@ -70,7 +70,7 @@ func TestParserUnknownFrameType(t *testing.T) {
 
 	r := bytes.NewReader(data)
 	fp := frameParser{r: r}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, f)
 	hf = f.(*headersFrame)
@@ -90,14 +90,14 @@ func TestParserHeadersFrame(t *testing.T) {
 	testFrameParserEOF(t, data)
 
 	// parse
-	f1, err := fp.ParseNext()
+	f1, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, f1)
 	require.Equal(t, uint64(0x1337), f1.(*headersFrame).Length)
 
 	// write and parse
 	fp = frameParser{r: bytes.NewReader(f1.(*headersFrame).Append(nil))}
-	f2, err := fp.ParseNext()
+	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, f1, f2)
 }
@@ -111,14 +111,14 @@ func TestDataFrame(t *testing.T) {
 	testFrameParserEOF(t, data)
 
 	// parse
-	f1, err := fp.ParseNext()
+	f1, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &dataFrame{}, f1)
 	require.Equal(t, uint64(0x1337), f1.(*dataFrame).Length)
 
 	// write and parse
 	fp = frameParser{r: bytes.NewReader(f1.(*dataFrame).Append(nil))}
-	f2, err := fp.ParseNext()
+	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, f1, f2)
 }
@@ -140,7 +140,7 @@ func TestParserSettingsFrame(t *testing.T) {
 	testFrameParserEOF(t, data)
 
 	fp := frameParser{r: bytes.NewReader(data)}
-	frame, err := fp.ParseNext()
+	frame, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, frame)
 	sf := frame.(*settingsFrame)
@@ -150,7 +150,7 @@ func TestParserSettingsFrame(t *testing.T) {
 
 	// write and parse
 	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
-	f2, err := fp.ParseNext()
+	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, f2)
 	sf2 := f2.(*settingsFrame)
@@ -187,7 +187,7 @@ func TestParserSettingsFrameDuplicateSettings(t *testing.T) {
 			data = quicvarint.Append(data, uint64(len(settings)))
 			data = append(data, settings...)
 			fp := frameParser{r: bytes.NewReader(data)}
-			_, err := fp.ParseNext()
+			_, err := fp.ParseNext(nil)
 			require.Error(t, err)
 			require.EqualError(t, err, fmt.Sprintf("duplicate setting: %d", tc.num))
 		})
@@ -216,14 +216,14 @@ func testParserSettingsFrameDatagram(t *testing.T, enabled bool) {
 	data = append(data, settings...)
 
 	fp := frameParser{r: bytes.NewReader(data)}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, f)
 	sf := f.(*settingsFrame)
 	require.Equal(t, enabled, sf.Datagram)
 
 	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
-	f2, err := fp.ParseNext()
+	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, sf, f2)
 }
@@ -235,7 +235,7 @@ func TestParserSettingsFrameDatagramInvalidValue(t *testing.T) {
 	data = quicvarint.Append(data, uint64(len(settings)))
 	data = append(data, settings...)
 	fp := frameParser{r: bytes.NewReader(data)}
-	_, err := fp.ParseNext()
+	_, err := fp.ParseNext(nil)
 	require.EqualError(t, err, "invalid value for SETTINGS_H3_DATAGRAM: 1337")
 }
 
@@ -261,14 +261,14 @@ func testParserSettingsFrameExtendedConnect(t *testing.T, enabled bool) {
 	data = append(data, settings...)
 
 	fp := frameParser{r: bytes.NewReader(data)}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, f)
 	sf := f.(*settingsFrame)
 	require.Equal(t, enabled, sf.ExtendedConnect)
 
 	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
-	f2, err := fp.ParseNext()
+	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, sf, f2)
 }
@@ -280,7 +280,7 @@ func TestParserSettingsFrameExtendedConnectInvalidValue(t *testing.T) {
 	data = quicvarint.Append(data, uint64(len(settings)))
 	data = append(data, settings...)
 	fp := frameParser{r: bytes.NewReader(data)}
-	_, err := fp.ParseNext()
+	_, err := fp.ParseNext(nil)
 	require.EqualError(t, err, "invalid value for SETTINGS_ENABLE_CONNECT_PROTOCOL: 1337")
 }
 
@@ -293,14 +293,14 @@ func TestParserGoAwayFrame(t *testing.T) {
 	testFrameParserEOF(t, data)
 
 	fp := frameParser{r: bytes.NewReader(data)}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &goAwayFrame{}, f)
 	require.Equal(t, quic.StreamID(100), f.(*goAwayFrame).StreamID)
 
 	// write and parse
 	fp = frameParser{r: bytes.NewReader(f.(*goAwayFrame).Append(nil))}
-	f2, err := fp.ParseNext()
+	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, f, f2)
 }
@@ -344,7 +344,7 @@ func testParserHijacking(t *testing.T, hijack bool) {
 			return true, nil
 		},
 	}
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.True(t, called)
 	if hijack {
 		require.ErrorIs(t, err, errHijacked)
@@ -375,7 +375,7 @@ func TestParserHijackError(t *testing.T) {
 			return true, nil
 		},
 	}
-	_, err := fp.ParseNext()
+	_, err := fp.ParseNext(nil)
 	require.ErrorIs(t, err, errHijacked)
 	require.True(t, called)
 }

@@ -48,7 +48,7 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	require.NoError(t, err)
 	require.EqualValues(t, streamTypeControlStream, typ)
 	fp := (&frameParser{r: str})
-	f, err := fp.ParseNext()
+	f, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.IsType(t, &settingsFrame{}, f)
 	settingsFrame := f.(*settingsFrame)
@@ -60,6 +60,7 @@ func encodeResponse(t *testing.T, status int) []byte {
 	mockCtrl := gomock.NewController(t)
 	buf := &bytes.Buffer{}
 	rstr := NewMockDatagramStream(mockCtrl)
+	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil), nil, false, nil)
 	rw.WriteHeader(status)
@@ -325,6 +326,7 @@ func TestClient1xxHandling(t *testing.T) {
 func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, tooMany bool) {
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
+	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil), nil, false, nil)
 	rw.header.Add("Link", "foo")
@@ -404,6 +406,7 @@ func testClientGzip(t *testing.T,
 ) {
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
+	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil), nil, false, nil)
 	rw.WriteHeader(http.StatusOK)

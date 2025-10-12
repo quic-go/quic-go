@@ -580,7 +580,7 @@ func (s *Server) handleRequest(
 		}
 	}
 	fp := &frameParser{closeConn: conn.CloseWithError, r: str, unknownFrameHandler: ufh}
-	frame, err := fp.ParseNext()
+	frame, err := fp.ParseNext(qlogger)
 	if err != nil {
 		if !errors.Is(err, errHijacked) {
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))

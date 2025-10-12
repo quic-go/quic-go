@@ -158,7 +158,7 @@ func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, q
 			},
 		}
 		go func() {
-			if _, err := fp.ParseNext(); err == errHijacked {
+			if _, err := fp.ParseNext(c.conn.qlogger); err == errHijacked {
 				return
 			}
 			if err != nil {
