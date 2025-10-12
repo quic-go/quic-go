@@ -862,6 +862,7 @@ func testConnectionUnpackFailureDropped(t *testing.T, unpackErr error, packetDro
 		// test teardown
 		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 		tc.conn.destroy(nil)
+		synctest.Wait() // Ensure all goroutines have progressed after destroy
 		select {
 		case <-errChan:
 		default:
