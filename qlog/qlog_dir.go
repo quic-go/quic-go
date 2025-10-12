@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/quic-go/quic-go/internal/utils"
@@ -19,6 +20,17 @@ const EventSchema = "urn:ietf:params:qlog:events:quic-12"
 // File names are <odcid>_<perspective>.sqlog.
 // Returns nil if QLOGDIR is not set.
 func DefaultConnectionTracer(_ context.Context, isClient bool, connID ConnectionID) qlogwriter.Trace {
+	return defaultConnectionTracerWithSchemas(isClient, connID, []string{EventSchema})
+}
+
+func DefaultConnectionTracerWithSchemas(_ context.Context, isClient bool, connID ConnectionID, eventSchemas []string) qlogwriter.Trace {
+	if !slices.Contains(eventSchemas, EventSchema) {
+		eventSchemas = append([]string{EventSchema}, eventSchemas...)
+	}
+	return defaultConnectionTracerWithSchemas(isClient, connID, eventSchemas)
+}
+
+func defaultConnectionTracerWithSchemas(isClient bool, connID ConnectionID, eventSchemas []string) qlogwriter.Trace {
 	qlogDir := os.Getenv("QLOGDIR")
 	if qlogDir == "" {
 		return nil
@@ -42,7 +54,7 @@ func DefaultConnectionTracer(_ context.Context, isClient bool, connID Connection
 		utils.NewBufferedWriteCloser(bufio.NewWriter(f), f),
 		isClient,
 		connID,
-		[]string{EventSchema},
+		eventSchemas,
 	)
 	go fileSeq.Run()
 	return fileSeq

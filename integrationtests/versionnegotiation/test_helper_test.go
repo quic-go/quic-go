@@ -74,6 +74,8 @@ type multiplexedTrace struct {
 
 var _ qlogwriter.Trace = &multiplexedTrace{}
 
+func (t *multiplexedTrace) SupportsSchemas(schema string) bool { return true }
+
 func (t *multiplexedTrace) AddProducer() qlogwriter.Recorder {
 	recorders := make([]qlogwriter.Recorder, 0, len(t.Traces))
 	for _, tr := range t.Traces {
