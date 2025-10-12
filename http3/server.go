@@ -628,7 +628,7 @@ func (s *Server) handleRequest(
 		return
 	}
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf.Length, hfs)
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {

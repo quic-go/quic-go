@@ -87,7 +87,7 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 	str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
 	str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
 	rw := newResponseWriter(
-		newStream(str, nil, nil, func(r io.Reader, u uint64) error { return nil }, &eventRecorder),
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
 		nil,
 		false,
 		nil,

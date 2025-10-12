@@ -81,7 +81,7 @@ func encodeResponse(t *testing.T, status int) []byte {
 	rstr := NewMockDatagramStream(mockCtrl)
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
 	rw.WriteHeader(status)
 	rw.Flush()
 	return buf.Bytes()
@@ -347,7 +347,7 @@ func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, 
 	rstr := NewMockDatagramStream(gomock.NewController(t))
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
 	rw.header.Add("Link", "foo")
 	rw.header.Add("Link", "bar")
 	for range numEarlyHints {
@@ -427,7 +427,7 @@ func testClientGzip(t *testing.T,
 	rstr := NewMockDatagramStream(gomock.NewController(t))
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(rstr, nil, nil, func(r io.Reader, u uint64) error { return nil }, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
 	rw.WriteHeader(http.StatusOK)
 	if responseAddContentEncoding {
 		rw.header.Add("Content-Encoding", "gzip")

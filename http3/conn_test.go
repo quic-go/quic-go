@@ -29,11 +29,12 @@ func TestConnReceiveSettings(t *testing.T) {
 		0,
 	)
 	b := quicvarint.Append(nil, streamTypeControlStream)
-	b = (&settingsFrame{
+	sf := &settingsFrame{
 		Datagram:        true,
 		ExtendedConnect: true,
 		Other:           map[uint64]uint64{1337: 42},
-	}).Append(b)
+	}
+	b = sf.Append(b)
 	controlStr, err := clientConn.OpenUniStream()
 	require.NoError(t, err)
 	_, err = controlStr.Write(b)
@@ -54,11 +55,12 @@ func TestConnReceiveSettings(t *testing.T) {
 	require.True(t, settings.EnableExtendedConnect)
 	require.Equal(t, map[uint64]uint64{1337: 42}, settings.Other)
 
+	expectedLen, expectedPayloadLen := expectedFrameLength(t, sf)
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.FrameParsed{
 				StreamID: controlStr.StreamID(),
-				Raw:      qlog.RawInfo{PayloadLength: len(b) - 3}, // type and length
+				Raw:      qlog.RawInfo{Length: expectedLen, PayloadLength: expectedPayloadLen},
 				Frame:    qlog.Frame{Frame: qlog.SettingsFrame{Datagram: pointer(true), ExtendedConnect: pointer(true), Other: map[uint64]uint64{1337: 42}}},
 			},
 		},
@@ -335,10 +337,12 @@ func testConnGoAway(t *testing.T, withStream bool) {
 		t.Fatal("timeout waiting for close")
 	}
 
+	expectedLen, expectedPayloadLen := expectedFrameLength(t, &goAwayFrame{StreamID: 8})
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.FrameParsed{
 				StreamID: 3,
+				Raw:      qlog.RawInfo{PayloadLength: expectedPayloadLen, Length: expectedLen},
 				Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: 8}},
 			},
 		},
