@@ -20,6 +20,16 @@ func (f Frame) encode(enc *jsontext.Encoder) error {
 		return frame.encode(enc)
 	case SettingsFrame:
 		return frame.encode(enc)
+	case PushPromiseFrame:
+		return frame.encode(enc)
+	case CancelPushFrame:
+		return frame.encode(enc)
+	case MaxPushIDFrame:
+		return frame.encode(enc)
+	case ReservedFrame:
+		return frame.encode(enc)
+	case UnknownFrame:
+		return frame.encode(enc)
 	}
 	// This shouldn't happen if the code is correctly logging frames.
 	// Write a null token to produce valid JSON.
@@ -128,6 +138,74 @@ func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
 		}
 	}
 	h.WriteToken(jsontext.EndArray)
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// A PushPromiseFrame is a PUSH_PROMISE frame
+type PushPromiseFrame struct{}
+
+func (f *PushPromiseFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("push_promise"))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// A CancelPushFrame is a CANCEL_PUSH frame
+type CancelPushFrame struct{}
+
+func (f *CancelPushFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("cancel_push"))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// A MaxPushIDFrame is a MAX_PUSH_ID frame
+type MaxPushIDFrame struct{}
+
+func (f *MaxPushIDFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("max_push_id"))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// A ReservedFrame is one of the reserved frame types
+type ReservedFrame struct {
+	Type uint64
+}
+
+func (f *ReservedFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("reserved"))
+	h.WriteToken(jsontext.String("frame_type_bytes"))
+	h.WriteToken(jsontext.Uint(f.Type))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// An UnknownFrame is an unknown frame type
+type UnknownFrame struct {
+	Type uint64
+}
+
+func (f *UnknownFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("unknown"))
+	h.WriteToken(jsontext.String("frame_type_bytes"))
+	h.WriteToken(jsontext.Uint(f.Type))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

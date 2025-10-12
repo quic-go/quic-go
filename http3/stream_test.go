@@ -99,7 +99,6 @@ func TestStreamReadDataFrames(t *testing.T) {
 	buf.Write([]byte("invalid"))
 	_, err = str.Read([]byte{0})
 	require.Error(t, err)
-	require.Empty(t, eventRecorder.Events(qlog.FrameParsed{}))
 }
 
 func TestStreamInvalidFrame(t *testing.T) {

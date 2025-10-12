@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,17 +33,19 @@ func testFrameParserEOF(t *testing.T, data []byte) {
 func TestParserReservedFrameType(t *testing.T) {
 	for _, ft := range []uint64{0x2, 0x6, 0x8, 0x9} {
 		t.Run(fmt.Sprintf("type %#x", ft), func(t *testing.T) {
-			client, server := newConnPair(t)
+			var eventRecorder events.Recorder
+			client, server := newConnPairWithDatagrams(t, nil, &eventRecorder)
 
 			data := quicvarint.Append(nil, ft)
 			data = quicvarint.Append(data, 6)
 			data = append(data, []byte("foobar")...)
 
 			fp := frameParser{
+				streamID:  42,
 				r:         bytes.NewReader(data),
 				closeConn: client.CloseWithError,
 			}
-			_, err := fp.ParseNext(nil)
+			_, err := fp.ParseNext(&eventRecorder)
 			require.Error(t, err)
 			require.ErrorContains(t, err, "http3: reserved frame type")
 
@@ -53,6 +58,17 @@ func TestParserReservedFrameType(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("timeout")
 			}
+
+			require.Equal(t,
+				[]qlogwriter.Event{
+					qlog.FrameParsed{
+						StreamID: 42,
+						Raw:      qlog.RawInfo{Length: len(data), PayloadLength: 6},
+						Frame:    qlog.Frame{Frame: qlog.ReservedFrame{Type: ft}},
+					},
+				},
+				eventRecorder.Events(qlog.FrameParsed{}),
+			)
 		})
 	}
 }
@@ -79,6 +95,60 @@ func TestParserUnknownFrameType(t *testing.T) {
 	_, err = io.ReadFull(r, payload)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), payload)
+}
+
+func TestParserUnsupportedFrameTypes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ft   uint64
+		qf   any
+	}{
+		{name: "CANCEL_PUSH", ft: 0x3, qf: qlog.CancelPushFrame{}},
+		{name: "PUSH_PROMISE", ft: 0x5, qf: qlog.PushPromiseFrame{}},
+		{name: "MAX_PUSH_ID", ft: 0xd, qf: qlog.MaxPushIDFrame{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var eventRecorder events.Recorder
+
+			data := quicvarint.Append(nil, tc.ft)
+			data = quicvarint.Append(data, 6)
+			data = append(data, []byte("foobar")...)
+			df := &dataFrame{Length: 3}
+			data = df.Append(data)
+			data = append(data, []byte("foo")...)
+
+			r := bytes.NewReader(data)
+			fp := frameParser{streamID: 42, r: r}
+
+			f, err := fp.ParseNext(&eventRecorder)
+			require.NoError(t, err)
+			require.IsType(t, &dataFrame{}, f)
+			df = f.(*dataFrame)
+			require.Equal(t, uint64(3), df.Length)
+			payload := make([]byte, 3)
+			_, err = io.ReadFull(r, payload)
+			require.NoError(t, err)
+			require.Equal(t, []byte("foo"), payload)
+
+			headerLen := quicvarint.Len(tc.ft) + quicvarint.Len(6)
+			dfLen, _ := expectedFrameLength(t, df)
+			require.Equal(t,
+				[]qlogwriter.Event{
+					qlog.FrameParsed{
+						StreamID: 42,
+						Raw:      qlog.RawInfo{Length: headerLen, PayloadLength: 6},
+						Frame:    qlog.Frame{Frame: tc.qf},
+					},
+					qlog.FrameParsed{
+						StreamID: 42,
+						Raw:      qlog.RawInfo{Length: dfLen, PayloadLength: 3},
+						Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+					},
+				},
+				eventRecorder.Events(qlog.FrameParsed{}),
+			)
+		})
+	}
 }
 
 func TestParserHeadersFrame(t *testing.T) {

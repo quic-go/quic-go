@@ -11,6 +11,8 @@ import (
 )
 
 func check(t *testing.T, f any, expected map[string]any) {
+	t.Helper()
+
 	var buf bytes.Buffer
 	enc := jsontext.NewEncoder(&buf)
 	require.NoError(t, (Frame{Frame: f}).encode(enc))
@@ -143,4 +145,36 @@ func TestSettingsFrame(t *testing.T) {
 			check(t, tc.frame, tc.expected)
 		})
 	}
+}
+
+func TestPushPromiseFrame(t *testing.T) {
+	check(t, PushPromiseFrame{}, map[string]any{
+		"frame_type": "push_promise",
+	})
+}
+
+func TestCancelPushFrame(t *testing.T) {
+	check(t, CancelPushFrame{}, map[string]any{
+		"frame_type": "cancel_push",
+	})
+}
+
+func TestMaxPushIDFrame(t *testing.T) {
+	check(t, MaxPushIDFrame{}, map[string]any{
+		"frame_type": "max_push_id",
+	})
+}
+
+func TestReservedFrame(t *testing.T) {
+	check(t, ReservedFrame{Type: 0x1f}, map[string]any{
+		"frame_type":       "reserved",
+		"frame_type_bytes": 0x1f,
+	})
+}
+
+func TestUnknownFrame(t *testing.T) {
+	check(t, UnknownFrame{Type: 0x2a}, map[string]any{
+		"frame_type":       "unknown",
+		"frame_type_bytes": 0x2a,
+	})
 }
