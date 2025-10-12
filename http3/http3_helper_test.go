@@ -15,12 +15,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/require"
@@ -305,4 +307,24 @@ func decodeHeader(t *testing.T, r io.Reader) map[string][]string {
 		fields[p.Name] = append(fields[p.Name], p.Value)
 	}
 	return fields
+}
+
+// filterQlogEventsForFrame filters the events for the given frame type,
+// for both FrameCreated and FrameParsed events.
+// It returns the events that match the given frame type.
+func filterQlogEventsForFrame(events []qlogwriter.Event, frame any) []qlogwriter.Event {
+	var filtered []qlogwriter.Event
+	for _, ev := range events {
+		switch e := ev.(type) {
+		case qlog.FrameCreated:
+			if reflect.TypeOf(e.Frame.Frame) == reflect.TypeOf(frame) {
+				filtered = append(filtered, ev)
+			}
+		case qlog.FrameParsed:
+			if reflect.TypeOf(e.Frame.Frame) == reflect.TypeOf(frame) {
+				filtered = append(filtered, ev)
+			}
+		}
+	}
+	return filtered
 }

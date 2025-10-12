@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"runtime"
@@ -439,6 +440,11 @@ func (s *Server) removeListener(l *QUICListener) {
 // handleConn handles the HTTP/3 exchange on a QUIC connection.
 // It blocks until all HTTP handlers for all streams have returned.
 func (s *Server) handleConn(conn *quic.Conn) error {
+	var qlogger qlogwriter.Recorder
+	if qlogTrace := conn.QlogTrace(); qlogTrace != nil {
+		qlogger = qlogTrace.AddProducer()
+	}
+
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
 	// when the server is gracefully closed
 	ctrlStr, err := conn.OpenUniStream()
@@ -452,6 +458,20 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		ExtendedConnect: true,
 		Other:           s.AdditionalSettings,
 	}).Append(b)
+	if qlogger != nil {
+		sf := qlog.SettingsFrame{
+			ExtendedConnect: pointer(true),
+			Other:           maps.Clone(s.AdditionalSettings),
+		}
+		if s.EnableDatagrams {
+			sf.Datagram = pointer(true)
+		}
+		qlogger.RecordEvent(qlog.FrameCreated{
+			StreamID: ctrlStr.StreamID(),
+			Raw:      qlog.RawInfo{Length: len(b)},
+			Frame:    qlog.Frame{Frame: sf},
+		})
+	}
 	ctrlStr.Write(b)
 
 	connCtx := conn.Context()
@@ -463,11 +483,6 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		if connCtx == nil {
 			panic("http3: ConnContext returned nil")
 		}
-	}
-
-	var qlogger qlogwriter.Recorder
-	if qlogTrace := conn.QlogTrace(); qlogTrace != nil {
-		qlogger = qlogTrace.AddProducer()
 	}
 
 	hconn := newConnection(

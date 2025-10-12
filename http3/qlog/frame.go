@@ -18,6 +18,8 @@ func (f Frame) encode(enc *jsontext.Encoder) error {
 		return frame.encode(enc)
 	case GoAwayFrame:
 		return frame.encode(enc)
+	case SettingsFrame:
+		return frame.encode(enc)
 	}
 	// This shouldn't happen if the code is correctly logging frames.
 	// Write a null token to produce valid JSON.
@@ -80,6 +82,52 @@ func (f *GoAwayFrame) encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.String("goaway"))
 	h.WriteToken(jsontext.String("id"))
 	h.WriteToken(jsontext.Uint(uint64(f.StreamID)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+type SettingsFrame struct {
+	Datagram        *bool
+	ExtendedConnect *bool
+	Other           map[uint64]uint64
+}
+
+func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("settings"))
+	h.WriteToken(jsontext.String("settings"))
+	h.WriteToken(jsontext.BeginArray)
+	if f.Datagram != nil {
+		h.WriteToken(jsontext.BeginObject)
+		h.WriteToken(jsontext.String("name"))
+		h.WriteToken(jsontext.String("settings_h3_datagram"))
+		h.WriteToken(jsontext.String("value"))
+		h.WriteToken(jsontext.Bool(*f.Datagram))
+		h.WriteToken(jsontext.EndObject)
+	}
+	if f.ExtendedConnect != nil {
+		h.WriteToken(jsontext.BeginObject)
+		h.WriteToken(jsontext.String("name"))
+		h.WriteToken(jsontext.String("settings_enable_connect_protocol"))
+		h.WriteToken(jsontext.String("value"))
+		h.WriteToken(jsontext.Bool(*f.ExtendedConnect))
+		h.WriteToken(jsontext.EndObject)
+	}
+	if len(f.Other) > 0 {
+		for k, v := range f.Other {
+			h.WriteToken(jsontext.BeginObject)
+			h.WriteToken(jsontext.String("name"))
+			h.WriteToken(jsontext.String("unknown"))
+			h.WriteToken(jsontext.String("name_bytes"))
+			h.WriteToken(jsontext.Uint(k))
+			h.WriteToken(jsontext.String("value"))
+			h.WriteToken(jsontext.Uint(v))
+			h.WriteToken(jsontext.EndObject)
+		}
+	}
+	h.WriteToken(jsontext.EndArray)
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

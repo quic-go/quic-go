@@ -13,7 +13,10 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +38,8 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 		AdditionalSettings: other,
 	}
 
-	clientConn, serverConn := newConnPair(t)
+	var eventRecorder events.Recorder
+	clientConn, serverConn := newConnPairWithRecorder(t, &eventRecorder, nil)
 	tr.NewClientConn(clientConn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -54,6 +58,21 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	settingsFrame := f.(*settingsFrame)
 	require.Equal(t, settingsFrame.Datagram, enableDatagrams)
 	require.Equal(t, settingsFrame.Other, other)
+
+	var datagramValue *bool
+	if enableDatagrams {
+		datagramValue = pointer(true)
+	}
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameCreated{
+				StreamID: str.StreamID(),
+				Raw:      qlog.RawInfo{Length: 5},
+				Frame:    qlog.Frame{Frame: qlog.SettingsFrame{Datagram: datagramValue, Other: other}},
+			},
+		},
+		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameCreated{}), qlog.SettingsFrame{}),
+	)
 }
 
 func encodeResponse(t *testing.T, status int) []byte {

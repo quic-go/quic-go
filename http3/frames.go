@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
@@ -73,7 +74,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 		case 0x1:
 			return &headersFrame{Length: l}, nil
 		case 0x4:
-			return parseSettingsFrame(p.r, l)
+			return parseSettingsFrame(p.r, l, p.streamID, qlogger)
 		case 0x3: // CANCEL_PUSH
 		case 0x5: // PUSH_PROMISE
 		case 0x7:
@@ -132,7 +133,11 @@ type settingsFrame struct {
 	Other map[uint64]uint64 // all settings that we don't explicitly recognize
 }
 
-func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
+func pointer[T any](v T) *T {
+	return &v
+}
+
+func parseSettingsFrame(r io.Reader, l uint64, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*settingsFrame, error) {
 	if l > 8*(1<<10) {
 		return nil, fmt.Errorf("unexpected size for SETTINGS frame: %d", l)
 	}
@@ -145,6 +150,7 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 	}
 	frame := &settingsFrame{}
 	b := bytes.NewReader(buf)
+	var settingsFrame qlog.SettingsFrame
 	var readDatagram, readExtendedConnect bool
 	for b.Len() > 0 {
 		id, err := quicvarint.Read(b)
@@ -166,6 +172,9 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 				return nil, fmt.Errorf("invalid value for SETTINGS_ENABLE_CONNECT_PROTOCOL: %d", val)
 			}
 			frame.ExtendedConnect = val == 1
+			if qlogger != nil {
+				settingsFrame.ExtendedConnect = pointer(frame.ExtendedConnect)
+			}
 		case settingDatagram:
 			if readDatagram {
 				return nil, fmt.Errorf("duplicate setting: %d", id)
@@ -175,6 +184,9 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 				return nil, fmt.Errorf("invalid value for SETTINGS_H3_DATAGRAM: %d", val)
 			}
 			frame.Datagram = val == 1
+			if qlogger != nil {
+				settingsFrame.Datagram = pointer(frame.Datagram)
+			}
 		default:
 			if _, ok := frame.Other[id]; ok {
 				return nil, fmt.Errorf("duplicate setting: %d", id)
@@ -184,6 +196,15 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 			}
 			frame.Other[id] = val
 		}
+	}
+	if qlogger != nil {
+		settingsFrame.Other = maps.Clone(frame.Other)
+
+		qlogger.RecordEvent(qlog.FrameParsed{
+			StreamID: streamID,
+			Raw:      qlog.RawInfo{PayloadLength: len(buf)},
+			Frame:    qlog.Frame{Frame: settingsFrame},
+		})
 	}
 	return frame, nil
 }

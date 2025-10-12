@@ -17,7 +17,8 @@ import (
 )
 
 func TestConnReceiveSettings(t *testing.T) {
-	clientConn, serverConn := newConnPair(t)
+	var eventRecorder events.Recorder
+	clientConn, serverConn := newConnPairWithRecorder(t, nil, &eventRecorder)
 
 	conn := newConnection(
 		serverConn.Context(),
@@ -52,6 +53,17 @@ func TestConnReceiveSettings(t *testing.T) {
 	require.True(t, settings.EnableDatagrams)
 	require.True(t, settings.EnableExtendedConnect)
 	require.Equal(t, map[uint64]uint64{1337: 42}, settings.Other)
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameParsed{
+				StreamID: controlStr.StreamID(),
+				Raw:      qlog.RawInfo{PayloadLength: len(b) - 3}, // type and length
+				Frame:    qlog.Frame{Frame: qlog.SettingsFrame{Datagram: pointer(true), ExtendedConnect: pointer(true), Other: map[uint64]uint64{1337: 42}}},
+			},
+		},
+		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameParsed{}), qlog.SettingsFrame{}),
+	)
 }
 
 func TestConnRejectDuplicateStreams(t *testing.T) {
@@ -323,19 +335,14 @@ func testConnGoAway(t *testing.T, withStream bool) {
 		t.Fatal("timeout waiting for close")
 	}
 
-	framesParsed := clientEventRecorder.Events(qlog.FrameParsed{})
-	var goawayFramesParsed []qlog.FrameParsed
-	for _, ev := range framesParsed {
-		if _, ok := ev.(qlog.FrameParsed).Frame.Frame.(qlog.GoAwayFrame); ok {
-			goawayFramesParsed = append(goawayFramesParsed, ev.(qlog.FrameParsed))
-		}
-	}
 	require.Equal(t,
-		[]qlog.FrameParsed{{
-			StreamID: 3,
-			Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: 8}},
-		}},
-		goawayFramesParsed,
+		[]qlogwriter.Event{
+			qlog.FrameParsed{
+				StreamID: 3,
+				Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: 8}},
+			},
+		},
+		filterQlogEventsForFrame(clientEventRecorder.Events(qlog.FrameParsed{}), qlog.GoAwayFrame{StreamID: 8}),
 	)
 }
 

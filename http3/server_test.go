@@ -131,9 +131,9 @@ func TestServerRequestHandling(t *testing.T) {
 		require.Contains(t, fp.Frame.Frame.(qlog.HeadersFrame).HeaderFields, qlog.HeaderField{Name: ":method", Value: "GET"})
 		require.Contains(t, fp.Frame.Frame.(qlog.HeadersFrame).HeaderFields, qlog.HeaderField{Name: ":authority", Value: "www.example.com"})
 
-		require.Len(t, eventRecorder.Events(qlog.FrameCreated{}), 1)
-		require.IsType(t, qlog.HeadersFrame{}, eventRecorder.Events(qlog.FrameCreated{})[0].(qlog.FrameCreated).Frame.Frame)
-		fc := eventRecorder.Events(qlog.FrameCreated{})[0].(qlog.FrameCreated)
+		events := filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameCreated{}), qlog.HeadersFrame{})
+		require.Len(t, events, 1)
+		fc := events[0].(qlog.FrameCreated)
 		require.Equal(t, quic.StreamID(0), fp.StreamID)
 		require.NotZero(t, fc.Raw.PayloadLength)
 		require.Contains(t, fc.Frame.Frame.(qlog.HeadersFrame).HeaderFields, qlog.HeaderField{Name: ":status", Value: "200"})
