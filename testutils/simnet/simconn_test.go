@@ -8,7 +8,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/marcopolo/simnet/internal/require"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSimConnBasicConnectivity(t *testing.T) {

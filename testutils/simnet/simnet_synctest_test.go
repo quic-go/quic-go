@@ -7,11 +7,10 @@ import (
 	"math"
 	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
-	"testing/synctest"
-
-	"github.com/marcopolo/simnet/internal/require"
+	"github.com/stretchr/testify/require"
 )
 
 const oneMbps = 1_000_000
