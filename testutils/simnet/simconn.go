@@ -28,8 +28,8 @@ type Packet struct {
 	buf  []byte
 }
 
-// SimConn is a simulated network connection that implements net.PacketConn. It
-// provides packet-based communication through a Router for testing and
+// SimConn is a simulated network connection that implements net.PacketConn.
+// It provides packet-based communication through a Router for testing and
 // simulation purposes. All send/recv operations are handled through the
 // Router's packet delivery mechanism.
 type SimConn struct {
@@ -56,6 +56,8 @@ type SimConn struct {
 	readDeadline  time.Time
 	writeDeadline time.Time
 }
+
+var _ net.PacketConn = &SimConn{}
 
 // NewSimConn creates a new simulated connection that drops packets if the
 // receive buffer is full.
@@ -98,18 +100,12 @@ func (c *SimConn) Stats() ConnStats {
 	}
 }
 
-// SetLocalAddr only changes what `.LocalAddr()` returns.
-// Packets will still come From the initially configured addr.
-func (c *SimConn) SetLocalAddr(addr net.Addr) {
-	c.myLocalAddr = addr
-}
-
 // SetReadBuffer only exists to quell the warning message from quic-go
 func (c *SimConn) SetReadBuffer(n int) error {
 	return nil
 }
 
-// SetReadBuffer only exists to quell the warning message from quic-go
+// SetWriteBuffer only exists to quell the warning message from quic-go
 func (c *SimConn) SetWriteBuffer(n int) error {
 	return nil
 }
@@ -140,9 +136,6 @@ func (c *SimConn) RecvPacket(p Packet) {
 	}
 }
 
-var _ net.PacketConn = &SimConn{}
-
-// Close implements net.PacketConn
 func (c *SimConn) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -154,7 +147,6 @@ func (c *SimConn) Close() error {
 	return nil
 }
 
-// ReadFrom implements net.PacketConn
 func (c *SimConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	c.mu.Lock()
 	if c.closed {
@@ -191,7 +183,6 @@ func (c *SimConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	return n, pkt.From, nil
 }
 
-// WriteTo implements net.PacketConn
 func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mu.Lock()
 	if c.closed {
@@ -220,7 +211,6 @@ func (c *SimConn) UnicastAddr() net.Addr {
 	return c.myAddr
 }
 
-// LocalAddr implements net.PacketConn
 func (c *SimConn) LocalAddr() net.Addr {
 	if c.myLocalAddr != nil {
 		return c.myLocalAddr
@@ -228,7 +218,6 @@ func (c *SimConn) LocalAddr() net.Addr {
 	return c.myAddr
 }
 
-// SetDeadline implements net.PacketConn
 func (c *SimConn) SetDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -237,7 +226,6 @@ func (c *SimConn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline implements net.PacketConn
 func (c *SimConn) SetReadDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -249,29 +237,9 @@ func (c *SimConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline implements net.PacketConn
 func (c *SimConn) SetWriteDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.writeDeadline = t
 	return nil
-}
-
-func IntToPublicIPv4(n int) net.IP {
-	n += 1
-	// Avoid private IP ranges
-	b := make([]byte, 4)
-	b[0] = byte((n>>24)&0xFF | 1)
-	b[1] = byte((n >> 16) & 0xFF)
-	b[2] = byte((n >> 8) & 0xFF)
-	b[3] = byte(n & 0xFF)
-
-	ip := net.IPv4(b[0], b[1], b[2], b[3])
-
-	// Check and modify if it's in private ranges
-	if ip.IsPrivate() {
-		b[0] = 1 // Use 1.x.x.x as public range
-	}
-
-	return ip
 }

@@ -122,12 +122,12 @@ func (r *PerfectRouter) RemoveNode(addr net.Addr) {
 
 var _ Router = &PerfectRouter{}
 
-type DelayedPacketReciever struct {
+type DelayedPacketReceiver struct {
 	inner PacketReceiver
 	delay time.Duration
 }
 
-func (r *DelayedPacketReciever) RecvPacket(p Packet) {
+func (r *DelayedPacketReceiver) RecvPacket(p Packet) {
 	time.AfterFunc(r.delay, func() { r.inner.RecvPacket(p) })
 }
 
@@ -141,7 +141,7 @@ func (r *FixedLatencyRouter) SendPacket(p Packet) error {
 }
 
 func (r *FixedLatencyRouter) AddNode(addr net.Addr, conn PacketReceiver) {
-	r.PerfectRouter.AddNode(addr, &DelayedPacketReciever{
+	r.PerfectRouter.AddNode(addr, &DelayedPacketReceiver{
 		inner: conn,
 		delay: r.latency,
 	})

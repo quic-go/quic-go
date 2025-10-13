@@ -193,11 +193,11 @@ func TestBandwidthLimiterAndLatencyConnectedLinks(t *testing.T) {
 
 		// Wait for delayed packets to be sent
 		time.Sleep(40 * time.Millisecond)
-		fmt.Printf("sent: %d\n", bytesSent)
+		t.Logf("sent: %d", bytesSent)
 
 		link1.Close()
 		link2.Close()
-		fmt.Printf("bytesRead: %d\n", bytesRead)
+		t.Logf("bytesRead: %d", bytesRead)
 		recvStartTime := <-recvStartTimeChan
 		duration := time.Since(recvStartTime)
 

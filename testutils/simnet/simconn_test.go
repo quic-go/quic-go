@@ -2,21 +2,31 @@ package simnet
 
 import (
 	"bytes"
+	"crypto/rand"
 	"net"
 	"sync"
 	"testing"
-	"testing/quick"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
+func randomPublicIPv4() net.IP {
+start:
+	ip := make([]byte, 4)
+	rand.Read(ip[:])
+	if net.IP(ip).IsPrivate() || net.IP(ip).IsLoopback() || net.IP(ip).IsLinkLocalUnicast() {
+		goto start
+	}
+	return ip
+}
+
 func TestSimConnBasicConnectivity(t *testing.T) {
 	router := &PerfectRouter{}
 
 	// Create two endpoints
-	addr1 := &net.UDPAddr{IP: IntToPublicIPv4(1), Port: 1234}
-	addr2 := &net.UDPAddr{IP: IntToPublicIPv4(2), Port: 1234}
+	addr1 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
+	addr2 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
 
 	conn1 := NewSimConn(addr1, router)
 	conn2 := NewSimConn(addr2, router)
@@ -47,7 +57,7 @@ func TestSimConnBasicConnectivity(t *testing.T) {
 func TestSimConnDeadlines(t *testing.T) {
 	router := &PerfectRouter{}
 
-	addr1 := &net.UDPAddr{IP: IntToPublicIPv4(1), Port: 1234}
+	addr1 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
 	conn := NewSimConn(addr1, router)
 
 	t.Run("read deadline", func(t *testing.T) {
@@ -73,7 +83,7 @@ func TestSimConnDeadlines(t *testing.T) {
 func TestSimConnClose(t *testing.T) {
 	router := &PerfectRouter{}
 
-	addr1 := &net.UDPAddr{IP: IntToPublicIPv4(1), Port: 1234}
+	addr1 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
 	conn := NewSimConn(addr1, router)
 
 	err := conn.Close()
@@ -92,29 +102,14 @@ func TestSimConnClose(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSimConnLocalAddr(t *testing.T) {
-	router := &PerfectRouter{}
-
-	addr1 := &net.UDPAddr{IP: IntToPublicIPv4(1), Port: 1234}
-	conn := NewSimConn(addr1, router)
-
-	// Test default local address
-	require.Equal(t, addr1, conn.LocalAddr())
-
-	// Test setting custom local address
-	customAddr := &net.UDPAddr{IP: IntToPublicIPv4(3), Port: 5678}
-	conn.SetLocalAddr(customAddr)
-	require.Equal(t, customAddr, conn.LocalAddr())
-}
-
 func TestSimConnDeadlinesWithLatency(t *testing.T) {
 	router := &FixedLatencyRouter{
 		PerfectRouter: PerfectRouter{},
 		latency:       100 * time.Millisecond,
 	}
 
-	addr1 := &net.UDPAddr{IP: IntToPublicIPv4(1), Port: 1234}
-	addr2 := &net.UDPAddr{IP: IntToPublicIPv4(2), Port: 1234}
+	addr1 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
+	addr2 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
 
 	conn1 := NewSimConn(addr1, router)
 	conn2 := NewSimConn(addr2, router)
@@ -200,8 +195,8 @@ func TestSimpleHolePunch(t *testing.T) {
 	}
 
 	// Create two peers
-	addr1 := &net.UDPAddr{IP: IntToPublicIPv4(1), Port: 1234}
-	addr2 := &net.UDPAddr{IP: IntToPublicIPv4(2), Port: 1234}
+	addr1 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
+	addr2 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
 
 	peer1 := NewSimConn(addr1, router)
 	peer2 := NewSimConn(addr2, router)
@@ -287,12 +282,4 @@ func TestSimpleHolePunch(t *testing.T) {
 			require.Equal(t, string(testMsg), string(buf[:n]))
 		})
 	})
-}
-
-func TestPublicIP(t *testing.T) {
-	err := quick.Check(func(n int) bool {
-		ip := IntToPublicIPv4(n)
-		return !ip.IsPrivate()
-	}, nil)
-	require.NoError(t, err)
 }
