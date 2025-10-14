@@ -19,21 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type droppingRouter struct {
-	simnet.PerfectRouter
-
-	Drop func(simnet.Packet) bool
-}
-
-func (d *droppingRouter) SendPacket(p simnet.Packet) error {
-	if d.Drop(p) {
-		return nil
-	}
-	return d.PerfectRouter.SendPacket(p)
-}
-
-var _ simnet.Router = &droppingRouter{}
-
 func TestConnectionCloseRetransmission(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const rtt = 10 * time.Millisecond
