@@ -138,7 +138,7 @@ type SimulatedLink struct {
 
 func delayPacketHandling(limiter *rate.Limiter, p packetWithDeliveryTime) {
 	// WaitN blocks until the limiter permits len(p.buf) tokens
-	limiter.WaitN(context.Background(), len(p.buf))
+	limiter.WaitN(context.Background(), len(p.Data))
 }
 
 func (l *SimulatedLink) backgroundDownlink() {
@@ -222,7 +222,7 @@ func (l *SimulatedLink) Close() error {
 }
 
 func (l *SimulatedLink) SendPacket(p Packet) error {
-	if len(p.buf) > l.UplinkSettings.MTU {
+	if len(p.Data) > l.UplinkSettings.MTU {
 		// Dropping packet if it's too large for the link
 		return nil
 	}
@@ -231,7 +231,7 @@ func (l *SimulatedLink) SendPacket(p Packet) error {
 }
 
 func (l *SimulatedLink) RecvPacket(p Packet) {
-	if len(p.buf) > l.DownlinkSettings.MTU {
+	if len(p.Data) > l.DownlinkSettings.MTU {
 		// Dropping packet if it's too large for the link
 		return
 	}

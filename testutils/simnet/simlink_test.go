@@ -51,7 +51,7 @@ func TestBandwidthLimiterAndLatency(t *testing.T) {
 						recvStarted = true
 						recvStartTimeChan <- time.Now()
 					}
-					bytesRead += len(p.buf)
+					bytesRead += len(p.Data)
 				}
 
 				router := &testRouter{}
@@ -82,9 +82,9 @@ func TestBandwidthLimiterAndLatency(t *testing.T) {
 						// but it acts as a simple pacer to avoid just dropping the packets when the link is saturated.
 						time.Sleep(100 * time.Microsecond)
 						if testUpload {
-							_ = link.SendPacket(Packet{buf: chunk})
+							_ = link.SendPacket(Packet{Data: chunk})
 						} else {
-							link.RecvPacket(Packet{buf: chunk})
+							link.RecvPacket(Packet{Data: chunk})
 						}
 						bytesSent += len(chunk)
 					}
@@ -155,7 +155,7 @@ func TestBandwidthLimiterAndLatencyConnectedLinks(t *testing.T) {
 				recvStarted = true
 				recvStartTimeChan <- time.Now()
 			}
-			bytesRead += len(p.buf)
+			bytesRead += len(p.Data)
 		}
 		r := &testRouter{
 			onRecv: packetHandler,
@@ -186,7 +186,7 @@ func TestBandwidthLimiterAndLatencyConnectedLinks(t *testing.T) {
 			// Blast a bunch of packets
 			for bytesSent < totalBytes {
 				time.Sleep(100 * time.Microsecond)
-				_ = link1.SendPacket(Packet{buf: chunk})
+				_ = link1.SendPacket(Packet{Data: chunk})
 				bytesSent += len(chunk)
 			}
 		}

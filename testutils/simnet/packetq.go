@@ -31,11 +31,11 @@ func (q *packetQueue) Push(p packetWithDeliveryTime) {
 	if q.closed {
 		return
 	}
-	if q.currentByteCount+len(p.buf) > q.byteCountLimit {
+	if q.currentByteCount+len(p.Data) > q.byteCountLimit {
 		return
 	}
 	q.queue = append(q.queue, p)
-	q.currentByteCount += len(p.buf)
+	q.currentByteCount += len(p.Data)
 	q.cond.Signal()
 }
 
@@ -51,6 +51,6 @@ func (q *packetQueue) Pop() (packetWithDeliveryTime, bool) {
 	}
 	p := q.queue[0]
 	q.queue = q.queue[1:]
-	q.currentByteCount -= len(p.buf)
+	q.currentByteCount -= len(p.Data)
 	return p, true
 }

@@ -25,7 +25,8 @@ type Router interface {
 type Packet struct {
 	To   net.Addr
 	From net.Addr
-	buf  []byte
+
+	Data []byte
 }
 
 // SimConn is a simulated network connection that implements net.PacketConn.
@@ -118,7 +119,7 @@ func (c *SimConn) RecvPacket(p Packet) {
 	}
 	c.mu.Unlock()
 	c.packetsRcvd.Add(1)
-	c.bytesRcvd.Add(int64(len(p.buf)))
+	c.bytesRcvd.Add(int64(len(p.Data)))
 
 	if c.recvBackPressure {
 		select {
@@ -176,7 +177,7 @@ func (c *SimConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, nil, ErrDeadlineExceeded
 	}
 
-	n = copy(p, pkt.buf)
+	n = copy(p, pkt.Data)
 	// if the provided buffer is not enough to read the whole packet, we drop
 	// the rest of the data. this is similar to what `recvfrom` does on Linux
 	// and macOS.
@@ -202,7 +203,7 @@ func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	pkt := Packet{
 		From: c.myAddr,
 		To:   addr,
-		buf:  slices.Clone(p),
+		Data: slices.Clone(p),
 	}
 	return len(p), c.router.SendPacket(pkt)
 }
