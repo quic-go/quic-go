@@ -20,7 +20,7 @@ func newConn(simnet *Simnet, address *net.UDPAddr, linkSettings NodeBiDiLinkSett
 
 func TestSimpleSimNet(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		router := &Simnet{}
+		router := &Simnet{Router: &PerfectRouter{}}
 
 		const bandwidth = 10 * oneMbps
 		const latency = 10 * time.Millisecond
@@ -69,7 +69,7 @@ func TestSimpleSimNet(t *testing.T) {
 
 func TestSimNetBandwidth(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		router := &Simnet{}
+		router := &Simnet{Router: &PerfectRouter{}}
 
 		const bandwidth = 40 * oneMbps
 		const latency = 10 * time.Millisecond

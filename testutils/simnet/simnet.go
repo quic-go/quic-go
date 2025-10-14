@@ -9,8 +9,9 @@ import (
 // Simnet is a simulated network that manages connections between nodes
 // with configurable network conditions.
 type Simnet struct {
-	router PerfectRouter
-	links  []*SimulatedLink
+	Router Router
+
+	links []*SimulatedLink
 }
 
 // NodeBiDiLinkSettings defines the bidirectional link settings for a network node.
@@ -48,11 +49,11 @@ func (n *Simnet) NewEndpoint(addr *net.UDPAddr, linkSettings NodeBiDiLinkSetting
 	link := &SimulatedLink{
 		DownlinkSettings: linkSettings.Downlink,
 		UplinkSettings:   linkSettings.Uplink,
-		UploadPacket:     &n.router,
+		UploadPacket:     n.Router,
 	}
 	c := NewBlockingSimConn(addr, link)
 
 	n.links = append(n.links, link)
-	n.router.AddNode(addr, link)
+	n.Router.AddNode(addr, link)
 	return c
 }
