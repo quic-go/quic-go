@@ -441,7 +441,7 @@ func (s *Server) removeListener(l *QUICListener) {
 // It blocks until all HTTP handlers for all streams have returned.
 func (s *Server) handleConn(conn *quic.Conn) error {
 	var qlogger qlogwriter.Recorder
-	if qlogTrace := conn.QlogTrace(); qlogTrace != nil {
+	if qlogTrace := conn.QlogTrace(); qlogTrace != nil && qlogTrace.SupportsSchemas(qlog.EventSchema) {
 		qlogger = qlogTrace.AddProducer()
 	}
 

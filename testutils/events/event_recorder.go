@@ -26,6 +26,10 @@ func (t *Trace) AddProducer() qlogwriter.Recorder {
 	return t.Recorder
 }
 
+func (t *Trace) SupportsSchemas(string) bool {
+	return true
+}
+
 // Recorder is a qlog.Recorder that records events.
 // Events can be retrieved using the Events method.
 type Recorder struct {

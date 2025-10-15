@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"slices"
 	"sync"
 	"time"
 
@@ -18,6 +19,9 @@ type Trace interface {
 	// AddProducer creates a new Recorder for this trace.
 	// Each Recorder can record events independently.
 	AddProducer() Recorder
+
+	// SupportsSchemas returns true if the trace supports the given schema.
+	SupportsSchemas(schema string) bool
 }
 
 // Recorder is used to record events to a qlog trace.
@@ -67,6 +71,8 @@ type FileSeq struct {
 	mx        sync.Mutex
 	producers int
 	closed    bool
+
+	eventSchemas []string
 }
 
 var _ Trace = &FileSeq{}
@@ -110,6 +116,10 @@ func newFileSeq(w io.WriteCloser, pers string, odcid *ConnectionID, eventSchemas
 		encodeErr:     encodeErr,
 		events:        make(chan event, eventChanSize),
 	}
+}
+
+func (t *FileSeq) SupportsSchemas(schema string) bool {
+	return slices.Contains(t.eventSchemas, schema)
 }
 
 func (t *FileSeq) AddProducer() Recorder {

@@ -66,7 +66,7 @@ func newConnection(
 	idleTimeout time.Duration,
 ) *Conn {
 	var qlogger qlogwriter.Recorder
-	if qlogTrace := quicConn.QlogTrace(); qlogTrace != nil {
+	if qlogTrace := quicConn.QlogTrace(); qlogTrace != nil && qlogTrace.SupportsSchemas(qlog.EventSchema) {
 		qlogger = qlogTrace.AddProducer()
 	}
 	c := &Conn{

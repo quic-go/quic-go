@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	h3qlog "github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -46,7 +47,7 @@ func NewQlogConnectionTracer(logger io.Writer) func(ctx context.Context, isClien
 			utils.NewBufferedWriteCloser(bufio.NewWriter(f), f),
 			isClient,
 			connID,
-			[]string{qlog.EventSchema},
+			[]string{qlog.EventSchema, h3qlog.EventSchema},
 		)
 		go fileSeq.Run()
 		return fileSeq
