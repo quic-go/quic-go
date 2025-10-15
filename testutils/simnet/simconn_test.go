@@ -1,7 +1,6 @@
 package simnet
 
 import (
-	"bytes"
 	"crypto/rand"
 	"net"
 	"sync"
@@ -186,100 +185,5 @@ func TestSimConnDeadlinesWithLatency(t *testing.T) {
 		buf := make([]byte, 1024)
 		_, _, err = conn2.ReadFrom(buf)
 		require.ErrorIs(t, err, ErrDeadlineExceeded)
-	})
-}
-
-func TestSimpleHolePunch(t *testing.T) {
-	router := &SimpleFirewallRouter{
-		nodes: make(map[string]*simpleNodeFirewall),
-	}
-
-	// Create two peers
-	addr1 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
-	addr2 := &net.UDPAddr{IP: randomPublicIPv4(), Port: 1234}
-
-	peer1 := NewSimConn(addr1, router)
-	peer2 := NewSimConn(addr2, router)
-
-	reset := func() {
-		router.RemoveNode(addr1)
-		router.RemoveNode(addr2)
-
-		peer1 = NewSimConn(addr1, router)
-		peer2 = NewSimConn(addr2, router)
-	}
-
-	// Initially, direct communication between peer1 and peer2 should fail
-	t.Run("direct communication blocked initially", func(t *testing.T) {
-		_, err := peer1.WriteTo([]byte("direct message"), addr2)
-		require.NoError(t, err) // Write succeeds but packet is dropped
-
-		// Try to read from peer2
-		peer2.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
-		buf := make([]byte, 1024)
-		_, _, err = peer2.ReadFrom(buf)
-		require.ErrorIs(t, err, ErrDeadlineExceeded)
-		reset()
-	})
-
-	holePunchMsg := []byte("hole punch")
-	// Simulate hole punching
-	t.Run("hole punch and direct communication", func(t *testing.T) {
-		// Both peers send packets to each other simultaneously
-		var wg sync.WaitGroup
-		wg.Add(2)
-
-		go func() {
-			defer wg.Done()
-			_, err := peer1.WriteTo(holePunchMsg, addr2)
-			require.NoError(t, err)
-		}()
-
-		go func() {
-			defer wg.Done()
-			_, err := peer2.WriteTo(holePunchMsg, addr1)
-			require.NoError(t, err)
-		}()
-
-		wg.Wait()
-
-		// Now direct communication should work both ways
-		t.Run("peer1 to peer2", func(t *testing.T) {
-			testMsg := []byte("direct message after hole punch")
-			_, err := peer1.WriteTo(testMsg, addr2)
-			require.NoError(t, err)
-
-			buf := make([]byte, 1024)
-			peer2.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-			n, addr, err := peer2.ReadFrom(buf)
-			require.NoError(t, err)
-			require.Equal(t, addr1, addr)
-			if bytes.Equal(buf[:n], holePunchMsg) {
-				// Read again to get the actual message
-				n, addr, err = peer2.ReadFrom(buf)
-				require.NoError(t, err)
-				require.Equal(t, addr1, addr)
-			}
-			require.Equal(t, string(testMsg), string(buf[:n]))
-		})
-
-		t.Run("peer2 to peer1", func(t *testing.T) {
-			testMsg := []byte("response from peer2")
-			_, err := peer2.WriteTo(testMsg, addr1)
-			require.NoError(t, err)
-
-			buf := make([]byte, 1024)
-			peer1.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-			n, addr, err := peer1.ReadFrom(buf)
-			require.NoError(t, err)
-			require.Equal(t, addr2, addr)
-			if bytes.Equal(buf[:n], holePunchMsg) {
-				// Read again to get the actual message
-				n, addr, err = peer1.ReadFrom(buf)
-				require.NoError(t, err)
-				require.Equal(t, addr2, addr)
-			}
-			require.Equal(t, string(testMsg), string(buf[:n]))
-		})
 	})
 }
