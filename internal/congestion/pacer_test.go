@@ -131,3 +131,24 @@ func TestPacerNoOverflows(t *testing.T) {
 	require.Equal(t, next.Sub(now), protocol.MinPacingDelay)
 	require.Greater(t, p.Budget(next), initialMaxDatagramSize)
 }
+
+func BenchmarkPacer(b *testing.B) {
+	const bandwidth = 50 * initialMaxDatagramSize // 50 full-size packets per second
+	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
+
+	now := monotime.Now()
+
+	var i int
+	for b.Loop() {
+		i++
+		for p.Budget(now) > 0 {
+			p.SentPacket(now, initialMaxDatagramSize)
+		}
+		next := p.TimeUntilSend()
+		if i%2 == 0 {
+			now = next
+		} else {
+			now = now.Add(100 * time.Millisecond)
+		}
+	}
+}
