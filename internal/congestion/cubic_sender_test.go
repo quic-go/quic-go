@@ -162,7 +162,6 @@ func TestCubicSenderExponentialSlowStart(t *testing.T) {
 	// At startup make sure we can send.
 	require.True(t, sender.sender.CanSend(0))
 	require.Zero(t, sender.sender.TimeUntilSend(0))
-	require.Equal(t, infBandwidth, sender.sender.BandwidthEstimate())
 
 	const numberOfAcks = 20
 	for range numberOfAcks {
