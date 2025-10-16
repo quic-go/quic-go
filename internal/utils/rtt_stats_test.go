@@ -9,13 +9,13 @@ import (
 )
 
 func TestRTTStatsDefaults(t *testing.T) {
-	var rttStats RTTStats
-	require.Zero(t, rttStats.MinRTT())
-	require.Zero(t, rttStats.SmoothedRTT())
+	rttStats := NewRTTStats()
+	require.Equal(t, DefaultInitialRTT, rttStats.MinRTT())
+	require.Equal(t, DefaultInitialRTT, rttStats.SmoothedRTT())
 }
 
 func TestRTTStatsSmoothedRTT(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	// verify that ack_delay is ignored in the first measurement
 	rttStats.UpdateRTT(300*time.Millisecond, 100*time.Millisecond)
 	require.Equal(t, 300*time.Millisecond, rttStats.LatestRTT())
@@ -31,7 +31,7 @@ func TestRTTStatsSmoothedRTT(t *testing.T) {
 }
 
 func TestRTTStatsMinRTT(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	rttStats.UpdateRTT(200*time.Millisecond, 0)
 	require.Equal(t, 200*time.Millisecond, rttStats.MinRTT())
 	rttStats.UpdateRTT(10*time.Millisecond, 0)
@@ -48,7 +48,7 @@ func TestRTTStatsMinRTT(t *testing.T) {
 }
 
 func TestRTTStatsMaxAckDelay(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	rttStats.SetMaxAckDelay(42 * time.Minute)
 	require.Equal(t, 42*time.Minute, rttStats.MaxAckDelay())
 }
@@ -58,7 +58,7 @@ func TestRTTStatsComputePTO(t *testing.T) {
 		maxAckDelay = 42 * time.Minute
 		rtt         = time.Second
 	)
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	rttStats.SetMaxAckDelay(maxAckDelay)
 	rttStats.UpdateRTT(rtt, 0)
 	require.Equal(t, rtt, rttStats.SmoothedRTT())
@@ -69,13 +69,13 @@ func TestRTTStatsComputePTO(t *testing.T) {
 
 func TestRTTStatsPTOWithShortRTT(t *testing.T) {
 	const rtt = time.Microsecond
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
 	require.Equal(t, rtt+protocol.TimerGranularity, rttStats.PTO(true))
 }
 
 func TestRTTStatsUpdateWithBadSendDeltas(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	const initialRtt = 10 * time.Millisecond
 	rttStats.UpdateRTT(initialRtt, 0)
 	require.Equal(t, initialRtt, rttStats.MinRTT())
@@ -94,7 +94,7 @@ func TestRTTStatsUpdateWithBadSendDeltas(t *testing.T) {
 }
 
 func TestRTTStatsRestore(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	rttStats.SetInitialRTT(10 * time.Second)
 	require.Equal(t, 10*time.Second, rttStats.LatestRTT())
 	require.Equal(t, 10*time.Second, rttStats.SmoothedRTT())
@@ -107,7 +107,7 @@ func TestRTTStatsRestore(t *testing.T) {
 }
 
 func TestRTTMeasurementAfterRestore(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	const rtt = 10 * time.Millisecond
 	rttStats.UpdateRTT(rtt, 0)
 	require.Equal(t, rtt, rttStats.LatestRTT())
@@ -118,7 +118,7 @@ func TestRTTMeasurementAfterRestore(t *testing.T) {
 }
 
 func TestRTTStatsResetForPathMigration(t *testing.T) {
-	var rttStats RTTStats
+	rttStats := NewRTTStats()
 	rttStats.SetMaxAckDelay(42 * time.Millisecond)
 	rttStats.UpdateRTT(time.Second, 0)
 	rttStats.UpdateRTT(10*time.Second, 0)
@@ -127,10 +127,10 @@ func TestRTTStatsResetForPathMigration(t *testing.T) {
 	require.NotZero(t, rttStats.SmoothedRTT())
 
 	rttStats.ResetForPathMigration()
-	require.Zero(t, rttStats.MinRTT())
-	require.Zero(t, rttStats.LatestRTT())
-	require.Zero(t, rttStats.SmoothedRTT())
-	require.Equal(t, 2*defaultInitialRTT, rttStats.PTO(false))
+	require.Equal(t, DefaultInitialRTT, rttStats.MinRTT())
+	require.Equal(t, DefaultInitialRTT, rttStats.LatestRTT())
+	require.Equal(t, DefaultInitialRTT, rttStats.SmoothedRTT())
+	require.Equal(t, 2*DefaultInitialRTT, rttStats.PTO(false))
 	// make sure that max_ack_delay was not reset
 	require.Equal(t, 42*time.Millisecond, rttStats.MaxAckDelay())
 

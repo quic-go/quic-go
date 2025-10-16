@@ -35,7 +35,7 @@ func setupEndpoints(t *testing.T, serverRTTStats *utils.RTTStats) (client, serve
 	rand.Read(trafficSecret1)
 	rand.Read(trafficSecret2)
 
-	client = newUpdatableAEAD(&utils.RTTStats{}, nil, utils.DefaultLogger, protocol.Version1)
+	client = newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.Version1)
 	server = newUpdatableAEAD(serverRTTStats, &eventRecorder, utils.DefaultLogger, protocol.Version1)
 	client.SetReadKey(cs, trafficSecret2)
 	client.SetWriteKey(cs, trafficSecret1)
@@ -97,7 +97,7 @@ func TestChaChaTestVector(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("QUIC %s", tc.version), func(t *testing.T) {
 			secret := splitHexString(t, "9ac312a7f877468ebe69422748ad00a1 5443f18203a07d6060f688f30f21632b")
-			aead := newUpdatableAEAD(&utils.RTTStats{}, nil, nil, tc.version)
+			aead := newUpdatableAEAD(utils.NewRTTStats(), nil, nil, tc.version)
 			chacha := cipherSuites[2]
 			require.Equal(t, tls.TLS_CHACHA20_POLY1305_SHA256, chacha.ID)
 			aead.SetWriteKey(chacha, secret)
@@ -123,8 +123,8 @@ func TestUpdatableAEADHeaderProtection(t *testing.T) {
 				rand.Read(trafficSecret1)
 				rand.Read(trafficSecret2)
 
-				client := newUpdatableAEAD(&utils.RTTStats{}, nil, utils.DefaultLogger, v)
-				server := newUpdatableAEAD(&utils.RTTStats{}, nil, utils.DefaultLogger, v)
+				client := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, v)
+				server := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, v)
 				client.SetReadKey(cs, trafficSecret2)
 				client.SetWriteKey(cs, trafficSecret1)
 				server.SetReadKey(cs, trafficSecret1)
@@ -188,7 +188,7 @@ func TestUpdatableAEADEncryptDecryptMessage(t *testing.T) {
 }
 
 func TestUpdatableAEADPacketNumbers(t *testing.T) {
-	client, server, _ := setupEndpoints(t, &utils.RTTStats{})
+	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
 	msg := []byte("Lorem ipsum")
 	ad := []byte("Donec in velit neque.")
 
@@ -208,7 +208,7 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 }
 
 func TestAEADLimitReached(t *testing.T) {
-	client, _, _ := setupEndpoints(t, &utils.RTTStats{})
+	client, _, _ := setupEndpoints(t, utils.NewRTTStats())
 	client.invalidPacketLimit = 10
 	for i := 0; i < 9; i++ {
 		_, err := client.Open(nil, []byte("foobar"), monotime.Now(), protocol.PacketNumber(i), protocol.KeyPhaseZero, []byte("ad"))
@@ -222,7 +222,7 @@ func TestAEADLimitReached(t *testing.T) {
 }
 
 func TestKeyUpdates(t *testing.T) {
-	client, server, _ := setupEndpoints(t, &utils.RTTStats{})
+	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
 
 	now := monotime.Now()
 	require.Equal(t, protocol.KeyPhaseZero, server.KeyPhase())
@@ -277,7 +277,7 @@ func TestKeyUpdates(t *testing.T) {
 // }
 
 func TestReorderedPacketAfterKeyUpdate(t *testing.T) {
-	client, server, eventRecorder := setupEndpoints(t, &utils.RTTStats{})
+	client, server, eventRecorder := setupEndpoints(t, utils.NewRTTStats())
 
 	now := monotime.Now()
 	encrypted01 := client.Seal(nil, []byte(msg), 0x42, []byte(ad))
@@ -305,8 +305,8 @@ func TestReorderedPacketAfterKeyUpdate(t *testing.T) {
 }
 
 func TestDropsKeys3PTOsAfterKeyUpdate(t *testing.T) {
-	var rttStats utils.RTTStats
-	client, server, eventRecorder := setupEndpoints(t, &rttStats)
+	rttStats := utils.NewRTTStats()
+	client, server, eventRecorder := setupEndpoints(t, rttStats)
 
 	now := monotime.Now()
 	rttStats.UpdateRTT(10*time.Millisecond, 0)
@@ -339,7 +339,7 @@ func TestDropsKeys3PTOsAfterKeyUpdate(t *testing.T) {
 }
 
 func TestAllowsFirstKeyUpdateImmediately(t *testing.T) {
-	client, server, serverTracer := setupEndpoints(t, &utils.RTTStats{})
+	client, server, serverTracer := setupEndpoints(t, utils.NewRTTStats())
 	client.rollKeys()
 	encrypted := client.Seal(nil, []byte(msg), 0x1337, []byte(ad))
 
@@ -357,7 +357,7 @@ func TestAllowsFirstKeyUpdateImmediately(t *testing.T) {
 }
 
 func TestRejectFrequentKeyUpdates(t *testing.T) {
-	client, server, _ := setupEndpoints(t, &utils.RTTStats{})
+	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
 
 	server.rollKeys()
 	client.rollKeys()
@@ -389,7 +389,7 @@ func TestInitiateKeyUpdateAfterSendingMaxPackets(t *testing.T) {
 	const keyUpdateInterval = 20
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
-	client, server, eventRecorder := setupEndpoints(t, &utils.RTTStats{})
+	client, server, eventRecorder := setupEndpoints(t, utils.NewRTTStats())
 	server.SetHandshakeConfirmed()
 
 	var pn protocol.PacketNumber
@@ -437,7 +437,7 @@ func TestKeyUpdateEnforceACKKeyPhase(t *testing.T) {
 	const firstKeyUpdateInterval = 5
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, protocol.KeyUpdateInterval)
 
-	_, server, eventRecorder := setupEndpoints(t, &utils.RTTStats{})
+	_, server, eventRecorder := setupEndpoints(t, utils.NewRTTStats())
 	server.SetHandshakeConfirmed()
 
 	// First make sure that we update our keys.
@@ -479,7 +479,7 @@ func TestKeyUpdateAfterOpeningMaxPackets(t *testing.T) {
 	const keyUpdateInterval = 20
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
-	client, server, eventRecorder := setupEndpoints(t, &utils.RTTStats{})
+	client, server, eventRecorder := setupEndpoints(t, utils.NewRTTStats())
 	server.SetHandshakeConfirmed()
 
 	msg := []byte("message")
@@ -532,9 +532,9 @@ func TestKeyUpdateKeyPhaseSkipping(t *testing.T) {
 	const keyUpdateInterval = 20
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
-	var rttStats utils.RTTStats
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(10*time.Millisecond, 0)
-	client, server, eventRecorder := setupEndpoints(t, &rttStats)
+	client, server, eventRecorder := setupEndpoints(t, rttStats)
 	server.SetHandshakeConfirmed()
 
 	now := monotime.Now()
@@ -567,7 +567,7 @@ func TestFastKeyUpdatesByPeer(t *testing.T) {
 	const keyUpdateInterval = 20
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
-	client, server, eventRecorder := setupEndpoints(t, &utils.RTTStats{})
+	client, server, eventRecorder := setupEndpoints(t, utils.NewRTTStats())
 	server.SetHandshakeConfirmed()
 
 	var pn protocol.PacketNumber
@@ -618,9 +618,9 @@ func TestFastKeyUpdateByUs(t *testing.T) {
 	const keyUpdateInterval = 20
 	setKeyUpdateIntervals(t, firstKeyUpdateInterval, keyUpdateInterval)
 
-	var rttStats utils.RTTStats
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(10*time.Millisecond, 0)
-	client, server, eventRecorder := setupEndpoints(t, &rttStats)
+	client, server, eventRecorder := setupEndpoints(t, rttStats)
 	server.SetHandshakeConfirmed()
 
 	// send so many packets that we initiate the first key update
@@ -677,9 +677,9 @@ func getClientAndServer() (client, server *updatableAEAD) {
 	rand.Read(trafficSecret2)
 
 	cs := cipherSuites[0]
-	var rttStats utils.RTTStats
-	client = newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, protocol.Version1)
-	server = newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	rttStats := utils.NewRTTStats()
+	client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	server = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
 	client.SetReadKey(cs, trafficSecret2)
 	client.SetWriteKey(cs, trafficSecret1)
 	server.SetReadKey(cs, trafficSecret1)

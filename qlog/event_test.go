@@ -568,7 +568,7 @@ func TestPacketDropped(t *testing.T) {
 }
 
 func TestMetricsUpdated(t *testing.T) {
-	var rttStats utils.RTTStats
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(15*time.Millisecond, 0)
 	rttStats.UpdateRTT(20*time.Millisecond, 0)
 	rttStats.UpdateRTT(25*time.Millisecond, 0)

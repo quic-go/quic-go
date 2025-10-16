@@ -70,7 +70,7 @@ func TestErrorBeforeClientHelloGeneration(t *testing.T) {
 		&wire.TransportParameters{},
 		tlsConf,
 		false,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
@@ -92,7 +92,7 @@ func TestMessageReceivedAtWrongEncryptionLevel(t *testing.T) {
 		&wire.TransportParameters{StatelessResetToken: &token},
 		testdata.GetTLSConfig(),
 		false,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
@@ -221,7 +221,7 @@ func TestHandshake(t *testing.T) {
 	_, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -235,7 +235,7 @@ func TestHelloRetryRequest(t *testing.T) {
 	_, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -267,7 +267,7 @@ func TestWithClientAuth(t *testing.T) {
 	_, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -283,7 +283,7 @@ func TestTransportParameters(t *testing.T) {
 		cTransportParameters,
 		clientConf,
 		false,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
@@ -302,7 +302,7 @@ func TestTransportParameters(t *testing.T) {
 		sTransportParameters,
 		serverConf,
 		false,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
@@ -335,7 +335,7 @@ func TestNewSessionTicketAtWrongEncryptionLevel(t *testing.T) {
 	client, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -354,7 +354,7 @@ func TestHandlingNewSessionTicketFails(t *testing.T) {
 	client, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -375,7 +375,7 @@ func TestSessionResumption(t *testing.T) {
 	client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -389,8 +389,8 @@ func TestSessionResumption(t *testing.T) {
 	require.False(t, server.ConnectionState().DidResume)
 	require.False(t, client.ConnectionState().DidResume)
 
-	clientRTTStats := &utils.RTTStats{}
-	serverRTTStats := &utils.RTTStats{}
+	clientRTTStats := utils.NewRTTStats()
+	serverRTTStats := utils.NewRTTStats()
 	client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
@@ -416,7 +416,7 @@ func TestSessionResumptionDisabled(t *testing.T) {
 	client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -434,7 +434,7 @@ func TestSessionResumptionDisabled(t *testing.T) {
 	client, _, clientErr, server, _, serverErr = handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		false,
 	)
@@ -457,7 +457,7 @@ func Test0RTT(t *testing.T) {
 	client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 		true,
@@ -475,7 +475,7 @@ func Test0RTT(t *testing.T) {
 	client, clientEvents, clientErr, server, serverEvents, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 		true,
@@ -520,7 +520,7 @@ func Test0RTTRejectionOnTransportParametersChanged(t *testing.T) {
 	client, _, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		&utils.RTTStats{}, &utils.RTTStats{},
+		utils.NewRTTStats(), utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 		true,
@@ -535,11 +535,11 @@ func Test0RTTRejectionOnTransportParametersChanged(t *testing.T) {
 	require.False(t, server.ConnectionState().DidResume)
 	require.False(t, client.ConnectionState().DidResume)
 
-	clientRTTStats := &utils.RTTStats{}
+	clientRTTStats := utils.NewRTTStats()
 	client, clientEvents, clientErr, server, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		clientRTTStats, &utils.RTTStats{},
+		clientRTTStats, utils.NewRTTStats(),
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData - 1},
 		true,

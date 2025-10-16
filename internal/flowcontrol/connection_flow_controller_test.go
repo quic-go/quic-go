@@ -17,7 +17,7 @@ func TestConnectionFlowControlWindowUpdate(t *testing.T) {
 		100, // initial receive window
 		100, // max receive window
 		nil,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 	require.False(t, fc.AddBytesRead(1))
@@ -28,7 +28,7 @@ func TestConnectionFlowControlWindowUpdate(t *testing.T) {
 
 func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
 	// the RTT is 1 second
-	rttStats := &utils.RTTStats{}
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(time.Second, 0)
 	require.Equal(t, time.Second, rttStats.SmoothedRTT())
 
@@ -52,7 +52,7 @@ func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
 }
 
 func TestConnectionFlowControlViolation(t *testing.T) {
-	fc := NewConnectionFlowController(100, 100, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	fc := NewConnectionFlowController(100, 100, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	require.NoError(t, fc.IncrementHighestReceived(40, monotime.Now()))
 	require.NoError(t, fc.IncrementHighestReceived(60, monotime.Now()))
 	err := fc.IncrementHighestReceived(1, monotime.Now())
@@ -62,7 +62,7 @@ func TestConnectionFlowControlViolation(t *testing.T) {
 }
 
 func TestConnectionFlowControllerReset(t *testing.T) {
-	fc := NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	fc := NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	fc.UpdateSendWindow(100)
 	fc.AddBytesSent(10)
 	require.Equal(t, protocol.ByteCount(90), fc.SendWindowSize())
@@ -71,7 +71,7 @@ func TestConnectionFlowControllerReset(t *testing.T) {
 }
 
 func TestConnectionFlowControllerResetAfterReading(t *testing.T) {
-	fc := NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	fc := NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	fc.AddBytesRead(1)
 	require.EqualError(t, fc.Reset(), "flow controller reset after reading data")
 }

@@ -278,8 +278,8 @@ func (c *cubicSender) isCwndLimited(bytesInFlight protocol.ByteCount) bool {
 func (c *cubicSender) BandwidthEstimate() Bandwidth {
 	srtt := c.rttStats.SmoothedRTT()
 	if srtt == 0 {
-		// If we haven't measured an rtt, the bandwidth estimate is unknown.
-		return infBandwidth
+		// This should never happen, but if it does, avoid division by zero.
+		srtt = protocol.TimerGranularity
 	}
 	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
 }

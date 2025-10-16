@@ -516,7 +516,7 @@ func (c *Conn) preSetup() {
 		c.config.EnableStreamResetPartialDelivery,
 		false, // ACK_FREQUENCY is not supported yet
 	)
-	c.rttStats = &utils.RTTStats{}
+	c.rttStats = utils.NewRTTStats()
 	c.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(c.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(c.config.MaxConnectionReceiveWindow),
