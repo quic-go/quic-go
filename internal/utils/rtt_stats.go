@@ -90,7 +90,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration) {
 	minRTT := time.Duration(r.minRTT.Load())
 	if !r.hasMeasurement || minRTT > sendDelta {
 		minRTT = sendDelta
-		r.minRTT.Store(int64(sendDelta))
+		r.minRTT.Store(sendDelta.Nanoseconds())
 	}
 
 	// Correct for ackDelay if information received from the peer results in a
@@ -100,18 +100,18 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration) {
 	if sample-minRTT >= ackDelay {
 		sample -= ackDelay
 	}
-	r.latestRTT.Store(int64(sample))
+	r.latestRTT.Store(sample.Nanoseconds())
 	// First time call.
 	if !r.hasMeasurement {
 		r.hasMeasurement = true
-		r.smoothedRTT.Store(int64(sample))
-		r.meanDeviation.Store(int64(sample / 2))
+		r.smoothedRTT.Store(sample.Nanoseconds())
+		r.meanDeviation.Store(sample.Nanoseconds() / 2)
 	} else {
 		smoothedRTT := r.SmoothedRTT()
 		meanDev := time.Duration(oneMinusBeta*float32(r.MeanDeviation()/time.Microsecond)+rttBeta*float32((smoothedRTT-sample).Abs()/time.Microsecond)) * time.Microsecond
 		newSmoothedRTT := time.Duration((float32(smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
-		r.meanDeviation.Store(int64(meanDev))
-		r.smoothedRTT.Store(int64(newSmoothedRTT))
+		r.meanDeviation.Store(meanDev.Nanoseconds())
+		r.smoothedRTT.Store(newSmoothedRTT.Nanoseconds())
 	}
 }
 
