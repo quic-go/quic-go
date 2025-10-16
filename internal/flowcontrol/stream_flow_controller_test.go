@@ -19,13 +19,13 @@ func TestStreamFlowControlReceiving(t *testing.T) {
 			protocol.MaxByteCount,
 			protocol.MaxByteCount,
 			nil,
-			&utils.RTTStats{},
+			utils.NewRTTStats(),
 			utils.DefaultLogger,
 		),
 		100,
 		protocol.MaxByteCount,
 		protocol.MaxByteCount,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 
@@ -52,13 +52,13 @@ func TestStreamFlowControllerFinalOffset(t *testing.T) {
 				protocol.MaxByteCount,
 				protocol.MaxByteCount,
 				nil,
-				&utils.RTTStats{},
+				utils.NewRTTStats(),
 				utils.DefaultLogger,
 			),
 			protocol.MaxByteCount,
 			protocol.MaxByteCount,
 			protocol.MaxByteCount,
-			&utils.RTTStats{},
+			utils.NewRTTStats(),
 			utils.DefaultLogger,
 		)
 	}
@@ -109,7 +109,7 @@ func TestStreamAbandoning(t *testing.T) {
 		100,
 		protocol.MaxByteCount,
 		nil,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 	require.True(t, connFC.UpdateSendWindow(300))
@@ -119,7 +119,7 @@ func TestStreamAbandoning(t *testing.T) {
 		60,
 		protocol.MaxByteCount,
 		100,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 
@@ -140,7 +140,7 @@ func TestStreamSendWindow(t *testing.T) {
 		protocol.MaxByteCount,
 		protocol.MaxByteCount,
 		nil,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 	require.True(t, connFC.UpdateSendWindow(300))
@@ -150,7 +150,7 @@ func TestStreamSendWindow(t *testing.T) {
 		protocol.MaxByteCount,
 		protocol.MaxByteCount,
 		100,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 	// first, we're limited by the stream flow controller
@@ -183,13 +183,13 @@ func TestStreamWindowUpdate(t *testing.T) {
 			protocol.MaxByteCount,
 			protocol.MaxByteCount,
 			nil,
-			&utils.RTTStats{},
+			utils.NewRTTStats(),
 			utils.DefaultLogger,
 		),
 		100,
 		100,
 		protocol.MaxByteCount,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 	require.Zero(t, fc.GetWindowUpdate(monotime.Now()))
@@ -221,7 +221,7 @@ func TestStreamConnectionWindowUpdate(t *testing.T) {
 		100,
 		protocol.MaxByteCount,
 		nil,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 	fc := NewStreamFlowController(
@@ -230,7 +230,7 @@ func TestStreamConnectionWindowUpdate(t *testing.T) {
 		1000,
 		protocol.MaxByteCount,
 		protocol.MaxByteCount,
-		&utils.RTTStats{},
+		utils.NewRTTStats(),
 		utils.DefaultLogger,
 	)
 
@@ -243,7 +243,7 @@ func TestStreamConnectionWindowUpdate(t *testing.T) {
 
 func TestStreamWindowAutoTuning(t *testing.T) {
 	// the RTT is 1 second
-	rttStats := &utils.RTTStats{}
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(time.Second, 0)
 	require.Equal(t, time.Second, rttStats.SmoothedRTT())
 

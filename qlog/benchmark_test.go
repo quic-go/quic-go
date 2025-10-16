@@ -34,7 +34,7 @@ func BenchmarkConnectionTracing(b *testing.B) {
 	tracer := trace.AddProducer()
 	b.Cleanup(func() { tracer.Close() })
 
-	var rttStats utils.RTTStats
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(1337*time.Millisecond, 0)
 	rttStats.UpdateRTT(1000*time.Millisecond, 10*time.Millisecond)
 	rttStats.UpdateRTT(800*time.Millisecond, 100*time.Millisecond)

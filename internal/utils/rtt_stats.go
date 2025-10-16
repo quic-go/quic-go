@@ -12,9 +12,10 @@ const (
 	oneMinusAlpha = 1 - rttAlpha
 	rttBeta       = 0.25
 	oneMinusBeta  = 1 - rttBeta
-	// The default RTT used before an RTT sample is taken.
-	defaultInitialRTT = 100 * time.Millisecond
 )
+
+// The default RTT used before an RTT sample is taken
+const DefaultInitialRTT = 100 * time.Millisecond
 
 // RTTStats provides round-trip statistics
 type RTTStats struct {
@@ -26,6 +27,14 @@ type RTTStats struct {
 	meanDeviation atomic.Int64 // nanoseconds
 
 	maxAckDelay atomic.Int64 // nanoseconds
+}
+
+func NewRTTStats() *RTTStats {
+	var rttStats RTTStats
+	rttStats.minRTT.Store(DefaultInitialRTT.Nanoseconds())
+	rttStats.latestRTT.Store(DefaultInitialRTT.Nanoseconds())
+	rttStats.smoothedRTT.Store(DefaultInitialRTT.Nanoseconds())
+	return &rttStats
 }
 
 // MinRTT Returns the minRTT for the entire connection.
@@ -58,8 +67,8 @@ func (r *RTTStats) MaxAckDelay() time.Duration {
 
 // PTO gets the probe timeout duration.
 func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
-	if r.SmoothedRTT() == 0 {
-		return 2 * defaultInitialRTT
+	if !r.hasMeasurement {
+		return 2 * DefaultInitialRTT
 	}
 	pto := r.SmoothedRTT() + max(4*r.MeanDeviation(), protocol.TimerGranularity)
 	if includeMaxAckDelay {
@@ -79,7 +88,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration) {
 	// the client may cause a high ackDelay to result in underestimation of the
 	// r.minRTT.
 	minRTT := time.Duration(r.minRTT.Load())
-	if minRTT == 0 || minRTT > sendDelta {
+	if !r.hasMeasurement || minRTT > sendDelta {
 		minRTT = sendDelta
 		r.minRTT.Store(int64(sendDelta))
 	}
@@ -127,9 +136,9 @@ func (r *RTTStats) SetInitialRTT(t time.Duration) {
 
 func (r *RTTStats) ResetForPathMigration() {
 	r.hasMeasurement = false
-	r.minRTT.Store(0)
-	r.latestRTT.Store(0)
-	r.smoothedRTT.Store(0)
+	r.minRTT.Store(DefaultInitialRTT.Nanoseconds())
+	r.latestRTT.Store(DefaultInitialRTT.Nanoseconds())
+	r.smoothedRTT.Store(DefaultInitialRTT.Nanoseconds())
 	r.meanDeviation.Store(0)
 	// max_ack_delay remains valid
 }

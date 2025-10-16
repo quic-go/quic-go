@@ -71,9 +71,9 @@ func connectionOptHandshakeConfirmed() testConnectionOpt {
 }
 
 func connectionOptRTT(rtt time.Duration) testConnectionOpt {
-	var rttStats utils.RTTStats
+	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
-	return func(conn *Conn) { conn.rttStats = &rttStats }
+	return func(conn *Conn) { conn.rttStats = rttStats }
 }
 
 func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
@@ -239,7 +239,7 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 
 func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	require.Zero(t, connFC.SendWindowSize())
 	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
 	now := monotime.Now()
@@ -1009,7 +1009,7 @@ func TestConnectionHandshakeIdleTimeout(t *testing.T) {
 func TestConnectionTransportParameters(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	var eventRecorder events.Recorder
-	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	require.Zero(t, connFC.SendWindowSize())
 	tc := newServerTestConnection(t,
 		mockCtrl,
@@ -1062,7 +1062,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
-		connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, &utils.RTTStats{}, utils.DefaultLogger)
+		connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
 		tc.conn.handleTransportParameters(&wire.TransportParameters{})
 
