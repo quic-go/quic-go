@@ -68,6 +68,9 @@ func (p *pacer) maxBurstSize() protocol.ByteCount {
 	)
 }
 
+// timeScaledBandwidth calculates the number of bytes that may be sent within
+// a given time interval (ns nanoseconds), based on the current bandwidth estimate.
+// It caps the scaled value to the maximum allowed burst and handles overflows.
 func (p *pacer) timeScaledBandwidth(ns uint64) protocol.ByteCount {
 	bw := p.adjustedBandwidth()
 	if bw == 0 {
