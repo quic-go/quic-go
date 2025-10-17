@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/monotime"
+	"github.com/quic-go/quic-go/internal/protocol"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,10 +112,43 @@ func TestPacerFastPacing(t *testing.T) {
 }
 
 func TestPacerNoOverflows(t *testing.T) {
-	p := newPacer(func() Bandwidth { return infBandwidth })
+	p := newPacer(func() Bandwidth { return math.MaxUint64 })
 	now := monotime.Now()
 	p.SentPacket(now, initialMaxDatagramSize)
 	for range 100000 {
 		require.NotZero(t, p.Budget(now.Add(time.Duration(rand.Int64N(math.MaxInt64)))))
+	}
+
+	burstCount := 1
+	for p.Budget(now) > 0 {
+		burstCount++
+		p.SentPacket(now, initialMaxDatagramSize)
+	}
+	require.Equal(t, maxBurstSizePackets, burstCount)
+	require.Zero(t, p.Budget(now))
+
+	next := p.TimeUntilSend()
+	require.Equal(t, next.Sub(now), protocol.MinPacingDelay)
+	require.Greater(t, p.Budget(next), initialMaxDatagramSize)
+}
+
+func BenchmarkPacer(b *testing.B) {
+	const bandwidth = 50 * initialMaxDatagramSize // 50 full-size packets per second
+	p := newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
+
+	now := monotime.Now()
+
+	var i int
+	for b.Loop() {
+		i++
+		for p.Budget(now) > 0 {
+			p.SentPacket(now, initialMaxDatagramSize)
+		}
+		next := p.TimeUntilSend()
+		if i%2 == 0 {
+			now = next
+		} else {
+			now = now.Add(100 * time.Millisecond)
+		}
 	}
 }
