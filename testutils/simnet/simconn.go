@@ -224,6 +224,10 @@ func (c *SimConn) SetDeadline(t time.Time) error {
 	defer c.mu.Unlock()
 	c.readDeadline = t
 	c.writeDeadline = t
+	select {
+	case c.deadlineUpdated <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
