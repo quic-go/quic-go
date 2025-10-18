@@ -193,7 +193,7 @@ func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	deadline := c.writeDeadline
 	c.mu.Unlock()
 
-	if !deadline.IsZero() && time.Now().After(deadline) {
+	if !deadline.IsZero() && !time.Now().Before(deadline) {
 		return 0, ErrDeadlineExceeded
 	}
 
