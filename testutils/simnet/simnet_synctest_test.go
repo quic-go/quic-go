@@ -1,7 +1,6 @@
 package simnet
 
 import (
-	"fmt"
 	"math"
 	"net"
 	"testing"
@@ -148,8 +147,8 @@ func TestSimNetBandwidth(t *testing.T) {
 
 		observedBandwidth := float64(bytesRead*8) / readDuration.Seconds()
 		expectedBandwidth := float64(bandwidth)
-		fmt.Println("sent bytes", bytesSent)
-		fmt.Println("Read bytes", bytesRead)
+		t.Logf("sent bytes: %d", bytesSent)
+		t.Logf("read bytes: %d", bytesRead)
 		percentDiffBandwidth := math.Abs(observedBandwidth-expectedBandwidth) / expectedBandwidth
 		t.Logf("observed bandwidth: %v mbps, expected bandwidth: %v mbps, percent diff: %v", observedBandwidth/oneMbps, expectedBandwidth/oneMbps, percentDiffBandwidth)
 		if percentDiffBandwidth > 0.20 {
