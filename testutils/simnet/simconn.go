@@ -1,15 +1,13 @@
 package simnet
 
 import (
-	"errors"
 	"net"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 )
-
-var ErrDeadlineExceeded = errors.New("deadline exceeded")
 
 type PacketReceiver interface {
 	RecvPacket(p Packet)
@@ -158,7 +156,7 @@ func (c *SimConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	c.mu.Unlock()
 
 	if !deadline.IsZero() && !time.Now().Before(deadline) {
-		return 0, nil, ErrDeadlineExceeded
+		return 0, nil, os.ErrDeadlineExceeded
 	}
 
 	var pkt Packet
@@ -174,7 +172,7 @@ func (c *SimConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	case <-c.deadlineUpdated:
 		return c.ReadFrom(p)
 	case <-deadlineTimer:
-		return 0, nil, ErrDeadlineExceeded
+		return 0, nil, os.ErrDeadlineExceeded
 	}
 
 	n = copy(p, pkt.Data)
@@ -194,7 +192,7 @@ func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mu.Unlock()
 
 	if !deadline.IsZero() && !time.Now().Before(deadline) {
-		return 0, ErrDeadlineExceeded
+		return 0, os.ErrDeadlineExceeded
 	}
 
 	c.packetsSent.Add(1)

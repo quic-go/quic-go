@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"math"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -78,6 +80,8 @@ func newSimnetLink(t *testing.T, rtt time.Duration) (client, server net.PacketCo
 	server = n.NewEndpoint(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9002}, settings)
 	require.NoError(t, n.Start())
 	return client, server, func() {
+		require.NoError(t, client.Close())
+		require.NoError(t, server.Close())
 		require.NoError(t, n.Close())
 	}
 }
@@ -652,15 +656,18 @@ func TestTransportReplaceWithClosed(t *testing.T) {
 	if strings.HasPrefix(runtime.Version(), "go1.24") {
 		t.Skip("skipping on Go 1.24 due to synctest issues")
 	}
-	t.Run("local", func(t *testing.T) {
-		testTransportReplaceWithClosed(t, true)
-	})
-	t.Run("remote", func(t *testing.T) {
-		testTransportReplaceWithClosed(t, false)
-	})
+
+	for _, isSingleUse := range []bool{true, false} {
+		t.Run(fmt.Sprintf("local, isSingleUse: %t", isSingleUse), func(t *testing.T) {
+			testTransportReplaceWithClosed(t, isSingleUse, true)
+		})
+		t.Run(fmt.Sprintf("remote, isSingleUse: %t", isSingleUse), func(t *testing.T) {
+			testTransportReplaceWithClosed(t, isSingleUse, false)
+		})
+	}
 }
 
-func testTransportReplaceWithClosed(t *testing.T, local bool) {
+func testTransportReplaceWithClosed(t *testing.T, isSingleUse, local bool) {
 	synctest.Test(t, func(t *testing.T) {
 		clientConn, serverConn, closeFn := newSimnetLink(t, 10*time.Millisecond)
 		defer closeFn()
@@ -670,6 +677,7 @@ func testTransportReplaceWithClosed(t *testing.T, local bool) {
 			Conn:               serverConn,
 			ConnectionIDLength: 4,
 			StatelessResetKey:  &srk,
+			isSingleUse:        isSingleUse,
 		}
 		tr.init(true)
 		defer tr.Close()
@@ -720,6 +728,11 @@ func testTransportReplaceWithClosed(t *testing.T, local bool) {
 		for {
 			b := make([]byte, 100)
 			n, _, err := clientConn.ReadFrom(b)
+			if isSingleUse {
+				require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+				<-errChan
+				return
+			}
 			require.NoError(t, err)
 			// at some point, the connection is cleaned up, and we'll receive a stateless reset
 			if !bytes.Equal(b[:n], []byte("foobar")) {

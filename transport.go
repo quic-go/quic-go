@@ -481,15 +481,17 @@ func (t *Transport) Close() error {
 
 func (t *Transport) closeServer() {
 	t.mutex.Lock()
-	defer t.mutex.Unlock()
 
 	t.server = nil
 	if t.isSingleUse {
 		t.closeErr = ErrServerClosed
 	}
 
-	if len(t.handlers) == 0 {
-		t.maybeStopListening()
+	stopListening := t.isSingleUse && t.closeErr != nil && len(t.handlers) == 0
+	t.mutex.Unlock()
+
+	if stopListening {
+		t.stopListening()
 	}
 }
 
@@ -560,9 +562,11 @@ func (t *Transport) listen(conn rawConn) {
 	}
 }
 
-func (t *Transport) maybeStopListening() {
-	if t.isSingleUse && t.closeErr != nil {
-		t.conn.SetReadDeadline(time.Now())
+func (t *Transport) stopListening() {
+	t.conn.SetReadDeadline(time.Now())
+	defer func() { t.conn.SetReadDeadline(time.Time{}) }()
+	if t.listening != nil {
+		<-t.listening
 	}
 }
 
@@ -840,16 +844,25 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connCl
 	h.mutex.Unlock()
 	h.logger.Debugf("Replacing connection for connection IDs %s with a closed connection.", ids)
 
+	if h.isSingleUse && len(h.handlers) == len(ids) {
+		if h.closeErr == nil {
+			h.closeErr = ErrTransportClosed
+		}
+		(*Transport)(h).stopListening()
+		return
+	}
+
 	time.AfterFunc(expiry, func() {
 		h.mutex.Lock()
 		for _, id := range ids {
 			delete(h.handlers, id)
 		}
-		if len(h.handlers) == 0 {
-			t := (*Transport)(h)
-			t.maybeStopListening()
-		}
+		stopListening := h.isSingleUse && h.closeErr != nil && len(h.handlers) == 0
 		h.mutex.Unlock()
+
+		if stopListening {
+			(*Transport)(h).stopListening()
+		}
 		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
 	})
 }

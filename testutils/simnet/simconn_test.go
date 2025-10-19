@@ -3,6 +3,7 @@ package simnet
 import (
 	"crypto/rand"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -66,7 +67,7 @@ func TestSimConnDeadlines(t *testing.T) {
 
 		buf := make([]byte, 1024)
 		_, _, err = conn.ReadFrom(buf)
-		require.ErrorIs(t, err, ErrDeadlineExceeded)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 	})
 
 	t.Run("write deadline", func(t *testing.T) {
@@ -75,7 +76,7 @@ func TestSimConnDeadlines(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = conn.WriteTo([]byte("test"), &net.UDPAddr{})
-		require.ErrorIs(t, err, ErrDeadlineExceeded)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 	})
 }
 
@@ -138,7 +139,7 @@ func TestSimConnDeadlinesWithLatency(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = conn1.WriteTo([]byte("test"), addr2)
-		require.ErrorIs(t, err, ErrDeadlineExceeded)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 		reset()
 	})
 
@@ -184,6 +185,6 @@ func TestSimConnDeadlinesWithLatency(t *testing.T) {
 		// Read should fail due to deadline
 		buf := make([]byte, 1024)
 		_, _, err = conn2.ReadFrom(buf)
-		require.ErrorIs(t, err, ErrDeadlineExceeded)
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 	})
 }

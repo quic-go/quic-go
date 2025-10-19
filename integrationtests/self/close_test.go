@@ -34,6 +34,16 @@ func (d *droppingRouter) SendPacket(p simnet.Packet) error {
 var _ simnet.Router = &droppingRouter{}
 
 func TestConnectionCloseRetransmission(t *testing.T) {
+	t.Run("using a Transport", func(t *testing.T) {
+		testConnectionCloseRetransmission(t, true)
+	})
+
+	t.Run("using Listen", func(t *testing.T) {
+		testConnectionCloseRetransmission(t, false)
+	})
+}
+
+func testConnectionCloseRetransmission(t *testing.T, useTransport bool) {
 	synctest.Test(t, func(t *testing.T) {
 		const rtt = 10 * time.Millisecond
 		serverAddr := &net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}
@@ -49,22 +59,30 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 				return shouldDrop
 			}},
 		}
+		defer n.Close()
 		settings := simnet.NodeBiDiLinkSettings{
 			Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
 			Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
 		}
 		clientConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
+		defer clientConn.Close()
 		serverConn := n.NewEndpoint(serverAddr, settings)
+		defer serverConn.Close()
 		require.NoError(t, n.Start())
-		defer n.Close()
 
-		tr := &quic.Transport{Conn: serverConn}
-		defer tr.Close()
-		server, err := tr.Listen(
-			getTLSConfig(),
-			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
-		)
-		require.NoError(t, err)
+		var server *quic.Listener
+		serverConfig := &quic.Config{DisablePathMTUDiscovery: true}
+		if useTransport {
+			tr := &quic.Transport{Conn: serverConn}
+			defer tr.Close()
+			var err error
+			server, err = tr.Listen(getTLSConfig(), getQuicConfig(serverConfig))
+			require.NoError(t, err)
+		} else {
+			var err error
+			server, err = quic.Listen(serverConn, getTLSConfig(), getQuicConfig(serverConfig))
+			require.NoError(t, err)
+		}
 		defer server.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -98,7 +116,11 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 
 		// Expect retransmissions of the CONNECTION_CLOSE for the
 		// 1st, 2nd, 4th, 8th, 16th, 32th, 64th packet: 7 in total (+1 for the original packet)
-		require.Len(t, dropped, 8)
+		if useTransport {
+			require.Len(t, dropped, 8)
+		} else {
+			require.Len(t, dropped, 1) // only the original packet
+		}
 
 		// verify all retransmitted packets were identical
 		for i := 1; i < len(dropped); i++ {
