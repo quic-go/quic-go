@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"math"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,12 +40,15 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 		serverAddr := &net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}
 
 		var drop atomic.Bool
+		var mx sync.Mutex
 		var dropped [][]byte
 		n := &simnet.Simnet{
 			Router: &droppingRouter{Drop: func(p simnet.Packet) bool {
 				shouldDrop := drop.Load() && p.From.String() == serverAddr.String()
 				if shouldDrop {
+					mx.Lock()
 					dropped = append(dropped, p.Data)
+					mx.Unlock()
 				}
 				return shouldDrop
 			}},
@@ -95,6 +99,9 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 		}
 
 		time.Sleep(rtt)
+
+		mx.Lock()
+		defer mx.Unlock()
 
 		// Expect retransmissions of the CONNECTION_CLOSE for the
 		// 1st, 2nd, 4th, 8th, 16th, 32th, 64th packet: 7 in total (+1 for the original packet)
