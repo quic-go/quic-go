@@ -9,39 +9,50 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/synctest"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/testutils/simnet"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestDropTests(t *testing.T) {
-	for _, direction := range []quicproxy.Direction{quicproxy.DirectionIncoming, quicproxy.DirectionOutgoing} {
-		t.Run(fmt.Sprintf("in %s direction", direction), func(t *testing.T) {
-			const numMessages = 15
-			const rtt = 10 * time.Millisecond
+func TestPacketDrops(t *testing.T) {
+	for _, direction := range []protocol.Perspective{protocol.PerspectiveClient, protocol.PerspectiveServer} {
+		t.Run(fmt.Sprintf("from %s", direction), func(t *testing.T) {
+			testPacketDrops(t, direction)
+		})
+	}
+}
 
-			messageInterval := randomDuration(10*time.Millisecond, 100*time.Millisecond)
-			dropDuration := randomDuration(messageInterval*3/2, 2*time.Second)
-			dropDelay := randomDuration(25*time.Millisecond, numMessages*messageInterval/2)
-			t.Logf("sending a message every %s, %d times", messageInterval, numMessages)
-			t.Logf("dropping packets for %s, after a delay of %s", dropDuration, dropDelay)
-			startTime := time.Now()
+func testPacketDrops(t *testing.T, direction protocol.Perspective) {
+	synctest.Test(t, func(t *testing.T) {
+		const numMessages = 50
+		const rtt = 10 * time.Millisecond
 
-			ln, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
-			require.NoError(t, err)
-			defer ln.Close()
+		addrClient := &net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}
+		addrServer := &net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}
 
-			var numDroppedPackets atomic.Int32
-			proxy := &quicproxy.Proxy{
-				Conn:        newUDPConnLocalhost(t),
-				ServerAddr:  ln.Addr().(*net.UDPAddr),
-				DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
-				DropPacket: func(d quicproxy.Direction, _, _ net.Addr, b []byte) bool {
-					if !d.Is(direction) {
-						return false
+		var numDroppedPackets atomic.Int32
+		messageInterval := randomDuration(10*time.Millisecond, 100*time.Millisecond)
+		dropDuration := randomDuration(messageInterval*3, 2*time.Second)
+		dropDelay := randomDuration(25*time.Millisecond, numMessages*messageInterval/2)
+
+		startTime := time.Now()
+		n := &simnet.Simnet{
+			Router: &droppingRouter{
+				Drop: func(p simnet.Packet) bool {
+					switch p.To {
+					case addrClient:
+						if direction == protocol.PerspectiveClient {
+							return false
+						}
+					case addrServer:
+						if direction == protocol.PerspectiveServer {
+							return false
+						}
 					}
-					if wire.IsLongHeaderPacket(b[0]) { // don't interfere with the handshake
+					if wire.IsLongHeaderPacket(p.Data[0]) { // don't interfere with the handshake
 						return false
 					}
 					drop := time.Now().After(startTime.Add(dropDelay)) && time.Now().Before(startTime.Add(dropDelay).Add(dropDuration))
@@ -50,43 +61,60 @@ func TestDropTests(t *testing.T) {
 					}
 					return drop
 				},
-			}
-			require.NoError(t, proxy.Start())
-			defer proxy.Close()
+			},
+		}
+		settings := simnet.NodeBiDiLinkSettings{
+			Downlink: simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
+			Uplink:   simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
+		}
+		clientPacketConn := n.NewEndpoint(addrClient, settings)
+		defer clientPacketConn.Close()
+		serverPacketConn := n.NewEndpoint(addrServer, settings)
+		defer serverPacketConn.Close()
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
-			require.NoError(t, err)
-			defer conn.CloseWithError(0, "")
+		require.NoError(t, n.Start())
+		defer n.Close()
 
-			serverConn, err := ln.Accept(ctx)
-			require.NoError(t, err)
-			serverStr, err := serverConn.OpenUniStream()
-			require.NoError(t, err)
-			errChan := make(chan error, 1)
-			go func() {
-				for i := uint8(1); i <= numMessages; i++ {
-					if _, err := serverStr.Write([]byte{i}); err != nil {
-						errChan <- err
-						return
-					}
-					time.Sleep(messageInterval)
+		t.Logf("sending a message every %s, %d times", messageInterval, numMessages)
+		t.Logf("dropping packets for %s, after a delay of %s", dropDuration, dropDelay)
+
+		ln, err := quic.Listen(serverPacketConn, getTLSConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+		defer ln.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		conn, err := quic.Dial(ctx, clientPacketConn, ln.Addr().(*net.UDPAddr), getTLSClientConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+		defer conn.CloseWithError(0, "")
+
+		serverConn, err := ln.Accept(ctx)
+		require.NoError(t, err)
+		defer serverConn.CloseWithError(0, "")
+		serverStr, err := serverConn.OpenUniStream()
+		require.NoError(t, err)
+		errChan := make(chan error, 1)
+		go func() {
+			for i := range numMessages {
+				time.Sleep(messageInterval)
+				if _, err := serverStr.Write([]byte{uint8(i + 1)}); err != nil {
+					errChan <- err
+					return
 				}
-			}()
-
-			str, err := conn.AcceptUniStream(ctx)
-			require.NoError(t, err)
-			for i := uint8(1); i <= numMessages; i++ {
-				b := []byte{0}
-				n, err := str.Read(b)
-				require.NoError(t, err)
-				require.Equal(t, 1, n)
-				require.Equal(t, i, b[0])
 			}
-			numDropped := numDroppedPackets.Load()
-			t.Logf("dropped %d packets", numDropped)
-			require.NotZero(t, numDropped)
-		})
-	}
+		}()
+
+		str, err := conn.AcceptUniStream(ctx)
+		require.NoError(t, err)
+		for i := range numMessages {
+			b := []byte{0}
+			n, err := str.Read(b)
+			require.NoError(t, err)
+			require.Equal(t, 1, n)
+			require.Equal(t, byte(i+1), b[0])
+		}
+		numDropped := numDroppedPackets.Load()
+		t.Logf("dropped %d packets", numDropped)
+		require.NotZero(t, numDropped)
+	})
 }
