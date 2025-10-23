@@ -147,16 +147,16 @@ func dropTestProtocolNobodySpeaks(t *testing.T, ln *quic.Listener, clientConn ne
 }
 
 func dropCallbackDropNthPacket(dir direction, ns ...int) func(direction, simnet.Packet) bool {
-	var incoming, outgoing atomic.Int32
+	var toClient, toServer atomic.Int32
 	return func(d direction, p simnet.Packet) bool {
 		switch d {
-		case directionIncoming:
-			c := incoming.Add(1)
+		case directionToClient:
+			c := toClient.Add(1)
 			if d == dir || dir == directionBoth {
 				return slices.Contains(ns, int(c))
 			}
-		case directionOutgoing:
-			c := outgoing.Add(1)
+		case directionToServer:
+			c := toServer.Add(1)
 			if dir == d || dir == directionBoth {
 				return slices.Contains(ns, int(c))
 			}
@@ -168,33 +168,33 @@ func dropCallbackDropNthPacket(dir direction, ns ...int) func(direction, simnet.
 func dropCallbackDropOneThird(_ direction) func(direction, simnet.Packet) bool {
 	const maxSequentiallyDropped = 10
 	var mx sync.Mutex
-	var incoming, outgoing int
+	var toClient, toServer int
 	return func(d direction, p simnet.Packet) bool {
 		drop := mrand.IntN(3) == 0
 
 		mx.Lock()
 		defer mx.Unlock()
 		// never drop more than 10 consecutive packets
-		if d == directionIncoming || d == directionBoth {
+		if d == directionToClient || d == directionBoth {
 			if drop {
-				incoming++
-				if incoming > maxSequentiallyDropped {
+				toClient++
+				if toClient > maxSequentiallyDropped {
 					drop = false
 				}
 			}
 			if !drop {
-				incoming = 0
+				toClient = 0
 			}
 		}
-		if d == directionOutgoing || d == directionBoth {
+		if d == directionToServer || d == directionBoth {
 			if drop {
-				outgoing++
-				if outgoing > maxSequentiallyDropped {
+				toServer++
+				if toServer > maxSequentiallyDropped {
 					drop = false
 				}
 			}
 			if !drop {
-				outgoing = 0
+				toServer = 0
 			}
 		}
 		return drop
@@ -220,13 +220,13 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 		doRetry       bool
 	}
 
-	for _, dir := range []direction{directionIncoming, directionOutgoing, directionBoth} {
+	for _, dir := range []direction{directionToClient, directionToServer, directionBoth} {
 		for _, pattern := range []dropPattern{
 			dropPatternDrop1stPacket,
 			dropPatternDropFirst3Packets,
 			dropPatternDropOneThirdOfPackets,
 		} {
-			t.Run(fmt.Sprintf("%s in %s direction", pattern, dir), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s in direction %s", pattern, dir), func(t *testing.T) {
 				for _, conf := range []testConfig{
 					{postQuantum: false, longCertChain: false, doRetry: true},
 					{postQuantum: false, longCertChain: false, doRetry: false},
