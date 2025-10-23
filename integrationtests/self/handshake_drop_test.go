@@ -168,7 +168,7 @@ func dropCallbackDropNthPacket(dir direction, ns ...int) func(direction, simnet.
 func dropCallbackDropOneThird(_ direction) func(direction, simnet.Packet) bool {
 	const maxSequentiallyDropped = 10
 	var mx sync.Mutex
-	var incoming, outgoing atomic.Int32
+	var incoming, outgoing int
 	return func(d direction, p simnet.Packet) bool {
 		drop := mrand.IntN(3) == 0
 
@@ -177,24 +177,24 @@ func dropCallbackDropOneThird(_ direction) func(direction, simnet.Packet) bool {
 		// never drop more than 10 consecutive packets
 		if d == directionIncoming || d == directionBoth {
 			if drop {
-				n := incoming.Add(1)
-				if n > maxSequentiallyDropped {
+				incoming++
+				if incoming > maxSequentiallyDropped {
 					drop = false
 				}
 			}
 			if !drop {
-				incoming.Store(0)
+				incoming = 0
 			}
 		}
 		if d == directionOutgoing || d == directionBoth {
 			if drop {
-				n := outgoing.Add(1)
-				if n > maxSequentiallyDropped {
+				outgoing++
+				if outgoing > maxSequentiallyDropped {
 					drop = false
 				}
 			}
 			if !drop {
-				outgoing.Store(0)
+				outgoing = 0
 			}
 		}
 		return drop
