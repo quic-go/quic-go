@@ -23,17 +23,17 @@ type direction uint8
 
 const (
 	directionUnknown = iota
-	directionIncoming
-	directionOutgoing
+	directionToClient
+	directionToServer
 	directionBoth
 )
 
 func (d direction) String() string {
 	switch d {
-	case directionIncoming:
-		return "incoming"
-	case directionOutgoing:
-		return "outgoing"
+	case directionToClient:
+		return "to client"
+	case directionToServer:
+		return "to server"
 	case directionBoth:
 		return "both"
 	}
@@ -54,9 +54,9 @@ func (d *directionAwareDroppingRouter) SendPacket(p simnet.Packet) error {
 	var dir direction
 	switch p.To.String() {
 	case d.ClientAddr.String():
-		dir = directionIncoming
+		dir = directionToClient
 	case d.ServerAddr.String():
-		dir = directionOutgoing
+		dir = directionToServer
 	default:
 		dir = directionUnknown
 	}
