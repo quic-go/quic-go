@@ -9,7 +9,9 @@ import (
 	"math"
 	mrand "math/rand/v2"
 	"net"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -307,10 +309,13 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 								defer ln.Close()
 
 								conn := test.fn(t, ln, clientConn, clientConf, timeout, data)
-								if conf.postQuantum {
-									require.Equal(t, tls.X25519MLKEM768, conn.ConnectionState().TLS.CurveID)
-								} else {
-									require.Equal(t, tls.CurveP384, conn.ConnectionState().TLS.CurveID)
+								if !strings.HasPrefix(runtime.Version(), "go1.24") {
+									curveID := getCurveID(conn.ConnectionState().TLS)
+									if conf.postQuantum {
+										require.Equal(t, tls.X25519MLKEM768, curveID)
+									} else {
+										require.Equal(t, tls.CurveP384, curveID)
+									}
 								}
 
 								if pattern != dropPatternDropOneThirdOfPackets {
