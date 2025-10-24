@@ -151,6 +151,8 @@ func AppendWithLen(b []byte, i uint64, length int) []byte {
 }
 
 // Len determines the number of bytes that will be needed to write the number i.
+//
+//gcassert:inline
 func Len(i uint64) int {
 	if i <= maxVarInt1 {
 		return 1
