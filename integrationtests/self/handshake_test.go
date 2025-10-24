@@ -764,6 +764,11 @@ func TestServerTransportClose(t *testing.T) {
 		getQuicConfig(&quic.Config{MaxIdleTimeout: scaleDuration(50 * time.Millisecond)}),
 	)
 	require.NoError(t, err)
+
+	sconn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	require.Equal(t, conn1.LocalAddr(), sconn.RemoteAddr())
+
 	// ...the second conn isn't, it remains in the server's accept queue
 	conn2, err := quic.Dial(
 		ctx,
@@ -775,10 +780,6 @@ func TestServerTransportClose(t *testing.T) {
 	require.NoError(t, err)
 
 	time.Sleep(scaleDuration(10 * time.Millisecond))
-
-	sconn, err := server.Accept(ctx)
-	require.NoError(t, err)
-	require.Equal(t, conn1.LocalAddr(), sconn.RemoteAddr())
 
 	// closing the Transport abruptly terminates connections
 	require.NoError(t, tr.Close())
