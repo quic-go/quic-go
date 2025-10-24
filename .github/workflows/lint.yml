@@ -29,6 +29,9 @@ jobs:
         run: |
           cd integrationtests/gomodvendor
           go mod vendor
+      - name: run gcassert
+        if: success() || failure() # run this step even if the previous one failed
+        run: go tool gcassert ./...
   golangci-lint:
     runs-on: ubuntu-latest
     strategy:
