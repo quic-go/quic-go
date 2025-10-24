@@ -862,6 +862,9 @@ func testConnectionUnpackFailureDropped(t *testing.T, unpackErr error, packetDro
 		// test teardown
 		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 		tc.conn.destroy(nil)
+
+		synctest.Wait()
+
 		select {
 		case <-errChan:
 		default:
