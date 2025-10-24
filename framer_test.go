@@ -16,15 +16,33 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+type customFrameHandler struct {
+	onAcked func(wire.Frame)
+	onLost  func(wire.Frame)
+}
+
+func (h *customFrameHandler) OnAcked(f wire.Frame) { h.onAcked(f) }
+func (h *customFrameHandler) OnLost(f wire.Frame)  { h.onLost(f) }
+
+var _ ackhandler.FrameHandler = &customFrameHandler{}
+
 func TestFramerControlFrames(t *testing.T) {
 	pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
+	var calledAcked, calledLost bool
+	pcFrame := ackhandler.Frame{
+		Frame: pc,
+		Handler: &customFrameHandler{
+			onAcked: func(f wire.Frame) { require.Equal(t, pc, f); calledAcked = true },
+			onLost:  func(f wire.Frame) { calledLost = true },
+		},
+	}
 	msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
 
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
-	framer.QueueControlFrame(pc)
+	framer.QueueControlFrame(pcFrame)
 	require.True(t, framer.HasData())
-	framer.QueueControlFrame(msf)
+	framer.QueueControlFrame(ackhandler.Frame{Frame: msf})
 	frames, streamFrames, length := framer.Append(
 		[]ackhandler.Frame{{Frame: &wire.PingFrame{}}},
 		nil,
@@ -35,10 +53,19 @@ func TestFramerControlFrames(t *testing.T) {
 	require.Len(t, frames, 3)
 	require.Empty(t, streamFrames)
 	require.Contains(t, frames, ackhandler.Frame{Frame: &wire.PingFrame{}})
-	require.Contains(t, frames, ackhandler.Frame{Frame: pc})
+	require.Contains(t, frames, pcFrame)
 	require.Contains(t, frames, ackhandler.Frame{Frame: msf})
 	require.Equal(t, length, pc.Length(protocol.Version1)+msf.Length(protocol.Version1))
 	require.False(t, framer.HasData())
+
+	// check that the frame handlers were correctly passed through
+	for _, frame := range frames {
+		if frame.Handler != nil {
+			frame.Handler.OnAcked(frame.Frame)
+		}
+	}
+	require.True(t, calledAcked)
+	require.False(t, calledLost)
 }
 
 func TestFramerControlFrameSizing(t *testing.T) {
@@ -49,7 +76,7 @@ func TestFramerControlFrameSizing(t *testing.T) {
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 	numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
 	for i := 0; i < numFrames+1; i++ {
-		framer.QueueControlFrame(bf)
+		framer.QueueControlFrame(ackhandler.Frame{Frame: bf})
 	}
 	frames, _, length := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, numFrames)
@@ -67,7 +94,7 @@ func TestFramerStreamControlFrames(t *testing.T) {
 	mdf2 := &wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1338}
 
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
-	framer.QueueControlFrame(ping)
+	framer.QueueControlFrame(ackhandler.Frame{Frame: ping})
 	str := NewMockStreamControlFrameGetter(gomock.NewController(t))
 	framer.AddStreamWithControlFrames(streamID, str)
 	now := monotime.Now()
@@ -212,17 +239,17 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 func TestFramerDetectsFrameDoS(t *testing.T) {
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 	for i := 0; i < maxControlFrames-1; i++ {
-		framer.QueueControlFrame(&wire.PingFrame{})
-		framer.QueueControlFrame(&wire.PingFrame{})
+		framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.PingFrame{}})
+		framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.PingFrame{}})
 		require.False(t, framer.QueuedTooManyControlFrames())
 		frames, _, _ := framer.Append([]ackhandler.Frame{}, nil, 1, monotime.Now(), protocol.Version1)
 		require.Len(t, frames, 1)
 		require.Len(t, framer.controlFrames, i+1)
 	}
-	framer.QueueControlFrame(&wire.PingFrame{})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.PingFrame{}})
 	require.False(t, framer.QueuedTooManyControlFrames())
 	require.Len(t, framer.controlFrames, maxControlFrames)
-	framer.QueueControlFrame(&wire.PingFrame{})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.PingFrame{}})
 	require.True(t, framer.QueuedTooManyControlFrames())
 	require.Len(t, framer.controlFrames, maxControlFrames)
 }
@@ -234,7 +261,7 @@ func TestFramerDetectsFramePathResponseDoS(t *testing.T) {
 		var f wire.PathResponseFrame
 		binary.BigEndian.PutUint64(f.Data[:], rand.Uint64())
 		pathResponses = append(pathResponses, &f)
-		framer.QueueControlFrame(&f)
+		framer.QueueControlFrame(ackhandler.Frame{Frame: &f})
 	}
 	for i := 0; i < maxPathResponses; i++ {
 		require.True(t, framer.HasData())
@@ -255,10 +282,10 @@ func TestFramerPacksSinglePathResponsePerPacket(t *testing.T) {
 	f2 := &wire.PathResponseFrame{Data: [8]byte{2, 3, 4, 5, 6, 7, 8, 9}}
 	cf1 := &wire.DataBlockedFrame{MaximumData: 1337}
 	cf2 := &wire.HandshakeDoneFrame{}
-	framer.QueueControlFrame(f1)
-	framer.QueueControlFrame(f2)
-	framer.QueueControlFrame(cf1)
-	framer.QueueControlFrame(cf2)
+	framer.QueueControlFrame(ackhandler.Frame{Frame: f1})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: f2})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: cf1})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: cf2})
 	// the first packet should contain a single PATH_RESPONSE frame, but all the other control frames
 	frames, _, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, 3)
@@ -457,12 +484,12 @@ func TestFramer0RTTRejection(t *testing.T) {
 	pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
 
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
-	framer.QueueControlFrame(ncid)
-	framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: 1337})
-	framer.QueueControlFrame(&wire.StreamDataBlockedFrame{StreamID: 42, MaximumStreamData: 1337})
-	framer.QueueControlFrame(ping)
-	framer.QueueControlFrame(&wire.StreamsBlockedFrame{StreamLimit: 13})
-	framer.QueueControlFrame(pc)
+	framer.QueueControlFrame(ackhandler.Frame{Frame: ncid})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.DataBlockedFrame{MaximumData: 1337}})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.StreamDataBlockedFrame{StreamID: 42, MaximumStreamData: 1337}})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: ping})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.StreamsBlockedFrame{StreamLimit: 13}})
+	framer.QueueControlFrame(ackhandler.Frame{Frame: pc})
 
 	framer.AddActiveStream(10, NewMockStreamFrameGetter(gomock.NewController(t)))
 

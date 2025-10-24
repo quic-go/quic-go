@@ -680,7 +680,7 @@ runLoop:
 		if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the connection
 			c.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
-			c.framer.QueueControlFrame(&wire.PingFrame{})
+			c.framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.PingFrame{}})
 			c.keepAlivePingSent = true
 		} else if !c.handshakeComplete && now.Sub(c.creationTime) >= c.config.handshakeTimeout() {
 			c.destroyImpl(qerr.ErrHandshakeTimeout)
@@ -2464,7 +2464,10 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 	}
 
 	if offset := c.connFlowController.GetWindowUpdate(now); offset > 0 {
-		c.framer.QueueControlFrame(&wire.MaxDataFrame{MaximumData: offset})
+		c.framer.QueueControlFrame(ackhandler.Frame{
+			Frame: &wire.MaxDataFrame{MaximumData: offset},
+		},
+		)
 	}
 	if cf := c.cryptoStreamManager.GetPostHandshakeData(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
 		c.queueControlFrame(cf)
@@ -2930,7 +2933,7 @@ func (c *Conn) tryQueueingUndecryptablePacket(p receivedPacket, pt qlog.PacketTy
 }
 
 func (c *Conn) queueControlFrame(f wire.Frame) {
-	c.framer.QueueControlFrame(f)
+	c.framer.QueueControlFrame(ackhandler.Frame{Frame: f})
 	c.scheduleSending()
 }
 
