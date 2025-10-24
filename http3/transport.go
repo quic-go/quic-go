@@ -334,10 +334,12 @@ func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached b
 			delete(t.clients, hostname)
 			return nil, false, cl.dialErr
 		}
-		select {
-		case <-cl.conn.HandshakeComplete():
-			isReused = true
-		default:
+		if cl.conn != nil {
+			select {
+			case <-cl.conn.HandshakeComplete():
+				isReused = true
+			default:
+			}
 		}
 	default:
 	}
