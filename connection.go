@@ -3046,6 +3046,45 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 	), nil
 }
 
+// KeepAliveResult is the result of sending a keep-alive PING frame.
+type KeepAliveResult struct {
+	Lost bool
+}
+
+type keepAliveFrameHandler struct {
+	onAcked func(wire.Frame)
+	onLost  func(wire.Frame)
+}
+
+func (h *keepAliveFrameHandler) OnAcked(f wire.Frame) { h.onAcked(f) }
+func (h *keepAliveFrameHandler) OnLost(f wire.Frame)  { h.onLost(f) }
+
+// SendKeepAlive sends a keep-alive PING frame and blocks until it is acknowledged or lost.
+//
+// Note that the packet will only be declared lost if more data (or further keep-alive packets)
+// are sent on the connection. Otherwise, the connection will eventually run into an idle timeout.
+func (c *Conn) SendKeepAlive(ctx context.Context) (KeepAliveResult, error) {
+	done := make(chan struct{})
+	var lost bool
+
+	c.framer.QueueControlFrame(ackhandler.Frame{
+		Frame: &wire.PingFrame{},
+		Handler: &keepAliveFrameHandler{
+			onAcked: func(wire.Frame) { close(done) },
+			onLost:  func(wire.Frame) { lost = true; close(done) },
+		},
+	})
+
+	select {
+	case <-done:
+		return KeepAliveResult{Lost: lost}, nil
+	case <-ctx.Done():
+		return KeepAliveResult{}, ctx.Err()
+	case <-c.Context().Done():
+		return KeepAliveResult{}, context.Cause(c.Context())
+	}
+}
+
 // HandshakeComplete blocks until the handshake completes (or fails).
 // For the client, data sent before completion of the handshake is encrypted with 0-RTT keys.
 // For the server, data sent before completion of the handshake is encrypted with 1-RTT keys,
