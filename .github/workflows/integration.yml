@@ -67,7 +67,7 @@ jobs:
         run: go test -v -run=^$ -timeout 5m -shuffle=on -bench=. ./integrationtests/self
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: qlogs-${{ matrix.os }}-go${{ matrix.go }}-race${{ matrix.race }}
           path: integrationtests/self/*.qlog
