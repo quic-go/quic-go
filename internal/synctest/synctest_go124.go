@@ -14,5 +14,6 @@ func Test(t *testing.T, f func(t *testing.T)) {
 }
 
 func Wait() {
+	//nolint:govet // the CI configuration sets the GOEXPERIMENT=synctest flag
 	synctest.Wait()
 }

@@ -39,7 +39,7 @@ jobs:
       matrix:
         go: [ "1.24.x", "1.25.x" ]
     env:
-      GOLANGCI_LINT_VERSION: v2.4.0
+      GOLANGCI_LINT_VERSION: v2.6.0
       GOEXPERIMENT: ${{ matrix.go == '1.24.x' && 'synctest' || '' }}
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
