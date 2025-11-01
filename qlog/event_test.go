@@ -105,7 +105,8 @@ func TestVersionInformationWithNegotiation(t *testing.T) {
 
 func TestIdleTimeouts(t *testing.T) {
 	name, ev := testEventEncoding(t, &ConnectionClosed{
-		Error: &qerr.IdleTimeoutError{},
+		Initiator: InitiatorLocal,
+		Trigger:   ConnectionCloseTriggerIdleTimeout,
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
@@ -114,20 +115,10 @@ func TestIdleTimeouts(t *testing.T) {
 	require.Equal(t, "idle_timeout", ev["trigger"])
 }
 
-func TestHandshakeTimeouts(t *testing.T) {
-	name, ev := testEventEncoding(t, &ConnectionClosed{
-		Error: &qerr.HandshakeTimeoutError{},
-	})
-
-	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 2)
-	require.Equal(t, "local", ev["initiator"])
-	require.Equal(t, "handshake_timeout", ev["trigger"])
-}
-
 func TestReceivedStatelessResetPacket(t *testing.T) {
 	name, ev := testEventEncoding(t, &ConnectionClosed{
-		Error: &qerr.StatelessResetError{},
+		Initiator: InitiatorRemote,
+		Trigger:   ConnectionCloseTriggerStatelessReset,
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
@@ -138,42 +129,85 @@ func TestReceivedStatelessResetPacket(t *testing.T) {
 
 func TestVersionNegotiationFailure(t *testing.T) {
 	name, ev := testEventEncoding(t, &ConnectionClosed{
-		Error: &qerr.VersionNegotiationError{},
+		Initiator: InitiatorLocal,
+		Trigger:   ConnectionCloseTriggerVersionMismatch,
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 1)
+	require.Len(t, ev, 2)
+	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "version_mismatch", ev["trigger"])
 }
 
 func TestApplicationErrors(t *testing.T) {
+	code := qerr.ApplicationErrorCode(1337)
 	name, ev := testEventEncoding(t, &ConnectionClosed{
-		Error: &qerr.ApplicationError{
-			Remote:       true,
-			ErrorCode:    1337,
-			ErrorMessage: "foobar",
-		},
+		Initiator:        InitiatorRemote,
+		ApplicationError: &code,
+		Reason:           "foobar",
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 3)
+	require.Len(t, ev, 4)
 	require.Equal(t, "remote", ev["initiator"])
-	require.Equal(t, float64(1337), ev["application_code"])
+	require.Equal(t, "unknown", ev["application_error"])
+	require.Equal(t, float64(1337), ev["error_code"])
 	require.Equal(t, "foobar", ev["reason"])
 }
 
 func TestTransportErrors(t *testing.T) {
+	tests := []struct {
+		code qerr.TransportErrorCode
+		want string
+	}{
+		{qerr.NoError, "no_error"},
+		{qerr.InternalError, "internal_error"},
+		{qerr.ConnectionRefused, "connection_refused"},
+		{qerr.FlowControlError, "flow_control_error"},
+		{qerr.StreamLimitError, "stream_limit_error"},
+		{qerr.StreamStateError, "stream_state_error"},
+		{qerr.FinalSizeError, "final_size_error"},
+		{qerr.FrameEncodingError, "frame_encoding_error"},
+		{qerr.TransportParameterError, "transport_parameter_error"},
+		{qerr.ConnectionIDLimitError, "connection_id_limit_error"},
+		{qerr.ProtocolViolation, "protocol_violation"},
+		{qerr.InvalidToken, "invalid_token"},
+		{qerr.ApplicationErrorErrorCode, "application_error"},
+		{qerr.CryptoBufferExceeded, "crypto_buffer_exceeded"},
+		{qerr.KeyUpdateError, "key_update_error"},
+		{qerr.AEADLimitReached, "aead_limit_reached"},
+		{qerr.NoViablePathError, "no_viable_path"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			code := tt.code
+			name, ev := testEventEncoding(t, &ConnectionClosed{
+				Initiator:       InitiatorLocal,
+				ConnectionError: &code,
+				Reason:          "foobar",
+			})
+
+			require.Equal(t, "transport:connection_closed", name)
+			require.Equal(t, "local", ev["initiator"])
+			require.Equal(t, tt.want, ev["connection_error"])
+			require.Equal(t, "foobar", ev["reason"])
+			require.NotContains(t, ev, "error_code")
+		})
+	}
+}
+
+func TestTransportCryptoError(t *testing.T) {
+	code := qerr.TransportErrorCode(0x100 + 0x2a)
 	name, ev := testEventEncoding(t, &ConnectionClosed{
-		Error: &qerr.TransportError{
-			ErrorCode:    qerr.AEADLimitReached,
-			ErrorMessage: "foobar",
-		},
+		Initiator:       InitiatorLocal,
+		ConnectionError: &code,
+		Reason:          "foobar",
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 3)
 	require.Equal(t, "local", ev["initiator"])
-	require.Equal(t, "aead_limit_reached", ev["connection_code"])
+	require.Equal(t, "crypto_error_0x12a", ev["connection_error"])
 	require.Equal(t, "foobar", ev["reason"])
 }
 

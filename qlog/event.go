@@ -1,7 +1,6 @@
 package qlog
 
 import (
-	"errors"
 	"fmt"
 	"net/netip"
 	"time"
@@ -130,7 +129,14 @@ func (e VersionInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 }
 
 type ConnectionClosed struct {
-	Error error
+	Initiator Initiator
+
+	ConnectionError  *TransportErrorCode
+	ApplicationError *ApplicationErrorCode
+
+	Reason string
+
+	Trigger ConnectionCloseTrigger
 }
 
 func (e ConnectionClosed) Name() string { return "transport:connection_closed" }
@@ -138,55 +144,68 @@ func (e ConnectionClosed) Name() string { return "transport:connection_closed" }
 func (e ConnectionClosed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	var (
-		statelessResetErr     *qerr.StatelessResetError
-		handshakeTimeoutErr   *qerr.HandshakeTimeoutError
-		idleTimeoutErr        *qerr.IdleTimeoutError
-		applicationErr        *qerr.ApplicationError
-		transportErr          *qerr.TransportError
-		versionNegotiationErr *qerr.VersionNegotiationError
-	)
-	switch {
-	case errors.As(e.Error, &statelessResetErr):
-		h.WriteToken(jsontext.String("initiator"))
-		h.WriteToken(jsontext.String(string(InitiatorRemote)))
-		h.WriteToken(jsontext.String("trigger"))
-		h.WriteToken(jsontext.String("stateless_reset"))
-	case errors.As(e.Error, &handshakeTimeoutErr):
-		h.WriteToken(jsontext.String("initiator"))
-		h.WriteToken(jsontext.String(string(InitiatorLocal)))
-		h.WriteToken(jsontext.String("trigger"))
-		h.WriteToken(jsontext.String("handshake_timeout"))
-	case errors.As(e.Error, &idleTimeoutErr):
-		h.WriteToken(jsontext.String("initiator"))
-		h.WriteToken(jsontext.String(string(InitiatorLocal)))
-		h.WriteToken(jsontext.String("trigger"))
-		h.WriteToken(jsontext.String("idle_timeout"))
-	case errors.As(e.Error, &applicationErr):
-		initiator := InitiatorLocal
-		if applicationErr.Remote {
-			initiator = InitiatorRemote
+	h.WriteToken(jsontext.String("initiator"))
+	h.WriteToken(jsontext.String(string(e.Initiator)))
+	if e.ConnectionError != nil {
+		h.WriteToken(jsontext.String("connection_error"))
+		if e.ConnectionError.IsCryptoError() {
+			h.WriteToken(jsontext.String(fmt.Sprintf("crypto_error_%#x", uint16(*e.ConnectionError))))
+		} else {
+			switch *e.ConnectionError {
+			case qerr.NoError:
+				h.WriteToken(jsontext.String("no_error"))
+			case qerr.InternalError:
+				h.WriteToken(jsontext.String("internal_error"))
+			case qerr.ConnectionRefused:
+				h.WriteToken(jsontext.String("connection_refused"))
+			case qerr.FlowControlError:
+				h.WriteToken(jsontext.String("flow_control_error"))
+			case qerr.StreamLimitError:
+				h.WriteToken(jsontext.String("stream_limit_error"))
+			case qerr.StreamStateError:
+				h.WriteToken(jsontext.String("stream_state_error"))
+			case qerr.FinalSizeError:
+				h.WriteToken(jsontext.String("final_size_error"))
+			case qerr.FrameEncodingError:
+				h.WriteToken(jsontext.String("frame_encoding_error"))
+			case qerr.TransportParameterError:
+				h.WriteToken(jsontext.String("transport_parameter_error"))
+			case qerr.ConnectionIDLimitError:
+				h.WriteToken(jsontext.String("connection_id_limit_error"))
+			case qerr.ProtocolViolation:
+				h.WriteToken(jsontext.String("protocol_violation"))
+			case qerr.InvalidToken:
+				h.WriteToken(jsontext.String("invalid_token"))
+			case qerr.ApplicationErrorErrorCode:
+				h.WriteToken(jsontext.String("application_error"))
+			case qerr.CryptoBufferExceeded:
+				h.WriteToken(jsontext.String("crypto_buffer_exceeded"))
+			case qerr.KeyUpdateError:
+				h.WriteToken(jsontext.String("key_update_error"))
+			case qerr.AEADLimitReached:
+				h.WriteToken(jsontext.String("aead_limit_reached"))
+			case qerr.NoViablePathError:
+				h.WriteToken(jsontext.String("no_viable_path"))
+			default:
+				h.WriteToken(jsontext.String("unknown"))
+				h.WriteToken(jsontext.String("error_code"))
+				h.WriteToken(jsontext.Uint(uint64(*e.ConnectionError)))
+			}
 		}
-		h.WriteToken(jsontext.String("initiator"))
-		h.WriteToken(jsontext.String(string(initiator)))
-		h.WriteToken(jsontext.String("application_code"))
-		h.WriteToken(jsontext.Uint(uint64(applicationErr.ErrorCode)))
+	}
+	if e.ApplicationError != nil {
+		h.WriteToken(jsontext.String("application_error"))
+		h.WriteToken(jsontext.String("unknown"))
+		h.WriteToken(jsontext.String("error_code"))
+		h.WriteToken(jsontext.Uint(uint64(*e.ApplicationError)))
+	}
+	if e.ConnectionError != nil || e.ApplicationError != nil {
 		h.WriteToken(jsontext.String("reason"))
-		h.WriteToken(jsontext.String(applicationErr.ErrorMessage))
-	case errors.As(e.Error, &transportErr):
-		initiator := InitiatorLocal
-		if transportErr.Remote {
-			initiator = InitiatorRemote
-		}
-		h.WriteToken(jsontext.String("initiator"))
-		h.WriteToken(jsontext.String(string(initiator)))
-		h.WriteToken(jsontext.String("connection_code"))
-		h.WriteToken(jsontext.String(transportError(transportErr.ErrorCode).String()))
-		h.WriteToken(jsontext.String("reason"))
-		h.WriteToken(jsontext.String(transportErr.ErrorMessage))
-	case errors.As(e.Error, &versionNegotiationErr):
+		h.WriteToken(jsontext.String(e.Reason))
+	}
+	if e.Trigger != "" {
 		h.WriteToken(jsontext.String("trigger"))
-		h.WriteToken(jsontext.String("version_mismatch"))
+		h.WriteToken(jsontext.String(string(e.Trigger)))
 	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err

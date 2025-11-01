@@ -16,6 +16,8 @@ type (
 	KeyPhaseBit              = protocol.KeyPhaseBit
 	KeyPhase                 = protocol.KeyPhase
 	StreamID                 = protocol.StreamID
+	TransportErrorCode       = qerr.TransportErrorCode
+	ApplicationErrorCode     = qerr.ApplicationErrorCode
 )
 
 const (
@@ -277,4 +279,17 @@ const (
 	ECNStateFailed ECNState = "failed"
 	// ECNStateCapable is the capable state
 	ECNStateCapable ECNState = "capable"
+)
+
+type ConnectionCloseTrigger string
+
+const (
+	// IdleTimeout indicates the connection was closed due to idle timeout
+	ConnectionCloseTriggerIdleTimeout ConnectionCloseTrigger = "idle_timeout"
+	// Application indicates the connection was closed by the application
+	ConnectionCloseTriggerApplication ConnectionCloseTrigger = "application"
+	// VersionMismatch indicates the connection was closed due to a QUIC version mismatch
+	ConnectionCloseTriggerVersionMismatch ConnectionCloseTrigger = "version_mismatch"
+	// StatelessReset indicates the connection was closed due to receiving a stateless reset from the peer
+	ConnectionCloseTriggerStatelessReset ConnectionCloseTrigger = "stateless_reset"
 )

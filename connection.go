@@ -2174,23 +2174,38 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 		transportErr          *TransportError
 	)
 	var isRemoteClose bool
+	var trigger qlog.ConnectionCloseTrigger
+	var reason string
+	var transportErrorCode *qlog.TransportErrorCode
+	var applicationErrorCode *qlog.ApplicationErrorCode
 	switch {
 	case errors.Is(e, qerr.ErrIdleTimeout),
-		errors.Is(e, qerr.ErrHandshakeTimeout),
-		errors.As(e, &statelessResetErr),
-		errors.As(e, &versionNegotiationErr),
-		errors.As(e, &recreateErr):
+		errors.Is(e, qerr.ErrHandshakeTimeout):
+		trigger = qlog.ConnectionCloseTriggerIdleTimeout
+	case errors.As(e, &statelessResetErr):
+		trigger = qlog.ConnectionCloseTriggerStatelessReset
+	case errors.As(e, &versionNegotiationErr):
+		trigger = qlog.ConnectionCloseTriggerVersionMismatch
+	case errors.As(e, &recreateErr):
 	case errors.As(e, &applicationErr):
 		isRemoteClose = applicationErr.Remote
+		reason = applicationErr.ErrorMessage
+		applicationErrorCode = &applicationErr.ErrorCode
 	case errors.As(e, &transportErr):
 		isRemoteClose = transportErr.Remote
+		reason = transportErr.ErrorMessage
+		transportErrorCode = &transportErr.ErrorCode
 	case closeErr.immediate:
 		e = closeErr.err
 	default:
-		e = &qerr.TransportError{
+		te := &qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
 			ErrorMessage: e.Error(),
 		}
+		e = te
+		reason = te.ErrorMessage
+		code := te.ErrorCode
+		transportErrorCode = &code
 	}
 
 	c.streamsMap.CloseWithError(e)
@@ -2205,7 +2220,17 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	defer c.connIDManager.Close()
 
 	if c.qlogger != nil && !errors.As(e, &recreateErr) {
-		c.qlogger.RecordEvent(qlog.ConnectionClosed{Error: e})
+		initiator := qlog.InitiatorLocal
+		if isRemoteClose {
+			initiator = qlog.InitiatorRemote
+		}
+		c.qlogger.RecordEvent(qlog.ConnectionClosed{
+			Initiator:        initiator,
+			ConnectionError:  transportErrorCode,
+			ApplicationError: applicationErrorCode,
+			Trigger:          trigger,
+			Reason:           reason,
+		})
 	}
 
 	// If this is a remote close we're done here
