@@ -1046,7 +1046,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.ParametersSet{
-				Owner:                         qlog.OwnerRemote,
+				Initiator:                     qlog.InitiatorRemote,
 				MaxIdleTimeout:                90 * time.Second,
 				InitialMaxStreamDataBidiLocal: 0x5000,
 				InitialMaxData:                1337,

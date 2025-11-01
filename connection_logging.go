@@ -227,9 +227,9 @@ func (c *Conn) qlogTransportParameters(tp *wire.TransportParameters, sentBy prot
 		EnableResetStreamAt:             tp.EnableResetStreamAt,
 	}
 	if sentBy == c.perspective {
-		ev.Owner = qlog.OwnerLocal
+		ev.Initiator = qlog.InitiatorLocal
 	} else {
-		ev.Owner = qlog.OwnerRemote
+		ev.Initiator = qlog.InitiatorRemote
 	}
 	if tp.PreferredAddress != nil {
 		ev.PreferredAddress = &qlog.PreferredAddress{
