@@ -110,7 +110,7 @@ func TestIdleTimeouts(t *testing.T) {
 
 	require.Equal(t, "transport:connection_closed", name)
 	require.Len(t, ev, 2)
-	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "idle_timeout", ev["trigger"])
 }
 
@@ -121,7 +121,7 @@ func TestHandshakeTimeouts(t *testing.T) {
 
 	require.Equal(t, "transport:connection_closed", name)
 	require.Len(t, ev, 2)
-	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "handshake_timeout", ev["trigger"])
 }
 
@@ -132,7 +132,7 @@ func TestReceivedStatelessResetPacket(t *testing.T) {
 
 	require.Equal(t, "transport:connection_closed", name)
 	require.Len(t, ev, 2)
-	require.Equal(t, "remote", ev["owner"])
+	require.Equal(t, "remote", ev["initiator"])
 	require.Equal(t, "stateless_reset", ev["trigger"])
 }
 
@@ -157,7 +157,7 @@ func TestApplicationErrors(t *testing.T) {
 
 	require.Equal(t, "transport:connection_closed", name)
 	require.Len(t, ev, 3)
-	require.Equal(t, "remote", ev["owner"])
+	require.Equal(t, "remote", ev["initiator"])
 	require.Equal(t, float64(1337), ev["application_code"])
 	require.Equal(t, "foobar", ev["reason"])
 }
@@ -172,7 +172,7 @@ func TestTransportErrors(t *testing.T) {
 
 	require.Equal(t, "transport:connection_closed", name)
 	require.Len(t, ev, 3)
-	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "aead_limit_reached", ev["connection_code"])
 	require.Equal(t, "foobar", ev["reason"])
 }
@@ -180,7 +180,7 @@ func TestTransportErrors(t *testing.T) {
 func TestSentTransportParameters(t *testing.T) {
 	rcid := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
 	name, ev := testEventEncoding(t, &ParametersSet{
-		Owner:                           OwnerLocal,
+		Initiator:                       InitiatorLocal,
 		SentBy:                          protocol.PerspectiveServer,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
 		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -203,7 +203,7 @@ func TestSentTransportParameters(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "deadc0de", ev["original_destination_connection_id"])
 	require.Equal(t, "deadbeef", ev["initial_source_connection_id"])
 	require.Equal(t, "decafbad", ev["retry_source_connection_id"])
@@ -225,7 +225,7 @@ func TestSentTransportParameters(t *testing.T) {
 
 func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 	name, ev := testEventEncoding(t, &ParametersSet{
-		Owner:                           OwnerLocal,
+		Initiator:                       InitiatorLocal,
 		SentBy:                          protocol.PerspectiveServer,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
 		ActiveConnectionIDLimit:         7,
@@ -237,13 +237,13 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 
 func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 	name, ev := testEventEncoding(t, &ParametersSet{
-		Owner:               OwnerLocal,
+		Initiator:           InitiatorLocal,
 		SentBy:              protocol.PerspectiveServer,
 		StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "local", ev["initiator"])
 	require.NotContains(t, ev, "retry_source_connection_id")
 }
 
@@ -273,13 +273,13 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 		preferredAddress.IPv6 = addr6
 	}
 	name, ev := testEventEncoding(t, &ParametersSet{
-		Owner:            OwnerLocal,
+		Initiator:        InitiatorLocal,
 		SentBy:           protocol.PerspectiveServer,
 		PreferredAddress: preferredAddress,
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "local", ev["owner"])
+	require.Equal(t, "local", ev["initiator"])
 	require.Contains(t, ev, "preferred_address")
 	pa := ev["preferred_address"].(map[string]any)
 	if hasIPv4 {
@@ -302,7 +302,7 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 
 func TestTransportParametersWithDatagramExtension(t *testing.T) {
 	name, ev := testEventEncoding(t, &ParametersSet{
-		Owner:                OwnerLocal,
+		Initiator:            InitiatorLocal,
 		SentBy:               protocol.PerspectiveServer,
 		MaxDatagramFrameSize: 1337,
 	})
@@ -313,12 +313,12 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 
 func TestReceivedTransportParameters(t *testing.T) {
 	name, ev := testEventEncoding(t, &ParametersSet{
-		Owner:  OwnerRemote,
-		SentBy: protocol.PerspectiveClient,
+		Initiator: InitiatorRemote,
+		SentBy:    protocol.PerspectiveClient,
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "remote", ev["owner"])
+	require.Equal(t, "remote", ev["initiator"])
 	require.NotContains(t, ev, "original_destination_connection_id")
 }
 
@@ -333,7 +333,7 @@ func TestRestoredTransportParameters(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_restored", name)
-	require.NotContains(t, ev, "owner")
+	require.NotContains(t, ev, "initiator")
 	require.NotContains(t, ev, "original_destination_connection_id")
 	require.NotContains(t, ev, "stateless_reset_token")
 	require.NotContains(t, ev, "retry_source_connection_id")

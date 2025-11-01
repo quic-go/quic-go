@@ -148,38 +148,38 @@ func (e ConnectionClosed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	)
 	switch {
 	case errors.As(e.Error, &statelessResetErr):
-		h.WriteToken(jsontext.String("owner"))
-		h.WriteToken(jsontext.String(string(OwnerRemote)))
+		h.WriteToken(jsontext.String("initiator"))
+		h.WriteToken(jsontext.String(string(InitiatorRemote)))
 		h.WriteToken(jsontext.String("trigger"))
 		h.WriteToken(jsontext.String("stateless_reset"))
 	case errors.As(e.Error, &handshakeTimeoutErr):
-		h.WriteToken(jsontext.String("owner"))
-		h.WriteToken(jsontext.String(string(OwnerLocal)))
+		h.WriteToken(jsontext.String("initiator"))
+		h.WriteToken(jsontext.String(string(InitiatorLocal)))
 		h.WriteToken(jsontext.String("trigger"))
 		h.WriteToken(jsontext.String("handshake_timeout"))
 	case errors.As(e.Error, &idleTimeoutErr):
-		h.WriteToken(jsontext.String("owner"))
-		h.WriteToken(jsontext.String(string(OwnerLocal)))
+		h.WriteToken(jsontext.String("initiator"))
+		h.WriteToken(jsontext.String(string(InitiatorLocal)))
 		h.WriteToken(jsontext.String("trigger"))
 		h.WriteToken(jsontext.String("idle_timeout"))
 	case errors.As(e.Error, &applicationErr):
-		owner := OwnerLocal
+		initiator := InitiatorLocal
 		if applicationErr.Remote {
-			owner = OwnerRemote
+			initiator = InitiatorRemote
 		}
-		h.WriteToken(jsontext.String("owner"))
-		h.WriteToken(jsontext.String(string(owner)))
+		h.WriteToken(jsontext.String("initiator"))
+		h.WriteToken(jsontext.String(string(initiator)))
 		h.WriteToken(jsontext.String("application_code"))
 		h.WriteToken(jsontext.Uint(uint64(applicationErr.ErrorCode)))
 		h.WriteToken(jsontext.String("reason"))
 		h.WriteToken(jsontext.String(applicationErr.ErrorMessage))
 	case errors.As(e.Error, &transportErr):
-		owner := OwnerLocal
+		initiator := InitiatorLocal
 		if transportErr.Remote {
-			owner = OwnerRemote
+			initiator = InitiatorRemote
 		}
-		h.WriteToken(jsontext.String("owner"))
-		h.WriteToken(jsontext.String(string(owner)))
+		h.WriteToken(jsontext.String("initiator"))
+		h.WriteToken(jsontext.String(string(initiator)))
 		h.WriteToken(jsontext.String("connection_code"))
 		h.WriteToken(jsontext.String(transportError(transportErr.ErrorCode).String()))
 		h.WriteToken(jsontext.String("reason"))
@@ -539,7 +539,7 @@ func (e KeyDiscarded) Encode(enc *jsontext.Encoder, _ time.Time) error {
 
 type ParametersSet struct {
 	Restore                         bool
-	Owner                           Owner
+	Initiator                       Initiator
 	SentBy                          protocol.Perspective
 	OriginalDestinationConnectionID protocol.ConnectionID
 	InitialSourceConnectionID       protocol.ConnectionID
@@ -573,8 +573,8 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if !e.Restore {
-		h.WriteToken(jsontext.String("owner"))
-		h.WriteToken(jsontext.String(string(e.Owner)))
+		h.WriteToken(jsontext.String("initiator"))
+		h.WriteToken(jsontext.String(string(e.Initiator)))
 		if e.SentBy == protocol.PerspectiveServer {
 			h.WriteToken(jsontext.String("original_destination_connection_id"))
 			h.WriteToken(jsontext.String(e.OriginalDestinationConnectionID.String()))

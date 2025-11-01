@@ -41,11 +41,11 @@ const (
 	ECNCE ECN = "CE"
 )
 
-type Owner string
+type Initiator string
 
 const (
-	OwnerLocal  Owner = "local"
-	OwnerRemote Owner = "remote"
+	InitiatorLocal  Initiator = "local"
+	InitiatorRemote Initiator = "remote"
 )
 
 type streamType protocol.StreamType

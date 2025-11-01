@@ -2254,7 +2254,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.ParametersSet{
 			Restore:                         true,
-			Owner:                           qlog.OwnerRemote,
+			Initiator:                       qlog.InitiatorRemote,
 			SentBy:                          c.perspective,
 			OriginalDestinationConnectionID: params.OriginalDestinationConnectionID,
 			InitialSourceConnectionID:       params.InitialSourceConnectionID,
