@@ -333,6 +333,28 @@ func (h *sentPacketHandler) SentPacket(
 func (h *sentPacketHandler) qlogMetricsUpdated() {
 	var metricsUpdatedEvent qlog.MetricsUpdated
 	var updated bool
+	if h.rttStats.HasMeasurement() {
+		if h.lastMetrics.MinRTT == nil || *h.lastMetrics.MinRTT != h.rttStats.MinRTT() {
+			metricsUpdatedEvent.MinRTT = pointer(h.rttStats.MinRTT())
+			h.lastMetrics.MinRTT = pointer(h.rttStats.MinRTT())
+			updated = true
+		}
+		if h.lastMetrics.SmoothedRTT == nil || *h.lastMetrics.SmoothedRTT != h.rttStats.SmoothedRTT() {
+			metricsUpdatedEvent.SmoothedRTT = pointer(h.rttStats.SmoothedRTT())
+			h.lastMetrics.SmoothedRTT = pointer(h.rttStats.SmoothedRTT())
+			updated = true
+		}
+		if h.lastMetrics.LatestRTT == nil || *h.lastMetrics.LatestRTT != h.rttStats.LatestRTT() {
+			metricsUpdatedEvent.LatestRTT = pointer(h.rttStats.LatestRTT())
+			h.lastMetrics.LatestRTT = pointer(h.rttStats.LatestRTT())
+			updated = true
+		}
+		if h.lastMetrics.RTTVariance == nil || *h.lastMetrics.RTTVariance != h.rttStats.MeanDeviation() {
+			metricsUpdatedEvent.RTTVariance = pointer(h.rttStats.MeanDeviation())
+			h.lastMetrics.RTTVariance = pointer(h.rttStats.MeanDeviation())
+			updated = true
+		}
+	}
 	if h.lastMetrics.CongestionWindow == nil || *h.lastMetrics.CongestionWindow != int(h.congestion.GetCongestionWindow()) {
 		metricsUpdatedEvent.CongestionWindow = pointer(int(h.congestion.GetCongestionWindow()))
 		h.lastMetrics.CongestionWindow = pointer(int(h.congestion.GetCongestionWindow()))

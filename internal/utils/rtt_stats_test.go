@@ -10,14 +10,17 @@ import (
 
 func TestRTTStatsDefaults(t *testing.T) {
 	rttStats := NewRTTStats()
+	require.False(t, rttStats.HasMeasurement())
 	require.Equal(t, DefaultInitialRTT, rttStats.MinRTT())
 	require.Equal(t, DefaultInitialRTT, rttStats.SmoothedRTT())
 }
 
 func TestRTTStatsSmoothedRTT(t *testing.T) {
 	rttStats := NewRTTStats()
+	require.False(t, rttStats.HasMeasurement())
 	// verify that ack_delay is ignored in the first measurement
 	rttStats.UpdateRTT(300*time.Millisecond, 100*time.Millisecond)
+	require.True(t, rttStats.HasMeasurement())
 	require.Equal(t, 300*time.Millisecond, rttStats.LatestRTT())
 	require.Equal(t, 300*time.Millisecond, rttStats.SmoothedRTT())
 	// verify that smoothed RTT includes max ack delay if it's reasonable
@@ -122,11 +125,13 @@ func TestRTTStatsResetForPathMigration(t *testing.T) {
 	rttStats.SetMaxAckDelay(42 * time.Millisecond)
 	rttStats.UpdateRTT(time.Second, 0)
 	rttStats.UpdateRTT(10*time.Second, 0)
+	require.True(t, rttStats.HasMeasurement())
 	require.Equal(t, time.Second, rttStats.MinRTT())
 	require.Equal(t, 10*time.Second, rttStats.LatestRTT())
 	require.NotZero(t, rttStats.SmoothedRTT())
 
 	rttStats.ResetForPathMigration()
+	require.False(t, rttStats.HasMeasurement())
 	require.Equal(t, DefaultInitialRTT, rttStats.MinRTT())
 	require.Equal(t, DefaultInitialRTT, rttStats.LatestRTT())
 	require.Equal(t, DefaultInitialRTT, rttStats.SmoothedRTT())
@@ -135,6 +140,7 @@ func TestRTTStatsResetForPathMigration(t *testing.T) {
 	require.Equal(t, 42*time.Millisecond, rttStats.MaxAckDelay())
 
 	rttStats.UpdateRTT(10*time.Millisecond, 0)
+	require.True(t, rttStats.HasMeasurement())
 	require.Equal(t, 10*time.Millisecond, rttStats.SmoothedRTT())
 	require.Equal(t, 10*time.Millisecond, rttStats.LatestRTT())
 }
