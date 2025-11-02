@@ -115,6 +115,10 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration) {
 	}
 }
 
+func (r *RTTStats) HasMeasurement() bool {
+	return r.hasMeasurement
+}
+
 // SetMaxAckDelay sets the max_ack_delay
 func (r *RTTStats) SetMaxAckDelay(mad time.Duration) {
 	r.maxAckDelay.Store(int64(mad))
