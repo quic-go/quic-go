@@ -21,6 +21,6 @@ jobs:
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v4
         with:
-          mode: instrumentation
+          mode: walltime
           run: go test -run=^$ -bench=. ./...
           token: ${{ secrets.CODSPEED_TOKEN }}
