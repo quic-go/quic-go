@@ -313,8 +313,24 @@ func testConnectionClose(t *testing.T, useApplicationClose bool, expectedErr err
 
 		synctest.Wait()
 
+		var want qlog.ConnectionClosed
+		if useApplicationClose {
+			code := expectedErr.(*qerr.ApplicationError).ErrorCode
+			want = qlog.ConnectionClosed{
+				Initiator:        qlog.InitiatorLocal,
+				ApplicationError: &code,
+				Reason:           expectedErr.(*qerr.ApplicationError).ErrorMessage,
+			}
+		} else {
+			code := expectedErr.(*qerr.TransportError).ErrorCode
+			want = qlog.ConnectionClosed{
+				Initiator:       qlog.InitiatorLocal,
+				ConnectionError: &code,
+				Reason:          expectedErr.(*qerr.TransportError).ErrorMessage,
+			}
+		}
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Error: expectedErr}},
+			[]qlogwriter.Event{want},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 		eventRecorder.Clear()
@@ -346,7 +362,7 @@ func TestConnectionStatelessReset(t *testing.T) {
 		synctest.Wait()
 
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Error: &StatelessResetError{}}},
+			[]qlogwriter.Event{qlog.ConnectionClosed{Initiator: qlog.InitiatorLocal, Trigger: qlog.ConnectionCloseTriggerStatelessReset}},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 	})
@@ -936,8 +952,15 @@ func TestConnectionRemoteClose(t *testing.T) {
 			t.Fatal("timeout")
 		}
 
+		code := expectedErr.ErrorCode
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Error: expectedErr}},
+			[]qlogwriter.Event{
+				qlog.ConnectionClosed{
+					Initiator:       qlog.InitiatorRemote,
+					ConnectionError: &code,
+					Reason:          expectedErr.ErrorMessage,
+				},
+			},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 	})
@@ -971,7 +994,12 @@ func TestConnectionIdleTimeoutDuringHandshake(t *testing.T) {
 		}
 
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Error: &IdleTimeoutError{}}},
+			[]qlogwriter.Event{
+				qlog.ConnectionClosed{
+					Initiator: qlog.InitiatorLocal,
+					Trigger:   qlog.ConnectionCloseTriggerIdleTimeout,
+				},
+			},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 	})
@@ -1003,7 +1031,12 @@ func TestConnectionHandshakeIdleTimeout(t *testing.T) {
 		}
 
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Error: &HandshakeTimeoutError{}}},
+			[]qlogwriter.Event{
+				qlog.ConnectionClosed{
+					Initiator: qlog.InitiatorLocal,
+					Trigger:   qlog.ConnectionCloseTriggerIdleTimeout,
+				},
+			},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 	})
@@ -2763,7 +2796,10 @@ func TestConnectionVersionNegotiationNoMatch(t *testing.T) {
 						},
 						SupportedVersions: vnpVersions,
 					},
-					qlog.ConnectionClosed{Error: verr},
+					qlog.ConnectionClosed{
+						Initiator: qlog.InitiatorLocal,
+						Trigger:   qlog.ConnectionCloseTriggerVersionMismatch,
+					},
 				},
 				eventRecorder.Events(qlog.VersionNegotiationReceived{}, qlog.ConnectionClosed{}),
 			)
@@ -3150,9 +3186,14 @@ func TestConnectionEarlyClose(t *testing.T) {
 		case err := <-errChan:
 			require.Error(t, err)
 			require.ErrorContains(t, err, "early error")
+			code := qerr.InternalError
 			require.Equal(t,
 				[]qlogwriter.Event{
-					qlog.ConnectionClosed{Error: &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: "early error"}},
+					qlog.ConnectionClosed{
+						Initiator:       qlog.InitiatorLocal,
+						ConnectionError: &code,
+						Reason:          "early error",
+					},
 				},
 				eventRecorder.Events(qlog.ConnectionClosed{}),
 			)
