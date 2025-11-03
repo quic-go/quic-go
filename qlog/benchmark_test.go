@@ -57,20 +57,14 @@ func BenchmarkConnectionTracing(b *testing.B) {
 			},
 		})
 
-		minRTT := rttStats.MinRTT()
-		smoothedRTT := rttStats.SmoothedRTT()
-		latestRTT := rttStats.LatestRTT()
-		rttVariance := rttStats.MeanDeviation()
-		cwndInt := int(12345 + protocol.ByteCount(2*i))
-		bytesInt := int(12345 + protocol.ByteCount(i))
 		tracer.RecordEvent(&MetricsUpdated{
-			MinRTT:           &minRTT,
-			SmoothedRTT:      &smoothedRTT,
-			LatestRTT:        &latestRTT,
-			RTTVariance:      &rttVariance,
-			CongestionWindow: &cwndInt,
-			BytesInFlight:    &bytesInt,
-			PacketsInFlight:  &i,
+			MinRTT:           rttStats.MinRTT(),
+			SmoothedRTT:      rttStats.SmoothedRTT(),
+			LatestRTT:        rttStats.LatestRTT(),
+			RTTVariance:      rttStats.MeanDeviation(),
+			CongestionWindow: int(12345 + protocol.ByteCount(2*i)),
+			BytesInFlight:    int(12345 + protocol.ByteCount(i)),
+			PacketsInFlight:  i,
 		})
 
 		if i%2 == 0 {

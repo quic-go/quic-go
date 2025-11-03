@@ -621,9 +621,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 			},
-			qlog.MetricsUpdated{
-				PTOCount: pointer(uint32(1)),
-			},
+			qlog.PTOCountUpdated{PTOCount: 1},
 			qlog.LossTimerUpdated{
 				Type:      qlog.LossTimerUpdateTypeSet,
 				TimerType: qlog.TimerTypePTO,
@@ -631,7 +629,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				Time:      sendTimes[2].Add(2 * rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
-		eventRecorder.Events(qlog.MetricsUpdated{}, qlog.LossTimerUpdated{}),
+		eventRecorder.Events(qlog.PTOCountUpdated{}, qlog.LossTimerUpdated{}),
 	)
 	// PTO timer expiration doesn't declare packets lost
 	require.Empty(t, packets.Lost)
@@ -677,9 +675,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 			},
-			qlog.MetricsUpdated{
-				PTOCount: pointer(uint32(2)),
-			},
+			qlog.PTOCountUpdated{PTOCount: 2},
 			qlog.LossTimerUpdated{
 				Type:      qlog.LossTimerUpdateTypeSet,
 				TimerType: qlog.TimerTypePTO,
@@ -687,7 +683,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 				Time:      sendTimes[6].Add(4 * rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
-		eventRecorder.Events(qlog.LossTimerUpdated{}, qlog.MetricsUpdated{}),
+		eventRecorder.Events(qlog.LossTimerUpdated{}, qlog.PTOCountUpdated{}),
 	)
 	eventRecorder.Clear()
 	// PTO timer expiration doesn't declare packets lost
@@ -722,9 +718,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	require.Len(t, eventRecorder.Events(qlog.PacketLost{}), 2)
 	require.Equal(t,
 		[]qlogwriter.Event{
-			qlog.MetricsUpdated{PTOCount: pointer(uint32(0))},
+			qlog.PTOCountUpdated{PTOCount: 0},
 		},
-		eventRecorder.Events(qlog.MetricsUpdated{})[:1],
+		eventRecorder.Events(qlog.PTOCountUpdated{})[:1],
 	)
 	require.Equal(t,
 		[]qlogwriter.Event{
