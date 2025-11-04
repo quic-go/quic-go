@@ -412,15 +412,17 @@ func (e MTUUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	return h.err
 }
 
+// MetricsUpdated logs RTT and congestion metrics as defined in the
+// recovery:metrics_updated event.
+// The PTO count is logged via PTOCountUpdated.
 type MetricsUpdated struct {
-	MinRTT           *time.Duration
-	SmoothedRTT      *time.Duration
-	LatestRTT        *time.Duration
-	RTTVariance      *time.Duration
-	CongestionWindow *int
-	BytesInFlight    *int
-	PacketsInFlight  *int
-	PTOCount         *uint32
+	MinRTT           time.Duration
+	SmoothedRTT      time.Duration
+	LatestRTT        time.Duration
+	RTTVariance      time.Duration
+	CongestionWindow int
+	BytesInFlight    int
+	PacketsInFlight  int
 }
 
 func (e MetricsUpdated) Name() string { return "recovery:metrics_updated" }
@@ -428,38 +430,51 @@ func (e MetricsUpdated) Name() string { return "recovery:metrics_updated" }
 func (e MetricsUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	if e.MinRTT != nil {
+	if e.MinRTT != 0 {
 		h.WriteToken(jsontext.String("min_rtt"))
-		h.WriteToken(jsontext.Float(milliseconds(*e.MinRTT)))
+		h.WriteToken(jsontext.Float(milliseconds(e.MinRTT)))
 	}
-	if e.SmoothedRTT != nil {
+	if e.SmoothedRTT != 0 {
 		h.WriteToken(jsontext.String("smoothed_rtt"))
-		h.WriteToken(jsontext.Float(milliseconds(*e.SmoothedRTT)))
+		h.WriteToken(jsontext.Float(milliseconds(e.SmoothedRTT)))
 	}
-	if e.LatestRTT != nil {
+	if e.LatestRTT != 0 {
 		h.WriteToken(jsontext.String("latest_rtt"))
-		h.WriteToken(jsontext.Float(milliseconds(*e.LatestRTT)))
+		h.WriteToken(jsontext.Float(milliseconds(e.LatestRTT)))
 	}
-	if e.RTTVariance != nil {
+	if e.RTTVariance != 0 {
 		h.WriteToken(jsontext.String("rtt_variance"))
-		h.WriteToken(jsontext.Float(milliseconds(*e.RTTVariance)))
+		h.WriteToken(jsontext.Float(milliseconds(e.RTTVariance)))
 	}
-	if e.CongestionWindow != nil {
+	if e.CongestionWindow != 0 {
 		h.WriteToken(jsontext.String("congestion_window"))
-		h.WriteToken(jsontext.Uint(uint64(*e.CongestionWindow)))
+		h.WriteToken(jsontext.Uint(uint64(e.CongestionWindow)))
 	}
-	if e.BytesInFlight != nil {
+	if e.BytesInFlight != 0 {
 		h.WriteToken(jsontext.String("bytes_in_flight"))
-		h.WriteToken(jsontext.Uint(uint64(*e.BytesInFlight)))
+		h.WriteToken(jsontext.Uint(uint64(e.BytesInFlight)))
 	}
-	if e.PacketsInFlight != nil {
+	if e.PacketsInFlight != 0 {
 		h.WriteToken(jsontext.String("packets_in_flight"))
-		h.WriteToken(jsontext.Uint(uint64(*e.PacketsInFlight)))
+		h.WriteToken(jsontext.Uint(uint64(e.PacketsInFlight)))
 	}
-	if e.PTOCount != nil {
-		h.WriteToken(jsontext.String("pto_count"))
-		h.WriteToken(jsontext.Uint(uint64(*e.PTOCount)))
-	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// PTOCountUpdated logs the pto_count value of the
+// recovery:metrics_updated event.
+type PTOCountUpdated struct {
+	PTOCount uint32
+}
+
+func (e PTOCountUpdated) Name() string { return "recovery:metrics_updated" }
+
+func (e PTOCountUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("pto_count"))
+	h.WriteToken(jsontext.Uint(uint64(e.PTOCount)))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

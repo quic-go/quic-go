@@ -15,10 +15,6 @@ import (
 	"github.com/quic-go/quic-go/qlogwriter"
 )
 
-func pointer[T any](v T) *T {
-	return &v
-}
-
 const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// Specified as an RTT multiplier.
@@ -220,7 +216,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now m
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}
 	if h.qlogger != nil && h.ptoCount != 0 {
-		h.qlogger.RecordEvent(qlog.MetricsUpdated{PTOCount: pointer(uint32(0))})
+		h.qlogger.RecordEvent(qlog.PTOCountUpdated{PTOCount: 0})
 	}
 	h.ptoCount = 0
 	h.numProbesToSend = 0
@@ -334,40 +330,40 @@ func (h *sentPacketHandler) qlogMetricsUpdated() {
 	var metricsUpdatedEvent qlog.MetricsUpdated
 	var updated bool
 	if h.rttStats.HasMeasurement() {
-		if h.lastMetrics.MinRTT == nil || *h.lastMetrics.MinRTT != h.rttStats.MinRTT() {
-			metricsUpdatedEvent.MinRTT = pointer(h.rttStats.MinRTT())
-			h.lastMetrics.MinRTT = pointer(h.rttStats.MinRTT())
+		if h.lastMetrics.MinRTT != h.rttStats.MinRTT() {
+			metricsUpdatedEvent.MinRTT = h.rttStats.MinRTT()
+			h.lastMetrics.MinRTT = metricsUpdatedEvent.MinRTT
 			updated = true
 		}
-		if h.lastMetrics.SmoothedRTT == nil || *h.lastMetrics.SmoothedRTT != h.rttStats.SmoothedRTT() {
-			metricsUpdatedEvent.SmoothedRTT = pointer(h.rttStats.SmoothedRTT())
-			h.lastMetrics.SmoothedRTT = pointer(h.rttStats.SmoothedRTT())
+		if h.lastMetrics.SmoothedRTT != h.rttStats.SmoothedRTT() {
+			metricsUpdatedEvent.SmoothedRTT = h.rttStats.SmoothedRTT()
+			h.lastMetrics.SmoothedRTT = metricsUpdatedEvent.SmoothedRTT
 			updated = true
 		}
-		if h.lastMetrics.LatestRTT == nil || *h.lastMetrics.LatestRTT != h.rttStats.LatestRTT() {
-			metricsUpdatedEvent.LatestRTT = pointer(h.rttStats.LatestRTT())
-			h.lastMetrics.LatestRTT = pointer(h.rttStats.LatestRTT())
+		if h.lastMetrics.LatestRTT != h.rttStats.LatestRTT() {
+			metricsUpdatedEvent.LatestRTT = h.rttStats.LatestRTT()
+			h.lastMetrics.LatestRTT = metricsUpdatedEvent.LatestRTT
 			updated = true
 		}
-		if h.lastMetrics.RTTVariance == nil || *h.lastMetrics.RTTVariance != h.rttStats.MeanDeviation() {
-			metricsUpdatedEvent.RTTVariance = pointer(h.rttStats.MeanDeviation())
-			h.lastMetrics.RTTVariance = pointer(h.rttStats.MeanDeviation())
+		if h.lastMetrics.RTTVariance != h.rttStats.MeanDeviation() {
+			metricsUpdatedEvent.RTTVariance = h.rttStats.MeanDeviation()
+			h.lastMetrics.RTTVariance = metricsUpdatedEvent.RTTVariance
 			updated = true
 		}
 	}
-	if h.lastMetrics.CongestionWindow == nil || *h.lastMetrics.CongestionWindow != int(h.congestion.GetCongestionWindow()) {
-		metricsUpdatedEvent.CongestionWindow = pointer(int(h.congestion.GetCongestionWindow()))
-		h.lastMetrics.CongestionWindow = pointer(int(h.congestion.GetCongestionWindow()))
+	if cwnd := h.congestion.GetCongestionWindow(); h.lastMetrics.CongestionWindow != int(cwnd) {
+		metricsUpdatedEvent.CongestionWindow = int(cwnd)
+		h.lastMetrics.CongestionWindow = metricsUpdatedEvent.CongestionWindow
 		updated = true
 	}
-	if h.lastMetrics.BytesInFlight == nil || *h.lastMetrics.BytesInFlight != int(h.bytesInFlight) {
-		metricsUpdatedEvent.BytesInFlight = pointer(int(h.bytesInFlight))
-		h.lastMetrics.BytesInFlight = pointer(int(h.bytesInFlight))
+	if h.lastMetrics.BytesInFlight != int(h.bytesInFlight) {
+		metricsUpdatedEvent.BytesInFlight = int(h.bytesInFlight)
+		h.lastMetrics.BytesInFlight = metricsUpdatedEvent.BytesInFlight
 		updated = true
 	}
-	if h.lastMetrics.PacketsInFlight == nil || *h.lastMetrics.PacketsInFlight != h.packetsInFlight() {
-		metricsUpdatedEvent.PacketsInFlight = pointer(h.packetsInFlight())
-		h.lastMetrics.PacketsInFlight = pointer(h.packetsInFlight())
+	if h.lastMetrics.PacketsInFlight != h.packetsInFlight() {
+		metricsUpdatedEvent.PacketsInFlight = h.packetsInFlight()
+		h.lastMetrics.PacketsInFlight = metricsUpdatedEvent.PacketsInFlight
 		updated = true
 	}
 	if updated {
@@ -476,7 +472,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	// Reset the pto_count unless the client is unsure if the server has validated the client's address.
 	if h.peerCompletedAddressValidation {
 		if h.qlogger != nil && h.ptoCount != 0 {
-			h.qlogger.RecordEvent(qlog.MetricsUpdated{PTOCount: pointer(uint32(0))})
+			h.qlogger.RecordEvent(qlog.PTOCountUpdated{PTOCount: 0})
 		}
 		h.ptoCount = 0
 	}
@@ -930,7 +926,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 			TimerType: qlog.TimerTypePTO,
 			EncLevel:  encLevel,
 		})
-		h.qlogger.RecordEvent(qlog.MetricsUpdated{PTOCount: pointer(h.ptoCount)})
+		h.qlogger.RecordEvent(qlog.PTOCountUpdated{PTOCount: h.ptoCount})
 	}
 	h.numProbesToSend += 2
 	//nolint:exhaustive // We never arm a PTO timer for 0-RTT packets.
@@ -1112,7 +1108,7 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 	oldAlarm := h.alarm
 	h.alarm = alarmTimer{}
 	if h.qlogger != nil {
-		h.qlogger.RecordEvent(qlog.MetricsUpdated{PTOCount: pointer(uint32(0))})
+		h.qlogger.RecordEvent(qlog.PTOCountUpdated{PTOCount: 0})
 		if !oldAlarm.Time.IsZero() {
 			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
 				Type: qlog.LossTimerUpdateTypeCancelled,

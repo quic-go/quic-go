@@ -606,21 +606,14 @@ func TestMetricsUpdated(t *testing.T) {
 	rttStats.UpdateRTT(15*time.Millisecond, 0)
 	rttStats.UpdateRTT(20*time.Millisecond, 0)
 	rttStats.UpdateRTT(25*time.Millisecond, 0)
-	minRTT := rttStats.MinRTT()
-	smoothedRTT := rttStats.SmoothedRTT()
-	latestRTT := rttStats.LatestRTT()
-	rttVariance := rttStats.MeanDeviation()
-	cwndInt := 4321
-	bytesInt := 1234
-	packetsInt := 42
 	name, ev := testEventEncoding(t, &MetricsUpdated{
-		MinRTT:           &minRTT,
-		SmoothedRTT:      &smoothedRTT,
-		LatestRTT:        &latestRTT,
-		RTTVariance:      &rttVariance,
-		CongestionWindow: &cwndInt,
-		BytesInFlight:    &bytesInt,
-		PacketsInFlight:  &packetsInt,
+		MinRTT:           rttStats.MinRTT(),
+		SmoothedRTT:      rttStats.SmoothedRTT(),
+		LatestRTT:        rttStats.LatestRTT(),
+		RTTVariance:      rttStats.MeanDeviation(),
+		CongestionWindow: 4321,
+		BytesInFlight:    1234,
+		PacketsInFlight:  42,
 	})
 
 	require.Equal(t, "recovery:metrics_updated", name)
@@ -683,9 +676,8 @@ func TestCongestionStateUpdated(t *testing.T) {
 	require.Equal(t, "congestion_avoidance", ev["new"])
 }
 
-func TestMetricsUpdatedPTO(t *testing.T) {
-	value := uint32(42)
-	name, ev := testEventEncoding(t, &MetricsUpdated{PTOCount: &value})
+func TestPTOCountUpdated(t *testing.T) {
+	name, ev := testEventEncoding(t, &PTOCountUpdated{PTOCount: 42})
 
 	require.Equal(t, "recovery:metrics_updated", name)
 	require.Equal(t, float64(42), ev["pto_count"])
