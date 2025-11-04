@@ -351,8 +351,8 @@ func (h *sentPacketHandler) qlogMetricsUpdated() {
 			updated = true
 		}
 	}
-	if h.lastMetrics.CongestionWindow != int(h.congestion.GetCongestionWindow()) {
-		metricsUpdatedEvent.CongestionWindow = int(h.congestion.GetCongestionWindow())
+	if cwnd := h.congestion.GetCongestionWindow(); h.lastMetrics.CongestionWindow != int(cwnd) {
+		metricsUpdatedEvent.CongestionWindow = int(cwnd)
 		h.lastMetrics.CongestionWindow = metricsUpdatedEvent.CongestionWindow
 		updated = true
 	}
