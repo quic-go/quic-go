@@ -13,9 +13,37 @@ on:
   workflow_dispatch:
 
 jobs:
+  list-packages:
+    name: List Go packages with benchmarks
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.list.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - id: list
+        run: |
+          all_pkgs=$(go list ./...)
+          pkgs_with_bench=()
+          for pkg in $all_pkgs; do
+            if go test -list '^Benchmark' "$pkg" | grep -q '^Benchmark'; then
+              pkgs_with_bench+=("$pkg")
+            fi
+          done
+          json=$(printf '%s\n' "${pkgs_with_bench[@]}" | jq -c -R -s 'split("\n") | del(.[] | select(. == ""))')
+          echo "packages=$json" >> $GITHUB_OUTPUT
+
   benchmarks:
-    name: Run benchmarks
+    name: Benchmarks (${{ matrix.package }})
+    needs: list-packages
     runs-on: codspeed-macro
+    strategy:
+      matrix:
+        package: ${{ fromJson(needs.list-packages.outputs.packages) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -25,5 +53,5 @@ jobs:
         uses: CodSpeedHQ/action@v4
         with:
           mode: walltime
-          run: go test -run=^$ -bench=. ./...
+          run: go test -run=^$ -bench=. ${{ matrix.package }}
           token: ${{ secrets.CODSPEED_TOKEN }}
