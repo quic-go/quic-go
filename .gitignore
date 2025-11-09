@@ -16,3 +16,14 @@ fuzzing/*/suppressions
 fuzzing/*/corpus/
 
 gomock_reflect_*/
+
+# Benchmark binaries and outputs
+benchmark/benchmark_server
+benchmark/benchmark_client
+benchmark/benchmark_runner
+benchmark/benchmark_server_*
+benchmark/benchmark_client_*
+benchmark/*.csv
+benchmark/*.log
+benchmark/qemu-images/
+benchmark/results/
