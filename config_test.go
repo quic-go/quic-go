@@ -132,6 +132,8 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			f.Set(reflect.ValueOf("pqc"))
 		case "PQCSecurityLevel":
 			f.Set(reflect.ValueOf(768))
+		case "PQCSignatureLevel":
+			f.Set(reflect.ValueOf(65))
 		default:
 			t.Fatalf("all fields must be accounted for, but saw unknown field %q", fn)
 		}

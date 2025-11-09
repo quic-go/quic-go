@@ -32,7 +32,7 @@ func GenerateMLDSACertificate(level int, organization string, validFor time.Dura
 	}
 
 	// Wrap signer for TLS use
-	tlsSigner := NewMLDSASigner(signer)
+	_ = NewMLDSASigner(signer) // tlsSigner would be used in full implementation
 
 	// Create certificate template
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)

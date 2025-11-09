@@ -74,6 +74,8 @@ func TestErrorBeforeClientHelloGeneration(t *testing.T) {
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		"classical", // cryptoMode
+		768,         // pqcSecurityLevel
 	)
 
 	var terr *qerr.TransportError
@@ -96,6 +98,8 @@ func TestMessageReceivedAtWrongEncryptionLevel(t *testing.T) {
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
+		"classical", // cryptoMode
+		768,         // pqcSecurityLevel
 	)
 
 	require.NoError(t, server.StartHandshake(context.Background()))
@@ -194,6 +198,8 @@ func handshakeWithTLSConf(
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		"classical", // cryptoMode
+		768,         // pqcSecurityLevel
 	)
 
 	if serverTransportParameters.StatelessResetToken == nil {
@@ -211,6 +217,8 @@ func handshakeWithTLSConf(
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
+		"classical", // cryptoMode
+		768,         // pqcSecurityLevel
 	)
 	cEvents, cErr, sEvents, sErr := handshake(t, client, server)
 	return client, cEvents, cErr, server, sEvents, sErr
@@ -287,6 +295,8 @@ func TestTransportParameters(t *testing.T) {
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		"classical", // cryptoMode
+		768,         // pqcSecurityLevel
 	)
 
 	var token protocol.StatelessResetToken
@@ -306,6 +316,8 @@ func TestTransportParameters(t *testing.T) {
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
+		"classical", // cryptoMode
+		768,         // pqcSecurityLevel
 	)
 
 	clientEvents, cErr, serverEvents, sErr := handshake(t, client, server)
