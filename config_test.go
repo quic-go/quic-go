@@ -128,6 +128,10 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			f.Set(reflect.ValueOf(true))
 		case "EnableStreamResetPartialDelivery":
 			f.Set(reflect.ValueOf(true))
+		case "CryptoMode":
+			f.Set(reflect.ValueOf("pqc"))
+		case "PQCSecurityLevel":
+			f.Set(reflect.ValueOf(768))
 		default:
 			t.Fatalf("all fields must be accounted for, but saw unknown field %q", fn)
 		}

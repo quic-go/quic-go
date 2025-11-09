@@ -285,6 +285,8 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		"classical", // CryptoMode
+		768,         // PQCSecurityLevel
 	)
 	if err := client.StartHandshake(context.Background()); err != nil {
 		log.Fatal(err)
@@ -302,6 +304,8 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
+		"classical", // CryptoMode
+		768,         // PQCSecurityLevel
 	)
 	if err := server.StartHandshake(context.Background()); err != nil {
 		log.Fatal(err)

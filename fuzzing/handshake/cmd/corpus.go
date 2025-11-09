@@ -33,6 +33,8 @@ func main() {
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		"classical", // CryptoMode
+		768,         // PQCSecurityLevel
 	)
 
 	config := testdata.GetTLSConfig()
@@ -48,6 +50,8 @@ func main() {
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
+		"classical", // CryptoMode
+		768,         // PQCSecurityLevel
 	)
 
 	if err := client.StartHandshake(context.Background()); err != nil {

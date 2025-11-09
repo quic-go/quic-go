@@ -12,6 +12,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
@@ -26,8 +27,8 @@ var QUICVersionContextKey = &quicVersionContextKey{}
 const clientSessionStateRevision = 5
 
 type cryptoSetup struct {
-	tlsConf *tls.Config
-	conn    *tls.QUICConn
+	tlsConf *qtls.Config
+	conn    *qtls.QUICConn
 
 	events []Event
 
@@ -76,6 +77,8 @@ func NewCryptoSetupClient(
 	qlogger qlogwriter.Recorder,
 	logger utils.Logger,
 	version protocol.Version,
+	cryptoMode string,
+	pqcSecurityLevel int,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
@@ -87,13 +90,13 @@ func NewCryptoSetupClient(
 		version,
 	)
 
-	tlsConf = tlsConf.Clone()
-	tlsConf.MinVersion = tls.VersionTLS13
-	cs.tlsConf = tlsConf
+	// Convert standard tls.Config to qtls.Config
+	qtlsConf := convertToQTLSConfig(tlsConf, cryptoMode, pqcSecurityLevel)
+	cs.tlsConf = qtlsConf
 	cs.allow0RTT = enable0RTT
 
-	cs.conn = tls.QUICClient(&tls.QUICConfig{
-		TLSConfig:           tlsConf,
+	cs.conn = qtls.QUICClient(&qtls.QUICConfig{
+		TLSConfig:           qtlsConf,
 		EnableSessionEvents: true,
 	})
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
@@ -112,6 +115,8 @@ func NewCryptoSetupServer(
 	qlogger qlogwriter.Recorder,
 	logger utils.Logger,
 	version protocol.Version,
+	cryptoMode string,
+	pqcSecurityLevel int,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
@@ -126,9 +131,11 @@ func NewCryptoSetupServer(
 
 	tlsConf = setupConfigForServer(tlsConf, localAddr, remoteAddr)
 
-	cs.tlsConf = tlsConf
-	cs.conn = tls.QUICServer(&tls.QUICConfig{
-		TLSConfig:           tlsConf,
+	// Convert standard tls.Config to qtls.Config
+	qtlsConf := convertToQTLSConfig(tlsConf, cryptoMode, pqcSecurityLevel)
+	cs.tlsConf = qtlsConf
+	cs.conn = qtls.QUICServer(&qtls.QUICConfig{
+		TLSConfig:           qtlsConf,
 		EnableSessionEvents: true,
 	})
 	return cs
@@ -198,7 +205,7 @@ func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
 		if err := h.handleEvent(ev); err != nil {
 			return wrapError(err)
 		}
-		if ev.Kind == tls.QUICNoEvent {
+		if ev.Kind == qtls.QUICNoEvent {
 			break
 		}
 	}
@@ -229,7 +236,8 @@ func (h *cryptoSetup) HandleMessage(data []byte, encLevel protocol.EncryptionLev
 }
 
 func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLevel) error {
-	if err := h.conn.HandleData(encLevel.ToTLSEncryptionLevel(), data); err != nil {
+	// Convert tls.QUICEncryptionLevel to qtls.QUICEncryptionLevel (both are int types with same values)
+	if err := h.conn.HandleData(qtls.QUICEncryptionLevel(encLevel.ToTLSEncryptionLevel()), data); err != nil {
 		return err
 	}
 	for {
@@ -237,37 +245,37 @@ func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLev
 		if err := h.handleEvent(ev); err != nil {
 			return err
 		}
-		if ev.Kind == tls.QUICNoEvent {
+		if ev.Kind == qtls.QUICNoEvent {
 			return nil
 		}
 	}
 }
 
-func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
+func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (err error) {
 	switch ev.Kind {
-	case tls.QUICNoEvent:
+	case qtls.QUICNoEvent:
 		return nil
-	case tls.QUICSetReadSecret:
+	case qtls.QUICSetReadSecret:
 		h.setReadKey(ev.Level, ev.Suite, ev.Data)
 		return nil
-	case tls.QUICSetWriteSecret:
+	case qtls.QUICSetWriteSecret:
 		h.setWriteKey(ev.Level, ev.Suite, ev.Data)
 		return nil
-	case tls.QUICTransportParameters:
+	case qtls.QUICTransportParameters:
 		return h.handleTransportParameters(ev.Data)
-	case tls.QUICTransportParametersRequired:
+	case qtls.QUICTransportParametersRequired:
 		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
 		return nil
-	case tls.QUICRejectedEarlyData:
+	case qtls.QUICRejectedEarlyData:
 		h.rejected0RTT()
 		return nil
-	case tls.QUICWriteData:
+	case qtls.QUICWriteData:
 		h.writeRecord(ev.Level, ev.Data)
 		return nil
-	case tls.QUICHandshakeDone:
+	case qtls.QUICHandshakeDone:
 		h.handshakeComplete()
 		return nil
-	case tls.QUICStoreSession:
+	case qtls.QUICStoreSession:
 		if h.perspective == protocol.PerspectiveServer {
 			panic("cryptoSetup BUG: unexpected QUICStoreSession event for the server")
 		}
@@ -276,7 +284,7 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
 			addSessionStateExtraPrefix(h.marshalDataForSessionState(ev.SessionState.EarlyData)),
 		)
 		return h.conn.StoreSession(ev.SessionState)
-	case tls.QUICResumeSession:
+	case qtls.QUICResumeSession:
 		var allowEarlyData bool
 		switch h.perspective {
 		case protocol.PerspectiveClient:
@@ -381,7 +389,7 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 // Due to limitations in crypto/tls, it's only possible to generate a single session ticket per connection.
 // It is only valid for the server.
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
-	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{
+	if err := h.conn.SendSessionTicket(qtls.QUICSessionTicketOptions{
 		EarlyData: h.allow0RTT,
 		Extra:     [][]byte{addSessionStateExtraPrefix(h.getDataForSessionTicket())},
 	}); err != nil {
@@ -395,23 +403,13 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 		}
 		return nil, err
 	}
-	// If session tickets are disabled, NextEvent will immediately return QUICNoEvent,
-	// and we will return a nil ticket.
-	var ticket []byte
-	for {
-		ev := h.conn.NextEvent()
-		if ev.Kind == tls.QUICNoEvent {
-			break
-		}
-		if ev.Kind == tls.QUICWriteData && ev.Level == tls.QUICEncryptionLevelApplication {
-			if ticket != nil {
-				h.logger.Errorf("unexpected multiple session tickets")
-				continue
-			}
-			ticket = ev.Data
-		} else {
-			h.logger.Errorf("unexpected event: %v", ev.Kind)
-		}
+	ev := h.conn.NextEvent()
+	if ev.Kind != qtls.QUICWriteData || ev.Level != qtls.QUICEncryptionLevelApplication {
+		panic("crypto/tls bug: where's my session ticket?")
+	}
+	ticket := ev.Data
+	if ev := h.conn.NextEvent(); ev.Kind != qtls.QUICNoEvent {
+		panic("crypto/tls bug: why more than one ticket?")
 	}
 	return ticket, nil
 }
@@ -453,11 +451,11 @@ func (h *cryptoSetup) rejected0RTT() {
 	}
 }
 
-func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) setReadKey(el qtls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
-	case tls.QUICEncryptionLevelEarly:
+	case qtls.QUICEncryptionLevelEarly:
 		if h.perspective == protocol.PerspectiveClient {
 			panic("Received 0-RTT read key for the client")
 		}
@@ -469,7 +467,7 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed 0-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
-	case tls.QUICEncryptionLevelHandshake:
+	case qtls.QUICEncryptionLevelHandshake:
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
@@ -477,7 +475,7 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
-	case tls.QUICEncryptionLevelApplication:
+	case qtls.QUICEncryptionLevelApplication:
 		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
 		if h.logger.Debug() {
@@ -490,16 +488,16 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 	if h.qlogger != nil {
 		h.qlogger.RecordEvent(qlog.KeyUpdated{
 			Trigger: qlog.KeyUpdateTLS,
-			KeyType: encLevelToKeyType(protocol.FromTLSEncryptionLevel(el), h.perspective.Opposite()),
+			KeyType: encLevelToKeyType(protocol.FromTLSEncryptionLevel(tls.QUICEncryptionLevel(el)), h.perspective.Opposite()),
 		})
 	}
 }
 
-func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) setWriteKey(el qtls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
-	case tls.QUICEncryptionLevelEarly:
+	case qtls.QUICEncryptionLevelEarly:
 		if h.perspective == protocol.PerspectiveServer {
 			panic("Received 0-RTT write key for the server")
 		}
@@ -518,7 +516,7 @@ func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 		}
 		// don't set used0RTT here. 0-RTT might still get rejected.
 		return
-	case tls.QUICEncryptionLevelHandshake:
+	case qtls.QUICEncryptionLevelHandshake:
 		h.handshakeSealer = newLongHeaderSealer(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
@@ -526,7 +524,7 @@ func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed Handshake Write keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
-	case tls.QUICEncryptionLevelApplication:
+	case qtls.QUICEncryptionLevelApplication:
 		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
 		if h.logger.Debug() {
@@ -547,20 +545,20 @@ func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 	if h.qlogger != nil {
 		h.qlogger.RecordEvent(qlog.KeyUpdated{
 			Trigger: qlog.KeyUpdateTLS,
-			KeyType: encLevelToKeyType(protocol.FromTLSEncryptionLevel(el), h.perspective),
+			KeyType: encLevelToKeyType(protocol.FromTLSEncryptionLevel(tls.QUICEncryptionLevel(el)), h.perspective),
 		})
 	}
 }
 
 // writeRecord is called when TLS writes data
-func (h *cryptoSetup) writeRecord(encLevel tls.QUICEncryptionLevel, p []byte) {
+func (h *cryptoSetup) writeRecord(encLevel qtls.QUICEncryptionLevel, p []byte) {
 	//nolint:exhaustive // handshake records can only be written for Initial and Handshake.
 	switch encLevel {
-	case tls.QUICEncryptionLevelInitial:
+	case qtls.QUICEncryptionLevelInitial:
 		h.events = append(h.events, Event{Kind: EventWriteInitialData, Data: p})
-	case tls.QUICEncryptionLevelHandshake:
+	case qtls.QUICEncryptionLevelHandshake:
 		h.events = append(h.events, Event{Kind: EventWriteHandshakeData, Data: p})
-	case tls.QUICEncryptionLevelApplication:
+	case qtls.QUICEncryptionLevelApplication:
 		panic("unexpected write")
 	default:
 		panic(fmt.Sprintf("unexpected write encryption level: %s", encLevel))
@@ -679,9 +677,28 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) ConnectionState() ConnectionState {
+	qtlsState := h.conn.ConnectionState()
 	return ConnectionState{
-		ConnectionState: h.conn.ConnectionState(),
+		ConnectionState: convertConnectionState(qtlsState),
 		Used0RTT:        h.used0RTT.Load(),
+	}
+}
+
+// convertConnectionState converts qtls.ConnectionState to tls.ConnectionState
+func convertConnectionState(qtlsState qtls.ConnectionState) tls.ConnectionState {
+	return tls.ConnectionState{
+		Version:                     qtlsState.Version,
+		HandshakeComplete:           qtlsState.HandshakeComplete,
+		DidResume:                   qtlsState.DidResume,
+		CipherSuite:                 qtlsState.CipherSuite,
+		CurveID:                     tls.CurveID(qtlsState.CurveID), // Cast uint16 to tls.CurveID
+		NegotiatedProtocol:          qtlsState.NegotiatedProtocol,
+		ServerName:                  qtlsState.ServerName,
+		PeerCertificates:            qtlsState.PeerCertificates,
+		VerifiedChains:              qtlsState.VerifiedChains,
+		SignedCertificateTimestamps: qtlsState.SignedCertificateTimestamps,
+		OCSPResponse:                qtlsState.OCSPResponse,
+		TLSUnique:                   qtlsState.TLSUnique,
 	}
 }
 
@@ -718,5 +735,86 @@ func encLevelToKeyType(encLevel protocol.EncryptionLevel, pers protocol.Perspect
 		return qlog.KeyTypeClient1RTT
 	default:
 		return ""
+	}
+}
+
+// convertToQTLSConfig creates a qtls.Config with essential fields from tls.Config
+// and sets up PQC curve preferences based on the cryptoMode and pqcSecurityLevel
+func convertToQTLSConfig(stdConf *tls.Config, cryptoMode string, pqcSecurityLevel int) *qtls.Config {
+	if stdConf == nil {
+		stdConf = &tls.Config{}
+	}
+
+	// Create a minimal qtls.Config with only essential fields
+	qtlsConf := &qtls.Config{
+		// Basic connection settings
+		ServerName:         stdConf.ServerName,
+		InsecureSkipVerify: stdConf.InsecureSkipVerify,
+		NextProtos:         stdConf.NextProtos,
+
+		// Certificate verification
+		RootCAs:   stdConf.RootCAs,
+		ClientCAs: stdConf.ClientCAs,
+
+		// TLS version - force TLS 1.3 for PQC
+		MinVersion: qtls.VersionTLS13,
+		MaxVersion: qtls.VersionTLS13,
+
+		// Session settings
+		SessionTicketsDisabled: stdConf.SessionTicketsDisabled,
+
+		// Debugging
+		KeyLogWriter: stdConf.KeyLogWriter,
+
+		// PQC curve preferences
+		CurvePreferences: getCurvePreferences(cryptoMode, pqcSecurityLevel),
+	}
+
+	// Convert certificates if present
+	if len(stdConf.Certificates) > 0 {
+		qtlsConf.Certificates = convertCertificates(stdConf.Certificates)
+	}
+
+	return qtlsConf
+}
+
+// convertCertificates converts tls.Certificate to qtls.Certificate
+func convertCertificates(tlsCerts []tls.Certificate) []qtls.Certificate {
+	qtlsCerts := make([]qtls.Certificate, len(tlsCerts))
+	for i, cert := range tlsCerts {
+		qtlsCerts[i] = qtls.Certificate{
+			Certificate: cert.Certificate, // [][]byte - same type
+			PrivateKey:  cert.PrivateKey,  // crypto.PrivateKey - same interface
+			Leaf:        cert.Leaf,        // *x509.Certificate - same type
+			OCSPStaple:  cert.OCSPStaple,  // []byte - same type
+			SignedCertificateTimestamps: cert.SignedCertificateTimestamps, // [][]byte - same type
+		}
+		// Note: SupportedSignatureAlgorithms would need conversion, but we don't use it
+	}
+	return qtlsCerts
+}
+
+// getCurvePreferences returns the appropriate curve preferences based on crypto mode
+func getCurvePreferences(cryptoMode string, pqcSecurityLevel int) []qtls.CurveID {
+	switch cryptoMode {
+	case "pqc":
+		// Pure PQC mode
+		if pqcSecurityLevel == 1024 {
+			return []qtls.CurveID{qtls.MLKEM1024, qtls.MLKEM768, qtls.X25519}
+		}
+		return []qtls.CurveID{qtls.MLKEM768, qtls.MLKEM1024, qtls.X25519}
+	
+	case "auto":
+		// Auto mode: try PQC first, fallback to classical
+		if pqcSecurityLevel == 1024 {
+			return []qtls.CurveID{qtls.MLKEM1024, qtls.MLKEM768, qtls.X25519, qtls.CurveP256}
+		}
+		return []qtls.CurveID{qtls.MLKEM768, qtls.MLKEM1024, qtls.X25519, qtls.CurveP256}
+	
+	case "classical":
+		fallthrough
+	default:
+		// Classical mode (default)
+		return []qtls.CurveID{qtls.X25519, qtls.CurveP256, qtls.CurveP384}
 	}
 }

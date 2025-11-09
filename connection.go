@@ -366,6 +366,8 @@ var newConnection = func(
 		s.qlogger,
 		logger,
 		s.version,
+		conf.CryptoMode,
+		conf.PQCSecurityLevel,
 	)
 	s.cryptoStreamHandler = cs
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective)
@@ -490,6 +492,8 @@ var newClientConnection = func(
 		s.qlogger,
 		logger,
 		s.version,
+		conf.CryptoMode,
+		conf.PQCSecurityLevel,
 	)
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, oneRTTStream)
