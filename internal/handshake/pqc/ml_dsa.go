@@ -56,6 +56,10 @@ func (s *MLDSA44Signer) Sign(message []byte) ([]byte, error) {
 
 // Verify checks a signature over the message
 func (s *MLDSA44Signer) Verify(message, signature []byte) bool {
+	// Strict length validation per FIPS 204
+	if len(signature) != 2420 {
+		return false
+	}
 	return mldsa44.Verify(&s.publicKey, message, nil, signature)
 }
 
@@ -107,6 +111,10 @@ func (s *MLDSA65Signer) Sign(message []byte) ([]byte, error) {
 
 // Verify checks a signature over the message
 func (s *MLDSA65Signer) Verify(message, signature []byte) bool {
+	// Strict length validation per FIPS 204
+	if len(signature) != 3309 {
+		return false
+	}
 	return mldsa65.Verify(&s.publicKey, message, nil, signature)
 }
 
@@ -158,6 +166,10 @@ func (s *MLDSA87Signer) Sign(message []byte) ([]byte, error) {
 
 // Verify checks a signature over the message
 func (s *MLDSA87Signer) Verify(message, signature []byte) bool {
+	// Strict length validation per FIPS 204
+	if len(signature) != 4627 {
+		return false
+	}
 	return mldsa87.Verify(&s.publicKey, message, nil, signature)
 }
 
@@ -189,6 +201,10 @@ func NewMLDSASigner(level int) (Signer, error) {
 func VerifyMLDSASignature(publicKeyBytes, message, signature []byte, level int) (bool, error) {
 	switch level {
 	case 44:
+		// Strict length validation per FIPS 204
+		if len(signature) != 2420 {
+			return false, nil
+		}
 		var pub mldsa44.PublicKey
 		if err := pub.UnmarshalBinary(publicKeyBytes); err != nil {
 			return false, fmt.Errorf("failed to unmarshal ML-DSA-44 public key: %w", err)
@@ -196,6 +212,10 @@ func VerifyMLDSASignature(publicKeyBytes, message, signature []byte, level int) 
 		return mldsa44.Verify(&pub, message, nil, signature), nil
 
 	case 65:
+		// Strict length validation per FIPS 204
+		if len(signature) != 3309 {
+			return false, nil
+		}
 		var pub mldsa65.PublicKey
 		if err := pub.UnmarshalBinary(publicKeyBytes); err != nil {
 			return false, fmt.Errorf("failed to unmarshal ML-DSA-65 public key: %w", err)
@@ -203,6 +223,10 @@ func VerifyMLDSASignature(publicKeyBytes, message, signature []byte, level int) 
 		return mldsa65.Verify(&pub, message, nil, signature), nil
 
 	case 87:
+		// Strict length validation per FIPS 204
+		if len(signature) != 4627 {
+			return false, nil
+		}
 		var pub mldsa87.PublicKey
 		if err := pub.UnmarshalBinary(publicKeyBytes); err != nil {
 			return false, fmt.Errorf("failed to unmarshal ML-DSA-87 public key: %w", err)
