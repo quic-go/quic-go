@@ -55,6 +55,14 @@ func verifyHandshakeSignature(sigType uint8, pubkey crypto.PublicKey, hashFunc c
 		if err := rsa.VerifyPSS(pubKey, hashFunc, signed, sig, signOpts); err != nil {
 			return err
 		}
+	case signatureMLDSA:
+		pubKey, ok := pubkey.(*MLDSAPublicKey)
+		if !ok {
+			return fmt.Errorf("expected an ML-DSA public key, got %T", pubkey)
+		}
+		if err := VerifyMLDSASignature(pubKey, signed, sig); err != nil {
+			return err
+		}
 	default:
 		return errors.New("internal error: unknown signature type")
 	}
@@ -106,6 +114,8 @@ func typeAndHashFromSignatureScheme(signatureAlgorithm SignatureScheme) (sigType
 		sigType = signatureECDSA
 	case Ed25519:
 		sigType = signatureEd25519
+	case MLDSA44, MLDSA65, MLDSA87:
+		sigType = signatureMLDSA
 	default:
 		return 0, 0, fmt.Errorf("unsupported signature algorithm: %v", signatureAlgorithm)
 	}
@@ -118,7 +128,7 @@ func typeAndHashFromSignatureScheme(signatureAlgorithm SignatureScheme) (sigType
 		hash = crypto.SHA384
 	case PKCS1WithSHA512, PSSWithSHA512, ECDSAWithP521AndSHA512:
 		hash = crypto.SHA512
-	case Ed25519:
+	case Ed25519, MLDSA44, MLDSA65, MLDSA87:
 		hash = directSigning
 	default:
 		return 0, 0, fmt.Errorf("unsupported signature algorithm: %v", signatureAlgorithm)
@@ -197,6 +207,21 @@ func signatureSchemesForPublicKey(version uint16, pub crypto.PublicKey) []Signat
 		return sigAlgs
 	case ed25519.PublicKey:
 		return []SignatureScheme{Ed25519}
+	case *MLDSAPublicKey:
+		// ML-DSA is only supported in TLS 1.3
+		if version < VersionTLS13 {
+			return nil
+		}
+		switch pub.Level() {
+		case 44:
+			return []SignatureScheme{MLDSA44}
+		case 65:
+			return []SignatureScheme{MLDSA65}
+		case 87:
+			return []SignatureScheme{MLDSA87}
+		default:
+			return nil
+		}
 	default:
 		return nil
 	}
@@ -273,6 +298,8 @@ func unsupportedCertificateError(cert *Certificate) error {
 	case *rsa.PublicKey:
 		return fmt.Errorf("tls: certificate RSA key size too small for supported signature algorithms")
 	case ed25519.PublicKey:
+	case *MLDSAPublicKey:
+		// ML-DSA public keys are supported
 	default:
 		return fmt.Errorf("tls: unsupported certificate key (%T)", pub)
 	}

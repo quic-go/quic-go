@@ -227,6 +227,7 @@ const (
 	signatureRSAPSS
 	signatureECDSA
 	signatureEd25519
+	signatureMLDSA // Post-quantum ML-DSA signatures
 )
 
 // directSigning is a standard Hash value that signals that no pre-hashing
@@ -434,6 +435,12 @@ const (
 
 	// EdDSA algorithms.
 	Ed25519 SignatureScheme = 0x0807
+
+	// Post-Quantum ML-DSA algorithms (FIPS 204).
+	// Using private range 0xFE00-0xFEFF for experimental/private use.
+	MLDSA44 SignatureScheme = 0xFE00 // ML-DSA-44 (128-bit security)
+	MLDSA65 SignatureScheme = 0xFE01 // ML-DSA-65 (192-bit security, recommended)
+	MLDSA87 SignatureScheme = 0xFE02 // ML-DSA-87 (256-bit security)
 
 	// Legacy signature and hash algorithms for TLS 1.2.
 	PKCS1WithSHA1 SignatureScheme = 0x0201

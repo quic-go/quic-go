@@ -59,6 +59,12 @@ func (i SignatureScheme) String() string {
 	case 2052 <= i && i <= 2055:
 		i -= 2052
 		return _SignatureScheme_name_8[_SignatureScheme_index_8[i]:_SignatureScheme_index_8[i+1]]
+	case i == 0xFE00: // 65024
+		return "ML-DSA-44"
+	case i == 0xFE01: // 65025
+		return "ML-DSA-65"
+	case i == 0xFE02: // 65026
+		return "ML-DSA-87"
 	default:
 		return "SignatureScheme(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
