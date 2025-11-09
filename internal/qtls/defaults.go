@@ -29,6 +29,11 @@ func defaultCurvePreferences() []CurveID {
 // Note that in TLS 1.2, the ECDSA algorithms are not constrained to P-256, etc.
 func defaultSupportedSignatureAlgorithms() []SignatureScheme {
 	return []SignatureScheme{
+		// Post-Quantum ML-DSA signatures (prioritized for quantum resistance)
+		MLDSA65, // ML-DSA-65 (192-bit, recommended)
+		MLDSA87, // ML-DSA-87 (256-bit, high security)
+		MLDSA44, // ML-DSA-44 (128-bit)
+		// Classical signatures
 		PSSWithSHA256,
 		ECDSAWithP256AndSHA256,
 		Ed25519,

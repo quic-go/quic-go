@@ -1098,8 +1098,13 @@ func (hs *serverHandshakeStateTLS13) readClientCertificate() error {
 		// See RFC 8446, Section 4.4.3.
 		// We don't use certReq.supportedSignatureAlgorithms because it would
 		// require keeping the certificateRequestMsgTLS13 around in the hs.
+		// For ML-DSA signatures, we skip the public key compatibility check since
+		// we may be transitioning from classical to PQC certificates.
+		isMLDSA := certVerify.signatureAlgorithm == MLDSA44 ||
+			certVerify.signatureAlgorithm == MLDSA65 ||
+			certVerify.signatureAlgorithm == MLDSA87
 		if !isSupportedSignatureAlgorithm(certVerify.signatureAlgorithm, supportedSignatureAlgorithms(c.vers)) ||
-			!isSupportedSignatureAlgorithm(certVerify.signatureAlgorithm, signatureSchemesForPublicKey(c.vers, c.peerCertificates[0].PublicKey)) {
+			(!isMLDSA && !isSupportedSignatureAlgorithm(certVerify.signatureAlgorithm, signatureSchemesForPublicKey(c.vers, c.peerCertificates[0].PublicKey))) {
 			c.sendAlert(alertIllegalParameter)
 			return errors.New("tls: client certificate used with invalid signature algorithm")
 		}

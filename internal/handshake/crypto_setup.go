@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"context"
+	"crypto"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/handshake/pqc"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/qtls"
@@ -772,26 +774,65 @@ func convertToQTLSConfig(stdConf *tls.Config, cryptoMode string, pqcSecurityLeve
 
 	// Convert certificates if present
 	if len(stdConf.Certificates) > 0 {
-		qtlsConf.Certificates = convertCertificates(stdConf.Certificates)
+		qtlsConf.Certificates = convertCertificates(stdConf.Certificates, cryptoMode, pqcSecurityLevel)
 	}
 
 	return qtlsConf
 }
 
 // convertCertificates converts tls.Certificate to qtls.Certificate
-func convertCertificates(tlsCerts []tls.Certificate) []qtls.Certificate {
+// and replaces the signer with ML-DSA when in PQC mode
+func convertCertificates(tlsCerts []tls.Certificate, cryptoMode string, pqcSecurityLevel int) []qtls.Certificate {
 	qtlsCerts := make([]qtls.Certificate, len(tlsCerts))
 	for i, cert := range tlsCerts {
+		privateKey := cert.PrivateKey
+		leaf := cert.Leaf
+
+		// Replace with ML-DSA signer when in PQC mode
+		if cryptoMode == "pqc" || cryptoMode == "auto" {
+			if signer, mldsaSigner, err := wrapWithMLDSASigner(cert.PrivateKey, pqcSecurityLevel); err == nil {
+				privateKey = signer
+
+				// Update the leaf certificate's public key to be ML-DSA
+				// This ensures the TLS handshake sees consistent key types
+				if leaf != nil {
+					leafCopy := *leaf
+					leafCopy.PublicKey = mldsaSigner.Public()
+					leaf = &leafCopy
+				}
+			}
+		}
+
 		qtlsCerts[i] = qtls.Certificate{
 			Certificate: cert.Certificate, // [][]byte - same type
-			PrivateKey:  cert.PrivateKey,  // crypto.PrivateKey - same interface
-			Leaf:        cert.Leaf,        // *x509.Certificate - same type
+			PrivateKey:  privateKey,       // Use ML-DSA signer in PQC mode
+			Leaf:        leaf,             // Updated with ML-DSA public key
 			OCSPStaple:  cert.OCSPStaple,  // []byte - same type
 			SignedCertificateTimestamps: cert.SignedCertificateTimestamps, // [][]byte - same type
 		}
 		// Note: SupportedSignatureAlgorithms would need conversion, but we don't use it
 	}
 	return qtlsCerts
+}
+
+// wrapWithMLDSASigner wraps the existing private key with an ML-DSA signer
+// Returns the TLS signer and the underlying ML-DSA signer for public key access
+func wrapWithMLDSASigner(existingKey crypto.PrivateKey, pqcSecurityLevel int) (crypto.Signer, *qtls.MLDSASigner, error) {
+	// Determine ML-DSA level based on PQC security level
+	mldsaLevel := 65 // default to ML-DSA-65 (192-bit)
+	if pqcSecurityLevel == 1024 {
+		mldsaLevel = 87 // ML-DSA-87 (256-bit) for higher security
+	}
+
+	// Generate a new ML-DSA signer
+	signer, err := pqc.NewMLDSASigner(mldsaLevel)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Wrap it for TLS use
+	tlsSigner := qtls.NewMLDSASigner(signer)
+	return tlsSigner, tlsSigner, nil
 }
 
 // getCurvePreferences returns the appropriate curve preferences based on crypto mode
