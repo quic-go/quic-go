@@ -781,38 +781,76 @@ func convertToQTLSConfig(stdConf *tls.Config, cryptoMode string, pqcSecurityLeve
 }
 
 // convertCertificates converts tls.Certificate to qtls.Certificate
-// and replaces the signer with ML-DSA when in PQC mode
+// In PQC mode, it generates new ML-DSA certificates on-the-fly
 func convertCertificates(tlsCerts []tls.Certificate, cryptoMode string, pqcSecurityLevel int) []qtls.Certificate {
 	qtlsCerts := make([]qtls.Certificate, len(tlsCerts))
 	for i, cert := range tlsCerts {
-		privateKey := cert.PrivateKey
-		leaf := cert.Leaf
-
-		// Replace with ML-DSA signer when in PQC mode
+		// In PQC mode, generate a new ML-DSA certificate
 		if cryptoMode == "pqc" || cryptoMode == "auto" {
-			if signer, mldsaSigner, err := wrapWithMLDSASigner(cert.PrivateKey, pqcSecurityLevel); err == nil {
-				privateKey = signer
-
-				// Update the leaf certificate's public key to be ML-DSA
-				// This ensures the TLS handshake sees consistent key types
-				if leaf != nil {
-					leafCopy := *leaf
-					leafCopy.PublicKey = mldsaSigner.Public()
-					leaf = &leafCopy
-				}
+			if pqcCert, err := generatePQCCertificate(cert, pqcSecurityLevel); err == nil {
+				qtlsCerts[i] = pqcCert
+				continue
 			}
+			// If PQC cert generation fails, fall through to classical
 		}
 
+		// Classical mode or fallback: use original certificate
 		qtlsCerts[i] = qtls.Certificate{
-			Certificate: cert.Certificate, // [][]byte - same type
-			PrivateKey:  privateKey,       // Use ML-DSA signer in PQC mode
-			Leaf:        leaf,             // Updated with ML-DSA public key
-			OCSPStaple:  cert.OCSPStaple,  // []byte - same type
-			SignedCertificateTimestamps: cert.SignedCertificateTimestamps, // [][]byte - same type
+			Certificate: cert.Certificate,
+			PrivateKey:  cert.PrivateKey,
+			Leaf:        cert.Leaf,
+			OCSPStaple:  cert.OCSPStaple,
+			SignedCertificateTimestamps: cert.SignedCertificateTimestamps,
 		}
-		// Note: SupportedSignatureAlgorithms would need conversion, but we don't use it
 	}
 	return qtlsCerts
+}
+
+// generatePQCCertificate creates a new certificate with ML-DSA for PQC mode
+func generatePQCCertificate(originalCert tls.Certificate, pqcSecurityLevel int) (qtls.Certificate, error) {
+	// Determine ML-DSA level
+	mldsaLevel := 65 // default
+	if pqcSecurityLevel == 1024 {
+		mldsaLevel = 87
+	}
+
+	// Extract organization and DNS names from original cert
+	organization := "QUIC-go PQC"
+	dnsNames := []string{"localhost"}
+	if originalCert.Leaf != nil {
+		if len(originalCert.Leaf.Subject.Organization) > 0 {
+			organization = originalCert.Leaf.Subject.Organization[0]
+		}
+		if len(originalCert.Leaf.DNSNames) > 0 {
+			dnsNames = originalCert.Leaf.DNSNames
+		}
+	}
+
+	// Generate ML-DSA certificate (valid for 10 years)
+	certBytes, mldsaSigner, err := qtls.GenerateMLDSACertificate(
+		mldsaLevel,
+		organization,
+		dnsNames,
+		10*365*24*time.Hour,
+	)
+	if err != nil {
+		return qtls.Certificate{}, err
+	}
+
+	// Parse the certificate to set the Leaf field
+	// This prevents TLS from trying to parse it with the standard library
+	_, leafCert, err := qtls.ParseMLDSACertificate(certBytes)
+	if err != nil {
+		return qtls.Certificate{}, err
+	}
+
+	return qtls.Certificate{
+		Certificate: [][]byte{certBytes},
+		PrivateKey:  mldsaSigner,
+		Leaf:        leafCert,
+		OCSPStaple:  nil,
+		SignedCertificateTimestamps: nil,
+	}, nil
 }
 
 // wrapWithMLDSASigner wraps the existing private key with an ML-DSA signer

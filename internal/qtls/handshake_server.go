@@ -928,7 +928,13 @@ func (c *Conn) processCertsFromClient(certificate Certificate) error {
 	certs := make([]*x509.Certificate, len(certificates))
 	var err error
 	for i, asn1Data := range certificates {
-		if certs[i], err = x509.ParseCertificate(asn1Data); err != nil {
+		// Try parsing as ML-DSA certificate first, fall back to standard parsing
+		if IsMLDSACertificateBytes(asn1Data) {
+			_, certs[i], err = ParseMLDSACertificate(asn1Data)
+		} else {
+			certs[i], err = x509.ParseCertificate(asn1Data)
+		}
+		if err != nil {
 			c.sendAlert(alertDecodeError)
 			return errors.New("tls: failed to parse client certificate: " + err.Error())
 		}

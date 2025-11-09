@@ -23,7 +23,14 @@ func (wcc *weakCertCache) newCert(der []byte) (*x509.Certificate, error) {
 		}
 	}
 
-	cert, err := x509.ParseCertificate(der)
+	// Try parsing as ML-DSA certificate first
+	var cert *x509.Certificate
+	var err error
+	if IsMLDSACertificateBytes(der) {
+		_, cert, err = ParseMLDSACertificate(der)
+	} else {
+		cert, err = x509.ParseCertificate(der)
+	}
 	if err != nil {
 		return nil, err
 	}
