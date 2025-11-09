@@ -51,6 +51,33 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("invalid QUIC version: %s", v)
 		}
 	}
+	// validate crypto mode
+	if config.CryptoMode != "" {
+		switch config.CryptoMode {
+		case "classical", "pqc", "auto":
+			// valid modes
+		default:
+			return fmt.Errorf("invalid CryptoMode: %s (must be 'classical', 'pqc', or 'auto')", config.CryptoMode)
+		}
+	}
+	// validate PQC security level
+	if config.PQCSecurityLevel != 0 {
+		switch config.PQCSecurityLevel {
+		case 768, 1024:
+			// valid security levels
+		default:
+			return fmt.Errorf("invalid PQCSecurityLevel: %d (must be 768 or 1024)", config.PQCSecurityLevel)
+		}
+	}
+	// validate PQC signature level
+	if config.PQCSignatureLevel != 0 {
+		switch config.PQCSignatureLevel {
+		case 44, 65, 87:
+			// valid signature security levels
+		default:
+			return fmt.Errorf("invalid PQCSignatureLevel: %d (must be 44, 65, or 87)", config.PQCSignatureLevel)
+		}
+	}
 	return nil
 }
 
@@ -104,6 +131,25 @@ func populateConfig(config *Config) *Config {
 	if initialPacketSize == 0 {
 		initialPacketSize = protocol.InitialPacketSize
 	}
+	cryptoMode := config.CryptoMode
+	if cryptoMode == "" {
+		cryptoMode = "classical" // default to classical for backward compatibility
+	}
+	pqcSecurityLevel := config.PQCSecurityLevel
+	if pqcSecurityLevel == 0 {
+		pqcSecurityLevel = 768 // default to ML-KEM-768 (192-bit security)
+	}
+	pqcSignatureLevel := config.PQCSignatureLevel
+	if pqcSignatureLevel == 0 {
+		// Auto-match signature level to key exchange level
+		if pqcSecurityLevel == 768 {
+			pqcSignatureLevel = 65 // ML-DSA-65 (192-bit) matches ML-KEM-768
+		} else if pqcSecurityLevel == 1024 {
+			pqcSignatureLevel = 87 // ML-DSA-87 (256-bit) matches ML-KEM-1024
+		} else {
+			pqcSignatureLevel = 65 // default to ML-DSA-65
+		}
+	}
 
 	return &Config{
 		GetConfigForClient:               config.GetConfigForClient,
@@ -124,6 +170,9 @@ func populateConfig(config *Config) *Config {
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,
 		EnableStreamResetPartialDelivery: config.EnableStreamResetPartialDelivery,
 		Allow0RTT:                        config.Allow0RTT,
+		CryptoMode:                       cryptoMode,
+		PQCSecurityLevel:                 pqcSecurityLevel,
+		PQCSignatureLevel:                pqcSignatureLevel,
 		Tracer:                           config.Tracer,
 	}
 }

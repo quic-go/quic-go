@@ -176,6 +176,21 @@ type Config struct {
 	// See https://datatracker.ietf.org/doc/html/draft-ietf-quic-reliable-stream-reset-07.
 	EnableStreamResetPartialDelivery bool
 
+	// CryptoMode specifies the cryptographic mode to use.
+	// Valid values: "classical" (X25519), "pqc" (ML-KEM), "auto" (negotiate)
+	// If not set, defaults to "classical" for backward compatibility.
+	CryptoMode string
+	// PQCSecurityLevel specifies the security level for PQC key exchange algorithms.
+	// Valid values: 768 (ML-KEM-768), 1024 (ML-KEM-1024)
+	// If not set, defaults to 768 (192-bit security).
+	// Only used when CryptoMode is "pqc" or "auto".
+	PQCSecurityLevel int
+	// PQCSignatureLevel specifies the security level for PQC signature algorithms.
+	// Valid values: 44 (ML-DSA-44, 128-bit), 65 (ML-DSA-65, 192-bit), 87 (ML-DSA-87, 256-bit)
+	// If not set, automatically matches PQCSecurityLevel: 768->65, 1024->87.
+	// Only used when CryptoMode is "pqc" or "auto".
+	PQCSignatureLevel int
+
 	Tracer func(ctx context.Context, isClient bool, connID ConnectionID) qlogwriter.Trace
 }
 
