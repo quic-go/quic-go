@@ -3,7 +3,7 @@ module github.com/quic-go/quic-go
 go 1.24
 
 require (
-	github.com/quic-go/qpack v0.5.1
+	github.com/quic-go/qpack v0.6.0
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/mock v0.5.2
 	golang.org/x/crypto v0.41.0

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -28,9 +27,7 @@ func decodeRequest(t *testing.T, str io.Reader, streamID quic.StreamID, eventRec
 	data := make([]byte, headersFrame.Length)
 	_, err = io.ReadFull(&r, data)
 	require.NoError(t, err)
-	decoder := qpack.NewDecoder(nil)
-	hfs, err := decoder.DecodeFull(data)
-	require.NoError(t, err)
+	hfs := decodeQpackHeaderFields(t, data)
 	values := make(map[string]string)
 	for _, hf := range hfs {
 		values[hf.Name] = hf.Value
