@@ -226,4 +226,10 @@ type ConnectionState struct {
 	Version Version
 	// GSO says if generic segmentation offload is used.
 	GSO bool
+	// MaxDatagramSize is the maximum size of a datagram payload that can be sent.
+	// This is the minimum of the peer's advertised limit and the maximum frame size
+	// according to the current MTU, connection ID length, and encryption overhead.
+	// This value may change as the MTU estimate is updated.
+	// If SupportsDatagrams is false, this value is 0.
+	MaxDatagramSize uint16 
 }

@@ -764,6 +764,66 @@ func (c *Conn) supportsDatagrams() bool {
 	return c.peerParams.MaxDatagramFrameSize > 0
 }
 
+// calculateMaxDatagramSize calculates the maximum datagram payload size that can be sent.
+// This is the minimum of the peer's advertised limit and the maximum frame size
+// according to the current MTU, connection ID length, and encryption overhead.
+func (c *Conn) calculateMaxDatagramSize() uint16 {
+	if !c.supportsDatagrams() {
+		return 0
+	}
+
+	// Get the peer's advertised limit
+	peerLimit := c.peerParams.MaxDatagramFrameSize
+
+	// Get current MTU estimate
+	currentMTU := protocol.ByteCount(c.currentMTUEstimate.Load())
+	if currentMTU == 0 {
+		// If MTU hasn't been discovered yet, use initial packet size
+		currentMTU = protocol.InitialPacketSize
+	}
+
+	// Get destination connection ID for sending
+	destConnID := c.connIDManager.Get()
+
+	// Get the actual packet number length that would be used for the next packet
+	// This gives us a more accurate estimate than using the maximum
+	_, pnLen := c.sentPacketHandler.PeekPacketNumber(protocol.Encryption1RTT)
+
+	// Calculate header size: 1 byte (type) + connection ID length + packet number length
+	headerLen := wire.ShortHeaderLen(destConnID, pnLen)
+
+	// Get AEAD overhead from the actual sealer for accuracy
+	// We need 1-RTT keys to send datagrams, so try to get the sealer
+	// cryptoStreamHandler is actually a handshake.CryptoSetup which implements Get1RTTSealer
+	var aeadOverhead protocol.ByteCount
+	if sealer, ok := c.cryptoStreamHandler.(interface {
+		Get1RTTSealer() (handshake.ShortHeaderSealer, error)
+	}); ok {
+		oneRTTSealer, err := sealer.Get1RTTSealer()
+		if err == nil {
+			aeadOverhead = protocol.ByteCount(oneRTTSealer.Overhead())
+		} else {
+			fmt.Println("sealer not found")
+			aeadOverhead = protocol.ByteCount(16)
+		}
+	} else {
+		aeadOverhead = protocol.ByteCount(16)
+	}
+
+	// Calculate maximum payload size: MTU - header - AEAD overhead
+	maxPayloadSize := currentMTU - headerLen - aeadOverhead
+	if maxPayloadSize <= 0 {
+		return 0
+	}
+
+	// Calculate max datagram data length using the frame's MaxDataLen method
+	// This accounts for the frame header overhead (1 byte type + varint length encoding)
+	datagramFrame := &wire.DatagramFrame{DataLenPresent: true}
+	maxDataLen := datagramFrame.MaxDataLen(min(peerLimit, maxPayloadSize), c.version)
+
+	return uint16(maxDataLen)
+}
+
 // ConnectionState returns basic details about the QUIC connection.
 func (c *Conn) ConnectionState() ConnectionState {
 	c.connStateMutex.Lock()
@@ -773,6 +833,8 @@ func (c *Conn) ConnectionState() ConnectionState {
 	c.connState.Used0RTT = cs.Used0RTT
 	c.connState.SupportsStreamResetPartialDelivery = c.peerParams.EnableResetStreamAt
 	c.connState.GSO = c.conn.capabilities().GSO
+	c.connState.SupportsDatagrams = c.supportsDatagrams()
+	c.connState.MaxDatagramSize = c.calculateMaxDatagramSize()
 	return c.connState
 }
 
@@ -2997,7 +3059,15 @@ func (c *Conn) SendDatagram(p []byte) error {
 		protocol.ByteCount(c.currentMTUEstimate.Load()),
 	)
 	if protocol.ByteCount(len(p)) > maxDataLen {
-		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
+		// maxDataLen is protocol.ByteCount (int64), but we know it fits in uint16
+		// since wire.MaxDatagramSize is 16383, which is well within uint16 range
+		var maxSize uint16
+		if maxDataLen > 65535 {
+			maxSize = 65535
+		} else {
+			maxSize = uint16(maxDataLen)
+		}
+		return &DatagramTooLargeError{MaxDatagramPayloadSize: maxSize}
 	}
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)

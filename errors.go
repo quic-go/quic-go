@@ -94,7 +94,7 @@ func (e *StreamError) Error() string {
 
 // DatagramTooLargeError is returned from Conn.SendDatagram if the payload is too large to be sent.
 type DatagramTooLargeError struct {
-	MaxDatagramPayloadSize int64
+	MaxDatagramPayloadSize uint16
 }
 
 func (e *DatagramTooLargeError) Is(target error) bool {

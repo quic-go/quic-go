@@ -252,3 +252,95 @@ func TestDatagramLoss(t *testing.T) {
 		assert.EqualValues(t, numDatagrams-numDroppedToClient, clientDatagrams, "datagrams received by the client")
 	})
 }
+
+func TestMaxDatagramSize(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const rtt = 10 * time.Millisecond
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLink(t, rtt)
+		defer closeFn(t)
+
+		server, err := quic.Listen(
+			serverPacketConn,
+			getTLSConfig(),
+			getQuicConfig(&quic.Config{EnableDatagrams: true}),
+		)
+		require.NoError(t, err)
+		defer server.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		clientConn, err := quic.Dial(
+			ctx,
+			clientPacketConn,
+			serverPacketConn.LocalAddr(),
+			getTLSClientConfig(),
+			getQuicConfig(&quic.Config{EnableDatagrams: true}),
+		)
+		require.NoError(t, err)
+		defer clientConn.CloseWithError(0, "")
+
+		serverConn, err := server.Accept(ctx)
+		require.NoError(t, err)
+		defer serverConn.CloseWithError(0, "")
+
+		// Wait for handshake to complete and MTU discovery to settle
+		// In synctest, time advances deterministically, so we can use a short sleep
+		time.Sleep(100 * time.Millisecond)
+		synctest.Wait() // Advance synctest time
+
+		// Get the maximum datagram size from ConnectionState
+		clientState := clientConn.ConnectionState()
+		require.True(t, clientState.SupportsDatagrams, "client should support datagrams")
+		require.Greater(t, clientState.MaxDatagramSize, uint16(0), "MaxDatagramSize should be greater than 0")
+
+		serverState := serverConn.ConnectionState()
+		require.True(t, serverState.SupportsDatagrams, "server should support datagrams")
+		require.Greater(t, serverState.MaxDatagramSize, uint16(0), "MaxDatagramSize should be greater than 0")
+
+		maxSize := clientState.MaxDatagramSize
+		t.Logf("MaxDatagramSize reported: %d bytes", maxSize)
+
+		// Test that a datagram of the reported maximum size can be sent
+		payloadMax := bytes.Repeat([]byte("a"), int(maxSize))
+		err = clientConn.SendDatagram(payloadMax)
+		require.NoError(t, err, "sending datagram of MaxDatagramSize should succeed")
+
+		// Wait a bit for the datagram to be received
+		// In synctest, we can use a shorter timeout since time is controlled
+		recvCtx, recvCancel := context.WithTimeout(ctx, time.Second)
+		defer recvCancel()
+		time.Sleep(50 * time.Millisecond)
+		synctest.Wait() // Advance time to process the datagram
+		received, err := serverConn.ReceiveDatagram(recvCtx)
+		require.NoError(t, err, "receiving datagram of MaxDatagramSize should succeed")
+		require.Equal(t, payloadMax, received, "received datagram should match sent datagram")
+
+		// Test that a datagram of size+1 cannot be sent (or gets an error)
+		payloadTooLarge := bytes.Repeat([]byte("b"), int(maxSize+1))
+		err = clientConn.SendDatagram(payloadTooLarge)
+		// The datagram should either be rejected immediately or dropped during packing
+		// If it's rejected, we get an error. If it's accepted but dropped, we won't receive it.
+		if err != nil {
+			// If we get an error, verify it's a DatagramTooLargeError
+			var sizeErr *quic.DatagramTooLargeError
+			require.ErrorAs(t, err, &sizeErr, "error should be DatagramTooLargeError")
+			t.Logf("Datagram of size %d was correctly rejected with error", maxSize+1)
+		} else {
+			// If no error, the datagram was accepted but might be dropped during packing
+			// Try to receive it with a short timeout - if it doesn't arrive, it was dropped
+			recvCtx2, recvCancel2 := context.WithTimeout(ctx, 100*time.Millisecond)
+			defer recvCancel2()
+			time.Sleep(50 * time.Millisecond)
+			synctest.Wait() // Advance time to see if datagram arrives
+			_, err := serverConn.ReceiveDatagram(recvCtx2)
+			if err != nil {
+				// If we get a timeout/context error, the datagram was dropped (which is expected)
+				require.ErrorIs(t, err, context.DeadlineExceeded, "datagram of size+1 should be dropped or timeout")
+				t.Logf("Datagram of size %d was accepted but dropped during packing (as expected)", maxSize+1)
+			} else {
+				// If we receive it, that's unexpected - the reported size was too conservative
+				t.Errorf("Unexpectedly received datagram of size %d, but MaxDatagramSize was reported as %d", maxSize+1, maxSize)
+			}
+		}
+	})
+}
