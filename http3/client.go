@@ -137,10 +137,15 @@ func (c *ClientConn) setupConn() error {
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream)
 	// send the SETTINGS frame
-	b = (&settingsFrame{Datagram: c.enableDatagrams, Other: c.additionalSettings}).Append(b)
+	b = (&settingsFrame{
+		Datagram:            c.enableDatagrams,
+		Other:               c.additionalSettings,
+		MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
+	}).Append(b)
 	if c.conn.qlogger != nil {
 		sf := qlog.SettingsFrame{
-			Other: maps.Clone(c.additionalSettings),
+			MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
+			Other:               maps.Clone(c.additionalSettings),
 		}
 		if c.enableDatagrams {
 			sf.Datagram = pointer(true)

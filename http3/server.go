@@ -454,14 +454,16 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream) // stream type
 	b = (&settingsFrame{
-		Datagram:        s.EnableDatagrams,
-		ExtendedConnect: true,
-		Other:           s.AdditionalSettings,
+		MaxFieldSectionSize: int64(s.maxHeaderBytes()),
+		Datagram:            s.EnableDatagrams,
+		ExtendedConnect:     true,
+		Other:               s.AdditionalSettings,
 	}).Append(b)
 	if qlogger != nil {
 		sf := qlog.SettingsFrame{
-			ExtendedConnect: pointer(true),
-			Other:           maps.Clone(s.AdditionalSettings),
+			MaxFieldSectionSize: int64(s.maxHeaderBytes()),
+			ExtendedConnect:     pointer(true),
+			Other:               maps.Clone(s.AdditionalSettings),
 		}
 		if s.EnableDatagrams {
 			sf.Datagram = pointer(true)

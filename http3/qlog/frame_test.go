@@ -91,8 +91,11 @@ func TestSettingsFrame(t *testing.T) {
 		expected map[string]any
 	}{
 		{
-			name:  "datagram: true",
-			frame: SettingsFrame{Datagram: pointer(true)},
+			name: "datagram: true",
+			frame: SettingsFrame{
+				MaxFieldSectionSize: -1,
+				Datagram:            pointer(true),
+			},
 			expected: map[string]any{
 				"frame_type": "settings",
 				"settings": []map[string]any{{
@@ -102,8 +105,11 @@ func TestSettingsFrame(t *testing.T) {
 			},
 		},
 		{
-			name:  "extended_connect: false",
-			frame: SettingsFrame{ExtendedConnect: pointer(false)},
+			name: "extended_connect: false",
+			frame: SettingsFrame{
+				MaxFieldSectionSize: -1,
+				ExtendedConnect:     pointer(false),
+			},
 			expected: map[string]any{
 				"frame_type": "settings",
 				"settings": []map[string]any{{
@@ -113,8 +119,23 @@ func TestSettingsFrame(t *testing.T) {
 			},
 		},
 		{
-			name:  "datagram: false, extended_connect: false",
-			frame: SettingsFrame{Datagram: pointer(false), ExtendedConnect: pointer(false)},
+			name:  "max_field_section_size",
+			frame: SettingsFrame{MaxFieldSectionSize: 1337},
+			expected: map[string]any{
+				"frame_type": "settings",
+				"settings": []map[string]any{{
+					"name":  "settings_max_field_section_size",
+					"value": float64(1337),
+				}},
+			},
+		},
+		{
+			name: "datagram: false, extended_connect: false",
+			frame: SettingsFrame{
+				MaxFieldSectionSize: -1,
+				Datagram:            pointer(false),
+				ExtendedConnect:     pointer(false),
+			},
 			expected: map[string]any{
 				"frame_type": "settings",
 				"settings": []map[string]any{
@@ -128,7 +149,10 @@ func TestSettingsFrame(t *testing.T) {
 			// Only test a single unknown setting.
 			// Testing multiple unknown settings doesn't add a lot of value,
 			// and would require us to deal with non-deterministic map iteration order.
-			frame: SettingsFrame{Other: map[uint64]uint64{0xdead: 0xbeef}},
+			frame: SettingsFrame{
+				MaxFieldSectionSize: -1,
+				Other:               map[uint64]uint64{0xdead: 0xbeef},
+			},
 			expected: map[string]any{
 				"frame_type": "settings",
 				"settings": []map[string]any{{

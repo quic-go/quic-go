@@ -245,6 +245,11 @@ func TestParserSettingsFrameDuplicateSettings(t *testing.T) {
 			val:  1,
 		},
 		{
+			name: "max field section size",
+			num:  settingMaxFieldSectionSize,
+			val:  1337,
+		},
+		{
 			name: "datagram",
 			num:  settingDatagram,
 			val:  1,
@@ -262,6 +267,42 @@ func TestParserSettingsFrameDuplicateSettings(t *testing.T) {
 			require.EqualError(t, err, fmt.Sprintf("duplicate setting: %d", tc.num))
 		})
 	}
+}
+
+func TestParserSettingsFrameMaxFieldSectionSize(t *testing.T) {
+	t.Run("absent", func(t *testing.T) {
+		testParserSettingsFrameMaxFieldSectionSize(t, false)
+	})
+
+	t.Run("with value", func(t *testing.T) {
+		testParserSettingsFrameMaxFieldSectionSize(t, true)
+	})
+}
+
+func testParserSettingsFrameMaxFieldSectionSize(t *testing.T, present bool) {
+	var settings []byte
+	if present {
+		settings = appendSetting(nil, settingMaxFieldSectionSize, 1337)
+	}
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
+
+	fp := frameParser{r: bytes.NewReader(data)}
+	f, err := fp.ParseNext(nil)
+	require.NoError(t, err)
+	require.IsType(t, &settingsFrame{}, f)
+	sf := f.(*settingsFrame)
+	if present {
+		require.EqualValues(t, 1337, sf.MaxFieldSectionSize)
+	} else {
+		require.EqualValues(t, -1, sf.MaxFieldSectionSize)
+	}
+
+	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
+	f2, err := fp.ParseNext(nil)
+	require.NoError(t, err)
+	require.Equal(t, sf, f2)
 }
 
 func TestParserSettingsFrameDatagram(t *testing.T) {

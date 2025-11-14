@@ -30,9 +30,10 @@ func TestConnReceiveSettings(t *testing.T) {
 	)
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	sf := &settingsFrame{
-		Datagram:        true,
-		ExtendedConnect: true,
-		Other:           map[uint64]uint64{1337: 42},
+		MaxFieldSectionSize: 1234,
+		Datagram:            true,
+		ExtendedConnect:     true,
+		Other:               map[uint64]uint64{1337: 42},
 	}
 	b = sf.Append(b)
 	controlStr, err := clientConn.OpenUniStream()
@@ -61,7 +62,14 @@ func TestConnReceiveSettings(t *testing.T) {
 			qlog.FrameParsed{
 				StreamID: controlStr.StreamID(),
 				Raw:      qlog.RawInfo{Length: expectedLen, PayloadLength: expectedPayloadLen},
-				Frame:    qlog.Frame{Frame: qlog.SettingsFrame{Datagram: pointer(true), ExtendedConnect: pointer(true), Other: map[uint64]uint64{1337: 42}}},
+				Frame: qlog.Frame{
+					Frame: qlog.SettingsFrame{
+						MaxFieldSectionSize: 1234,
+						Datagram:            pointer(true),
+						ExtendedConnect:     pointer(true),
+						Other:               map[uint64]uint64{1337: 42},
+					},
+				},
 			},
 		},
 		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameParsed{}), qlog.SettingsFrame{}),

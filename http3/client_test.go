@@ -67,8 +67,14 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 		[]qlogwriter.Event{
 			qlog.FrameCreated{
 				StreamID: str.StreamID(),
-				Raw:      qlog.RawInfo{Length: 5},
-				Frame:    qlog.Frame{Frame: qlog.SettingsFrame{Datagram: datagramValue, Other: other}},
+				Raw:      qlog.RawInfo{Length: 10},
+				Frame: qlog.Frame{
+					Frame: qlog.SettingsFrame{
+						MaxFieldSectionSize: defaultMaxResponseHeaderBytes,
+						Datagram:            datagramValue,
+						Other:               other,
+					},
+				},
 			},
 		},
 		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameCreated{}), qlog.SettingsFrame{}),
