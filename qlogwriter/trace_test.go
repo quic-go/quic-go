@@ -59,6 +59,11 @@ func TestTraceMetadata(t *testing.T) {
 			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 			[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
 		)
+
+		require.False(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:baz"))
+		require.True(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:foo"))
+		require.True(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:bar"))
+
 		go trace.Run()
 		producer := trace.AddProducer()
 		producer.Close()
