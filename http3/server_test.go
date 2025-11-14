@@ -415,8 +415,9 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 
 	go s.ServeQUICConn(serverConn)
 
-	expectStreamReadReset(t, str, quic.StreamErrorCode(ErrCodeFrameError))
-	expectStreamWriteReset(t, str, quic.StreamErrorCode(ErrCodeFrameError))
+	hfs := decodeHeader(t, str)
+	require.Equal(t, []string{"431"}, hfs[":status"])
+	expectStreamWriteReset(t, str, quic.StreamErrorCode(ErrCodeExcessiveLoad))
 	require.False(t, called)
 }
 

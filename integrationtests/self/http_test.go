@@ -25,7 +25,9 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/http3/qlog"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,11 +81,14 @@ func startHTTPServer(t *testing.T, mux *http.ServeMux, opts ...func(*http3.Serve
 	return conn.LocalAddr().(*net.UDPAddr).Port
 }
 
-func newHTTP3Client(t *testing.T) *http.Client {
+func newHTTP3Client(t *testing.T, opts ...func(*http3.Transport)) *http.Client {
 	tr := &http3.Transport{
 		TLSClientConfig:    getTLSClientConfigWithoutServerName(),
 		QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		DisableCompression: true,
+	}
+	for _, opt := range opts {
+		opt(tr)
 	}
 	addDialCallback(t, tr)
 	t.Cleanup(func() { tr.Close() })
@@ -241,6 +246,133 @@ func TestHTTPHeaders(t *testing.T) {
 	require.Equal(t, "bar", resp.Header.Get("foo"))
 	require.Equal(t, "ipsum", resp.Header.Get("lorem"))
 	require.Equal(t, echoHdr, resp.Header.Get("echo"))
+}
+
+func TestHTTPHeaderSizeLimitServer(t *testing.T) {
+	t.Run("large HEADERS frame", func(t *testing.T) {
+		const limit = 1024
+		hdr := make(http.Header)
+		for range 20 {
+			hdr.Add(randomString(50), randomString(50))
+		}
+		headersFrameSize := testHTTPHeaderSizeLimitServer(t, hdr, limit)
+		require.Greater(t, headersFrameSize, limit)
+	})
+
+	t.Run("large decompressed HEADERS frame", func(t *testing.T) {
+		const limit = 1024
+		hdr := make(http.Header)
+		for range 200 {
+			// This is a QPACK static table entry, so it will be compressed.
+			hdr.Add("content-type", "text/plain;charset=utf-8")
+		}
+		headersFrameSize := testHTTPHeaderSizeLimitServer(t, hdr, limit)
+		require.Less(t, headersFrameSize, limit)
+	})
+}
+
+func testHTTPHeaderSizeLimitServer(t *testing.T, hdr http.Header, limit int) (headersFrameSize int) {
+	mux := http.NewServeMux()
+	var handlerCalled bool
+	mux.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+	})
+	port := startHTTPServer(t, mux, func(s *http3.Server) { s.MaxHeaderBytes = limit })
+
+	var eventRecorder events.Recorder
+	cl := newHTTP3Client(t, func(tr *http3.Transport) {
+		tr.QUICConfig = getQuicConfig(&quic.Config{
+			MaxIdleTimeout: 10 * time.Second,
+			Tracer:         newTracer(&eventRecorder),
+		})
+	})
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/headers", port), nil)
+	require.NoError(t, err)
+	req.Header = hdr
+
+	resp, err := cl.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusRequestHeaderFieldsTooLarge, resp.StatusCode)
+	require.False(t, handlerCalled)
+
+	for _, ev := range eventRecorder.Events(qlog.FrameCreated{}) {
+		fc := ev.(qlog.FrameCreated)
+		if _, ok := fc.Frame.Frame.(qlog.HeadersFrame); ok {
+			headersFrameSize = fc.Raw.Length
+			break
+		}
+	}
+	return headersFrameSize
+}
+
+func TestHTTPHeaderSizeLimitClient(t *testing.T) {
+	t.Run("large HEADERS frame", func(t *testing.T) {
+		const limit = 1024
+		hdr := make(http.Header)
+		for range 20 {
+			hdr.Add(randomString(50), randomString(50))
+		}
+		headersFrameSize, requestErr := testHTTPHeaderSizeLimitClient(t, hdr, limit)
+		require.ErrorContains(t, requestErr, "http3: HEADERS frame too large")
+		require.Greater(t, headersFrameSize, limit)
+	})
+
+	t.Run("large decompressed HEADERS frame", func(t *testing.T) {
+		const limit = 1024
+		hdr := make(http.Header)
+		for range 200 {
+			// This is a QPACK static table entry, so it will be compressed.
+			hdr.Add("content-type", "text/plain;charset=utf-8")
+		}
+		headersFrameSize, requestErr := testHTTPHeaderSizeLimitClient(t, hdr, limit)
+		require.ErrorContains(t, requestErr, "http3: headers too large")
+		require.Less(t, headersFrameSize, limit)
+	})
+}
+
+func testHTTPHeaderSizeLimitClient(t *testing.T, hdr http.Header, limit int) (headersFrameSize int, requestErr error) {
+	mux := http.NewServeMux()
+	var handlerCalled atomic.Bool
+	mux.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled.Store(true)
+		for k, v := range hdr {
+			for _, val := range v {
+				w.Header().Add(k, val)
+			}
+		}
+	})
+	port := startHTTPServer(t, mux)
+
+	var eventRecorder events.Recorder
+	cl := newHTTP3Client(t,
+		func(tr *http3.Transport) {
+			tr.MaxResponseHeaderBytes = limit
+			tr.QUICConfig = getQuicConfig(&quic.Config{
+				MaxIdleTimeout: 10 * time.Second,
+				Tracer:         newTracer(&eventRecorder),
+			})
+		},
+	)
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/headers", port), nil)
+	require.NoError(t, err)
+
+	_, requestErr = cl.Do(req)
+	require.Error(t, requestErr)
+	require.True(t, handlerCalled.Load())
+
+	var found bool
+	for _, ev := range eventRecorder.Events(qlog.FrameParsed{}) {
+		fp := ev.(qlog.FrameParsed)
+		if _, ok := fp.Frame.Frame.(qlog.HeadersFrame); ok {
+			headersFrameSize = fp.Raw.PayloadLength
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+	return headersFrameSize, requestErr
 }
 
 func TestHTTPTrailers(t *testing.T) {

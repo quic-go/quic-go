@@ -20,6 +20,8 @@ type qpackError struct{ err error }
 func (e *qpackError) Error() string { return fmt.Sprintf("qpack: %v", e.err) }
 func (e *qpackError) Unwrap() error { return e.err }
 
+var errHeaderTooLarge = errors.New("http3: headers too large")
+
 type header struct {
 	// Pseudo header fields defined in RFC 9114
 	Path      string
@@ -44,7 +46,7 @@ var invalidHeaderFields = [...]string{
 	"upgrade",
 }
 
-func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, headerFields *[]qpack.HeaderField) (header, error) {
+func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, sizeLimit int, headerFields *[]qpack.HeaderField) (header, error) {
 	hdr := header{Headers: make(http.Header)}
 	var readFirstRegularHeader, readContentLength bool
 	var contentLengthStr string
@@ -58,6 +60,13 @@ func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, headerFields *[]qpa
 		}
 		if headerFields != nil {
 			*headerFields = append(*headerFields, h)
+		}
+		// RFC 9114, section 4.2.2:
+		// The size of a field list is calculated based on the uncompressed size of fields,
+		// including the length of the name and value in bytes plus an overhead of 32 bytes for each field.
+		sizeLimit -= len(h.Name) + len(h.Value) + 32
+		if sizeLimit < 0 {
+			return header{}, errHeaderTooLarge
 		}
 		// field names need to be lowercase, see section 4.2 of RFC 9114
 		if strings.ToLower(h.Name) != h.Name {
@@ -167,8 +176,8 @@ func parseTrailers(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField)
 	return h, nil
 }
 
-func requestFromHeaders(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField) (*http.Request, error) {
-	hdr, err := parseHeaders(decodeFn, true, headerFields)
+func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpack.HeaderField) (*http.Request, error) {
+	hdr, err := parseHeaders(decodeFn, true, sizeLimit, headerFields)
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +250,8 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderF
 // using the decoded qpack header filed.
 // It is only called for the HTTP header (and not the HTTP trailer).
 // It takes an http.Response as an argument to allow the caller to set the trailer later on.
-func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField) error {
-	hdr, err := parseHeaders(decodeFn, false, headerFields)
+func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpack.HeaderField) error {
+	hdr, err := parseHeaders(decodeFn, false, sizeLimit, headerFields)
 	if err != nil {
 		return err
 	}
