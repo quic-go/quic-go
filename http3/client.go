@@ -59,7 +59,7 @@ type ClientConn struct {
 
 	// maxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
-	maxResponseHeaderBytes uint64
+	maxResponseHeaderBytes int
 
 	// disableCompression, if true, prevents the Transport from requesting compression with an
 	// "Accept-Encoding: gzip" request header when the Request contains no existing Accept-Encoding value.
@@ -82,7 +82,7 @@ func newClientConn(
 	additionalSettings map[uint64]uint64,
 	streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error),
 	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool),
-	maxResponseHeaderBytes int64,
+	maxResponseHeaderBytes int,
 	disableCompression bool,
 	logger *slog.Logger,
 ) *ClientConn {
@@ -95,7 +95,7 @@ func newClientConn(
 	if maxResponseHeaderBytes <= 0 {
 		c.maxResponseHeaderBytes = defaultMaxResponseHeaderBytes
 	} else {
-		c.maxResponseHeaderBytes = uint64(maxResponseHeaderBytes)
+		c.maxResponseHeaderBytes = maxResponseHeaderBytes
 	}
 	c.decoder = qpack.NewDecoder(func(hf qpack.HeaderField) {})
 	c.requestWriter = newRequestWriter()

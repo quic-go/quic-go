@@ -170,7 +170,7 @@ type RequestStream struct {
 
 	decoder            *qpack.Decoder
 	requestWriter      *requestWriter
-	maxHeaderBytes     uint64
+	maxHeaderBytes     int
 	reqDone            chan<- struct{}
 	disableCompression bool
 	response           *http.Response
@@ -186,7 +186,7 @@ func newRequestStream(
 	reqDone chan<- struct{},
 	decoder *qpack.Decoder,
 	disableCompression bool,
-	maxHeaderBytes uint64,
+	maxHeaderBytes int,
 	rsp *http.Response,
 ) *RequestStream {
 	return &RequestStream{
@@ -329,7 +329,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
 	}
-	if hf.Length > s.maxHeaderBytes {
+	if hf.Length > uint64(s.maxHeaderBytes) {
 		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))

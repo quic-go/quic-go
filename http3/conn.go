@@ -147,7 +147,7 @@ func (c *Conn) openRequestStream(
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
 	disableCompression bool,
-	maxHeaderBytes uint64,
+	maxHeaderBytes int,
 ) (*RequestStream, error) {
 	c.streamMx.Lock()
 	maxStreamID := c.maxStreamID
@@ -193,8 +193,8 @@ func (c *Conn) openRequestStream(
 	), nil
 }
 
-func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, hf *headersFrame, maxHeaderBytes uint64) (http.Header, error) {
-	if hf.Length > maxHeaderBytes {
+func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, hf *headersFrame, maxHeaderBytes int) (http.Header, error) {
+	if hf.Length > uint64(maxHeaderBytes) {
 		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, hf.Length)
 		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
