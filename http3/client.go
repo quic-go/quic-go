@@ -337,31 +337,37 @@ func (c *ClientConn) sendRequestBody(str *RequestStream, body io.ReadCloser, con
 
 func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Response, error) {
 	trace := httptrace.ContextClientTrace(req.Context())
+	var sendingReqFailed bool
 	if err := str.sendRequestHeader(req); err != nil {
 		traceWroteRequest(trace, err)
-		return nil, err
+		if c.logger != nil {
+			c.logger.Debug("error writing request", "error", err)
+		}
+		sendingReqFailed = true
 	}
-	if req.Body == nil {
-		traceWroteRequest(trace, nil)
-		str.Close()
-	} else {
-		// send the request body asynchronously
-		go func() {
-			contentLength := int64(-1)
-			// According to the documentation for http.Request.ContentLength,
-			// a value of 0 with a non-nil Body is also treated as unknown content length.
-			if req.ContentLength > 0 {
-				contentLength = req.ContentLength
-			}
-			err := c.sendRequestBody(str, req.Body, contentLength)
-			traceWroteRequest(trace, err)
-			if err != nil {
-				if c.logger != nil {
-					c.logger.Debug("error writing request", "error", err)
-				}
-			}
+	if !sendingReqFailed {
+		if req.Body == nil {
+			traceWroteRequest(trace, nil)
 			str.Close()
-		}()
+		} else {
+			// send the request body asynchronously
+			go func() {
+				contentLength := int64(-1)
+				// According to the documentation for http.Request.ContentLength,
+				// a value of 0 with a non-nil Body is also treated as unknown content length.
+				if req.ContentLength > 0 {
+					contentLength = req.ContentLength
+				}
+				err := c.sendRequestBody(str, req.Body, contentLength)
+				traceWroteRequest(trace, err)
+				if err != nil {
+					if c.logger != nil {
+						c.logger.Debug("error writing request", "error", err)
+					}
+				}
+				str.Close()
+			}()
+		}
 	}
 
 	// copy from net/http: support 1xx responses
