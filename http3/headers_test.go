@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -499,4 +500,45 @@ func BenchmarkRequestFromHeaders(b *testing.B) {
 			b.Fatalf("failed to parse request: %v", err)
 		}
 	}
+}
+
+func TestQPACKErrorWrapping(t *testing.T) {
+	t.Run("parseHeaders wraps QPACK errors", func(t *testing.T) {
+		qpackErr := fmt.Errorf("qpack decoding failed")
+		decodeFn := func() (qpack.HeaderField, error) {
+			return qpack.HeaderField{}, qpackErr
+		}
+		_, err := parseHeaders(decodeFn, true, nil)
+		require.Error(t, err)
+		var qErr *qpackError
+		require.ErrorAs(t, err, &qErr)
+		require.Equal(t, qpackErr, qErr.Unwrap())
+	})
+
+	t.Run("parseTrailers wraps QPACK errors", func(t *testing.T) {
+		qpackErr := fmt.Errorf("qpack decoding failed")
+		decodeFn := func() (qpack.HeaderField, error) {
+			return qpack.HeaderField{}, qpackErr
+		}
+		_, err := parseTrailers(decodeFn, nil)
+		require.Error(t, err)
+		var qErr *qpackError
+		require.ErrorAs(t, err, &qErr)
+		require.Equal(t, qpackErr, qErr.Unwrap())
+	})
+
+	t.Run("semantic errors are not wrapped", func(t *testing.T) {
+		// Test that semantic validation errors (non-QPACK errors) are not wrapped
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/"},
+			{Name: ":method", Value: "GET"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":authority", Value: "example.com"},
+			{Name: "UPPERCASE", Value: "value"}, // Invalid: not lowercase
+		}
+		_, err := parseHeaders(decodeFromSlice(headers), true, nil)
+		require.Error(t, err)
+		var qErr *qpackError
+		require.False(t, errors.As(err, &qErr), "semantic errors should not be wrapped as qpackError")
+	})
 }

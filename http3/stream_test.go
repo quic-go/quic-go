@@ -240,3 +240,40 @@ func TestRequestStream(t *testing.T) {
 	require.Equal(t, 6, n)
 	require.Equal(t, []byte("foobar"), b[:n])
 }
+
+func TestRequestStreamUsesQPACKErrorCode(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	decoder := qpack.NewDecoder()
+
+	// Create a valid HEADERS frame with intentionally corrupted QPACK data
+	// This will cause QPACK decoding to fail
+	hf := &headersFrame{Length: 100}
+	hfBytes := hf.Append(nil)
+	corruptedQPACKData := bytes.Repeat([]byte{0xff}, 100) // Invalid QPACK data
+	headerData := append(hfBytes, corruptedQPACKData...)
+
+	buf := bytes.NewBuffer(headerData)
+
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	str.EXPECT().Context().Return(context.Background()).AnyTimes()
+	// Expect CancelRead and CancelWrite to be called with QPACK error code
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeQPACKDecompressionFailed))
+	str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeQPACKDecompressionFailed))
+
+	reqStream := newRequestStream(
+		newStream(str, &Conn{decoder: decoder, isServer: false}, nil, nil, nil),
+		nil,
+		nil,
+		decoder,
+		false,
+		10000,
+		&http.Response{},
+	)
+	reqStream.sentRequest = true
+
+	_, err := reqStream.ReadResponse()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid response")
+}
