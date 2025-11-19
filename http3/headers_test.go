@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"testing"
@@ -451,4 +452,40 @@ func TestResponseTrailerParsingValidation(t *testing.T) {
 	}
 	_, err := parseTrailers(headers)
 	require.EqualError(t, err, "http3: received pseudo header in trailer: :status")
+}
+
+func BenchmarkRequestFromHeaders(b *testing.B) {
+	b.ReportAllocs()
+
+	headers := []qpack.HeaderField{
+		{Name: ":path", Value: "/api/v1/users/12345"},
+		{Name: ":authority", Value: "quic-go.net"},
+		{Name: ":method", Value: http.MethodPost},
+		{Name: "content-type", Value: "application/json"},
+		{Name: "content-length", Value: "1024"},
+		{Name: "user-agent", Value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"},
+		{Name: "accept", Value: "application/json, text/plain, */*"},
+		{Name: "accept-encoding", Value: "gzip, deflate, br"},
+		{Name: "accept-language", Value: "en-US,en;q=0.9"},
+		{Name: "cache-control", Value: "no-cache"},
+		{Name: "cookie", Value: "session_id=abc123"},
+		{Name: "cookie", Value: "user_pref=dark_mode"},
+		{Name: "referer", Value: "https://quic-go.net/docs/http3/"},
+	}
+	var buf bytes.Buffer
+	enc := qpack.NewEncoder(&buf)
+	for _, hf := range headers {
+		require.NoError(b, enc.WriteField(hf))
+	}
+
+	dec := qpack.NewDecoder(func(f qpack.HeaderField) {})
+	for b.Loop() {
+		hfs, err := dec.DecodeFull(buf.Bytes())
+		if err != nil {
+			b.Fatalf("failed to decode headers: %v", err)
+		}
+		if _, err := requestFromHeaders(hfs); err != nil {
+			b.Fatalf("failed to parse request: %v", err)
+		}
+	}
 }
