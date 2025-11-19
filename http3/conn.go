@@ -210,6 +210,7 @@ func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, hf *headersFr
 	}
 	trailers, err := parseTrailers(decodeFn, &fields)
 	if err != nil {
+		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, hf.Length)
 		return nil, err
 	}
 	if c.qlogger != nil {
