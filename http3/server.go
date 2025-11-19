@@ -623,16 +623,15 @@ func (s *Server) handleRequest(
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return
 	}
-	hfs, err := decoder.DecodeFull(headerBlock)
-	if err != nil {
-		// TODO: use the right error code
-		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeGeneralProtocolError), "expected first frame to be a HEADERS frame")
-		return
+	decodeFn := decoder.Decode(headerBlock)
+	var hfs []qpack.HeaderField
+	if qlogger != nil {
+		hfs = make([]qpack.HeaderField, 0, 16)
 	}
+	req, err := requestFromHeaders(decodeFn, &hfs)
 	if qlogger != nil {
 		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
 	}
-	req, err := requestFromHeaders(hfs)
 	if err != nil {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))

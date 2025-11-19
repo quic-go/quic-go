@@ -10,8 +10,6 @@ import (
 	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/testutils/events"
 
-	"github.com/quic-go/qpack"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -28,8 +26,6 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]
 
 	rw.Flush()
 	rw.flushTrailers()
-	decoder := qpack.NewDecoder(nil)
-
 	startLen := rw.buf.Len()
 	frame, err := (&frameParser{r: rw.buf}).ParseNext(nil)
 	require.NoError(t, err)
@@ -39,8 +35,7 @@ func (rw *testResponseWriter) DecodeHeaders(t *testing.T, idx int) map[string][]
 	headerFrameLen := startLen - rw.buf.Len() + len(data)
 	_, err = io.ReadFull(rw.buf, data)
 	require.NoError(t, err)
-	hfs, err := decoder.DecodeFull(data)
-	require.NoError(t, err)
+	hfs := decodeQpackHeaderFields(t, data)
 
 	// check that the decoded header fields are properly logged
 	require.GreaterOrEqual(t, len(rw.eventRecorder.Events(qlog.FrameCreated{})), idx+1)

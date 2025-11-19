@@ -3,6 +3,7 @@ package http3
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -38,11 +39,21 @@ var invalidHeaderFields = [...]string{
 	"upgrade",
 }
 
-func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
-	hdr := header{Headers: make(http.Header, len(headers))}
+func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, headerFields *[]qpack.HeaderField) (header, error) {
+	hdr := header{Headers: make(http.Header)}
 	var readFirstRegularHeader, readContentLength bool
 	var contentLengthStr string
-	for _, h := range headers {
+	for {
+		h, err := decodeFn()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return header{}, err
+		}
+		if headerFields != nil {
+			*headerFields = append(*headerFields, h)
+		}
 		// field names need to be lowercase, see section 4.2 of RFC 9114
 		if strings.ToLower(h.Name) != h.Name {
 			return header{}, fmt.Errorf("header field is not lower-case: %s", h.Name)
@@ -130,19 +141,29 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 	return hdr, nil
 }
 
-func parseTrailers(headers []qpack.HeaderField) (http.Header, error) {
-	h := make(http.Header, len(headers))
-	for _, field := range headers {
-		if field.IsPseudo() {
-			return nil, fmt.Errorf("http3: received pseudo header in trailer: %s", field.Name)
+func parseTrailers(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField) (http.Header, error) {
+	h := make(http.Header)
+	for {
+		hf, err := decodeFn()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
 		}
-		h.Add(field.Name, field.Value)
+		if headerFields != nil {
+			*headerFields = append(*headerFields, hf)
+		}
+		if hf.IsPseudo() {
+			return nil, fmt.Errorf("http3: received pseudo header in trailer: %s", hf.Name)
+		}
+		h.Add(hf.Name, hf.Value)
 	}
 	return h, nil
 }
 
-func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error) {
-	hdr, err := parseHeaders(headerFields, true)
+func requestFromHeaders(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField) (*http.Request, error) {
+	hdr, err := parseHeaders(decodeFn, true, headerFields)
 	if err != nil {
 		return nil, err
 	}
@@ -215,8 +236,8 @@ func requestFromHeaders(headerFields []qpack.HeaderField) (*http.Request, error)
 // using the decoded qpack header filed.
 // It is only called for the HTTP header (and not the HTTP trailer).
 // It takes an http.Response as an argument to allow the caller to set the trailer later on.
-func updateResponseFromHeaders(rsp *http.Response, headerFields []qpack.HeaderField) error {
-	hdr, err := parseHeaders(headerFields, false)
+func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField) error {
+	hdr, err := parseHeaders(decodeFn, false, headerFields)
 	if err != nil {
 		return err
 	}

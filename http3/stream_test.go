@@ -198,7 +198,7 @@ func TestRequestStream(t *testing.T) {
 		),
 		requestWriter,
 		make(chan struct{}),
-		qpack.NewDecoder(func(qpack.HeaderField) {}),
+		qpack.NewDecoder(),
 		true,
 		math.MaxInt,
 		&http.Response{},
