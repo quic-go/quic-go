@@ -28,6 +28,17 @@ func (e *qpackError) Unwrap() error {
 	return e.err
 }
 
+// getErrorCodeForHeaderError returns the appropriate error code for a header parsing error.
+// QPACK decompression errors use ErrCodeQPACKDecompressionFailed, while HTTP/3 semantic
+// validation errors use ErrCodeMessageError.
+func getErrorCodeForHeaderError(err error) ErrCode {
+	var qpackErr *qpackError
+	if errors.As(err, &qpackErr) {
+		return ErrCodeQPACKDecompressionFailed
+	}
+	return ErrCodeMessageError
+}
+
 type header struct {
 	// Pseudo header fields defined in RFC 9114
 	Path      string

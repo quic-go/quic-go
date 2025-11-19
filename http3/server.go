@@ -633,11 +633,7 @@ func (s *Server) handleRequest(
 		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
 	}
 	if err != nil {
-		errCode := ErrCodeMessageError
-		var qpackErr *qpackError
-		if errors.As(err, &qpackErr) {
-			errCode = ErrCodeQPACKDecompressionFailed
-		}
+		errCode := getErrorCodeForHeaderError(err)
 		str.CancelRead(quic.StreamErrorCode(errCode))
 		str.CancelWrite(quic.StreamErrorCode(errCode))
 		return
