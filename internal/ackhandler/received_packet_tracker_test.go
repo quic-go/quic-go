@@ -71,9 +71,8 @@ func TestAppDataReceivedPacketTrackerECN(t *testing.T) {
 
 func TestAppDataReceivedPacketTrackerAckEverySecondPacket(t *testing.T) {
 	tr := newAppDataReceivedPacketTracker(utils.DefaultLogger)
-	// the first packet is always acknowledged
-	require.NoError(t, tr.ReceivedPacket(0, protocol.ECNNon, monotime.Now(), true))
-	require.NotNil(t, tr.GetAckFrame(monotime.Now(), true))
+	require.Nil(t, tr.GetAckFrame(monotime.Now(), true))
+
 	for p := protocol.PacketNumber(1); p <= 20; p++ {
 		require.NoError(t, tr.ReceivedPacket(p, protocol.ECNNon, monotime.Now(), true))
 		switch p % 2 {
@@ -87,10 +86,6 @@ func TestAppDataReceivedPacketTrackerAckEverySecondPacket(t *testing.T) {
 
 func TestAppDataReceivedPacketTrackerAlarmTimeout(t *testing.T) {
 	tr := newAppDataReceivedPacketTracker(utils.DefaultLogger)
-
-	// the first packet is always acknowledged
-	require.NoError(t, tr.ReceivedPacket(0, protocol.ECNNon, monotime.Now(), true))
-	require.NotNil(t, tr.GetAckFrame(monotime.Now(), true))
 
 	now := monotime.Now()
 	require.NoError(t, tr.ReceivedPacket(1, protocol.ECNNon, now, false))
@@ -110,10 +105,6 @@ func TestAppDataReceivedPacketTrackerAlarmTimeout(t *testing.T) {
 func TestAppDataReceivedPacketTrackerQueuesECNCE(t *testing.T) {
 	tr := newAppDataReceivedPacketTracker(utils.DefaultLogger)
 
-	// the first packet is always acknowledged
-	require.NoError(t, tr.ReceivedPacket(0, protocol.ECNNon, monotime.Now(), true))
-	require.NotNil(t, tr.GetAckFrame(monotime.Now(), true))
-
 	require.NoError(t, tr.ReceivedPacket(1, protocol.ECNCE, monotime.Now(), true))
 	ack := tr.GetAckFrame(monotime.Now(), true)
 	require.NotNil(t, ack)
@@ -125,9 +116,8 @@ func TestAppDataReceivedPacketTrackerMissingPackets(t *testing.T) {
 	tr := newAppDataReceivedPacketTracker(utils.DefaultLogger)
 
 	now := monotime.Now()
-	// the first packet is always acknowledged
 	require.NoError(t, tr.ReceivedPacket(0, protocol.ECNNon, now, true))
-	require.NotNil(t, tr.GetAckFrame(now, true))
+	require.Nil(t, tr.GetAckFrame(now, true))
 
 	require.NoError(t, tr.ReceivedPacket(5, protocol.ECNNon, now, true))
 	ack := tr.GetAckFrame(now, true) // ACK: 0 and 5, missing: 1, 2, 3, 4
