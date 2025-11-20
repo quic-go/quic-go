@@ -3,10 +3,13 @@ package self_test
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/synctest"
+	"github.com/quic-go/quic-go/testutils/simnet"
 
 	"github.com/stretchr/testify/require"
 )
@@ -66,65 +69,84 @@ func TestTLSSessionResumption(t *testing.T) {
 }
 
 func handshakeWithSessionResumption(t *testing.T, serverTLSConf *tls.Config, expectSessionTicket bool) {
-	server, err := quic.Listen(newUDPConnLocalhost(t), serverTLSConf, getQuicConfig(nil))
-	require.NoError(t, err)
-	defer server.Close()
+	synctest.Test(t, func(t *testing.T) {
+		const rtt = 10 * time.Millisecond
 
-	gets := make(chan string, 100)
-	puts := make(chan string, 100)
-	cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
-	tlsConf := getTLSClientConfig()
-	tlsConf.ClientSessionCache = cache
-
-	// first connection - doesn't use resumption
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	conn1, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), tlsConf, getQuicConfig(nil))
-	require.NoError(t, err)
-	defer conn1.CloseWithError(0, "")
-	require.False(t, conn1.ConnectionState().TLS.DidResume)
-
-	var sessionKey string
-	select {
-	case sessionKey = <-puts:
-		if !expectSessionTicket {
-			t.Fatal("unexpected session ticket")
+		n := &simnet.Simnet{Router: &simnet.PerfectRouter{}}
+		defer n.Close()
+		settings := simnet.NodeBiDiLinkSettings{
+			Downlink: simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
+			Uplink:   simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
 		}
-	case <-time.After(scaleDuration(50 * time.Millisecond)):
+		clientPacketConn1 := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
+		defer clientPacketConn1.Close()
+		clientPacketConn2 := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9001}, settings)
+		defer clientPacketConn2.Close()
+		serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.3"), Port: 9002}, settings)
+		defer serverPacketConn.Close()
+
+		require.NoError(t, n.Start())
+
+		server, err := quic.Listen(serverPacketConn, serverTLSConf, getQuicConfig(nil))
+		require.NoError(t, err)
+		defer server.Close()
+
+		gets := make(chan string, 100)
+		puts := make(chan string, 100)
+		cache := newClientSessionCache(tls.NewLRUClientSessionCache(10), gets, puts)
+		tlsConf := getTLSClientConfig()
+		tlsConf.ClientSessionCache = cache
+
+		// first connection - doesn't use resumption
+		conn1, err := quic.Dial(context.Background(), clientPacketConn1, server.Addr(), tlsConf, getQuicConfig(nil))
+		require.NoError(t, err)
+		defer conn1.CloseWithError(0, "")
+		require.False(t, conn1.ConnectionState().TLS.DidResume)
+
+		var sessionKey string
+		select {
+		case sessionKey = <-puts:
+			if !expectSessionTicket {
+				t.Fatal("unexpected session ticket")
+			}
+		case <-time.After(time.Hour):
+			if expectSessionTicket {
+				t.Fatal("timeout waiting for session ticket")
+			}
+		}
+
+		serverConn1, err := server.Accept(context.Background())
+		require.NoError(t, err)
+		require.False(t, serverConn1.ConnectionState().TLS.DidResume)
+		defer serverConn1.CloseWithError(0, "")
+
+		// second connection - will use resumption, if enabled
+		conn2, err := quic.Dial(context.Background(), clientPacketConn2, server.Addr(), tlsConf, getQuicConfig(nil))
+		require.NoError(t, err)
+		defer conn2.CloseWithError(0, "")
+
+		select {
+		case k := <-gets:
+			if expectSessionTicket {
+				// we can only perform this check if we got a session ticket before
+				require.Equal(t, sessionKey, k)
+			}
+		case <-time.After(time.Hour):
+			if expectSessionTicket {
+				t.Fatal("timeout waiting for retrieval of session ticket")
+			}
+		}
+
+		serverConn2, err := server.Accept(context.Background())
+		require.NoError(t, err)
+		defer serverConn2.CloseWithError(0, "")
+
 		if expectSessionTicket {
-			t.Fatal("timeout waiting for session ticket")
+			require.True(t, conn2.ConnectionState().TLS.DidResume)
+			require.True(t, serverConn2.ConnectionState().TLS.DidResume)
+		} else {
+			require.False(t, conn2.ConnectionState().TLS.DidResume)
+			require.False(t, serverConn2.ConnectionState().TLS.DidResume)
 		}
-	}
-
-	serverConn, err := server.Accept(ctx)
-	require.NoError(t, err)
-	require.False(t, serverConn.ConnectionState().TLS.DidResume)
-
-	// second connection - will use resumption, if enabled
-	conn2, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), tlsConf, getQuicConfig(nil))
-	require.NoError(t, err)
-	defer conn2.CloseWithError(0, "")
-
-	select {
-	case k := <-gets:
-		if expectSessionTicket {
-			// we can only perform this check if we got a session ticket before
-			require.Equal(t, sessionKey, k)
-		}
-	case <-time.After(scaleDuration(50 * time.Millisecond)):
-		if expectSessionTicket {
-			t.Fatal("timeout waiting for retrieval of session ticket")
-		}
-	}
-
-	serverConn, err = server.Accept(context.Background())
-	require.NoError(t, err)
-
-	if expectSessionTicket {
-		require.True(t, conn2.ConnectionState().TLS.DidResume)
-		require.True(t, serverConn.ConnectionState().TLS.DidResume)
-	} else {
-		require.False(t, conn2.ConnectionState().TLS.DidResume)
-		require.False(t, serverConn.ConnectionState().TLS.DidResume)
-	}
+	})
 }
