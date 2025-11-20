@@ -15,6 +15,11 @@ import (
 	"github.com/quic-go/qpack"
 )
 
+type qpackError struct{ err error }
+
+func (e *qpackError) Error() string { return fmt.Sprintf("qpack: %v", e.err) }
+func (e *qpackError) Unwrap() error { return e.err }
+
 type header struct {
 	// Pseudo header fields defined in RFC 9114
 	Path      string
@@ -49,7 +54,7 @@ func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, headerFields *[]qpa
 			if err == io.EOF {
 				break
 			}
-			return header{}, err
+			return header{}, &qpackError{err}
 		}
 		if headerFields != nil {
 			*headerFields = append(*headerFields, h)
@@ -149,7 +154,7 @@ func parseTrailers(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField)
 			if err == io.EOF {
 				break
 			}
-			return nil, err
+			return nil, &qpackError{err}
 		}
 		if headerFields != nil {
 			*headerFields = append(*headerFields, hf)

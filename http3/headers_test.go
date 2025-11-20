@@ -230,6 +230,7 @@ func TestRequestHeadersValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := requestFromHeaders(decodeFromSlice(tc.headers), nil)
 			require.EqualError(t, err, tc.err)
+			require.NotErrorAs(t, err, new(*qpackError))
 		})
 	}
 }
@@ -466,6 +467,27 @@ func TestResponseTrailerParsingValidation(t *testing.T) {
 	}
 	_, err := parseTrailers(decodeFromSlice(headers), nil)
 	require.EqualError(t, err, "http3: received pseudo header in trailer: :status")
+}
+
+func TestQpackError(t *testing.T) {
+	buf := &bytes.Buffer{}
+	enc := qpack.NewEncoder(buf)
+	enc.WriteField(qpack.HeaderField{Name: ":status", Value: "200"})
+	enc.Close()
+
+	t.Run("header parsing", func(t *testing.T) {
+		dec := qpack.NewDecoder()
+		decodeFn := dec.Decode(buf.Bytes()[:len(buf.Bytes())/2])
+		_, err := requestFromHeaders(decodeFn, nil)
+		require.ErrorAs(t, err, new(*qpackError))
+	})
+
+	t.Run("trailer parsing", func(t *testing.T) {
+		dec := qpack.NewDecoder()
+		decodeFn := dec.Decode(buf.Bytes()[:len(buf.Bytes())/2])
+		_, err := parseTrailers(decodeFn, nil)
+		require.ErrorAs(t, err, new(*qpackError))
+	})
 }
 
 func BenchmarkRequestFromHeaders(b *testing.B) {

@@ -353,8 +353,13 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, hfs)
 	}
 	if err != nil {
-		s.str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+		errCode := ErrCodeMessageError
+		var qpackErr *qpackError
+		if errors.As(err, &qpackErr) {
+			errCode = ErrCodeQPACKDecompressionFailed
+		}
+		s.str.CancelRead(quic.StreamErrorCode(errCode))
+		s.str.CancelWrite(quic.StreamErrorCode(errCode))
 		return nil, fmt.Errorf("http3: invalid response: %w", err)
 	}
 
