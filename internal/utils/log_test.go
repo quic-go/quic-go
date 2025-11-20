@@ -95,7 +95,8 @@ func TestAddTimestamp(t *testing.T) {
 	timestamp := b.String()[:b.Len()-6]
 	parsedTime, err := time.Parse(format, timestamp)
 	require.NoError(t, err)
-	require.WithinDuration(t, time.Now(), parsedTime, 25*time.Hour)
+	// Use 48-hour tolerance to account for timezone offsets when using date-only format
+	require.WithinDuration(t, time.Now(), parsedTime, 48*time.Hour)
 }
 
 func TestLogAddPrefixes(t *testing.T) {
