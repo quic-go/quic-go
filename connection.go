@@ -885,9 +885,6 @@ func (c *Conn) maybeResetTimer() {
 		return
 	}
 
-	if t := c.connIDGenerator.NextRetireTime(); !t.IsZero() && t.Before(deadline) {
-		deadline = t
-	}
 	if !c.pacingDeadline.IsZero() && c.pacingDeadline.Before(deadline) {
 		deadline = c.pacingDeadline
 	}

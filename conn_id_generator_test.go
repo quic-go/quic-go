@@ -135,14 +135,6 @@ func TestConnIDGeneratorRetiring(t *testing.T) {
 		require.NoError(t, g.Retire(uint64(i+1), protocol.ParseConnectionID([]byte{9, 9, 9, 9}), t2))
 		retirements[added[i]] = t2
 
-		var nextRetirement monotime.Time
-		for _, r := range retirements {
-			if nextRetirement.IsZero() || r.Before(nextRetirement) {
-				nextRetirement = r
-			}
-		}
-		require.Equal(t, nextRetirement, g.NextRetireTime())
-
 		if rand.IntN(2) == 0 {
 			now = now.Add(time.Duration(rand.IntN(500)) * time.Millisecond)
 			g.RemoveRetiredConnIDs(now)
