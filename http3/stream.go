@@ -348,7 +348,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		hfs = make([]qpack.HeaderField, 0, 16)
 	}
 	res := s.response
-	err = updateResponseFromHeaders(res, decodeFn, &hfs)
+	err = updateResponseFromHeaders(res, decodeFn, s.maxHeaderBytes, &hfs)
 	if s.str.qlogger != nil {
 		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, hfs)
 	}

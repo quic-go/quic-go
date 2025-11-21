@@ -572,16 +572,16 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 	return handleErr
 }
 
-func (s *Server) maxHeaderBytes() uint64 {
+func (s *Server) maxHeaderBytes() int {
 	if s.MaxHeaderBytes <= 0 {
 		return http.DefaultMaxHeaderBytes
 	}
-	return uint64(s.MaxHeaderBytes)
+	return s.MaxHeaderBytes
 }
 
 func (s *Server) handleRequest(
 	conn *Conn,
-	str datagramStream,
+	str *stateTrackingStream,
 	decoder *qpack.Decoder,
 	qlogger qlogwriter.Recorder,
 ) {
@@ -610,10 +610,12 @@ func (s *Server) handleRequest(
 		conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return
 	}
-	if hf.Length > s.maxHeaderBytes() {
+	if hf.Length > uint64(s.maxHeaderBytes()) {
 		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
-		str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
-		str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
+		// stop the client from sending more data
+		str.CancelRead(quic.StreamErrorCode(ErrCodeExcessiveLoad))
+		// send a 431 Response (Request Header Fields Too Large)
+		s.rejectWithHeaderFieldsTooLarge(str, conn, qlogger)
 		return
 	}
 	headerBlock := make([]byte, hf.Length)
@@ -628,11 +630,19 @@ func (s *Server) handleRequest(
 	if qlogger != nil {
 		hfs = make([]qpack.HeaderField, 0, 16)
 	}
-	req, err := requestFromHeaders(decodeFn, &hfs)
+	req, err := requestFromHeaders(decodeFn, s.maxHeaderBytes(), &hfs)
 	if qlogger != nil {
 		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
 	}
 	if err != nil {
+		if errors.Is(err, errHeaderTooLarge) {
+			// stop the client from sending more data
+			str.CancelRead(quic.StreamErrorCode(ErrCodeExcessiveLoad))
+			// send a 431 Response (Request Header Fields Too Large)
+			s.rejectWithHeaderFieldsTooLarge(str, conn, qlogger)
+			return
+		}
+
 		errCode := ErrCodeMessageError
 		var qpackErr *qpackError
 		if errors.As(err, &qpackErr) {
@@ -717,6 +727,14 @@ func (s *Server) handleRequest(
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 	str.Close()
+}
+
+func (s *Server) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream, conn *Conn, qlogger qlogwriter.Recorder) {
+	hstr := newStream(str, conn, nil, nil, qlogger)
+	defer hstr.Close()
+	r := newResponseWriter(hstr, conn, false, s.Logger)
+	r.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
+	r.Flush()
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.

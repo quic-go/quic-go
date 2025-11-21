@@ -196,7 +196,7 @@ func (c *Conn) openRequestStream(
 func (c *Conn) decodeTrailers(r io.Reader, streamID quic.StreamID, hf *headersFrame, maxHeaderBytes int) (http.Header, error) {
 	if hf.Length > uint64(maxHeaderBytes) {
 		maybeQlogInvalidHeadersFrame(c.qlogger, streamID, hf.Length)
-		return nil, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
+		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
 
 	b := make([]byte, hf.Length)
