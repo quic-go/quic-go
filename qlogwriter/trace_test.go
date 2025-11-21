@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/synctest"
 
 	"github.com/stretchr/testify/require"
 )
@@ -22,17 +21,6 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 	return &nopWriteCloserImpl{Writer: w}
 }
 
-func scaleDuration(t time.Duration) time.Duration {
-	scaleFactor := 1
-	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
-		scaleFactor = f
-	}
-	if scaleFactor == 0 {
-		panic("TIMESCALE_FACTOR must not be 0")
-	}
-	return time.Duration(scaleFactor) * t
-}
-
 func unmarshal(data []byte, v any) error {
 	if bytes.Equal(data[:1], recordSeparator) {
 		data = data[1:]
@@ -42,38 +30,42 @@ func unmarshal(data []byte, v any) error {
 
 func TestTraceMetadata(t *testing.T) {
 	t.Run("non-connection trace", func(t *testing.T) {
-		buf := &bytes.Buffer{}
-		trace := NewFileSeq(nopWriteCloser(buf))
-		go trace.Run()
-		producer := trace.AddProducer()
-		producer.Close()
+		synctest.Test(t, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			trace := NewFileSeq(nopWriteCloser(buf))
+			go trace.Run()
+			producer := trace.AddProducer()
+			producer.Close()
 
-		testTraceMetadata(t, buf, "transport", "", []string{})
+			testTraceMetadata(t, buf, "transport", "", []string{})
+		})
 	})
 
 	t.Run("connection trace", func(t *testing.T) {
-		buf := &bytes.Buffer{}
-		trace := NewConnectionFileSeq(
-			nopWriteCloser(buf),
-			false,
-			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-			[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
-		)
+		synctest.Test(t, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			trace := NewConnectionFileSeq(
+				nopWriteCloser(buf),
+				false,
+				protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+				[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
+			)
 
-		require.False(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:baz"))
-		require.True(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:foo"))
-		require.True(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:bar"))
+			require.False(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:baz"))
+			require.True(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:foo"))
+			require.True(t, trace.SupportsSchemas("urn:ietf:params:qlog:events:bar"))
 
-		go trace.Run()
-		producer := trace.AddProducer()
-		producer.Close()
+			go trace.Run()
+			producer := trace.AddProducer()
+			producer.Close()
 
-		testTraceMetadata(t,
-			buf,
-			"server",
-			"deadbeef",
-			[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
-		)
+			testTraceMetadata(t,
+				buf,
+				"server",
+				"deadbeef",
+				[]string{"urn:ietf:params:qlog:events:foo", "urn:ietf:params:qlog:events:bar"},
+			)
+		})
 	})
 }
 
@@ -107,7 +99,7 @@ func testTraceMetadata(t *testing.T,
 	wallClockTimeStr := referenceTimeMap["wall_clock_time"].(string)
 	wallClockTime, err := time.Parse(time.RFC3339Nano, wallClockTimeStr)
 	require.NoError(t, err)
-	require.WithinDuration(t, time.Now(), wallClockTime, scaleDuration(10*time.Millisecond))
+	require.Equal(t, time.Now().UTC(), wallClockTime.UTC())
 	require.Contains(t, tr, "vantage_point")
 	vantagePoint := tr["vantage_point"].(map[string]any)
 	require.Equal(t, expectedVantagePoint, vantagePoint["type"])
