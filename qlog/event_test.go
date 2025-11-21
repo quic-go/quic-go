@@ -840,3 +840,19 @@ func TestALPNInformation(t *testing.T) {
 	require.Len(t, ev, 1)
 	require.Equal(t, "h3", ev["chosen_alpn"])
 }
+
+func TestDebugEvent(t *testing.T) {
+	t.Run("default name", func(t *testing.T) {
+		name, ev := testEventEncoding(t, &DebugEvent{Message: "hello world"})
+		require.Equal(t, "transport:debug", name)
+		require.Len(t, ev, 1)
+		require.Equal(t, "hello world", ev["message"])
+	})
+
+	t.Run("custom name", func(t *testing.T) {
+		name, ev := testEventEncoding(t, &DebugEvent{EventName: "foo", Message: "bar"})
+		require.Equal(t, "transport:foo", name)
+		require.Len(t, ev, 1)
+		require.Equal(t, "bar", ev["message"])
+	})
+}
