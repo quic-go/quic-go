@@ -1003,7 +1003,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 	}
 
 	var hasMorePackets bool
-	for i := 0; i < numPackets; i++ {
+	for i := range numPackets {
 		if i > 0 {
 			c.receivedPacketMx.Lock()
 		}
@@ -1022,11 +1022,10 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		if processed {
 			wasProcessed = true
 		}
-		if !hasMorePackets {
+		if !c.handshakeComplete && (c.initialStream.HasData() || c.handshakeStream.HasData()) {
 			break
 		}
-		// only process a single packet at a time before handshake completion
-		if !c.handshakeComplete {
+		if !hasMorePackets {
 			break
 		}
 	}
@@ -1043,8 +1042,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (w
 	c.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
-		c.handleVersionNegotiationPacket(rp)
-		return false, nil
+		return false, c.handleVersionNegotiationPacket(rp)
 	}
 
 	var counter uint8
@@ -1556,7 +1554,7 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 	return true
 }
 
-func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) {
+func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 	if c.perspective == protocol.PerspectiveServer || // servers never receive version negotiation packets
 		c.receivedFirstPacket || c.versionNegotiated { // ignore delayed / duplicated version negotiation packets
 		if c.qlogger != nil {
@@ -1566,7 +1564,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) {
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
 		}
-		return
+		return nil
 	}
 
 	src, dest, supportedVersions, err := wire.ParseVersionNegotiationPacket(p.data)
@@ -1579,7 +1577,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) {
 			})
 		}
 		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
-		return
+		return nil
 	}
 
 	if slices.Contains(supportedVersions, c.version) {
@@ -1592,7 +1590,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) {
 		}
 		// The Version Negotiation packet contains the version that we offered.
 		// This might be a packet sent by an attacker, or it was corrupted.
-		return
+		return nil
 	}
 
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", supportedVersions)
@@ -1612,7 +1610,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) {
 			Theirs: supportedVersions,
 		})
 		c.logger.Infof("No compatible QUIC version found.")
-		return
+		return nil
 	}
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.VersionInformation{
@@ -1624,10 +1622,10 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) {
 
 	c.logger.Infof("Switching to QUIC version %s.", newVersion)
 	nextPN, _ := c.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
-	c.destroyImpl(&errCloseForRecreating{
+	return &errCloseForRecreating{
 		nextPacketNumber: nextPN,
 		nextVersion:      newVersion,
-	})
+	}
 }
 
 func (c *Conn) handleUnpackedLongHeaderPacket(
