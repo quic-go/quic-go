@@ -350,7 +350,6 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 			now,
 			false,
 			onlyAck,
-			true,
 			v,
 		)
 		if initialPayload.length > 0 {
@@ -373,7 +372,6 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 				now,
 				false,
 				onlyAck,
-				true,
 				v,
 			)
 			if handshakePayload.length > 0 {
@@ -500,7 +498,7 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	encLevel protocol.EncryptionLevel,
 	now monotime.Time,
 	addPingIfEmpty bool,
-	onlyAck, ackAllowed bool,
+	onlyAck bool,
 	v protocol.Version,
 ) (*wire.ExtendedHeader, payload) {
 	if onlyAck {
@@ -527,10 +525,7 @@ func (p *packetPacker) maybeGetCryptoPacket(
 	handler := p.retransmissionQueue.AckHandler(encLevel)
 	hasRetransmission := p.retransmissionQueue.HasData(encLevel)
 
-	var ack *wire.AckFrame
-	if ackAllowed {
-		ack = p.acks.GetAckFrame(encLevel, now, !hasRetransmission && !hasCryptoData())
-	}
+	ack := p.acks.GetAckFrame(encLevel, now, !hasRetransmission && !hasCryptoData())
 	var pl payload
 	if !hasCryptoData() && !hasRetransmission && ack == nil {
 		if !addPingIfEmpty {
@@ -747,7 +742,6 @@ func (p *packetPacker) PackPTOProbePacket(
 		now,
 		addPingIfEmpty,
 		false,
-		true,
 		v,
 	)
 	if pl.length == 0 {
