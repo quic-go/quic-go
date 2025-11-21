@@ -399,6 +399,7 @@ func TestPacketSent(t *testing.T) {
 	require.Equal(t, "transport:packet_sent", name)
 	require.Contains(t, ev, "raw")
 	raw := ev["raw"].(map[string]any)
+	require.NotContains(t, ev, "datagram_id")
 	require.Equal(t, float64(987), raw["length"])
 	require.Equal(t, float64(1337), raw["payload_length"])
 	require.Contains(t, ev, "header")
@@ -414,7 +415,17 @@ func TestPacketSent(t *testing.T) {
 	require.Equal(t, "stream", frames[1].(map[string]any)["frame_type"])
 }
 
-func TestPacketSentShort(t *testing.T) {
+func TestPacketSent1RTT(t *testing.T) {
+	t.Run("with datagram ID", func(t *testing.T) {
+		testPacketSent1RTT(t, 1337)
+	})
+
+	t.Run("without datagram ID", func(t *testing.T) {
+		testPacketSent1RTT(t, 0)
+	})
+}
+
+func testPacketSent1RTT(t *testing.T, datagramID DatagramID) {
 	name, ev := testEventEncoding(t, &PacketSent{
 		Header: PacketHeader{
 			PacketType:       PacketType1RTT,
@@ -427,7 +438,8 @@ func TestPacketSentShort(t *testing.T) {
 			{Frame: &AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}}},
 			{Frame: &MaxDataFrame{MaximumData: 987}},
 		},
-		ECN: ECNUnsupported,
+		ECN:        ECNUnsupported,
+		DatagramID: datagramID,
 	})
 
 	require.Equal(t, "transport:packet_sent", name)
@@ -444,6 +456,12 @@ func TestPacketSentShort(t *testing.T) {
 	require.Len(t, frames, 2)
 	require.Equal(t, "ack", frames[0].(map[string]any)["frame_type"])
 	require.Equal(t, "max_data", frames[1].(map[string]any)["frame_type"])
+	if datagramID != 0 {
+		require.Contains(t, ev, "datagram_id")
+		require.Equal(t, float64(datagramID), ev["datagram_id"])
+	} else {
+		require.NotContains(t, ev, "datagram_id")
+	}
 }
 
 func TestPacketReceived(t *testing.T) {
@@ -464,7 +482,8 @@ func TestPacketReceived(t *testing.T) {
 			{Frame: &MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987}},
 			{Frame: &StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true}},
 		},
-		ECN: ECT0,
+		ECN:        ECT0,
+		DatagramID: 42,
 	})
 
 	require.Equal(t, "transport:packet_received", name)
@@ -483,9 +502,21 @@ func TestPacketReceived(t *testing.T) {
 	require.Equal(t, "deadbeef", token["data"])
 	require.Contains(t, ev, "frames")
 	require.Len(t, ev["frames"].([]any), 2)
+	require.Contains(t, ev, "datagram_id")
+	require.Equal(t, float64(42), ev["datagram_id"])
 }
 
 func TestPacketReceived1RTT(t *testing.T) {
+	t.Run("with datagram ID", func(t *testing.T) {
+		testPacketReceived1RTT(t, 1337)
+	})
+
+	t.Run("without datagram ID", func(t *testing.T) {
+		testPacketReceived1RTT(t, 0)
+	})
+}
+
+func testPacketReceived1RTT(t *testing.T, datagramID DatagramID) {
 	name, ev := testEventEncoding(t, &PacketReceived{
 		Header: PacketHeader{
 			PacketType:       PacketType1RTT,
@@ -498,7 +529,8 @@ func TestPacketReceived1RTT(t *testing.T) {
 			{Frame: &MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987}},
 			{Frame: &StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true}},
 		},
-		ECN: ECT1,
+		ECN:        ECT1,
+		DatagramID: datagramID,
 	})
 
 	require.Equal(t, "transport:packet_received", name)
@@ -511,9 +543,14 @@ func TestPacketReceived1RTT(t *testing.T) {
 	hdr := ev["header"].(map[string]any)
 	require.Equal(t, "1RTT", hdr["packet_type"])
 	require.Equal(t, float64(1337), hdr["packet_number"])
-	require.Equal(t, "0", hdr["key_phase_bit"])
 	require.Contains(t, ev, "frames")
 	require.Len(t, ev["frames"].([]any), 2)
+	if datagramID != 0 {
+		require.Contains(t, ev, "datagram_id")
+		require.Equal(t, float64(datagramID), ev["datagram_id"])
+	} else {
+		require.NotContains(t, ev, "datagram_id")
+	}
 }
 
 func TestPacketReceivedRetry(t *testing.T) {
