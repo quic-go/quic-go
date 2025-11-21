@@ -998,7 +998,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 	}
 
 	var hasMorePackets bool
-	for i := 0; i < numPackets; i++ {
+	for i := range numPackets {
 		if i > 0 {
 			c.receivedPacketMx.Lock()
 		}
@@ -1013,11 +1013,10 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		if processed {
 			wasProcessed = true
 		}
-		if !hasMorePackets {
+		if !c.handshakeComplete && (c.initialStream.HasData() || c.handshakeStream.HasData()) {
 			break
 		}
-		// only process a single packet at a time before handshake completion
-		if !c.handshakeComplete {
+		if !hasMorePackets {
 			break
 		}
 	}
