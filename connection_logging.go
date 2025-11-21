@@ -5,7 +5,6 @@ import (
 	"net/netip"
 	"slices"
 
-	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
@@ -109,61 +108,55 @@ func (c *Conn) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN) {
 }
 
 func (c *Conn) logShortHeaderPacket(
-	destConnID protocol.ConnectionID,
-	ackFrame *wire.AckFrame,
-	frames []ackhandler.Frame,
-	streamFrames []ackhandler.StreamFrame,
-	pn protocol.PacketNumber,
-	pnLen protocol.PacketNumberLen,
-	kp protocol.KeyPhaseBit,
+	p shortHeaderPacket,
 	ecn protocol.ECN,
 	size protocol.ByteCount,
 	isCoalesced bool,
 ) {
 	if c.logger.Debug() && !isCoalesced {
-		c.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, 1-RTT (ECN: %s)", pn, size, c.logID, ecn)
+		c.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, 1-RTT (ECN: %s)", p.PacketNumber, size, c.logID, ecn)
 	}
 	// quic-go logging
 	if c.logger.Debug() {
-		wire.LogShortHeader(c.logger, destConnID, pn, pnLen, kp)
-		if ackFrame != nil {
-			wire.LogFrame(c.logger, ackFrame, true)
+		wire.LogShortHeader(c.logger, p.DestConnID, p.PacketNumber, p.PacketNumberLen, p.KeyPhase)
+		if p.Ack != nil {
+			wire.LogFrame(c.logger, p.Ack, true)
 		}
-		for _, f := range frames {
+		for _, f := range p.Frames {
 			wire.LogFrame(c.logger, f.Frame, true)
 		}
-		for _, f := range streamFrames {
+		for _, f := range p.StreamFrames {
 			wire.LogFrame(c.logger, f.Frame, true)
 		}
 	}
 
 	// tracing
 	if c.qlogger != nil {
-		numFrames := len(frames) + len(streamFrames)
-		if ackFrame != nil {
+		numFrames := len(p.Frames) + len(p.StreamFrames)
+		if p.Ack != nil {
 			numFrames++
 		}
 		fs := make([]qlog.Frame, 0, numFrames)
-		if ackFrame != nil {
-			fs = append(fs, toQlogFrame(ackFrame))
+		if p.Ack != nil {
+			fs = append(fs, toQlogFrame(p.Ack))
 		}
-		for _, f := range frames {
+		for _, f := range p.Frames {
 			fs = append(fs, toQlogFrame(f.Frame))
 		}
-		for _, f := range streamFrames {
+		for _, f := range p.StreamFrames {
 			fs = append(fs, toQlogFrame(f.Frame))
 		}
 		c.qlogger.RecordEvent(qlog.PacketSent{
 			Header: qlog.PacketHeader{
 				PacketType:       qlog.PacketType1RTT,
-				KeyPhaseBit:      kp,
-				PacketNumber:     pn,
+				KeyPhaseBit:      p.KeyPhase,
+				PacketNumber:     p.PacketNumber,
 				Version:          c.version,
-				DestConnectionID: destConnID,
+				DestConnectionID: p.DestConnID,
 			},
 			Raw: qlog.RawInfo{
 				Length:        int(size),
-				PayloadLength: int(size - wire.ShortHeaderLen(destConnID, pnLen)),
+				PayloadLength: int(size - wire.ShortHeaderLen(p.DestConnID, p.PacketNumberLen)),
 			},
 			Frames: fs,
 			ECN:    toQlogECN(ecn),
@@ -177,13 +170,7 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 		// during which we might call PackCoalescedPacket but just pack a short header packet.
 		if len(packet.longHdrPackets) == 0 && packet.shortHdrPacket != nil {
 			c.logShortHeaderPacket(
-				packet.shortHdrPacket.DestConnID,
-				packet.shortHdrPacket.Ack,
-				packet.shortHdrPacket.Frames,
-				packet.shortHdrPacket.StreamFrames,
-				packet.shortHdrPacket.PacketNumber,
-				packet.shortHdrPacket.PacketNumberLen,
-				packet.shortHdrPacket.KeyPhase,
+				*packet.shortHdrPacket,
 				ecn,
 				packet.shortHdrPacket.Length,
 				false,
@@ -200,7 +187,7 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 		c.logLongHeaderPacket(p, ecn)
 	}
 	if p := packet.shortHdrPacket; p != nil {
-		c.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, ecn, p.Length, true)
+		c.logShortHeaderPacket(*p, ecn, p.Length, true)
 	}
 }
 
