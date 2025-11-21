@@ -373,7 +373,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 				now,
 				false,
 				onlyAck,
-				size == 0,
+				true,
 				v,
 			)
 			if handshakePayload.length > 0 {

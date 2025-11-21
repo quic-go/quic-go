@@ -141,7 +141,7 @@ func TestPackLongHeaders(t *testing.T) {
 	tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, now, false)
-	// don't EXPECT any calls for a Handshake ACK frame
+	tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, now, false)
 	clientHello := getClientHello(t, "quic-go.net")
 	tp.initialStream.Write(clientHello)
 	tp.packer.retransmissionQueue.addHandshake(&wire.PingFrame{})
