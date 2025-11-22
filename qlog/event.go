@@ -805,3 +805,25 @@ func (e ALPNInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
+
+// DebugEvent is a generic event that can be used to log arbitrary messages.
+type DebugEvent struct {
+	EventName string
+	Message   string
+}
+
+func (e DebugEvent) Name() string {
+	if e.EventName == "" {
+		return "transport:debug"
+	}
+	return fmt.Sprintf("transport:%s", e.EventName)
+}
+
+func (e DebugEvent) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("message"))
+	h.WriteToken(jsontext.String(e.Message))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
