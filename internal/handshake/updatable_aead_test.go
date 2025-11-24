@@ -24,7 +24,7 @@ const (
 	ad  = "Donec in velit neque."
 )
 
-func randomCipherSuite() *cipherSuite { return cipherSuites[mrand.IntN(len(cipherSuites))] }
+func randomCipherSuite() cipherSuite { return cipherSuites[mrand.IntN(len(cipherSuites))] }
 
 func setupEndpoints(t *testing.T, serverRTTStats *utils.RTTStats) (client, server *updatableAEAD, serverEventRecorder *events.Recorder) {
 	cs := randomCipherSuite()

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getSealerAndOpener(t *testing.T, cs *cipherSuite, v protocol.Version) (LongHeaderSealer, LongHeaderOpener) {
+func getSealerAndOpener(t *testing.T, cs cipherSuite, v protocol.Version) (LongHeaderSealer, LongHeaderOpener) {
 	t.Helper()
 	key := make([]byte, 16)
 	hpKey := make([]byte, 16)
@@ -83,7 +83,7 @@ func TestEncryptAndDecryptHeader(t *testing.T) {
 	}
 }
 
-func testEncryptAndDecryptHeader(t *testing.T, cs *cipherSuite, v protocol.Version) {
+func testEncryptAndDecryptHeader(t *testing.T, cs cipherSuite, v protocol.Version) {
 	sealer, opener := getSealerAndOpener(t, cs, v)
 	var lastFourBitsDifferent int
 
