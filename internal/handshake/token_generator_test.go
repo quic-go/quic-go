@@ -118,3 +118,23 @@ func TestTokenGeneratorNonUDPAddr(t *testing.T) {
 	require.False(t, token.ValidateRemoteAddr(&net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1338}))
 	require.WithinDuration(t, time.Now(), token.SentTime, 100*time.Millisecond)
 }
+
+func BenchmarkTokenGeneratorDecodeToken(b *testing.B) {
+	b.ReportAllocs()
+
+	var key TokenProtectorKey
+	_, err := rand.Read(key[:])
+	require.NoError(b, err)
+	tokenGen := NewTokenGenerator(key)
+	addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+	connID1 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+	connID2 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+	tokenEnc, err := tokenGen.NewRetryToken(addr, connID1, connID2)
+	require.NoError(b, err)
+
+	for b.Loop() {
+		if _, err := tokenGen.DecodeToken(tokenEnc); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
