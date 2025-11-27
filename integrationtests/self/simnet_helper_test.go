@@ -46,6 +46,17 @@ func (d *droppingRouter) SendPacket(p simnet.Packet) error {
 	return d.PerfectRouter.SendPacket(p)
 }
 
+type callbackRouter struct {
+	simnet.Router
+
+	OnSendPacket func(simnet.Packet)
+}
+
+func (c *callbackRouter) SendPacket(p simnet.Packet) error {
+	c.OnSendPacket(p)
+	return c.Router.SendPacket(p)
+}
+
 type direction uint8
 
 const (
