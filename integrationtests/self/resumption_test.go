@@ -75,8 +75,9 @@ func handshakeWithSessionResumption(t *testing.T, serverTLSConf *tls.Config, exp
 		n := &simnet.Simnet{Router: &simnet.PerfectRouter{}}
 		defer n.Close()
 		settings := simnet.NodeBiDiLinkSettings{
-			Downlink: simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
-			Uplink:   simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
+			Downlink: simnet.LinkSettings{BitsPerSecond: 1e8},
+			Uplink:   simnet.LinkSettings{BitsPerSecond: 1e8},
+			Latency:  rtt / 2, // Latency applies to downlink only; uplink is instant
 		}
 		clientPacketConn1 := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
 		defer clientPacketConn1.Close()

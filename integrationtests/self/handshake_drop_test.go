@@ -270,8 +270,9 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 									},
 								}
 								settings := simnet.NodeBiDiLinkSettings{
-									Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-									Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
+									Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt},
+									Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt},
+									Latency:  rtt / 2, // Latency applies to downlink only; uplink is instant
 								}
 								clientConn := n.NewEndpoint(clientAddr, settings)
 								defer clientConn.Close()

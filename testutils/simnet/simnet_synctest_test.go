@@ -26,12 +26,11 @@ func TestSimpleSimNet(t *testing.T) {
 		linkSettings := NodeBiDiLinkSettings{
 			Downlink: LinkSettings{
 				BitsPerSecond: bandwidth,
-				Latency:       latency / 2,
 			},
 			Uplink: LinkSettings{
 				BitsPerSecond: bandwidth,
-				Latency:       latency / 2,
 			},
+			Latency: latency,
 		}
 
 		addressA := net.UDPAddr{
@@ -57,6 +56,7 @@ func TestSimpleSimNet(t *testing.T) {
 		require.Equal(t, addressA.String(), from.String())
 		observedLatency := time.Since(start)
 
+		// Only downlink has latency now (uplink is instant)
 		expectedLatency := latency
 		percentDiff := math.Abs(float64(observedLatency-expectedLatency) / float64(expectedLatency))
 		t.Logf("observed latency: %v, expected latency: %v, percent diff: %v", observedLatency, expectedLatency, percentDiff)
@@ -77,13 +77,12 @@ func TestSimNetBandwidth(t *testing.T) {
 			Downlink: LinkSettings{
 				BitsPerSecond: bandwidth,
 				MTU:           MTU,
-				Latency:       latency / 2,
 			},
 			Uplink: LinkSettings{
 				BitsPerSecond: bandwidth,
 				MTU:           MTU,
-				Latency:       latency / 2,
 			},
+			Latency: latency,
 		}
 
 		addressA := net.UDPAddr{

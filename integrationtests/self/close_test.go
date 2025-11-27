@@ -39,8 +39,9 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 			}},
 		}
 		settings := simnet.NodeBiDiLinkSettings{
-			Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-			Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
+			Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt},
+			Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt},
+			Latency:  rtt / 2, // Latency applies to downlink only; uplink is instant
 		}
 		clientConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
 		serverConn := n.NewEndpoint(serverAddr, settings)
