@@ -2605,6 +2605,9 @@ func TestConnectionCongestionControl(t *testing.T) {
 		// test teardown
 		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 		tc.conn.destroy(nil)
+
+		synctest.Wait()
+
 		select {
 		case err := <-errChan:
 			require.NoError(t, err)
