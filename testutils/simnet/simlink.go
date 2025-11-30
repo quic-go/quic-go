@@ -1,24 +1,12 @@
 package simnet
 
 import (
-	"context"
 	"net"
 	"sync"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
-// Creates a new RateLimiter with the following parameters:
-// bandwidth (in bits/sec).
-// burstSize is in Bytes
-func newRateLimiter(bandwidth int, burstSize int) *rate.Limiter {
-	// Convert bandwidth from bits/sec to bytes/sec
-	bytesPerSecond := rate.Limit(float64(bandwidth) / 8.0)
-	return rate.NewLimiter(bytesPerSecond, burstSize)
-}
-
-// packetWithDeliveryTime holds a packet along with its delivery time and enqueue time
+// packetWithDeliveryTime holds a packet along with its scheduled delivery time
 type packetWithDeliveryTime struct {
 	Packet
 	DeliveryTime time.Time
@@ -26,27 +14,18 @@ type packetWithDeliveryTime struct {
 
 // LinkSettings defines the network characteristics for a simulated link direction
 type LinkSettings struct {
-	// BitsPerSecond specifies the bandwidth limit in bits per second
-	BitsPerSecond int
-
 	// MTU (Maximum Transmission Unit) specifies the maximum packet size in bytes
 	MTU int
 }
 
-// SimulatedLink simulates a bidirectional network link with variable latency,
-// bandwidth limiting, and CoDel-based bufferbloat mitigation
+// SimulatedLink simulates a bidirectional network link with variable latency and MTU constraints
 type SimulatedLink struct {
 	// Internal state for lifecycle management
-	closed chan struct{}
-	wg     sync.WaitGroup
+	wg sync.WaitGroup
 
-	// CoDel queues for bufferbloat control
-	downstreamQueue *codelQueue
-	upstreamQueue   *codelQueue
-
-	// Rate limiters enforce bandwidth constraints
-	upLimiter   *rate.Limiter
-	downLimiter *rate.Limiter
+	// Queues for packet delivery timing
+	downstreamQueue *queue
+	upstreamQueue   *queue
 
 	// Configuration for link characteristics
 	UplinkSettings   LinkSettings
@@ -75,8 +54,6 @@ func (l *SimulatedLink) Start() {
 		panic("SimulatedLink.Start() called without having added a packet receiver")
 	}
 
-	l.closed = make(chan struct{})
-
 	// Sane defaults
 	if l.DownlinkSettings.MTU == 0 {
 		l.DownlinkSettings.MTU = 1400
@@ -85,16 +62,8 @@ func (l *SimulatedLink) Start() {
 		l.UplinkSettings.MTU = 1400
 	}
 
-	// Initialize CoDel queues with 5ms target and 100ms interval
-	const target = 5 * time.Millisecond
-	const interval = 100 * time.Millisecond
-	l.downstreamQueue = newCodelQueue(target, interval)
-	l.upstreamQueue = newCodelQueue(target, interval)
-
-	// Initialize rate limiters
-	const burstSizeInPackets = 16
-	l.upLimiter = newRateLimiter(l.UplinkSettings.BitsPerSecond, l.UplinkSettings.MTU*burstSizeInPackets)
-	l.downLimiter = newRateLimiter(l.DownlinkSettings.BitsPerSecond, l.DownlinkSettings.MTU*burstSizeInPackets)
+	l.downstreamQueue = newQueue()
+	l.upstreamQueue = newQueue()
 
 	l.wg.Add(2)
 	go l.backgroundDownlink()
@@ -102,7 +71,6 @@ func (l *SimulatedLink) Start() {
 }
 
 func (l *SimulatedLink) Close() error {
-	close(l.closed)
 	l.downstreamQueue.Close()
 	l.upstreamQueue.Close()
 	l.wg.Wait()
@@ -113,30 +81,12 @@ func (l *SimulatedLink) backgroundDownlink() {
 	defer l.wg.Done()
 
 	for {
-		select {
-		case <-l.closed:
-			return
-		default:
-		}
-
 		// Dequeue a packet (this will block until packet is ready for delivery)
+		// Dequeue() returns false when the queue is closed
 		p, ok := l.downstreamQueue.Dequeue()
 		if !ok {
 			return
 		}
-
-		// Calculate sojourn time (time spent in queue)
-		sojournTime := time.Since(p.DeliveryTime)
-
-		// Check if CoDel wants to drop this packet
-		shouldDrop := l.downstreamQueue.shouldDrop(sojournTime)
-		if shouldDrop {
-			// Drop the packet and continue to next one
-			continue
-		}
-
-		// Apply rate limiting before delivery
-		l.downLimiter.WaitN(context.Background(), len(p.Data))
 
 		// Deliver the packet
 		l.downloadPacket.RecvPacket(p.Packet)
@@ -147,30 +97,12 @@ func (l *SimulatedLink) backgroundUplink() {
 	defer l.wg.Done()
 
 	for {
-		select {
-		case <-l.closed:
-			return
-		default:
-		}
-
 		// Dequeue a packet (this will block until packet is ready for delivery)
+		// Dequeue() returns false when the queue is closed
 		p, ok := l.upstreamQueue.Dequeue()
 		if !ok {
 			return
 		}
-
-		// Calculate sojourn time (time spent in queue)
-		sojournTime := time.Since(p.DeliveryTime)
-
-		// Check if CoDel wants to drop this packet
-		shouldDrop := l.upstreamQueue.shouldDrop(sojournTime)
-		if shouldDrop {
-			// Drop the packet and continue to next one
-			continue
-		}
-
-		// Apply rate limiting before delivery
-		l.upLimiter.WaitN(context.Background(), len(p.Data))
 
 		// Deliver the packet
 		_ = l.UploadPacket.SendPacket(p.Packet)
@@ -186,8 +118,7 @@ func (l *SimulatedLink) SendPacket(p Packet) error {
 	// Uplink has no latency - packets are delivered immediately
 	deliveryTime := time.Now()
 
-	// Enqueue packet with delivery time to CoDel queue
-	// Rate limiting happens after dequeue in background goroutine
+	// Enqueue packet with delivery time
 	l.upstreamQueue.Enqueue(&packetWithDeliveryTime{
 		Packet:       p,
 		DeliveryTime: deliveryTime,
@@ -211,8 +142,7 @@ func (l *SimulatedLink) RecvPacket(p Packet) {
 	}
 	deliveryTime := time.Now().Add(latency)
 
-	// Enqueue packet with delivery time to CoDel queue
-	// Rate limiting happens after dequeue in background goroutine
+	// Enqueue packet with delivery time
 	l.downstreamQueue.Enqueue(&packetWithDeliveryTime{
 		Packet:       p,
 		DeliveryTime: deliveryTime,
