@@ -63,10 +63,7 @@ func testPacketDrops(t *testing.T, direction protocol.Perspective) {
 				},
 			},
 		}
-		settings := simnet.NodeBiDiLinkSettings{
-			Downlink: simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
-			Uplink:   simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
-		}
+		settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
 		clientPacketConn := n.NewEndpoint(addrClient, settings)
 		defer clientPacketConn.Close()
 		serverPacketConn := n.NewEndpoint(addrServer, settings)

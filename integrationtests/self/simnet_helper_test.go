@@ -20,10 +20,7 @@ func newSimnetLinkWithRouter(t *testing.T, rtt time.Duration, router simnet.Rout
 	t.Helper()
 
 	n := &simnet.Simnet{Router: router}
-	settings := simnet.NodeBiDiLinkSettings{
-		Downlink: simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
-		Uplink:   simnet.LinkSettings{BitsPerSecond: 1e8, Latency: rtt / 4},
-	}
+	settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
 	clientPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
 	serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}, settings)
 

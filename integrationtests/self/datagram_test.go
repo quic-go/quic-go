@@ -3,7 +3,6 @@ package self_test
 import (
 	"bytes"
 	"context"
-	"math"
 	mrand "math/rand/v2"
 	"net"
 	"sync/atomic"
@@ -160,10 +159,7 @@ func TestDatagramLoss(t *testing.T) {
 				},
 			},
 		}
-		settings := simnet.NodeBiDiLinkSettings{
-			Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-			Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-		}
+		settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
 		clientPacketConn := n.NewEndpoint(clientAddr, settings)
 		defer clientPacketConn.Close()
 		serverPacketConn := n.NewEndpoint(serverAddr, settings)

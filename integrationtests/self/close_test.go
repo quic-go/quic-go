@@ -3,7 +3,6 @@ package self_test
 import (
 	"context"
 	"crypto/tls"
-	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -38,10 +37,7 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 				return shouldDrop
 			}},
 		}
-		settings := simnet.NodeBiDiLinkSettings{
-			Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-			Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-		}
+		settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
 		clientConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
 		serverConn := n.NewEndpoint(serverAddr, settings)
 		require.NoError(t, n.Start())

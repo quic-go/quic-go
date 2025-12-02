@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"math"
 	mrand "math/rand/v2"
 	"net"
 	"runtime"
@@ -269,10 +268,7 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 										},
 									},
 								}
-								settings := simnet.NodeBiDiLinkSettings{
-									Downlink: simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-									Uplink:   simnet.LinkSettings{BitsPerSecond: math.MaxInt, Latency: rtt / 4},
-								}
+								settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
 								clientConn := n.NewEndpoint(clientAddr, settings)
 								defer clientConn.Close()
 								serverConn := n.NewEndpoint(serverAddr, settings)
