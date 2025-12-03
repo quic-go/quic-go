@@ -548,14 +548,12 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 
 func TestConnectionUnpacking(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 	unpacker := NewMockUnpacker(mockCtrl)
 	var eventRecorder events.Recorder
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		nil,
 		false,
-		connectionOptReceivedPacketHandler(rph),
 		connectionOptUnpacker(unpacker),
 		connectionOptTracer(&eventRecorder),
 	)
@@ -582,10 +580,6 @@ func TestConnectionUnpacking(t *testing.T) {
 		hdr:             &unpackedHdr,
 		data:            []byte{0}, // one PADDING frame
 	}, nil)
-	gomock.InOrder(
-		rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.EncryptionInitial),
-		rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.ECNCE, protocol.EncryptionInitial, rcvTime, false),
-	)
 
 	wasProcessed, err := tc.conn.handleOnePacket(packet, 42)
 	require.NoError(t, err)
@@ -611,7 +605,6 @@ func TestConnectionUnpacking(t *testing.T) {
 
 	// receive a duplicate of this packet
 	packet = getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
-	rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.EncryptionInitial).Return(true)
 	unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 		encryptionLevel: protocol.EncryptionInitial,
 		hdr:             &unpackedHdr,
@@ -642,10 +635,6 @@ func TestConnectionUnpacking(t *testing.T) {
 	packet = getShortHeaderPacket(t, tc.remoteAddr, tc.srcConnID, 0x37, nil)
 	packet.ecn = protocol.ECT1
 	packet.rcvTime = rcvTime
-	gomock.InOrder(
-		rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT),
-		rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.ECT1, protocol.Encryption1RTT, rcvTime, false),
-	)
 	unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
 		protocol.PacketNumber(0x1337), protocol.PacketNumberLen2, protocol.KeyPhaseZero, []byte{0} /* PADDING */, nil,
 	)
@@ -672,14 +661,12 @@ func TestConnectionUnpacking(t *testing.T) {
 
 func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 	unpacker := NewMockUnpacker(mockCtrl)
 	var eventRecorder events.Recorder
 	tc := newServerTestConnection(t,
 		mockCtrl,
 		nil,
 		false,
-		connectionOptReceivedPacketHandler(rph),
 		connectionOptUnpacker(unpacker),
 		connectionOptTracer(&eventRecorder),
 	)
@@ -740,13 +727,6 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 		hdr:             &unpackedHdr2,
 		data:            []byte{1}, // one PING frame
 	}, nil)
-	gomock.InOrder(
-		rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(1337), protocol.EncryptionInitial),
-		rph.EXPECT().ReceivedPacket(protocol.PacketNumber(1337), protocol.ECT1, protocol.EncryptionInitial, rcvTime, false),
-		rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(1338), protocol.EncryptionHandshake),
-		rph.EXPECT().ReceivedPacket(protocol.PacketNumber(1338), protocol.ECT1, protocol.EncryptionHandshake, rcvTime, true),
-	)
-	rph.EXPECT().DropPackets(protocol.EncryptionInitial)
 	wasProcessed, err := tc.conn.handleOnePacket(packet, 42)
 	require.NoError(t, err)
 	require.True(t, wasProcessed)
@@ -2128,8 +2108,8 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 func TestConnectionACKTimer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
-		rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		rph := ackhandler.NewReceivedPacketHandler(utils.DefaultLogger)
 		tc := newServerTestConnection(t,
 			mockCtrl,
 			&Config{MaxIdleTimeout: time.Second},
@@ -2144,17 +2124,31 @@ func TestConnectionACKTimer(t *testing.T) {
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
 		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
-		rph.EXPECT().GetAlarmTimeout().Return(monotime.Now().Add(time.Hour))
 		tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+		// Set initial alarm timeout far in the future
+		_ = rph.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, monotime.Now().Add(time.Hour), true)
 
 		var times []monotime.Time
 		done := make(chan struct{}, 5)
 		var calls []any
-		for i := range 2 {
+
+		for range 2 {
 			calls = append(calls, tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 				func(buf *packetBuffer, _ protocol.ByteCount, _ monotime.Time, _ protocol.Version) (shortHeaderPacket, error) {
 					buf.Data = append(buf.Data, []byte("foobar")...)
 					times = append(times, monotime.Now())
+					if len(times) == 1 {
+						// After first packet is sent, set alarm timeout for the next iteration
+						// Get the ACK frame to reset state, then receive a new packet to set alarm
+						_ = rph.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), false)
+						alarmRcvTime := monotime.Now().Add(alarmTimeout - protocol.MaxAckDelay)
+						_ = rph.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, alarmRcvTime, true)
+					} else {
+						// After second packet is sent, set alarm timeout far in the future
+						_ = rph.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), false)
+						_ = rph.ReceivedPacket(3, protocol.ECNNon, protocol.Encryption1RTT, monotime.Now().Add(time.Hour), true)
+					}
 					return shortHeaderPacket{Frames: []ackhandler.Frame{{Frame: &wire.PingFrame{}}}, Length: 6}, nil
 				},
 			))
@@ -2164,11 +2158,6 @@ func TestConnectionACKTimer(t *testing.T) {
 					return shortHeaderPacket{}, errNothingToPack
 				},
 			))
-			if i == 0 {
-				calls = append(calls, rph.EXPECT().GetAlarmTimeout().Return(monotime.Now().Add(alarmTimeout)))
-			} else {
-				calls = append(calls, rph.EXPECT().GetAlarmTimeout().Return(monotime.Now().Add(time.Hour)))
-			}
 		}
 		gomock.InOrder(calls...)
 		errChan := make(chan error, 1)
