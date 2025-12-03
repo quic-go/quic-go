@@ -81,11 +81,7 @@ type sentPacketHandler struct {
 
 	handshakeConfirmed bool
 
-	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
-	// example: we send an ACK for packets 90-100 with packet number 20
-	// once we receive an ACK from the peer for packet 20, the lowestNotConfirmedAcked is 101
-	// Only applies to the application-data packet number space.
-	lowestNotConfirmedAcked protocol.PacketNumber
+	ignorePacketsBelow func(protocol.PacketNumber)
 
 	ackedPackets []packetWithPacketNumber // to avoid allocations in detectAndRemoveAckedPackets
 
@@ -115,24 +111,22 @@ type sentPacketHandler struct {
 	logger      utils.Logger
 }
 
-var (
-	_ SentPacketHandler = &sentPacketHandler{}
-	_ sentPacketTracker = &sentPacketHandler{}
-)
+var _ SentPacketHandler = &sentPacketHandler{}
 
 // clientAddressValidated indicates whether the address was validated beforehand by an address validation token.
 // If the address was validated, the amplification limit doesn't apply. It has no effect for a client.
-func newSentPacketHandler(
+func NewSentPacketHandler(
 	initialPN protocol.PacketNumber,
 	initialMaxDatagramSize protocol.ByteCount,
 	rttStats *utils.RTTStats,
 	connStats *utils.ConnectionStats,
 	clientAddressValidated bool,
 	enableECN bool,
+	ignorePacketsBelow func(protocol.PacketNumber),
 	pers protocol.Perspective,
 	qlogger qlogwriter.Recorder,
 	logger utils.Logger,
-) *sentPacketHandler {
+) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
@@ -152,6 +146,7 @@ func newSentPacketHandler(
 		rttStats:                       rttStats,
 		connStats:                      connStats,
 		congestion:                     congestion,
+		ignorePacketsBelow:             ignorePacketsBelow,
 		perspective:                    pers,
 		qlogger:                        qlogger,
 		logger:                         logger,
@@ -526,10 +521,6 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	}
 }
 
-func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNumber {
-	return h.lowestNotConfirmedAcked
-}
-
 // Packets are returned in ascending packet number order.
 func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]packetWithPacketNumber, error) {
 	if len(h.ackedPackets) > 0 {
@@ -595,8 +586,8 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	}
 
 	for _, p := range h.ackedPackets {
-		if p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
-			h.lowestNotConfirmedAcked = max(h.lowestNotConfirmedAcked, p.LargestAcked+1)
+		if p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT && h.ignorePacketsBelow != nil {
+			h.ignorePacketsBelow(p.LargestAcked + 1)
 		}
 
 		for _, f := range p.Frames {

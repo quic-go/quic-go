@@ -108,13 +108,14 @@ func TestSentPacketHandlerSendAndAcknowledge(t *testing.T) {
 }
 
 func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.EncryptionLevel) {
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		false,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -162,13 +163,14 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 }
 
 func TestSentPacketHandlerAcknowledgeSkippedPacket(t *testing.T) {
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		false,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -217,13 +219,14 @@ func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, 
 	expectedRTTStats.SetMaxAckDelay(time.Second)
 	rttStats := utils.NewRTTStats()
 	rttStats.SetMaxAckDelay(time.Second)
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		false,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -307,13 +310,14 @@ func TestSentPacketHandlerAmplificationLimitServer(t *testing.T) {
 }
 
 func testSentPacketHandlerAmplificationLimitServer(t *testing.T, addressValidated bool) {
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		addressValidated,
 		false,
+		nil,
 		protocol.PerspectiveServer,
 		nil,
 		utils.DefaultLogger,
@@ -377,13 +381,14 @@ func TestSentPacketHandlerAmplificationLimitClient(t *testing.T) {
 }
 
 func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake bool) {
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -432,13 +437,14 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 
 func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	rttStats := utils.NewRTTStats()
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveServer,
 		nil,
 		utils.DefaultLogger,
@@ -486,13 +492,14 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 
 func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 	rttStats := utils.NewRTTStats()
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveServer,
 		nil,
 		utils.DefaultLogger,
@@ -547,13 +554,14 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	rttStats.UpdateRTT(500*time.Millisecond, 0)
 	rttStats.UpdateRTT(1000*time.Millisecond, 0)
 	rttStats.UpdateRTT(1500*time.Millisecond, 0)
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveServer,
 		&eventRecorder,
 		utils.DefaultLogger,
@@ -744,13 +752,14 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	const rtt = time.Second
 	rttStats.UpdateRTT(rtt, 0)
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveServer,
 		nil,
 		utils.DefaultLogger,
@@ -777,7 +786,7 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	now = now.Add(100 * time.Millisecond)
 	handshakePNs[1] = sendPacket(t, now, protocol.EncryptionHandshake)
 	handshakeTimes[1] = now
-	require.Equal(t, protocol.ByteCount(4000), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(4000), sph.(*sentPacketHandler).getBytesInFlight())
 
 	// the PTO is the earliest time of the PTO times for both packet number spaces,
 	// i.e. the 2nd Initial packet sent
@@ -809,9 +818,9 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 
 	// drop the Initial packet number space
 	now = timeout.Add(100 * time.Millisecond)
-	require.Equal(t, protocol.ByteCount(6000), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(6000), sph.(*sentPacketHandler).getBytesInFlight())
 	sph.DropPackets(protocol.EncryptionInitial, now)
-	require.Equal(t, protocol.ByteCount(3000), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(3000), sph.(*sentPacketHandler).getBytesInFlight())
 
 	// Since the Initial packets are gone:
 	// * the earliest PTO time is now based on the 3rd Handshake packet
@@ -836,13 +845,14 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 }
 
 func TestSentPacketHandler0RTT(t *testing.T) {
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -868,7 +878,7 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	sendPacket(t, now.Add(200*time.Millisecond), protocol.Encryption0RTT)
 	sendPacket(t, now.Add(300*time.Millisecond), protocol.Encryption1RTT)
 	sendPacket(t, now.Add(400*time.Millisecond), protocol.Encryption1RTT)
-	require.Equal(t, protocol.ByteCount(5000), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(5000), sph.(*sentPacketHandler).getBytesInFlight())
 
 	// The PTO timer is based on the Handshake packet number space, not the 0-RTT packets
 	timeout := sph.GetLossDetectionTimeout()
@@ -878,7 +888,7 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 
 	now = timeout.Add(100 * time.Millisecond)
 	sph.DropPackets(protocol.Encryption0RTT, now)
-	require.Equal(t, protocol.ByteCount(3000), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(3000), sph.(*sentPacketHandler).getBytesInFlight())
 	// 0-RTT are discarded, not lost
 	require.Empty(t, appDataPackets.Lost)
 }
@@ -887,18 +897,19 @@ func TestSentPacketHandlerCongestion(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cong := mocks.NewMockSendAlgorithmWithDebugInfos(mockCtrl)
 	rttStats := utils.NewRTTStats()
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveServer,
 		nil,
 		utils.DefaultLogger,
 	)
-	sph.congestion = cong
+	sph.(*sentPacketHandler).congestion = cong
 
 	var packets packetTracker
 	// Send the first 5 packets: not congestion-limited, not pacing-limited.
@@ -987,13 +998,14 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 	var initialPackets, appDataPackets packetTracker
 
 	rttStats := utils.NewRTTStats()
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -1014,7 +1026,7 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{appDataPackets.NewPingFrame(pn)}, protocol.Encryption0RTT, protocol.ECNNon, 1000, false, false)
 		now = now.Add(100 * time.Millisecond)
 	}
-	require.Equal(t, protocol.ByteCount(4000), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(4000), sph.(*sentPacketHandler).getBytesInFlight())
 	require.NotZero(t, sph.GetLossDetectionTimeout())
 
 	sph.ResetForRetry(start.Add(rtt))
@@ -1027,7 +1039,7 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 	require.False(t, sph.QueueProbePacket(protocol.Encryption0RTT))
 	// the RTT measurement is taken from the first packet sent
 	require.Equal(t, expectedRTT, rttStats.SmoothedRTT())
-	require.Zero(t, sph.getBytesInFlight())
+	require.Zero(t, sph.(*sentPacketHandler).getBytesInFlight())
 
 	// packet numbers continue increasing
 	initialPN, _ := sph.PeekPacketNumber(protocol.EncryptionInitial)
@@ -1038,13 +1050,14 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 
 func TestSentPacketHandlerRetryAfterPTO(t *testing.T) {
 	rttStats := utils.NewRTTStats()
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -1082,19 +1095,20 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	cong.EXPECT().OnPacketAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	cong.EXPECT().MaybeExitSlowStart().AnyTimes()
 	ecnHandler := NewMockECNHandler(mockCtrl)
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
 	)
-	sph.ecnTracker = ecnHandler
-	sph.congestion = cong
+	sph.(*sentPacketHandler).ecnTracker = ecnHandler
+	sph.(*sentPacketHandler).congestion = cong
 
 	// ECN marks on non-1-RTT packets are ignored
 	sph.SentPacket(monotime.Now(), sph.PopPacketNumber(protocol.EncryptionInitial), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false, false)
@@ -1186,13 +1200,14 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
 
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -1238,10 +1253,10 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	// the timeout is now based on the probe packet
 	timeout := sph.GetLossDetectionTimeout()
 	require.Equal(t, pathProbeTimeout, timeout)
-	require.Zero(t, sph.getBytesInFlight())
+	require.Zero(t, sph.(*sentPacketHandler).getBytesInFlight())
 	pn1 := sendPacket(t, now, false)
 	pn2 := sendPacket(t, now, false)
-	require.Equal(t, protocol.ByteCount(2400), sph.getBytesInFlight())
+	require.Equal(t, protocol.ByteCount(2400), sph.(*sentPacketHandler).getBytesInFlight())
 
 	// send one more non-probe packet
 	pn := sendPacket(t, now, false)
@@ -1256,7 +1271,7 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 
 	packets.Lost = packets.Lost[:0]
 	sph.MigratedPath(now, 1200)
-	require.Zero(t, sph.getBytesInFlight())
+	require.Zero(t, sph.(*sentPacketHandler).getBytesInFlight())
 	require.Equal(t, utils.DefaultInitialRTT, rttStats.SmoothedRTT())
 	require.Equal(t, []protocol.PacketNumber{pn1, pn2}, packets.Lost)
 }
@@ -1266,13 +1281,14 @@ func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
 
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -1342,13 +1358,14 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 		return time.Duration(rand.Int64N(int64(max-min))) + min
 	}
 
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,
@@ -1411,13 +1428,14 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 
 	var eventRecorder events.Recorder
 
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		&eventRecorder,
 		utils.DefaultLogger,
@@ -1546,13 +1564,14 @@ func benchmarkSendAndAcknowledge(b *testing.B, ackEvery, inFlight int) {
 	b.ReportAllocs()
 
 	rttStats := utils.NewRTTStats()
-	sph := newSentPacketHandler(
+	sph := NewSentPacketHandler(
 		0,
 		1200,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
+		nil,
 		protocol.PerspectiveClient,
 		nil,
 		utils.DefaultLogger,

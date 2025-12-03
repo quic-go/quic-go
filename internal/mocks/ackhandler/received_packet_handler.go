@@ -154,6 +154,42 @@ func (c *MockReceivedPacketHandlerGetAlarmTimeoutCall) DoAndReturn(f func() mono
 	return c
 }
 
+// IgnorePacketsBelow mocks base method.
+func (m *MockReceivedPacketHandler) IgnorePacketsBelow(arg0 protocol.PacketNumber) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IgnorePacketsBelow", arg0)
+}
+
+// IgnorePacketsBelow indicates an expected call of IgnorePacketsBelow.
+func (mr *MockReceivedPacketHandlerMockRecorder) IgnorePacketsBelow(arg0 any) *MockReceivedPacketHandlerIgnorePacketsBelowCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IgnorePacketsBelow", reflect.TypeOf((*MockReceivedPacketHandler)(nil).IgnorePacketsBelow), arg0)
+	return &MockReceivedPacketHandlerIgnorePacketsBelowCall{Call: call}
+}
+
+// MockReceivedPacketHandlerIgnorePacketsBelowCall wrap *gomock.Call
+type MockReceivedPacketHandlerIgnorePacketsBelowCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockReceivedPacketHandlerIgnorePacketsBelowCall) Return() *MockReceivedPacketHandlerIgnorePacketsBelowCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockReceivedPacketHandlerIgnorePacketsBelowCall) Do(f func(protocol.PacketNumber)) *MockReceivedPacketHandlerIgnorePacketsBelowCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockReceivedPacketHandlerIgnorePacketsBelowCall) DoAndReturn(f func(protocol.PacketNumber)) *MockReceivedPacketHandlerIgnorePacketsBelowCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // IsPotentiallyDuplicate mocks base method.
 func (m *MockReceivedPacketHandler) IsPotentiallyDuplicate(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel) bool {
 	m.ctrl.T.Helper()

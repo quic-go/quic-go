@@ -10,8 +10,6 @@ import (
 )
 
 type receivedPacketHandler struct {
-	sentPackets sentPacketTracker
-
 	initialPackets   *receivedPacketTracker
 	handshakePackets *receivedPacketTracker
 	appDataPackets   appDataReceivedPacketTracker
@@ -21,9 +19,8 @@ type receivedPacketHandler struct {
 
 var _ ReceivedPacketHandler = &receivedPacketHandler{}
 
-func newReceivedPacketHandler(sentPackets sentPacketTracker, logger utils.Logger) ReceivedPacketHandler {
+func NewReceivedPacketHandler(logger utils.Logger) ReceivedPacketHandler {
 	return &receivedPacketHandler{
-		sentPackets:      sentPackets,
 		initialPackets:   newReceivedPacketTracker(),
 		handshakePackets: newReceivedPacketTracker(),
 		appDataPackets:   *newAppDataReceivedPacketTracker(logger),
@@ -38,7 +35,6 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	rcvTime monotime.Time,
 	ackEliciting bool,
 ) error {
-	h.sentPackets.ReceivedPacket(encLevel, rcvTime)
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		return h.initialPackets.ReceivedPacket(pn, ecn, ackEliciting)
@@ -58,14 +54,14 @@ func (h *receivedPacketHandler) ReceivedPacket(
 		if h.lowest1RTTPacket == protocol.InvalidPacketNumber || pn < h.lowest1RTTPacket {
 			h.lowest1RTTPacket = pn
 		}
-		if err := h.appDataPackets.ReceivedPacket(pn, ecn, rcvTime, ackEliciting); err != nil {
-			return err
-		}
-		h.appDataPackets.IgnoreBelow(h.sentPackets.GetLowestPacketNotConfirmedAcked())
-		return nil
+		return h.appDataPackets.ReceivedPacket(pn, ecn, rcvTime, ackEliciting)
 	default:
 		panic(fmt.Sprintf("received packet with unknown encryption level: %s", encLevel))
 	}
+}
+
+func (h *receivedPacketHandler) IgnorePacketsBelow(pn protocol.PacketNumber) {
+	h.appDataPackets.IgnoreBelow(pn)
 }
 
 func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
