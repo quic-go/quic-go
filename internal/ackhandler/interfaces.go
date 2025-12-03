@@ -13,6 +13,7 @@ type SentPacketHandler interface {
 	// ReceivedAck processes an ACK frame.
 	// It does not store a copy of the frame.
 	ReceivedAck(f *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool /* 1-RTT packet acked */, error)
+	ReceivedPacket(protocol.EncryptionLevel, monotime.Time)
 	ReceivedBytes(_ protocol.ByteCount, rcvTime monotime.Time)
 	DropPackets(_ protocol.EncryptionLevel, rcvTime monotime.Time)
 	ResetForRetry(rcvTime monotime.Time)
@@ -37,13 +38,9 @@ type SentPacketHandler interface {
 	MigratedPath(now monotime.Time, initialMaxPacketSize protocol.ByteCount)
 }
 
-type sentPacketTracker interface {
-	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
-	ReceivedPacket(_ protocol.EncryptionLevel, rcvTime monotime.Time)
-}
-
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
 type ReceivedPacketHandler interface {
+	IgnorePacketsBelow(protocol.PacketNumber)
 	IsPotentiallyDuplicate(protocol.PacketNumber, protocol.EncryptionLevel) bool
 	ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, encLevel protocol.EncryptionLevel, rcvTime monotime.Time, ackEliciting bool) error
 	DropPackets(protocol.EncryptionLevel)

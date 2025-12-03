@@ -419,6 +419,42 @@ func (c *MockSentPacketHandlerReceivedBytesCall) DoAndReturn(f func(protocol.Byt
 	return c
 }
 
+// ReceivedPacket mocks base method.
+func (m *MockSentPacketHandler) ReceivedPacket(arg0 protocol.EncryptionLevel, arg1 monotime.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReceivedPacket", arg0, arg1)
+}
+
+// ReceivedPacket indicates an expected call of ReceivedPacket.
+func (mr *MockSentPacketHandlerMockRecorder) ReceivedPacket(arg0, arg1 any) *MockSentPacketHandlerReceivedPacketCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedPacket), arg0, arg1)
+	return &MockSentPacketHandlerReceivedPacketCall{Call: call}
+}
+
+// MockSentPacketHandlerReceivedPacketCall wrap *gomock.Call
+type MockSentPacketHandlerReceivedPacketCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSentPacketHandlerReceivedPacketCall) Return() *MockSentPacketHandlerReceivedPacketCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSentPacketHandlerReceivedPacketCall) Do(f func(protocol.EncryptionLevel, monotime.Time)) *MockSentPacketHandlerReceivedPacketCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSentPacketHandlerReceivedPacketCall) DoAndReturn(f func(protocol.EncryptionLevel, monotime.Time)) *MockSentPacketHandlerReceivedPacketCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // ResetForRetry mocks base method.
 func (m *MockSentPacketHandler) ResetForRetry(rcvTime monotime.Time) {
 	m.ctrl.T.Helper()
