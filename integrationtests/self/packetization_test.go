@@ -226,34 +226,34 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	var streamDataBlockedFrames []qlog.StreamDataBlockedFrame
 	var dataBlockedFrames []qlog.DataBlockedFrame
 	var bundledCounter int
-	seenStreamDataBlockedOffsets := make(map[protocol.ByteCount]bool)
-	seenDataBlockedOffsets := make(map[protocol.ByteCount]bool)
-	seenBundledOffsets := make(map[protocol.ByteCount]bool)
+	seenStreamDataBlockedOffsets := make(map[protocol.ByteCount]struct{})
+	seenDataBlockedOffsets := make(map[protocol.ByteCount]struct{})
+	seenBundledOffsets := make(map[protocol.ByteCount]struct{})
 	for _, p := range counter.getSentShortHeaderPackets() {
 		blockedOffset := protocol.InvalidByteCount
 		for _, f := range p.frames {
 			switch frame := f.Frame.(type) {
 			case *qlog.StreamDataBlockedFrame:
 				// Only count unique frames (deduplicate by offset)
-				if !seenStreamDataBlockedOffsets[frame.MaximumStreamData] {
+				if _, seen := seenStreamDataBlockedOffsets[frame.MaximumStreamData]; !seen {
 					streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
-					seenStreamDataBlockedOffsets[frame.MaximumStreamData] = true
+					seenStreamDataBlockedOffsets[frame.MaximumStreamData] = struct{}{}
 				}
 				blockedOffset = frame.MaximumStreamData
 			case *qlog.DataBlockedFrame:
 				// Only count unique frames (deduplicate by offset)
-				if !seenDataBlockedOffsets[frame.MaximumData] {
+				if _, seen := seenDataBlockedOffsets[frame.MaximumData]; !seen {
 					dataBlockedFrames = append(dataBlockedFrames, *frame)
-					seenDataBlockedOffsets[frame.MaximumData] = true
+					seenDataBlockedOffsets[frame.MaximumData] = struct{}{}
 				}
 				blockedOffset = frame.MaximumData
 			case *qlog.StreamFrame:
 				// the STREAM frame is always packed last
 				if frame.Offset+frame.Length == int64(blockedOffset) {
 					// Only count unique bundled packets (deduplicate by blocked offset)
-					if !seenBundledOffsets[blockedOffset] {
+					if _, seen := seenBundledOffsets[blockedOffset]; !seen {
 						bundledCounter++
-						seenBundledOffsets[blockedOffset] = true
+						seenBundledOffsets[blockedOffset] = struct{}{}
 					}
 				}
 			}
