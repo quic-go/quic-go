@@ -51,10 +51,6 @@ func connectionOptSentPacketHandler(sph ackhandler.SentPacketHandler) testConnec
 	return func(conn *Conn) { conn.sentPacketHandler = sph }
 }
 
-func connectionOptReceivedPacketHandler(rph ackhandler.ReceivedPacketHandler) testConnectionOpt {
-	return func(conn *Conn) { conn.receivedPacketHandler = rph }
-}
-
 func connectionOptUnpacker(u unpacker) testConnectionOpt {
 	return func(conn *Conn) { conn.unpacker = u }
 }
@@ -88,6 +84,10 @@ type testConnection struct {
 	destConnID protocol.ConnectionID
 	srcConnID  protocol.ConnectionID
 	remoteAddr *net.UDPAddr
+}
+
+func (tc *testConnection) receivedPacketHandler() *ackhandler.ReceivedPacketHandler {
+	return &tc.conn.receivedPacketHandler
 }
 
 func newServerTestConnection(
@@ -2109,13 +2109,11 @@ func TestConnectionACKTimer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-		rph := ackhandler.NewReceivedPacketHandler(utils.DefaultLogger)
 		tc := newServerTestConnection(t,
 			mockCtrl,
 			&Config{MaxIdleTimeout: time.Second},
 			false,
 			connectionOptHandshakeConfirmed(),
-			connectionOptReceivedPacketHandler(rph),
 			connectionOptSentPacketHandler(sph),
 		)
 		const alarmTimeout = 500 * time.Millisecond
@@ -2127,7 +2125,7 @@ func TestConnectionACKTimer(t *testing.T) {
 		tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 		// Set initial alarm timeout far in the future
-		_ = rph.ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, monotime.Now().Add(time.Hour), true)
+		_ = tc.receivedPacketHandler().ReceivedPacket(1, protocol.ECNNon, protocol.Encryption1RTT, monotime.Now().Add(time.Hour), true)
 
 		var times []monotime.Time
 		done := make(chan struct{}, 5)
@@ -2138,6 +2136,7 @@ func TestConnectionACKTimer(t *testing.T) {
 				func(buf *packetBuffer, _ protocol.ByteCount, _ monotime.Time, _ protocol.Version) (shortHeaderPacket, error) {
 					buf.Data = append(buf.Data, []byte("foobar")...)
 					times = append(times, monotime.Now())
+					rph := tc.receivedPacketHandler()
 					if len(times) == 1 {
 						// After first packet is sent, set alarm timeout for the next iteration
 						// Get the ACK frame to reset state, then receive a new packet to set alarm

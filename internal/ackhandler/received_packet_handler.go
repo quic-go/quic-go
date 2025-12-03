@@ -9,7 +9,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-type receivedPacketHandler struct {
+type ReceivedPacketHandler struct {
 	initialPackets   *receivedPacketTracker
 	handshakePackets *receivedPacketTracker
 	appDataPackets   appDataReceivedPacketTracker
@@ -17,10 +17,8 @@ type receivedPacketHandler struct {
 	lowest1RTTPacket protocol.PacketNumber
 }
 
-var _ ReceivedPacketHandler = &receivedPacketHandler{}
-
-func NewReceivedPacketHandler(logger utils.Logger) ReceivedPacketHandler {
-	return &receivedPacketHandler{
+func NewReceivedPacketHandler(logger utils.Logger) *ReceivedPacketHandler {
+	return &ReceivedPacketHandler{
 		initialPackets:   newReceivedPacketTracker(),
 		handshakePackets: newReceivedPacketTracker(),
 		appDataPackets:   *newAppDataReceivedPacketTracker(logger),
@@ -28,7 +26,7 @@ func NewReceivedPacketHandler(logger utils.Logger) ReceivedPacketHandler {
 	}
 }
 
-func (h *receivedPacketHandler) ReceivedPacket(
+func (h *ReceivedPacketHandler) ReceivedPacket(
 	pn protocol.PacketNumber,
 	ecn protocol.ECN,
 	encLevel protocol.EncryptionLevel,
@@ -60,11 +58,11 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	}
 }
 
-func (h *receivedPacketHandler) IgnorePacketsBelow(pn protocol.PacketNumber) {
+func (h *ReceivedPacketHandler) IgnorePacketsBelow(pn protocol.PacketNumber) {
 	h.appDataPackets.IgnoreBelow(pn)
 }
 
-func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+func (h *ReceivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	//nolint:exhaustive // 1-RTT packet number space is never dropped.
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -79,11 +77,11 @@ func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	}
 }
 
-func (h *receivedPacketHandler) GetAlarmTimeout() monotime.Time {
+func (h *ReceivedPacketHandler) GetAlarmTimeout() monotime.Time {
 	return h.appDataPackets.GetAlarmTimeout()
 }
 
-func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, now monotime.Time, onlyIfQueued bool) *wire.AckFrame {
+func (h *ReceivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, now monotime.Time, onlyIfQueued bool) *wire.AckFrame {
 	//nolint:exhaustive // 0-RTT packets can't contain ACK frames.
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -104,7 +102,7 @@ func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, n
 	}
 }
 
-func (h *receivedPacketHandler) IsPotentiallyDuplicate(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) bool {
+func (h *ReceivedPacketHandler) IsPotentiallyDuplicate(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) bool {
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		if h.initialPackets != nil {
