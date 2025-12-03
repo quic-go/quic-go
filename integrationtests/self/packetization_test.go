@@ -226,20 +226,35 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	var streamDataBlockedFrames []qlog.StreamDataBlockedFrame
 	var dataBlockedFrames []qlog.DataBlockedFrame
 	var bundledCounter int
+	seenStreamDataBlockedOffsets := make(map[protocol.ByteCount]bool)
+	seenDataBlockedOffsets := make(map[protocol.ByteCount]bool)
+	seenBundledOffsets := make(map[protocol.ByteCount]bool)
 	for _, p := range counter.getSentShortHeaderPackets() {
 		blockedOffset := protocol.InvalidByteCount
 		for _, f := range p.frames {
 			switch frame := f.Frame.(type) {
 			case *qlog.StreamDataBlockedFrame:
-				streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
+				// Only count unique frames (deduplicate by offset)
+				if !seenStreamDataBlockedOffsets[frame.MaximumStreamData] {
+					streamDataBlockedFrames = append(streamDataBlockedFrames, *frame)
+					seenStreamDataBlockedOffsets[frame.MaximumStreamData] = true
+				}
 				blockedOffset = frame.MaximumStreamData
 			case *qlog.DataBlockedFrame:
-				dataBlockedFrames = append(dataBlockedFrames, *frame)
+				// Only count unique frames (deduplicate by offset)
+				if !seenDataBlockedOffsets[frame.MaximumData] {
+					dataBlockedFrames = append(dataBlockedFrames, *frame)
+					seenDataBlockedOffsets[frame.MaximumData] = true
+				}
 				blockedOffset = frame.MaximumData
 			case *qlog.StreamFrame:
 				// the STREAM frame is always packed last
 				if frame.Offset+frame.Length == int64(blockedOffset) {
-					bundledCounter++
+					// Only count unique bundled packets (deduplicate by blocked offset)
+					if !seenBundledOffsets[blockedOffset] {
+						bundledCounter++
+						seenBundledOffsets[blockedOffset] = true
+					}
 				}
 			}
 		}
