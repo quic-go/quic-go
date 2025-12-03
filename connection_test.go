@@ -1542,22 +1542,12 @@ func TestConnection0RTTTransportParameters(t *testing.T) {
 }
 
 func TestConnectionReceivePrioritization(t *testing.T) {
-	t.Run("handshake complete", func(t *testing.T) {
-		events := testConnectionReceivePrioritization(t, true, 5)
-		require.Equal(t, []string{"unpack", "unpack", "unpack", "unpack", "unpack", "pack"}, events)
-	})
-
-	// before handshake completion, we trigger packing of a new packet every time we receive a packet
-	t.Run("handshake not complete", func(t *testing.T) {
-		events := testConnectionReceivePrioritization(t, false, 5)
-		require.Equal(t, []string{
-			"unpack", "pack",
-			"unpack", "pack",
-			"unpack", "pack",
-			"unpack", "pack",
-			"unpack", "pack",
-		}, events)
-	})
+	for _, handshakeComplete := range []bool{true, false} {
+		t.Run(fmt.Sprintf("handshake complete: %t", handshakeComplete), func(t *testing.T) {
+			events := testConnectionReceivePrioritization(t, handshakeComplete, 5)
+			require.Equal(t, []string{"unpack", "unpack", "unpack", "unpack", "unpack", "pack"}, events)
+		})
+	}
 }
 
 func testConnectionReceivePrioritization(t *testing.T, handshakeComplete bool, numPackets int) []string {
