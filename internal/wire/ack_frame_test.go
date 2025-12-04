@@ -474,3 +474,43 @@ func TestAckFrameReset(t *testing.T) {
 	require.Zero(t, f.ECT1)
 	require.Zero(t, f.ECNCE)
 }
+
+func BenchmarkACKSerialization(b *testing.B) {
+	b.Run("single range", func(b *testing.B) {
+		benchmarkACKSerialization(b, &AckFrame{
+			DelayTime: 18 * time.Millisecond,
+			ECT0:      1234,
+			ECNCE:     3,
+			AckRanges: []AckRange{{Smallest: 42, Largest: 1337}},
+		})
+	})
+
+	b.Run("multiple ranges", func(b *testing.B) {
+		benchmarkACKSerialization(b, &AckFrame{
+			DelayTime: 13 * time.Millisecond,
+			ECT0:      1234,
+			ECNCE:     4,
+			AckRanges: []AckRange{
+				{Smallest: 1000, Largest: 2000},
+				{Smallest: 800, Largest: 950},
+				{Smallest: 600, Largest: 700},
+				{Smallest: 300, Largest: 550},
+				{Smallest: 42, Largest: 150},
+			},
+		})
+	})
+}
+
+func benchmarkACKSerialization(b *testing.B, f *AckFrame) {
+	b.ReportAllocs()
+
+	buf := make([]byte, 0, 1024)
+	for b.Loop() {
+		buf = buf[:0]
+		var err error
+		buf, err = f.Append(buf, protocol.Version1)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
