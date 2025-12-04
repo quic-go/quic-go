@@ -3,6 +3,7 @@ package wire
 import (
 	"io"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -315,29 +316,118 @@ func TestWriteACKMultipleRanges(t *testing.T) {
 	require.True(t, frame.HasMissingRanges())
 }
 
-func TestWriteACKLimitMaxSize(t *testing.T) {
-	const numRanges = 1000
-	ackRanges := make([]AckRange, numRanges)
-	for i := protocol.PacketNumber(1); i <= numRanges; i++ {
-		ackRanges[numRanges-i] = AckRange{Smallest: 2 * i, Largest: 2 * i}
+func TestACKTruncate(t *testing.T) {
+	t.Run("single range", func(t *testing.T) {
+		testACKTruncate(t, AckFrame{
+			DelayTime: 18 * time.Millisecond,
+			AckRanges: []AckRange{
+				{Smallest: 42, Largest: 1337},
+			},
+		})
+	})
+
+	t.Run("multiple ranges", func(t *testing.T) {
+		testACKTruncate(t, AckFrame{
+			DelayTime: 18 * time.Millisecond,
+			AckRanges: []AckRange{
+				{Smallest: 300, Largest: 12345678},
+				{Smallest: 200, Largest: 250},
+				{Smallest: 1, Largest: 100},
+			},
+		})
+	})
+
+	t.Run("multiple ranges, with ECN", func(t *testing.T) {
+		testACKTruncate(t, AckFrame{
+			DelayTime: 18 * time.Millisecond,
+			ECT0:      1234,
+			ECT1:      5678,
+			ECNCE:     9012,
+			AckRanges: []AckRange{
+				{Smallest: 50, Largest: 60},
+				{Smallest: 40, Largest: 48},
+				{Smallest: 30, Largest: 35},
+				{Smallest: 20, Largest: 28},
+				{Smallest: 10, Largest: 15},
+			},
+		})
+	})
+
+	t.Run("more than MaxNumAckRanges ranges", func(t *testing.T) {
+		const numRanges = 1000
+		ackRanges := make([]AckRange, numRanges)
+		for i := protocol.PacketNumber(1); i <= numRanges; i++ {
+			ackRanges[numRanges-i] = AckRange{Smallest: 2 * i, Largest: 2 * i}
+		}
+		f := &AckFrame{AckRanges: ackRanges}
+		require.True(t, f.validateAckRanges())
+		testACKTruncate(t, *f)
+	})
+}
+
+func testACKTruncate(t *testing.T, origACK AckFrame) {
+	require.True(t, origACK.validateAckRanges())
+
+	numRanges := len(origACK.AckRanges)
+	cloneACK := func() AckFrame {
+		ack := origACK
+		ack.AckRanges = slices.Clone(origACK.AckRanges)
+		return ack
 	}
-	f := &AckFrame{AckRanges: ackRanges}
-	require.True(t, f.validateAckRanges())
-	b, err := f.Append(nil, protocol.Version1)
+
+	expectedRanges := min(numRanges, protocol.MaxNumAckRanges)
+
+	ack := cloneACK()
+	l := ack.Length(protocol.Version1)
+	ack.Truncate(1000, protocol.Version1)
+	require.Equal(t, expectedRanges, len(ack.AckRanges))
+	ack.Truncate(l, protocol.Version1)
+	require.Equal(t, expectedRanges, len(ack.AckRanges))
+
+	maxLen := l
+	for {
+		ack = cloneACK()
+
+		ack.Truncate(maxLen, protocol.Version1)
+		require.Len(t, ack.AckRanges, expectedRanges)
+		b, err := ack.Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		require.Len(t, b, int(ack.Length(protocol.Version1)))
+		require.LessOrEqual(t, len(b), int(maxLen))
+		if len(b) == int(maxLen) {
+			expectedRanges--
+		}
+		maxLen--
+		if expectedRanges == 0 {
+			break
+		}
+	}
+}
+
+func TestACKTooManyRanges(t *testing.T) {
+	var ack AckFrame
+	numRanges := protocol.MaxNumAckRanges + 10
+	ack.AckRanges = make([]AckRange, numRanges)
+	for i := range numRanges {
+		ack.AckRanges[numRanges-i-1] = AckRange{Smallest: protocol.PacketNumber(2 * i), Largest: protocol.PacketNumber(2 * i)}
+	}
+	require.True(t, ack.validateAckRanges())
+
+	l := ack.Length(protocol.Version1)
+
+	buf, err := ack.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	require.Len(t, b, int(f.Length(protocol.Version1)))
-	// make sure the ACK frame is *a little bit* smaller than the MaxAckFrameSize
-	require.Greater(t, protocol.ByteCount(len(b)), protocol.MaxAckFrameSize-5)
-	require.LessOrEqual(t, protocol.ByteCount(len(b)), protocol.MaxAckFrameSize)
-	typ, l, err := quicvarint.Parse(b)
+	require.Len(t, buf, int(l))
+
+	var parsedAck AckFrame
+	n, err := parseAckFrame(&parsedAck, buf[1:], FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
 	require.NoError(t, err)
-	b = b[l:]
-	var frame AckFrame
-	n, err := parseAckFrame(&frame, b, FrameType(typ), protocol.AckDelayExponent, protocol.Version1)
-	require.NoError(t, err)
-	require.Equal(t, len(b), n)
-	require.True(t, frame.HasMissingRanges())
-	require.Less(t, len(frame.AckRanges), numRanges) // make sure we dropped some ranges
+	require.Equal(t, len(buf[1:]), n)
+	require.Len(t, parsedAck.AckRanges, protocol.MaxNumAckRanges)
+
+	ack.Truncate(1000, protocol.Version1)
+	require.Len(t, ack.AckRanges, protocol.MaxNumAckRanges)
+	require.Equal(t, ack, parsedAck)
 }
 
 func TestAckRangeValidator(t *testing.T) {
@@ -504,13 +594,19 @@ func BenchmarkACKSerialization(b *testing.B) {
 func benchmarkACKSerialization(b *testing.B, f *AckFrame) {
 	b.ReportAllocs()
 
+	numRanges := len(f.AckRanges)
+
 	buf := make([]byte, 0, 1024)
 	for b.Loop() {
 		buf = buf[:0]
 		var err error
+		f.Truncate(1000, protocol.Version1)
 		buf, err = f.Append(buf, protocol.Version1)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
+
+	// the frame should not have been truncated
+	require.Equal(b, numRanges, len(f.AckRanges))
 }
