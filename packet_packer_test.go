@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -108,22 +109,59 @@ func parseShortHeaderPacket(t *testing.T, data []byte, connIDLen int) {
 
 func expectAppendFrames(framer *MockFrameSource, controlFrames []ackhandler.Frame, streamFrames []ackhandler.StreamFrame) {
 	framer.EXPECT().Append(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(cf []ackhandler.Frame, sf []ackhandler.StreamFrame, _ protocol.ByteCount, _ monotime.Time, v protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+		func(cf []ackhandler.Frame, sf []ackhandler.StreamFrame, maxSize protocol.ByteCount, _ monotime.Time, v protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
 			var length protocol.ByteCount
 			for _, f := range controlFrames {
+				if length+f.Frame.Length(v) > maxSize {
+					break
+				}
 				length += f.Frame.Length(v)
+				cf = append(cf, f)
 			}
 			for _, f := range streamFrames {
+				if length+f.Frame.Length(v) > maxSize {
+					break
+				}
 				length += f.Frame.Length(v)
+				sf = append(sf, f)
 			}
-			return append(cf, controlFrames...), append(sf, streamFrames...), length
+			return cf, sf, length
 		},
 	)
+}
+
+func generateLargeACKFrame(t *testing.T, minSize protocol.ByteCount) *wire.AckFrame {
+	t.Helper()
+
+	ack := &wire.AckFrame{
+		AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
+		DelayTime: 42 * time.Millisecond,
+	}
+	var counter int
+	for ack.Length(protocol.Version1) < minSize {
+		counter++
+		if counter > protocol.MaxNumAckRanges {
+			t.Fatalf("max number of ACK ranges reached, size: %d", ack.Length(protocol.Version1))
+		}
+		pn := protocol.PacketNumber(1000 * counter)
+		ack.AckRanges = append([]wire.AckRange{{Smallest: pn, Largest: pn + 100}}, ack.AckRanges...)
+	}
+	return ack
 }
 
 func TestPackLongHeaders(t *testing.T) {
 	skipIfDisableScramblingEnvSet(t)
 
+	t.Run("with Handshake ACK", func(t *testing.T) {
+		testPackLongHeaders(t, true)
+	})
+
+	t.Run("without Handshake ACK", func(t *testing.T) {
+		testPackLongHeaders(t, false)
+	})
+}
+
+func testPackLongHeaders(t *testing.T, includeACK bool) {
 	const maxPacketSize protocol.ByteCount = 1234
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
@@ -138,12 +176,20 @@ func TestPackLongHeaders(t *testing.T) {
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
 	tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
 	tp.sealingManager.EXPECT().GetHandshakeSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
-	tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
-	tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, now, false)
-	// don't EXPECT any calls for a Handshake ACK frame
+	var numRanges int
+	if includeACK {
+		ack := generateLargeACKFrame(t, maxPacketSize-1000)
+		numRanges = len(ack.AckRanges)
+		tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, now, false).Return(ack)
+	} else {
+		tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, now, false)
+		tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+		tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+	}
 	clientHello := getClientHello(t, "quic-go.net")
 	tp.initialStream.Write(clientHello)
+	tp.initialStream.Write(make([]byte, 900-len(clientHello))) // add some more data
 	tp.packer.retransmissionQueue.addHandshake(&wire.PingFrame{})
 
 	p, err := tp.packer.PackCoalescedPacket(false, maxPacketSize, now, protocol.Version1)
@@ -152,13 +198,21 @@ func TestPackLongHeaders(t *testing.T) {
 	require.Len(t, p.longHdrPackets, 2)
 	require.Nil(t, p.shortHdrPacket)
 	require.Equal(t, protocol.EncryptionInitial, p.longHdrPackets[0].EncryptionLevel())
-	require.Len(t, p.longHdrPackets[0].frames, 3)
+	// the ClientHello is split into multiple frames
+	require.GreaterOrEqual(t, len(p.longHdrPackets[0].frames), 3)
 	for _, f := range p.longHdrPackets[0].frames {
 		require.IsType(t, &wire.CryptoFrame{}, f.Frame)
 	}
 	require.Equal(t, protocol.EncryptionHandshake, p.longHdrPackets[1].EncryptionLevel())
 	require.Len(t, p.longHdrPackets[1].frames, 1)
 	require.IsType(t, &wire.PingFrame{}, p.longHdrPackets[1].frames[0].Frame)
+	if includeACK {
+		require.NotNil(t, p.longHdrPackets[1].ack)
+		// the ACK frame was truncated
+		require.Less(t, len(p.longHdrPackets[1].ack.AckRanges), numRanges)
+	} else {
+		require.Nil(t, p.longHdrPackets[1].ack)
+	}
 
 	hdrs, more := parsePacket(t, p.buffer.Data)
 	require.Len(t, hdrs, 2)
@@ -283,6 +337,16 @@ func TestPack0RTTPacketNoACK(t *testing.T) {
 }
 
 func TestPackCoalescedAppData(t *testing.T) {
+	t.Run("with large ACK", func(t *testing.T) {
+		testPackCoalescedAppData(t, true)
+	})
+
+	t.Run("without ACK", func(t *testing.T) {
+		testPackCoalescedAppData(t, false)
+	})
+}
+
+func testPackCoalescedAppData(t *testing.T, withAck bool) {
 	const maxPacketSize protocol.ByteCount = 1234
 
 	mockCtrl := gomock.NewController(t)
@@ -296,21 +360,41 @@ func TestPackCoalescedAppData(t *testing.T) {
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
 	tp.framer.EXPECT().HasData().Return(true)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, gomock.Any(), false)
-	// don't expect any calls for a 1-RTT ACK frame
-	tp.handshakeStream.Write([]byte("handshake"))
+
+	var numRanges int
+	if withAck {
+		// The ACK is too large and needs to be truncated
+		ack := generateLargeACKFrame(t, maxPacketSize-1000)
+		numRanges = len(ack.AckRanges)
+		tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), false).Return(ack)
+	} else {
+		tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), false)
+	}
+
+	handshakeData := make([]byte, 1000)
+	rand.Read(handshakeData)
+	tp.handshakeStream.Write(handshakeData)
 	expectAppendFrames(tp.framer, nil, []ackhandler.StreamFrame{{Frame: &wire.StreamFrame{Data: []byte("foobar")}}})
 
 	p, err := tp.packer.PackCoalescedPacket(false, maxPacketSize, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
-	require.Less(t, p.buffer.Len(), protocol.ByteCount(100))
 	require.Len(t, p.longHdrPackets, 1)
 	require.Equal(t, protocol.EncryptionHandshake, p.longHdrPackets[0].EncryptionLevel())
 	require.Len(t, p.longHdrPackets[0].frames, 1)
-	require.Equal(t, []byte("handshake"), p.longHdrPackets[0].frames[0].Frame.(*wire.CryptoFrame).Data)
+	require.Equal(t, handshakeData, p.longHdrPackets[0].frames[0].Frame.(*wire.CryptoFrame).Data)
 	require.NotNil(t, p.shortHdrPacket)
 	require.Empty(t, p.shortHdrPacket.Frames)
-	require.Len(t, p.shortHdrPacket.StreamFrames, 1)
-	require.Equal(t, []byte("foobar"), p.shortHdrPacket.StreamFrames[0].Frame.Data)
+	if withAck {
+		require.NotNil(t, p.shortHdrPacket.Ack)
+		require.Less(t, len(p.shortHdrPacket.Ack.AckRanges), numRanges)
+		require.LessOrEqual(t, len(p.buffer.Data), int(maxPacketSize))
+		require.Empty(t, p.shortHdrPacket.StreamFrames)
+	} else {
+		require.Nil(t, p.shortHdrPacket.Ack)
+		require.Less(t, len(p.buffer.Data), int(maxPacketSize))
+		require.Len(t, p.shortHdrPacket.StreamFrames, 1)
+		require.Equal(t, []byte("foobar"), p.shortHdrPacket.StreamFrames[0].Frame.Data)
+	}
 
 	hdrs, more := parsePacket(t, p.buffer.Data)
 	require.Len(t, hdrs, 1)
