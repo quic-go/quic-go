@@ -446,7 +446,7 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 			} else {
 				count++
 			}
-			go func(shouldCancel bool) {
+			go func() {
 				var str *mockStream
 				var err error
 				if shouldCancel {
@@ -455,7 +455,7 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 					str, err = m.OpenStreamSync(context.Background())
 				}
 				resultChan <- result{str: str, err: err}
-			}(shouldCancel)
+			}()
 		}
 
 		synctest.Wait()
