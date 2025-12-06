@@ -115,6 +115,7 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 		if m.closeErr != nil {
 			return *new(T), m.closeErr
 		}
+		// Check context again after waking up, in case it was cancelled while we were waiting
 		if err := ctx.Err(); err != nil {
 			m.openQueue = slices.DeleteFunc(m.openQueue, func(c chan struct{}) bool {
 				return c == waitChan
