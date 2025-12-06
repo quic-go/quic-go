@@ -120,13 +120,8 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 		if err := ctx.Err(); err != nil {
 			// Remove ourselves from the front of the queue
 			m.openQueue = m.openQueue[1:]
-			// Wake the next goroutine directly since we didn't consume a stream
-			if len(m.openQueue) > 0 {
-				select {
-				case m.openQueue[0] <- struct{}{}:
-				default:
-				}
-			}
+			// Wake the next goroutine using the standard mechanism
+			m.maybeUnblockOpenSync()
 			return *new(T), err
 		}
 		if m.nextStream > m.maxStream {
