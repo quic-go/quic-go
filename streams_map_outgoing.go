@@ -89,11 +89,6 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 		return *new(T), err
 	}
 	if len(m.openQueue) == 0 && m.nextStream <= m.maxStream {
-		// Check context again before opening stream, in case it was cancelled
-		// between the initial check and reaching this point
-		if err := ctx.Err(); err != nil {
-			return *new(T), err
-		}
 		return m.openStream(), nil
 	}
 
@@ -120,12 +115,18 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 		if m.closeErr != nil {
 			return *new(T), m.closeErr
 		}
-		// Check context again after waking up, in case it was cancelled while we were waiting
+		// Check context one more time after waking up, as it could have been cancelled
+		// while we were waiting or if select chose waitChan over ctx.Done()
 		if err := ctx.Err(); err != nil {
-			m.openQueue = slices.DeleteFunc(m.openQueue, func(c chan struct{}) bool {
-				return c == waitChan
-			})
-			m.maybeUnblockOpenSync()
+			// Remove ourselves from the front of the queue
+			m.openQueue = m.openQueue[1:]
+			// Wake the next goroutine directly since we didn't consume a stream
+			if len(m.openQueue) > 0 {
+				select {
+				case m.openQueue[0] <- struct{}{}:
+				default:
+				}
+			}
 			return *new(T), err
 		}
 		if m.nextStream > m.maxStream {
