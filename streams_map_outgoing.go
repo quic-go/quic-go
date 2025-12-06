@@ -90,7 +90,7 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 	}
 	if len(m.openQueue) == 0 && m.nextStream <= m.maxStream {
 		// Check context again before opening stream, in case it was cancelled
-		// after the initial check but before we acquired the lock
+		// between the initial check and reaching this point
 		if err := ctx.Err(); err != nil {
 			return *new(T), err
 		}
