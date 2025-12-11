@@ -995,24 +995,22 @@ func (c *Conn) handleHandshakeConfirmed(now monotime.Time) error {
 	return nil
 }
 
+const maxPacketsToProcess = 32
+
 func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
-	// Now process all packets in the receivedPackets channel.
-	// Limit the number of packets to the length of the receivedPackets channel,
+	// Process packets from the receivedPackets queue.
+	// Limit the number of packets to process to maxPacketsToProcess,
 	// so we eventually get a chance to send out an ACK when receiving a lot of packets.
 	c.receivedPacketMx.Lock()
-	numPackets := c.receivedPackets.Len()
-	if numPackets == 0 {
+
+	if c.receivedPackets.Empty() {
 		c.receivedPacketMx.Unlock()
 		return false, nil
 	}
 
 	var hasMorePackets bool
-	for i := range numPackets {
-		if i > 0 {
-			c.receivedPacketMx.Lock()
-		}
+	for range maxPacketsToProcess {
 		p := c.receivedPackets.PopFront()
-		hasMorePackets = !c.receivedPackets.Empty()
 		c.receivedPacketMx.Unlock()
 
 		var datagramID qlog.DatagramID
@@ -1026,13 +1024,19 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		if processed {
 			wasProcessed = true
 		}
-		if !c.handshakeComplete && (c.initialStream.HasData() || c.handshakeStream.HasData()) {
-			break
-		}
+		c.receivedPacketMx.Lock()
+		hasMorePackets = !c.receivedPackets.Empty()
 		if !hasMorePackets {
 			break
 		}
+		// Prioritize sending of new CRYPTO data.
+		// This is especially relevant when processing 0-RTT packets.
+		if !c.handshakeComplete && (c.initialStream.HasData() || c.handshakeStream.HasData()) {
+			break
+		}
 	}
+	c.receivedPacketMx.Unlock()
+
 	if hasMorePackets {
 		select {
 		case c.notifyReceivedPacket <- struct{}{}:
