@@ -509,7 +509,7 @@ func (c *Conn) preSetup() {
 	c.largestRcvdAppData = protocol.InvalidPacketNumber
 	c.initialStream = newInitialCryptoStream(c.perspective == protocol.PerspectiveClient)
 	c.handshakeStream = newCryptoStream()
-	c.sendQueue = newSendQueue(c.conn)
+	c.sendQueue = newSendQueue(c.conn, c.qlogger)
 	c.retransmissionQueue = newRetransmissionQueue()
 	c.frameParser = *wire.NewFrameParser(
 		c.config.EnableDatagrams,
@@ -712,6 +712,12 @@ runLoop:
 			// Cancel the pacing timer, as we can't send any more packets until the send queue is available again.
 			c.pacingDeadline = 0
 			c.blocked = blockModeHardBlocked
+			if c.qlogger != nil {
+				c.qlogger.RecordEvent(qlog.ArbitraryEvent{
+					EventName: "queue block",
+					Value:     "conn queue blocked",
+				})
+			}
 			continue
 		}
 
@@ -909,7 +915,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
-	c.sendQueue = newSendQueue(c.conn)
+	c.sendQueue = newSendQueue(c.conn, c.qlogger)
 	go func() {
 		if err := c.sendQueue.Run(); err != nil {
 			c.destroyImpl(err)

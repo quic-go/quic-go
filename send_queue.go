@@ -1,9 +1,13 @@
 package quic
 
 import (
+	"fmt"
 	"net"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 type sender interface {
@@ -27,19 +31,21 @@ type sendQueue struct {
 	runStopped  chan struct{} // runStopped when the run loop returns
 	available   chan struct{}
 	conn        sendConn
+	qlogger     qlogwriter.Recorder
 }
 
 var _ sender = &sendQueue{}
 
 const sendQueueCapacity = 8
 
-func newSendQueue(conn sendConn) sender {
+func newSendQueue(conn sendConn, qlogger qlogwriter.Recorder) sender {
 	return &sendQueue{
 		conn:        conn,
 		runStopped:  make(chan struct{}),
 		closeCalled: make(chan struct{}),
 		available:   make(chan struct{}, 1),
 		queue:       make(chan queueEntry, sendQueueCapacity),
+		qlogger:     qlogger,
 	}
 }
 
@@ -87,6 +93,7 @@ func (h *sendQueue) Run() error {
 			// make sure that all queued packets are actually sent out
 			shouldClose = true
 		case e := <-h.queue:
+			st := time.Now()
 			if err := h.conn.Write(e.buf.Data, e.gsoSize, e.ecn); err != nil {
 				// This additional check enables:
 				// 1. Checking for "datagram too large" message from the kernel, as such,
@@ -95,6 +102,16 @@ func (h *sendQueue) Run() error {
 				if !isSendMsgSizeErr(err) {
 					return err
 				}
+			}
+			took := time.Since(st)
+			if h.qlogger != nil {
+				h.qlogger.RecordEvent(qlog.ArbitraryEvent{
+					EventName: "send time",
+					Value:     fmt.Sprintf("sending packet took: %d: size: %d, at: %s", took.Milliseconds(), len(e.buf.Data), time.Now()),
+				})
+			}
+			if took.Milliseconds() > 200 {
+				fmt.Println("send took:", took.Milliseconds())
 			}
 			e.buf.Release()
 			select {

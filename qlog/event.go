@@ -394,6 +394,23 @@ func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	return h.err
 }
 
+// ArbitraryEvent is the transport:packet_dropped event.
+type ArbitraryEvent struct {
+	EventName string
+	Value     string
+}
+
+func (e ArbitraryEvent) Name() string { return e.EventName }
+
+func (e ArbitraryEvent) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("value"))
+	h.WriteToken(jsontext.String(e.Value))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
 type MTUUpdated struct {
 	Value int
 	Done  bool
