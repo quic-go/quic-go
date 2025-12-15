@@ -1,6 +1,9 @@
+<div align="center" style="margin: 10px 0 25px 0;">
+  <img src="./assets/quic-go-logo.png" width="700" height="auto">
+</div>
+
 # A QUIC implementation in pure Go
 
-<img src="docs/quic.png" width=303 height=124>
 
 [![Documentation](https://img.shields.io/badge/docs-quic--go.net-red?style=flat)](https://quic-go.net/docs/)
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/quic-go/quic-go)](https://pkg.go.dev/github.com/quic-go/quic-go)
