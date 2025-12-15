@@ -18,7 +18,7 @@ jobs:
         run: echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
       - name: Load Go build cache
         id: load-go-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
@@ -35,7 +35,7 @@ jobs:
       - name: Save Go build cache
         # only store cache when on master
         if: github.event_name == 'push' && github.ref_name == 'master'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ~/.cache/go-build
           # Caches are immutable, so we only update it once per day (at most).
