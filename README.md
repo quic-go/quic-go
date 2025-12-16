@@ -1,4 +1,4 @@
-<div align="center" style="margin: 10px 0 25px 0;">
+<div align="center" style="margin-bottom: 15px;">
   <img src="./assets/quic-go-logo.png" width="700" height="auto">
 </div>
 
