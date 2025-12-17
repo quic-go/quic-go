@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.24.x", "1.25.x" ]
+        go: [ "1.24.x", "1.25.x", "1.26.0-rc.1" ]
     env:
       GOLANGCI_LINT_VERSION: v2.6.0
       GOEXPERIMENT: ${{ matrix.go == '1.24.x' && 'synctest' || '' }}
