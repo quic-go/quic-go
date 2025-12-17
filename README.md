@@ -58,4 +58,4 @@ We are always happy to welcome new contributors! We have a number of self-contai
 
 ## License
 
-The code is licensed under the MIT license. The logo and brand assets are licensed under Creative Commons Attribution 4.0 International (CC BY 4.0) and are excluded from the MIT license. See [assets/LICENSE](https://github.com/quic-go/quic-go/tree/master/assets/LICENSE) for the full usage policy and details.
+The code is licensed under the MIT license. The logo and brand assets are excluded from the MIT license. See [assets/LICENSE.md](https://github.com/quic-go/quic-go/tree/master/assets/LICENSE.md) for the full usage policy and details.
