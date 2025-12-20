@@ -20,7 +20,7 @@ type testEvent struct {
 }
 
 func (e testEvent) Name() string {
-	return "transport:test_event"
+	return "quic:test_event"
 }
 
 func (e testEvent) Encode(enc *jsontext.Encoder, _ time.Time) error {
