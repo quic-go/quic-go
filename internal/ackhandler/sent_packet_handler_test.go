@@ -202,7 +202,7 @@ func TestSentPacketHandlerAcknowledgeSkippedPacket(t *testing.T) {
 	require.ErrorContains(t, err, fmt.Sprintf("received an ACK for skipped packet number: %d (1-RTT)", skippedPN))
 }
 
-func TestSentPacketHandlerRTT(t *testing.T) {
+func TestSentPacketHandlerRTTAckEliciting(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	sph := NewSentPacketHandler(
 		0,
@@ -257,6 +257,52 @@ func TestSentPacketHandlerRTT(t *testing.T) {
 	// packet was acknowledged, so the RTT is updated
 	ackPackets(t, now, pn6, pn7)
 	require.Equal(t, 800*time.Millisecond, rttStats.LatestRTT())
+}
+
+func TestSentPacketHandlerRTTAcrossPacketNumberSpaces(t *testing.T) {
+	rttStats := utils.NewRTTStats()
+	sph := NewSentPacketHandler(
+		0,
+		1200,
+		rttStats,
+		&utils.ConnectionStats{},
+		false,
+		false,
+		nil,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	sendPacket := func(t *testing.T, ti monotime.Time, encLevel protocol.EncryptionLevel) protocol.PacketNumber {
+		t.Helper()
+		pn := sph.PopPacketNumber(encLevel)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, encLevel, protocol.ECNNon, 1200, false, false)
+		return pn
+	}
+
+	ackPackets := func(t *testing.T, ti monotime.Time, encLevel protocol.EncryptionLevel, pns ...protocol.PacketNumber) {
+		t.Helper()
+		_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns...)}, encLevel, ti)
+		require.NoError(t, err)
+	}
+
+	now := monotime.Now()
+	initial1 := sendPacket(t, now, protocol.EncryptionInitial)
+	handshake1 := sendPacket(t, now.Add(time.Second), protocol.EncryptionHandshake)
+	initial2 := sendPacket(t, now.Add(2*time.Second), protocol.EncryptionInitial)
+	handshake2 := sendPacket(t, now.Add(2*time.Second), protocol.EncryptionHandshake)
+
+	ackPackets(t, now.Add(3*time.Second), protocol.EncryptionInitial, initial1, initial2)
+	require.Equal(t, time.Second, rttStats.LatestRTT())
+
+	// No RTT measurement, since the second initial packet was sent after the first handshake packet.
+	ackPackets(t, now.Add(4*time.Second), protocol.EncryptionHandshake, handshake1)
+	require.Equal(t, time.Second, rttStats.LatestRTT())
+
+	// This causes an RTT measurement, since the second handshake packet was sent last.
+	ackPackets(t, now.Add(5*time.Second), protocol.EncryptionHandshake, handshake1, handshake2)
+	require.Equal(t, 3*time.Second, rttStats.LatestRTT())
 }
 
 func TestSentPacketHandlerRTTAckDelays(t *testing.T) {

@@ -32,7 +32,7 @@ type zeroRTTCountingRouter struct {
 var _ simnet.Router = &zeroRTTCountingRouter{}
 
 func (r *zeroRTTCountingRouter) SendPacket(p simnet.Packet) error {
-	if contains0RTTPacket(p.Data) {
+	if containsPacketType(p.Data, protocol.PacketType0RTT) {
 		r.counter.Add(1)
 	}
 	return r.Router.SendPacket(p)

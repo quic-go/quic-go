@@ -312,9 +312,9 @@ func randomDuration(min, max time.Duration) time.Duration {
 	return min + time.Duration(rand.IntN(int(max-min)))
 }
 
-// contains0RTTPacket says if a packet contains a 0-RTT long header packet.
+// containsPacketType checks if a packet contains a long header packet of the specified type.
 // It correctly handles coalesced packets.
-func contains0RTTPacket(data []byte) bool {
+func containsPacketType(data []byte, packetType protocol.PacketType) bool {
 	for len(data) > 0 {
 		if !wire.IsLongHeaderPacket(data[0]) {
 			return false
@@ -323,7 +323,7 @@ func contains0RTTPacket(data []byte) bool {
 		if err != nil {
 			return false
 		}
-		if hdr.Type == protocol.PacketType0RTT {
+		if hdr.Type == packetType {
 			return true
 		}
 		data = rest

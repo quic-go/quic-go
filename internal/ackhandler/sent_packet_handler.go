@@ -69,6 +69,8 @@ type sentPacketHandler struct {
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
 	lostPackets      lostPacketTracker // only for application-data packet number space
+	// send time of the largest acknowledged packet, across all packet number spaces
+	largestAckedTime monotime.Time
 
 	// Do we know that the peer completed address validation yet?
 	// Always true for the server.
@@ -407,9 +409,12 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			if encLevel == protocol.Encryption1RTT {
 				ackDelay = min(ack.DelayTime, h.rttStats.MaxAckDelay())
 			}
-			h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay)
-			if h.logger.Debug() {
-				h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+			if h.largestAckedTime.IsZero() || !p.SendTime.Before(h.largestAckedTime) {
+				h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay)
+				if h.logger.Debug() {
+					h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+				}
+				h.largestAckedTime = p.SendTime
 			}
 			h.congestion.MaybeExitSlowStart()
 		}
