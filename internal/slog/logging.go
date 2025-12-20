@@ -174,6 +174,14 @@ func newMsgLastTextHandler(w io.Writer, levels logLevels) slog.Handler {
 	}
 }
 
+// DefaultLogger is the default logger used by quic-go.
+// It is initialized with the configuration from the QUIC_GO_LOG_LEVEL environment variable.
+var DefaultLogger *slog.Logger
+
+func init() {
+	DefaultLogger = NewLogger(os.Stderr)
+}
+
 func NewLogger(w io.Writer) *slog.Logger {
 	logConfig := os.Getenv("QUIC_GO_LOG_LEVEL")
 	levels, err := parseLogConfig(logConfig)

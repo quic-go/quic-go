@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -125,20 +125,39 @@ func (h *ExtendedHeader) GetLength(_ protocol.Version) protocol.ByteCount {
 }
 
 // Log logs the Header
-func (h *ExtendedHeader) Log(logger utils.Logger) {
-	var token string
+func (h *ExtendedHeader) Log(logger *slog.Logger) {
 	if h.Type == protocol.PacketTypeInitial || h.Type == protocol.PacketTypeRetry {
-		if len(h.Token) == 0 {
-			token = "Token: (empty), "
-		} else {
-			token = fmt.Sprintf("Token: %#x, ", h.Token)
-		}
 		if h.Type == protocol.PacketTypeRetry {
-			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sVersion: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.Version)
+			logger.Debug("Long Header (Retry)",
+				"type", h.Type,
+				"dest_conn_id", h.DestConnectionID,
+				"src_conn_id", h.SrcConnectionID,
+				"token", fmt.Sprintf("%#x", h.Token),
+				"version", h.Version,
+			)
 			return
 		}
+		logger.Debug("Long Header",
+			"type", h.Type,
+			"dest_conn_id", h.DestConnectionID,
+			"src_conn_id", h.SrcConnectionID,
+			"token", fmt.Sprintf("%#x", h.Token),
+			"packet_number", h.PacketNumber,
+			"packet_number_len", h.PacketNumberLen,
+			"length", h.Length,
+			"version", h.Version,
+		)
+		return
 	}
-	logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %d, PacketNumberLen: %d, Length: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.Length, h.Version)
+	logger.Debug("Long Header",
+		"type", h.Type,
+		"dest_conn_id", h.DestConnectionID,
+		"src_conn_id", h.SrcConnectionID,
+		"packet_number", h.PacketNumber,
+		"packet_number_len", h.PacketNumberLen,
+		"length", h.Length,
+		"version", h.Version,
+	)
 }
 
 func appendPacketNumber(b []byte, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) ([]byte, error) {

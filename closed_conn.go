@@ -1,11 +1,10 @@
 package quic
 
 import (
+	"log/slog"
 	"math/bits"
 	"net"
 	"sync/atomic"
-
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 // A closedLocalConn is a connection that we closed locally.
@@ -13,7 +12,7 @@ import (
 // with an exponential backoff.
 type closedLocalConn struct {
 	counter atomic.Uint32
-	logger  utils.Logger
+	logger  *slog.Logger
 
 	sendPacket func(net.Addr, packetInfo)
 }
@@ -21,7 +20,7 @@ type closedLocalConn struct {
 var _ packetHandler = &closedLocalConn{}
 
 // newClosedLocalConn creates a new closedLocalConn and runs it.
-func newClosedLocalConn(sendPacket func(net.Addr, packetInfo), logger utils.Logger) packetHandler {
+func newClosedLocalConn(sendPacket func(net.Addr, packetInfo), logger *slog.Logger) packetHandler {
 	return &closedLocalConn{
 		sendPacket: sendPacket,
 		logger:     logger,
@@ -35,7 +34,7 @@ func (c *closedLocalConn) handlePacket(p receivedPacket) {
 	if bits.OnesCount32(n) != 1 {
 		return
 	}
-	c.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", n)
+	c.logger.Debug("Retransmitting CONNECTION_CLOSE after receiving packets", "count", n)
 	c.sendPacket(p.remoteAddr, p.info)
 }
 

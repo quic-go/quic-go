@@ -2,10 +2,10 @@ package ackhandler
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -17,7 +17,7 @@ type ReceivedPacketHandler struct {
 	lowest1RTTPacket protocol.PacketNumber
 }
 
-func NewReceivedPacketHandler(logger utils.Logger) *ReceivedPacketHandler {
+func NewReceivedPacketHandler(logger *slog.Logger) *ReceivedPacketHandler {
 	return &ReceivedPacketHandler{
 		initialPackets:   newReceivedPacketTracker(),
 		handshakePackets: newReceivedPacketTracker(),

@@ -1,11 +1,13 @@
 package handshake
 
 import (
+	"context"
 	"crypto"
 	"crypto/cipher"
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go/internal/monotime"
@@ -67,7 +69,7 @@ type updatableAEAD struct {
 	rttStats *utils.RTTStats
 
 	qlogger qlogwriter.Recorder
-	logger  utils.Logger
+	logger  *slog.Logger
 	version protocol.Version
 
 	// use a single slice to avoid allocations
@@ -79,7 +81,7 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, logger utils.Logger, version protocol.Version) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, logger *slog.Logger, version protocol.Version) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
@@ -94,7 +96,12 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, log
 
 func (a *updatableAEAD) rollKeys() {
 	if a.prevRcvAEAD != nil {
-		a.logger.Debugf("Dropping key phase %d ahead of scheduled time. Drop time was: %s", a.keyPhase-1, a.prevRcvAEADExpiry)
+		if a.logger.Enabled(context.Background(), slog.LevelDebug) {
+			a.logger.Debug("Dropping key phase ahead of scheduled time",
+				"key_phase", a.keyPhase-1,
+				"drop_time", a.prevRcvAEADExpiry,
+			)
+		}
 		if a.qlogger != nil {
 			a.qlogger.RecordEvent(qlog.KeyDiscarded{
 				KeyType:  qlog.KeyTypeClient1RTT,
@@ -125,7 +132,12 @@ func (a *updatableAEAD) rollKeys() {
 
 func (a *updatableAEAD) startKeyDropTimer(now monotime.Time) {
 	d := 3 * a.rttStats.PTO(true)
-	a.logger.Debugf("Starting key drop timer to drop key phase %d (in %s)", a.keyPhase-1, d)
+	if a.logger.Enabled(context.Background(), slog.LevelDebug) {
+		a.logger.Debug("Starting key drop timer",
+			"key_phase", a.keyPhase-1,
+			"duration", d,
+		)
+	}
 	a.prevRcvAEADExpiry = now.Add(d)
 }
 
@@ -196,7 +208,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol
 func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
-		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
+		a.logger.Debug("Dropping key phase", "key_phase", a.keyPhase-1)
 		a.prevRcvAEADExpiry = 0
 		if a.qlogger != nil {
 			a.qlogger.RecordEvent(qlog.KeyDiscarded{
@@ -235,7 +247,7 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 			}
 		}
 		a.rollKeys()
-		a.logger.Debugf("Peer updated keys to %d", a.keyPhase)
+		a.logger.Debug("Peer updated keys", "key_phase", a.keyPhase)
 		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
 		// Start a timer to drop the previous key generation.
 		a.startKeyDropTimer(rcvTime)
@@ -265,7 +277,7 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 		// We initiated the key updated, and now we received the first packet protected with the new key phase.
 		// Therefore, we are certain that the peer rolled its keys as well. Start a timer to drop the old keys.
 		if a.keyPhase > 0 {
-			a.logger.Debugf("Peer confirmed key update to phase %d", a.keyPhase)
+			a.logger.Debug("Peer confirmed key update", "key_phase", a.keyPhase)
 			a.startKeyDropTimer(rcvTime)
 		}
 		a.firstRcvdWithCurrentKey = pn
@@ -326,11 +338,23 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 		}
 	}
 	if a.numRcvdWithCurrentKey >= keyUpdateInterval.Load() {
-		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)
+		if a.logger.Enabled(context.Background(), slog.LevelDebug) {
+			a.logger.Debug("Initiating key update",
+				"reason", "received packet count",
+				"packets_received", a.numRcvdWithCurrentKey,
+				"next_key_phase", a.keyPhase+1,
+			)
+		}
 		return true
 	}
 	if a.numSentWithCurrentKey >= keyUpdateInterval.Load() {
-		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %d", a.numSentWithCurrentKey, a.keyPhase+1)
+		if a.logger.Enabled(context.Background(), slog.LevelDebug) {
+			a.logger.Debug("Initiating key update",
+				"reason", "sent packet count",
+				"packets_sent", a.numSentWithCurrentKey,
+				"next_key_phase", a.keyPhase+1,
+			)
+		}
 		return true
 	}
 	return false

@@ -1,12 +1,13 @@
 package ackhandler
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -94,10 +95,10 @@ type appDataReceivedPacketTracker struct {
 	ackElicitingPacketsReceivedSinceLastAck int
 	ackAlarm                                monotime.Time
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
-func newAppDataReceivedPacketTracker(logger utils.Logger) *appDataReceivedPacketTracker {
+func newAppDataReceivedPacketTracker(logger *slog.Logger) *appDataReceivedPacketTracker {
 	h := &appDataReceivedPacketTracker{
 		receivedPacketTracker: *newReceivedPacketTracker(),
 		maxAckDelay:           protocol.MaxAckDelay,
@@ -126,8 +127,8 @@ func (h *appDataReceivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, 
 	if !h.ackQueued {
 		// No ACK queued, but we'll need to acknowledge the packet after max_ack_delay.
 		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
-		if h.logger.Debug() {
-			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Setting ACK timer to max ack delay", "delay", h.maxAckDelay)
 		}
 	}
 	return nil
@@ -141,8 +142,8 @@ func (h *appDataReceivedPacketTracker) IgnoreBelow(pn protocol.PacketNumber) {
 	}
 	h.ignoreBelow = pn
 	h.packetHistory.DeleteBelow(pn)
-	if h.logger.Debug() {
-		h.logger.Debugf("\tIgnoring all packets below %d.", pn)
+	if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+		h.logger.Debug("Ignoring all packets below", "packet_number", pn)
 	}
 }
 
@@ -177,29 +178,32 @@ func (h *appDataReceivedPacketTracker) shouldQueueACK(pn protocol.PacketNumber, 
 	// Ack decimation with reordering relies on the timer to send an ACK, but if
 	// missing packets we reported in the previous ACK, send an ACK immediately.
 	if wasMissing {
-		if h.logger.Debug() {
-			h.logger.Debugf("\tQueueing ACK because packet %d was missing before.", pn)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Queueing ACK because packet was missing before", "packet_number", pn)
 		}
 		return true
 	}
 
 	// send an ACK every 2 ack-eliciting packets
 	if h.ackElicitingPacketsReceivedSinceLastAck >= packetsBeforeAck {
-		if h.logger.Debug() {
-			h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, packetsBeforeAck)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Queueing ACK because packet threshold reached",
+				"packets_received", h.ackElicitingPacketsReceivedSinceLastAck,
+				"threshold", packetsBeforeAck,
+			)
 		}
 		return true
 	}
 
 	// queue an ACK if there are new missing packets to report
 	if h.hasNewMissingPackets() {
-		h.logger.Debugf("\tQueuing ACK because there's a new missing packet to report.")
+		h.logger.Debug("Queuing ACK because there's a new missing packet to report.")
 		return true
 	}
 
 	// queue an ACK if the packet was ECN-CE marked
 	if ecn == protocol.ECNCE {
-		h.logger.Debugf("\tQueuing ACK because the packet was ECN-CE marked.")
+		h.logger.Debug("Queuing ACK because the packet was ECN-CE marked.")
 		return true
 	}
 	return false
@@ -210,8 +214,8 @@ func (h *appDataReceivedPacketTracker) GetAckFrame(now monotime.Time, onlyIfQueu
 		if h.ackAlarm.IsZero() || h.ackAlarm.After(now) {
 			return nil
 		}
-		if h.logger.Debug() && !h.ackAlarm.IsZero() {
-			h.logger.Debugf("Sending ACK because the ACK timer expired.")
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) && !h.ackAlarm.IsZero() {
+			h.logger.Debug("Sending ACK because the ACK timer expired.")
 		}
 	}
 	ack := h.receivedPacketTracker.GetAckFrame()

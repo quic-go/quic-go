@@ -10,6 +10,7 @@ import (
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
+	islog "github.com/quic-go/quic-go/internal/slog"
 	"github.com/quic-go/quic-go/internal/testdata"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -31,7 +32,7 @@ func main() {
 		false,
 		&utils.RTTStats{},
 		nil,
-		utils.DefaultLogger.WithPrefix("client"),
+		islog.DefaultLogger.With(islog.ComponentKey, "client"),
 		protocol.Version1,
 	)
 
@@ -46,7 +47,7 @@ func main() {
 		false,
 		&utils.RTTStats{},
 		nil,
-		utils.DefaultLogger.WithPrefix("server"),
+		islog.DefaultLogger.With(islog.ComponentKey, "server"),
 		protocol.Version1,
 	)
 

@@ -1,8 +1,10 @@
 package flowcontrol
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -23,7 +25,7 @@ func NewConnectionFlowController(
 	maxReceiveWindow protocol.ByteCount,
 	allowWindowIncrease func(size protocol.ByteCount) bool,
 	rttStats *utils.RTTStats,
-	logger utils.Logger,
+	logger *slog.Logger,
 ) *connectionFlowController {
 	return &connectionFlowController{
 		baseFlowController: baseFlowController{
@@ -71,8 +73,10 @@ func (c *connectionFlowController) GetWindowUpdate(now monotime.Time) protocol.B
 
 	oldWindowSize := c.receiveWindowSize
 	offset := c.getWindowUpdate(now)
-	if c.logger.Debug() && oldWindowSize < c.receiveWindowSize {
-		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowSize/(1<<10))
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) && oldWindowSize < c.receiveWindowSize {
+		c.logger.Debug("Increasing receive flow control window for the connection",
+			"window_size_kb", c.receiveWindowSize/(1<<10),
+		)
 	}
 	return offset
 }
@@ -89,8 +93,10 @@ func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCoun
 	newSize := min(inc, c.maxReceiveWindowSize)
 	if delta := newSize - c.receiveWindowSize; delta > 0 && c.allowWindowIncrease(delta) {
 		c.receiveWindowSize = newSize
-		if c.logger.Debug() {
-			c.logger.Debugf("Increasing receive flow control window for the connection to %d, in response to stream flow control window increase", newSize)
+		if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+			c.logger.Debug("Increasing receive flow control window for the connection in response to stream flow control window increase",
+				"window_size", newSize,
+			)
 		}
 	}
 	c.startNewAutoTuningEpoch(now)

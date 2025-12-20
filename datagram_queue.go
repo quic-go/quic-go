@@ -2,9 +2,9 @@ package quic
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -28,10 +28,10 @@ type datagramQueue struct {
 
 	hasData func()
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
-func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
+func newDatagramQueue(hasData func(), logger *slog.Logger) *datagramQueue {
 	return &datagramQueue{
 		hasData: hasData,
 		rcvd:    make(chan struct{}, 1),
@@ -104,8 +104,8 @@ func (h *datagramQueue) HandleDatagramFrame(f *wire.DatagramFrame) {
 		}
 	}
 	h.rcvMx.Unlock()
-	if !queued && h.logger.Debug() {
-		h.logger.Debugf("Discarding received DATAGRAM frame (%d bytes payload)", len(f.Data))
+	if !queued && h.logger.Enabled(context.Background(), slog.LevelDebug) {
+		h.logger.Debug("Discarding received DATAGRAM frame", "payload_bytes", len(f.Data))
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"reflect"
 	"slices"
@@ -20,6 +21,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	islog "github.com/quic-go/quic-go/internal/slog"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -229,7 +231,7 @@ type Conn struct {
 	logID     string
 	qlogTrace qlogwriter.Trace
 	qlogger   qlogwriter.Recorder
-	logger    utils.Logger
+	logger    *slog.Logger
 }
 
 var _ streamSender = &Conn{}
@@ -267,7 +269,7 @@ var newConnection = func(
 	clientAddressValidated bool,
 	rtt time.Duration,
 	qlogTrace qlogwriter.Trace,
-	logger utils.Logger,
+	logger *slog.Logger,
 	v protocol.Version,
 ) *wrappedConn {
 	s := &Conn{
@@ -392,7 +394,7 @@ var newClientConnection = func(
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
 	qlogTrace qlogwriter.Trace,
-	logger utils.Logger,
+	logger *slog.Logger,
 	v protocol.Version,
 ) *wrappedConn {
 	s := &Conn{
@@ -688,7 +690,7 @@ runLoop:
 
 		if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the connection
-			c.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
+			c.logger.Debug("Sending a keep-alive PING to keep the connection alive.")
 			c.framer.QueueControlFrame(&wire.PingFrame{})
 			c.keepAlivePingSent = true
 		} else if !c.handshakeComplete && now.Sub(c.creationTime) >= c.config.handshakeTimeout() {
@@ -753,7 +755,7 @@ runLoop:
 			c.qlogger.Close()
 		}
 	}
-	c.logger.Infof("Connection %s closed.", c.logID)
+	c.logger.Info("Connection closed.", "conn_id", c.logID)
 	c.timer.Stop()
 	return closeErr.err
 }
@@ -916,7 +918,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
 	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
-	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
+	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, islog.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
 	c.sendQueue = newSendQueue(c.conn)
 	go func() {
@@ -1071,7 +1073,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (w
 						Trigger:    qlog.PacketDropHeaderParseError,
 					})
 				}
-				c.logger.Debugf("error parsing packet, couldn't parse connection ID: %s", err)
+				c.logger.Debug("Error parsing packet, couldn't parse connection ID", "error", err)
 				break
 			}
 			if destConnID != lastConnID {
@@ -1083,7 +1085,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (w
 						Trigger:    qlog.PacketDropUnknownConnectionID,
 					})
 				}
-				c.logger.Debugf("coalesced packet has different destination connection ID: %s, expected %s", destConnID, lastConnID)
+				c.logger.Debug("Coalesced packet has different destination connection ID", "got", destConnID, "expected", lastConnID)
 				break
 			}
 		}
@@ -1107,7 +1109,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (w
 						})
 					}
 				}
-				c.logger.Debugf("error parsing packet: %s", err)
+				c.logger.Debug("Error parsing packet", "error", err)
 				break
 			}
 			lastConnID = hdr.DestConnectionID
@@ -1120,7 +1122,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (w
 						Trigger:    qlog.PacketDropUnexpectedVersion,
 					})
 				}
-				c.logger.Debugf("Dropping packet with version %x. Expected %x.", hdr.Version, c.version)
+				c.logger.Debug("Dropping packet with unexpected version", "got", fmt.Sprintf("%x", hdr.Version), "expected", fmt.Sprintf("%x", c.version))
 				break
 			}
 
@@ -1130,8 +1132,8 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (w
 			counter++
 
 			// only log if this actually a coalesced packet
-			if c.logger.Debug() && (counter > 1 || len(rest) > 0) {
-				c.logger.Debugf("Parsed a coalesced packet. Part %d: %d bytes. Remaining: %d bytes.", counter, len(packetData), len(rest))
+			if c.logger.Enabled(context.Background(), slog.LevelDebug) && (counter > 1 || len(rest) > 0) {
+				c.logger.Debug("Parsed a coalesced packet.", "part", counter, "bytes", len(packetData), "remaining", len(rest))
 			}
 
 			p.data = packetData
@@ -1209,13 +1211,13 @@ func (c *Conn) handleShortHeaderPacket(
 	}
 	c.largestRcvdAppData = max(c.largestRcvdAppData, pn)
 
-	if c.logger.Debug() {
-		c.logger.Debugf("<- Reading packet %d (%d bytes) for connection %s, 1-RTT", pn, p.Size(), destConnID)
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		c.logger.Debug("<- Reading packet", "packet_number", pn, "bytes", p.Size(), "conn_id", destConnID, "enc_level", "1-RTT")
 		wire.LogShortHeader(c.logger, destConnID, pn, pnLen, keyPhase)
 	}
 
 	if c.receivedPacketHandler.IsPotentiallyDuplicate(pn, protocol.Encryption1RTT) {
-		c.logger.Debugf("Dropping (potentially) duplicate packet.")
+		c.logger.Debug("Dropping (potentially) duplicate packet.")
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
@@ -1277,7 +1279,7 @@ func (c *Conn) handleShortHeaderPacket(
 		if err != nil {
 			return true, err
 		}
-		c.logger.Debugf("sending path probe packet to %s", p.remoteAddr)
+		c.logger.Debug("Sending path probe packet", "remote_addr", p.remoteAddr)
 		c.logShortHeaderPacketWithDatagramID(probe, protocol.ECNNon, buf.Len(), false, datagramID)
 		c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, p.rcvTime)
 		c.sendQueue.SendProbe(buf, p.remoteAddr)
@@ -1330,7 +1332,7 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 				Trigger:    qlog.PacketDropUnknownConnectionID,
 			})
 		}
-		c.logger.Debugf("Dropping Initial packet (%d bytes) with unexpected source connection ID: %s (expected %s)", p.Size(), hdr.SrcConnectionID, c.handshakeDestConnID)
+		c.logger.Debug("Dropping Initial packet with unexpected source connection ID", "bytes", p.Size(), "got", hdr.SrcConnectionID, "expected", c.handshakeDestConnID)
 		return false, nil
 	}
 	// drop 0-RTT packets, if we are a client
@@ -1355,13 +1357,13 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 		return false, err
 	}
 
-	if c.logger.Debug() {
-		c.logger.Debugf("<- Reading packet %d (%d bytes) for connection %s, %s", packet.hdr.PacketNumber, p.Size(), hdr.DestConnectionID, packet.encryptionLevel)
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		c.logger.Debug("<- Reading packet", "packet_number", packet.hdr.PacketNumber, "bytes", p.Size(), "conn_id", hdr.DestConnectionID, "enc_level", packet.encryptionLevel)
 		packet.hdr.Log(c.logger)
 	}
 
 	if pn := packet.hdr.PacketNumber; c.receivedPacketHandler.IsPotentiallyDuplicate(pn, packet.encryptionLevel) {
-		c.logger.Debugf("Dropping (potentially) duplicate packet.")
+		c.logger.Debug("Dropping (potentially) duplicate packet.")
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
@@ -1401,7 +1403,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 				Trigger:    qlog.PacketDropKeyUnavailable,
 			})
 		}
-		c.logger.Debugf("Dropping %s packet (%d bytes) because we already dropped the keys.", pt, p.Size())
+		c.logger.Debug("Dropping packet because we already dropped the keys.", "packet_type", pt, "bytes", p.Size())
 		return false, nil
 	case handshake.ErrKeysNotYetAvailable:
 		// Sealer for this encryption level not yet available.
@@ -1428,7 +1430,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 				Trigger:    qlog.PacketDropPayloadDecryptError,
 			})
 		}
-		c.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", pt, p.Size(), err)
+		c.logger.Debug("Dropping packet that could not be unpacked", "packet_type", pt, "bytes", p.Size(), "error", err)
 		return false, nil
 	default:
 		var headerErr *headerParseError
@@ -1447,7 +1449,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 					Trigger:    qlog.PacketDropHeaderParseError,
 				})
 			}
-			c.logger.Debugf("Dropping %s packet (%d bytes) for which we couldn't unpack the header. Error: %s", pt, p.Size(), err)
+			c.logger.Debug("Dropping packet for which we couldn't unpack the header", "packet_type", pt, "bytes", p.Size(), "error", err)
 			return false, nil
 		}
 		// This is an error returned by the AEAD (other than ErrDecryptionFailed).
@@ -1470,7 +1472,7 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
 		}
-		c.logger.Debugf("Ignoring Retry.")
+		c.logger.Debug("Ignoring Retry.")
 		return false
 	}
 	if c.receivedFirstPacket {
@@ -1486,7 +1488,7 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
 		}
-		c.logger.Debugf("Ignoring Retry, since we already received a packet.")
+		c.logger.Debug("Ignoring Retry, since we already received a packet.")
 		return false
 	}
 	destConnID := c.connIDManager.Get()
@@ -1503,13 +1505,13 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
 		}
-		c.logger.Debugf("Ignoring Retry, since the server didn't change the Source Connection ID.")
+		c.logger.Debug("Ignoring Retry, since the server didn't change the Source Connection ID.")
 		return false
 	}
 	// If a token is already set, this means that we already received a Retry from the server.
 	// Ignore this Retry packet.
 	if c.receivedRetry {
-		c.logger.Debugf("Ignoring Retry, since a Retry was already received.")
+		c.logger.Debug("Ignoring Retry, since a Retry was already received.")
 		return false
 	}
 
@@ -1527,7 +1529,7 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 				Trigger: qlog.PacketDropPayloadDecryptError,
 			})
 		}
-		c.logger.Debugf("Ignoring spoofed Retry. Integrity Tag doesn't match.")
+		c.logger.Debug("Ignoring spoofed Retry. Integrity Tag doesn't match.")
 		return false
 	}
 
@@ -1540,10 +1542,10 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 	c.packer.SetToken(hdr.Token)
 	c.connIDManager.ChangeInitialConnID(newDestConnID)
 
-	if c.logger.Debug() {
-		c.logger.Debugf("<- Received Retry:")
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		c.logger.Debug("<- Received Retry")
 		(&wire.ExtendedHeader{Header: *hdr}).Log(c.logger)
-		c.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+		c.logger.Debug("Switching destination connection ID", "dest_conn_id", hdr.SrcConnectionID)
 	}
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.PacketReceived{
@@ -1584,7 +1586,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 				Trigger: qlog.PacketDropHeaderParseError,
 			})
 		}
-		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
+		c.logger.Debug("Error parsing Version Negotiation packet", "error", err)
 		return nil
 	}
 
@@ -1601,7 +1603,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 		return nil
 	}
 
-	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", supportedVersions)
+	c.logger.Info("Received a Version Negotiation packet.", "supported_versions", supportedVersions)
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.VersionNegotiationReceived{
 			Header: qlog.PacketHeaderVersionNegotiation{
@@ -1617,7 +1619,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 			Ours:   c.config.Versions,
 			Theirs: supportedVersions,
 		})
-		c.logger.Infof("No compatible QUIC version found.")
+		c.logger.Info("No compatible QUIC version found.")
 		return nil
 	}
 	if c.qlogger != nil {
@@ -1628,7 +1630,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 		})
 	}
 
-	c.logger.Infof("Switching to QUIC version %s.", newVersion)
+	c.logger.Info("Switching to QUIC version", "version", newVersion)
 	nextPN, _ := c.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
 	return &errCloseForRecreating{
 		nextPacketNumber: nextPN,
@@ -1662,7 +1664,7 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 		// The server can change the source connection ID with the first Handshake packet.
 		if c.perspective == protocol.PerspectiveClient && packet.hdr.SrcConnectionID != c.handshakeDestConnID {
 			cid := packet.hdr.SrcConnectionID
-			c.logger.Debugf("Received first packet. Switching destination connection ID to: %s", cid)
+			c.logger.Debug("Received first packet. Switching destination connection ID", "dest_conn_id", cid)
 			c.handshakeDestConnID = cid
 			c.connIDManager.ChangeInitialConnID(cid)
 		}
@@ -2186,15 +2188,15 @@ func (c *Conn) closeWithTransportError(code TransportErrorCode) {
 func (c *Conn) handleCloseError(closeErr *closeError) {
 	if closeErr.immediate {
 		if nerr, ok := closeErr.err.(net.Error); ok && nerr.Timeout() {
-			c.logger.Errorf("Destroying connection: %s", closeErr.err)
+			c.logger.Error("Destroying connection", "error", closeErr.err)
 		} else {
-			c.logger.Errorf("Destroying connection with error: %s", closeErr.err)
+			c.logger.Error("Destroying connection with error", "error", closeErr.err)
 		}
 	} else {
 		if closeErr.err == nil {
-			c.logger.Infof("Closing connection.")
+			c.logger.Info("Closing connection.")
 		} else {
-			c.logger.Errorf("Closing connection with error: %s", closeErr.err)
+			c.logger.Error("Closing connection with error", "error", closeErr.err)
 		}
 	}
 
@@ -2289,7 +2291,7 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	}
 	connClosePacket, err := c.sendConnectionClose(e)
 	if err != nil {
-		c.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
+		c.logger.Debug("Error sending CONNECTION_CLOSE", "error", err)
 	}
 	c.connIDGenerator.ReplaceWithClosed(connClosePacket, 3*c.rttStats.PTO(false))
 }
@@ -2312,8 +2314,8 @@ func (c *Conn) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now monoti
 
 // is called for the client, when restoring transport parameters saved for 0-RTT
 func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
-	if c.logger.Debug() {
-		c.logger.Debugf("Restoring Transport Parameters: %s", params)
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		c.logger.Debug("Restoring Transport Parameters", "params", params)
 	}
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.ParametersSet{
@@ -2385,8 +2387,8 @@ func (c *Conn) handleTransportParameters(params *wire.TransportParameters) error
 }
 
 func (c *Conn) checkTransportParameters(params *wire.TransportParameters) error {
-	if c.logger.Debug() {
-		c.logger.Debugf("Processed Transport Parameters: %s", params)
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		c.logger.Debug("Processed Transport Parameters", "params", params)
 	}
 
 	// check the initial_source_connection_id
@@ -2497,7 +2499,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 				if err != nil {
 					return err
 				}
-				c.logger.Debugf("sending path probe packet from %s", c.LocalAddr())
+				c.logger.Debug("Sending path probe packet", "local_addr", c.LocalAddr())
 				c.logShortHeaderPacket(probe, protocol.ECNNon, buf.Len())
 				c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
 				tr.WriteTo(buf.Data, c.conn.RemoteAddr())
@@ -2978,10 +2980,10 @@ func (c *Conn) tryQueueingUndecryptablePacket(p receivedPacket, pt qlog.PacketTy
 				Trigger:    qlog.PacketDropDOSPrevention,
 			})
 		}
-		c.logger.Infof("Dropping undecryptable packet (%d bytes). Undecryptable packet queue full.", p.Size())
+		c.logger.Info("Dropping undecryptable packet. Undecryptable packet queue full.", "bytes", p.Size())
 		return
 	}
-	c.logger.Infof("Queueing packet (%d bytes) for later decryption", p.Size())
+	c.logger.Info("Queueing packet for later decryption", "bytes", p.Size())
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.PacketBuffered{
 			Header: qlog.PacketHeader{

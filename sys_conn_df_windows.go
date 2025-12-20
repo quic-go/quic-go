@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/quic-go/quic-go/internal/utils"
+	islog "github.com/quic-go/quic-go/internal/slog"
 )
 
 const (
@@ -30,11 +30,11 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 	}
 	switch {
 	case errDFIPv4 == nil && errDFIPv6 == nil:
-		utils.DefaultLogger.Debugf("Setting DF for IPv4 and IPv6.")
+		islog.DefaultLogger.Debug("Setting DF for IPv4 and IPv6.")
 	case errDFIPv4 == nil && errDFIPv6 != nil:
-		utils.DefaultLogger.Debugf("Setting DF for IPv4.")
+		islog.DefaultLogger.Debug("Setting DF for IPv4.")
 	case errDFIPv4 != nil && errDFIPv6 == nil:
-		utils.DefaultLogger.Debugf("Setting DF for IPv6.")
+		islog.DefaultLogger.Debug("Setting DF for IPv6.")
 	case errDFIPv4 != nil && errDFIPv6 != nil:
 		return false, errors.New("setting DF failed for both IPv4 and IPv6")
 	}

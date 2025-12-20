@@ -3,9 +3,9 @@ package wire
 import (
 	"errors"
 	"io"
+	"log/slog"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 // ParseShortHeader parses a short header packet.
@@ -57,6 +57,11 @@ func ShortHeaderLen(dest protocol.ConnectionID, pnLen protocol.PacketNumberLen) 
 	return 1 + protocol.ByteCount(dest.Len()) + protocol.ByteCount(pnLen)
 }
 
-func LogShortHeader(logger utils.Logger, dest protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) {
-	logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %d, PacketNumberLen: %d, KeyPhase: %s}", dest, pn, pnLen, kp)
+func LogShortHeader(logger *slog.Logger, dest protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) {
+	logger.Debug("Short Header",
+		"dest_conn_id", dest,
+		"packet_number", pn,
+		"packet_number_len", pnLen,
+		"key_phase", kp,
+	)
 }

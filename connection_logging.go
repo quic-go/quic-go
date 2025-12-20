@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"context"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
@@ -59,7 +61,7 @@ func toQlogAckFrame(f *wire.AckFrame) *qlog.AckFrame {
 
 func (c *Conn) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN, datagramID qlog.DatagramID) {
 	// quic-go logging
-	if c.logger.Debug() {
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
 		p.header.Log(c.logger)
 		if p.ack != nil {
 			wire.LogFrame(c.logger, p.ack, true)
@@ -113,11 +115,11 @@ func (c *Conn) logShortHeaderPacket(p shortHeaderPacket, ecn protocol.ECN, size 
 }
 
 func (c *Conn) logShortHeaderPacketWithDatagramID(p shortHeaderPacket, ecn protocol.ECN, size protocol.ByteCount, isCoalesced bool, datagramID qlog.DatagramID) {
-	if c.logger.Debug() && !isCoalesced {
-		c.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, 1-RTT (ECN: %s)", p.PacketNumber, size, c.logID, ecn)
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) && !isCoalesced {
+		c.logger.Debug("-> Sending packet", "packet_number", p.PacketNumber, "bytes", size, "conn_id", c.logID, "enc_level", "1-RTT", "ecn", ecn)
 	}
 	// quic-go logging
-	if c.logger.Debug() {
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
 		wire.LogShortHeader(c.logger, p.DestConnID, p.PacketNumber, p.PacketNumberLen, p.KeyPhase)
 		if p.Ack != nil {
 			wire.LogFrame(c.logger, p.Ack, true)
@@ -170,7 +172,7 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 	if c.qlogger != nil {
 		datagramID = qlog.CalculateDatagramID(packet.buffer.Data)
 	}
-	if c.logger.Debug() {
+	if c.logger.Enabled(context.Background(), slog.LevelDebug) {
 		// There's a short period between dropping both Initial and Handshake keys and completion of the handshake,
 		// during which we might call PackCoalescedPacket but just pack a short header packet.
 		if len(packet.longHdrPackets) == 0 && packet.shortHdrPacket != nil {
@@ -184,9 +186,9 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 			return
 		}
 		if len(packet.longHdrPackets) > 1 {
-			c.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.longHdrPackets), packet.buffer.Len(), c.logID)
+			c.logger.Debug("-> Sending coalesced packet", "parts", len(packet.longHdrPackets), "bytes", packet.buffer.Len(), "conn_id", c.logID)
 		} else {
-			c.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.longHdrPackets[0].header.PacketNumber, packet.buffer.Len(), c.logID, packet.longHdrPackets[0].EncryptionLevel())
+			c.logger.Debug("-> Sending packet", "packet_number", packet.longHdrPackets[0].header.PacketNumber, "bytes", packet.buffer.Len(), "conn_id", c.logID, "enc_level", packet.longHdrPackets[0].EncryptionLevel())
 		}
 	}
 	for _, p := range packet.longHdrPackets {

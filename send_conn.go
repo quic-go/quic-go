@@ -1,11 +1,12 @@
 package quic
 
 import (
+	"context"
+	"log/slog"
 	"net"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.
@@ -32,7 +33,7 @@ type sconn struct {
 
 	remoteAddrInfo atomic.Pointer[remoteAddrInfo]
 
-	logger utils.Logger
+	logger *slog.Logger
 
 	// If GSO enabled, and we receive a GSO error for this remote address, GSO is disabled.
 	gotGSOError bool
@@ -43,7 +44,7 @@ type sconn struct {
 
 var _ sendConn = &sconn{}
 
-func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger utils.Logger) *sconn {
+func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger *slog.Logger) *sconn {
 	localAddr := c.LocalAddr()
 	if info.addr.IsValid() {
 		if udpAddr, ok := localAddr.(*net.UDPAddr); ok {
@@ -75,8 +76,8 @@ func (c *sconn) Write(p []byte, gsoSize uint16, ecn protocol.ECN) error {
 	if err != nil && isGSOError(err) {
 		// disable GSO for future calls
 		c.gotGSOError = true
-		if c.logger.Debug() {
-			c.logger.Debugf("GSO failed when sending to %s", ai.addr)
+		if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+			c.logger.Debug("GSO failed when sending", "addr", ai.addr)
 		}
 		// send out the packets one by one
 		for len(p) > 0 {

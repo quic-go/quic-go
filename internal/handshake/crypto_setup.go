@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -42,7 +43,7 @@ type cryptoSetup struct {
 	rttStats *utils.RTTStats
 
 	qlogger qlogwriter.Recorder
-	logger  utils.Logger
+	logger  *slog.Logger
 
 	perspective protocol.Perspective
 
@@ -74,7 +75,7 @@ func NewCryptoSetupClient(
 	enable0RTT bool,
 	rttStats *utils.RTTStats,
 	qlogger qlogwriter.Recorder,
-	logger utils.Logger,
+	logger *slog.Logger,
 	version protocol.Version,
 ) CryptoSetup {
 	cs := newCryptoSetup(
@@ -110,7 +111,7 @@ func NewCryptoSetupServer(
 	allow0RTT bool,
 	rttStats *utils.RTTStats,
 	qlogger qlogwriter.Recorder,
-	logger utils.Logger,
+	logger *slog.Logger,
 	version protocol.Version,
 ) CryptoSetup {
 	cs := newCryptoSetup(
@@ -139,7 +140,7 @@ func newCryptoSetup(
 	tp *wire.TransportParameters,
 	rttStats *utils.RTTStats,
 	qlogger qlogwriter.Recorder,
-	logger utils.Logger,
+	logger *slog.Logger,
 	perspective protocol.Perspective,
 	version protocol.Version,
 ) *cryptoSetup {
@@ -204,10 +205,13 @@ func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
 	}
 	if h.perspective == protocol.PerspectiveClient {
 		if h.zeroRTTSealer != nil && h.zeroRTTParameters != nil {
-			h.logger.Debugf("Doing 0-RTT.")
+			h.logger.Debug("Doing 0-RTT.")
 			h.events = append(h.events, Event{Kind: EventRestoredTransportParameters, TransportParameters: h.zeroRTTParameters})
 		} else {
-			h.logger.Debugf("Not doing 0-RTT. Has sealer: %t, has params: %t", h.zeroRTTSealer != nil, h.zeroRTTParameters != nil)
+			h.logger.Debug("Not doing 0-RTT.",
+				"has_sealer", h.zeroRTTSealer != nil,
+				"has_params", h.zeroRTTParameters != nil,
+			)
 		}
 	}
 	return nil
@@ -337,7 +341,7 @@ func (h *cryptoSetup) marshalDataForSessionState(earlyData bool) []byte {
 func (h *cryptoSetup) handleDataFromSessionState(data []byte, earlyData bool) (allowEarlyData bool) {
 	tp, err := decodeDataFromSessionState(data, earlyData)
 	if err != nil {
-		h.logger.Debugf("Restoring of transport parameters from session ticket failed: %s", err.Error())
+		h.logger.Debug("Restoring of transport parameters from session ticket failed", "error", err.Error())
 		return
 	}
 	// The session ticket might have been saved from a connection that allowed 0-RTT,
@@ -403,12 +407,12 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 		}
 		if ev.Kind == tls.QUICWriteData && ev.Level == tls.QUICEncryptionLevelApplication {
 			if ticket != nil {
-				h.logger.Errorf("unexpected multiple session tickets")
+				h.logger.Error("unexpected multiple session tickets")
 				continue
 			}
 			ticket = ev.Data
 		} else {
-			h.logger.Errorf("unexpected event: %v", ev.Kind)
+			h.logger.Error("unexpected event", "kind", ev.Kind)
 		}
 	}
 	return ticket, nil
@@ -421,7 +425,7 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEarlyData bool) {
 	var t sessionTicket
 	if err := t.Unmarshal(data); err != nil {
-		h.logger.Debugf("Unmarshalling session ticket failed: %s", err.Error())
+		h.logger.Debug("Unmarshalling session ticket failed", "error", err.Error())
 		return false
 	}
 	if !using0RTT {
@@ -429,11 +433,11 @@ func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEar
 	}
 	valid := h.ourParams.ValidFor0RTT(t.Parameters)
 	if !valid {
-		h.logger.Debugf("Transport parameters changed. Rejecting 0-RTT.")
+		h.logger.Debug("Transport parameters changed. Rejecting 0-RTT.")
 		return false
 	}
 	if !h.allow0RTT {
-		h.logger.Debugf("0-RTT not allowed. Rejecting 0-RTT.")
+		h.logger.Debug("0-RTT not allowed. Rejecting 0-RTT.")
 		return false
 	}
 	return true
@@ -441,7 +445,7 @@ func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEar
 
 // rejected0RTT is called for the client when the server rejects 0-RTT.
 func (h *cryptoSetup) rejected0RTT() {
-	h.logger.Debugf("0-RTT was rejected. Dropping 0-RTT keys.")
+	h.logger.Debug("0-RTT was rejected. Dropping 0-RTT keys.")
 
 	had0RTTKeys := h.zeroRTTSealer != nil
 	h.zeroRTTSealer = nil
@@ -464,22 +468,22 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
 		h.used0RTT.Store(true)
-		if h.logger.Debug() {
-			h.logger.Debugf("Installed 0-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Installed 0-RTT Read keys", "cipher_suite", tls.CipherSuiteName(suite.ID))
 		}
 	case tls.QUICEncryptionLevelHandshake:
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
-		if h.logger.Debug() {
-			h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Installed Handshake Read keys", "cipher_suite", tls.CipherSuiteName(suite.ID))
 		}
 	case tls.QUICEncryptionLevelApplication:
 		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
-		if h.logger.Debug() {
-			h.logger.Debugf("Installed 1-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Installed 1-RTT Read keys", "cipher_suite", tls.CipherSuiteName(suite.ID))
 		}
 	default:
 		panic("unexpected read encryption level")
@@ -505,8 +509,8 @@ func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
-		if h.logger.Debug() {
-			h.logger.Debugf("Installed 0-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Installed 0-RTT Write keys", "cipher_suite", tls.CipherSuiteName(suite.ID))
 		}
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.KeyUpdated{
@@ -521,20 +525,20 @@ func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
-		if h.logger.Debug() {
-			h.logger.Debugf("Installed Handshake Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Installed Handshake Write keys", "cipher_suite", tls.CipherSuiteName(suite.ID))
 		}
 	case tls.QUICEncryptionLevelApplication:
 		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
-		if h.logger.Debug() {
-			h.logger.Debugf("Installed 1-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Installed 1-RTT Write keys", "cipher_suite", tls.CipherSuiteName(suite.ID))
 		}
 		if h.zeroRTTSealer != nil {
 			// Once we receive handshake keys, we know that 0-RTT was not rejected.
 			h.used0RTT.Store(true)
 			h.zeroRTTSealer = nil
-			h.logger.Debugf("Dropping 0-RTT keys.")
+			h.logger.Debug("Dropping 0-RTT keys.")
 			if h.qlogger != nil {
 				h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeClient0RTT})
 			}
@@ -570,7 +574,7 @@ func (h *cryptoSetup) DiscardInitialKeys() {
 	h.initialOpener = nil
 	h.initialSealer = nil
 	if dropped {
-		h.logger.Debugf("Dropping Initial keys.")
+		h.logger.Debug("Dropping Initial keys.")
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeClientInitial})
 			h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeServerInitial})
@@ -593,7 +597,7 @@ func (h *cryptoSetup) SetHandshakeConfirmed() {
 		dropped = true
 	}
 	if dropped {
-		h.logger.Debugf("Dropping Handshake keys.")
+		h.logger.Debug("Dropping Handshake keys.")
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeClientHandshake})
 			h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeServerHandshake})
@@ -664,7 +668,7 @@ func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	if h.zeroRTTOpener != nil && time.Since(h.handshakeCompleteTime) > 3*h.rttStats.PTO(true) {
 		h.zeroRTTOpener = nil
-		h.logger.Debugf("Dropping 0-RTT keys.")
+		h.logger.Debug("Dropping 0-RTT keys.")
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeClient0RTT})
 		}

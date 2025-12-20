@@ -6,13 +6,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	islog "github.com/quic-go/quic-go/internal/slog"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -163,7 +164,7 @@ type Transport struct {
 	readingNonQUICPackets atomic.Bool
 	nonQUICPackets        chan receivedPacket
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 // Listen starts listening for incoming QUIC connections.
@@ -254,7 +255,7 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	tlsConf = tlsConf.Clone()
 	setTLSConfigServerName(tlsConf, addr, host)
 	return t.doDial(ctx,
-		newSendConn(t.conn, addr, packetInfo{}, utils.DefaultLogger),
+		newSendConn(t.conn, addr, packetInfo{}, islog.DefaultLogger),
 		tlsConf,
 		conf,
 		0,
@@ -297,8 +298,15 @@ func (t *Transport) doDial(
 		qlogTrace = config.Tracer(ctx, true, destConnID)
 	}
 
-	logger := utils.DefaultLogger.WithPrefix("client")
-	logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", tlsConf.ServerName, sendConn.LocalAddr(), sendConn.RemoteAddr(), srcConnID, destConnID, version)
+	logger := islog.DefaultLogger.With(islog.ComponentKey, "client")
+	logger.Info("Starting new connection",
+		"server", tlsConf.ServerName,
+		"local_addr", sendConn.LocalAddr(),
+		"remote_addr", sendConn.RemoteAddr(),
+		"src_conn_id", srcConnID,
+		"dest_conn_id", destConnID,
+		"version", version,
+	)
 
 	conn := newClientConnection(
 		context.WithoutCancel(ctx),
@@ -389,7 +397,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 			}
 		}
 
-		t.logger = utils.DefaultLogger // TODO: make this configurable
+		t.logger = islog.DefaultLogger // TODO: make this configurable
 		t.conn = conn
 		t.handlers = make(map[protocol.ConnectionID]packetHandler)
 		t.resetTokens = make(map[protocol.StatelessResetToken]packetHandler)
@@ -545,7 +553,7 @@ func (t *Transport) listen(conn rawConn) {
 			if closed {
 				return
 			}
-			t.logger.Debugf("Temporary error reading from conn: %w", err)
+			t.logger.Debug("Temporary error reading from conn", "error", err)
 			continue
 		}
 		if err != nil {
@@ -576,7 +584,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	}
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
-		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
+		t.logger.Debug("Error parsing connection ID on packet", "remote_addr", p.remoteAddr, "error", err)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
 				Raw:     qlog.RawInfo{Length: int(p.Size())},
@@ -619,7 +627,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.server == nil { // no server set
-		t.logger.Debugf("received a packet with an unexpected connection ID %s", connID)
+		t.logger.Debug("Received a packet with an unexpected connection ID", "conn_id", connID)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
 				Raw:     qlog.RawInfo{Length: int(p.Size())},
@@ -657,17 +665,17 @@ func (t *Transport) sendStatelessReset(p receivedPacket) {
 
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
-		t.logger.Errorf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
+		t.logger.Error("Error parsing connection ID on packet", "remote_addr", p.remoteAddr, "error", err)
 		return
 	}
 	token := t.statelessResetter.GetStatelessResetToken(connID)
-	t.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
+	t.logger.Debug("Sending stateless reset", "remote_addr", p.remoteAddr, "conn_id", connID, "token", fmt.Sprintf("%#x", token))
 	data := make([]byte, protocol.MinStatelessResetSize-16, protocol.MinStatelessResetSize)
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)
 	if _, err := t.conn.WritePacket(data, p.remoteAddr, p.info.OOB(), 0, protocol.ECNUnsupported); err != nil {
-		t.logger.Debugf("Error sending Stateless Reset to %s: %s", p.remoteAddr, err)
+		t.logger.Debug("Error sending Stateless Reset", "remote_addr", p.remoteAddr, "error", err)
 	}
 }
 
@@ -686,7 +694,7 @@ func (t *Transport) maybeHandleStatelessReset(data []byte) bool {
 	t.mutex.Unlock()
 
 	if ok {
-		t.logger.Debugf("Received a stateless reset with token %#x. Closing connection.", token)
+		t.logger.Debug("Received a stateless reset. Closing connection.", "token", fmt.Sprintf("%#x", token))
 		go conn.destroy(&StatelessResetError{})
 		return true
 	}
@@ -763,11 +771,11 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 	defer h.mutex.Unlock()
 
 	if _, ok := h.handlers[id]; ok {
-		h.logger.Debugf("Not adding connection ID %s, as it already exists.", id)
+		h.logger.Debug("Not adding connection ID, as it already exists.", "conn_id", id)
 		return false
 	}
 	h.handlers[id] = handler
-	h.logger.Debugf("Adding connection ID %s.", id)
+	h.logger.Debug("Adding connection ID.", "conn_id", id)
 	return true
 }
 
@@ -795,12 +803,12 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	defer h.mutex.Unlock()
 
 	if _, ok := h.handlers[clientDestConnID]; ok {
-		h.logger.Debugf("Not adding connection ID %s for a new connection, as it already exists.", clientDestConnID)
+		h.logger.Debug("Not adding connection ID for a new connection, as it already exists.", "conn_id", clientDestConnID)
 		return false
 	}
 	h.handlers[clientDestConnID] = handler
 	h.handlers[newConnID] = handler
-	h.logger.Debugf("Adding connection IDs %s and %s for a new connection.", clientDestConnID, newConnID)
+	h.logger.Debug("Adding connection IDs for a new connection.", "client_dest_conn_id", clientDestConnID, "new_conn_id", newConnID)
 	return true
 }
 
@@ -808,7 +816,7 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	h.mutex.Lock()
 	delete(h.handlers, id)
 	h.mutex.Unlock()
-	h.logger.Debugf("Removing connection ID %s.", id)
+	h.logger.Debug("Removing connection ID.", "conn_id", id)
 }
 
 // ReplaceWithClosed is called when a connection is closed.
@@ -838,7 +846,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connCl
 		h.handlers[id] = handler
 	}
 	h.mutex.Unlock()
-	h.logger.Debugf("Replacing connection for connection IDs %s with a closed connection.", ids)
+	h.logger.Debug("Replacing connection with a closed connection.", "conn_ids", ids)
 
 	time.AfterFunc(expiry, func() {
 		h.mutex.Lock()
@@ -850,6 +858,6 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, connCl
 			t.maybeStopListening()
 		}
 		h.mutex.Unlock()
-		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
+		h.logger.Debug("Removing connection IDs for a closed connection after it has been retired.", "conn_ids", ids)
 	})
 }

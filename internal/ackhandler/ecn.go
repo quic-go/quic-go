@@ -2,9 +2,9 @@ package ackhandler
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 )
@@ -63,12 +63,12 @@ type ecnTracker struct {
 	numAckedECT0, numAckedECT1, numAckedECNCE int64
 
 	qlogger qlogwriter.Recorder
-	logger  utils.Logger
+	logger  *slog.Logger
 }
 
 var _ ecnHandler = &ecnTracker{}
 
-func newECNTracker(logger utils.Logger, qlogger qlogwriter.Recorder) *ecnTracker {
+func newECNTracker(logger *slog.Logger, qlogger qlogwriter.Recorder) *ecnTracker {
 	return &ecnTracker{
 		firstTestingPacket: protocol.InvalidPacketNumber,
 		lastTestingPacket:  protocol.InvalidPacketNumber,
@@ -151,7 +151,7 @@ func (e *ecnTracker) LostPacket(pn protocol.PacketNumber) {
 		return
 	}
 	if e.numLostTesting >= e.numSentTesting {
-		e.logger.Debugf("Disabling ECN. All testing packets were lost.")
+		e.logger.Debug("Disabling ECN. All testing packets were lost.")
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State:   qlog.ECNStateFailed,
@@ -176,7 +176,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	// ECN validation can fail if the received total count for either ECT(0) or ECT(1) exceeds
 	// the total number of packets sent with each corresponding ECT codepoint.
 	if ect0 > e.numSentECT0 || ect1 > e.numSentECT1 {
-		e.logger.Debugf("Disabling ECN. Received more ECT(0) / ECT(1) acknowledgements than packets sent.")
+		e.logger.Debug("Disabling ECN. Received more ECT(0) / ECT(1) acknowledgements than packets sent.")
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State:   qlog.ECNStateFailed,
@@ -205,7 +205,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	// * paths that bleach all ECN marks, and
 	// * peers that don't report any ECN counts
 	if (ackedECT0 > 0 || ackedECT1 > 0) && ect0 == 0 && ect1 == 0 && ecnce == 0 {
-		e.logger.Debugf("Disabling ECN. ECN-marked packet acknowledged, but no ECN counts on ACK frame.")
+		e.logger.Debug("Disabling ECN. ECN-marked packet acknowledged, but no ECN counts on ACK frame.")
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State:   qlog.ECNStateFailed,
@@ -225,7 +225,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	// Therefore, the ECN counters should only ever increase.
 	// Any decrease means that the peer's counting logic is broken.
 	if newECT0 < 0 || newECT1 < 0 || newECNCE < 0 {
-		e.logger.Debugf("Disabling ECN. ECN counts decreased unexpectedly.")
+		e.logger.Debug("Disabling ECN. ECN counts decreased unexpectedly.")
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State:   qlog.ECNStateFailed,
@@ -240,7 +240,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	// of newly acknowledged packets that were originally sent with an ECT(0) marking.
 	// This could be the result of (partial) bleaching.
 	if newECT0+newECNCE < ackedECT0 {
-		e.logger.Debugf("Disabling ECN. Received less ECT(0) + ECN-CE than packets sent with ECT(0).")
+		e.logger.Debug("Disabling ECN. Received less ECT(0) + ECN-CE than packets sent with ECT(0).")
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State:   qlog.ECNStateFailed,
@@ -253,7 +253,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	// Similarly, ECN validation fails if the sum of the increases to ECT(1) and ECN-CE counts is less than
 	// the number of newly acknowledged packets sent with an ECT(1) marking.
 	if newECT1+newECNCE < ackedECT1 {
-		e.logger.Debugf("Disabling ECN. Received less ECT(1) + ECN-CE than packets sent with ECT(1).")
+		e.logger.Debug("Disabling ECN. Received less ECT(1) + ECN-CE than packets sent with ECT(1).")
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State:   qlog.ECNStateFailed,
@@ -287,7 +287,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 		}
 		// This check won't succeed if the path is mangling ECN-marks (i.e. rewrites all ECN-marked packets to CE).
 		if ackedTestingPacket && (newECT0 > 0 || newECT1 > 0) {
-			e.logger.Debugf("ECN capability confirmed.")
+			e.logger.Debug("ECN capability confirmed.")
 			if e.qlogger != nil {
 				e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 					State: qlog.ECNStateCapable,

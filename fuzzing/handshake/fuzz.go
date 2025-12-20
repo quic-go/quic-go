@@ -18,6 +18,7 @@ import (
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qtls"
+	islog "github.com/quic-go/quic-go/internal/slog"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -283,7 +284,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		enable0RTTClient,
 		&utils.RTTStats{},
 		nil,
-		utils.DefaultLogger.WithPrefix("client"),
+		islog.DefaultLogger.With(islog.ComponentKey, "client"),
 		protocol.Version1,
 	)
 	if err := client.StartHandshake(context.Background()); err != nil {
@@ -300,7 +301,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		enable0RTTServer,
 		&utils.RTTStats{},
 		nil,
-		utils.DefaultLogger.WithPrefix("server"),
+		islog.DefaultLogger.With(islog.ComponentKey, "server"),
 		protocol.Version1,
 	)
 	if err := server.StartHandshake(context.Background()); err != nil {

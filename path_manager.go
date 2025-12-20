@@ -1,7 +1,9 @@
 package quic
 
 import (
+	"context"
 	"crypto/rand"
+	"log/slog"
 	"net"
 	"slices"
 	"time"
@@ -9,7 +11,6 @@ import (
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -45,13 +46,13 @@ type pathManager struct {
 	getConnID    func(pathID) (_ protocol.ConnectionID, ok bool)
 	retireConnID func(pathID)
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 func newPathManager(
 	getConnID func(pathID) (_ protocol.ConnectionID, ok bool),
 	retireConnID func(pathID),
-	logger utils.Logger,
+	logger *slog.Logger,
 ) *pathManager {
 	return &pathManager{
 		paths:        make([]*path, 0, maxPaths+1),
@@ -78,8 +79,11 @@ func (pm *pathManager) HandlePacket(
 			if isNonProbing {
 				path.rcvdNonProbing = true
 			}
-			if pm.logger.Debug() {
-				pm.logger.Debugf("received packet for path %s that was already probed, validated: %t", remoteAddr, path.validated)
+			if pm.logger.Enabled(context.Background(), slog.LevelDebug) {
+				pm.logger.Debug("Received packet for path that was already probed",
+					"path", remoteAddr,
+					"validated", path.validated,
+				)
 			}
 			shouldSwitch = path.validated && path.rcvdNonProbing
 			if i != len(pm.paths)-1 {
@@ -95,8 +99,11 @@ func (pm *pathManager) HandlePacket(
 
 	if len(pm.paths) >= maxPaths {
 		if pm.paths[0].lastPacketTime.Add(pathTimeout).After(t) {
-			if pm.logger.Debug() {
-				pm.logger.Debugf("received packet for previously unseen path %s, but already have %d paths", remoteAddr, len(pm.paths))
+			if pm.logger.Enabled(context.Background(), slog.LevelDebug) {
+				pm.logger.Debug("Received packet for previously unseen path, but already have max paths",
+					"path", remoteAddr,
+					"num_paths", len(pm.paths),
+				)
 			}
 			return protocol.ConnectionID{}, nil, shouldSwitch
 		}
@@ -115,7 +122,7 @@ func (pm *pathManager) HandlePacket(
 	// previously unseen path, initiate path validation by sending a PATH_CHALLENGE
 	connID, ok := pm.getConnID(pathID)
 	if !ok {
-		pm.logger.Debugf("skipping validation of new path %s since no connection ID is available", remoteAddr)
+		pm.logger.Debug("Skipping validation of new path since no connection ID is available", "path", remoteAddr)
 		return protocol.ConnectionID{}, nil, shouldSwitch
 	}
 
@@ -136,7 +143,7 @@ func (pm *pathManager) HandlePacket(
 			Frame:   &wire.PathChallengeFrame{Data: p.pathChallenge},
 			Handler: (*pathManagerAckHandler)(pm),
 		})
-		pm.logger.Debugf("enqueueing PATH_CHALLENGE for new path %s", remoteAddr)
+		pm.logger.Debug("Enqueueing PATH_CHALLENGE for new path", "path", remoteAddr)
 	}
 	if pathChallenge != nil {
 		frames = append(frames, ackhandler.Frame{
@@ -152,7 +159,7 @@ func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame) {
 		if f.Data == p.pathChallenge {
 			// path validated
 			p.validated = true
-			pm.logger.Debugf("path %s validated", p.addr)
+			pm.logger.Debug("Path validated", "path", p.addr)
 			break
 		}
 	}
@@ -163,7 +170,7 @@ func (pm *pathManager) SwitchToPath(addr net.Addr) {
 	// retire all other paths
 	for _, path := range pm.paths {
 		if addrsEqual(path.addr, addr) {
-			pm.logger.Debugf("switching to path %d (%s)", path.id, addr)
+			pm.logger.Debug("Switching to path", "path_id", path.id, "addr", addr)
 			continue
 		}
 		pm.retireConnID(path.id)

@@ -1,7 +1,9 @@
 package flowcontrol
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -29,7 +31,7 @@ func NewStreamFlowController(
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
 	rttStats *utils.RTTStats,
-	logger utils.Logger,
+	logger *slog.Logger,
 ) StreamFlowController {
 	return &streamFlowController{
 		streamID:   streamID,
@@ -147,7 +149,12 @@ func (c *streamFlowController) GetWindowUpdate(now monotime.Time) protocol.ByteC
 	oldWindowSize := c.receiveWindowSize
 	offset := c.getWindowUpdate(now)
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
-		c.logger.Debugf("Increasing receive flow control window for stream %d to %d", c.streamID, c.receiveWindowSize)
+		if c.logger.Enabled(context.Background(), slog.LevelDebug) {
+			c.logger.Debug("Increasing receive flow control window for stream",
+				"stream_id", c.streamID,
+				"window_size", c.receiveWindowSize,
+			)
+		}
 		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize)*protocol.ConnectionFlowControlMultiplier), now)
 	}
 	return offset

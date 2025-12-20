@@ -12,7 +12,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	islog "github.com/quic-go/quic-go/internal/slog"
 )
 
 type connCapabilities struct {
@@ -95,7 +95,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 	}
 	c, ok := pc.(OOBCapablePacketConn)
 	if !ok {
-		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
+		islog.DefaultLogger.Info("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
 		return &basicConn{PacketConn: pc, supportsDF: supportsDF}, nil
 	}
 	return newConn(c, supportsDF)

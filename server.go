@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -13,7 +14,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
+	islog "github.com/quic-go/quic-go/internal/slog"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -88,7 +89,7 @@ type baseServer struct {
 		bool, /* client address validated by an address validation token */
 		time.Duration,
 		qlogwriter.Trace,
-		utils.Logger,
+		*slog.Logger,
 		protocol.Version,
 	) *wrappedConn
 
@@ -117,7 +118,7 @@ type baseServer struct {
 
 	qlogger qlogwriter.Recorder
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 // A Listener listens for incoming QUIC connections.
@@ -274,7 +275,7 @@ func newServer(
 		retryQueue:                make(chan rejectedPacket, 8),
 		newConn:                   newConnection,
 		qlogger:                   qlogger,
-		logger:                    utils.DefaultLogger.WithPrefix("server"),
+		logger:                    islog.DefaultLogger.With(islog.ComponentKey, "server"),
 		acceptEarlyConns:          acceptEarly,
 		disableVersionNegotiation: disableVersionNegotiation,
 		onClose:                   onClose,
@@ -284,7 +285,7 @@ func newServer(
 	}
 	go s.run()
 	go s.runSendQueue()
-	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
+	s.logger.Debug("Listening for connections", "network", conn.LocalAddr().Network(), "addr", conn.LocalAddr().String())
 	return s
 }
 
@@ -397,7 +398,7 @@ func (s *baseServer) handlePacket(p receivedPacket) {
 	case <-s.errorChan:
 		return
 	default:
-		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, p.Size())
+		s.logger.Debug("Dropping packet. Server receive queue full.", "remote_addr", p.remoteAddr, "bytes", p.Size())
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Raw:     qlog.RawInfo{Length: int(p.Size())},
@@ -413,7 +414,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 	}
 
 	if wire.IsVersionNegotiationPacket(p.data) {
-		s.logger.Debugf("Dropping Version Negotiation packet.")
+		s.logger.Debug("Dropping Version Negotiation packet.")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
@@ -430,7 +431,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 	v, err := wire.ParseVersion(p.data)
 	// drop the packet if we failed to parse the protocol version
 	if err != nil {
-		s.logger.Debugf("Dropping a packet with an unknown version")
+		s.logger.Debug("Dropping a packet with an unknown version")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Raw:     qlog.RawInfo{Length: int(p.Size())},
@@ -453,7 +454,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		}
 
 		if p.Size() < protocol.MinUnknownVersionPacketSize {
-			s.logger.Debugf("Dropping a packet with an unsupported version number %d that is too small (%d bytes)", v, p.Size())
+			s.logger.Debug("Dropping a packet with an unsupported version that is too small", "version", v, "bytes", p.Size())
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
 					Header:  qlog.PacketHeader{Version: v},
@@ -493,11 +494,11 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 				Trigger: qlog.PacketDropHeaderParseError,
 			})
 		}
-		s.logger.Debugf("Error parsing packet: %s", err)
+		s.logger.Debug("Error parsing packet", "error", err)
 		return false
 	}
 	if hdr.Type == protocol.PacketTypeInitial && p.Size() < protocol.MinInitialPacketSize {
-		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", p.Size())
+		s.logger.Debug("Dropping a packet that is too small to be a valid Initial", "bytes", p.Size())
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
@@ -516,7 +517,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		// Drop long header packets.
 		// There's little point in sending a Stateless Reset, since the client
 		// might not have received the token yet.
-		s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
+		s.logger.Debug("Dropping long header packet", "type", hdr.Type, "bytes", len(p.data))
 		if s.qlogger != nil {
 			var pt qlog.PacketType
 			switch hdr.Type {
@@ -542,10 +543,10 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		return false
 	}
 
-	s.logger.Debugf("<- Received Initial packet.")
+	s.logger.Debug("<- Received Initial packet.")
 
 	if err := s.handleInitialImpl(p, hdr); err != nil {
-		s.logger.Errorf("Error occurred handling initial packet: %s", err)
+		s.logger.Error("Error occurred handling initial packet", "error", err)
 	}
 	// Don't put the packet buffer back.
 	// handleInitialImpl deals with the buffer.
@@ -649,8 +650,8 @@ func (s *baseServer) cleanupZeroRTTQueues(now monotime.Time) {
 			p.buffer.Release()
 		}
 		delete(s.zeroRTTQueues, connID)
-		if s.logger.Debug() {
-			s.logger.Debugf("Removing 0-RTT queue for %s.", connID)
+		if s.logger.Enabled(context.Background(), slog.LevelDebug) {
+			s.logger.Debug("Removing 0-RTT queue", "conn_id", connID)
 		}
 	}
 	s.nextZeroRTTCleanup = nextCleanup
@@ -766,7 +767,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	if s.config.GetConfigForClient != nil {
 		conf, err := s.config.GetConfigForClient(clientInfo)
 		if err != nil {
-			s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
+			s.logger.Debug("Rejecting new connection due to GetConfigForClient callback")
 			s.refuseNewConn(p, hdr)
 			return nil
 		}
@@ -781,7 +782,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		ctx, err = s.connContext(ctx, clientInfo)
 		if err != nil {
 			cancel1(err)
-			s.logger.Debugf("Rejecting new connection due to ConnContext callback: %s", err)
+			s.logger.Debug("Rejecting new connection due to ConnContext callback", "error", err)
 			s.refuseNewConn(p, hdr)
 			return nil
 		}
@@ -814,7 +815,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	if err != nil {
 		return err
 	}
-	s.logger.Debugf("Changing connection ID to %s.", connID)
+	s.logger.Debug("Changing connection ID", "conn_id", connID)
 	conn = s.newConn(
 		ctx,
 		cancel,
@@ -905,7 +906,7 @@ func (s *baseServer) handleNewConn(conn *wrappedConn) {
 
 func (s *baseServer) sendRetry(p rejectedPacket) {
 	if err := s.sendRetryPacket(p); err != nil {
-		s.logger.Debugf("Error sending Retry packet: %s", err)
+		s.logger.Debug("Error sending Retry packet", "error", err)
 	}
 }
 
@@ -928,9 +929,9 @@ func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
 	replyHdr.SrcConnectionID = srcConnID
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.Token = token
-	if s.logger.Debug() {
-		s.logger.Debugf("Changing connection ID to %s.", srcConnID)
-		s.logger.Debugf("-> Sending Retry")
+	if s.logger.Enabled(context.Background(), slog.LevelDebug) {
+		s.logger.Debug("Changing connection ID", "conn_id", srcConnID)
+		s.logger.Debug("-> Sending Retry")
 		replyHdr.Log(s.logger)
 	}
 
@@ -1001,11 +1002,11 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 		}
 		return
 	}
-	if s.logger.Debug() {
-		s.logger.Debugf("Client sent an invalid retry token. Sending INVALID_TOKEN to %s.", p.remoteAddr)
+	if s.logger.Enabled(context.Background(), slog.LevelDebug) {
+		s.logger.Debug("Client sent an invalid retry token. Sending INVALID_TOKEN.", "remote_addr", p.remoteAddr)
 	}
 	if err := s.sendError(p.remoteAddr, hdr, sealer, InvalidToken, p.info); err != nil {
-		s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
+		s.logger.Debug("Error sending INVALID_TOKEN error", "error", err)
 	}
 }
 
@@ -1013,7 +1014,7 @@ func (s *baseServer) sendConnectionRefused(p rejectedPacket) {
 	defer p.buffer.Release()
 	sealer, _ := handshake.NewInitialAEAD(p.hdr.DestConnectionID, protocol.PerspectiveServer, p.hdr.Version)
 	if err := s.sendError(p.remoteAddr, p.hdr, sealer, ConnectionRefused, p.info); err != nil {
-		s.logger.Debugf("Error sending CONNECTION_REFUSED error: %s", err)
+		s.logger.Debug("Error sending CONNECTION_REFUSED error", "error", err)
 	}
 }
 
@@ -1090,13 +1091,13 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 
 	v, err := wire.ParseVersion(p.data)
 	if err != nil {
-		s.logger.Debugf("failed to parse version for sending version negotiation packet: %s", err)
+		s.logger.Debug("Failed to parse version for sending version negotiation packet", "error", err)
 		return
 	}
 
 	_, src, dest, err := wire.ParseArbitraryLenConnectionIDs(p.data)
 	if err != nil { // should never happen
-		s.logger.Debugf("Dropping a packet with an unknown version for which we failed to parse connection IDs")
+		s.logger.Debug("Dropping a packet with an unknown version for which we failed to parse connection IDs")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Raw:     qlog.RawInfo{Length: int(p.Size())},
@@ -1106,7 +1107,7 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 		return
 	}
 
-	s.logger.Debugf("Client offered version %s, sending Version Negotiation", v)
+	s.logger.Debug("Client offered version, sending Version Negotiation", "version", v)
 
 	data := wire.ComposeVersionNegotiation(dest, src, s.config.Versions)
 	if s.qlogger != nil {
@@ -1119,6 +1120,6 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 		})
 	}
 	if _, err := s.conn.WritePacket(data, p.remoteAddr, p.info.OOB(), 0, protocol.ECNUnsupported); err != nil {
-		s.logger.Debugf("Error sending Version Negotiation: %s", err)
+		s.logger.Debug("Error sending Version Negotiation", "error", err)
 	}
 }

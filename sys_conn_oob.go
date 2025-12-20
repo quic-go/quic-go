@@ -20,7 +20,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	islog "github.com/quic-go/quic-go/internal/slog"
 )
 
 const (
@@ -104,22 +104,22 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	}
 	switch {
 	case errECNIPv4 == nil && errECNIPv6 == nil:
-		utils.DefaultLogger.Debugf("Activating reading of ECN bits for IPv4 and IPv6.")
+		islog.DefaultLogger.Debug("Activating reading of ECN bits for IPv4 and IPv6.")
 	case errECNIPv4 == nil && errECNIPv6 != nil:
-		utils.DefaultLogger.Debugf("Activating reading of ECN bits for IPv4.")
+		islog.DefaultLogger.Debug("Activating reading of ECN bits for IPv4.")
 	case errECNIPv4 != nil && errECNIPv6 == nil:
-		utils.DefaultLogger.Debugf("Activating reading of ECN bits for IPv6.")
+		islog.DefaultLogger.Debug("Activating reading of ECN bits for IPv6.")
 	case errECNIPv4 != nil && errECNIPv6 != nil:
 		return nil, errors.New("activating ECN failed for both IPv4 and IPv6")
 	}
 	if needsPacketInfo {
 		switch {
 		case errPIIPv4 == nil && errPIIPv6 == nil:
-			utils.DefaultLogger.Debugf("Activating reading of packet info for IPv4 and IPv6.")
+			islog.DefaultLogger.Debug("Activating reading of packet info for IPv4 and IPv6.")
 		case errPIIPv4 == nil && errPIIPv6 != nil:
-			utils.DefaultLogger.Debugf("Activating reading of packet info bits for IPv4.")
+			islog.DefaultLogger.Debug("Activating reading of packet info bits for IPv4.")
 		case errPIIPv4 != nil && errPIIPv6 == nil:
-			utils.DefaultLogger.Debugf("Activating reading of packet info bits for IPv6.")
+			islog.DefaultLogger.Debug("Activating reading of packet info bits for IPv6.")
 		case errPIIPv4 != nil && errPIIPv6 != nil:
 			return nil, errors.New("activating packet info failed for both IPv4 and IPv6")
 		}

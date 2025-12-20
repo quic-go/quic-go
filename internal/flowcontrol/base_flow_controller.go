@@ -1,6 +1,7 @@
 package flowcontrol
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -30,7 +31,7 @@ type baseFlowController struct {
 	epochStartOffset protocol.ByteCount
 	rttStats         *utils.RTTStats
 
-	logger utils.Logger
+	logger *slog.Logger
 }
 
 // IsNewlyBlocked says if it is newly blocked by flow control.

@@ -3,6 +3,7 @@ package quicproxy
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"slices"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
+	islog "github.com/quic-go/quic-go/internal/slog"
 )
 
 // Connection is a UDP connection
@@ -160,7 +161,7 @@ type Proxy struct {
 	DelayPacket DelayCallback
 
 	closeChan chan struct{}
-	logger    utils.Logger
+	logger    *slog.Logger
 
 	// mapping from client addresses (as host:port) to connection
 	mutex      sync.Mutex
@@ -170,7 +171,7 @@ type Proxy struct {
 func (p *Proxy) Start() error {
 	p.clientDict = make(map[string]*connection)
 	p.closeChan = make(chan struct{})
-	p.logger = utils.DefaultLogger.WithPrefix("proxy")
+	p.logger = islog.DefaultLogger.With(islog.ComponentKey, "proxy")
 
 	if err := p.Conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
 		return err
@@ -179,7 +180,7 @@ func (p *Proxy) Start() error {
 		return err
 	}
 
-	p.logger.Debugf("Starting UDP Proxy %s <-> %s", p.Conn.LocalAddr(), p.ServerAddr)
+	p.logger.Debug("Starting UDP Proxy", "local", p.Conn.LocalAddr(), "server", p.ServerAddr)
 	go p.runProxy()
 	return nil
 }
@@ -269,8 +270,8 @@ func (p *Proxy) runProxy() error {
 		p.mutex.Unlock()
 
 		if p.DropPacket != nil && p.DropPacket(DirectionIncoming, cliaddr, conn.ServerAddr, raw) {
-			if p.logger.Debug() {
-				p.logger.Debugf("dropping incoming packet(%d bytes)", n)
+			if p.logger.Enabled(nil, slog.LevelDebug) {
+				p.logger.Debug("dropping incoming packet", "bytes", n)
 			}
 			continue
 		}
@@ -280,16 +281,16 @@ func (p *Proxy) runProxy() error {
 			delay = p.DelayPacket(DirectionIncoming, cliaddr, conn.ServerAddr, raw)
 		}
 		if delay == 0 {
-			if p.logger.Debug() {
-				p.logger.Debugf("forwarding incoming packet (%d bytes) to %s", len(raw), conn.ServerAddr)
+			if p.logger.Enabled(nil, slog.LevelDebug) {
+				p.logger.Debug("forwarding incoming packet", "bytes", len(raw), "dest", conn.ServerAddr)
 			}
 			if _, err := conn.GetServerConn().WriteTo(raw, conn.ServerAddr); err != nil {
 				return err
 			}
 		} else {
 			now := monotime.Now()
-			if p.logger.Debug() {
-				p.logger.Debugf("delaying incoming packet (%d bytes) to %s by %s", len(raw), conn.ServerAddr, delay)
+			if p.logger.Enabled(nil, slog.LevelDebug) {
+				p.logger.Debug("delaying incoming packet", "bytes", len(raw), "dest", conn.ServerAddr, "delay", delay)
 			}
 			conn.queuePacket(now.Add(delay), raw)
 		}
@@ -314,8 +315,8 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 			raw := buffer[0:n]
 
 			if p.DropPacket != nil && p.DropPacket(DirectionOutgoing, addr, conn.ClientAddr, raw) {
-				if p.logger.Debug() {
-					p.logger.Debugf("dropping outgoing packet(%d bytes)", n)
+				if p.logger.Enabled(nil, slog.LevelDebug) {
+					p.logger.Debug("dropping outgoing packet", "bytes", n)
 				}
 				continue
 			}
@@ -325,16 +326,16 @@ func (p *Proxy) runOutgoingConnection(conn *connection) error {
 				delay = p.DelayPacket(DirectionOutgoing, addr, conn.ClientAddr, raw)
 			}
 			if delay == 0 {
-				if p.logger.Debug() {
-					p.logger.Debugf("forwarding outgoing packet (%d bytes) to %s", len(raw), conn.ClientAddr)
+				if p.logger.Enabled(nil, slog.LevelDebug) {
+					p.logger.Debug("forwarding outgoing packet", "bytes", len(raw), "dest", conn.ClientAddr)
 				}
 				if _, err := p.Conn.WriteToUDP(raw, conn.ClientAddr); err != nil {
 					return
 				}
 			} else {
 				now := monotime.Now()
-				if p.logger.Debug() {
-					p.logger.Debugf("delaying outgoing packet (%d bytes) to %s by %s", len(raw), conn.ClientAddr, delay)
+				if p.logger.Enabled(nil, slog.LevelDebug) {
+					p.logger.Debug("delaying outgoing packet", "bytes", len(raw), "dest", conn.ClientAddr, "delay", delay)
 				}
 				outgoingPackets <- packetEntry{Time: now.Add(delay), Raw: raw}
 			}

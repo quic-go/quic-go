@@ -1,8 +1,10 @@
 package ackhandler
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/congestion"
@@ -108,7 +110,7 @@ type sentPacketHandler struct {
 
 	qlogger     qlogwriter.Recorder
 	lastMetrics qlog.MetricsUpdated
-	logger      utils.Logger
+	logger      *slog.Logger
 }
 
 var _ SentPacketHandler = &sentPacketHandler{}
@@ -125,7 +127,7 @@ func NewSentPacketHandler(
 	ignorePacketsBelow func(protocol.PacketNumber),
 	pers protocol.Perspective,
 	qlogger qlogwriter.Recorder,
-	logger utils.Logger,
+	logger *slog.Logger,
 ) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
@@ -263,9 +265,9 @@ func (h *sentPacketHandler) SentPacket(
 	h.connStats.PacketsSent.Add(1)
 
 	pnSpace := h.getPacketNumberSpace(encLevel)
-	if h.logger.Debug() && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
+	if h.logger.Enabled(context.Background(), slog.LevelDebug) && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
 		for p := max(0, pnSpace.largestSent+1); p < pn; p++ {
-			h.logger.Debugf("Skipping packet number %d", p)
+			h.logger.Debug("Skipping packet number", "packet_number", p)
 		}
 	}
 
@@ -394,7 +396,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	if h.perspective == protocol.PerspectiveClient && !h.peerCompletedAddressValidation &&
 		(encLevel == protocol.EncryptionHandshake || encLevel == protocol.Encryption1RTT) {
 		h.peerCompletedAddressValidation = true
-		h.logger.Debugf("Peer doesn't await address validation any longer.")
+		h.logger.Debug("Peer doesn't await address validation any longer.")
 		// Make sure that the timer is reset, even if this ACK doesn't acknowledge any (ack-eliciting) packets.
 		h.setLossDetectionTimer(rcvTime)
 	}
@@ -413,8 +415,11 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 				ackDelay = min(ack.DelayTime, h.rttStats.MaxAckDelay())
 			}
 			h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay)
-			if h.logger.Debug() {
-				h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+			if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+				h.logger.Debug("Updated RTT",
+					"smoothed_rtt", h.rttStats.SmoothedRTT(),
+					"rtt_var", h.rttStats.MeanDeviation(),
+				)
 			}
 			h.congestion.MaybeExitSlowStart()
 		}
@@ -577,12 +582,12 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		}
 		h.ackedPackets = append(h.ackedPackets, packetWithPacketNumber{PacketNumber: pn, packet: p})
 	}
-	if h.logger.Debug() && len(h.ackedPackets) > 0 {
+	if h.logger.Enabled(context.Background(), slog.LevelDebug) && len(h.ackedPackets) > 0 {
 		pns := make([]protocol.PacketNumber, len(h.ackedPackets))
 		for i, p := range h.ackedPackets {
 			pns[i] = p.PacketNumber
 		}
-		h.logger.Debugf("\tnewly acked packets (%d): %d", len(pns), pns)
+		h.logger.Debug("Newly acked packets", "count", len(pns), "packet_numbers", pns)
 	}
 
 	for _, p := range h.ackedPackets {
@@ -693,7 +698,7 @@ func (h *sentPacketHandler) setLossDetectionTimer(now monotime.Time) {
 
 	hasAlarm := !newAlarm.Time.IsZero()
 	if !hasAlarm && !oldAlarm.Time.IsZero() {
-		h.logger.Debugf("Canceling loss detection timer.")
+		h.logger.Debug("Canceling loss detection timer.")
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
 				Type: qlog.LossTimerUpdateTypeCancelled,
@@ -800,8 +805,8 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 		if !p.SendTime.After(lostSendTime) {
 			packetLost = true
 			if !p.isPathProbePacket {
-				if h.logger.Debug() {
-					h.logger.Debugf("\tlost packet %d (time threshold)", pn)
+				if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+					h.logger.Debug("Lost packet (time threshold)", "packet_number", pn)
 				}
 				if h.qlogger != nil {
 					h.qlogger.RecordEvent(qlog.PacketLost{
@@ -816,8 +821,8 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
 			packetLost = true
 			if !p.isPathProbePacket {
-				if h.logger.Debug() {
-					h.logger.Debugf("\tlost packet %d (reordering threshold)", pn)
+				if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+					h.logger.Debug("Lost packet (reordering threshold)", "packet_number", pn)
 				}
 				if h.qlogger != nil {
 					h.qlogger.RecordEvent(qlog.PacketLost{
@@ -832,8 +837,13 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
 			lossTime := p.SendTime.Add(lossDelay)
-			if h.logger.Debug() {
-				h.logger.Debugf("\tsetting loss timer for packet %d (%s) to %s (in %s)", pn, encLevel, lossDelay, lossTime)
+			if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+				h.logger.Debug("Setting loss timer for packet",
+					"packet_number", pn,
+					"enc_level", encLevel,
+					"loss_delay", lossDelay,
+					"loss_time", lossTime,
+				)
 			}
 			pnSpace.lossTime = lossTime
 		}
@@ -866,8 +876,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 
 	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
-		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Loss detection alarm fired in loss timer mode", "loss_time", earliestLossTime)
 		}
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
@@ -908,8 +918,11 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		return nil
 	}
 	h.ptoCount++
-	if h.logger.Debug() {
-		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
+	if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+		h.logger.Debug("Loss detection alarm fired in PTO mode",
+			"enc_level", encLevel,
+			"pto_count", h.ptoCount,
+		)
 	}
 	if h.qlogger != nil {
 		h.qlogger.RecordEvent(qlog.LossTimerUpdated{
@@ -964,8 +977,8 @@ func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) p
 	if skipped {
 		skippedPN := pn - 1
 		pnSpace.history.SkippedPacket(skippedPN)
-		if h.logger.Debug() {
-			h.logger.Debugf("Skipping packet number %d", skippedPN)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Skipping packet number", "packet_number", skippedPN)
 		}
 	}
 	return pn
@@ -981,7 +994,10 @@ func (h *sentPacketHandler) SendMode(now monotime.Time) SendMode {
 	}
 
 	if h.isAmplificationLimited() {
-		h.logger.Debugf("Amplification window limited. Received %d bytes, already sent out %d bytes", h.bytesReceived, h.bytesSent)
+		h.logger.Debug("Amplification window limited",
+			"bytes_received", h.bytesReceived,
+			"bytes_sent", h.bytesSent,
+		)
 		return SendNone
 	}
 	// Don't send any packets if we're keeping track of the maximum number of packets.
@@ -989,8 +1005,11 @@ func (h *sentPacketHandler) SendMode(now monotime.Time) SendMode {
 	// we will stop sending out new data when reaching MaxOutstandingSentPackets,
 	// but still allow sending of retransmissions and ACKs.
 	if numTrackedPackets >= protocol.MaxTrackedSentPackets {
-		if h.logger.Debug() {
-			h.logger.Debugf("Limited by the number of tracked packets: tracking %d packets, maximum %d", numTrackedPackets, protocol.MaxTrackedSentPackets)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Limited by the number of tracked packets",
+				"tracked", numTrackedPackets,
+				"max", protocol.MaxTrackedSentPackets,
+			)
 		}
 		return SendNone
 	}
@@ -999,14 +1018,20 @@ func (h *sentPacketHandler) SendMode(now monotime.Time) SendMode {
 	}
 	// Only send ACKs if we're congestion limited.
 	if !h.congestion.CanSend(h.bytesInFlight) {
-		if h.logger.Debug() {
-			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, h.congestion.GetCongestionWindow())
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Congestion limited",
+				"bytes_in_flight", h.bytesInFlight,
+				"cwnd", h.congestion.GetCongestionWindow(),
+			)
 		}
 		return SendAck
 	}
 	if numTrackedPackets >= protocol.MaxOutstandingSentPackets {
-		if h.logger.Debug() {
-			h.logger.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Max outstanding limited",
+				"tracked", numTrackedPackets,
+				"max", protocol.MaxOutstandingSentPackets,
+			)
 		}
 		return SendAck
 	}
@@ -1087,8 +1112,11 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 	if h.ptoCount == 0 {
 		// Don't set the RTT to a value lower than 5ms here.
 		h.rttStats.UpdateRTT(max(minRTTAfterRetry, now.Sub(firstPacketSendTime)), 0)
-		if h.logger.Debug() {
-			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+		if h.logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.logger.Debug("Updated RTT",
+				"smoothed_rtt", h.rttStats.SmoothedRTT(),
+				"rtt_var", h.rttStats.MeanDeviation(),
+			)
 		}
 		if h.qlogger != nil {
 			h.qlogMetricsUpdated()
