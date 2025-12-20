@@ -604,7 +604,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			return nil, err
 		}
 	}
-	// TODO: add support for the transport:packets_acked qlog event
+	// TODO: add support for the quic:packets_acked qlog event
 	return h.ackedPackets, nil
 }
 

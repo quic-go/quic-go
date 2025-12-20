@@ -68,7 +68,7 @@ func TestStartedConnection(t *testing.T) {
 		Remote: remoteInfo,
 	})
 
-	require.Equal(t, "transport:connection_started", name)
+	require.Equal(t, "quic:connection_started", name)
 
 	local, ok := ev["local"].(map[string]any)
 	require.True(t, ok)
@@ -84,7 +84,7 @@ func TestStartedConnection(t *testing.T) {
 func TestVersionInformation(t *testing.T) {
 	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: 0x1337})
 
-	require.Equal(t, "transport:version_information", name)
+	require.Equal(t, "quic:version_information", name)
 	require.Len(t, ev, 1)
 	require.Equal(t, "1337", ev["chosen_version"])
 }
@@ -96,7 +96,7 @@ func TestVersionInformationWithNegotiation(t *testing.T) {
 		ServerVersions: []Version{4, 5, 6},
 	})
 
-	require.Equal(t, "transport:version_information", name)
+	require.Equal(t, "quic:version_information", name)
 	require.Len(t, ev, 3)
 	require.Equal(t, "1337", ev["chosen_version"])
 	require.Equal(t, []any{"1", "2", "3"}, ev["client_versions"])
@@ -109,7 +109,7 @@ func TestIdleTimeouts(t *testing.T) {
 		Trigger:   ConnectionCloseTriggerIdleTimeout,
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.Len(t, ev, 2)
 	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "idle_timeout", ev["trigger"])
@@ -121,7 +121,7 @@ func TestReceivedStatelessResetPacket(t *testing.T) {
 		Trigger:   ConnectionCloseTriggerStatelessReset,
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.Len(t, ev, 2)
 	require.Equal(t, "remote", ev["initiator"])
 	require.Equal(t, "stateless_reset", ev["trigger"])
@@ -133,7 +133,7 @@ func TestVersionNegotiationFailure(t *testing.T) {
 		Trigger:   ConnectionCloseTriggerVersionMismatch,
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.Len(t, ev, 2)
 	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "version_mismatch", ev["trigger"])
@@ -147,7 +147,7 @@ func TestApplicationErrors(t *testing.T) {
 		Reason:           "foobar",
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.Len(t, ev, 4)
 	require.Equal(t, "remote", ev["initiator"])
 	require.Equal(t, "unknown", ev["application_error"])
@@ -188,7 +188,7 @@ func TestTransportErrors(t *testing.T) {
 				Reason:          "foobar",
 			})
 
-			require.Equal(t, "transport:connection_closed", name)
+			require.Equal(t, "quic:connection_closed", name)
 			require.Equal(t, "local", ev["initiator"])
 			require.Equal(t, tt.want, ev["connection_error"])
 			require.Equal(t, "foobar", ev["reason"])
@@ -205,7 +205,7 @@ func TestTransportCryptoError(t *testing.T) {
 		Reason:          "foobar",
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "crypto_error_0x12a", ev["connection_error"])
 	require.Equal(t, "foobar", ev["reason"])
@@ -236,7 +236,7 @@ func TestSentTransportParameters(t *testing.T) {
 		EnableResetStreamAt:             true,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.Equal(t, "local", ev["initiator"])
 	require.Equal(t, "deadc0de", ev["original_destination_connection_id"])
 	require.Equal(t, "deadbeef", ev["initial_source_connection_id"])
@@ -265,7 +265,7 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 		ActiveConnectionIDLimit:         7,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.NotContains(t, ev, "stateless_reset_token")
 }
 
@@ -276,7 +276,7 @@ func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 		StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.Equal(t, "local", ev["initiator"])
 	require.NotContains(t, ev, "retry_source_connection_id")
 }
@@ -312,7 +312,7 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 		PreferredAddress: preferredAddress,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.Equal(t, "local", ev["initiator"])
 	require.Contains(t, ev, "preferred_address")
 	pa := ev["preferred_address"].(map[string]any)
@@ -341,7 +341,7 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 		MaxDatagramFrameSize: 1337,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.Equal(t, float64(1337), ev["max_datagram_frame_size"])
 }
 
@@ -351,7 +351,7 @@ func TestReceivedTransportParameters(t *testing.T) {
 		SentBy:    protocol.PerspectiveClient,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.Equal(t, "remote", ev["initiator"])
 	require.NotContains(t, ev, "original_destination_connection_id")
 }
@@ -366,7 +366,7 @@ func TestRestoredTransportParameters(t *testing.T) {
 		MaxIdleTimeout:                 123 * time.Millisecond,
 	})
 
-	require.Equal(t, "transport:parameters_restored", name)
+	require.Equal(t, "quic:parameters_restored", name)
 	require.NotContains(t, ev, "initiator")
 	require.NotContains(t, ev, "original_destination_connection_id")
 	require.NotContains(t, ev, "stateless_reset_token")
@@ -396,7 +396,7 @@ func TestPacketSent(t *testing.T) {
 		ECN: ECNCE,
 	})
 
-	require.Equal(t, "transport:packet_sent", name)
+	require.Equal(t, "quic:packet_sent", name)
 	require.Contains(t, ev, "raw")
 	raw := ev["raw"].(map[string]any)
 	require.NotContains(t, ev, "datagram_id")
@@ -442,7 +442,7 @@ func testPacketSent1RTT(t *testing.T, datagramID DatagramID) {
 		DatagramID: datagramID,
 	})
 
-	require.Equal(t, "transport:packet_sent", name)
+	require.Equal(t, "quic:packet_sent", name)
 	raw := ev["raw"].(map[string]any)
 	require.Equal(t, float64(123), raw["length"])
 	require.NotContains(t, raw, "payload_length")
@@ -486,7 +486,7 @@ func TestPacketReceived(t *testing.T) {
 		DatagramID: 42,
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.Contains(t, ev, "raw")
 	raw := ev["raw"].(map[string]any)
 	require.Equal(t, float64(789), raw["length"])
@@ -533,7 +533,7 @@ func testPacketReceived1RTT(t *testing.T, datagramID DatagramID) {
 		DatagramID: datagramID,
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.Contains(t, ev, "raw")
 	raw := ev["raw"].(map[string]any)
 	require.Equal(t, float64(789), raw["length"])
@@ -565,7 +565,7 @@ func TestPacketReceivedRetry(t *testing.T) {
 		Raw: RawInfo{Length: 123},
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.Contains(t, ev, "raw")
 	raw := ev["raw"].(map[string]any)
 	require.Len(t, raw, 1)
@@ -592,7 +592,7 @@ func TestVersionNegotiationReceived(t *testing.T) {
 		SupportedVersions: []Version{0xdeadbeef, 0xdecafbad},
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.Contains(t, ev, "header")
 	require.NotContains(t, ev, "frames")
 	require.Contains(t, ev, "supported_versions")
@@ -616,7 +616,7 @@ func TestPacketBuffered(t *testing.T) {
 		Raw: RawInfo{Length: 1337},
 	})
 
-	require.Equal(t, "transport:packet_buffered", name)
+	require.Equal(t, "quic:packet_buffered", name)
 	require.Contains(t, ev, "header")
 	require.Contains(t, ev, "raw")
 	require.Equal(t, float64(1337), ev["raw"].(map[string]any)["length"])
@@ -631,7 +631,7 @@ func TestPacketDropped(t *testing.T) {
 		Trigger: PacketDropPayloadDecryptError,
 	})
 
-	require.Equal(t, "transport:packet_dropped", name)
+	require.Equal(t, "quic:packet_dropped", name)
 	require.Contains(t, ev, "raw")
 	require.Equal(t, float64(1337), ev["raw"].(map[string]any)["length"])
 	require.Contains(t, ev, "header")
@@ -873,7 +873,7 @@ func TestALPNInformation(t *testing.T) {
 		ChosenALPN: "h3",
 	})
 
-	require.Equal(t, "transport:alpn_information", name)
+	require.Equal(t, "quic:alpn_information", name)
 	require.Len(t, ev, 1)
 	require.Equal(t, "h3", ev["chosen_alpn"])
 }
@@ -881,14 +881,14 @@ func TestALPNInformation(t *testing.T) {
 func TestDebugEvent(t *testing.T) {
 	t.Run("default name", func(t *testing.T) {
 		name, ev := testEventEncoding(t, &DebugEvent{Message: "hello world"})
-		require.Equal(t, "transport:debug", name)
+		require.Equal(t, "quic:debug", name)
 		require.Len(t, ev, 1)
 		require.Equal(t, "hello world", ev["message"])
 	})
 
 	t.Run("custom name", func(t *testing.T) {
 		name, ev := testEventEncoding(t, &DebugEvent{EventName: "foo", Message: "bar"})
-		require.Equal(t, "transport:foo", name)
+		require.Equal(t, "quic:foo", name)
 		require.Len(t, ev, 1)
 		require.Equal(t, "bar", ev["message"])
 	})
