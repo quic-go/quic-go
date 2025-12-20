@@ -93,7 +93,7 @@ func TestAddTimestamp(t *testing.T) {
 	DefaultLogger.SetLogLevel(LogLevelInfo)
 	DefaultLogger.Infof("info")
 	timestamp := b.String()[:b.Len()-6]
-	parsedTime, err := time.Parse(format, timestamp)
+	parsedTime, err := time.ParseInLocation(format, timestamp, time.Local)
 	require.NoError(t, err)
 	require.WithinDuration(t, time.Now(), parsedTime, 25*time.Hour)
 }
