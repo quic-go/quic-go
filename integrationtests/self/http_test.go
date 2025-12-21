@@ -27,6 +27,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/http3/qlog"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
@@ -1009,7 +1010,7 @@ func TestHTTP0RTT(t *testing.T) {
 		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
 		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
-			if contains0RTTPacket(data) {
+			if containsPacketType(data, protocol.PacketType0RTT) {
 				num0RTTPackets.Add(1)
 			}
 			return scaleDuration(25 * time.Millisecond)
