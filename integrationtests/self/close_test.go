@@ -112,7 +112,16 @@ func TestDrainServerAcceptQueue(t *testing.T) {
 		require.NoError(t, err)
 		conns = append(conns, conn)
 	}
-	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued
+	// wait for all handshakes to complete before closing the server
+	for _, conn := range conns {
+		select {
+		case <-conn.HandshakeComplete():
+		case <-ctx.Done():
+			t.Fatal("handshake did not complete in time")
+		}
+	}
+	// Give a small amount of time to ensure connections are queued after handshake
+	time.Sleep(scaleDuration(10 * time.Millisecond))
 
 	server.Close()
 	for i := range protocol.MaxAcceptQueueSize {
