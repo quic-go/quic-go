@@ -193,11 +193,6 @@ type Config struct {
 	Tracer func(ctx context.Context, isClient bool, connID ConnectionID) qlogwriter.Trace
 }
 
-// ClientHelloInfo contains information about an incoming connection attempt.
-//
-// Deprecated: Use ClientInfo instead.
-type ClientHelloInfo = ClientInfo
-
 // ClientInfo contains information about an incoming connection attempt.
 type ClientInfo struct {
 	// RemoteAddr is the remote address on the Initial packet.
