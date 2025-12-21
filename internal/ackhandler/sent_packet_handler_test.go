@@ -202,19 +202,76 @@ func TestSentPacketHandlerAcknowledgeSkippedPacket(t *testing.T) {
 	require.ErrorContains(t, err, fmt.Sprintf("received an ACK for skipped packet number: %d (1-RTT)", skippedPN))
 }
 
-func TestSentPacketHandlerRTTs(t *testing.T) {
+func TestSentPacketHandlerRTT(t *testing.T) {
+	rttStats := utils.NewRTTStats()
+	sph := NewSentPacketHandler(
+		0,
+		1200,
+		rttStats,
+		&utils.ConnectionStats{},
+		false,
+		false,
+		nil,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	sendPacket := func(t *testing.T, ti monotime.Time, ackEliciting bool) protocol.PacketNumber {
+		t.Helper()
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		var frames []Frame
+		if ackEliciting {
+			frames = []Frame{{Frame: &wire.PingFrame{}}}
+		}
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, frames, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, false)
+		return pn
+	}
+
+	ackPackets := func(t *testing.T, ti monotime.Time, pns ...protocol.PacketNumber) {
+		t.Helper()
+		_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns...)}, protocol.Encryption1RTT, ti)
+		require.NoError(t, err)
+	}
+
+	now := monotime.Now()
+	pn1 := sendPacket(t, now, true)
+	pn2 := sendPacket(t, now, false)
+	pn3 := sendPacket(t, now, true)
+	// the RTT is recorded, since the largest acknowledged packet is ack-eliciting
+	now = now.Add(200 * time.Millisecond)
+	ackPackets(t, now, pn1, pn2, pn3)
+	require.Equal(t, 200*time.Millisecond, rttStats.LatestRTT())
+
+	pn4 := sendPacket(t, now, false)
+	pn5 := sendPacket(t, now, false)
+	now = now.Add(500 * time.Millisecond)
+	// only non-ack-eliciting packets are newly acknowledged, so the RTT is not updated
+	ackPackets(t, now, pn2, pn3, pn4, pn5)
+	require.Equal(t, 200*time.Millisecond, rttStats.LatestRTT())
+
+	pn6 := sendPacket(t, now, true)
+	pn7 := sendPacket(t, now, false)
+	now = now.Add(800 * time.Millisecond)
+	// largest acknowledged packet is not ack-eliciting, but one new ack-eliciting
+	// packet was acknowledged, so the RTT is updated
+	ackPackets(t, now, pn6, pn7)
+	require.Equal(t, 800*time.Millisecond, rttStats.LatestRTT())
+}
+
+func TestSentPacketHandlerRTTAckDelays(t *testing.T) {
 	t.Run("Initial", func(t *testing.T) {
-		testSentPacketHandlerRTTs(t, protocol.EncryptionInitial, false)
+		testSentPacketHandlerRTTAckDelays(t, protocol.EncryptionInitial, false)
 	})
 	t.Run("Handshake", func(t *testing.T) {
-		testSentPacketHandlerRTTs(t, protocol.EncryptionHandshake, false)
+		testSentPacketHandlerRTTAckDelays(t, protocol.EncryptionHandshake, false)
 	})
 	t.Run("1-RTT", func(t *testing.T) {
-		testSentPacketHandlerRTTs(t, protocol.Encryption1RTT, true)
+		testSentPacketHandlerRTTAckDelays(t, protocol.Encryption1RTT, true)
 	})
 }
 
-func testSentPacketHandlerRTTs(t *testing.T, encLevel protocol.EncryptionLevel, usesAckDelay bool) {
+func testSentPacketHandlerRTTAckDelays(t *testing.T, encLevel protocol.EncryptionLevel, usesAckDelay bool) {
 	expectedRTTStats := utils.NewRTTStats()
 	expectedRTTStats.SetMaxAckDelay(time.Second)
 	rttStats := utils.NewRTTStats()
