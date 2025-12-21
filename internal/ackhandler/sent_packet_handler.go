@@ -393,13 +393,15 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	priorInFlight := h.bytesInFlight
-	ackedPackets, err := h.detectAndRemoveAckedPackets(ack, encLevel)
+	ackedPackets, hasAckEliciting, err := h.detectAndRemoveAckedPackets(ack, encLevel)
 	if err != nil || len(ackedPackets) == 0 {
 		return false, err
 	}
-	// update the RTT, if the largest acked is newly acknowledged
+	// update the RTT, if:
+	// * the largest acked is newly acknowledged, AND
+	// * at least one new ack-eliciting packet was acknowledged
 	if len(ackedPackets) > 0 {
-		if p := ackedPackets[len(ackedPackets)-1]; p.PacketNumber == ack.LargestAcked() && !p.isPathProbePacket {
+		if p := ackedPackets[len(ackedPackets)-1]; p.PacketNumber == ack.LargestAcked() && !p.isPathProbePacket && hasAckEliciting {
 			// don't use the ack delay for Initial and Handshake packets
 			var ackDelay time.Duration
 			if encLevel == protocol.Encryption1RTT {
@@ -515,9 +517,12 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 }
 
 // Packets are returned in ascending packet number order.
-func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]packetWithPacketNumber, error) {
+func (h *sentPacketHandler) detectAndRemoveAckedPackets(
+	ack *wire.AckFrame,
+	encLevel protocol.EncryptionLevel,
+) (_ []packetWithPacketNumber, hasAckEliciting bool, _ error) {
 	if len(h.ackedPackets) > 0 {
-		return nil, errors.New("ackhandler BUG: ackedPackets slice not empty")
+		return nil, false, errors.New("ackhandler BUG: ackedPackets slice not empty")
 	}
 
 	pnSpace := h.getPacketNumberSpace(encLevel)
@@ -525,7 +530,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	if encLevel == protocol.Encryption1RTT {
 		for p := range pnSpace.history.SkippedPackets() {
 			if ack.AcksPacket(p) {
-				return nil, &qerr.TransportError{
+				return nil, false, &qerr.TransportError{
 					ErrorCode:    qerr.ProtocolViolation,
 					ErrorMessage: fmt.Sprintf("received an ACK for skipped packet number: %d (%s)", p, encLevel),
 				}
@@ -557,7 +562,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 				continue
 			}
 			if pn > ackRange.Largest {
-				return nil, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", pn, ackRange.Smallest, ackRange.Largest)
+				return nil, false, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", pn, ackRange.Smallest, ackRange.Largest)
 			}
 		}
 		if p.isPathProbePacket {
@@ -567,6 +572,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 				h.ackedPackets = append(h.ackedPackets, packetWithPacketNumber{PacketNumber: pn, packet: probePacket})
 			}
 			continue
+		}
+		if p.IsAckEliciting() {
+			hasAckEliciting = true
 		}
 		h.ackedPackets = append(h.ackedPackets, packetWithPacketNumber{PacketNumber: pn, packet: p})
 	}
@@ -594,11 +602,11 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			}
 		}
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	// TODO: add support for the transport:packets_acked qlog event
-	return h.ackedPackets, nil
+	return h.ackedPackets, hasAckEliciting, nil
 }
 
 func (h *sentPacketHandler) getLossTimeAndSpace() (monotime.Time, protocol.EncryptionLevel) {
