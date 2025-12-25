@@ -124,6 +124,14 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return s.sendStr.Write(p)
 }
 
+// SetReliableBoundary marks the data written to this stream so far as reliable.
+// It is valid to call this function multiple times, thereby increasing the reliable size.
+// It only has an effect if the peer enabled support for the RESET_STREAM_AT extension,
+// otherwise, it is a no-op.
+func (s *Stream) SetReliableBoundary() {
+	s.sendStr.SetReliableBoundary()
+}
+
 // CancelWrite aborts sending on this stream.
 // See [SendStream.CancelWrite] for more details.
 func (s *Stream) CancelWrite(errorCode StreamErrorCode) {
