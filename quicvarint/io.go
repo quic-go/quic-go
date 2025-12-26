@@ -14,6 +14,9 @@ type Reader interface {
 var _ Reader = &bytes.Reader{}
 
 // A Peeker can peek bytes without consuming them.
+// Peek fills b with data. It returns the number of bytes filled and any error encountered.
+// If err is nil, n == len(b) and all bytes in b have been filled.
+// If err is not nil, n indicates how many bytes were successfully filled before the error.
 type Peeker interface {
 	Peek(b []byte) (int, error)
 }
