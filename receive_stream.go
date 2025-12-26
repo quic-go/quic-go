@@ -160,16 +160,8 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			}
 
 			deadline := s.deadline
-			if !deadline.IsZero() {
-				if !monotime.Now().Before(deadline) {
-					return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, errDeadline
-				}
-				if deadlineTimer == nil {
-					deadlineTimer = time.NewTimer(monotime.Until(deadline))
-					defer deadlineTimer.Stop()
-				} else {
-					deadlineTimer.Reset(monotime.Until(deadline))
-				}
+			if !deadline.IsZero() && !monotime.Now().Before(deadline) {
+				return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, errDeadline
 			}
 
 			if s.currentFrame != nil || s.currentFrameIsLast {
@@ -180,6 +172,12 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			if deadline.IsZero() {
 				<-s.readChan
 			} else {
+				if deadlineTimer == nil {
+					deadlineTimer = time.NewTimer(monotime.Until(deadline))
+					defer deadlineTimer.Stop()
+				} else {
+					deadlineTimer.Reset(monotime.Until(deadline))
+				}
 				select {
 				case <-s.readChan:
 				case <-deadlineTimer.C:
