@@ -184,9 +184,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 				}
 			}
 			s.mutex.Lock()
-			if s.currentFrame == nil {
-				s.dequeueNextFrame()
-			}
+			s.dequeueNextFrame()
 		}
 
 		if bytesRead > len(p) {
