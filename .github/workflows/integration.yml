@@ -74,8 +74,9 @@ jobs:
           retention-days: 7
       - name: Upload report to Codecov
         if: ${{ !cancelled() && !matrix.race }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
+          report_type: test_results
           name: Unit tests
           files: report_tools.xml,report_versionnegotiation.xml,report_self.xml,report_self_v2.xml,report_self_nogso.xml,report_self_noecn.xml
           env_vars: OS,GO
