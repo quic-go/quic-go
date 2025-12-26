@@ -131,7 +131,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 		s.errorRead = true
 		return false, false, 0, io.EOF
 	}
-	if s.cancelledLocally || (s.cancelledRemotely && s.readPos >= s.reliableSize) {
+	if s.cancelledLocally || s.isRemoteCancellationEffective() {
 		s.errorRead = true
 		return false, false, 0, s.cancelErr
 	}
@@ -154,22 +154,14 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			if s.closeForShutdownErr != nil {
 				return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, s.closeForShutdownErr
 			}
-			if s.cancelledLocally || (s.cancelledRemotely && s.readPos >= s.reliableSize) {
+			if s.cancelledLocally || s.isRemoteCancellationEffective() {
 				s.errorRead = true
 				return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, s.cancelErr
 			}
 
 			deadline := s.deadline
-			if !deadline.IsZero() {
-				if !monotime.Now().Before(deadline) {
-					return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, errDeadline
-				}
-				if deadlineTimer == nil {
-					deadlineTimer = time.NewTimer(monotime.Until(deadline))
-					defer deadlineTimer.Stop()
-				} else {
-					deadlineTimer.Reset(monotime.Until(deadline))
-				}
+			if !deadline.IsZero() && !monotime.Now().Before(deadline) {
+				return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, errDeadline
 			}
 
 			if s.currentFrame != nil || s.currentFrameIsLast {
@@ -180,15 +172,19 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			if deadline.IsZero() {
 				<-s.readChan
 			} else {
+				if deadlineTimer == nil {
+					deadlineTimer = time.NewTimer(monotime.Until(deadline))
+					defer deadlineTimer.Stop()
+				} else {
+					deadlineTimer.Reset(monotime.Until(deadline))
+				}
 				select {
 				case <-s.readChan:
 				case <-deadlineTimer.C:
 				}
 			}
 			s.mutex.Lock()
-			if s.currentFrame == nil {
-				s.dequeueNextFrame()
-			}
+			s.dequeueNextFrame()
 		}
 
 		if bytesRead > len(p) {
@@ -201,7 +197,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 
 		// when a RESET_STREAM was received, the flow controller was already
 		// informed about the final offset for this stream
-		if !s.cancelledRemotely || s.readPos < s.reliableSize {
+		if !s.isRemoteCancellationEffective() {
 			hasStream, hasConn := s.flowController.AddBytesRead(protocol.ByteCount(m))
 			if hasStream {
 				s.queuedMaxStreamData = true
@@ -216,7 +212,7 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 		s.readPos += protocol.ByteCount(m)
 		bytesRead += m
 
-		if s.cancelledRemotely && s.readPos >= s.reliableSize {
+		if s.isRemoteCancellationEffective() {
 			s.flowController.Abandon()
 		}
 
@@ -229,11 +225,17 @@ func (s *ReceiveStream) readImpl(p []byte) (hasStreamWindowUpdate bool, hasConnW
 			return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, io.EOF
 		}
 	}
-	if s.cancelledRemotely && s.readPos >= s.reliableSize {
+	if s.isRemoteCancellationEffective() {
 		s.errorRead = true
 		return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, s.cancelErr
 	}
 	return hasStreamWindowUpdate, hasConnWindowUpdate, bytesRead, nil
+}
+
+// isRemoteCancellationEffective returns whether the stream was cancelled remotely
+// and all reliable data has been read.
+func (s *ReceiveStream) isRemoteCancellationEffective() bool {
+	return s.cancelledRemotely && s.readPos >= s.reliableSize
 }
 
 func (s *ReceiveStream) dequeueNextFrame() {
