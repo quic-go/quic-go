@@ -238,6 +238,121 @@ func (s *ReceiveStream) isRemoteCancellationEffective() bool {
 	return s.cancelledRemotely && s.readPos >= s.reliableSize
 }
 
+// Peek fills b with stream data, without consuming the stream data.
+// It blocks until len(b) bytes are available, or an error occurs.
+// It respects the stream deadline set by SetReadDeadline.
+// If the stream ends before len(b) bytes are available,
+// it returns the number of bytes peeked along with io.EOF.
+func (s *ReceiveStream) Peek(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+
+	// prevent concurrent use with Read
+	s.readOnce <- struct{}{}
+	defer func() { <-s.readOnce }()
+
+	return s.peekImpl(b)
+}
+
+func (s *ReceiveStream) peekImpl(b []byte) (int, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	var deadlineTimer *time.Timer
+
+	for {
+		if s.currentFrameIsLast && s.currentFrame == nil {
+			return 0, io.EOF
+		}
+		if s.cancelledLocally || s.isRemoteCancellationEffective() {
+			return 0, s.cancelErr
+		}
+		if s.closeForShutdownErr != nil {
+			return 0, s.closeForShutdownErr
+		}
+
+		deadline := s.deadline
+		if !deadline.IsZero() && !monotime.Now().Before(deadline) {
+			return 0, errDeadline
+		}
+
+		if s.currentFrame == nil || s.readPosInFrame >= len(s.currentFrame) {
+			s.dequeueNextFrame()
+		}
+
+		if s.currentFrame != nil && s.readPosInFrame < len(s.currentFrame) {
+			availableInCurrentFrame := len(s.currentFrame) - s.readPosInFrame
+
+			if availableInCurrentFrame >= len(b) {
+				copy(b, s.currentFrame[s.readPosInFrame:])
+				return len(b), nil
+			}
+
+			offset := s.readPos + protocol.ByteCount(availableInCurrentFrame)
+			// First peek, then copy.
+			// This avoids copying data if there's not enough data in the queue.
+			if err := s.frameQueue.Peek(offset, b[availableInCurrentFrame:]); err == nil {
+				copy(b[:availableInCurrentFrame], s.currentFrame[s.readPosInFrame:])
+				return len(b), nil
+			}
+
+			if s.currentFrameIsLast {
+				copy(b[:availableInCurrentFrame], s.currentFrame[s.readPosInFrame:])
+				return availableInCurrentFrame, io.EOF
+			}
+
+			// If the stream was remotely cancelled and the request extends beyond the reliable size,
+			// return the data available with the cancel error (once it's all received).
+			if s.cancelledRemotely && s.readPos+protocol.ByteCount(len(b)) > s.reliableSize {
+				total := int(s.reliableSize - s.readPos)
+				needed := total - availableInCurrentFrame
+				// only return once all available data is contiguous
+				if needed <= 0 || s.frameQueue.Peek(offset, b[availableInCurrentFrame:total]) == nil {
+					copy(b[:availableInCurrentFrame], s.currentFrame[s.readPosInFrame:])
+					return total, s.cancelErr
+				}
+			}
+
+			// If the request extends beyond the stream's final offset,
+			// return the data available with EOF (once it's all received).
+			if s.readPos+protocol.ByteCount(len(b)) > s.finalOffset {
+				total := int(s.finalOffset - s.readPos)
+				needed := total - availableInCurrentFrame
+				// only return once all available data is contiguous
+				if needed <= 0 || s.frameQueue.Peek(offset, b[availableInCurrentFrame:total]) == nil {
+					copy(b[:availableInCurrentFrame], s.currentFrame[s.readPosInFrame:])
+					return total, io.EOF
+				}
+			}
+		}
+
+		if s.currentFrameIsLast || s.readPos >= s.finalOffset {
+			return 0, io.EOF
+		}
+
+		s.mutex.Unlock()
+		if deadline.IsZero() {
+			<-s.readChan
+		} else {
+			if deadlineTimer == nil {
+				deadlineTimer = time.NewTimer(monotime.Until(deadline))
+				defer deadlineTimer.Stop()
+			} else {
+				deadlineTimer.Reset(monotime.Until(deadline))
+			}
+			select {
+			case <-s.readChan:
+			case <-deadlineTimer.C:
+			}
+		}
+		s.mutex.Lock()
+		if s.currentFrame == nil || s.readPosInFrame >= len(s.currentFrame) {
+			s.dequeueNextFrame()
+		}
+	}
+}
+
 func (s *ReceiveStream) dequeueNextFrame() {
 	var offset protocol.ByteCount
 	// We're done with the last frame. Release the buffer.
