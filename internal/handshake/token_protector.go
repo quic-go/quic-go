@@ -3,12 +3,10 @@ package handshake
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
-	"io"
-
-	"golang.org/x/crypto/hkdf"
 )
 
 // TokenProtectorKey is the key used to encrypt both Retry and session resumption tokens.
@@ -52,16 +50,23 @@ func (s *tokenProtector) DecodeToken(p []byte) ([]byte, error) {
 	return aead.Open(nil, aeadNonce, p[tokenNonceSize:], nil)
 }
 
+const tokenProtectorHKDFInfo = "quic-go token source"
+
 func (s *tokenProtector) createAEAD(nonce []byte) (cipher.AEAD, []byte, error) {
-	h := hkdf.New(sha256.New, s.key[:], nonce, []byte("quic-go token source"))
-	key := make([]byte, 32) // use a 32 byte key, in order to select AES-256
-	if _, err := io.ReadFull(h, key); err != nil {
+	prk, err := hkdf.Extract(sha256.New, s.key[:], nonce)
+	if err != nil {
 		return nil, nil, err
 	}
-	aeadNonce := make([]byte, 12)
-	if _, err := io.ReadFull(h, aeadNonce); err != nil {
+
+	// expand to get key (32 bytes) and nonce (12 bytes) in one HKDF call
+	expanded, err := hkdf.Expand(sha256.New, prk, tokenProtectorHKDFInfo, 32+12)
+	if err != nil {
 		return nil, nil, err
 	}
+
+	key := expanded[:32] // use a 32 byte key, in order to select AES-256
+	aeadNonce := expanded[32:]
+
 	c, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, nil, err
