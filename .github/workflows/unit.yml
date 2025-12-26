@@ -58,11 +58,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test report to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         env:
           OS: ${{ matrix.os }}
           GO: ${{ matrix.go }}
         with:
+          report_type: test_results
           name: Unit tests
           files: report.xml,report_root.xml
           env_vars: OS,GO
