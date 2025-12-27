@@ -62,7 +62,9 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool,
 	if len(req.Trailer) > 0 {
 		keys := make([]string, 0, len(req.Trailer))
 		for k := range req.Trailer {
-			keys = append(keys, k)
+			if httpguts.ValidTrailerHeader(k) {
+				keys = append(keys, k)
+			}
 		}
 		trailers = strings.Join(keys, ",")
 	}

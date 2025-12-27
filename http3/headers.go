@@ -308,8 +308,8 @@ func extractAnnouncedTrailers(header http.Header) http.Header {
 // It returns true if trailers were written, false if there were no trailers to write.
 func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, qlogger qlogwriter.Recorder) (bool, error) {
 	var hasValues bool
-	for _, vals := range trailers {
-		if len(vals) > 0 {
+	for k, vals := range trailers {
+		if httpguts.ValidTrailerHeader(k) && len(vals) > 0 {
 			hasValues = true
 			break
 		}
@@ -327,6 +327,9 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 
 	for k, vals := range trailers {
 		if len(vals) == 0 {
+			continue
+		}
+		if !httpguts.ValidTrailerHeader(k) {
 			continue
 		}
 		lowercaseKey := strings.ToLower(k)
