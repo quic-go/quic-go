@@ -66,7 +66,7 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool,
 				keys = append(keys, k)
 			}
 		}
-		trailers = strings.Join(keys, ",")
+		trailers = strings.Join(keys, ", ")
 	}
 
 	headerFields, err := w.encodeHeaders(req, gzip, trailers, actualContentLength(req), qlogger != nil)
