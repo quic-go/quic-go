@@ -97,9 +97,6 @@ type Transport struct {
 	// However, if the user explicitly requested gzip it is not automatically uncompressed.
 	DisableCompression bool
 
-	StreamHijacker    func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error)
-	UniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool)
-
 	Logger *slog.Logger
 
 	mutex sync.Mutex
@@ -133,8 +130,6 @@ func (t *Transport) init() error {
 				conn,
 				t.EnableDatagrams,
 				t.AdditionalSettings,
-				t.StreamHijacker,
-				t.UniStreamHijacker,
 				t.MaxResponseHeaderBytes,
 				t.DisableCompression,
 				t.Logger,
@@ -430,8 +425,6 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 		conn,
 		t.EnableDatagrams,
 		t.AdditionalSettings,
-		t.StreamHijacker,
-		t.UniStreamHijacker,
 		t.MaxResponseHeaderBytes,
 		t.DisableCompression,
 		t.Logger,
