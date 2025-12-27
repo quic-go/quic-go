@@ -53,6 +53,7 @@ var (
 	_ http.ResponseWriter = &responseWriter{}
 	_ http.Flusher        = &responseWriter{}
 	_ Hijacker            = &responseWriter{}
+	_ Settingser          = &responseWriter{}
 	_ HTTPStreamer        = &responseWriter{}
 	// make sure that we implement (some of the) methods used by the http.ResponseController
 	_ interface {
@@ -338,6 +339,14 @@ func (w *responseWriter) wasStreamHijacked() bool { return w.hijacked }
 
 func (w *responseWriter) Connection() *Conn {
 	return w.conn
+}
+
+func (w *responseWriter) ReceivedSettings() <-chan struct{} {
+	return w.conn.ReceivedSettings()
+}
+
+func (w *responseWriter) Settings() *Settings {
+	return w.conn.Settings()
 }
 
 func (w *responseWriter) SetReadDeadline(deadline time.Time) error {
