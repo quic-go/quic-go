@@ -14,7 +14,6 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/quic-go/testutils/events"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -414,79 +413,4 @@ func TestParserGoAwayFrame(t *testing.T) {
 	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, f, f2)
-}
-
-func TestParserHijacking(t *testing.T) {
-	t.Run("hijacking", func(t *testing.T) {
-		testParserHijacking(t, true)
-	})
-	t.Run("not hijacking", func(t *testing.T) {
-		testParserHijacking(t, false)
-	})
-}
-
-func testParserHijacking(t *testing.T, hijack bool) {
-	b := quicvarint.Append(nil, 1337)
-	if hijack {
-		b = append(b, "foobar"...)
-	} else {
-		// if the stream is not hijacked, this will be treated as an unknown frame
-		b = quicvarint.Append(b, 11)
-		b = append(b, []byte("lorem ipsum")...)
-		b = (&dataFrame{Length: 6}).Append(b)
-		b = append(b, []byte("foobar")...)
-	}
-
-	var called bool
-	r := bytes.NewReader(b)
-	fp := frameParser{
-		r: r,
-		unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
-			called = true
-			require.NoError(t, e)
-			require.Equal(t, FrameType(1337), ft)
-			if !hijack {
-				return false, nil
-			}
-			b := make([]byte, 6)
-			_, err = io.ReadFull(r, b)
-			require.NoError(t, err)
-			require.Equal(t, "foobar", string(b))
-			return true, nil
-		},
-	}
-	f, err := fp.ParseNext(nil)
-	require.True(t, called)
-	if hijack {
-		require.ErrorIs(t, err, errHijacked)
-		return
-	}
-	require.NoError(t, err)
-	require.IsType(t, &dataFrame{}, f)
-	df := f.(*dataFrame)
-	require.Equal(t, uint64(6), df.Length)
-	payload := make([]byte, 6)
-	_, err = io.ReadFull(r, payload)
-	require.NoError(t, err)
-	require.Equal(t, "foobar", string(payload))
-}
-
-type errReader struct{ err error }
-
-func (e errReader) Read([]byte) (int, error) { return 0, e.err }
-
-func TestParserHijackError(t *testing.T) {
-	var called bool
-	fp := frameParser{
-		r: errReader{err: assert.AnError},
-		unknownFrameHandler: func(ft FrameType, e error) (hijacked bool, err error) {
-			require.EqualError(t, e, assert.AnError.Error())
-			require.Zero(t, ft)
-			called = true
-			return true, nil
-		},
-	}
-	_, err := fp.ParseNext(nil)
-	require.ErrorIs(t, err, errHijacked)
-	require.True(t, called)
 }
