@@ -117,6 +117,15 @@ func (s *Stream) Read(p []byte) (int, error) {
 	return s.receiveStr.Read(p)
 }
 
+// Peek fills b with stream data, without consuming the stream data.
+// It blocks until len(b) bytes are available, or an error occurs.
+// It respects the stream deadline set by SetReadDeadline.
+// If the stream ends before len(b) bytes are available,
+// it returns the number of bytes peeked along with io.EOF.
+func (s *Stream) Peek(b []byte) (int, error) {
+	return s.receiveStr.Peek(b)
+}
+
 // Write writes data to the stream.
 // Write can be made to time out using [Stream.SetWriteDeadline] or [Stream.SetDeadline].
 // If the stream was canceled, the error is a [StreamError].

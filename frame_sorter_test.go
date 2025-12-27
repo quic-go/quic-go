@@ -1472,3 +1472,41 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 		require.True(t, cb.WasCalled())
 	}
 }
+
+func TestFrameSorterPeek(t *testing.T) {
+	s := newFrameSorter()
+	require.NoError(t, s.Peek(1337, []byte{})) // empty peek is a no-op
+	require.ErrorIs(t, s.Peek(0, []byte{0, 1, 2, 3, 4}), errTooLittleData)
+
+	require.NoError(t, s.Push([]byte("foobar"), 0, nil))
+
+	// peek partial frame
+	p := make([]byte, 3)
+	require.NoError(t, s.Peek(0, p))
+	require.Equal(t, []byte("foo"), p)
+	// peek entire frame
+	p = make([]byte, 6)
+	require.NoError(t, s.Peek(0, p))
+	require.Equal(t, []byte("foobar"), p)
+	// peek more than available
+	p = make([]byte, 10)
+	require.ErrorIs(t, s.Peek(0, p), errTooLittleData)
+	// peek at offset where no entry exists
+	p = make([]byte, 3)
+	require.ErrorIs(t, s.Peek(3, p), errTooLittleData)
+
+	// peek across multiple frames
+	s.Push([]byte("baz"), 6, nil)
+	p = make([]byte, 9)
+	require.NoError(t, s.Peek(0, p))
+	require.Equal(t, []byte("foobarbaz"), p)
+	// peek starting from second frame
+	p = make([]byte, 3)
+	require.NoError(t, s.Peek(6, p))
+	require.Equal(t, []byte("baz"), p)
+
+	// peeking across gaps doesn't work
+	s.Push([]byte("qux"), 10, nil)
+	p = make([]byte, 10)
+	require.ErrorIs(t, s.Peek(0, p), errTooLittleData)
+}
