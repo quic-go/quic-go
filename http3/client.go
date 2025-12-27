@@ -352,6 +352,7 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 		} else {
 			// send the request body asynchronously
 			go func() {
+				defer str.Close()
 				contentLength := int64(-1)
 				// According to the documentation for http.Request.ContentLength,
 				// a value of 0 with a non-nil Body is also treated as unknown content length.
@@ -364,8 +365,16 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 					if c.logger != nil {
 						c.logger.Debug("error writing request", "error", err)
 					}
+					return
 				}
-				str.Close()
+
+				if len(req.Trailer) > 0 {
+					if err := str.sendRequestTrailer(req); err != nil {
+						if c.logger != nil {
+							c.logger.Debug("error writing trailers", "error", err)
+						}
+					}
+				}
 			}()
 		}
 	}

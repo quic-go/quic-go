@@ -128,3 +128,22 @@ func TestRequestWriterExtendedConnect(t *testing.T) {
 	require.Equal(t, "https", headerFields[":scheme"])
 	require.Equal(t, "webtransport", headerFields[":protocol"])
 }
+
+func TestRequestWriterTrailers(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "https://quic-go.net/upload", nil)
+	req.Trailer = http.Header{"Trailer1": []string{"foo"}, "Trailer2": []string{"bar"}}
+
+	rw := newRequestWriter()
+	buf := &bytes.Buffer{}
+	require.NoError(t, rw.WriteRequestHeader(buf, req, false, 42, nil))
+	headers := decodeHeader(t, buf)
+	require.Len(t, headers["trailer"], 1)
+	require.Contains(t, headers["trailer"][0], "Trailer1")
+	require.Contains(t, headers["trailer"][0], "Trailer2")
+
+	require.NoError(t, rw.WriteRequestTrailer(buf, req, 42, nil))
+
+	trailers := decodeHeader(t, buf)
+	require.Equal(t, []string{"foo"}, trailers["trailer1"])
+	require.Equal(t, []string{"bar"}, trailers["trailer2"])
+}
