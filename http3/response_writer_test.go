@@ -3,6 +3,7 @@ package http3
 import (
 	"bytes"
 	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 
@@ -85,7 +86,7 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
 		nil,
 		false,
-		nil,
+		slog.Default(),
 	)
 	return &testResponseWriter{
 		responseWriter: rw,
@@ -227,14 +228,14 @@ func TestResponseWriterEarlyHints(t *testing.T) {
 func TestResponseWriterTrailers(t *testing.T) {
 	rw := newTestResponseWriter(t)
 
-	rw.Header().Add("Trailer", "key")
+	rw.Header().Add("Trailer", "key, Content-Length") // Content-Length is not a valid trailer
 	n, err := rw.Write([]byte("foobar"))
 	require.Equal(t, 6, n)
 	require.NoError(t, err)
 
 	// writeTrailers needs to be called after writing the full body
 	headers := rw.DecodeHeaders(t, 0)
-	require.Equal(t, []string{"key"}, headers["trailer"])
+	require.Equal(t, []string{"key, Content-Length"}, headers["trailer"])
 	require.NotContains(t, headers, "foo")
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 
@@ -242,6 +243,7 @@ func TestResponseWriterTrailers(t *testing.T) {
 	rw.Header().Set("key", "value")                      // announced trailer
 	rw.Header().Set("foo", "bar")                        // this trailer was not announced, and will therefore be ignored
 	rw.Header().Set(http.TrailerPrefix+"lorem", "ipsum") // unannounced trailer with trailer prefix
+	rw.Header().Set("Content-Length", "999")             // invalid trailer, will be ignored
 	require.NoError(t, rw.writeTrailers())
 
 	trailers := rw.DecodeHeaders(t, 2)
@@ -249,4 +251,6 @@ func TestResponseWriterTrailers(t *testing.T) {
 	require.Equal(t, []string{"ipsum"}, trailers["lorem"])
 	// trailers without the trailer prefix that were not announced are ignored
 	require.NotContains(t, trailers, "foo")
+	// invalid trailers are ignored
+	require.NotContains(t, trailers, "content-length")
 }

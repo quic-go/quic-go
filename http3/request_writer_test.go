@@ -131,7 +131,11 @@ func TestRequestWriterExtendedConnect(t *testing.T) {
 
 func TestRequestWriterTrailers(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://quic-go.net/upload", nil)
-	req.Trailer = http.Header{"Trailer1": []string{"foo"}, "Trailer2": []string{"bar"}}
+	req.Trailer = http.Header{
+		"Trailer1":       []string{"foo"},
+		"Trailer2":       []string{"bar"},
+		"Content-Length": []string{"42"}, // Content-Length is not a valid trailer
+	}
 
 	rw := newRequestWriter()
 	buf := &bytes.Buffer{}
@@ -140,10 +144,13 @@ func TestRequestWriterTrailers(t *testing.T) {
 	require.Len(t, headers["trailer"], 1)
 	require.Contains(t, headers["trailer"][0], "Trailer1")
 	require.Contains(t, headers["trailer"][0], "Trailer2")
+	require.NotContains(t, headers["trailer"][0], "Content-Length")
 
 	require.NoError(t, rw.WriteRequestTrailer(buf, req, 42, nil))
 
 	trailers := decodeHeader(t, buf)
-	require.Equal(t, []string{"foo"}, trailers["trailer1"])
-	require.Equal(t, []string{"bar"}, trailers["trailer2"])
+	require.Equal(t, map[string][]string{
+		"trailer1": {"foo"},
+		"trailer2": {"bar"},
+	}, trailers)
 }

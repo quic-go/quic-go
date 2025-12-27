@@ -329,6 +329,9 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 		if len(vals) == 0 {
 			continue
 		}
+		if !httpguts.ValidTrailerHeader(k) {
+			continue
+		}
 		lowercaseKey := strings.ToLower(k)
 		for _, v := range vals {
 			if err := enc.WriteField(qpack.HeaderField{Name: lowercaseKey, Value: v}); err != nil {
