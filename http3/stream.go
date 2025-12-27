@@ -86,9 +86,6 @@ func (s *Stream) Read(b []byte) (int, error) {
 				s.bytesRemainingInFrame = f.Length
 				break parseLoop
 			case *headersFrame:
-				if s.conn.isServer {
-					continue
-				}
 				if s.parsedTrailer {
 					maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), f.Length)
 					return 0, errors.New("additional HEADERS frame received after trailers")
@@ -306,6 +303,12 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
 	return s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip, s.str.StreamID(), s.str.qlogger)
+}
+
+// sendRequestTrailer sends request trailers to the stream.
+// It should be called after the request body has been fully written.
+func (s *RequestStream) sendRequestTrailer(req *http.Request) error {
+	return s.requestWriter.WriteRequestTrailer(s.str.datagramStream, req, s.str.StreamID(), s.str.qlogger)
 }
 
 // ReadResponse reads the HTTP response from the stream.

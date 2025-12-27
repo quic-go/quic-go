@@ -663,7 +663,14 @@ func (s *Server) handleRequest(
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, nil, nil, qlogger)
+	hstr := newStream(str, conn, nil, func(r io.Reader, hf *headersFrame) error {
+		trailers, err := conn.decodeTrailers(r, str.StreamID(), hf, s.maxHeaderBytes())
+		if err != nil {
+			return err
+		}
+		req.Trailer = trailers
+		return nil
+	}, qlogger)
 	body := newRequestBody(hstr, contentLength, conn.Context(), conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
