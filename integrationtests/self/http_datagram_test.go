@@ -48,10 +48,9 @@ func TestHTTPSettings(t *testing.T) {
 	})
 
 	t.Run("client settings", func(t *testing.T) {
-		connChan := make(chan *http3.Conn, 1)
+		connChan := make(chan http3.Settingser, 1)
 		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
-			conn := w.(http3.Hijacker).Connection()
-			connChan <- conn
+			connChan <- w.(http3.Settingser)
 			w.WriteHeader(http.StatusOK)
 		})
 
@@ -70,7 +69,7 @@ func TestHTTPSettings(t *testing.T) {
 
 		_, err = tr.RoundTrip(req)
 		require.NoError(t, err)
-		var conn *http3.Conn
+		var conn http3.Settingser
 		select {
 		case conn = <-connChan:
 		case <-time.After(time.Second):
@@ -134,14 +133,14 @@ func TestHTTPDatagrams(t *testing.T) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		conn := w.(http3.Hijacker).Connection()
+		s := w.(http3.Settingser)
 		select {
-		case <-conn.ReceivedSettings():
+		case <-s.ReceivedSettings():
 		case <-time.After(time.Second):
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if !conn.Settings().EnableDatagrams {
+		if !s.Settings().EnableDatagrams {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -199,14 +198,14 @@ func TestHTTPDatagramClose(t *testing.T) {
 	datagramChan := make(chan []byte, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
-		conn := w.(http3.Hijacker).Connection()
+		s := w.(http3.Settingser)
 		select {
-		case <-conn.ReceivedSettings():
+		case <-s.ReceivedSettings():
 		case <-time.After(time.Second):
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if !conn.Settings().EnableDatagrams {
+		if !s.Settings().EnableDatagrams {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -256,14 +255,14 @@ func TestHTTPDatagramStreamReset(t *testing.T) {
 	datagramChan := make(chan []byte, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
-		conn := w.(http3.Hijacker).Connection()
+		s := w.(http3.Settingser)
 		select {
-		case <-conn.ReceivedSettings():
+		case <-s.ReceivedSettings():
 		case <-time.After(time.Second):
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if !conn.Settings().EnableDatagrams {
+		if !s.Settings().EnableDatagrams {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
