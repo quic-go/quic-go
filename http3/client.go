@@ -6,17 +6,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
+	"sync"
 	"time"
 
+	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
-	"github.com/quic-go/quic-go/quicvarint"
-
-	"github.com/quic-go/qpack"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 const (
@@ -33,6 +32,8 @@ const (
 	defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 )
 
+var errGoAway = errors.New("connection in graceful shutdown")
+
 type errConnUnusable struct{ e error }
 
 func (e *errConnUnusable) Unwrap() error { return e.e }
@@ -47,11 +48,10 @@ var defaultQuicConfig = &quic.Config{
 
 // ClientConn is an HTTP/3 client doing requests to a single remote server.
 type ClientConn struct {
-	conn *Conn
+	conn    *quic.Conn
+	rawConn *rawConn
 
-	// Enable support for HTTP/3 datagrams (RFC 9297).
-	// If a QUICConfig is set, datagram support also needs to be enabled on the QUIC layer by setting enableDatagrams.
-	enableDatagrams bool
+	decoder *qpack.Decoder
 
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
@@ -68,10 +68,14 @@ type ClientConn struct {
 	// However, if the user explicitly requested gzip it is not automatically uncompressed.
 	disableCompression bool
 
-	logger *slog.Logger
+	streamMx     sync.Mutex
+	maxStreamID  quic.StreamID
+	lastStreamID quic.StreamID
+
+	qlogger qlogwriter.Recorder
+	logger  *slog.Logger
 
 	requestWriter *requestWriter
-	decoder       *qpack.Decoder
 }
 
 var _ http.RoundTripper = &ClientConn{}
@@ -84,75 +88,161 @@ func newClientConn(
 	disableCompression bool,
 	logger *slog.Logger,
 ) *ClientConn {
+	var qlogger qlogwriter.Recorder
+	if qlogTrace := conn.QlogTrace(); qlogTrace != nil && qlogTrace.SupportsSchemas(qlog.EventSchema) {
+		qlogger = qlogTrace.AddProducer()
+	}
 	c := &ClientConn{
-		enableDatagrams:    enableDatagrams,
+		conn:               conn,
 		additionalSettings: additionalSettings,
 		disableCompression: disableCompression,
+		maxStreamID:        invalidStreamID,
+		lastStreamID:       invalidStreamID,
 		logger:             logger,
+		qlogger:            qlogger,
+		decoder:            qpack.NewDecoder(),
 	}
 	if maxResponseHeaderBytes <= 0 {
 		c.maxResponseHeaderBytes = defaultMaxResponseHeaderBytes
 	} else {
 		c.maxResponseHeaderBytes = maxResponseHeaderBytes
 	}
-	c.decoder = qpack.NewDecoder()
 	c.requestWriter = newRequestWriter()
-	c.conn = newConnection(
-		conn.Context(),
+	c.rawConn = newRawConn(
 		conn,
-		c.enableDatagrams,
-		false, // client
+		enableDatagrams,
+		c.onStreamsEmpty,
+		c.handleControlStream,
+		qlogger,
 		c.logger,
-		0,
 	)
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
-		if err := c.setupConn(); err != nil {
+		_, err := c.rawConn.openControlStream(&settingsFrame{
+			Datagram:            enableDatagrams,
+			Other:               additionalSettings,
+			MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
+		})
+		if err != nil {
 			if c.logger != nil {
-				c.logger.Debug("Setting up connection failed", "error", err)
+				c.logger.Debug("setting up connection failed", "error", err)
 			}
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
+			return
 		}
 	}()
-	go c.conn.handleUnidirectionalStreams()
 	return c
 }
 
 // OpenRequestStream opens a new request stream on the HTTP/3 connection.
 func (c *ClientConn) OpenRequestStream(ctx context.Context) (*RequestStream, error) {
-	return c.conn.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
+	return c.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
 }
 
-func (c *ClientConn) setupConn() error {
-	// open the control stream
-	str, err := c.conn.OpenUniStream()
+func (c *ClientConn) openRequestStream(
+	ctx context.Context,
+	requestWriter *requestWriter,
+	reqDone chan<- struct{},
+	disableCompression bool,
+	maxHeaderBytes int,
+) (*RequestStream, error) {
+	c.streamMx.Lock()
+	maxStreamID := c.maxStreamID
+	var nextStreamID quic.StreamID
+	if c.lastStreamID == invalidStreamID {
+		nextStreamID = 0
+	} else {
+		nextStreamID = c.lastStreamID + 4
+	}
+	c.streamMx.Unlock()
+	// Streams with stream ID equal to or greater than the stream ID carried in the GOAWAY frame
+	// will be rejected, see section 5.2 of RFC 9114.
+	if maxStreamID != invalidStreamID && nextStreamID >= maxStreamID {
+		return nil, errGoAway
+	}
+
+	str, err := c.conn.OpenStreamSync(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	b := make([]byte, 0, 64)
-	b = quicvarint.Append(b, streamTypeControlStream)
-	// send the SETTINGS frame
-	b = (&settingsFrame{
-		Datagram:            c.enableDatagrams,
-		Other:               c.additionalSettings,
-		MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
-	}).Append(b)
-	if c.conn.qlogger != nil {
-		sf := qlog.SettingsFrame{
-			MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
-			Other:               maps.Clone(c.additionalSettings),
+	c.streamMx.Lock()
+	c.lastStreamID = str.StreamID()
+	c.streamMx.Unlock()
+	hstr := c.rawConn.TrackStream(str)
+	rsp := &http.Response{}
+	trace := httptrace.ContextClientTrace(ctx)
+	return newRequestStream(
+		newStream(hstr, c.rawConn, trace, func(r io.Reader, hf *headersFrame) error {
+			hdr, err := decodeTrailers(r, hf, maxHeaderBytes, c.decoder, c.qlogger, str.StreamID())
+			if err != nil {
+				return err
+			}
+			rsp.Trailer = hdr
+			return nil
+		}, c.qlogger),
+		requestWriter,
+		reqDone,
+		c.decoder,
+		disableCompression,
+		maxHeaderBytes,
+		rsp,
+	), nil
+}
+
+func (c *ClientConn) handleUnidirectionalStream(str *quic.ReceiveStream) {
+	c.rawConn.handleUnidirectionalStream(str, false)
+}
+
+func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParser) {
+	for {
+		f, err := fp.ParseNext(c.qlogger)
+		if err != nil {
+			var serr *quic.StreamError
+			if err == io.EOF || errors.As(err, &serr) {
+				c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
+				return
+			}
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+			return
 		}
-		if c.enableDatagrams {
-			sf.Datagram = pointer(true)
+		// GOAWAY is the only frame allowed at this point:
+		// * unexpected frames are ignored by the frame parser
+		// * we don't support any extension that might add support for more frames
+		goaway, ok := f.(*goAwayFrame)
+		if !ok {
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return
 		}
-		c.conn.qlogger.RecordEvent(qlog.FrameCreated{
-			StreamID: str.StreamID(),
-			Raw:      qlog.RawInfo{Length: len(b)},
-			Frame:    qlog.Frame{Frame: sf},
-		})
+		if goaway.StreamID%4 != 0 { // client-initiated, bidirectional streams
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+			return
+		}
+		c.streamMx.Lock()
+		if c.maxStreamID != invalidStreamID && goaway.StreamID > c.maxStreamID {
+			c.streamMx.Unlock()
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+			return
+		}
+		c.maxStreamID = goaway.StreamID
+		c.streamMx.Unlock()
+
+		hasActiveStreams := c.rawConn.hasActiveStreams()
+		// immediately close the connection if there are currently no active requests
+		if !hasActiveStreams {
+			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+			return
+		}
 	}
-	_, err = str.Write(b)
-	return err
+}
+
+func (c *ClientConn) onStreamsEmpty() {
+	c.streamMx.Lock()
+	defer c.streamMx.Unlock()
+
+	// The server is performing a graceful shutdown.
+	if c.maxStreamID != invalidStreamID {
+		c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+	}
 }
 
 // RoundTrip executes a request and returns a response
@@ -193,17 +283,17 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		connCtx := c.conn.Context()
 		// wait for the server's SETTINGS frame to arrive
 		select {
-		case <-c.conn.ReceivedSettings():
+		case <-c.rawConn.ReceivedSettings():
 		case <-connCtx.Done():
 			return nil, context.Cause(connCtx)
 		}
-		if !c.conn.Settings().EnableExtendedConnect {
+		if !c.rawConn.Settings().EnableExtendedConnect {
 			return nil, errors.New("http3: server didn't enable Extended CONNECT")
 		}
 	}
 
 	reqDone := make(chan struct{})
-	str, err := c.conn.openRequestStream(
+	str, err := c.openRequestStream(
 		req.Context(),
 		c.requestWriter,
 		reqDone,
@@ -240,19 +330,19 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 // ReceivedSettings returns a channel that is closed once the server's HTTP/3 settings were received.
 // Settings can be obtained from the Settings method after the channel was closed.
 func (c *ClientConn) ReceivedSettings() <-chan struct{} {
-	return c.conn.ReceivedSettings()
+	return c.rawConn.ReceivedSettings()
 }
 
 // Settings returns the HTTP/3 settings for this connection.
 // It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *ClientConn) Settings() *Settings {
-	return c.conn.Settings()
+	return c.rawConn.Settings()
 }
 
 // CloseWithError closes the connection with the given error code and message.
 // It is invalid to call this function after the connection was closed.
-func (c *ClientConn) CloseWithError(code ErrCode, msg string) error {
-	return c.conn.CloseWithError(quic.ApplicationErrorCode(code), msg)
+func (c *ClientConn) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
+	return c.conn.CloseWithError(code, msg)
 }
 
 // Context returns a context that is cancelled when the connection is closed.
@@ -377,9 +467,23 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 	return res, nil
 }
 
-// Conn returns the underlying HTTP/3 connection.
-// This method is only useful for advanced use cases, such as when the application needs to
-// open streams on the HTTP/3 connection (e.g. WebTransport).
-func (c *ClientConn) Conn() *Conn {
-	return c.conn
+// RawClientConn is a low-level HTTP/3 client connection.
+// It allows the application to take control of the stream accept loops,
+// giving the application the ability to handle streams originating from the server.
+type RawClientConn struct {
+	*ClientConn
+}
+
+// HandleUnidirectionalStream handles an incoming unidirectional stream.
+func (c *RawClientConn) HandleUnidirectionalStream(str *quic.ReceiveStream) {
+	c.rawConn.handleUnidirectionalStream(str, false)
+}
+
+// HandleBidirectionalStream handles an incoming bidirectional stream.
+func (c *ClientConn) HandleBidirectionalStream(str *quic.Stream) {
+	// According to RFC 9114, the server is not allowed to open bidirectional streams.
+	c.rawConn.CloseWithError(
+		quic.ApplicationErrorCode(ErrCodeStreamCreationError),
+		fmt.Sprintf("server opened bidirectional stream %d", str.StreamID()),
+	)
 }
