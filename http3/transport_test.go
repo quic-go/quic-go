@@ -551,9 +551,10 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 
 func TestTransportClose(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
+	conn, _ := newConnPair(t)
 	tr := &Transport{
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			return nil, nil
+			return conn, nil
 		},
 		newClientConn: func(*quic.Conn) clientConn {
 			cl := NewMockClientConn(mockCtrl)

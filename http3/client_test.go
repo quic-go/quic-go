@@ -81,6 +81,8 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 }
 
 func encodeResponse(t *testing.T, status int) []byte {
+	t.Helper()
+
 	mockCtrl := gomock.NewController(t)
 	buf := &bytes.Buffer{}
 	rstr := NewMockDatagramStream(mockCtrl)
@@ -571,4 +573,179 @@ func TestClientRequestCancellation(t *testing.T) {
 	requestCancel()
 
 	expectStreamWriteReset(t, str, quic.StreamErrorCode(ErrCodeRequestCanceled))
+}
+
+func TestClientConnGoAway(t *testing.T) {
+	t.Run("no active streams", func(t *testing.T) {
+		testClientConnGoAway(t, false)
+	})
+
+	t.Run("active stream", func(t *testing.T) {
+		testClientConnGoAway(t, true)
+	})
+}
+
+func testClientConnGoAway(t *testing.T, withStream bool) {
+	var clientEventRecorder events.Recorder
+	localConn, peerConn := newConnPairWithRecorder(t, &clientEventRecorder, nil)
+
+	cc := (&Transport{}).NewClientConn(localConn)
+
+	var str *RequestStream
+	if withStream {
+		s, err := cc.OpenRequestStream(context.Background())
+		require.NoError(t, err)
+		str = s
+	}
+
+	// Peer sends control stream with SETTINGS and GOAWAY
+	b := quicvarint.Append(nil, streamTypeControlStream)
+	b = (&settingsFrame{}).Append(b)
+	b = (&goAwayFrame{StreamID: 8}).Append(b)
+	controlStr, err := peerConn.OpenUniStream()
+	require.NoError(t, err)
+	_, err = controlStr.Write(b)
+	require.NoError(t, err)
+
+	// The connection should be closed after the stream is closed
+	if withStream {
+		select {
+		case <-peerConn.Context().Done():
+			t.Fatal("connection closed")
+		case <-time.After(scaleDuration(10 * time.Millisecond)):
+		}
+
+		// The stream ID in the GOAWAY frame is 8, so it's possible to open stream 4.
+		str2, err := cc.OpenRequestStream(context.Background())
+		require.NoError(t, err)
+		str2.Close()
+		str2.CancelRead(1337)
+
+		// It's not possible to open stream 8.
+		_, err = cc.OpenRequestStream(context.Background())
+		require.ErrorIs(t, err, errGoAway)
+
+		str.Close()
+		str.CancelRead(1337)
+	}
+
+	select {
+	case <-peerConn.Context().Done():
+		require.ErrorIs(t,
+			context.Cause(peerConn.Context()),
+			&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeNoError)},
+		)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for close")
+	}
+
+	expectedLen, expectedPayloadLen := expectedFrameLength(t, &goAwayFrame{StreamID: 8})
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameParsed{
+				StreamID: controlStr.StreamID(),
+				Raw:      qlog.RawInfo{PayloadLength: expectedPayloadLen, Length: expectedLen},
+				Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: 8}},
+			},
+		},
+		filterQlogEventsForFrame(clientEventRecorder.Events(qlog.FrameParsed{}), qlog.GoAwayFrame{StreamID: 8}),
+	)
+}
+
+func TestClientConnGoAwayFailures(t *testing.T) {
+	t.Run("invalid frame", func(t *testing.T) {
+		b := (&settingsFrame{}).Append(nil)
+		// 1337 is invalid value for the Extended CONNECT setting
+		b = (&settingsFrame{Other: map[uint64]uint64{settingExtendedConnect: 1337}}).Append(b)
+		testClientConnGoAwayFailures(t, b, nil, ErrCodeFrameError)
+	})
+
+	t.Run("not a GOAWAY", func(t *testing.T) {
+		b := (&settingsFrame{}).Append(nil)
+		// GOAWAY is the only allowed frame type after SETTINGS
+		b = (&headersFrame{}).Append(b)
+		testClientConnGoAwayFailures(t, b, nil, ErrCodeFrameUnexpected)
+	})
+
+	t.Run("stream closed before GOAWAY", func(t *testing.T) {
+		testClientConnGoAwayFailures(t, (&settingsFrame{}).Append(nil), io.EOF, ErrCodeClosedCriticalStream)
+	})
+
+	t.Run("stream reset before GOAWAY", func(t *testing.T) {
+		testClientConnGoAwayFailures(t,
+			(&settingsFrame{}).Append(nil),
+			&quic.StreamError{Remote: true, ErrorCode: 42},
+			ErrCodeClosedCriticalStream,
+		)
+	})
+
+	t.Run("invalid stream ID", func(t *testing.T) {
+		data := (&settingsFrame{}).Append(nil)
+		data = (&goAwayFrame{StreamID: 1}).Append(data)
+		testClientConnGoAwayFailures(t, data, nil, ErrCodeIDError)
+	})
+
+	t.Run("increased stream ID", func(t *testing.T) {
+		localConn, peerConn := newConnPair(t)
+
+		cc := (&Transport{}).NewClientConn(localConn)
+
+		// need an active stream so the connection doesn't close after the first GOAWAY
+		_, err := cc.OpenRequestStream(context.Background())
+		require.NoError(t, err)
+
+		controlStr, err := peerConn.OpenUniStream()
+		require.NoError(t, err)
+		b := quicvarint.Append(nil, streamTypeControlStream)
+		b = (&settingsFrame{}).Append(b)
+		b = (&goAwayFrame{StreamID: 4}).Append(b)
+		b = (&goAwayFrame{StreamID: 8}).Append(b)
+		_, err = controlStr.Write(b)
+		require.NoError(t, err)
+
+		select {
+		case <-peerConn.Context().Done():
+			require.ErrorIs(t,
+				context.Cause(peerConn.Context()),
+				&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeIDError)},
+			)
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for close")
+		}
+	})
+}
+
+func testClientConnGoAwayFailures(t *testing.T, data []byte, readErr error, expectedErr ErrCode) {
+	localConn, peerConn := newConnPair(t)
+
+	(&Transport{}).NewClientConn(localConn)
+
+	controlStr, err := peerConn.OpenUniStream()
+	require.NoError(t, err)
+	_, err = controlStr.Write(quicvarint.Append(nil, streamTypeControlStream))
+	require.NoError(t, err)
+
+	switch readErr {
+	case nil:
+		_, err = controlStr.Write(data)
+		require.NoError(t, err)
+	case io.EOF:
+		_, err = controlStr.Write(data)
+		require.NoError(t, err)
+		require.NoError(t, controlStr.Close())
+	default:
+		// make sure the stream type is received
+		time.Sleep(scaleDuration(10 * time.Millisecond))
+		controlStr.CancelWrite(1337)
+	}
+
+	select {
+	case <-peerConn.Context().Done():
+		require.ErrorIs(t,
+			context.Cause(peerConn.Context()),
+			&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(expectedErr)},
+		)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for close")
+	}
 }
