@@ -343,9 +343,7 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 		}
 	}
 
-	// The maximum length of an encoded HTTP/3 frame header is 16:
-	// type (max 8 bytes varint) + length (max 8 bytes varint)
-	b := make([]byte, 0, 16+buf.Len())
+	b := make([]byte, 0, frameHeaderLen+buf.Len())
 	b = (&headersFrame{Length: uint64(buf.Len())}).Append(b)
 	b = append(b, buf.Bytes()...)
 	if qlogger != nil {

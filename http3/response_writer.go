@@ -22,10 +22,6 @@ type HTTPStreamer interface {
 	HTTPStream() *Stream
 }
 
-// The maximum length of an encoded HTTP/3 frame header is 16:
-// The frame has a type and length field, both QUIC varints (maximum 8 bytes in length)
-const frameHeaderLen = 16
-
 const maxSmallResponseSize = 4096
 
 type responseWriter struct {
