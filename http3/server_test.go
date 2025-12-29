@@ -21,7 +21,6 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/quic-go/testutils/events"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -498,92 +497,6 @@ func TestServerHTTPStreamHijacking(t *testing.T) {
 	data, err := io.ReadAll(r)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foobar"), data)
-}
-
-func TestServerStreamHijacking(t *testing.T) {
-	for _, bidirectional := range []bool{true, false} {
-		name := "bidirectional"
-		if !bidirectional {
-			name = "unidirectional"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Run("hijack", func(t *testing.T) {
-				testServerHijackBidirectionalStream(t, bidirectional, true, nil)
-			})
-			t.Run("don't hijack", func(t *testing.T) {
-				testServerHijackBidirectionalStream(t, bidirectional, false, nil)
-			})
-			t.Run("hijacker error", func(t *testing.T) {
-				testServerHijackBidirectionalStream(t, bidirectional, false, assert.AnError)
-			})
-		})
-	}
-}
-
-func testServerHijackBidirectionalStream(t *testing.T, bidirectional bool, doHijack bool, hijackErr error) {
-	type hijackCall struct {
-		ft            FrameType  // for bidirectional streams
-		st            StreamType // for unidirectional streams
-		connTracingID quic.ConnectionTracingID
-		e             error
-	}
-	hijackChan := make(chan hijackCall, 1)
-	testDone := make(chan struct{})
-	s := &Server{
-		StreamHijacker: func(ft FrameType, connTracingID quic.ConnectionTracingID, _ *quic.Stream, e error) (hijacked bool, err error) {
-			defer close(testDone)
-			hijackChan <- hijackCall{ft: ft, connTracingID: connTracingID, e: e}
-			return doHijack, hijackErr
-		},
-		UniStreamHijacker: func(st StreamType, connTracingID quic.ConnectionTracingID, _ *quic.ReceiveStream, err error) bool {
-			defer close(testDone)
-			hijackChan <- hijackCall{st: st, connTracingID: connTracingID, e: err}
-			return doHijack
-		},
-	}
-
-	clientConn, serverConn := newConnPair(t)
-	go s.ServeQUICConn(serverConn)
-
-	buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
-	if bidirectional {
-		str, err := clientConn.OpenStream()
-		require.NoError(t, err)
-		_, err = str.Write(buf.Bytes())
-		require.NoError(t, err)
-
-		if hijackErr != nil {
-			expectStreamReadReset(t, str, quic.StreamErrorCode(ErrCodeRequestIncomplete))
-			expectStreamWriteReset(t, str, quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		}
-		// if the stream is not hijacked, the frame parser will skip the frame
-	} else {
-		str, err := clientConn.OpenUniStream()
-		require.NoError(t, err)
-		_, err = str.Write(buf.Bytes())
-		require.NoError(t, err)
-
-		if !doHijack || hijackErr != nil {
-			expectStreamWriteReset(t, str, quic.StreamErrorCode(ErrCodeStreamCreationError))
-		}
-	}
-
-	select {
-	case hijackCall := <-hijackChan:
-		if bidirectional {
-			assert.Zero(t, hijackCall.st)
-			assert.Equal(t, hijackCall.ft, FrameType(0x41))
-		} else {
-			assert.Equal(t, hijackCall.st, StreamType(0x41))
-			assert.Zero(t, hijackCall.ft)
-		}
-		assert.Equal(t, serverConn.Context().Value(quic.ConnectionTracingKey), hijackCall.connTracingID)
-		assert.NoError(t, hijackCall.e)
-	case <-time.After(time.Second):
-		t.Fatal("hijack call not received")
-	}
-
-	time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 }
 
 func getAltSvc(s *Server) (string, bool) {

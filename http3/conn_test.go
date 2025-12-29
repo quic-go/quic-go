@@ -44,7 +44,7 @@ func TestConnReceiveSettings(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		conn.handleUnidirectionalStreams(nil)
+		conn.handleUnidirectionalStreams()
 	}()
 	select {
 	case <-conn.ReceivedSettings():
@@ -115,7 +115,7 @@ func testConnRejectDuplicateStreams(t *testing.T, typ uint64) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		conn.handleUnidirectionalStreams(nil)
+		conn.handleUnidirectionalStreams()
 	}()
 	select {
 	case <-clientConn.Context().Done():
@@ -150,7 +150,7 @@ func TestConnResetUnknownUniStream(t *testing.T) {
 	_, err = str.Write(buf.Bytes())
 	require.NoError(t, err)
 
-	go conn.handleUnidirectionalStreams(nil)
+	go conn.handleUnidirectionalStreams()
 
 	expectStreamWriteReset(t, str, quic.StreamErrorCode(ErrCodeStreamCreationError))
 }
@@ -239,7 +239,7 @@ func testConnControlStreamFailures(t *testing.T, data []byte, readErr error, exp
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		conn.handleUnidirectionalStreams(nil)
+		conn.handleUnidirectionalStreams()
 	}()
 
 	conn.openRequestStream(context.Background(), nil, nil, true, 1000)
@@ -311,7 +311,7 @@ func testConnGoAway(t *testing.T, withStream bool) {
 	_, err = controlStr.Write(b)
 	require.NoError(t, err)
 
-	go conn.handleUnidirectionalStreams(nil)
+	go conn.handleUnidirectionalStreams()
 
 	// the connection should be closed after the stream is closed
 	if withStream {
@@ -387,7 +387,7 @@ func testConnRejectPushStream(t *testing.T, isServer bool, expectedErr ErrCode) 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		conn.handleUnidirectionalStreams(nil)
+		conn.handleUnidirectionalStreams()
 	}()
 	select {
 	case <-serverConn.Context().Done():
@@ -423,7 +423,7 @@ func TestConnInconsistentDatagramSupport(t *testing.T) {
 	_, err = controlStr.Write(b)
 	require.NoError(t, err)
 
-	go conn.handleUnidirectionalStreams(nil)
+	go conn.handleUnidirectionalStreams()
 
 	select {
 	case <-serverConn.Context().Done():
@@ -454,7 +454,7 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	_, err = controlStr.Write(b)
 	require.NoError(t, err)
 
-	go conn.handleUnidirectionalStreams(nil)
+	go conn.handleUnidirectionalStreams()
 
 	const strID = 4
 
@@ -546,7 +546,7 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 
 	require.NoError(t, serverConn.SendDatagram(datagram))
 
-	go func() { conn.handleUnidirectionalStreams(nil) }()
+	go func() { conn.handleUnidirectionalStreams() }()
 	select {
 	case <-serverConn.Context().Done():
 		require.ErrorIs(t,

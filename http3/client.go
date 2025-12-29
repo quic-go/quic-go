@@ -80,8 +80,6 @@ func newClientConn(
 	conn *quic.Conn,
 	enableDatagrams bool,
 	additionalSettings map[uint64]uint64,
-	streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error),
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool),
 	maxResponseHeaderBytes int,
 	disableCompression bool,
 	logger *slog.Logger,
@@ -116,10 +114,7 @@ func newClientConn(
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
-	if streamHijacker != nil {
-		go c.handleBidirectionalStreams(streamHijacker)
-	}
-	go c.conn.handleUnidirectionalStreams(uniStreamHijacker)
+	go c.conn.handleUnidirectionalStreams()
 	return c
 }
 
@@ -158,37 +153,6 @@ func (c *ClientConn) setupConn() error {
 	}
 	_, err = str.Write(b)
 	return err
-}
-
-func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error)) {
-	for {
-		str, err := c.conn.conn.AcceptStream(context.Background())
-		if err != nil {
-			if c.logger != nil {
-				c.logger.Debug("accepting bidirectional stream failed", "error", err)
-			}
-			return
-		}
-		fp := &frameParser{
-			r:         str,
-			closeConn: c.conn.CloseWithError,
-			unknownFrameHandler: func(ft FrameType, e error) (processed bool, err error) {
-				id := c.conn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				return streamHijacker(ft, id, str, e)
-			},
-		}
-		go func() {
-			if _, err := fp.ParseNext(c.conn.qlogger); err == errHijacked {
-				return
-			}
-			if err != nil {
-				if c.logger != nil {
-					c.logger.Debug("error handling stream", "error", err)
-				}
-			}
-			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
-		}()
-	}
 }
 
 // RoundTrip executes a request and returns a response
