@@ -3,7 +3,6 @@ package quic
 import (
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -37,6 +36,30 @@ func (r *readerWithTimeout) Read(p []byte) (n int, err error) {
 		return n, err
 	case <-time.After(r.Timeout):
 		return 0, fmt.Errorf("read timeout after %s", r.Timeout)
+	}
+}
+
+type peeker interface {
+	Peek(b []byte) (int, error)
+}
+
+type peekerWithTimeout struct {
+	Peeker  peeker
+	Timeout time.Duration
+}
+
+func (p *peekerWithTimeout) Peek(b []byte) (n int, err error) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		n, err = p.Peeker.Peek(b)
+	}()
+
+	select {
+	case <-done:
+		return n, err
+	case <-time.After(p.Timeout):
+		return 0, fmt.Errorf("peek timeout after %s", p.Timeout)
 	}
 }
 
@@ -99,6 +122,41 @@ func TestReceiveStreamReadData(t *testing.T) {
 	require.Equal(t, []byte{'f', 'o', 'o', 'b', 'a', 'z'}, b)
 }
 
+func TestReceiveStreamPeekData(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+	mockFC.EXPECT().UpdateHighestReceived(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockFC.EXPECT().AddBytesRead(gomock.Any()).AnyTimes()
+	str := newReceiveStream(42, nil, mockFC)
+	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foo")}, monotime.Now()))
+	b := make([]byte, 2)
+	n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	require.Equal(t, []byte("fo"), b)
+
+	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("bar"), Offset: 3}, monotime.Now()))
+	b = make([]byte, 6)
+	n, err = (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.NoError(t, err)
+	require.Equal(t, 6, n)
+	require.Equal(t, []byte("foobar"), b)
+
+	_, err = str.Read([]byte{0, 0})
+	require.NoError(t, err)
+
+	b = make([]byte, 2)
+	n, err = (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	require.Equal(t, []byte("ob"), b)
+	b = make([]byte, 4)
+	n, err = (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.NoError(t, err)
+	require.Equal(t, 4, n)
+	require.Equal(t, []byte("obar"), b)
+}
+
 func TestReceiveStreamBlockRead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
@@ -109,7 +167,7 @@ func TestReceiveStreamBlockRead(t *testing.T) {
 		mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(2), false, gomock.Any())
 		mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
 		errChan := make(chan error, 1)
-		now := monotime.Now()
+		start := monotime.Now()
 		go func() {
 			frame := &wire.StreamFrame{Data: []byte{0xde, 0xad}}
 			time.Sleep(time.Hour)
@@ -119,8 +177,53 @@ func TestReceiveStreamBlockRead(t *testing.T) {
 		n, err := (&readerWithTimeout{Reader: str, Timeout: 2 * time.Hour}).Read(make([]byte, 2))
 		require.NoError(t, err)
 		require.Equal(t, 2, n)
-		require.Equal(t, now.Add(time.Hour), monotime.Now())
+		require.Equal(t, time.Hour, monotime.Since(start))
 		require.NoError(t, <-errChan)
+	})
+}
+
+func TestReceiveStreamBlockPeek(t *testing.T) {
+	t.Run("single STREAM frame", func(t *testing.T) {
+		testReceiveStreamBlockPeek(t, false)
+	})
+
+	t.Run("multiple STREAM frames", func(t *testing.T) {
+		testReceiveStreamBlockPeek(t, true)
+	})
+}
+
+func testReceiveStreamBlockPeek(t *testing.T, smallWrites bool) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+		mockFC.EXPECT().UpdateHighestReceived(gomock.Any(), false, gomock.Any()).AnyTimes()
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newReceiveStream(42, mockSender, mockFC)
+
+		errChan := make(chan error, 2)
+		start := monotime.Now()
+		go func() {
+			if smallWrites {
+				time.Sleep(30 * time.Minute)
+				errChan <- str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foo")}, monotime.Now())
+				time.Sleep(30 * time.Minute)
+				errChan <- str.handleStreamFrame(&wire.StreamFrame{Offset: 3, Data: []byte("bar")}, monotime.Now())
+			} else {
+				time.Sleep(time.Hour)
+				errChan <- str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar")}, monotime.Now())
+			}
+		}()
+
+		b := make([]byte, 6)
+		n, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Hour}).Peek(b)
+		require.NoError(t, err)
+		require.Equal(t, 6, n)
+		require.Equal(t, []byte("foobar"), b)
+		require.Equal(t, time.Hour, monotime.Since(start))
+		require.NoError(t, <-errChan)
+		if smallWrites {
+			require.NoError(t, <-errChan)
+		}
 	})
 }
 
@@ -207,6 +310,19 @@ func testReceiveStreamFlowControlUpdates(t *testing.T, hasStreamWindowUpdate, ha
 }
 
 func TestReceiveStreamDeadlineInThePast(t *testing.T) {
+	t.Run("read", func(t *testing.T) {
+		testReceiveStreamDeadlineInThePast(t, true, func(str *ReceiveStream, b []byte) (int, error) {
+			return str.Read(b)
+		})
+	})
+	t.Run("peek", func(t *testing.T) {
+		testReceiveStreamDeadlineInThePast(t, false, func(str *ReceiveStream, b []byte) (int, error) {
+			return str.Peek(b)
+		})
+	})
+}
+
+func testReceiveStreamDeadlineInThePast(t *testing.T, consumesBytes bool, op func(*ReceiveStream, []byte) (int, error)) {
 	mockCtrl := gomock.NewController(t)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
 	str := newReceiveStream(42, nil, mockFC)
@@ -216,22 +332,37 @@ func TestReceiveStreamDeadlineInThePast(t *testing.T) {
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar")}, monotime.Now()))
 	require.NoError(t, str.SetReadDeadline(time.Now().Add(-time.Second)))
 	b := make([]byte, 6)
-	n, err := (&readerWithTimeout{Reader: str, Timeout: time.Second}).Read(b)
+	n, err := op(str, b)
 	require.Error(t, err)
 	require.Zero(t, n)
-	var nerr net.Error
-	require.ErrorAs(t, err, &nerr)
-	require.True(t, nerr.Timeout())
+	require.ErrorIs(t, err, errDeadline)
 
 	// data is read when the deadline is in the future
 	require.NoError(t, str.SetReadDeadline(time.Now().Add(time.Second)))
-	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
-	n, err = (&readerWithTimeout{Reader: str, Timeout: time.Second}).Read(b)
+	if consumesBytes {
+		mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
+	}
+	n, err = op(str, b)
 	require.NoError(t, err)
 	require.Equal(t, 6, n)
 }
 
 func TestReceiveStreamDeadlineRemoval(t *testing.T) {
+	t.Run("read", func(t *testing.T) {
+		testReceiveStreamDeadlineRemoval(t, func(str *ReceiveStream) error {
+			_, err := str.Read([]byte{0})
+			return err
+		})
+	})
+	t.Run("peek", func(t *testing.T) {
+		testReceiveStreamDeadlineRemoval(t, func(str *ReceiveStream) error {
+			_, err := str.Peek([]byte{0})
+			return err
+		})
+	})
+}
+
+func testReceiveStreamDeadlineRemoval(t *testing.T, op func(*ReceiveStream) error) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
@@ -241,26 +372,25 @@ func TestReceiveStreamDeadlineRemoval(t *testing.T) {
 		require.NoError(t, str.SetReadDeadline(time.Now().Add(deadline)))
 		errChan := make(chan error, 1)
 		go func() {
-			_, err := (&readerWithTimeout{Reader: str, Timeout: 3 * deadline}).Read([]byte{0})
-			errChan <- err
+			errChan <- op(str)
 		}()
 		select {
 		case err := <-errChan:
-			t.Fatalf("read should not have returned yet: %v", err)
+			t.Fatalf("should not have returned yet: %v", err)
 		case <-time.After(deadline / 2):
 		}
 
 		// remove the deadline after a while (but before it expires)
 		require.NoError(t, str.SetReadDeadline(time.Time{}))
 
-		// no deadline set: Read should not return at all
+		// no deadline set: should not return at all
 		select {
 		case err := <-errChan:
-			t.Fatalf("read should not have returned yet: %v", err)
+			t.Fatalf("should not have returned yet: %v", err)
 		case <-time.After(2 * deadline):
 		}
 
-		// now set the deadline to the past to make Read return immediately
+		// now set the deadline to the past to make it return immediately
 		require.NoError(t, str.SetReadDeadline(time.Now().Add(-time.Second)))
 		synctest.Wait()
 
@@ -274,6 +404,21 @@ func TestReceiveStreamDeadlineRemoval(t *testing.T) {
 }
 
 func TestReceiveStreamDeadlineExtension(t *testing.T) {
+	t.Run("read", func(t *testing.T) {
+		testReceiveStreamDeadlineExtension(t, func(str *ReceiveStream) error {
+			_, err := str.Read([]byte{0})
+			return err
+		})
+	})
+	t.Run("peek", func(t *testing.T) {
+		testReceiveStreamDeadlineExtension(t, func(str *ReceiveStream) error {
+			_, err := str.Peek([]byte{0})
+			return err
+		})
+	})
+}
+
+func testReceiveStreamDeadlineExtension(t *testing.T, op func(*ReceiveStream) error) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
@@ -284,12 +429,11 @@ func TestReceiveStreamDeadlineExtension(t *testing.T) {
 		require.NoError(t, str.SetReadDeadline(time.Now().Add(deadline)))
 		errChan := make(chan error, 1)
 		go func() {
-			_, err := (&readerWithTimeout{Reader: str, Timeout: 2 * deadline}).Read([]byte{0})
-			errChan <- err
+			errChan <- op(str)
 		}()
 		select {
 		case err := <-errChan:
-			t.Fatalf("read should not have returned yet: %v", err)
+			t.Fatalf("should not have returned yet: %v", err)
 		case <-time.After(deadline / 2):
 		}
 
@@ -319,9 +463,24 @@ func TestReceiveStreamEOFWithData(t *testing.T) {
 	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)).Times(2)
 	mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
 
+	// peeking doesn't return an EOF
+	b := make([]byte, 4)
+	n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.NoError(t, err)
+	require.Equal(t, 4, n)
+	require.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, b)
+
+	// peeking returns the EOF, if more data is being peeked
+	b = make([]byte, 6)
+	n, err = (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.ErrorIs(t, err, io.EOF)
+	require.Equal(t, 4, n)
+	require.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, b[:n])
+
+	// reading returns the EOF
 	strWithTimeout := &readerWithTimeout{Reader: str, Timeout: time.Second}
-	b := make([]byte, 6)
-	n, err := strWithTimeout.Read(b)
+	b = make([]byte, 6)
+	n, err = strWithTimeout.Read(b)
 	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, 4, n)
 	require.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, b[:n])
@@ -330,16 +489,91 @@ func TestReceiveStreamEOFWithData(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
+func TestReceiveStreamPeekEOF(t *testing.T) {
+	t.Run("long peek", func(t *testing.T) {
+		testReceiveStreamPeekEOF(t, true)
+	})
+	t.Run("exact peek", func(t *testing.T) {
+		testReceiveStreamPeekEOF(t, false)
+	})
+}
+
+func testReceiveStreamPeekEOF(t *testing.T, longPeek bool) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := mocks.NewMockStreamFlowController(mockCtrl)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newReceiveStream(42, mockSender, mockFC)
+		mockFC.EXPECT().UpdateHighestReceived(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+		require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Offset: 3, Data: []byte("bar"), Fin: true}, monotime.Now()))
+
+		type result struct {
+			err  error
+			data []byte
+		}
+		resultChan := make(chan result, 1)
+		go func() {
+			b := make([]byte, 6)
+			if longPeek {
+				b = make([]byte, 8)
+			}
+			n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Hour}).Peek(b)
+			resultChan <- result{err: err, data: b[:n]}
+		}()
+
+		synctest.Wait()
+
+		select {
+		case result := <-resultChan:
+			t.Fatalf("peek should not have returned yet: %v", result.err)
+		default:
+		}
+
+		require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("f")}, monotime.Now()))
+
+		synctest.Wait()
+
+		select {
+		case result := <-resultChan:
+			t.Fatalf("peek should not have returned yet: %v", result.err)
+		default:
+		}
+
+		require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("oo"), Offset: 1}, monotime.Now()))
+
+		synctest.Wait()
+
+		select {
+		case result := <-resultChan:
+			if longPeek {
+				assert.ErrorIs(t, result.err, io.EOF)
+			} else {
+				assert.NoError(t, result.err)
+			}
+			require.Equal(t, []byte("foobar"), result.data)
+		default:
+			t.Fatal("peek should have returned")
+		}
+	})
+}
+
 func TestReceiveStreamImmediateFINs(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockFC := mocks.NewMockStreamFlowController(mockCtrl)
 	mockSender := NewMockStreamSender(mockCtrl)
 	str := newReceiveStream(42, mockSender, mockFC)
 	mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true, gomock.Any())
-	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(0))
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Fin: true}, monotime.Now()))
 	mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
-	n, err := (&readerWithTimeout{Reader: str, Timeout: time.Second}).Read(make([]byte, 4))
+
+	// peeking returns the EOF
+	n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(make([]byte, 4))
+	require.ErrorIs(t, err, io.EOF)
+	require.Equal(t, 0, n)
+
+	// and so does reading
+	n, err = (&readerWithTimeout{Reader: str, Timeout: time.Second}).Read(make([]byte, 4))
 	require.Zero(t, n)
 	require.ErrorIs(t, err, io.EOF)
 }
@@ -353,17 +587,24 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 		strWithTimeout := &readerWithTimeout{Reader: str, Timeout: time.Minute}
 
 		// Test immediate return of reads
-		errChan := make(chan error, 1)
+		readErrChan := make(chan error, 1)
+		peekErrChan := make(chan error, 1)
 		go func() {
 			_, err := strWithTimeout.Read([]byte{0})
-			errChan <- err
+			readErrChan <- err
+		}()
+		go func() {
+			_, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Minute}).Peek([]byte{0})
+			peekErrChan <- err
 		}()
 
 		synctest.Wait()
 
 		select {
-		case err := <-errChan:
+		case err := <-readErrChan:
 			t.Fatalf("read returned before closeForShutdown: %v", err)
+		case err := <-peekErrChan:
+			t.Fatalf("peek returned before closeForShutdown: %v", err)
 		default:
 		}
 
@@ -371,14 +612,25 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 		synctest.Wait()
 
 		select {
-		case err := <-errChan:
+		case err := <-readErrChan:
 			require.ErrorIs(t, err, assert.AnError)
 		default:
 			t.Fatal("read should have returned")
 		}
+		select {
+		case err := <-peekErrChan:
+			require.ErrorIs(t, err, assert.AnError)
+		default:
+			t.Fatal("peek should have returned")
+		}
+
+		// following calls to Peek should return the error
+		n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Minute}).Peek([]byte{0})
+		require.Zero(t, n)
+		require.ErrorIs(t, err, assert.AnError)
 
 		// following calls to Read should return the error
-		n, err := strWithTimeout.Read([]byte{0})
+		n, err = strWithTimeout.Read([]byte{0})
 		require.Zero(t, n)
 		require.ErrorIs(t, err, assert.AnError)
 
@@ -405,10 +657,15 @@ func TestReceiveStreamCancellation(t *testing.T) {
 		strWithTimeout := &readerWithTimeout{Reader: str, Timeout: 2 * time.Second}
 
 		mockSender.EXPECT().onHasStreamControlFrame(str.StreamID(), gomock.Any())
-		errChan := make(chan error, 1)
+		readErrChan := make(chan error, 1)
+		peekErrChan := make(chan error, 1)
 		go func() {
 			_, err := strWithTimeout.Read([]byte{0})
-			errChan <- err
+			readErrChan <- err
+		}()
+		go func() {
+			_, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
+			peekErrChan <- err
 		}()
 
 		synctest.Wait()
@@ -424,16 +681,25 @@ func TestReceiveStreamCancellation(t *testing.T) {
 		synctest.Wait()
 
 		select {
-		case err := <-errChan:
-			var streamErr *StreamError
-			require.ErrorAs(t, err, &streamErr)
-			require.Equal(t, StreamError{StreamID: 42, ErrorCode: 1234, Remote: false}, *streamErr)
+		case err := <-readErrChan:
+			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
 		default:
 			t.Fatal("Read was not unblocked")
 		}
+		select {
+		case err := <-peekErrChan:
+			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
+		default:
+			t.Fatal("Peek was not unblocked")
+		}
+
+		// further calls to Peek return the error
+		n, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
+		require.Zero(t, n)
+		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
 
 		// further Read calls return the error
-		n, err := strWithTimeout.Read([]byte{0})
+		n, err = strWithTimeout.Read([]byte{0})
 		require.Zero(t, n)
 		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
 
@@ -510,13 +776,18 @@ func testReceiveStreamCancelReadAfterFIN(t *testing.T, finRead bool) {
 		require.False(t, hasMore)
 	}
 
-	// Read returns the error
+	// Read returns the error...
 	n, err := str.Read([]byte{0})
 	require.Zero(t, n)
+	// ... and Peek returns the same error
+	n, peekErr := (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek([]byte{0})
+	require.Zero(t, n)
 	if finRead {
-		require.ErrorIs(t, err, io.EOF)
+		assert.ErrorIs(t, err, io.EOF)
+		assert.ErrorIs(t, peekErr, io.EOF)
 	} else {
-		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: false})
+		assert.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: false})
+		assert.ErrorIs(t, peekErr, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: false})
 	}
 }
 
@@ -528,10 +799,15 @@ func TestReceiveStreamReset(t *testing.T) {
 		str := newReceiveStream(42, mockSender, mockFC)
 		strWithTimeout := &readerWithTimeout{Reader: str, Timeout: 2 * time.Second}
 
-		errChan := make(chan error, 1)
+		readErrChan := make(chan error, 1)
+		peekErrChan := make(chan error, 1)
 		go func() {
 			_, err := strWithTimeout.Read([]byte{0})
-			errChan <- err
+			readErrChan <- err
+		}()
+		go func() {
+			_, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
+			peekErrChan <- err
 		}()
 
 		synctest.Wait()
@@ -549,14 +825,25 @@ func TestReceiveStreamReset(t *testing.T) {
 		synctest.Wait()
 
 		select {
-		case err := <-errChan:
+		case err := <-readErrChan:
 			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
 		default:
 			t.Fatal("Read was not unblocked")
 		}
+		select {
+		case err := <-peekErrChan:
+			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
+		default:
+			t.Fatal("Peek was not unblocked")
+		}
 
-		// Test that further calls to Read return the error
-		_, err := strWithTimeout.Read([]byte{0})
+		// further calls to Peek return the error
+		n, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
+		require.Zero(t, n)
+		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
+
+		// further calls to Read return the error
+		_, err = strWithTimeout.Read([]byte{0})
 		require.Equal(t, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true}, err)
 
 		// further RESET_STREAM frames have no effect
@@ -565,7 +852,8 @@ func TestReceiveStreamReset(t *testing.T) {
 			&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 4321, FinalSize: 42},
 			monotime.Now(),
 		))
-		n, err := str.Read([]byte{0})
+
+		n, err = str.Read([]byte{0})
 		require.Zero(t, n)
 		// error code unchanged
 		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
@@ -681,6 +969,11 @@ func TestReceiveStreamResetStreamAtBeforeReadOffset(t *testing.T) {
 	str.handleResetStreamFrame(&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 1337, FinalSize: 10, ReliableSize: 3}, monotime.Now())
 	require.True(t, mockCtrl.Satisfied())
 
+	// Peek returns the error
+	n, err = str.Peek([]byte{0})
+	require.Zero(t, n)
+	require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: true})
+
 	// Read returns the error
 	mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
 	n, err = str.Read([]byte{0})
@@ -707,7 +1000,22 @@ func TestReceiveStreamResetStreamAtAfterReadOffset(t *testing.T) {
 	str.handleResetStreamFrame(&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 1337, FinalSize: 10, ReliableSize: 6}, monotime.Now())
 	require.True(t, mockCtrl.Satisfied())
 
-	// Read returns the error
+	// Peek returns no error when peeking up to the reliable size...
+	b = make([]byte, 4)
+	n, err = (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.NoError(t, err)
+	require.Equal(t, 4, n)
+	require.Equal(t, []byte("obar"), b)
+
+	// ... but returns the error when peeking beyond the reliable size
+	b = make([]byte, 5)
+	n, err = (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(b)
+	require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: true})
+	require.Equal(t, 4, n)
+	require.Equal(t, []byte("obar"), b[:n])
+
+	// Read returns the error after reading up to the reliable size
+	b = make([]byte, 2)
 	mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2))
 	n, err = str.Read(b)
 	require.NoError(t, err)
