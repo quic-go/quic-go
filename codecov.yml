@@ -3,6 +3,7 @@ coverage:
   ignore:
     - http3/gzip_reader.go
     - example/
+    - integrationtests/
     - interop/
     - internal/handshake/cipher_suite.go
     - internal/mocks/
