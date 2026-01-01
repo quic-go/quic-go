@@ -145,12 +145,18 @@ func TestBodyReadRespectsContext(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-	
+
 	block := make(chan struct{})
 	// Read blocks until we close the channel
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
 		<-block
 		return 0, errors.New("stream canceled")
+	})
+
+	// Expect CancelRead to be called when context is canceled.
+	// This simulates the unblocking.
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Do(func(quic.StreamErrorCode) {
+		close(block)
 	})
 
 	reqDone := make(chan struct{})
@@ -171,7 +177,6 @@ func TestBodyReadRespectsContext(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond) // Ensure Read is blocked
 	cancel()
-	close(block) // Simulate cancellation unblocking the stream
 
 	select {
 	case err := <-errChan:
@@ -180,6 +185,64 @@ func TestBodyReadRespectsContext(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestBodyRead_GoroutineLeak(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	// CancelRead is called exactly once by Close()
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(1)
+
+	reqDone := make(chan struct{})
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rb.setContext(ctx, false)
+
+	// Close the body. This should stop the background goroutine.
+	require.NoError(t, rb.Close())
+
+	// Wait a bit to ensure goroutine has processed the close
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel context. This should NOT trigger another CancelRead if the goroutine exited.
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+}
+
+func TestBodyRead_PartialData(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).AnyTimes()
+
+	var buf bytes.Buffer
+	buf.Write(getDataFrame([]byte("foo")))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Read returns data AND cancels context
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+		cancel()
+		return buf.Read(p)
+	}).AnyTimes()
+
+	reqDone := make(chan struct{})
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
+	rb.setContext(ctx, false)
+
+	n, err := rb.Read(make([]byte, 10))
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
 }
 
 func TestBodyRead_DontCloseRequestStream(t *testing.T) {
