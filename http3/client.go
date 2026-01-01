@@ -220,6 +220,10 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		if req.Context().Value(dontCloseRequestStreamKey) == true {
+			<-reqDone
+			return
+		}
 		select {
 		case <-req.Context().Done():
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
@@ -351,6 +355,10 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 		res, err = str.ReadResponse()
 		if err != nil {
 			return nil, err
+		}
+		if body, ok := res.Body.(*hijackableBody); ok {
+			dontClose := req.Context().Value(dontCloseRequestStreamKey) == true
+			body.setContext(req.Context(), dontClose)
 		}
 		resCode := res.StatusCode
 		is1xx := 100 <= resCode && resCode <= 199

@@ -2,6 +2,8 @@ package http3
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -137,4 +139,70 @@ func testResponseBodyLengthLimiting(t *testing.T, alongFrameBoundary bool) {
 	n, err := rb.Read([]byte{0})
 	require.Zero(t, n)
 	require.ErrorIs(t, err, errTooMuchData)
+}
+
+func TestBodyReadRespectsContext(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	// Read blocks
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+		time.Sleep(2 * time.Second) // Block
+		return 0, nil
+	}).MaxTimes(1)
+
+	reqDone := make(chan struct{})
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rb.setContext(ctx, false)
+
+	// Start read in goroutine
+	errChan := make(chan error)
+	go func() {
+		_, err := rb.Read(make([]byte, 10))
+		errChan <- err
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestBodyRead_DontCloseRequestStream(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	
+	// Read returns data
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+		return copy(p, []byte("data")), nil
+	})
+
+	reqDone := make(chan struct{})
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+	
+	// Enable DontCloseRequestStream
+	rb.setContext(ctx, true)
+
+	n, err := rb.Read(make([]byte, 10))
+	require.NoError(t, err)
+	require.Equal(t, 4, n)
 }

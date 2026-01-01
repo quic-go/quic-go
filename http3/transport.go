@@ -35,6 +35,9 @@ type RoundTripOpt struct {
 	// OnlyCachedConn controls whether the Transport may create a new QUIC connection.
 	// If set true and no cached connection is available, RoundTripOpt will return ErrNoCachedConn.
 	OnlyCachedConn bool
+	// DontCloseRequestStream controls whether the request stream is closed when the context is canceled.
+	// If set true, the request stream will not be closed when the context is canceled.
+	DontCloseRequestStream bool
 }
 
 type clientConn interface {
@@ -122,6 +125,10 @@ var (
 	// ErrTransportClosed is returned when attempting to use a closed Transport
 	ErrTransportClosed = errors.New("http3: transport is closed")
 )
+
+type contextKey struct{ name string }
+
+var dontCloseRequestStreamKey = &contextKey{"dont-close-request-stream"}
 
 func (t *Transport) init() error {
 	if t.newClientConn == nil {
@@ -231,6 +238,9 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 	}
 	defer cl.useCount.Add(-1)
 	traceGotConn(trace, cl.conn, isReused)
+	if opt.DontCloseRequestStream {
+		req = req.WithContext(context.WithValue(req.Context(), dontCloseRequestStreamKey, true))
+	}
 	rsp, err := cl.clientConn.RoundTrip(req)
 	if err != nil {
 		// request aborted due to context cancellation

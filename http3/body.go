@@ -102,6 +102,9 @@ type hijackableBody struct {
 	// either when Read() errors, or when Close() is called.
 	reqDone     chan<- struct{}
 	reqDoneOnce sync.Once
+
+	ctx                    context.Context
+	dontCloseRequestStream bool
 }
 
 var _ io.ReadCloser = &hijackableBody{}
@@ -113,10 +116,25 @@ func newResponseBody(str *Stream, contentLength int64, done chan<- struct{}) *hi
 	}
 }
 
+func (r *hijackableBody) setContext(ctx context.Context, dontClose bool) {
+	r.ctx = ctx
+	r.dontCloseRequestStream = dontClose
+}
+
 func (r *hijackableBody) Read(b []byte) (int, error) {
+	if !r.dontCloseRequestStream && r.ctx != nil {
+		select {
+		case <-r.ctx.Done():
+			return 0, r.ctx.Err()
+		default:
+		}
+	}
 	n, err := r.body.Read(b)
 	if err != nil {
 		r.requestDone()
+	}
+	if !r.dontCloseRequestStream && r.ctx != nil && r.ctx.Err() != nil {
+		return n, r.ctx.Err()
 	}
 	return n, maybeReplaceError(err)
 }
