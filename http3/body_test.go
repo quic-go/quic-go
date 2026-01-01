@@ -145,11 +145,13 @@ func TestBodyReadRespectsContext(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-	// Read blocks
+	
+	block := make(chan struct{})
+	// Read blocks until we close the channel
 	str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
-		time.Sleep(2 * time.Second) // Block
-		return 0, nil
-	}).MaxTimes(1)
+		<-block
+		return 0, errors.New("stream canceled")
+	})
 
 	reqDone := make(chan struct{})
 	rb := newResponseBody(
@@ -161,18 +163,19 @@ func TestBodyReadRespectsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	rb.setContext(ctx, false)
 
-	// Start read in goroutine
 	errChan := make(chan error)
 	go func() {
 		_, err := rb.Read(make([]byte, 10))
 		errChan <- err
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Ensure Read is blocked
 	cancel()
+	close(block) // Simulate cancellation unblocking the stream
 
 	select {
 	case err := <-errChan:
+		// Ensure we get the context error, not the stream error
 		require.ErrorIs(t, err, context.Canceled)
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout")
@@ -184,10 +187,9 @@ func TestBodyRead_DontCloseRequestStream(t *testing.T) {
 	str := NewMockDatagramStream(mockCtrl)
 	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	
-	// Read returns data
-	str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-		return copy(p, []byte("data")), nil
-	})
+	var buf bytes.Buffer
+	buf.Write(getDataFrame([]byte("data")))
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
 	reqDone := make(chan struct{})
 	rb := newResponseBody(
@@ -197,10 +199,9 @@ func TestBodyRead_DontCloseRequestStream(t *testing.T) {
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel() 
 	
-	// Enable DontCloseRequestStream
-	rb.setContext(ctx, true)
+	rb.setContext(ctx, true) // Enable DontClose
 
 	n, err := rb.Read(make([]byte, 10))
 	require.NoError(t, err)

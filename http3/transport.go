@@ -126,8 +126,6 @@ var (
 	ErrTransportClosed = errors.New("http3: transport is closed")
 )
 
-type contextKey struct{ name string }
-
 var dontCloseRequestStreamKey = &contextKey{"dont-close-request-stream"}
 
 func (t *Transport) init() error {
