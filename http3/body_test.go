@@ -270,3 +270,29 @@ func TestBodyRead_DontCloseRequestStream(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, n)
 }
+
+func TestBodyRead_MultipleSetContext(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+
+	// Expect CancelRead exactly TWICE: once for cancel, once for Close.
+	// If multiple monitors were started, this would fail (called 3 times).
+	str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled)).Times(2)
+
+	reqDone := make(chan struct{})
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
+		-1,
+		reqDone,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rb.setContext(ctx, false)
+	rb.setContext(ctx, false)
+
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+
+	rb.Close()
+}

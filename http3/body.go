@@ -120,127 +120,263 @@ type hijackableBody struct {
 
 
 
-	// closed when Close() is called
-
-	bodyClosed     chan struct{}
-
-	bodyClosedOnce sync.Once
-
-}
+		// closed when Close() is called
 
 
 
-var _ io.ReadCloser = &hijackableBody{}
+		bodyClosed     chan struct{}
 
 
 
-func newResponseBody(str *Stream, contentLength int64, done chan<- struct{}) *hijackableBody {
-
-	return &hijackableBody{
-
-		body:       *newBody(str, contentLength),
-
-		reqDone:    done,
-
-		bodyClosed: make(chan struct{}),
-
-	}
-
-}
+		bodyClosedOnce sync.Once
 
 
 
-func (r *hijackableBody) setContext(ctx context.Context, dontClose bool) {
-
-	r.mu.Lock()
-
-	r.ctx = ctx
-
-	r.dontCloseRequestStream = dontClose
-
-	r.mu.Unlock()
+		monitorOnce    sync.Once
 
 
-
-	if dontClose {
-
-		return
 
 	}
 
 
 
-	go func() {
+	
 
-		select {
 
-		case <-ctx.Done():
 
-			r.mu.Lock()
+	var _ io.ReadCloser = &hijackableBody{}
 
-			// Check again in case setContext was called again (unlikely) or dontClose changed
 
-			if !r.dontCloseRequestStream {
 
-				r.body.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+	
+
+
+
+	func newResponseBody(str *Stream, contentLength int64, done chan<- struct{}) *hijackableBody {
+
+
+
+		return &hijackableBody{
+
+
+
+			body:       *newBody(str, contentLength),
+
+
+
+			reqDone:    done,
+
+
+
+			bodyClosed: make(chan struct{}),
+
+
+
+		}
+
+
+
+	}
+
+
+
+	
+
+
+
+	func (r *hijackableBody) setContext(ctx context.Context, dontClose bool) {
+
+
+
+		r.mu.Lock()
+
+
+
+		r.ctx = ctx
+
+
+
+		r.dontCloseRequestStream = dontClose
+
+
+
+		r.mu.Unlock()
+
+
+
+	
+
+
+
+		if dontClose {
+
+
+
+			return
+
+
+
+		}
+
+
+
+	
+
+
+
+		r.monitorOnce.Do(func() {
+
+
+
+			go func() {
+
+
+
+				select {
+
+
+
+				case <-ctx.Done():
+
+
+
+					r.mu.Lock()
+
+
+
+					// Check again in case setContext was called again (unlikely) or dontClose changed
+
+
+
+					if !r.dontCloseRequestStream {
+
+
+
+						r.body.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+
+
+
+					}
+
+
+
+					r.mu.Unlock()
+
+
+
+				case <-r.bodyClosed:
+
+
+
+				}
+
+
+
+			}()
+
+
+
+		})
+
+
+
+	}
+
+
+
+	
+
+
+
+	func (r *hijackableBody) Read(b []byte) (int, error) {
+
+
+
+		r.mu.Lock()
+
+
+
+		ctx := r.ctx
+
+
+
+		dontClose := r.dontCloseRequestStream
+
+
+
+		r.mu.Unlock()
+
+
+
+	
+
+
+
+		if !dontClose && ctx != nil {
+
+
+
+			select {
+
+
+
+			case <-ctx.Done():
+
+
+
+				return 0, ctx.Err()
+
+
+
+			default:
+
+
 
 			}
 
-			r.mu.Unlock()
 
-		case <-r.bodyClosed:
 
 		}
 
-	}()
-
-}
 
 
-
-func (r *hijackableBody) Read(b []byte) (int, error) {
-
-	r.mu.Lock()
-
-	ctx := r.ctx
-
-	dontClose := r.dontCloseRequestStream
-
-	r.mu.Unlock()
+		n, err := r.body.Read(b)
 
 
 
-	if !dontClose && ctx != nil {
+		if err != nil {
 
-		select {
 
-		case <-ctx.Done():
+
+			r.requestDone()
+
+
+
+		}
+
+
+
+		if n == 0 && err != nil && !dontClose && ctx != nil && ctx.Err() != nil {
+
+
 
 			return 0, ctx.Err()
 
-		default:
+
 
 		}
 
-	}
 
-	n, err := r.body.Read(b)
 
-	if err != nil {
+		return n, maybeReplaceError(err)
 
-		r.requestDone()
+
 
 	}
 
-	if n == 0 && !dontClose && ctx != nil && ctx.Err() != nil {
 
-		return 0, ctx.Err()
 
-	}
-
-	return n, maybeReplaceError(err)
-
-}
+	
 
 
 
