@@ -838,5 +838,35 @@ func TestServerQloggerClosed(t *testing.T) {
 
 		require.True(t, closeCalled, "qlogger.Close() should have been called on error path")
 	})
+
+	t.Run("on early error path (OpenUniStream fails)", func(t *testing.T) {
+		var closeCalled bool
+		mockRecorder := &mockQlogRecorder{
+			closeFunc: func() error {
+				closeCalled = true
+				return nil
+			},
+		}
+
+		// Create a connection that will fail when OpenUniStream is called
+		_, serverConn := newConnPairWithRecorder(t, nil, mockRecorder)
+
+		s := &Server{}
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- s.ServeQUICConn(serverConn)
+		}()
+
+		// Close the connection immediately to cause OpenUniStream to fail
+		serverConn.CloseWithError(0, "test")
+
+		select {
+		case <-errChan:
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for ServeQUICConn to return")
+		}
+
+		require.True(t, closeCalled, "qlogger.Close() should have been called even on early error")
+	})
 }
 
