@@ -557,3 +557,60 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 		t.Fatal("timeout waiting for close")
 	}
 }
+
+// TestConnGoAwayConcurrentStreamOpening tests that concurrent stream openings
+// during graceful shutdown are properly handled. This verifies the fix for the
+// race condition where multiple goroutines could open streams with IDs >= maxStreamID.
+func TestConnGoAwayConcurrentStreamOpening(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+
+	conn := newConnection(
+		clientConn.Context(),
+		clientConn,
+		false,
+		false, // client
+		nil,
+		0,
+	)
+
+	// Open the first stream (will get ID 0)
+	str0, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+	require.NoError(t, err)
+	require.Equal(t, quic.StreamID(0), str0.StreamID())
+
+	// Send GOAWAY with stream ID 8 (allows streams 0, 4 but not 8, 12, etc.)
+	b := quicvarint.Append(nil, streamTypeControlStream)
+	b = (&settingsFrame{}).Append(b)
+	b = (&goAwayFrame{StreamID: 8}).Append(b)
+
+	controlStr, err := serverConn.OpenUniStream()
+	require.NoError(t, err)
+	_, err = controlStr.Write(b)
+	require.NoError(t, err)
+
+	go conn.handleUnidirectionalStreams()
+
+	// Give time for GOAWAY to be processed
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+
+	// Now try to open stream 4 (should succeed, < 8)
+	str4, err := conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+	require.NoError(t, err)
+	require.Equal(t, quic.StreamID(4), str4.StreamID())
+
+	// Try to open stream 8 (should fail, >= 8)
+	_, err = conn.openRequestStream(context.Background(), nil, nil, true, 1000)
+	require.ErrorIs(t, err, errGoAway)
+
+	// Clean up
+	str0.Close()
+	str0.CancelRead(1337)
+	str4.Close()
+	str4.CancelRead(1337)
+
+	select {
+	case <-serverConn.Context().Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for close")
+	}
+}

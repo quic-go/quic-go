@@ -168,8 +168,17 @@ func (c *Conn) openRequestStream(
 	if err != nil {
 		return nil, err
 	}
-	hstr := newStateTrackingStream(str, c, func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
+	
+	// Validate the actual stream ID after allocation to prevent race conditions.
+	// Even if the pre-check passed, concurrent allocations could result in
+	// a stream ID >= maxStreamID, which must be rejected per RFC 9114 section 5.2.
 	c.streamMx.Lock()
+	if maxStreamID != invalidStreamID && str.StreamID() >= maxStreamID {
+		c.streamMx.Unlock()
+		str.Close()
+		return nil, errGoAway
+	}
+	hstr := newStateTrackingStream(str, c, func(b []byte) error { return c.sendDatagram(str.StreamID(), b) })
 	c.streams[str.StreamID()] = hstr
 	c.lastStreamID = str.StreamID()
 	c.streamMx.Unlock()
