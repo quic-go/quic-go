@@ -165,6 +165,12 @@ func (c *ClientConn) openRequestStream(
 	if err != nil {
 		return nil, err
 	}
+	// Re-check GOAWAY constraint with actual stream ID to prevent race
+	if maxStreamID != invalidStreamID && str.StreamID() >= maxStreamID {
+		str.CancelWrite(0)
+		str.CancelRead(0)
+		return nil, errGoAway
+	}
 	c.streamMx.Lock()
 	c.lastStreamID = str.StreamID()
 	c.streamMx.Unlock()
