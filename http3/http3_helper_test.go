@@ -369,3 +369,18 @@ func expectedFrameLength(t *testing.T, frame any) (length, payloadLength int) {
 	}
 	panic("unreachable")
 }
+
+// mockQlogRecorder is a mock implementation of qlogwriter.Recorder that tracks Close calls.
+type mockQlogRecorder struct {
+	closeFunc func() error
+}
+
+func (m *mockQlogRecorder) RecordEvent(qlogwriter.Event) {}
+
+func (m *mockQlogRecorder) Close() error {
+	if m.closeFunc != nil {
+		return m.closeFunc()
+	}
+	return nil
+}
+

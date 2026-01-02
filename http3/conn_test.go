@@ -557,3 +557,35 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 		t.Fatal("timeout waiting for close")
 	}
 }
+
+func TestConnQloggerClosed(t *testing.T) {
+	var closeCalled bool
+	mockRecorder := &mockQlogRecorder{
+		closeFunc: func() error {
+			closeCalled = true
+			return nil
+		},
+	}
+
+	clientConn, serverConn := newConnPairWithRecorder(t, mockRecorder, nil)
+
+	// Create a client-side Conn
+	conn := newConnection(
+		clientConn.Context(),
+		clientConn,
+		false,
+		false,
+		nil,
+		0,
+	)
+
+	// Close the connection
+	err := conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
+	require.NoError(t, err)
+
+	// Verify qlogger.Close() was called
+	require.True(t, closeCalled, "qlogger.Close() should have been called when connection is closed")
+
+	serverConn.CloseWithError(0, "")
+}
+

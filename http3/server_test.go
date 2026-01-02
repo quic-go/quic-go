@@ -775,3 +775,68 @@ func TestServerGracefulShutdown(t *testing.T) {
 		t.Fatal("timeout")
 	}
 }
+
+func TestServerQloggerClosed(t *testing.T) {
+	t.Run("on successful connection", func(t *testing.T) {
+		var closeCalled bool
+		mockRecorder := &mockQlogRecorder{
+			closeFunc: func() error {
+				closeCalled = true
+				return nil
+			},
+		}
+
+		clientConn, serverConn := newConnPairWithRecorder(t, nil, mockRecorder)
+		str, err := clientConn.OpenStream()
+		require.NoError(t, err)
+		_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodGet, "https://www.example.com", nil)))
+		require.NoError(t, err)
+		require.NoError(t, str.Close())
+
+		s := &Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})}
+		go s.ServeQUICConn(serverConn)
+
+		// Read response to ensure server processed the request
+		decodeHeader(t, str)
+
+		// Close the client connection to trigger server cleanup
+		clientConn.CloseWithError(0, "")
+
+		// Give some time for cleanup
+		time.Sleep(100 * time.Millisecond)
+
+		require.True(t, closeCalled, "qlogger.Close() should have been called")
+	})
+
+	t.Run("on error path", func(t *testing.T) {
+		var closeCalled bool
+		mockRecorder := &mockQlogRecorder{
+			closeFunc: func() error {
+				closeCalled = true
+				return nil
+			},
+		}
+
+		clientConn, serverConn := newConnPairWithRecorder(t, nil, mockRecorder)
+
+		s := &Server{}
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- s.ServeQUICConn(serverConn)
+		}()
+
+		// Close the connection to trigger an error path
+		clientConn.CloseWithError(0, "")
+
+		select {
+		case <-errChan:
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for ServeQUICConn to return")
+		}
+
+		require.True(t, closeCalled, "qlogger.Close() should have been called on error path")
+	})
+}
+

@@ -242,6 +242,9 @@ func (c *Conn) CloseWithError(code quic.ApplicationErrorCode, msg string) error 
 	if c.idleTimer != nil {
 		c.idleTimer.Stop()
 	}
+	if c.qlogger != nil {
+		c.qlogger.Close()
+	}
 	return c.conn.CloseWithError(code, msg)
 }
 

@@ -430,6 +430,9 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 	if qlogTrace := conn.QlogTrace(); qlogTrace != nil && qlogTrace.SupportsSchemas(qlog.EventSchema) {
 		qlogger = qlogTrace.AddProducer()
 	}
+	if qlogger != nil {
+		defer qlogger.Close()
+	}
 
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
 	// when the server is gracefully closed
