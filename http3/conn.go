@@ -168,7 +168,6 @@ func (c *Conn) openRequestStream(
 	if err != nil {
 		return nil, err
 	}
-	
 	// Validate the actual stream ID after allocation to prevent race conditions.
 	// Even if the pre-check passed, concurrent allocations could result in
 	// a stream ID >= maxStreamID, which must be rejected per RFC 9114 section 5.2.
