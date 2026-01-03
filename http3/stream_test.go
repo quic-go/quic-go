@@ -37,7 +37,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
 	var eventRecorder events.Recorder
-	clientConn, _ := newConnPairWithRecorder(t, &eventRecorder, nil)
+	clientConn, _ := newConnPair(t, withClientRecorder(&eventRecorder))
 	str := newStream(
 		qstr,
 		newRawConn(clientConn, false, nil, nil, &eventRecorder, nil),

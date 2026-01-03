@@ -199,7 +199,7 @@ func testServerRequestHandling(t *testing.T,
 	req *http.Request,
 	rec qlogwriter.Recorder,
 ) (responseHeaders map[string][]string, body []byte) {
-	clientConn, serverConn := newConnPairWithRecorder(t, nil, rec)
+	clientConn, serverConn := newConnPair(t, withServerRecorder(rec))
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))
@@ -406,7 +406,7 @@ func testServerRequestHeaderTooLarge(t *testing.T, req *http.Request, maxHeaderB
 	}
 	s.init()
 
-	clientConn, serverConn := newConnPairWithRecorder(t, nil, rec)
+	clientConn, serverConn := newConnPair(t, withServerRecorder(rec))
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 	_, err = str.Write(encodeRequest(t, req))

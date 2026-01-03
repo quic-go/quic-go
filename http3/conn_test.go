@@ -18,7 +18,7 @@ import (
 
 func TestConnReceiveSettings(t *testing.T) {
 	var eventRecorder events.Recorder
-	clientConn, serverConn := newConnPairWithRecorder(t, nil, &eventRecorder)
+	clientConn, serverConn := newConnPair(t, withServerRecorder(&eventRecorder))
 
 	conn := newRawConn(serverConn, false, nil, nil, &eventRecorder, nil)
 	b := quicvarint.Append(nil, streamTypeControlStream)
@@ -371,7 +371,7 @@ func TestConnInconsistentDatagramSupport(t *testing.T) {
 
 func TestConnSendAndReceiveDatagram(t *testing.T) {
 	var eventRecorder events.Recorder
-	clientConn, serverConn := newConnPairWithDatagrams(t, &eventRecorder, nil)
+	clientConn, serverConn := newConnPair(t, withDatagrams(), withClientRecorder(&eventRecorder))
 
 	conn := newRawConn(clientConn, true, nil, nil, &eventRecorder, nil)
 	b := quicvarint.Append(nil, streamTypeControlStream)
@@ -463,7 +463,7 @@ func TestConnDatagramFailures(t *testing.T) {
 }
 
 func testConnDatagramFailures(t *testing.T, datagram []byte) {
-	localConn, peerConn := newConnPairWithDatagrams(t, nil, nil)
+	localConn, peerConn := newConnPair(t, withDatagrams())
 
 	conn := newRawConn(localConn, true, nil, nil, nil, nil)
 

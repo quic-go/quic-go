@@ -38,7 +38,7 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	}
 
 	var eventRecorder events.Recorder
-	clientConn, serverConn := newConnPairWithRecorder(t, &eventRecorder, nil)
+	clientConn, serverConn := newConnPair(t, withClientRecorder(&eventRecorder))
 	tr.NewClientConn(clientConn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -587,9 +587,9 @@ func TestClientConnGoAway(t *testing.T) {
 
 func testClientConnGoAway(t *testing.T, withStream bool) {
 	var clientEventRecorder events.Recorder
-	localConn, peerConn := newConnPairWithRecorder(t, &clientEventRecorder, nil)
+	clientConn, serverConn := newConnPair(t, withClientRecorder(&clientEventRecorder))
 
-	cc := (&Transport{}).NewClientConn(localConn)
+	cc := (&Transport{}).NewClientConn(clientConn)
 
 	var str *RequestStream
 	if withStream {
@@ -598,30 +598,30 @@ func testClientConnGoAway(t *testing.T, withStream bool) {
 		str = s
 	}
 
-	// Peer sends control stream with SETTINGS and GOAWAY
+	// server sends control stream with SETTINGS and GOAWAY
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = (&settingsFrame{}).Append(b)
 	b = (&goAwayFrame{StreamID: 8}).Append(b)
-	controlStr, err := peerConn.OpenUniStream()
+	controlStr, err := serverConn.OpenUniStream()
 	require.NoError(t, err)
 	_, err = controlStr.Write(b)
 	require.NoError(t, err)
 
-	// The connection should be closed after the stream is closed
+	// the connection should be closed after the stream is closed
 	if withStream {
 		select {
-		case <-peerConn.Context().Done():
+		case <-serverConn.Context().Done():
 			t.Fatal("connection closed")
 		case <-time.After(scaleDuration(10 * time.Millisecond)):
 		}
 
-		// The stream ID in the GOAWAY frame is 8, so it's possible to open stream 4.
+		// the stream ID in the GOAWAY frame is 8, so it's possible to open stream 4
 		str2, err := cc.OpenRequestStream(context.Background())
 		require.NoError(t, err)
 		str2.Close()
 		str2.CancelRead(1337)
 
-		// It's not possible to open stream 8.
+		// it's not possible to open stream 8
 		_, err = cc.OpenRequestStream(context.Background())
 		require.ErrorIs(t, err, errGoAway)
 
@@ -630,9 +630,9 @@ func testClientConnGoAway(t *testing.T, withStream bool) {
 	}
 
 	select {
-	case <-peerConn.Context().Done():
+	case <-serverConn.Context().Done():
 		require.ErrorIs(t,
-			context.Cause(peerConn.Context()),
+			context.Cause(serverConn.Context()),
 			&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeNoError)},
 		)
 	case <-time.After(time.Second):
@@ -650,6 +650,81 @@ func testClientConnGoAway(t *testing.T, withStream bool) {
 		},
 		filterQlogEventsForFrame(clientEventRecorder.Events(qlog.FrameParsed{}), qlog.GoAwayFrame{StreamID: 8}),
 	)
+}
+
+func TestClientConnGoConcurrent(t *testing.T) {
+	clientConn, serverConn := newConnPair(t, withServerBidiStreamLimit(1)) // allows streams 0
+
+	cc := (&Transport{}).NewClientConn(clientConn)
+
+	// peer sends control stream with SETTINGS, but not GOAWAY yet
+	b := quicvarint.Append(nil, streamTypeControlStream)
+	b = (&settingsFrame{}).Append(b)
+	controlStr, err := serverConn.OpenUniStream()
+	require.NoError(t, err)
+	_, err = controlStr.Write(b)
+	require.NoError(t, err)
+
+	select {
+	case <-serverConn.Context().Done():
+		t.Fatal("connection closed")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	// of these 2 OpenStreamSync calls, one will succeed, the other one will block
+	errChan := make(chan error, 3)
+	for range 2 {
+		go func() {
+			str, err := cc.OpenRequestStream(context.Background())
+			if err == nil {
+				str.Close()
+			}
+			errChan <- err
+		}()
+	}
+
+	// wait until all Goroutines have started
+	time.Sleep(scaleDuration(10 * time.Millisecond))
+
+	select {
+	case err := <-errChan:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	// the second stream is still blocked
+	select {
+	case <-errChan:
+		t.Fatal("second OpenStreamSync should have blocked")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	// send the GOAWAY frame
+	b = (&goAwayFrame{StreamID: 4}).Append(nil)
+	_, err = controlStr.Write(b)
+	require.NoError(t, err)
+
+	// accepting and closing the stream allows the client to another stream
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	sstr, err := serverConn.AcceptStream(ctx)
+	require.NoError(t, err)
+	sstr.Close()
+	sstr.CancelRead(1337)
+
+	// The second stream is opened by the client,
+	// and immediately closed with a H3_REQUEST_CANCELED error.
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, errGoAway)
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+		t.Fatal("timeout")
+	}
+
+	sstr, err = serverConn.AcceptStream(ctx)
+	require.NoError(t, err)
+	_, err = sstr.Read([]byte{0})
+	require.ErrorIs(t, err, &quic.StreamError{StreamID: 4, ErrorCode: quic.StreamErrorCode(ErrCodeRequestCanceled), Remote: true})
 }
 
 func TestClientConnGoAwayFailures(t *testing.T) {

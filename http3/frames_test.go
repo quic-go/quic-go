@@ -33,7 +33,7 @@ func TestParserReservedFrameType(t *testing.T) {
 	for _, ft := range []uint64{0x2, 0x6, 0x8, 0x9} {
 		t.Run(fmt.Sprintf("type %#x", ft), func(t *testing.T) {
 			var eventRecorder events.Recorder
-			client, server := newConnPairWithDatagrams(t, nil, &eventRecorder)
+			client, server := newConnPair(t, withDatagrams(), withServerRecorder(&eventRecorder))
 
 			data := quicvarint.Append(nil, ft)
 			data = quicvarint.Append(data, 6)
