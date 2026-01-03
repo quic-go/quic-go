@@ -704,7 +704,7 @@ func TestClientConnGoConcurrent(t *testing.T) {
 	_, err = controlStr.Write(b)
 	require.NoError(t, err)
 
-	// accepting and closing the stream allows the client to another stream
+	// accepting and closing the stream allows the client to open another stream
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	sstr, err := serverConn.AcceptStream(ctx)
