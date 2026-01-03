@@ -133,12 +133,6 @@ func generateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Cer
 func getTLSConfig() *tls.Config       { return tlsConfig.Clone() }
 func getTLSClientConfig() *tls.Config { return tlsClientConfig.Clone() }
 
-func newConnPair(t *testing.T) (client, server *quic.Conn) {
-	t.Helper()
-
-	return newConnPairWithRecorder(t, nil, nil)
-}
-
 type qlogTrace struct {
 	recorder qlogwriter.Recorder
 }
@@ -149,51 +143,38 @@ func (t *qlogTrace) AddProducer() qlogwriter.Recorder {
 	return t.recorder
 }
 
-func newConnPairWithRecorder(t *testing.T, clientRecorder, serverRecorder qlogwriter.Recorder) (client, server *quic.Conn) {
-	t.Helper()
-
-	ln, err := quic.ListenEarly(
-		newUDPConnLocalhost(t),
-		getTLSConfig(),
-		&quic.Config{
-			InitialStreamReceiveWindow:     maxByteCount,
-			InitialConnectionReceiveWindow: maxByteCount,
-			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
-				return &qlogTrace{recorder: serverRecorder}
-			},
-		},
-	)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	cl, err := quic.DialEarly(
-		ctx,
-		newUDPConnLocalhost(t),
-		ln.Addr(),
-		getTLSClientConfig(),
-		&quic.Config{
-			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
-				return &qlogTrace{recorder: clientRecorder}
-			},
-		},
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { cl.CloseWithError(0, "") })
-
-	conn, err := ln.Accept(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { conn.CloseWithError(0, "") })
-	select {
-	case <-conn.HandshakeComplete():
-	case <-ctx.Done():
-		t.Fatal("timeout")
-	}
-	return cl, conn
+type connPairOpts struct {
+	clientRecorder        qlogwriter.Recorder
+	serverRecorder        qlogwriter.Recorder
+	serverBidiStreamLimit int64
+	enableDatagrams       bool
 }
 
-func newConnPairWithDatagrams(t *testing.T, clientRecorder, serverRecorder qlogwriter.Recorder) (client, server *quic.Conn) {
+type connPairOpt func(*connPairOpts)
+
+func withClientRecorder(r qlogwriter.Recorder) connPairOpt {
+	return func(o *connPairOpts) { o.clientRecorder = r }
+}
+
+func withServerRecorder(r qlogwriter.Recorder) connPairOpt {
+	return func(o *connPairOpts) { o.serverRecorder = r }
+}
+
+func withDatagrams() connPairOpt {
+	return func(o *connPairOpts) { o.enableDatagrams = true }
+}
+
+func withServerBidiStreamLimit(limit int64) connPairOpt {
+	return func(o *connPairOpts) { o.serverBidiStreamLimit = limit }
+}
+
+func newConnPair(t *testing.T, opts ...connPairOpt) (client, server *quic.Conn) {
 	t.Helper()
+
+	var o connPairOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
 
 	ln, err := quic.ListenEarly(
 		newUDPConnLocalhost(t),
@@ -201,9 +182,10 @@ func newConnPairWithDatagrams(t *testing.T, clientRecorder, serverRecorder qlogw
 		&quic.Config{
 			InitialStreamReceiveWindow:     maxByteCount,
 			InitialConnectionReceiveWindow: maxByteCount,
-			EnableDatagrams:                true,
+			MaxIncomingStreams:             o.serverBidiStreamLimit,
+			EnableDatagrams:                o.enableDatagrams,
 			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
-				return &qlogTrace{recorder: serverRecorder}
+				return &qlogTrace{recorder: o.serverRecorder}
 			},
 		},
 	)
@@ -217,9 +199,9 @@ func newConnPairWithDatagrams(t *testing.T, clientRecorder, serverRecorder qlogw
 		ln.Addr(),
 		getTLSClientConfig(),
 		&quic.Config{
-			EnableDatagrams: true,
+			EnableDatagrams: o.enableDatagrams,
 			Tracer: func(ctx context.Context, isClient bool, connID quic.ConnectionID) qlogwriter.Trace {
-				return &qlogTrace{recorder: clientRecorder}
+				return &qlogTrace{recorder: o.clientRecorder}
 			},
 		},
 	)

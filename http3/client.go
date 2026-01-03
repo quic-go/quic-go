@@ -69,8 +69,8 @@ type ClientConn struct {
 	disableCompression bool
 
 	streamMx     sync.Mutex
-	maxStreamID  quic.StreamID
-	lastStreamID quic.StreamID
+	maxStreamID  quic.StreamID // set once a GOAWAY frame is received
+	lastStreamID quic.StreamID // the highest stream ID that was opened
 
 	qlogger qlogwriter.Recorder
 	logger  *slog.Logger
@@ -165,9 +165,24 @@ func (c *ClientConn) openRequestStream(
 	if err != nil {
 		return nil, err
 	}
+
 	c.streamMx.Lock()
-	c.lastStreamID = str.StreamID()
+	// take the maximum here, as multiple OpenStreamSync calls might have returned concurrently
+	if c.lastStreamID == invalidStreamID {
+		c.lastStreamID = str.StreamID()
+	} else {
+		c.lastStreamID = max(c.lastStreamID, str.StreamID())
+	}
+	// check again, in case a (or another) GOAWAY frame was received
+	maxStreamID = c.maxStreamID
 	c.streamMx.Unlock()
+
+	if maxStreamID != invalidStreamID && str.StreamID() >= maxStreamID {
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		return nil, errGoAway
+	}
+
 	hstr := c.rawConn.TrackStream(str)
 	rsp := &http.Response{}
 	trace := httptrace.ContextClientTrace(ctx)
@@ -218,6 +233,7 @@ func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParse
 			return
 		}
 		c.streamMx.Lock()
+		// the server is not allowed to increase the Stream ID in subsequent GOAWAY frames
 		if c.maxStreamID != invalidStreamID && goaway.StreamID > c.maxStreamID {
 			c.streamMx.Unlock()
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
