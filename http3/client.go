@@ -69,7 +69,7 @@ type ClientConn struct {
 	disableCompression bool
 
 	streamMx     sync.Mutex
-	maxStreamID  quic.StreamID // set onced a GOAWAY frame is received
+	maxStreamID  quic.StreamID // set once a GOAWAY frame is received
 	lastStreamID quic.StreamID // the highest stream ID that was opened
 
 	qlogger qlogwriter.Recorder
