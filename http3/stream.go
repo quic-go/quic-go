@@ -36,7 +36,7 @@ type datagramStream interface {
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
 type Stream struct {
 	datagramStream
-	conn        *Conn
+	conn        *rawConn
 	frameParser *frameParser
 
 	buf []byte // used as a temporary buffer when writing the HTTP/3 frame headers
@@ -51,7 +51,7 @@ type Stream struct {
 
 func newStream(
 	str datagramStream,
-	conn *Conn,
+	conn *rawConn,
 	trace *httptrace.ClientTrace,
 	parseTrailer func(io.Reader, *headersFrame) error,
 	qlogger qlogwriter.Recorder,
@@ -319,7 +319,7 @@ func (s *RequestStream) sendRequestTrailer(req *http.Request) error {
 // It is invalid to call it after Read has been called.
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	if !s.sentRequest {
-		return nil, errors.New("http3: invalid duplicate use of RequestStream.ReadResponse before SendRequestHeader")
+		return nil, errors.New("http3: invalid use of RequestStream.ReadResponse before SendRequestHeader")
 	}
 	frame, err := s.str.frameParser.ParseNext(s.str.qlogger)
 	if err != nil {

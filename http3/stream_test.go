@@ -40,14 +40,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 	clientConn, _ := newConnPairWithRecorder(t, &eventRecorder, nil)
 	str := newStream(
 		qstr,
-		newConnection(
-			clientConn.Context(),
-			clientConn,
-			false,
-			false, // client
-			nil,
-			0,
-		),
+		newRawConn(clientConn, false, nil, nil, &eventRecorder, nil),
 		nil,
 		func(io.Reader, *headersFrame) error { return nil },
 		&eventRecorder,
@@ -115,7 +108,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 
 	str := newStream(
 		qstr,
-		newConnection(context.Background(), clientConn, false, false, nil, 0),
+		newRawConn(clientConn, false, nil, nil, nil, nil),
 		nil,
 		func(io.Reader, *headersFrame) error { return nil },
 		nil,
@@ -191,7 +184,7 @@ func TestRequestStream(t *testing.T) {
 	str := newRequestStream(
 		newStream(
 			qstr,
-			newConnection(context.Background(), clientConn, false, false, nil, 0),
+			newRawConn(clientConn, false, nil, nil, nil, nil),
 			&httptrace.ClientTrace{},
 			func(io.Reader, *headersFrame) error { return nil },
 			nil,
@@ -211,7 +204,7 @@ func TestRequestStream(t *testing.T) {
 
 	// calling ReadResponse before SendRequestHeader is not valid
 	_, err = str.ReadResponse()
-	require.EqualError(t, err, "http3: invalid duplicate use of RequestStream.ReadResponse before SendRequestHeader")
+	require.EqualError(t, err, "http3: invalid use of RequestStream.ReadResponse before SendRequestHeader")
 	// SendRequestHeader can't be used for requests that have a request body
 	require.EqualError(t,
 		str.SendRequestHeader(
@@ -226,7 +219,7 @@ func TestRequestStream(t *testing.T) {
 	// duplicate calls are not allowed
 	require.EqualError(t, str.SendRequestHeader(req), "http3: invalid duplicate use of RequestStream.SendRequestHeader")
 
-	buf := bytes.NewBuffer(encodeResponse(t, 200))
+	buf := bytes.NewBuffer(encodeResponse(t, http.StatusOK))
 	buf.Write((&dataFrame{Length: 6}).Append(nil))
 	buf.Write([]byte("foobar"))
 	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
