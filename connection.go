@@ -99,9 +99,6 @@ func (e *errCloseForRecreating) Error() string {
 
 var deadlineSendImmediately = monotime.Time(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
 
-var connTracingID atomic.Uint64              // to be accessed atomically
-func nextConnTracingID() ConnectionTracingID { return ConnectionTracingID(connTracingID.Add(1)) }
-
 type blockMode uint8
 
 const (

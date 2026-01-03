@@ -899,16 +899,11 @@ func TestHTTPConnContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var tracingID quic.ConnectionTracingID
 	select {
 	case ctx := <-connCtxChan:
 		serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
 		require.True(t, ok)
 		require.Equal(t, server, serv)
-
-		id, ok := ctx.Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-		require.True(t, ok)
-		tracingID = id
 	default:
 		t.Fatal("handler was not called")
 	}
@@ -922,10 +917,6 @@ func TestHTTPConnContext(t *testing.T) {
 		serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
 		require.True(t, ok)
 		require.Equal(t, server, serv)
-
-		id, ok := ctx.Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-		require.True(t, ok)
-		require.Equal(t, tracingID, id)
 	default:
 		t.Fatal("handler was not called")
 	}
