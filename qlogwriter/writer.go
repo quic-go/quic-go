@@ -32,7 +32,7 @@ type Recorder interface {
 	RecordEvent(Event)
 	// Close signals that this producer is done recording events.
 	// When all producers are closed, the underlying trace is closed.
-	// It must not be calles concurrently with RecordEvent.
+	// It must not be called concurrently with RecordEvent.
 	io.Closer
 }
 
