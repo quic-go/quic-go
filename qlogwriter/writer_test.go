@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/synctest"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 
 	"github.com/stretchr/testify/require"
@@ -69,4 +70,47 @@ func TestWritingStopping(t *testing.T) {
 	logBuf.Reset()
 	writer.RecordEvent(testEvent{message: "foobar"})
 	require.Empty(t, logBuf.String())
+}
+
+type blockingWriter struct {
+	bytes.Buffer
+	block   bool
+	unblock chan struct{}
+}
+
+func (w *blockingWriter) Write(b []byte) (int, error) {
+	if w.block {
+		<-w.unblock
+	}
+	return w.Buffer.Write(b)
+}
+
+// TestRecordCloseRace triggers a race between record and Close.
+func TestRecordCloseRace(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := &blockingWriter{unblock: make(chan struct{})}
+		trace := NewFileSeq(nopWriteCloser(w))
+		go trace.Run()
+		synctest.Wait() // Run is blocked waiting for events
+
+		producer := trace.AddProducer()
+		require.NotNil(t, producer)
+
+		w.block = true
+		const numEvents = eventChanSize + 1
+		for i := range numEvents {
+			producer.RecordEvent(testEvent{message: fmt.Sprintf("event %d", i)})
+		}
+
+		go producer.RecordEvent(testEvent{message: "last event"})
+		synctest.Wait() // goroutine is blocked on full channel
+
+		close(w.unblock) // let Run() finish
+		producer.Close()
+
+		for i := range numEvents {
+			require.Contains(t, w.String(), fmt.Sprintf(`"message":"event %d"`, i))
+		}
+		require.Contains(t, w.String(), `"message":"last event"`)
+	})
 }
