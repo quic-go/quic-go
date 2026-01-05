@@ -45,7 +45,8 @@ type rawConn struct {
 	settings         *Settings
 	receivedSettings chan struct{}
 
-	qlogger qlogwriter.Recorder
+	qlogger   qlogwriter.Recorder
+	qloggerWG sync.WaitGroup // tracks goroutines that may produce qlog events
 }
 
 func newRawConn(
@@ -56,7 +57,7 @@ func newRawConn(
 	qlogger qlogwriter.Recorder,
 	logger *slog.Logger,
 ) *rawConn {
-	return &rawConn{
+	c := &rawConn{
 		conn:              quicConn,
 		logger:            logger,
 		enableDatagrams:   enableDatagrams,
@@ -66,6 +67,10 @@ func newRawConn(
 		onStreamsEmpty:    onStreamsEmpty,
 		controlStrHandler: controlStrHandler,
 	}
+	if qlogger != nil {
+		context.AfterFunc(quicConn.Context(), c.closeQlogger)
+	}
+	return c
 }
 
 func (c *rawConn) OpenUniStream() (*quic.SendStream, error) {
@@ -75,6 +80,9 @@ func (c *rawConn) OpenUniStream() (*quic.SendStream, error) {
 // openControlStream opens the control stream and sends the SETTINGS frame.
 // It returns the control stream (needed by the server for sending GOAWAY later).
 func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, error) {
+	c.qloggerWG.Add(1)
+	defer c.qloggerWG.Done()
+
 	str, err := c.conn.OpenUniStream()
 	if err != nil {
 		return nil, err
@@ -110,6 +118,7 @@ func (c *rawConn) TrackStream(str *quic.Stream) *stateTrackingStream {
 
 	c.streamMx.Lock()
 	c.streams[str.StreamID()] = hstr
+	c.qloggerWG.Add(1)
 	c.streamMx.Unlock()
 	return hstr
 }
@@ -126,7 +135,10 @@ func (c *rawConn) clearStream(id quic.StreamID) {
 	c.streamMx.Lock()
 	defer c.streamMx.Unlock()
 
-	delete(c.streams, id)
+	if _, ok := c.streams[id]; ok {
+		delete(c.streams, id)
+		c.qloggerWG.Done()
+	}
 	if len(c.streams) == 0 {
 		c.onStreamsEmpty()
 	}
@@ -144,6 +156,9 @@ func (c *rawConn) CloseWithError(code quic.ApplicationErrorCode, msg string) err
 }
 
 func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer bool) {
+	c.qloggerWG.Add(1)
+	defer c.qloggerWG.Done()
+
 	streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 	if err != nil {
 		if c.logger != nil {
@@ -218,7 +233,9 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			return
 		}
+		c.qloggerWG.Add(1)
 		go func() {
+			defer c.qloggerWG.Done()
 			if err := c.receiveDatagrams(); err != nil {
 				if c.logger != nil {
 					c.logger.Debug("receiving datagrams failed", "error", err)
@@ -293,5 +310,12 @@ func (c *rawConn) ReceivedSettings() <-chan struct{} { return c.receivedSettings
 // It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *rawConn) Settings() *Settings { return c.settings }
 
-// Context returns the context of the underlying QUIC connection.
-func (c *rawConn) Context() context.Context { return c.conn.Context() }
+// closeQlogger waits for all goroutines that may produce qlog events to finish,
+// then closes the qlogger.
+func (c *rawConn) closeQlogger() {
+	if c.qlogger == nil {
+		return
+	}
+	c.qloggerWG.Wait()
+	c.qlogger.Close()
+}
