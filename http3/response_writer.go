@@ -8,6 +8,7 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/quic-go/qpack"
@@ -206,10 +207,17 @@ func (w *responseWriter) doWrite(p []byte) (int, error) {
 	return n, nil
 }
 
+var headersPool = &sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
 func (w *responseWriter) writeHeader(status int) error {
 	var headerFields []qlog.HeaderField // only used for qlog
-	var headers bytes.Buffer
-	enc := qpack.NewEncoder(&headers)
+	var headers = headersPool.Get().(*bytes.Buffer)
+	defer func() { headers.Reset(); headersPool.Put(headers) }()
+	enc := qpack.NewEncoder(headers)
 	if err := enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)}); err != nil {
 		return err
 	}
@@ -249,7 +257,10 @@ func (w *responseWriter) writeHeader(status int) error {
 		}
 	}
 
-	buf := make([]byte, 0, frameHeaderLen+headers.Len())
+	tmp := headersPool.Get().(*bytes.Buffer)
+	tmp.Grow(frameHeaderLen + headers.Len())
+	defer func() { tmp.Reset(); headersPool.Put(tmp) }()
+	buf := tmp.Bytes()
 	buf = (&headersFrame{Length: uint64(headers.Len())}).Append(buf)
 	buf = append(buf, headers.Bytes()...)
 

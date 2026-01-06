@@ -254,3 +254,12 @@ func TestResponseWriterTrailers(t *testing.T) {
 	// invalid trailers are ignored
 	require.NotContains(t, trailers, "content-length")
 }
+
+func BenchmarkWriteHeader(b *testing.B) {
+	b.RunParallel(func(p *testing.PB) {
+		for p.Next() {
+			rw := newTestResponseWriter(&testing.T{})
+			rw.writeHeader(200)
+		}
+	})
+}
