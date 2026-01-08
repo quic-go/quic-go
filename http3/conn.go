@@ -72,6 +72,8 @@ func newRawConn(
 	if qlogger != nil {
 		context.AfterFunc(quicConn.Context(), c.closeQlogger)
 	} else {
+		// Close the channel immediately if there's no qlogger to clean up.
+		// This prevents blocking when waiting for qloggerClosed (e.g., in Server.handleConn).
 		close(c.qloggerClosed)
 	}
 	return c
