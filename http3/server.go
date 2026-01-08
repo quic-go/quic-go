@@ -558,6 +558,9 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		}()
 	}
 	wg.Wait()
+	// Wait for the qlogger to be closed to prevent a race where server.Close()
+	// returns before the qlogger cleanup has completed.
+	<-hconn.rawConn.qloggerClosed
 	return handleErr
 }
 

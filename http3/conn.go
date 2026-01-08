@@ -45,8 +45,9 @@ type rawConn struct {
 	settings         *Settings
 	receivedSettings chan struct{}
 
-	qlogger   qlogwriter.Recorder
-	qloggerWG sync.WaitGroup // tracks goroutines that may produce qlog events
+	qlogger       qlogwriter.Recorder
+	qloggerWG     sync.WaitGroup // tracks goroutines that may produce qlog events
+	qloggerClosed chan struct{}  // closed when qlogger has been closed
 }
 
 func newRawConn(
@@ -66,9 +67,12 @@ func newRawConn(
 		qlogger:           qlogger,
 		onStreamsEmpty:    onStreamsEmpty,
 		controlStrHandler: controlStrHandler,
+		qloggerClosed:     make(chan struct{}),
 	}
 	if qlogger != nil {
 		context.AfterFunc(quicConn.Context(), c.closeQlogger)
+	} else {
+		close(c.qloggerClosed)
 	}
 	return c
 }
@@ -318,4 +322,5 @@ func (c *rawConn) closeQlogger() {
 	}
 	c.qloggerWG.Wait()
 	c.qlogger.Close()
+	close(c.qloggerClosed)
 }
