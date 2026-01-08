@@ -75,8 +75,9 @@ func TestHTTP3Qlog(t *testing.T) {
 		t.Fatal("server didn't shut down")
 	}
 
-	assert.Zero(t, clientTrace.OpenRecorders(), "client recorders should be closed")
-	assert.Zero(t, serverTrace.OpenRecorders(), "server recorders should be closed")
+	// Recorders are closed in an AfterFunc, so we need to wait for them to be closed.
+	assert.Eventually(t, func() bool { return clientTrace.OpenRecorders() == 0 }, time.Second, 10*time.Millisecond, "client recorders should be closed")
+	assert.Eventually(t, func() bool { return serverTrace.OpenRecorders() == 0 }, time.Second, 10*time.Millisecond, "server recorders should be closed")
 	assert.Equal(t, []string{h3qlog.EventSchema}, clientTrace.SchemasChecked)
 	assert.Equal(t, []string{h3qlog.EventSchema}, serverTrace.SchemasChecked)
 }
