@@ -896,7 +896,8 @@ func Test0RTTRejectedOnDatagramsDisabled(t *testing.T) {
 		defer ln.Close()
 		conn, sconn := check0RTTRejected(t, ln, clientConn, ln.Addr(), clientTLSConf, true)
 		defer conn.CloseWithError(0, "")
-		require.False(t, conn.ConnectionState().SupportsDatagrams)
+		require.False(t, conn.ConnectionState().SupportsDatagrams.Remote)
+		require.False(t, conn.ConnectionState().SupportsDatagrams.Local)
 
 		sconn.CloseWithError(0, "")
 		// The client should send 0-RTT packets, but the server doesn't process them.
@@ -1128,7 +1129,8 @@ func Test0RTTDatagrams(t *testing.T) {
 		)
 		require.NoError(t, err)
 		defer conn.CloseWithError(0, "")
-		require.True(t, conn.ConnectionState().SupportsDatagrams)
+		require.True(t, conn.ConnectionState().SupportsDatagrams.Remote)
+		require.True(t, conn.ConnectionState().SupportsDatagrams.Local)
 		require.NoError(t, conn.SendDatagram(msg))
 		select {
 		case <-conn.HandshakeComplete():
