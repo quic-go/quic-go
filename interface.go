@@ -194,13 +194,18 @@ type ClientInfo struct {
 type ConnectionState struct {
 	// TLS contains information about the TLS connection state, incl. the tls.ConnectionState.
 	TLS tls.ConnectionState
-	// SupportsDatagrams indicates whether the peer advertised support for QUIC datagrams (RFC 9221).
-	// When true, datagrams can be sent using the Conn's SendDatagram method.
-	// This is a unilateral declaration by the peer - receiving datagrams is only possible if
-	// datagram support was enabled locally via Config.EnableDatagrams.
-	SupportsDatagrams bool
-	// SupportsStreamResetPartialDelivery indicates whether the peer advertised support for QUIC Stream Resets with Partial Delivery.
-	SupportsStreamResetPartialDelivery bool
+	// SupportsDatagrams indicates support for QUIC datagrams (RFC 9221).
+	SupportsDatagrams struct {
+		// Remote is true if the peer advertised datagram support.
+		// Local is true if datagram support was enabled via Config.EnableDatagrams.
+		Remote, Local bool
+	}
+	// SupportsStreamResetPartialDelivery indicates support for QUIC Stream Resets with Partial Delivery.
+	SupportsStreamResetPartialDelivery struct {
+		// Remote is true if the peer advertised support.
+		// Local is true if support was enabled via Config.EnableStreamResetPartialDelivery.
+		Remote, Local bool
+	}
 	// Used0RTT says if 0-RTT resumption was used.
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.

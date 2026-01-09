@@ -58,25 +58,28 @@ func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDat
 	require.NoError(t, err)
 	defer serverConn.CloseWithError(0, "")
 
+	serverState := serverConn.ConnectionState().SupportsDatagrams
+	clientState := clientConn.ConnectionState().SupportsDatagrams
+	require.Equal(t, serverEnableDatagram, serverState.Local, "server local datagram support")
+	require.Equal(t, clientEnableDatagram, serverState.Remote, "server view of client datagram support")
+	require.Equal(t, clientEnableDatagram, clientState.Local, "client local datagram support")
+	require.Equal(t, serverEnableDatagram, clientState.Remote, "client view of server datagram support")
+
 	if clientEnableDatagram {
-		require.True(t, serverConn.ConnectionState().SupportsDatagrams)
 		require.NoError(t, serverConn.SendDatagram([]byte("foo")))
 		datagram, err := clientConn.ReceiveDatagram(ctx)
 		require.NoError(t, err)
 		require.Equal(t, []byte("foo"), datagram)
 	} else {
-		require.False(t, serverConn.ConnectionState().SupportsDatagrams)
 		require.Error(t, serverConn.SendDatagram([]byte("foo")))
 	}
 
 	if serverEnableDatagram {
-		require.True(t, clientConn.ConnectionState().SupportsDatagrams)
 		require.NoError(t, clientConn.SendDatagram([]byte("bar")))
 		datagram, err := serverConn.ReceiveDatagram(ctx)
 		require.NoError(t, err)
 		require.Equal(t, []byte("bar"), datagram)
 	} else {
-		require.False(t, clientConn.ConnectionState().SupportsDatagrams)
 		require.Error(t, clientConn.SendDatagram([]byte("bar")))
 	}
 }

@@ -667,7 +667,8 @@ func TestGetConfigForClient(t *testing.T) {
 	defer conn.CloseWithError(0, "")
 
 	cs := conn.ConnectionState()
-	require.True(t, cs.SupportsDatagrams)
+	require.True(t, cs.SupportsDatagrams.Remote, "server should advertise datagram support")
+	require.True(t, cs.SupportsDatagrams.Local, "client should have datagram support enabled")
 
 	select {
 	case <-acceptDone:
