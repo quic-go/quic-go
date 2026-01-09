@@ -767,7 +767,7 @@ func (c *Conn) Context() context.Context {
 }
 
 func (c *Conn) supportsDatagrams() bool {
-	return c.peerParams.MaxDatagramFrameSize > 0
+	return c.peerParams != nil && c.peerParams.MaxDatagramFrameSize > 0
 }
 
 // ConnectionState returns basic details about the QUIC connection.
@@ -780,7 +780,7 @@ func (c *Conn) ConnectionState() ConnectionState {
 	c.connState.Used0RTT = cs.Used0RTT
 	c.connState.SupportsDatagrams.Remote = c.supportsDatagrams()
 	c.connState.SupportsDatagrams.Local = c.config.EnableDatagrams
-	c.connState.SupportsStreamResetPartialDelivery.Remote = c.peerParams.EnableResetStreamAt
+	c.connState.SupportsStreamResetPartialDelivery.Remote = c.peerParams != nil && c.peerParams.EnableResetStreamAt
 	c.connState.SupportsStreamResetPartialDelivery.Local = c.config.EnableStreamResetPartialDelivery
 	c.connState.GSO = c.conn.capabilities().GSO
 	return c.connState

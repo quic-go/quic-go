@@ -84,6 +84,71 @@ func testDatagramNegotiation(t *testing.T, serverEnableDatagram, clientEnableDat
 	}
 }
 
+// TestConnectionStateEarlyLifecycle verifies that ConnectionState() can be called
+// early in the connection lifecycle (before transport parameters arrive) without
+// panicking, and that Remote flags are false until params arrive.
+func TestConnectionStateEarlyLifecycle(t *testing.T) {
+	ln, err := quic.ListenEarly(
+		newUDPConnLocalhost(t),
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	connChan := make(chan *quic.Conn)
+	errChan := make(chan error)
+	go func() {
+		conn, err := ln.Accept(ctx)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		// Call ConnectionState() before handshake completes
+		// This should not panic even if peerParams is nil
+		state := conn.ConnectionState()
+		// Remote flags should be false before transport params arrive
+		require.False(t, state.SupportsDatagrams.Remote, "Remote datagram support should be false before transport params")
+		require.False(t, state.SupportsStreamResetPartialDelivery.Remote, "Remote stream reset support should be false before transport params")
+		// Local flags should reflect our config
+		require.True(t, state.SupportsDatagrams.Local, "Local datagram support should reflect config")
+		connChan <- conn
+	}()
+
+	clientConn, err := quic.Dial(
+		ctx,
+		newUDPConnLocalhost(t),
+		ln.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer clientConn.CloseWithError(0, "")
+
+	var serverConn *quic.Conn
+	select {
+	case serverConn = <-connChan:
+	case err := <-errChan:
+		t.Fatalf("error accepting connection: %s", err)
+	}
+	defer serverConn.CloseWithError(0, "")
+
+	// Wait for handshake to complete
+	select {
+	case <-serverConn.HandshakeComplete():
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for handshake")
+	}
+
+	// After handshake, transport params should be available and Remote flags should reflect peer's capabilities
+	state := serverConn.ConnectionState()
+	require.True(t, state.SupportsDatagrams.Remote, "Remote datagram support should be true after transport params arrive")
+	require.True(t, state.SupportsDatagrams.Local, "Local datagram support should still reflect config")
+}
+
 func TestDatagramSizeLimit(t *testing.T) {
 	const maxDatagramSize = 456
 	originalMaxDatagramSize := wire.MaxDatagramSize
