@@ -774,10 +774,14 @@ func (c *Conn) supportsDatagrams() bool {
 func (c *Conn) ConnectionState() ConnectionState {
 	c.connStateMutex.Lock()
 	defer c.connStateMutex.Unlock()
+
 	cs := c.cryptoStreamHandler.ConnectionState()
 	c.connState.TLS = cs.ConnectionState
 	c.connState.Used0RTT = cs.Used0RTT
-	c.connState.SupportsStreamResetPartialDelivery = c.peerParams.EnableResetStreamAt
+	c.connState.SupportsDatagrams.Remote = c.supportsDatagrams()
+	c.connState.SupportsDatagrams.Local = c.config.EnableDatagrams
+	c.connState.SupportsStreamResetPartialDelivery.Remote = c.peerParams.EnableResetStreamAt
+	c.connState.SupportsStreamResetPartialDelivery.Local = c.config.EnableStreamResetPartialDelivery
 	c.connState.GSO = c.conn.capabilities().GSO
 	return c.connState
 }
@@ -2342,9 +2346,6 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	c.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	c.streamsMap.HandleTransportParameters(params)
-	c.connStateMutex.Lock()
-	c.connState.SupportsDatagrams = c.supportsDatagrams()
-	c.connStateMutex.Unlock()
 }
 
 func (c *Conn) handleTransportParameters(params *wire.TransportParameters) error {
@@ -2374,10 +2375,6 @@ func (c *Conn) handleTransportParameters(params *wire.TransportParameters) error
 		// the client's transport parameters.
 		close(c.earlyConnReadyChan)
 	}
-
-	c.connStateMutex.Lock()
-	c.connState.SupportsDatagrams = c.supportsDatagrams()
-	c.connStateMutex.Unlock()
 	return nil
 }
 
