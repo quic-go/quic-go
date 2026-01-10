@@ -436,7 +436,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 	var acked1RTTPacket bool
 	for _, p := range ackedPackets {
-		if p.includedInBytesInFlight && !p.declaredLost {
+		if p.includedInBytesInFlight {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
 		if p.EncryptionLevel == protocol.Encryption1RTT {
@@ -1076,14 +1076,14 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 		if firstPacketSendTime.IsZero() {
 			firstPacketSendTime = p.SendTime
 		}
-		if !p.declaredLost && p.IsAckEliciting() {
+		if p.IsAckEliciting() {
 			h.queueFramesForRetransmission(p)
 		}
 	}
 	// All application data packets sent at this point are 0-RTT packets.
 	// In the case of a Retry, we can assume that the server dropped all of them.
 	for _, p := range h.appDataPackets.history.Packets() {
-		if !p.declaredLost && p.IsAckEliciting() {
+		if p.IsAckEliciting() {
 			h.queueFramesForRetransmission(p)
 		}
 	}
