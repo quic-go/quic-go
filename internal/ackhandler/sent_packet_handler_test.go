@@ -203,6 +203,8 @@ func TestSentPacketHandlerAcknowledgeSkippedPacket(t *testing.T) {
 }
 
 func TestSentPacketHandlerRTTAckEliciting(t *testing.T) {
+	var eventRecorder events.Recorder
+
 	rttStats := utils.NewRTTStats()
 	sph := NewSentPacketHandler(
 		0,
@@ -213,18 +215,27 @@ func TestSentPacketHandlerRTTAckEliciting(t *testing.T) {
 		false,
 		nil,
 		protocol.PerspectiveClient,
-		nil,
+		&eventRecorder,
 		utils.DefaultLogger,
 	)
 
-	sendPacket := func(t *testing.T, ti monotime.Time, ackEliciting bool) protocol.PacketNumber {
+	getPacketsInFlight := func() int {
+		evs := eventRecorder.Events(qlog.MetricsUpdated{})
+		return evs[len(evs)-1].(qlog.MetricsUpdated).PacketsInFlight
+	}
+	getBytesInFlight := func() int {
+		evs := eventRecorder.Events(qlog.MetricsUpdated{})
+		return evs[len(evs)-1].(qlog.MetricsUpdated).BytesInFlight
+	}
+
+	sendPacket := func(t *testing.T, ti monotime.Time, size protocol.ByteCount, ackEliciting bool) protocol.PacketNumber {
 		t.Helper()
 		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
 		var frames []Frame
 		if ackEliciting {
 			frames = []Frame{{Frame: &wire.PingFrame{}}}
 		}
-		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, frames, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, false)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, frames, protocol.Encryption1RTT, protocol.ECNNon, size, false, false)
 		return pn
 	}
 
@@ -235,28 +246,50 @@ func TestSentPacketHandlerRTTAckEliciting(t *testing.T) {
 	}
 
 	now := monotime.Now()
-	pn1 := sendPacket(t, now, true)
-	pn2 := sendPacket(t, now, false)
-	pn3 := sendPacket(t, now, true)
+	pn1 := sendPacket(t, now, 1200, true)
+	require.Equal(t, 1, getPacketsInFlight())
+	require.Equal(t, 1200, getBytesInFlight())
+	pn2 := sendPacket(t, now, 1100, false)
+	// Sending a non-ack-eliciting packet doesn't change bytes or packets in flight.
+	// Non-ack-eliciting packets are not included in congestion control.
+	require.Equal(t, 1, getPacketsInFlight())
+	require.Equal(t, 1200, getBytesInFlight())
+	pn3 := sendPacket(t, now, 1000, true)
+	require.Equal(t, 2, getPacketsInFlight())
+	require.Equal(t, 2200, getBytesInFlight())
 	// the RTT is recorded, since the largest acknowledged packet is ack-eliciting
 	now = now.Add(200 * time.Millisecond)
 	ackPackets(t, now, pn1, pn2, pn3)
 	require.Equal(t, 200*time.Millisecond, rttStats.LatestRTT())
+	require.Zero(t, getPacketsInFlight())
+	require.Zero(t, getBytesInFlight())
 
-	pn4 := sendPacket(t, now, false)
-	pn5 := sendPacket(t, now, false)
+	pn4 := sendPacket(t, now, 1200, false)
+	// non-ack-eliciting packets don't trigger metrics updates
+	require.Zero(t, getPacketsInFlight())
+	require.Zero(t, getBytesInFlight())
+	pn5 := sendPacket(t, now, 500, false)
+	require.Zero(t, getPacketsInFlight())
+	require.Zero(t, getBytesInFlight())
 	now = now.Add(500 * time.Millisecond)
 	// only non-ack-eliciting packets are newly acknowledged, so the RTT is not updated
 	ackPackets(t, now, pn2, pn3, pn4, pn5)
 	require.Equal(t, 200*time.Millisecond, rttStats.LatestRTT())
 
-	pn6 := sendPacket(t, now, true)
-	pn7 := sendPacket(t, now, false)
+	pn6 := sendPacket(t, now, 1400, true)
+	require.Equal(t, 1, getPacketsInFlight())
+	require.Equal(t, 1400, getBytesInFlight())
+	pn7 := sendPacket(t, now, 1100, false)
+	// non-ack-eliciting packet doesn't change metrics
+	require.Equal(t, 1, getPacketsInFlight())
+	require.Equal(t, 1400, getBytesInFlight())
 	now = now.Add(800 * time.Millisecond)
 	// largest acknowledged packet is not ack-eliciting, but one new ack-eliciting
 	// packet was acknowledged, so the RTT is updated
 	ackPackets(t, now, pn6, pn7)
 	require.Equal(t, 800*time.Millisecond, rttStats.LatestRTT())
+	require.Zero(t, getPacketsInFlight())
+	require.Zero(t, getBytesInFlight())
 }
 
 func TestSentPacketHandlerRTTAcrossPacketNumberSpaces(t *testing.T) {
