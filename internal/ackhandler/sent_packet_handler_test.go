@@ -879,9 +879,29 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	)
 	require.Contains(t, packets.Acked, pns[7])
 
-	// the PTO timer is now set for the last remaining packet (8),
-	// with no exponential backoff
+	// The PTO timer is now set for the last remaining packet (8),
+	// with no exponential backoff.
 	require.Equal(t, sendTimes[8].Add(rttStats.PTO(encLevel == protocol.Encryption1RTT)), sph.GetLossDetectionTimeout())
+
+	// Acknowledge the last packet (8).
+	// This should cancel the loss detection timer since there are no more outstanding packets.
+	eventRecorder.Clear()
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[8])},
+		encLevel,
+		sendTimes[8].Add(time.Second),
+	)
+	require.NoError(t, err)
+	require.Contains(t, packets.Acked, pns[8])
+
+	// The loss detection timer should be cancelled since there are no more outstanding packets.
+	require.True(t, sph.GetLossDetectionTimeout().IsZero())
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.LossTimerUpdated{Type: qlog.LossTimerUpdateTypeCancelled},
+		},
+		eventRecorder.Events(qlog.LossTimerUpdated{}),
+	)
 }
 
 func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {

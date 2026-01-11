@@ -1044,11 +1044,12 @@ func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) 
 	if p == nil {
 		return false
 	}
-	h.queueFramesForRetransmission(p)
 	// TODO: don't declare the packet lost here.
 	// Keep track of acknowledged frames instead.
-	h.removeFromBytesInFlight(p)
+	// Call DeclareLost before queueFramesForRetransmission, which clears the packet's frames.
 	pnSpace.history.DeclareLost(pn)
+	h.removeFromBytesInFlight(p)
+	h.queueFramesForRetransmission(p)
 	return true
 }
 
