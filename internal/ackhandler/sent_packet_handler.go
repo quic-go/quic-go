@@ -239,12 +239,12 @@ func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel, t monotim
 }
 
 func (h *sentPacketHandler) packetsInFlight() int {
-	packetsInFlight := h.appDataPackets.history.Len()
+	packetsInFlight := h.appDataPackets.history.NumOutstanding()
 	if h.handshakePackets != nil {
-		packetsInFlight += h.handshakePackets.history.Len()
+		packetsInFlight += h.handshakePackets.history.NumOutstanding()
 	}
 	if h.initialPackets != nil {
-		packetsInFlight += h.initialPackets.history.Len()
+		packetsInFlight += h.initialPackets.history.NumOutstanding()
 	}
 	return packetsInFlight
 }
@@ -351,8 +351,9 @@ func (h *sentPacketHandler) qlogMetricsUpdated() {
 		h.lastMetrics.BytesInFlight = metricsUpdatedEvent.BytesInFlight
 		updated = true
 	}
-	if h.lastMetrics.PacketsInFlight != h.packetsInFlight() {
-		metricsUpdatedEvent.PacketsInFlight = h.packetsInFlight()
+	packetsInFlight := h.packetsInFlight()
+	if h.lastMetrics.PacketsInFlight != packetsInFlight {
+		metricsUpdatedEvent.PacketsInFlight = packetsInFlight
 		h.lastMetrics.PacketsInFlight = metricsUpdatedEvent.PacketsInFlight
 		updated = true
 	}
