@@ -47,6 +47,11 @@ func testSentPacketHistoryPacketTracking(t *testing.T, firstPacketAckEliciting b
 	require.Equal(t, []protocol.PacketNumber{0, 1, 2}, hist.getPacketNumbers())
 	require.Empty(t, slices.Collect(hist.SkippedPackets()))
 	require.Equal(t, 3, hist.Len())
+	if firstPacketAckEliciting {
+		require.Equal(t, 3, hist.NumOutstanding())
+	} else {
+		require.Equal(t, 2, hist.NumOutstanding())
+	}
 
 	// non-ack-eliciting packets are saved, but don't count as outstanding
 	hist.SentPacket(3, &packet{})
@@ -54,6 +59,11 @@ func testSentPacketHistoryPacketTracking(t *testing.T, firstPacketAckEliciting b
 	hist.SentPacket(5, &packet{})
 	hist.SentPacket(6, ackElicitingPacket())
 	require.Equal(t, []protocol.PacketNumber{0, 1, 2, 3, 4, 5, 6}, hist.getPacketNumbers())
+	if firstPacketAckEliciting {
+		require.Equal(t, 5, hist.NumOutstanding())
+	} else {
+		require.Equal(t, 4, hist.NumOutstanding())
+	}
 
 	// handle skipped packet numbers
 	hist.SkippedPacket(7)
@@ -64,6 +74,11 @@ func testSentPacketHistoryPacketTracking(t *testing.T, firstPacketAckEliciting b
 	require.Equal(t, []protocol.PacketNumber{0, 1, 2, 3, 4, 5, 6, 8, 9, 11}, hist.getPacketNumbers())
 	require.Equal(t, []protocol.PacketNumber{7, 10}, slices.Collect(hist.SkippedPackets()))
 	require.Equal(t, 12, hist.Len())
+	if firstPacketAckEliciting {
+		require.Equal(t, 7, hist.NumOutstanding())
+	} else {
+		require.Equal(t, 6, hist.NumOutstanding())
+	}
 }
 
 func TestSentPacketHistoryNonSequentialPacketNumberUse(t *testing.T) {
