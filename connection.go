@@ -819,6 +819,10 @@ type ConnectionStats struct {
 	// (does not monotonically increase, because packets that are declared lost
 	// can subsequently be received).
 	PacketsLost uint64
+	// CongestionWindow is the current size of the congestion window in bytes.
+	CongestionWindow protocol.ByteCount
+	// InSlowStart indicates whether the congestion controller is in slow start.
+	InSlowStart bool
 }
 
 func (c *Conn) ConnectionStats() ConnectionStats {
@@ -834,6 +838,9 @@ func (c *Conn) ConnectionStats() ConnectionStats {
 		PacketsReceived: c.connStats.PacketsReceived.Load(),
 		BytesLost:       c.connStats.BytesLost.Load(),
 		PacketsLost:     c.connStats.PacketsLost.Load(),
+
+		CongestionWindow: c.sentPacketHandler.GetCongestionWindow(),
+		InSlowStart:      c.sentPacketHandler.InSlowStart(),
 	}
 }
 

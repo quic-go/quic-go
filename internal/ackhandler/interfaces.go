@@ -35,6 +35,9 @@ type SentPacketHandler interface {
 	OnLossDetectionTimeout(now monotime.Time) error
 
 	MigratedPath(now monotime.Time, initialMaxPacketSize protocol.ByteCount)
+
+	GetCongestionWindow() protocol.ByteCount
+	InSlowStart() bool
 }
 
 type sentPacketTracker interface {

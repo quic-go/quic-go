@@ -1595,3 +1595,21 @@ func benchmarkSendAndAcknowledge(b *testing.B, ackEvery, inFlight int) {
 		}
 	}
 }
+
+func TestSentPacketHandlerCongestionWindowAndSlowStart(t *testing.T) {
+	sph := newSentPacketHandler(
+		0,
+		1200,
+		utils.NewRTTStats(),
+		&utils.ConnectionStats{},
+		false,
+		false,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	// Initially should be in slow start with the default congestion window
+	require.True(t, sph.InSlowStart())
+	require.Greater(t, sph.GetCongestionWindow(), protocol.ByteCount(0))
+}

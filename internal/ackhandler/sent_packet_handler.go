@@ -1140,3 +1140,11 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	)
 	h.setLossDetectionTimer(now)
 }
+
+func (h *sentPacketHandler) GetCongestionWindow() protocol.ByteCount {
+	return h.congestion.GetCongestionWindow()
+}
+
+func (h *sentPacketHandler) InSlowStart() bool {
+	return h.congestion.InSlowStart()
+}

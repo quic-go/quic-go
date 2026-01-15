@@ -117,6 +117,44 @@ func (c *MockSentPacketHandlerECNModeCall) DoAndReturn(f func(bool) protocol.ECN
 	return c
 }
 
+// GetCongestionWindow mocks base method.
+func (m *MockSentPacketHandler) GetCongestionWindow() protocol.ByteCount {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCongestionWindow")
+	ret0, _ := ret[0].(protocol.ByteCount)
+	return ret0
+}
+
+// GetCongestionWindow indicates an expected call of GetCongestionWindow.
+func (mr *MockSentPacketHandlerMockRecorder) GetCongestionWindow() *MockSentPacketHandlerGetCongestionWindowCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCongestionWindow", reflect.TypeOf((*MockSentPacketHandler)(nil).GetCongestionWindow))
+	return &MockSentPacketHandlerGetCongestionWindowCall{Call: call}
+}
+
+// MockSentPacketHandlerGetCongestionWindowCall wrap *gomock.Call
+type MockSentPacketHandlerGetCongestionWindowCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSentPacketHandlerGetCongestionWindowCall) Return(arg0 protocol.ByteCount) *MockSentPacketHandlerGetCongestionWindowCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSentPacketHandlerGetCongestionWindowCall) Do(f func() protocol.ByteCount) *MockSentPacketHandlerGetCongestionWindowCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSentPacketHandlerGetCongestionWindowCall) DoAndReturn(f func() protocol.ByteCount) *MockSentPacketHandlerGetCongestionWindowCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // GetLossDetectionTimeout mocks base method.
 func (m *MockSentPacketHandler) GetLossDetectionTimeout() monotime.Time {
 	m.ctrl.T.Helper()
@@ -151,6 +189,44 @@ func (c *MockSentPacketHandlerGetLossDetectionTimeoutCall) Do(f func() monotime.
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockSentPacketHandlerGetLossDetectionTimeoutCall) DoAndReturn(f func() monotime.Time) *MockSentPacketHandlerGetLossDetectionTimeoutCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// InSlowStart mocks base method.
+func (m *MockSentPacketHandler) InSlowStart() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InSlowStart")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// InSlowStart indicates an expected call of InSlowStart.
+func (mr *MockSentPacketHandlerMockRecorder) InSlowStart() *MockSentPacketHandlerInSlowStartCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InSlowStart", reflect.TypeOf((*MockSentPacketHandler)(nil).InSlowStart))
+	return &MockSentPacketHandlerInSlowStartCall{Call: call}
+}
+
+// MockSentPacketHandlerInSlowStartCall wrap *gomock.Call
+type MockSentPacketHandlerInSlowStartCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSentPacketHandlerInSlowStartCall) Return(arg0 bool) *MockSentPacketHandlerInSlowStartCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSentPacketHandlerInSlowStartCall) Do(f func() bool) *MockSentPacketHandlerInSlowStartCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSentPacketHandlerInSlowStartCall) DoAndReturn(f func() bool) *MockSentPacketHandlerInSlowStartCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
