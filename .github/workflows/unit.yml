@@ -7,7 +7,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu", "windows", "macos" ]
-        go: [ "1.24.x", "1.25.x", "1.26.0-rc.1" ]
+        go: [ "1.24.x", "1.25.6", "1.26.0-rc.1" ]
     runs-on: ${{ fromJSON(vars[format('UNIT_RUNNER_{0}', matrix.os)] || format('"{0}-latest"', matrix.os)) }}
     name: Unit tests (${{ matrix.os}}, Go ${{ matrix.go }})
     timeout-minutes: 30
