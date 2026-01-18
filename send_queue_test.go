@@ -196,6 +196,6 @@ func TestSendQueueSendProbe(t *testing.T) {
 	q := newSendQueue(c)
 
 	addr := &net.UDPAddr{IP: net.IPv4(42, 42, 42, 42), Port: 42}
-	c.EXPECT().WriteTo([]byte("foobar"), addr)
-	q.SendProbe(getPacketWithContents([]byte("foobar")), addr)
+	c.EXPECT().WriteTo([]byte("foobar"), addr, packetInfo{})
+	q.SendProbe(getPacketWithContents([]byte("foobar")), addr, packetInfo{})
 }

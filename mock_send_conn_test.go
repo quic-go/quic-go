@@ -230,17 +230,17 @@ func (c *MockSendConnWriteCall) DoAndReturn(f func([]byte, uint16, protocol.ECN)
 }
 
 // WriteTo mocks base method.
-func (m *MockSendConn) WriteTo(arg0 []byte, arg1 net.Addr) error {
+func (m *MockSendConn) WriteTo(arg0 []byte, arg1 net.Addr, arg2 packetInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WriteTo", arg0, arg1)
+	ret := m.ctrl.Call(m, "WriteTo", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WriteTo indicates an expected call of WriteTo.
-func (mr *MockSendConnMockRecorder) WriteTo(arg0, arg1 any) *MockSendConnWriteToCall {
+func (mr *MockSendConnMockRecorder) WriteTo(arg0, arg1, arg2 any) *MockSendConnWriteToCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteTo", reflect.TypeOf((*MockSendConn)(nil).WriteTo), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteTo", reflect.TypeOf((*MockSendConn)(nil).WriteTo), arg0, arg1, arg2)
 	return &MockSendConnWriteToCall{Call: call}
 }
 
@@ -256,13 +256,13 @@ func (c *MockSendConnWriteToCall) Return(arg0 error) *MockSendConnWriteToCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendConnWriteToCall) Do(f func([]byte, net.Addr) error) *MockSendConnWriteToCall {
+func (c *MockSendConnWriteToCall) Do(f func([]byte, net.Addr, packetInfo) error) *MockSendConnWriteToCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendConnWriteToCall) DoAndReturn(f func([]byte, net.Addr) error) *MockSendConnWriteToCall {
+func (c *MockSendConnWriteToCall) DoAndReturn(f func([]byte, net.Addr, packetInfo) error) *MockSendConnWriteToCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

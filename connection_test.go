@@ -3248,8 +3248,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 					return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
 				},
 			),
-			tc.sendConn.EXPECT().WriteTo(gomock.Any(), newRemoteAddr).DoAndReturn(
-				func([]byte, net.Addr) error { close(probeSent); return nil },
+			tc.sendConn.EXPECT().WriteTo(gomock.Any(), newRemoteAddr, packetInfo{}).DoAndReturn(
+				func([]byte, net.Addr, packetInfo) error { close(probeSent); return nil },
 			),
 			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 				shortHeaderPacket{}, errNothingToPack,

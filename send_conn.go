@@ -11,7 +11,7 @@ import (
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.
 type sendConn interface {
 	Write(b []byte, gsoSize uint16, ecn protocol.ECN) error
-	WriteTo([]byte, net.Addr) error
+	WriteTo([]byte, net.Addr, packetInfo) error
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
@@ -103,8 +103,8 @@ func (c *sconn) writePacket(p []byte, addr net.Addr, oob []byte, gsoSize uint16,
 	return err
 }
 
-func (c *sconn) WriteTo(b []byte, addr net.Addr) error {
-	_, err := c.WritePacket(b, addr, nil, 0, protocol.ECNUnsupported)
+func (c *sconn) WriteTo(b []byte, addr net.Addr, info packetInfo) error {
+	_, err := c.WritePacket(b, addr, info.OOB(), 0, protocol.ECNUnsupported)
 	return err
 }
 
