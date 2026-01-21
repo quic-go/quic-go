@@ -31,9 +31,9 @@ func TestSecurityLevelValidation(t *testing.T) {
 		level PQCSecurityLevel
 		valid bool
 	}{
+		{SecurityLevel128, true},
 		{SecurityLevel192, true},
 		{SecurityLevel256, true},
-		{PQCSecurityLevel(512), false},
 		{PQCSecurityLevel(256), false},
 		{PQCSecurityLevel(0), false},
 	}
@@ -53,6 +53,7 @@ func TestSecurityLevelMappings(t *testing.T) {
 		kemLevel int
 		dsaLevel int
 	}{
+		{SecurityLevel128, 512, 44},
 		{SecurityLevel192, 768, 65},
 		{SecurityLevel256, 1024, 87},
 	}
@@ -138,6 +139,22 @@ func TestClassicalKeyExchange(t *testing.T) {
 	}
 }
 
+func TestMLKEM512Provider(t *testing.T) {
+	provider := NewMLKEM512Provider()
+
+	if provider.Mode() != ModePQC {
+		t.Errorf("Mode() = %v, want %v", provider.Mode(), ModePQC)
+	}
+
+	if provider.KeyExchangeAlgorithm() != "ML-KEM-512" {
+		t.Errorf("KeyExchangeAlgorithm() = %v, want ML-KEM-512", provider.KeyExchangeAlgorithm())
+	}
+
+	if provider.SecurityLevel() != 512 {
+		t.Errorf("SecurityLevel() = %d, want 512", provider.SecurityLevel())
+	}
+}
+
 func TestMLKEM768Provider(t *testing.T) {
 	provider := NewMLKEM768Provider()
 
@@ -151,6 +168,24 @@ func TestMLKEM768Provider(t *testing.T) {
 
 	if provider.SecurityLevel() != 768 {
 		t.Errorf("SecurityLevel() = %d, want 768", provider.SecurityLevel())
+	}
+}
+
+func TestMLKEM512KeyExchange(t *testing.T) {
+	provider := NewMLKEM512Provider()
+
+	// Generate keypair
+	kex, err := provider.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate keypair: %v", err)
+	}
+
+	// Test public key retrieval
+	pubKey := kex.PublicKey()
+
+	// ML-KEM-512 public key should be 800 bytes
+	if len(pubKey) != 800 {
+		t.Errorf("Public key length = %d, want 800", len(pubKey))
 	}
 }
 
@@ -214,6 +249,7 @@ func TestProviderFactory(t *testing.T) {
 		wantErr       bool
 	}{
 		{ModeClassical, SecurityLevel192, "X25519", false},
+		{ModePQC, SecurityLevel128, "ML-KEM-512", false},
 		{ModePQC, SecurityLevel192, "ML-KEM-768", false},
 		{ModePQC, SecurityLevel256, "ML-KEM-1024", false},
 		{ModeAuto, SecurityLevel192, "ML-KEM-768", false},
@@ -249,6 +285,7 @@ func TestGetProviderForSecurityLevel(t *testing.T) {
 		wantErr  bool
 	}{
 		{128, "X25519", false},
+		{512, "ML-KEM-512", false},
 		{768, "ML-KEM-768", false},
 		{1024, "ML-KEM-1024", false},
 		{999, "", true},
@@ -278,6 +315,19 @@ func TestGetProviderForSecurityLevel(t *testing.T) {
 // Benchmark tests
 func BenchmarkClassicalKeyExchange(b *testing.B) {
 	provider := NewClassicalProvider()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		kex, err := provider.GenerateKeyPair()
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = kex.PublicKey()
+	}
+}
+
+func BenchmarkMLKEM512KeyExchange(b *testing.B) {
+	provider := NewMLKEM512Provider()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -517,10 +567,13 @@ func TestVerifyMLDSASignature(t *testing.T) {
 		t.Error("Signature verification failed")
 	}
 
-	// Test with wrong level
-	_, err = VerifyMLDSASignature(publicKey, message, signature, 44)
-	if err == nil {
-		t.Error("Expected error when using wrong security level")
+	// Test with wrong level (signature length mismatch should return false, not error)
+	valid, err = VerifyMLDSASignature(publicKey, message, signature, 44)
+	if err != nil {
+		t.Errorf("Unexpected error when using wrong security level: %v", err)
+	}
+	if valid {
+		t.Error("Expected verification to fail with wrong security level")
 	}
 
 	// Test with invalid level
@@ -537,6 +590,7 @@ func TestProviderGenerateSigner(t *testing.T) {
 		expectedAlgorithm string
 	}{
 		{"Classical", NewClassicalProvider(), "ECDSA-P256"},
+		{"MLKEM512", NewMLKEM512Provider(), "ML-DSA-44"},
 		{"MLKEM768", NewMLKEM768Provider(), "ML-DSA-65"},
 		{"MLKEM1024", NewMLKEM1024Provider(), "ML-DSA-87"},
 	}

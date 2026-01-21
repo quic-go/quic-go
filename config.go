@@ -63,10 +63,10 @@ func validateConfig(config *Config) error {
 	// validate PQC security level
 	if config.PQCSecurityLevel != 0 {
 		switch config.PQCSecurityLevel {
-		case 768, 1024:
+		case 512, 768, 1024:
 			// valid security levels
 		default:
-			return fmt.Errorf("invalid PQCSecurityLevel: %d (must be 768 or 1024)", config.PQCSecurityLevel)
+			return fmt.Errorf("invalid PQCSecurityLevel: %d (must be 512, 768, or 1024)", config.PQCSecurityLevel)
 		}
 	}
 	// validate PQC signature level
@@ -142,7 +142,9 @@ func populateConfig(config *Config) *Config {
 	pqcSignatureLevel := config.PQCSignatureLevel
 	if pqcSignatureLevel == 0 {
 		// Auto-match signature level to key exchange level
-		if pqcSecurityLevel == 768 {
+		if pqcSecurityLevel == 512 {
+			pqcSignatureLevel = 44 // ML-DSA-44 (128-bit) matches ML-KEM-512
+		} else if pqcSecurityLevel == 768 {
 			pqcSignatureLevel = 65 // ML-DSA-65 (192-bit) matches ML-KEM-768
 		} else if pqcSecurityLevel == 1024 {
 			pqcSignatureLevel = 87 // ML-DSA-87 (256-bit) matches ML-KEM-1024

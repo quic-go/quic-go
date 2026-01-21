@@ -33,6 +33,9 @@ func (m CryptoMode) String() string {
 type PQCSecurityLevel int
 
 const (
+	// SecurityLevel128 provides ~128-bit security (ML-KEM-512, ML-DSA-44)
+	SecurityLevel128 PQCSecurityLevel = 512
+
 	// SecurityLevel192 provides ~192-bit security (ML-KEM-768, ML-DSA-65)
 	SecurityLevel192 PQCSecurityLevel = 768
 
@@ -43,7 +46,7 @@ const (
 // IsValid checks if the security level is valid
 func (s PQCSecurityLevel) IsValid() bool {
 	switch s {
-	case SecurityLevel192, SecurityLevel256:
+	case SecurityLevel128, SecurityLevel192, SecurityLevel256:
 		return true
 	default:
 		return false
@@ -55,9 +58,11 @@ func (s PQCSecurityLevel) KEMLevel() int {
 	return int(s)
 }
 
-// DSALevel returns the DSA level (65 or 87)
+// DSALevel returns the DSA level (44, 65, or 87)
 func (s PQCSecurityLevel) DSALevel() int {
 	switch s {
+	case SecurityLevel128:
+		return 44
 	case SecurityLevel192:
 		return 65
 	case SecurityLevel256:

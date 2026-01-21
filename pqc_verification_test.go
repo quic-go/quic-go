@@ -16,6 +16,13 @@ func TestPQCKeyExchangeVerification(t *testing.T) {
 		expectedSharedSecSize  int
 	}{
 		{
+			name:                   "ML-KEM-512",
+			provider:               pqc.NewMLKEM512Provider(),
+			expectedPublicKeySize:  800, // ML-KEM-512 encapsulation key
+			expectedCiphertextSize: 768, // ML-KEM-512 ciphertext
+			expectedSharedSecSize:  32,  // Shared secret size
+		},
+		{
 			name:                   "ML-KEM-768",
 			provider:               pqc.NewMLKEM768Provider(),
 			expectedPublicKeySize:  1184, // ML-KEM-768 encapsulation key

@@ -29,6 +29,13 @@ func TestPQCHandshake(t *testing.T) {
 		expectedMinKeySize  int    // Minimum public key size in bytes
 	}{
 		{
+			name:               "PQC Mode with ML-KEM-512",
+			cryptoMode:         "pqc",
+			pqcSecurityLevel:   512,
+			expectedCurve:      "ML-KEM-512 or X25519",
+			expectedMinKeySize: 800, // ML-KEM-512 encapsulation key size
+		},
+		{
 			name:               "PQC Mode with ML-KEM-768",
 			cryptoMode:         "pqc",
 			pqcSecurityLevel:   768,

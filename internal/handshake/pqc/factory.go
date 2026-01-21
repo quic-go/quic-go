@@ -20,6 +20,8 @@ func NewProvider(mode CryptoMode, securityLevel PQCSecurityLevel) (CryptoProvide
 		}
 
 		switch securityLevel {
+		case SecurityLevel128:
+			return NewMLKEM512Provider(), nil
 		case SecurityLevel192:
 			return NewMLKEM768Provider(), nil
 		case SecurityLevel256:
@@ -44,6 +46,8 @@ func GetProviderForSecurityLevel(level int) (CryptoProvider, error) {
 	switch level {
 	case 128:
 		return NewClassicalProvider(), nil
+	case 512:
+		return NewMLKEM512Provider(), nil
 	case 768:
 		return NewMLKEM768Provider(), nil
 	case 1024:
