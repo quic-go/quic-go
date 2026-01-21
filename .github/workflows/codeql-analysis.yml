@@ -1,0 +1,20 @@
+name: CodeQL Analysis
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '42 3 * * 2'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  codeql:
+    uses: Lightspeed-Systems/github-reusable-workflows/.github/workflows/codeql-analysis.yml@main
+    secrets: inherit
+    with:
+      languages: '["go"]'
+      go_version_file: 'go.mod'
