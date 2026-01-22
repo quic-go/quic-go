@@ -222,6 +222,59 @@ func TestKeepAlive(t *testing.T) {
 	})
 }
 
+func TestManualKeepAlive(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const idleTimeout = 15 * time.Second
+
+		var drop atomic.Bool
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLinkWithRouter(t,
+			100*time.Millisecond,
+			&droppingRouter{Drop: func(p simnet.Packet) bool { return drop.Load() }},
+		)
+		defer closeFn(t)
+
+		server, err := quic.Listen(
+			serverPacketConn,
+			getTLSConfig(),
+			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, MaxIdleTimeout: idleTimeout}),
+		)
+		require.NoError(t, err)
+		defer server.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		conn, err := quic.Dial(
+			ctx,
+			clientPacketConn,
+			serverPacketConn.LocalAddr(),
+			getTLSClientConfig(),
+			getQuicConfig(nil),
+		)
+		require.NoError(t, err)
+
+		serverConn, err := server.Accept(ctx)
+		require.NoError(t, err)
+
+		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		result, err := conn.SendKeepAlive(ctx)
+		require.NoError(t, err)
+		require.False(t, result.Lost)
+
+		drop.Store(true)
+		time.Sleep(time.Second)
+		// The packet is never retransmitted, so it won't be declared lost.
+		// Instead, the connection eventually run into the idle timeout.
+		ctx, cancel = context.WithTimeout(context.Background(), 2*idleTimeout)
+		defer cancel()
+		_, err = conn.SendKeepAlive(ctx)
+		requireIdleTimeoutError(t, err)
+
+		serverConn.CloseWithError(0, "")
+		conn.CloseWithError(0, "")
+	})
+}
+
 func TestTimeoutAfterInactivity(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const idleTimeout = 15 * time.Second
