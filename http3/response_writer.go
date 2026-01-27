@@ -129,7 +129,6 @@ func (w *responseWriter) sniffContentType(p []byte) {
 func (w *responseWriter) Write(p []byte) (int, error) {
 	bodyAllowed := bodyAllowedForStatus(w.status)
 	if !w.headerComplete {
-		w.sniffContentType(p)
 		w.WriteHeader(http.StatusOK)
 		bodyAllowed = true
 	}
