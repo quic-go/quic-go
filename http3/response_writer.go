@@ -97,12 +97,6 @@ func (w *responseWriter) WriteHeader(status int) {
 
 	// We're done with headers once we write a status >= 200.
 	w.headerComplete = true
-	// Add Date header.
-	// This is what the standard library does.
-	// Can be disabled by setting the Date header to nil.
-	if _, ok := w.header["Date"]; !ok {
-		w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
-	}
 	// Content-Length checking
 	// use ParseUint instead of ParseInt, as negative values are invalid
 	if clen := w.header.Get("Content-Length"); clen != "" {
@@ -165,6 +159,12 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 func (w *responseWriter) doWrite(p []byte) (int, error) {
 	if !w.headerWritten {
+		// Add Date header.
+		// This is what the standard library does.
+		// Can be disabled by setting the Date header to nil.
+		if _, ok := w.header["Date"]; !ok {
+			w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		}
 		w.sniffContentType(w.smallResponseBuf)
 		if err := w.writeHeader(w.status); err != nil {
 			return 0, maybeReplaceError(err)
