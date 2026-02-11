@@ -6,6 +6,6 @@ import "crypto/tls"
 
 const quicErrorEvent tls.QUICEventKind = -1
 
-func extractQUICEventError(ev tls.QUICEvent) error {
+func extractQUICEventError(tls.QUICEvent) error {
 	return nil
 }
