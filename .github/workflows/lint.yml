@@ -11,6 +11,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25.x"
+          check-latest: true
       - name: Check for //go:build ignore in .go files
         run: |
           IGNORED_FILES=$(grep -rl '//go:build ignore' . --include='*.go') || true
@@ -47,6 +48,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
+          check-latest: true
       - name: golangci-lint (Linux)
         uses: golangci/golangci-lint-action@v9
         with:
