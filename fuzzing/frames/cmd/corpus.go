@@ -63,6 +63,7 @@ func getAckRanges(num int) []wire.AckRange {
 }
 
 func getFrames() []wire.Frame {
+	//nolint:prealloc // we don't care about optimizing allocations here
 	frames := []wire.Frame{
 		&wire.StreamFrame{ // STREAM frame at 0 offset, with FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),

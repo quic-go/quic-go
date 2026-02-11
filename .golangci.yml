@@ -73,6 +73,12 @@ linters:
       - linters:
           - depguard
         path: internal/qtls
+      # The //nolint:govet directive in this file is needed for Go 1.24
+      # (where testing/synctest is experimental), but gets flagged as unused
+      # by Go 1.25 (where the file is excluded by build tags).
+      - linters:
+          - nolintlint
+        path: internal/synctest/synctest_go124\.go
       - linters:
           - exhaustive
           - prealloc
