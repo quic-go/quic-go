@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/synctest"
 
 	"github.com/stretchr/testify/require"
 )

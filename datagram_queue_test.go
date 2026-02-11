@@ -3,8 +3,8 @@ package quic
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 
-	"github.com/quic-go/quic-go/internal/synctest"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 

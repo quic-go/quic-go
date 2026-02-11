@@ -53,8 +53,6 @@ linters:
           deny:
             - pkg: 'github.com/quic-go/quic-go/internal'
               desc: 'no dependency on quic-go/internal'
-          allow:
-            - 'github.com/quic-go/quic-go/internal/synctest'
     misspell:
       ignore-rules:
         - ect
@@ -73,12 +71,6 @@ linters:
       - linters:
           - depguard
         path: internal/qtls
-      # The //nolint:govet directive in this file is needed for Go 1.24
-      # (where testing/synctest is experimental), but gets flagged as unused
-      # by Go 1.25 (where the file is excluded by build tags).
-      - linters:
-          - nolintlint
-        path: internal/synctest/synctest_go124\.go
       # The //nolint:exhaustive directive is needed for Go 1.26
       # (which added tls.QUICErrorEvent), but gets flagged as unused by Go 1.25.
       - linters:
