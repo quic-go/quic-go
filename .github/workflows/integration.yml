@@ -6,7 +6,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu" ]
-        go: [ "1.24.x", "1.25.x", "1.26.0-rc.1" ]
+        go: [ "1.25.x", "1.26.x" ]
         race: [ false ]
         include:
           - os: "ubuntu"
@@ -26,7 +26,6 @@ jobs:
     env:
       DEBUG: false # set this to true to export qlogs and save them as artifacts
       TIMESCALE_FACTOR: 3
-      GOEXPERIMENT: ${{ matrix.go == '1.24.x' && 'synctest' || '' }}
     name: "Integration (${{ matrix.os }}, Go ${{ matrix.go }}${{ matrix.race && ', race' || '' }})"
     steps:
       - uses: actions/checkout@v6
