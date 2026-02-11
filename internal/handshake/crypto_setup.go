@@ -244,7 +244,6 @@ func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLev
 }
 
 func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
-	//nolint:exhaustive // support for tls.QUICErrorEvent will be added later
 	switch ev.Kind {
 	case tls.QUICNoEvent:
 		return nil
@@ -297,6 +296,8 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
 			ev.SessionState.EarlyData = allowEarlyData
 		}
 		return nil
+	case quicErrorEvent:
+		return extractQUICEventError(ev)
 	default:
 		// Unknown events should be ignored.
 		// crypto/tls will ensure that this is safe to do.
