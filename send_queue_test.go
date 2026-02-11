@@ -197,8 +197,6 @@ func TestSendQueueSendProbe(t *testing.T) {
 	q := newSendQueue(c)
 
 	addr := &net.UDPAddr{IP: net.IPv4(42, 42, 42, 42), Port: 42}
-	// in actual, use packetInfo from receivedPacket
-	// see https://github.com/quic-go/quic-go/pull/5544 for details
 	localAddr := netip.MustParseAddr("43.43.43.43")
 	c.EXPECT().WriteTo([]byte("foobar"), addr, packetInfo{
 		addr: localAddr,
