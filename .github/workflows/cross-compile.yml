@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
+          check-latest: true
       - name: Get Date
         id: get-date
         run: echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
