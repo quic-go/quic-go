@@ -79,6 +79,11 @@ linters:
       - linters:
           - nolintlint
         path: internal/synctest/synctest_go124\.go
+      # The //nolint:exhaustive directive is needed for Go 1.26
+      # (which added tls.QUICErrorEvent), but gets flagged as unused by Go 1.25.
+      - linters:
+          - nolintlint
+        path: internal/handshake/crypto_setup\.go
       - linters:
           - exhaustive
           - prealloc
