@@ -173,13 +173,11 @@ func TestSimConnDeadlinesWithLatency(t *testing.T) {
 
 		var wg sync.WaitGroup
 		defer wg.Wait()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Send data after setting deadline
 			_, err := conn1.WriteTo([]byte("test"), addr2)
 			require.NoError(t, err)
-		}()
+		})
 
 		// Read should fail due to deadline
 		buf := make([]byte, 1024)

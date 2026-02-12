@@ -474,10 +474,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			str, err := conn.AcceptUniStream(context.Background())
 			if err != nil {
@@ -485,7 +482,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 			}
 			go hconn.HandleUnidirectionalStream(str)
 		}
-	}()
+	})
 
 	var nextStreamID quic.StreamID
 	var handleErr error
