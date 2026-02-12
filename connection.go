@@ -1321,11 +1321,12 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
-	if c.receivedFirstPacket && hdr.Type == protocol.PacketTypeHandshake && hdr.SrcConnectionID != c.handshakeDestConnID {
+	// This check only applies to clients.
+	if c.perspective == protocol.PerspectiveClient && c.receivedFirstPacket && hdr.Type == protocol.PacketTypeInitial && hdr.SrcConnectionID != c.handshakeDestConnID {
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeHandshake,
+					PacketType:   qlog.PacketTypeInitial,
 					PacketNumber: protocol.InvalidPacketNumber,
 				},
 				Raw:        qlog.RawInfo{Length: int(p.Size())},
@@ -1333,7 +1334,7 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 				Trigger:    qlog.PacketDropUnknownConnectionID,
 			})
 		}
-		c.logger.Debugf("Dropping Handshake packet (%d bytes) with unexpected source connection ID: %s (expected %s)", p.Size(), hdr.SrcConnectionID, c.handshakeDestConnID)
+		c.logger.Debugf("Dropping Initial packet (%d bytes) with unexpected source connection ID: %s (expected %s)", p.Size(), hdr.SrcConnectionID, c.handshakeDestConnID)
 		return false, nil
 	}
 	// drop 0-RTT packets, if we are a client
