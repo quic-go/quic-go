@@ -768,6 +768,81 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 	)
 }
 
+func TestConnectionUnpackCoalescedInitialPackets(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	unpacker := NewMockUnpacker(mockCtrl)
+	var eventRecorder events.Recorder
+	tc := newServerTestConnection(t,
+		mockCtrl,
+		nil,
+		false,
+		connectionOptUnpacker(unpacker),
+		connectionOptTracer(&eventRecorder),
+	)
+
+	clientSrcConnID := protocol.ParseConnectionID([]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6})
+
+	// Create two Initial packets with the same source connection ID
+	hdr1 := &wire.ExtendedHeader{
+		Header: wire.Header{
+			Type:             protocol.PacketTypeInitial,
+			SrcConnectionID:  clientSrcConnID,
+			DestConnectionID: tc.srcConnID,
+			Version:          protocol.Version1,
+			Length:           1,
+		},
+		PacketNumber:    1,
+		PacketNumberLen: protocol.PacketNumberLen1,
+	}
+	hdr2 := &wire.ExtendedHeader{
+		Header: wire.Header{
+			Type:             protocol.PacketTypeInitial,
+			SrcConnectionID:  clientSrcConnID, // Same source connection ID
+			DestConnectionID: tc.srcConnID,
+			Version:          protocol.Version1,
+			Length:           1,
+		},
+		PacketNumber:    2,
+		PacketNumberLen: protocol.PacketNumberLen1,
+	}
+
+	unpackedHdr1 := *hdr1
+	unpackedHdr1.PacketNumber = 1337
+	unpackedHdr2 := *hdr2
+	unpackedHdr2.PacketNumber = 1338
+
+	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr1, nil)
+	packet2 := getLongHeaderPacket(t, tc.remoteAddr, hdr2, nil)
+	packet.data = append(packet.data, packet2.data...)
+	rcvTime := monotime.Now()
+	packet.rcvTime = rcvTime
+
+	unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
+		encryptionLevel: protocol.EncryptionInitial,
+		hdr:             &unpackedHdr1,
+		data:            []byte{0}, // one PADDING frame
+	}, nil)
+	unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
+		encryptionLevel: protocol.EncryptionInitial,
+		hdr:             &unpackedHdr2,
+		data:            []byte{0}, // one PADDING frame
+	}, nil)
+
+	wasProcessed, err := tc.conn.handleOnePacket(packet, 42)
+	require.NoError(t, err)
+	require.True(t, wasProcessed)
+
+	// Both Initial packets should be received and processed
+	receivedEvents := eventRecorder.Events(qlog.PacketReceived{})
+	droppedEvents := eventRecorder.Events(qlog.PacketDropped{})
+	
+	// Ensure no packets were dropped
+	require.Len(t, droppedEvents, 0, "No packets should be dropped")
+	
+	// Ensure both packets were received
+	require.Len(t, receivedEvents, 2, "Expected both coalesced Initial packets to be processed")
+}
+
 func TestConnectionUnpackFailuresFatal(t *testing.T) {
 	t.Run("other errors", func(t *testing.T) {
 		require.ErrorIs(t,
