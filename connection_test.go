@@ -835,10 +835,10 @@ func TestConnectionUnpackCoalescedInitialPackets(t *testing.T) {
 	// Both Initial packets should be received and processed
 	receivedEvents := eventRecorder.Events(qlog.PacketReceived{})
 	droppedEvents := eventRecorder.Events(qlog.PacketDropped{})
-	
+
 	// Ensure no packets were dropped
 	require.Len(t, droppedEvents, 0, "No packets should be dropped")
-	
+
 	// Ensure both packets were received
 	require.Len(t, receivedEvents, 2, "Expected both coalesced Initial packets to be processed")
 }
