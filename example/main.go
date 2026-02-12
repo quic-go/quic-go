@@ -149,7 +149,6 @@ func main() {
 	handler := setupHandler(*www)
 
 	var wg sync.WaitGroup
-	wg.Add(len(bs))
 	var certFile, keyFile string
 	if *key != "" && *cert != "" {
 		keyFile = *key
@@ -160,7 +159,7 @@ func main() {
 	for _, b := range bs {
 		fmt.Println("listening on", b)
 		bCap := b
-		go func() {
+		wg.Go(func() {
 			var err error
 			if *tcp {
 				err = http3.ListenAndServeTLS(bCap, certFile, keyFile, handler)
@@ -177,8 +176,7 @@ func main() {
 			if err != nil {
 				fmt.Println(err)
 			}
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 }
