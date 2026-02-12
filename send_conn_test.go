@@ -118,7 +118,7 @@ func TestSendConnRemoteAddrChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "foobar", string(b[:n]))
 
-	require.NoError(t, c.WriteTo([]byte("foobaz"), ln2.LocalAddr()))
+	require.NoError(t, c.WriteTo([]byte("foobaz"), ln2.LocalAddr(), packetInfo{}))
 	ln2.SetReadDeadline(time.Now().Add(time.Second))
 	b = make([]byte, 1024)
 	n, err = ln2.Read(b)

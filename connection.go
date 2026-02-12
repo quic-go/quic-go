@@ -1283,7 +1283,7 @@ func (c *Conn) handleShortHeaderPacket(
 		c.logger.Debugf("sending path probe packet to %s", p.remoteAddr)
 		c.logShortHeaderPacketWithDatagramID(probe, protocol.ECNNon, buf.Len(), false, datagramID)
 		c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, p.rcvTime)
-		c.sendQueue.SendProbe(buf, p.remoteAddr)
+		c.sendQueue.SendProbe(buf, p.remoteAddr, p.info)
 	}
 	// We only switch paths in response to the highest-numbered non-probing packet,
 	// see section 9.3 of RFC 9000.
