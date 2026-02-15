@@ -465,6 +465,45 @@ func TestServerRequestContext(t *testing.T) {
 	close(block)
 }
 
+func TestServerRequestContextCanceledOnConnectionClose(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	str, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodHead, "https://www.example.com", nil)))
+	require.NoError(t, err)
+
+	ctxChan := make(chan context.Context, 1)
+	s := &Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctxChan <- r.Context()
+			<-r.Context().Done()
+		}),
+	}
+
+	go s.ServeQUICConn(serverConn)
+
+	var requestContext context.Context
+	select {
+	case requestContext = <-ctxChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for request context")
+	}
+
+	select {
+	case <-requestContext.Done():
+		t.Fatal("request context was canceled prematurely")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	clientConn.CloseWithError(0, "client disconnect")
+
+	select {
+	case <-requestContext.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout: request context should be cancelled when connection closes")
+	}
+}
+
 func TestServerHTTPStreamHijacking(t *testing.T) {
 	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
