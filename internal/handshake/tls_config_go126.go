@@ -1,3 +1,5 @@
+//go:build !go1.27
+
 package handshake
 
 import (
@@ -36,4 +38,11 @@ func setupConfigForServer(conf *tls.Config, localAddr, remoteAddr net.Addr) *tls
 		}
 	}
 	return conf
+}
+
+func getQUICConfig(tlsConf *tls.Config, _, _ net.Addr) *tls.QUICConfig {
+	return &tls.QUICConfig{
+		TLSConfig:           tlsConf,
+		EnableSessionEvents: true,
+	}
 }
