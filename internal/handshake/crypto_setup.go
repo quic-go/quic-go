@@ -127,10 +127,7 @@ func NewCryptoSetupServer(
 	tlsConf = setupConfigForServer(tlsConf, localAddr, remoteAddr)
 
 	cs.tlsConf = tlsConf
-	cs.conn = tls.QUICServer(&tls.QUICConfig{
-		TLSConfig:           tlsConf,
-		EnableSessionEvents: true,
-	})
+	cs.conn = tls.QUICServer(getQUICConfig(tlsConf, localAddr, remoteAddr))
 	return cs
 }
 
