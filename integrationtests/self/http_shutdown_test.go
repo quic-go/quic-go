@@ -385,8 +385,10 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handlerChan := make(chan struct{})
+	handlerChan := make(chan struct{}, 1)
+	handlerInvokedChan := make(chan struct{}, 1)
 	mux.HandleFunc("/long", func(w http.ResponseWriter, r *http.Request) {
+		handlerInvokedChan <- struct{}{}
 		<-handlerChan
 		w.WriteHeader(http.StatusOK)
 	})
@@ -439,7 +441,13 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 			defer cancel()
 			longReqChan <- dial(t, ctx, u)
 		}()
-		time.Sleep(scaleDuration(10 * time.Millisecond))
+
+		// Wait for the handler to be invoked before starting shutdown
+		select {
+		case <-handlerInvokedChan:
+		case <-time.After(time.Second):
+			t.Fatal("long request handler was not invoked")
+		}
 
 		go func() { shutdownChan <- server.Shutdown(context.Background()) }()
 	} else {
