@@ -7,6 +7,12 @@ import (
 	"net"
 )
 
+func setupConfigForClient(conf *tls.Config) *tls.Config {
+	conf = conf.Clone()
+	conf.MinVersion = tls.VersionTLS13
+	return conf
+}
+
 func setupConfigForServer(conf *tls.Config, localAddr, remoteAddr net.Addr) *tls.Config {
 	// Workaround for https://github.com/golang/go/issues/60506.
 	// This initializes the session tickets _before_ cloning the config.
