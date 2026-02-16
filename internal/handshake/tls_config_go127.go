@@ -7,6 +7,10 @@ import (
 	"net"
 )
 
+func setupConfigForClient(conf *tls.Config) *tls.Config {
+	return conf
+}
+
 func setupConfigForServer(conf *tls.Config, _, _ net.Addr) *tls.Config {
 	return conf
 }
