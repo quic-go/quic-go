@@ -87,8 +87,7 @@ func NewCryptoSetupClient(
 		version,
 	)
 
-	tlsConf = tlsConf.Clone()
-	tlsConf.MinVersion = tls.VersionTLS13
+	tlsConf = setupConfigForClient(tlsConf)
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
