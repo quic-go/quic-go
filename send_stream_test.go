@@ -545,6 +545,13 @@ func TestSendStreamCloseForShutdown(t *testing.T) {
 		default:
 		}
 
+		select {
+		case <-str.Context().Done():
+			require.ErrorIs(t, context.Cause(str.Context()), assert.AnError)
+		default:
+			t.Fatal("context should be cancelled after closeForShutdown")
+		}
+
 		// STOP_SENDING frames are ignored
 		str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 1337})
 		_, ok, hasMore := str.getControlFrame(monotime.Now())
