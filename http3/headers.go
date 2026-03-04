@@ -225,8 +225,6 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 		} else {
 			u.Path = hdr.Path
 		}
-		u.Scheme = hdr.Scheme
-		u.Host = hdr.Authority
 		requestURI = hdr.Authority
 	} else {
 		u, err = url.ParseRequestURI(hdr.Path)
@@ -235,6 +233,8 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 		}
 		requestURI = hdr.Path
 	}
+	u.Scheme = hdr.Scheme
+	u.Host = hdr.Authority
 
 	req := &http.Request{
 		Method:        hdr.Method,
