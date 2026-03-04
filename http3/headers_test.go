@@ -125,9 +125,10 @@ func TestRequestHeadersContentLengthValidation(t *testing.T) {
 
 func TestRequestHeadersValidation(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		headers []qpack.HeaderField
-		err     string
+		name        string
+		headers     []qpack.HeaderField
+		err         string
+		errContains string
 	}{
 		{
 			name: "upper-case field name",
@@ -231,10 +232,23 @@ func TestRequestHeadersValidation(t *testing.T) {
 			},
 			err: ":protocol must be empty",
 		},
+		{
+			name: "invalid :path",
+			headers: []qpack.HeaderField{
+				{Name: ":path", Value: "invalid path"},
+				{Name: ":authority", Value: "quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			errContains: "invalid request URI",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := requestFromHeaders(decodeFromSlice(tc.headers), math.MaxInt, nil)
-			require.EqualError(t, err, tc.err)
+			if tc.errContains != "" {
+				require.ErrorContains(t, err, tc.errContains)
+			} else {
+				require.EqualError(t, err, tc.err)
+			}
 			require.NotErrorAs(t, err, new(*qpackError))
 		})
 	}
