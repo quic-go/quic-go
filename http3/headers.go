@@ -229,7 +229,7 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	} else {
 		u, err = url.ParseRequestURI(hdr.Path)
 		if err != nil {
-			return nil, fmt.Errorf("invalid content length: %w", err)
+			return nil, fmt.Errorf("invalid request URI: %w", err)
 		}
 		requestURI = hdr.Path
 	}
