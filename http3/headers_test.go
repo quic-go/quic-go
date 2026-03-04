@@ -246,7 +246,8 @@ func TestRequestHeadersValidation(t *testing.T) {
 			_, err := requestFromHeaders(decodeFromSlice(tc.headers), math.MaxInt, nil)
 			if tc.errContains != "" {
 				require.ErrorContains(t, err, tc.errContains)
-			} else {
+			}
+			if tc.err != "" {
 				require.EqualError(t, err, tc.err)
 			}
 			require.NotErrorAs(t, err, new(*qpackError))
