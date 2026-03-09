@@ -39,7 +39,7 @@ jobs:
           else
             echo 'tag=latest' | tee -a $GITHUB_OUTPUT;
           fi
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: "."
           file: "interop/Dockerfile"
