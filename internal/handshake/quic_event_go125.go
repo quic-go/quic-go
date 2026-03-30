@@ -1,11 +1,13 @@
-//go:build go1.25 && !go1.26
+//go:build go1.25
 
 package handshake
 
-import "crypto/tls"
+import qtls "github.com/quic-go/quic-go/internal/qtls"
 
-const quicErrorEvent tls.QUICEventKind = -1
+// quicErrorEvent is a sentinel value that never matches any real event kind.
+// Our qtls fork does not define QUICErrorEvent, so this is always -1.
+const quicErrorEvent qtls.QUICEventKind = -1
 
-func extractQUICEventError(tls.QUICEvent) error {
+func extractQUICEventError(qtls.QUICEvent) error {
 	return nil
 }
