@@ -63,6 +63,14 @@ func verifyHandshakeSignature(sigType uint8, pubkey crypto.PublicKey, hashFunc c
 		if err := VerifyMLDSASignature(pubKey, signed, sig); err != nil {
 			return err
 		}
+	case signatureHybridECDSA:
+		pubKey, ok := pubkey.(*HybridPublicKey)
+		if !ok {
+			return fmt.Errorf("expected a Hybrid public key, got %T", pubkey)
+		}
+		if err := VerifyHybridCertSignature(pubKey, signed, sig); err != nil {
+			return err
+		}
 	default:
 		return errors.New("internal error: unknown signature type")
 	}
@@ -116,6 +124,8 @@ func typeAndHashFromSignatureScheme(signatureAlgorithm SignatureScheme) (sigType
 		sigType = signatureEd25519
 	case MLDSA44, MLDSA65, MLDSA87:
 		sigType = signatureMLDSA
+	case HybridECDSAP256MLDSA44, HybridECDSAP256MLDSA65, HybridECDSAP256MLDSA87:
+		sigType = signatureHybridECDSA
 	default:
 		return 0, 0, fmt.Errorf("unsupported signature algorithm: %v", signatureAlgorithm)
 	}
@@ -128,7 +138,7 @@ func typeAndHashFromSignatureScheme(signatureAlgorithm SignatureScheme) (sigType
 		hash = crypto.SHA384
 	case PKCS1WithSHA512, PSSWithSHA512, ECDSAWithP521AndSHA512:
 		hash = crypto.SHA512
-	case Ed25519, MLDSA44, MLDSA65, MLDSA87:
+	case Ed25519, MLDSA44, MLDSA65, MLDSA87, HybridECDSAP256MLDSA44, HybridECDSAP256MLDSA65, HybridECDSAP256MLDSA87:
 		hash = directSigning
 	default:
 		return 0, 0, fmt.Errorf("unsupported signature algorithm: %v", signatureAlgorithm)
@@ -222,6 +232,21 @@ func signatureSchemesForPublicKey(version uint16, pub crypto.PublicKey) []Signat
 		default:
 			return nil
 		}
+	case *HybridPublicKey:
+		// Hybrid composite signatures are only supported in TLS 1.3
+		if version < VersionTLS13 {
+			return nil
+		}
+		switch pub.MLDSALevel() {
+		case 44:
+			return []SignatureScheme{HybridECDSAP256MLDSA44}
+		case 65:
+			return []SignatureScheme{HybridECDSAP256MLDSA65}
+		case 87:
+			return []SignatureScheme{HybridECDSAP256MLDSA87}
+		default:
+			return nil
+		}
 	default:
 		return nil
 	}
@@ -300,6 +325,8 @@ func unsupportedCertificateError(cert *Certificate) error {
 	case ed25519.PublicKey:
 	case *MLDSAPublicKey:
 		// ML-DSA public keys are supported
+	case *HybridPublicKey:
+		// Hybrid composite public keys are supported
 	default:
 		return fmt.Errorf("tls: unsupported certificate key (%T)", pub)
 	}

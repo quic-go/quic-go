@@ -101,7 +101,8 @@ func main() {
 | Mode | Description | Use Case |
 |------|-------------|----------|
 | `classical` | Traditional X25519 ECDH | Default, backward compatible |
-| `pqc` | Post-Quantum ML-KEM | Quantum-resistant connections |
+| `pqc` | Post-Quantum ML-KEM + ML-DSA | Quantum-resistant connections |
+| `hybrid` | X25519+ML-KEM key exchange, ECDSA-P256+ML-DSA composite certs | Transitional quantum safety |
 | `auto` | Automatic negotiation | Negotiate best available mode |
 
 ### Security Levels
@@ -131,11 +132,37 @@ config := &quic.Config{
     PQCSecurityLevel: 1024,
 }
 
+// Hybrid mode (ECDSA-P256 + ML-DSA composite certs, X25519+ML-KEM key exchange)
+config := &quic.Config{
+    CryptoMode:       "hybrid",
+    PQCSecurityLevel: 768,
+}
+
 // Auto negotiation mode
 config := &quic.Config{
     CryptoMode:       "auto",
     PQCSecurityLevel: 768, // preferred level
 }
+```
+
+### Hybrid Mode
+
+Hybrid mode provides transitional security by combining classical and post-quantum
+algorithms. Certificates contain **both** an ECDSA-P256 and an ML-DSA signature,
+and the verifier must validate both. This ensures security even if one of the two
+algorithm families is broken.
+
+- **Key exchange**: X25519 + ML-KEM-768 (built-in TLS hybrid)
+- **Signatures**: Composite ECDSA-P256 + ML-DSA-65 (dual-signed X.509 certificates)
+- **Interoperability**: Uses experimental/private-use TLS codepoints (0xFE10-0xFE12).
+  Only works between instances of this fork.
+
+```bash
+# Run hybrid server
+go run example/pqc_server/main.go hybrid
+
+# Run hybrid client (in another terminal)
+go run example/pqc_client/main.go hybrid
 ```
 
 ## 🧪 Testing

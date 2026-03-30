@@ -187,3 +187,111 @@ func IsMLDSACertificateBytes(certBytes []byte) bool {
 	oid := cert.TBSCertificate.PublicKey.Algorithm.Algorithm
 	return oid.Equal(oidMLDSA44) || oid.Equal(oidMLDSA65) || oid.Equal(oidMLDSA87)
 }
+
+// IsHybridCertificateBytes checks if certificate bytes contain a hybrid composite certificate.
+func IsHybridCertificateBytes(certBytes []byte) bool {
+	var cert certificate
+	if _, err := asn1.Unmarshal(certBytes, &cert); err != nil {
+		return false
+	}
+
+	oid := cert.TBSCertificate.PublicKey.Algorithm.Algorithm
+	_, ok := isCompositeOID(oid)
+	return ok
+}
+
+// ParseHybridCertificate parses a hybrid composite certificate and returns
+// the composite public key and a pseudo x509.Certificate for TLS compatibility.
+func ParseHybridCertificate(certBytes []byte) (*HybridPublicKey, *x509.Certificate, error) {
+	var cert certificate
+	rest, err := asn1.Unmarshal(certBytes, &cert)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+	if len(rest) > 0 {
+		return nil, nil, fmt.Errorf("trailing data after certificate")
+	}
+
+	// Extract ML-DSA level from composite OID
+	oid := cert.TBSCertificate.PublicKey.Algorithm.Algorithm
+	mldsaLevel, ok := isCompositeOID(oid)
+	if !ok {
+		return nil, nil, fmt.Errorf("not a hybrid composite certificate OID: %v", oid)
+	}
+
+	// Parse composite public key
+	compositeKeyBytes := cert.TBSCertificate.PublicKey.PublicKey.Bytes
+	var compositeKey compositePublicKeyASN1
+	if _, err := asn1.Unmarshal(compositeKeyBytes, &compositeKey); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse composite public key: %w", err)
+	}
+
+	ecdsaPubBytes := compositeKey.ECDSAPublicKey.Bytes
+	mldsaPubBytes := compositeKey.MLDSAPublicKey.Bytes
+
+	mldsaPubKey := NewMLDSAPublicKey(mldsaPubBytes, mldsaLevel)
+	hybridPubKey := NewHybridPublicKey(ecdsaPubBytes, mldsaPubKey)
+
+	// Create a pseudo x509.Certificate for TLS compatibility
+	pseudoCert := &x509.Certificate{
+		Raw:                certBytes,
+		Signature:          cert.SignatureValue.Bytes,
+		SignatureAlgorithm: x509.UnknownSignatureAlgorithm,
+		PublicKeyAlgorithm: x509.UnknownPublicKeyAlgorithm,
+		PublicKey:          hybridPubKey,
+
+		Version:      cert.TBSCertificate.Version + 1,
+		SerialNumber: cert.TBSCertificate.SerialNumber,
+
+		Issuer:  parseName(cert.TBSCertificate.Issuer),
+		Subject: parseName(cert.TBSCertificate.Subject),
+
+		NotBefore: cert.TBSCertificate.Validity.NotBefore,
+		NotAfter:  cert.TBSCertificate.Validity.NotAfter,
+
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+
+		DNSNames: extractDNSNames(cert.TBSCertificate.Extensions),
+		IsCA:     false,
+	}
+
+	return hybridPubKey, pseudoCert, nil
+}
+
+// VerifyHybridCertificateSignature verifies both signatures on a hybrid certificate.
+func VerifyHybridCertificateSignature(certBytes []byte) error {
+	var cert certificate
+	if _, err := asn1.Unmarshal(certBytes, &cert); err != nil {
+		return fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	// Verify it's a hybrid cert
+	oid := cert.TBSCertificate.PublicKey.Algorithm.Algorithm
+	mldsaLevel, ok := isCompositeOID(oid)
+	if !ok {
+		return fmt.Errorf("not a hybrid composite certificate: OID %v", oid)
+	}
+
+	// Marshal TBS certificate for signature verification
+	tbsBytes, err := asn1.Marshal(cert.TBSCertificate)
+	if err != nil {
+		return fmt.Errorf("failed to marshal TBS certificate: %w", err)
+	}
+
+	// Parse composite public key
+	compositeKeyBytes := cert.TBSCertificate.PublicKey.PublicKey.Bytes
+	var compositeKey compositePublicKeyASN1
+	if _, err := asn1.Unmarshal(compositeKeyBytes, &compositeKey); err != nil {
+		return fmt.Errorf("failed to parse composite public key: %w", err)
+	}
+
+	ecdsaPubBytes := compositeKey.ECDSAPublicKey.Bytes
+	mldsaPubBytes := compositeKey.MLDSAPublicKey.Bytes
+
+	// Verify the composite signature
+	mldsaPubKey := NewMLDSAPublicKey(mldsaPubBytes, mldsaLevel)
+	hybridPubKey := NewHybridPublicKey(ecdsaPubBytes, mldsaPubKey)
+
+	return VerifyHybridCertSignature(hybridPubKey, tbsBytes, cert.SignatureValue.Bytes)
+}

@@ -177,7 +177,9 @@ type Config struct {
 	EnableStreamResetPartialDelivery bool
 
 	// CryptoMode specifies the cryptographic mode to use.
-	// Valid values: "classical" (X25519), "pqc" (ML-KEM), "auto" (negotiate)
+	// Valid values: "classical" (X25519), "pqc" (ML-KEM + ML-DSA),
+	// "hybrid" (X25519+ML-KEM key exchange, ECDSA-P256+ML-DSA composite certs),
+	// "auto" (negotiate best available)
 	// If not set, defaults to "classical" for backward compatibility.
 	CryptoMode string
 	// PQCSecurityLevel specifies the security level for PQC key exchange algorithms.

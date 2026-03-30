@@ -95,3 +95,81 @@ func isMLDSASigner(signer crypto.Signer) bool {
 	_, ok := signer.(*MLDSASigner)
 	return ok
 }
+
+// HybridPublicKey represents a composite ECDSA-P256 + ML-DSA public key
+type HybridPublicKey struct {
+	ecdsaPublicKeyBytes []byte
+	mldsaPublicKey      *MLDSAPublicKey
+}
+
+// NewHybridPublicKey creates a new hybrid public key wrapper.
+func NewHybridPublicKey(ecdsaPubBytes []byte, mldsaPubKey *MLDSAPublicKey) *HybridPublicKey {
+	return &HybridPublicKey{
+		ecdsaPublicKeyBytes: ecdsaPubBytes,
+		mldsaPublicKey:      mldsaPubKey,
+	}
+}
+
+// ECDSAPublicKeyBytes returns the raw ECDSA-P256 public key bytes.
+func (pk *HybridPublicKey) ECDSAPublicKeyBytes() []byte {
+	return pk.ecdsaPublicKeyBytes
+}
+
+// MLDSAPublicKey returns the ML-DSA public key.
+func (pk *HybridPublicKey) MLDSAPublicKey() *MLDSAPublicKey {
+	return pk.mldsaPublicKey
+}
+
+// MLDSALevel returns the ML-DSA security level (44, 65, or 87).
+func (pk *HybridPublicKey) MLDSALevel() int {
+	return pk.mldsaPublicKey.Level()
+}
+
+// HybridTLSSigner wraps pqc.HybridSigner to implement crypto.Signer
+type HybridTLSSigner struct {
+	signer *pqc.HybridSigner
+}
+
+// NewHybridTLSSigner creates a new hybrid TLS signer.
+func NewHybridTLSSigner(signer *pqc.HybridSigner) *HybridTLSSigner {
+	return &HybridTLSSigner{signer: signer}
+}
+
+// Public returns the public key for this signer (a *HybridPublicKey).
+func (s *HybridTLSSigner) Public() crypto.PublicKey {
+	mldsaPub := NewMLDSAPublicKey(s.signer.MLDSAPublicKey(), s.signer.MLDSALevel())
+	return NewHybridPublicKey(s.signer.ECDSAPublicKey(), mldsaPub)
+}
+
+// Sign signs the message with both ECDSA and ML-DSA, producing a composite signature.
+func (s *HybridTLSSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	return s.signer.Sign(digest)
+}
+
+// Algorithm returns the hybrid algorithm name.
+func (s *HybridTLSSigner) Algorithm() string {
+	return s.signer.Algorithm()
+}
+
+// SecurityLevel returns the ML-DSA security level.
+func (s *HybridTLSSigner) SecurityLevel() int {
+	return s.signer.SecurityLevel()
+}
+
+// VerifyHybridCertSignature verifies a composite signature against a hybrid public key.
+func VerifyHybridCertSignature(publicKey *HybridPublicKey, message, signature []byte) error {
+	ok, err := pqc.VerifyHybridSignature(
+		publicKey.ecdsaPublicKeyBytes,
+		publicKey.mldsaPublicKey.publicKeyBytes,
+		message,
+		signature,
+		publicKey.mldsaPublicKey.level,
+	)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("hybrid signature verification failed")
+	}
+	return nil
+}

@@ -12,12 +12,15 @@ const (
 
 	// ModeAuto negotiates the best available mode with the peer
 	ModeAuto CryptoMode = "auto"
+
+	// ModeHybrid uses composite ECDSA-P256 + ML-DSA signatures with ML-KEM key exchange
+	ModeHybrid CryptoMode = "hybrid"
 )
 
 // IsValid checks if the crypto mode is valid
 func (m CryptoMode) IsValid() bool {
 	switch m {
-	case ModeClassical, ModePQC, ModeAuto:
+	case ModeClassical, ModePQC, ModeAuto, ModeHybrid:
 		return true
 	default:
 		return false

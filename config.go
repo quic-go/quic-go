@@ -54,10 +54,10 @@ func validateConfig(config *Config) error {
 	// validate crypto mode
 	if config.CryptoMode != "" {
 		switch config.CryptoMode {
-		case "classical", "pqc", "auto":
+		case "classical", "pqc", "hybrid", "auto":
 			// valid modes
 		default:
-			return fmt.Errorf("invalid CryptoMode: %s (must be 'classical', 'pqc', or 'auto')", config.CryptoMode)
+			return fmt.Errorf("invalid CryptoMode: %s (must be 'classical', 'pqc', 'hybrid', or 'auto')", config.CryptoMode)
 		}
 	}
 	// validate PQC security level

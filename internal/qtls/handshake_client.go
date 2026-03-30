@@ -1181,7 +1181,7 @@ func (c *Conn) verifyServerCertificate(certificates [][]byte) error {
 	}
 
 	switch certs[0].PublicKey.(type) {
-	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, *MLDSAPublicKey:
+	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, *MLDSAPublicKey, *HybridPublicKey:
 		break
 	default:
 		c.sendAlert(alertUnsupportedCertificate)

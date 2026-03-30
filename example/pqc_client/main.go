@@ -18,9 +18,9 @@ func main() {
 		cryptoMode = os.Args[1]
 	}
 
-	// Determine security level (768 or 1024) if PQC mode
+	// Determine security level (768 or 1024) for PQC/hybrid modes
 	securityLevel := 768
-	if len(os.Args) > 2 && cryptoMode == "pqc" {
+	if len(os.Args) > 2 && (cryptoMode == "pqc" || cryptoMode == "hybrid") {
 		fmt.Sscanf(os.Args[2], "%d", &securityLevel)
 	}
 

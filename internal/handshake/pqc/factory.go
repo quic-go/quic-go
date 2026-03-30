@@ -30,6 +30,12 @@ func NewProvider(mode CryptoMode, securityLevel PQCSecurityLevel) (CryptoProvide
 			return nil, fmt.Errorf("unsupported PQC security level: %d", securityLevel)
 		}
 
+	case ModeHybrid:
+		if !securityLevel.IsValid() {
+			securityLevel = SecurityLevel192 // default to 192-bit
+		}
+		return NewHybridProvider(securityLevel), nil
+
 	case ModeAuto:
 		// For auto mode, start with ML-KEM-768 as the default
 		// This can be negotiated during handshake

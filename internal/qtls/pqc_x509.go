@@ -23,6 +23,14 @@ var (
 	oidMLDSA87 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 19} // id-ml-dsa-87
 )
 
+// Composite hybrid OIDs (experimental, using private-use range)
+// These represent ECDSA-P256 + ML-DSA composite certificates
+var (
+	oidCompositeECDSAP256MLDSA44 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 32} // experimental
+	oidCompositeECDSAP256MLDSA65 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33} // experimental
+	oidCompositeECDSAP256MLDSA87 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34} // experimental
+)
+
 // ML-DSA public key sizes
 const (
 	mldsaPublicKeySize44 = 1312  // ML-DSA-44 public key bytes
@@ -314,4 +322,199 @@ func marshalExtension(ext pkix.Extension) (asn1.RawValue, error) {
 	}
 
 	return raw, nil
+}
+
+// compositePublicKeyASN1 is the ASN.1 structure for a composite ECDSA + ML-DSA public key.
+type compositePublicKeyASN1 struct {
+	ECDSAPublicKey asn1.BitString
+	MLDSAPublicKey asn1.BitString
+}
+
+// compositeSignatureASN1 is the ASN.1 structure for a composite ECDSA + ML-DSA signature.
+type compositeSignatureASN1 struct {
+	ECDSASignature asn1.BitString
+	MLDSASignature asn1.BitString
+}
+
+// getCompositeOID returns the composite OID for the given ML-DSA level.
+func getCompositeOID(mldsaLevel int) (asn1.ObjectIdentifier, error) {
+	switch mldsaLevel {
+	case 44:
+		return oidCompositeECDSAP256MLDSA44, nil
+	case 65:
+		return oidCompositeECDSAP256MLDSA65, nil
+	case 87:
+		return oidCompositeECDSAP256MLDSA87, nil
+	default:
+		return nil, fmt.Errorf("unsupported ML-DSA level for hybrid: %d", mldsaLevel)
+	}
+}
+
+// isCompositeOID checks if an OID is a composite hybrid OID and returns the ML-DSA level.
+func isCompositeOID(oid asn1.ObjectIdentifier) (int, bool) {
+	switch {
+	case oid.Equal(oidCompositeECDSAP256MLDSA44):
+		return 44, true
+	case oid.Equal(oidCompositeECDSAP256MLDSA65):
+		return 65, true
+	case oid.Equal(oidCompositeECDSAP256MLDSA87):
+		return 87, true
+	default:
+		return 0, false
+	}
+}
+
+// GenerateHybridCertificate generates a self-signed certificate with composite
+// ECDSA-P256 + ML-DSA signatures. Both keys are embedded in the certificate,
+// and both algorithms sign the TBSCertificate.
+func GenerateHybridCertificate(mldsaLevel int, organization string, dnsNames []string, validFor time.Duration) ([]byte, *HybridTLSSigner, error) {
+	// Create hybrid signer (generates both ECDSA + ML-DSA keypairs)
+	hybridPQCSigner, err := pqc.NewHybridSigner(mldsaLevel)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate hybrid signer: %w", err)
+	}
+
+	// Wrap for TLS
+	tlsSigner := NewHybridTLSSigner(hybridPQCSigner)
+
+	// Get composite OID
+	oid, err := getCompositeOID(mldsaLevel)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Generate serial number
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate serial number: %w", err)
+	}
+
+	// Create subject/issuer (self-signed)
+	subject := pkix.Name{
+		Organization: []string{organization},
+		CommonName:   "QUIC-go Hybrid PQC Test Certificate",
+	}
+	subjectBytes, err := asn1.Marshal(subject.ToRDNSequence())
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal subject: %w", err)
+	}
+	var subjectSeq pkix.RDNSequence
+	if _, err := asn1.Unmarshal(subjectBytes, &subjectSeq); err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal subject: %w", err)
+	}
+
+	// Create validity
+	notBefore := time.Now()
+	notAfter := notBefore.Add(validFor)
+
+	// Create extensions
+	var extensions []asn1.RawValue
+
+	if len(dnsNames) > 0 {
+		sanExtension, err := createSANExtension(dnsNames)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create SAN extension: %w", err)
+		}
+		sanRaw, err := marshalExtension(sanExtension)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to marshal SAN extension: %w", err)
+		}
+		extensions = append(extensions, sanRaw)
+	}
+
+	keyUsageExtension, err := createKeyUsageExtension()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create key usage extension: %w", err)
+	}
+	keyUsageRaw, err := marshalExtension(keyUsageExtension)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal key usage extension: %w", err)
+	}
+	extensions = append(extensions, keyUsageRaw)
+
+	extKeyUsageExtension, err := createExtKeyUsageExtension()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create extended key usage extension: %w", err)
+	}
+	extKeyUsageRaw, err := marshalExtension(extKeyUsageExtension)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal extended key usage extension: %w", err)
+	}
+	extensions = append(extensions, extKeyUsageRaw)
+
+	// Create composite public key: ASN.1 SEQUENCE { ECDSA pub, ML-DSA pub }
+	ecdsaPubBytes := hybridPQCSigner.ECDSAPublicKey()
+	mldsaPubBytes := hybridPQCSigner.MLDSAPublicKey()
+
+	compositeKey := compositePublicKeyASN1{
+		ECDSAPublicKey: asn1.BitString{Bytes: ecdsaPubBytes, BitLength: len(ecdsaPubBytes) * 8},
+		MLDSAPublicKey: asn1.BitString{Bytes: mldsaPubBytes, BitLength: len(mldsaPubBytes) * 8},
+	}
+	compositeKeyBytes, err := asn1.Marshal(compositeKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal composite public key: %w", err)
+	}
+
+	// Create SubjectPublicKeyInfo with composite OID
+	spki := subjectPublicKeyInfo{
+		Algorithm: algorithmIdentifier{
+			Algorithm:  oid,
+			Parameters: asn1.NullRawValue,
+		},
+		PublicKey: asn1.BitString{
+			Bytes:     compositeKeyBytes,
+			BitLength: len(compositeKeyBytes) * 8,
+		},
+	}
+
+	// Create TBSCertificate
+	tbs := tbsCertificate{
+		Version:      2, // v3
+		SerialNumber: serialNumber,
+		SignatureAlgorithm: algorithmIdentifier{
+			Algorithm:  oid,
+			Parameters: asn1.NullRawValue,
+		},
+		Issuer: subjectSeq,
+		Validity: validity{
+			NotBefore: notBefore,
+			NotAfter:  notAfter,
+		},
+		Subject:    subjectSeq,
+		PublicKey:  spki,
+		Extensions: extensions,
+	}
+
+	// Marshal TBSCertificate
+	tbsBytes, err := asn1.Marshal(tbs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal TBSCertificate: %w", err)
+	}
+
+	// Sign with the composite signer (produces ASN.1 SEQUENCE of both signatures)
+	compositeSig, err := hybridPQCSigner.Sign(tbsBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to sign certificate: %w", err)
+	}
+
+	// Create final certificate
+	cert := certificate{
+		TBSCertificate: tbs,
+		SignatureAlgorithm: algorithmIdentifier{
+			Algorithm:  oid,
+			Parameters: asn1.NullRawValue,
+		},
+		SignatureValue: asn1.BitString{
+			Bytes:     compositeSig,
+			BitLength: len(compositeSig) * 8,
+		},
+	}
+
+	certBytes, err := asn1.Marshal(cert)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal certificate: %w", err)
+	}
+
+	return certBytes, tlsSigner, nil
 }

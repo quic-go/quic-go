@@ -785,6 +785,15 @@ func convertToQTLSConfig(stdConf *tls.Config, cryptoMode string, pqcSecurityLeve
 func convertCertificates(tlsCerts []tls.Certificate, cryptoMode string, pqcSecurityLevel int) []qtls.Certificate {
 	qtlsCerts := make([]qtls.Certificate, len(tlsCerts))
 	for i, cert := range tlsCerts {
+		// In hybrid mode, generate a composite ECDSA+ML-DSA certificate
+		if cryptoMode == "hybrid" {
+			if hybridCert, err := generateHybridCertificate(cert, pqcSecurityLevel); err == nil {
+				qtlsCerts[i] = hybridCert
+				continue
+			}
+			// If hybrid cert generation fails, fall through to classical
+		}
+
 		// In PQC mode, generate a new ML-DSA certificate
 		if cryptoMode == "pqc" || cryptoMode == "auto" {
 			if pqcCert, err := generatePQCCertificate(cert, pqcSecurityLevel); err == nil {
@@ -853,6 +862,46 @@ func generatePQCCertificate(originalCert tls.Certificate, pqcSecurityLevel int) 
 	}, nil
 }
 
+// generateHybridCertificate creates a new certificate with composite ECDSA-P256 + ML-DSA for hybrid mode
+func generateHybridCertificate(originalCert tls.Certificate, pqcSecurityLevel int) (qtls.Certificate, error) {
+	mldsaLevel := 65 // default
+	if pqcSecurityLevel == 1024 {
+		mldsaLevel = 87
+	}
+
+	organization := "QUIC-go Hybrid PQC"
+	dnsNames := []string{"localhost"}
+	if originalCert.Leaf != nil {
+		if len(originalCert.Leaf.Subject.Organization) > 0 {
+			organization = originalCert.Leaf.Subject.Organization[0]
+		}
+		if len(originalCert.Leaf.DNSNames) > 0 {
+			dnsNames = originalCert.Leaf.DNSNames
+		}
+	}
+
+	certBytes, hybridSigner, err := qtls.GenerateHybridCertificate(
+		mldsaLevel,
+		organization,
+		dnsNames,
+		10*365*24*time.Hour,
+	)
+	if err != nil {
+		return qtls.Certificate{}, err
+	}
+
+	_, leafCert, err := qtls.ParseHybridCertificate(certBytes)
+	if err != nil {
+		return qtls.Certificate{}, err
+	}
+
+	return qtls.Certificate{
+		Certificate: [][]byte{certBytes},
+		PrivateKey:  hybridSigner,
+		Leaf:        leafCert,
+	}, nil
+}
+
 // wrapWithMLDSASigner wraps the existing private key with an ML-DSA signer
 // Returns the TLS signer and the underlying ML-DSA signer for public key access
 func wrapWithMLDSASigner(existingKey crypto.PrivateKey, pqcSecurityLevel int) (crypto.Signer, *qtls.MLDSASigner, error) {
@@ -882,14 +931,21 @@ func getCurvePreferences(cryptoMode string, pqcSecurityLevel int) []qtls.CurveID
 			return []qtls.CurveID{qtls.MLKEM1024, qtls.MLKEM768, qtls.X25519}
 		}
 		return []qtls.CurveID{qtls.MLKEM768, qtls.MLKEM1024, qtls.X25519}
-	
+
+	case "hybrid":
+		// Hybrid mode: use X25519MLKEM768 hybrid key exchange with composite signatures
+		if pqcSecurityLevel == 1024 {
+			return []qtls.CurveID{qtls.X25519MLKEM768, qtls.MLKEM1024, qtls.X25519}
+		}
+		return []qtls.CurveID{qtls.X25519MLKEM768, qtls.MLKEM768, qtls.X25519}
+
 	case "auto":
 		// Auto mode: try PQC first, fallback to classical
 		if pqcSecurityLevel == 1024 {
 			return []qtls.CurveID{qtls.MLKEM1024, qtls.MLKEM768, qtls.X25519, qtls.CurveP256}
 		}
 		return []qtls.CurveID{qtls.MLKEM768, qtls.MLKEM1024, qtls.X25519, qtls.CurveP256}
-	
+
 	case "classical":
 		fallthrough
 	default:
