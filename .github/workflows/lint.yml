@@ -32,6 +32,7 @@ jobs:
         if: success() || failure() # run this step even if the previous one failed
         run: go tool gcassert ./...
       - name: Run govulncheck
+        if: success() || failure() # run this step even if the previous one failed
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
   golangci-lint:
     runs-on: ubuntu-latest
