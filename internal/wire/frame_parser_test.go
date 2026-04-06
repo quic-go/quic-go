@@ -828,3 +828,196 @@ func benchmarkFrames(b *testing.B, frames ...Frame) {
 		parseFrames(b, parser, buf, frames...)
 	}
 }
+
+func FuzzFrameParser(f *testing.F) {
+	const version = protocol.Version1
+
+	for _, s := range []struct {
+		encLevel protocol.EncryptionLevel
+		frame    Frame
+	}{
+		{encLevel: protocol.EncryptionInitial, frame: &PingFrame{}},
+		{encLevel: protocol.EncryptionHandshake, frame: &PingFrame{}},
+		{encLevel: protocol.Encryption0RTT, frame: &PingFrame{}},
+		{encLevel: protocol.EncryptionInitial, frame: &CryptoFrame{Offset: 42, Data: []byte("initial crypto")}},
+		{encLevel: protocol.EncryptionHandshake, frame: &CryptoFrame{Offset: 123, Data: []byte("handshake crypto")}},
+		{encLevel: protocol.EncryptionInitial, frame: &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}},
+		{encLevel: protocol.EncryptionHandshake, frame: &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}},
+	} {
+		b, err := s.frame.Append(nil, version)
+		require.NoError(f, err)
+		f.Add(uint8(s.encLevel), b)
+	}
+
+	for _, fr := range []Frame{
+		&PingFrame{},
+		&StreamFrame{StreamID: 0x42, Fin: true},
+		&StreamFrame{StreamID: 0x42, Data: []byte("foobar"), Fin: true},
+		&StreamFrame{StreamID: 0x1337, Offset: 0xcafe, Data: []byte("foobar")},
+		&AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}},
+		&AckFrame{
+			AckRanges: []AckRange{{Smallest: 80, Largest: 100}, {Smallest: 1, Largest: 50}},
+			DelayTime: time.Millisecond,
+			ECT0:      42,
+			ECT1:      13,
+			ECNCE:     7,
+		},
+		&ResetStreamFrame{StreamID: 0x1337, ErrorCode: 0x42, FinalSize: 0xdead},
+		&StopSendingFrame{StreamID: 0x42, ErrorCode: 0x1337},
+		&CryptoFrame{Offset: 0x1337, Data: []byte("crypto data")},
+		&NewTokenFrame{Token: []byte("token")},
+		&MaxDataFrame{MaximumData: 0xcafe},
+		&MaxStreamDataFrame{StreamID: 0xdead, MaximumStreamData: 0xbeef},
+		&MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 0x42},
+		&MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 0x42},
+		&DataBlockedFrame{MaximumData: 0x1234},
+		&StreamDataBlockedFrame{StreamID: 0xdead, MaximumStreamData: 0xbeef},
+		&StreamsBlockedFrame{Type: protocol.StreamTypeBidi, StreamLimit: 0x42},
+		&StreamsBlockedFrame{Type: protocol.StreamTypeUni, StreamLimit: 0x42},
+		&NewConnectionIDFrame{
+			SequenceNumber:      0x42,
+			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+		},
+		&RetireConnectionIDFrame{SequenceNumber: 0x42},
+		&PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+		&PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}},
+		&ConnectionCloseFrame{ErrorCode: 0x42, ReasonPhrase: "foobar"},
+		&ConnectionCloseFrame{IsApplicationError: true, ErrorCode: 0x42, ReasonPhrase: "foobar"},
+		&HandshakeDoneFrame{},
+		&DatagramFrame{Data: []byte("datagram")},
+		&ResetStreamFrame{StreamID: 0x1337, ReliableSize: 0x42, FinalSize: 0xdead},
+		&AckFrequencyFrame{
+			SequenceNumber:        0x42,
+			AckElicitingThreshold: 10,
+			RequestMaxAckDelay:    25 * time.Millisecond,
+			ReorderingThreshold:   5,
+		},
+		&ImmediateAckFrame{},
+	} {
+		b, err := fr.Append(nil, version)
+		require.NoError(f, err)
+		f.Add(uint8(protocol.Encryption1RTT), b)
+	}
+
+	f.Fuzz(func(t *testing.T, encLevelRaw uint8, data []byte) {
+		encLevel := protocol.EncryptionLevel(encLevelRaw)
+		if encLevel != protocol.EncryptionInitial && encLevel != protocol.EncryptionHandshake && encLevel != protocol.Encryption1RTT && encLevel != protocol.Encryption0RTT {
+			return
+		}
+
+		parser := NewFrameParser(true, true, true)
+		parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
+
+		var b []byte
+		for len(data) > 0 {
+			initialLen := len(data)
+			frameType, l, err := parser.ParseType(data, encLevel)
+			if err != nil {
+				return
+			}
+			data = data[l:]
+
+			var frame Frame
+			switch {
+			case frameType.IsStreamFrameType():
+				frame, l, err = parser.ParseStreamFrame(frameType, data, version)
+			case frameType == FrameTypeAck || frameType == FrameTypeAckECN:
+				frame, l, err = parser.ParseAckFrame(frameType, data, encLevel, version)
+			case frameType == FrameTypeDatagramNoLength || frameType == FrameTypeDatagramWithLength:
+				frame, l, err = parser.ParseDatagramFrame(frameType, data, version)
+			default:
+				frame, l, err = parser.ParseLessCommonFrame(frameType, data, version)
+			}
+			if err != nil {
+				return
+			}
+			data = data[l:]
+			IsProbingFrame(frame)
+
+			if sf, ok := frame.(*StreamFrame); ok {
+				if sf.DataLen() == 0 {
+					sf.PutBack()
+					continue
+				}
+			}
+			checkFrameInvariants(t, frame)
+
+			startLen := len(b)
+			parsedLen := initialLen - len(data)
+			b, err = frame.Append(b, version)
+			if err != nil {
+				t.Fatalf("error writing frame %#v: %s", frame, err)
+			}
+			frameLen := protocol.ByteCount(len(b) - startLen)
+			if frame.Length(version) != frameLen {
+				t.Fatalf("inconsistent frame length for %#v: expected %d, got %d", frame, frameLen, frame.Length(version))
+			}
+			if sf, ok := frame.(*StreamFrame); ok {
+				sf.PutBack()
+			}
+			if frameLen > protocol.ByteCount(parsedLen) {
+				t.Fatalf("serialized length (%d) is longer than parsed length (%d)", len(b), parsedLen)
+			}
+		}
+	})
+}
+
+func checkFrameInvariants(t *testing.T, frame Frame) {
+	t.Helper()
+
+	switch f := frame.(type) {
+	case *StreamFrame:
+		if protocol.ByteCount(len(f.Data)) != f.DataLen() {
+			t.Fatal("STREAM frame: inconsistent data length")
+		}
+	case *AckFrame:
+		if f.DelayTime < 0 {
+			t.Fatalf("invalid ACK delay_time: %s", f.DelayTime)
+		}
+		if f.LargestAcked() < f.LowestAcked() {
+			t.Fatal("ACK: largest acknowledged is smaller than lowest acknowledged")
+		}
+		for _, r := range f.AckRanges {
+			if r.Largest < 0 || r.Smallest < 0 {
+				t.Fatal("ACK range contains a negative packet number")
+			}
+		}
+		if !f.AcksPacket(f.LargestAcked()) {
+			t.Fatal("ACK frame claims that largest acknowledged is not acknowledged")
+		}
+		if !f.AcksPacket(f.LowestAcked()) {
+			t.Fatal("ACK frame claims that lowest acknowledged is not acknowledged")
+		}
+		_ = f.AcksPacket(100)
+		_ = f.AcksPacket((f.LargestAcked() + f.LowestAcked()) / 2)
+	case *NewConnectionIDFrame:
+		if f.ConnectionID.Len() < 1 || f.ConnectionID.Len() > 20 {
+			t.Fatalf("invalid NEW_CONNECTION_ID frame length: %s", f.ConnectionID)
+		}
+	case *NewTokenFrame:
+		if len(f.Token) == 0 {
+			t.Fatal("NEW_TOKEN frame with an empty token")
+		}
+	case *MaxStreamsFrame:
+		if f.MaxStreamNum > protocol.MaxStreamCount {
+			t.Fatal("MAX_STREAMS frame with an invalid Maximum Streams value")
+		}
+	case *StreamsBlockedFrame:
+		if f.StreamLimit > protocol.MaxStreamCount {
+			t.Fatal("STREAMS_BLOCKED frame with an invalid Maximum Streams value")
+		}
+	case *ConnectionCloseFrame:
+		if f.IsApplicationError && f.FrameType != 0 {
+			t.Fatal("CONNECTION_CLOSE for an application error containing a frame type")
+		}
+	case *ResetStreamFrame:
+		if f.FinalSize < f.ReliableSize {
+			t.Fatal("RESET_STREAM frame with a FinalSize smaller than the ReliableSize")
+		}
+	case *AckFrequencyFrame:
+		if f.RequestMaxAckDelay < 0 {
+			t.Fatal("ACK_FREQUENCY frame with a negative RequestMaxAckDelay")
+		}
+	}
+}
