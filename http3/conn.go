@@ -257,7 +257,7 @@ func (c *rawConn) sendDatagram(streamID quic.StreamID, b []byte) error {
 	data = append(data, b...)
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.DatagramCreated{
-			QuaterStreamID: quarterStreamID,
+			QuarterStreamID: quarterStreamID,
 			Raw: qlog.RawInfo{
 				Length:        len(data),
 				PayloadLength: len(b),
@@ -280,7 +280,7 @@ func (c *rawConn) receiveDatagrams() error {
 		}
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.DatagramParsed{
-				QuaterStreamID: quarterStreamID,
+				QuarterStreamID: quarterStreamID,
 				Raw: qlog.RawInfo{
 					Length:        len(b),
 					PayloadLength: len(b) - n,

@@ -405,8 +405,8 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.DatagramParsed{
-				QuaterStreamID: strID / 4,
-				Raw:            qlog.RawInfo{Length: len(datagram), PayloadLength: 3},
+				QuarterStreamID: strID / 4,
+				Raw:             qlog.RawInfo{Length: len(datagram), PayloadLength: 3},
 			},
 		},
 		eventRecorder.Events(qlog.DatagramParsed{}),
@@ -439,8 +439,8 @@ func TestConnSendAndReceiveDatagram(t *testing.T) {
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.DatagramCreated{
-				QuaterStreamID: strID / 4,
-				Raw:            qlog.RawInfo{PayloadLength: 6, Length: len(expected)},
+				QuarterStreamID: strID / 4,
+				Raw:             qlog.RawInfo{PayloadLength: 6, Length: len(expected)},
 			},
 		},
 		eventRecorder.Events(qlog.DatagramCreated{}),
