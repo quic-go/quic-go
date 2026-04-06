@@ -1,14 +1,7 @@
 #!/bin/bash
 
-# Install Go manually, since oss-fuzz ships with an outdated Go version.
-# See https://github.com/google/oss-fuzz/pull/10643.
-export CXX="${CXX} -lresolv" # required by Go 1.20
-wget https://go.dev/dl/go1.26.0.linux-amd64.tar.gz \
-  && mkdir temp-go \
-  && rm -rf /root/.go/* \
-  && tar -C temp-go/ -xzf go1.26.0.linux-amd64.tar.gz \
-  && mv temp-go/go/* /root/.go/ \
-  && rm -rf temp-go go1.26.0.linux-amd64.tar.gz
+go version
+go env
 
 (
 # fuzz qpack
