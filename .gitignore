@@ -1,5 +1,6 @@
 debug
 debug.test
+*.test
 main
 mockgen_tmp.go
 *.qtr
