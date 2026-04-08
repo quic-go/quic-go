@@ -3,6 +3,11 @@
 go version
 go env
 
+# Reinstall go-118-fuzz-build with the current Go version.
+# The binary in the base image may have been compiled with an older version of Go,
+# leading to failures when processing files that require a newer Go version.
+go install github.com/AdamKorcz/go-118-fuzz-build@latest
+
 (
 # fuzz qpack
 compile_go_fuzzer github.com/quic-go/qpack/fuzzing Fuzz qpack_fuzzer
@@ -10,7 +15,7 @@ compile_go_fuzzer github.com/quic-go/qpack/fuzzing Fuzz qpack_fuzzer
 
 (
 # fuzz quic-go
-compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/frames Fuzz frame_fuzzer
+compile_native_go_fuzzer_v2 github.com/quic-go/quic-go/internal/wire FuzzFrameParser frame_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/header Fuzz header_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/transportparameters Fuzz transportparameter_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/tokens Fuzz token_fuzzer
