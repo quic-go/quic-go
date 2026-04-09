@@ -10,6 +10,8 @@ compile_go_fuzzer github.com/quic-go/qpack/fuzzing Fuzz qpack_fuzzer
 
 (
 # fuzz quic-go
+cd $GOPATH/src/github.com/quic-go/quic-go/
+
 compile_native_go_fuzzer_v2 github.com/quic-go/quic-go/internal/wire FuzzFrameParser frame_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/header Fuzz header_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/transportparameters Fuzz transportparameter_fuzzer
@@ -22,7 +24,6 @@ if [ $SANITIZER == "coverage" ]; then
 fi
 
 # generate seed corpora
-cd $GOPATH/src/github.com/quic-go/quic-go/
 go generate -x ./fuzzing/...
 
 zip --quiet -r $OUT/header_fuzzer_seed_corpus.zip fuzzing/header/corpus
