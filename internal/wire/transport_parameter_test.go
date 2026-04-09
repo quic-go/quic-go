@@ -934,3 +934,118 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 		}
 	}
 }
+
+func FuzzTransportParameters(f *testing.F) {
+	f.Add(true, false, (&TransportParameters{
+		StatelessResetToken:     &protocol.StatelessResetToken{},
+		ActiveConnectionIDLimit: 2,
+	}).Marshal(protocol.PerspectiveServer))
+	f.Add(false, false, (&TransportParameters{
+		ActiveConnectionIDLimit: 2,
+	}).Marshal(protocol.PerspectiveClient))
+	// session ticket
+	f.Add(false, true, (&TransportParameters{
+		InitialMaxStreamDataBidiLocal:  1234,
+		InitialMaxStreamDataBidiRemote: 2345,
+		InitialMaxStreamDataUni:        3456,
+		InitialMaxData:                 4567,
+		MaxBidiStreamNum:               1337,
+		MaxUniStreamNum:                7331,
+		ActiveConnectionIDLimit:        7,
+	}).MarshalForSessionTicket(nil))
+	//  with preferred address
+	f.Add(true, false, (&TransportParameters{
+		StatelessResetToken:     &protocol.StatelessResetToken{},
+		ActiveConnectionIDLimit: 2,
+		PreferredAddress: &PreferredAddress{
+			IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
+			IPv6:                netip.AddrPortFrom(netip.AddrFrom16([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}), 13),
+			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		},
+	}).Marshal(protocol.PerspectiveServer),
+	)
+
+	f.Fuzz(func(t *testing.T, isServer, isSessionTicket bool, data []byte) {
+		if isSessionTicket {
+			fuzzTransportParametersSessionTicket(t, data)
+		} else {
+			sentBy := protocol.PerspectiveClient
+			if isServer {
+				sentBy = protocol.PerspectiveServer
+			}
+			fuzzTransportParameters(t, data, sentBy)
+		}
+	})
+}
+
+func fuzzTransportParameters(t *testing.T, data []byte, sentBy protocol.Perspective) {
+	t.Helper()
+
+	tp := &TransportParameters{}
+	if err := tp.Unmarshal(data, sentBy); err != nil {
+		return
+	}
+	_ = tp.String()
+	checkTransportParameterInvariants(t, tp, sentBy)
+
+	tp2 := &TransportParameters{}
+	if err := tp2.Unmarshal(tp.Marshal(sentBy), sentBy); err != nil {
+		t.Fatalf("error unmarshaling re-marshaled transport parameters: %s", err)
+	}
+	checkTransportParameterInvariants(t, tp2, sentBy)
+}
+
+func fuzzTransportParametersSessionTicket(t *testing.T, data []byte) {
+	t.Helper()
+
+	tp := &TransportParameters{}
+	if err := tp.UnmarshalFromSessionTicket(data); err != nil {
+		return
+	}
+	b := tp.MarshalForSessionTicket(nil)
+	tp2 := &TransportParameters{}
+	if err := tp2.UnmarshalFromSessionTicket(b); err != nil {
+		t.Fatalf("error unmarshaling re-marshaled session ticket transport parameters: %s", err)
+	}
+}
+
+func checkTransportParameterInvariants(t *testing.T, tp *TransportParameters, sentBy protocol.Perspective) {
+	t.Helper()
+
+	if sentBy == protocol.PerspectiveClient && tp.StatelessResetToken != nil {
+		t.Fatal("client's transport parameters contained stateless reset token")
+	}
+	if tp.MaxIdleTimeout < 0 {
+		t.Fatalf("negative max_idle_timeout: %s", tp.MaxIdleTimeout)
+	}
+	if tp.AckDelayExponent > 20 {
+		t.Fatalf("invalid ack_delay_exponent: %d", tp.AckDelayExponent)
+	}
+	if tp.MaxUDPPayloadSize < 1200 {
+		t.Fatalf("invalid max_udp_payload_size: %d", tp.MaxUDPPayloadSize)
+	}
+	if tp.ActiveConnectionIDLimit < 2 {
+		t.Fatalf("invalid active_connection_id_limit: %d", tp.ActiveConnectionIDLimit)
+	}
+	if tp.OriginalDestinationConnectionID.Len() > 20 {
+		t.Fatalf("invalid original_destination_connection_id length: %s", tp.OriginalDestinationConnectionID)
+	}
+	if tp.InitialSourceConnectionID.Len() > 20 {
+		t.Fatalf("invalid initial_source_connection_id length: %s", tp.InitialSourceConnectionID)
+	}
+	if tp.RetrySourceConnectionID != nil && tp.RetrySourceConnectionID.Len() > 20 {
+		t.Fatalf("invalid retry_source_connection_id length: %s", tp.RetrySourceConnectionID)
+	}
+	if tp.PreferredAddress != nil && tp.PreferredAddress.ConnectionID.Len() > 20 {
+		t.Fatalf("invalid preferred_address connection ID length: %s", tp.PreferredAddress.ConnectionID)
+	}
+	if tp.MinAckDelay != nil {
+		if *tp.MinAckDelay < 0 {
+			t.Fatalf("negative min_ack_delay: %s", *tp.MinAckDelay)
+		}
+		if *tp.MinAckDelay > tp.MaxAckDelay {
+			t.Fatalf("min_ack_delay (%s) is greater than max_ack_delay (%s)", *tp.MinAckDelay, tp.MaxAckDelay)
+		}
+	}
+}
