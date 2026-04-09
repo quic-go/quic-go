@@ -448,10 +448,17 @@ func FuzzFrameParser(f *testing.F) {
 			}
 
 			switch f := fr.(type) {
+			case *dataFrame:
+				if _, err := io.CopyN(io.Discard, fp.r, int64(f.Length)); err != nil {
+					return
+				}
 			case *headersFrame:
 				// Type and length are each at least one varint byte; HTTP/3 caps the pair at frameHeaderLen.
 				if f.headerLen < 2 || f.headerLen > frameHeaderLen {
 					t.Fatalf("HEADERS: headerLen %d outside [2, %d]", f.headerLen, frameHeaderLen)
+				}
+				if _, err := io.CopyN(io.Discard, fp.r, int64(f.Length)); err != nil {
+					return
 				}
 			case *settingsFrame:
 				// Unset uses -1; a present SETTINGS_MAX_FIELD_SECTION_SIZE is non-negative (see parseSettingsFrame).
