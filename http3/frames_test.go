@@ -414,3 +414,70 @@ func TestParserGoAwayFrame(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, f, f2)
 }
+
+func FuzzFrameParser(f *testing.F) {
+	frames := []interface{ Append([]byte) []byte }{
+		&dataFrame{Length: 5},
+		&headersFrame{Length: 3},
+		&settingsFrame{
+			MaxFieldSectionSize: 1337,
+			Datagram:            true,
+			ExtendedConnect:     true,
+			Other:               map[uint64]uint64{0xdead: 0xbeef},
+		},
+		&goAwayFrame{StreamID: 42},
+	}
+	for _, fr := range frames {
+		f.Add(fr.Append(nil))
+	}
+
+	unknown := quicvarint.Append(nil, 0xdead)
+	unknown = quicvarint.Append(unknown, 6)
+	unknown = append(unknown, []byte("foobar")...)
+	f.Add(unknown)
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fp := frameParser{
+			r:         bytes.NewReader(data),
+			closeConn: func(quic.ApplicationErrorCode, string) error { return nil },
+		}
+		for {
+			fr, err := fp.ParseNext(nil)
+			if err != nil {
+				return
+			}
+
+			switch f := fr.(type) {
+			case *dataFrame:
+				if _, err := io.CopyN(io.Discard, fp.r, int64(f.Length)); err != nil {
+					return
+				}
+			case *headersFrame:
+				// Type and length are each at least one varint byte; HTTP/3 caps the pair at frameHeaderLen.
+				if f.headerLen < 2 || f.headerLen > frameHeaderLen {
+					t.Fatalf("HEADERS: headerLen %d outside [2, %d]", f.headerLen, frameHeaderLen)
+				}
+				if _, err := io.CopyN(io.Discard, fp.r, int64(f.Length)); err != nil {
+					return
+				}
+			case *settingsFrame:
+				// Unset uses -1; a present SETTINGS_MAX_FIELD_SECTION_SIZE is non-negative (see parseSettingsFrame).
+				if f.MaxFieldSectionSize != -1 && f.MaxFieldSectionSize < 0 {
+					t.Fatalf("SETTINGS: invalid MaxFieldSectionSize %d", f.MaxFieldSectionSize)
+				}
+				// Known settings are never stored in Other on a successful parse.
+				for id := range f.Other {
+					switch id {
+					case settingMaxFieldSectionSize, settingExtendedConnect, settingDatagram:
+						t.Fatalf("SETTINGS: known setting id %#x leaked into Other", id)
+					}
+				}
+			case *goAwayFrame:
+				// QUIC stream IDs fit in 62 bits; a negative value means uint64→int64 overflow in the parser.
+				if f.StreamID < 0 {
+					t.Fatalf("GOAWAY: negative StreamID %d", f.StreamID)
+				}
+			}
+		}
+	})
+}
