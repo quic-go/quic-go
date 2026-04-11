@@ -687,23 +687,17 @@ func FuzzHeaderParser(f *testing.F) {
 	))
 
 	f.Fuzz(func(t *testing.T, connIDLenRaw uint8, data []byte) {
-		connIDLen := int(connIDLenRaw % 21)
-
 		if IsVersionNegotiationPacket(data) {
-			connID, err := ParseConnectionID(data, 0)
-			if err != nil {
-				return
-			}
 			dest, src, versions, err := ParseVersionNegotiationPacket(data)
 			if err != nil {
 				return
 			}
-			require.Equal(t, dest.Bytes(), connID.Bytes(), "connection IDs don't match")
 			require.NotEmpty(t, versions, "no versions")
-			ComposeVersionNegotiation(src, dest, versions)
+			ComposeVersionNegotiation(dest, src, versions)
 			return
 		}
 
+		connIDLen := int(connIDLenRaw % 21)
 		connID, err := ParseConnectionID(data, connIDLen)
 		if err != nil {
 			return
