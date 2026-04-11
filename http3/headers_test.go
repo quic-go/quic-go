@@ -544,13 +544,13 @@ func BenchmarkRequestFromHeaders(b *testing.B) {
 	}
 }
 
-// FuzzRequestHeaders fuzzes HTTP/3 header parsing and request/response construction.
+// FuzzHeaderParsing fuzzes HTTP/3 header parsing and request/response construction.
 // Header fields are encoded as JSON (a [][2]string of [name, value] pairs) rather than as
 // QPACK-encoded bytes. This bypasses the QPACK decoder intentionally: QPACK is fuzzed
 // separately (in the qpack module), and feeding raw bytes through it would cause the fuzzer
 // to waste most of its budget on QPACK decode failures instead of exercising the HTTP/3
 // header validation logic in parseHeaders, requestFromHeaders, and updateResponseFromHeaders.
-func FuzzRequestHeaders(f *testing.F) {
+func FuzzHeaderParsing(f *testing.F) {
 	for _, s := range [][]qpack.HeaderField{
 		{ // GET request
 			{Name: ":method", Value: "GET"},
@@ -606,40 +606,78 @@ func FuzzRequestHeaders(f *testing.F) {
 			headers[i] = qpack.HeaderField{Name: p[0], Value: p[1]}
 		}
 
-		req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
-		if err != nil {
-			return
-		}
-		require.NotNil(t, req)
-		if req.Method == "" {
-			t.Fatal("request has empty method")
-		}
-		if req.URL == nil {
-			t.Fatal("request has nil URL")
-		}
-		if req.ProtoMajor != 3 {
-			t.Fatalf("expected ProtoMajor 3, got %d", req.ProtoMajor)
-		}
-		if req.ContentLength < -1 {
-			t.Fatalf("invalid ContentLength: %d", req.ContentLength)
-		}
-		if req.Proto == "" {
-			t.Fatal("request has empty Proto")
-		}
-		if req.Method != http.MethodConnect && req.Host == "" {
-			t.Fatal("non-CONNECT request has empty Host")
+		if req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil); err == nil {
+			if req.Method == "" {
+				t.Fatal("request has empty Method")
+			}
+			if req.URL == nil {
+				t.Fatal("request has nil URL")
+			}
+			if req.Proto == "" {
+				t.Fatal("request has empty Proto")
+			}
+			if req.ProtoMajor != 3 || req.ProtoMinor != 0 {
+				t.Fatalf("expected HTTP/3.0, got %d.%d", req.ProtoMajor, req.ProtoMinor)
+			}
+			if req.ContentLength < -1 {
+				t.Fatalf("invalid ContentLength: %d", req.ContentLength)
+			}
+			if req.Header == nil {
+				t.Fatal("request has nil Header map")
+			}
+			if req.Method == http.MethodConnect && req.Proto == "HTTP/3.0" {
+				// regular CONNECT: :path must be empty, :authority must be set
+				if req.URL.Path != "" {
+					t.Fatal("CONNECT request has non-empty URL.Path")
+				}
+			}
+			if req.Method != http.MethodConnect {
+				if req.Host == "" {
+					t.Fatal("non-CONNECT request has empty Host")
+				}
+				if req.RequestURI == "" {
+					t.Fatal("non-CONNECT request has empty RequestURI")
+				}
+			}
+			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
+				if req.Header.Get(name) != "" {
+					t.Fatalf("request contains connection-specific header %q", name)
+				}
+			}
 		}
 
 		rsp := &http.Response{}
-		err = updateResponseFromHeaders(rsp, decodeFromSlice(headers), math.MaxInt, nil)
-		if err != nil {
-			return
+		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), math.MaxInt, nil); err == nil {
+			if rsp.Proto != "HTTP/3.0" {
+				t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
+			}
+			if rsp.ProtoMajor != 3 {
+				t.Fatalf("expected ProtoMajor 3, got %d", rsp.ProtoMajor)
+			}
+			if rsp.ContentLength < -1 {
+				t.Fatalf("invalid ContentLength: %d", rsp.ContentLength)
+			}
+			if rsp.Header == nil {
+				t.Fatal("response has nil Header map")
+			}
+			if rsp.Status == "" {
+				t.Fatal("response has empty Status")
+			}
+			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
+				if rsp.Header.Get(name) != "" {
+					t.Fatalf("response contains connection-specific header %q", name)
+				}
+			}
 		}
-		if rsp.Proto != "HTTP/3.0" {
-			t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
-		}
-		if rsp.ContentLength < -1 {
-			t.Fatalf("invalid ContentLength: %d", rsp.ContentLength)
+
+		if trailers, err := parseTrailers(decodeFromSlice(headers), nil); err == nil {
+			for name := range trailers {
+				if len(name) > 0 && name[0] == ':' {
+					t.Fatalf("trailer contains pseudo header %q", name)
+				}
+			}
+			// TODO(#5601): once parseTrailers validates header field names and values,
+			// add assertions here
 		}
 	})
 }
