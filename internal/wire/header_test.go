@@ -573,3 +573,181 @@ func benchmarkArbitraryHeaderParsing(b *testing.B, destLen, srcLen int) {
 		}
 	}
 }
+
+func FuzzHeaderParser(f *testing.F) {
+	const version = protocol.Version1
+
+	addLongHeader := func(hdr *ExtendedHeader) {
+		b, err := hdr.Append(nil, version)
+		require.NoError(f, err)
+		if hdr.Type == protocol.PacketTypeRetry {
+			b = append(b, make([]byte, 16)...) // Retry Integrity Tag
+		}
+		if hdr.Length > 0 {
+			b = append(b, make([]byte, hdr.Length)...)
+		}
+		f.Add(uint8(hdr.DestConnectionID.Len()), b)
+	}
+
+	// Initial without token
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			Type:             protocol.PacketTypeInitial,
+			Length:           10,
+			Version:          version,
+		},
+		PacketNumberLen: protocol.PacketNumberLen2,
+		PacketNumber:    0x42,
+	})
+	// Initial without token, with zero-length src conn id
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			Type:             protocol.PacketTypeInitial,
+			Length:           10,
+			Version:          version,
+		},
+		PacketNumberLen: protocol.PacketNumberLen2,
+		PacketNumber:    0x42,
+	})
+	// Initial with token
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}),
+			Type:             protocol.PacketTypeInitial,
+			Length:           10,
+			Token:            []byte("this is a token"),
+			Version:          version,
+		},
+		PacketNumberLen: protocol.PacketNumberLen4,
+		PacketNumber:    0xdecafbad,
+	})
+	// Handshake packet
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+			Type:             protocol.PacketTypeHandshake,
+			Length:           10,
+			Version:          version,
+		},
+		PacketNumberLen: protocol.PacketNumberLen3,
+		PacketNumber:    0x1337,
+	})
+	// Handshake packet, with zero-length src conn id
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}),
+			Type:             protocol.PacketTypeHandshake,
+			Length:           10,
+			Version:          version,
+		},
+		PacketNumberLen: protocol.PacketNumberLen1,
+		PacketNumber:    0x42,
+	})
+	// 0-RTT packet
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}),
+			Type:             protocol.PacketType0RTT,
+			Length:           10,
+			Version:          version,
+		},
+		PacketNumberLen: protocol.PacketNumberLen2,
+		PacketNumber:    0x42,
+	})
+	// Retry packet
+	addLongHeader(&ExtendedHeader{
+		Header: Header{
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}),
+			Type:             protocol.PacketTypeRetry,
+			Token:            []byte("foobar"),
+			Version:          version,
+		},
+	})
+	// Short header
+	shortHdr, err := AppendShortHeader(nil, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), 0x1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+	require.NoError(f, err)
+	f.Add(uint8(8), shortHdr)
+	// Version Negotiation packets
+	f.Add(uint8(0), ComposeVersionNegotiation(
+		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+		[]protocol.Version{0x1234, 0x5678, 0x9abc, 0xdef0},
+	))
+	f.Add(uint8(0), ComposeVersionNegotiation(
+		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3}),
+		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}),
+		[]protocol.Version{0xdeadbeef},
+	))
+
+	f.Fuzz(func(t *testing.T, connIDLenRaw uint8, data []byte) {
+		if IsVersionNegotiationPacket(data) {
+			dest, src, versions, err := ParseVersionNegotiationPacket(data)
+			if err != nil {
+				return
+			}
+			require.NotEmpty(t, versions, "no versions")
+			ComposeVersionNegotiation(dest, src, versions)
+			return
+		}
+
+		connIDLen := int(connIDLenRaw % 21)
+		connID, err := ParseConnectionID(data, connIDLen)
+		if err != nil {
+			return
+		}
+
+		if !IsLongHeaderPacket(data[0]) {
+			ParseShortHeader(data, connIDLen)
+			return
+		}
+
+		is0RTTPacket := Is0RTTPacket(data)
+		hdr, _, _, err := ParsePacket(data)
+		if err != nil {
+			return
+		}
+		require.Equal(t, connID, hdr.DestConnectionID, "connection IDs don't match")
+		if (hdr.Type == protocol.PacketType0RTT) != is0RTTPacket {
+			t.Fatal("inconsistent 0-RTT packet detection")
+		}
+
+		var extHdr *ExtendedHeader
+		if hdr.Type == protocol.PacketTypeRetry {
+			extHdr = &ExtendedHeader{Header: *hdr}
+		} else {
+			var err error
+			extHdr, err = hdr.ParseExtended(data)
+			if err != nil {
+				return
+			}
+		}
+		// We always use a 2-byte encoding for the Length field in Long Header packets.
+		// Serializing the header will fail when using a higher value.
+		if hdr.Length > 16383 {
+			return
+		}
+		b, err := extHdr.Append(nil, version)
+		if err != nil {
+			// We are able to parse packets with connection IDs longer than 20 bytes,
+			// but in QUIC version 1, we don't write headers with longer connection IDs.
+			if hdr.DestConnectionID.Len() <= protocol.MaxConnIDLen &&
+				hdr.SrcConnectionID.Len() <= protocol.MaxConnIDLen {
+				t.Fatalf("error writing header: %s", err)
+			}
+			return
+		}
+		// GetLength is not implemented for Retry packets
+		if hdr.Type != protocol.PacketTypeRetry {
+			if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(len(b)) {
+				t.Fatalf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, len(b))
+			}
+		}
+	})
+}
