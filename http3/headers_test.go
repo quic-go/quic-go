@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -541,4 +542,104 @@ func BenchmarkRequestFromHeaders(b *testing.B) {
 			b.Fatalf("failed to parse request: %v", err)
 		}
 	}
+}
+
+// FuzzRequestHeaders fuzzes HTTP/3 header parsing and request/response construction.
+// Header fields are encoded as JSON (a [][2]string of [name, value] pairs) rather than as
+// QPACK-encoded bytes. This bypasses the QPACK decoder intentionally: QPACK is fuzzed
+// separately (in the qpack module), and feeding raw bytes through it would cause the fuzzer
+// to waste most of its budget on QPACK decode failures instead of exercising the HTTP/3
+// header validation logic in parseHeaders, requestFromHeaders, and updateResponseFromHeaders.
+func FuzzRequestHeaders(f *testing.F) {
+	for _, s := range [][]qpack.HeaderField{
+		{ // GET request
+			{Name: ":method", Value: "GET"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":path", Value: "/"},
+			{Name: ":authority", Value: "example.com"},
+		},
+		{ // POST with Content-Length
+			{Name: ":method", Value: "POST"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":path", Value: "/submit"},
+			{Name: ":authority", Value: "example.com"},
+			{Name: "content-length", Value: "42"},
+			{Name: "content-type", Value: "application/json"},
+		},
+		{ // CONNECT request
+			{Name: ":method", Value: "CONNECT"},
+			{Name: ":authority", Value: "proxy.example.com:443"},
+		},
+		{ // extended CONNECT
+			{Name: ":method", Value: "CONNECT"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":path", Value: "/webtransport"},
+			{Name: ":authority", Value: "example.com"},
+			{Name: ":protocol", Value: "webtransport"},
+		},
+		{ // 200 response
+			{Name: ":status", Value: "200"},
+			{Name: "content-type", Value: "text/html"},
+			{Name: "content-length", Value: "1024"},
+		},
+		{ // response with trailer announcement
+			{Name: ":status", Value: "200"},
+			{Name: "trailer", Value: "Checksum"},
+		},
+	} {
+		seedsStrings := make([][2]string, len(s))
+		for i, h := range s {
+			seedsStrings[i] = [2]string{h.Name, h.Value}
+		}
+		data, err := json.Marshal(seedsStrings)
+		require.NoError(f, err)
+		f.Add(data)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var pairs [][2]string
+		if err := json.Unmarshal(data, &pairs); err != nil {
+			return
+		}
+		headers := make([]qpack.HeaderField, len(pairs))
+		for i, p := range pairs {
+			headers[i] = qpack.HeaderField{Name: p[0], Value: p[1]}
+		}
+
+		req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
+		if err != nil {
+			return
+		}
+		require.NotNil(t, req)
+		if req.Method == "" {
+			t.Fatal("request has empty method")
+		}
+		if req.URL == nil {
+			t.Fatal("request has nil URL")
+		}
+		if req.ProtoMajor != 3 {
+			t.Fatalf("expected ProtoMajor 3, got %d", req.ProtoMajor)
+		}
+		if req.ContentLength < -1 {
+			t.Fatalf("invalid ContentLength: %d", req.ContentLength)
+		}
+		if req.Proto == "" {
+			t.Fatal("request has empty Proto")
+		}
+		if req.Method != http.MethodConnect && req.Host == "" {
+			t.Fatal("non-CONNECT request has empty Host")
+		}
+
+		rsp := &http.Response{}
+		err = updateResponseFromHeaders(rsp, decodeFromSlice(headers), math.MaxInt, nil)
+		if err != nil {
+			return
+		}
+		if rsp.Proto != "HTTP/3.0" {
+			t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
+		}
+		if rsp.ContentLength < -1 {
+			t.Fatalf("invalid ContentLength: %d", rsp.ContentLength)
+		}
+	})
 }
