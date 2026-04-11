@@ -544,12 +544,6 @@ func BenchmarkRequestFromHeaders(b *testing.B) {
 	}
 }
 
-// FuzzHeaderParsing fuzzes HTTP/3 header parsing and request/response construction.
-// Header fields are encoded as JSON (a [][2]string of [name, value] pairs) rather than as
-// QPACK-encoded bytes. This bypasses the QPACK decoder intentionally: QPACK is fuzzed
-// separately (in the qpack module), and feeding raw bytes through it would cause the fuzzer
-// to waste most of its budget on QPACK decode failures instead of exercising the HTTP/3
-// header validation logic in parseHeaders, requestFromHeaders, and updateResponseFromHeaders.
 func FuzzHeaderParsing(f *testing.F) {
 	for _, s := range [][]qpack.HeaderField{
 		{ // GET request
@@ -597,6 +591,9 @@ func FuzzHeaderParsing(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
+		// Header fields are encoded as JSON (a [][2]string of [name, value] pairs) rather than as
+		// QPACK-encoded bytes. This bypasses the QPACK decoder intentionally: QPACK is fuzzed
+		// separately (in the qpack package).
 		var pairs [][2]string
 		if err := json.Unmarshal(data, &pairs); err != nil {
 			return
