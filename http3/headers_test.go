@@ -594,11 +594,13 @@ func FuzzHeaderParsing(f *testing.F) {
 		// Header fields are encoded as JSON (a [][2]string of [name, value] pairs) rather than as
 		// QPACK-encoded bytes. This bypasses the QPACK decoder intentionally: QPACK is fuzzed
 		// separately (in the qpack package).
+		const maxPairs = 1000
+		const maxHeaderBytes = 50_000
 		var pairs [][2]string
 		if err := json.Unmarshal(data, &pairs); err != nil {
 			return
 		}
-		if len(pairs) > 1000 {
+		if len(pairs) > maxPairs {
 			// don't fuzz too many header fields all at once
 			return
 		}
@@ -607,7 +609,7 @@ func FuzzHeaderParsing(f *testing.F) {
 			headers[i] = qpack.HeaderField{Name: p[0], Value: p[1]}
 		}
 
-		if req, err := requestFromHeaders(decodeFromSlice(headers), 50_000, nil); err == nil {
+		if req, err := requestFromHeaders(decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
 			if req.Method == "" {
 				t.Fatal("request has empty Method")
 			}
@@ -648,7 +650,7 @@ func FuzzHeaderParsing(f *testing.F) {
 		}
 
 		rsp := &http.Response{}
-		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), 50_000, nil); err == nil {
+		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
 			if rsp.Proto != "HTTP/3.0" {
 				t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
 			}
