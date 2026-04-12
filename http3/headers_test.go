@@ -607,7 +607,7 @@ func FuzzHeaderParsing(f *testing.F) {
 			headers[i] = qpack.HeaderField{Name: p[0], Value: p[1]}
 		}
 
-		if req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil); err == nil {
+		if req, err := requestFromHeaders(decodeFromSlice(headers), 50_000, nil); err == nil {
 			if req.Method == "" {
 				t.Fatal("request has empty Method")
 			}
@@ -648,7 +648,7 @@ func FuzzHeaderParsing(f *testing.F) {
 		}
 
 		rsp := &http.Response{}
-		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), math.MaxInt, nil); err == nil {
+		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), 50_000, nil); err == nil {
 			if rsp.Proto != "HTTP/3.0" {
 				t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
 			}
