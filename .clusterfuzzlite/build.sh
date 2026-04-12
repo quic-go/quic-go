@@ -9,3 +9,4 @@ compile_native_go_fuzzer_v2 github.com/quic-go/quic-go/http3 FuzzFrameParser htt
 compile_native_go_fuzzer_v2 github.com/quic-go/quic-go/internal/wire FuzzHeaderParser header_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/tokens Fuzz token_fuzzer
 compile_go_fuzzer github.com/quic-go/quic-go/fuzzing/handshake Fuzz handshake_fuzzer
+compile_native_go_fuzzer_v2 github.com/quic-go/quic-go/http3 FuzzHeaderParsing http3_header_parsing_fuzzer

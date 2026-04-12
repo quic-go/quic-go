@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -541,4 +542,145 @@ func BenchmarkRequestFromHeaders(b *testing.B) {
 			b.Fatalf("failed to parse request: %v", err)
 		}
 	}
+}
+
+func FuzzHeaderParsing(f *testing.F) {
+	for _, s := range [][]qpack.HeaderField{
+		{ // GET request
+			{Name: ":method", Value: "GET"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":path", Value: "/"},
+			{Name: ":authority", Value: "example.com"},
+		},
+		{ // POST with Content-Length
+			{Name: ":method", Value: "POST"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":path", Value: "/submit"},
+			{Name: ":authority", Value: "example.com"},
+			{Name: "content-length", Value: "42"},
+			{Name: "content-type", Value: "application/json"},
+		},
+		{ // CONNECT request
+			{Name: ":method", Value: "CONNECT"},
+			{Name: ":authority", Value: "proxy.example.com:443"},
+		},
+		{ // extended CONNECT
+			{Name: ":method", Value: "CONNECT"},
+			{Name: ":scheme", Value: "https"},
+			{Name: ":path", Value: "/webtransport"},
+			{Name: ":authority", Value: "example.com"},
+			{Name: ":protocol", Value: "webtransport"},
+		},
+		{ // 200 response
+			{Name: ":status", Value: "200"},
+			{Name: "content-type", Value: "text/html"},
+			{Name: "content-length", Value: "1024"},
+		},
+		{ // response with trailer announcement
+			{Name: ":status", Value: "200"},
+			{Name: "trailer", Value: "Checksum"},
+		},
+	} {
+		seedsStrings := make([][2]string, len(s))
+		for i, h := range s {
+			seedsStrings[i] = [2]string{h.Name, h.Value}
+		}
+		data, err := json.Marshal(seedsStrings)
+		require.NoError(f, err)
+		f.Add(data)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		// Header fields are encoded as JSON (a [][2]string of [name, value] pairs) rather than as
+		// QPACK-encoded bytes. This bypasses the QPACK decoder intentionally: QPACK is fuzzed
+		// separately (in the qpack package).
+		const maxPairs = 1000
+		const maxHeaderBytes = 50_000
+		var pairs [][2]string
+		if err := json.Unmarshal(data, &pairs); err != nil {
+			return
+		}
+		if len(pairs) > maxPairs {
+			// don't fuzz too many header fields all at once
+			return
+		}
+		headers := make([]qpack.HeaderField, len(pairs))
+		for i, p := range pairs {
+			headers[i] = qpack.HeaderField{Name: p[0], Value: p[1]}
+		}
+
+		if req, err := requestFromHeaders(decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
+			if req.Method == "" {
+				t.Fatal("request has empty Method")
+			}
+			if req.URL == nil {
+				t.Fatal("request has nil URL")
+			}
+			if req.Proto == "" {
+				t.Fatal("request has empty Proto")
+			}
+			if req.ProtoMajor != 3 || req.ProtoMinor != 0 {
+				t.Fatalf("expected HTTP/3.0, got %d.%d", req.ProtoMajor, req.ProtoMinor)
+			}
+			if req.ContentLength < -1 {
+				t.Fatalf("invalid ContentLength: %d", req.ContentLength)
+			}
+			if req.Header == nil {
+				t.Fatal("request has nil Header map")
+			}
+			if req.Method == http.MethodConnect && req.Proto == "HTTP/3.0" {
+				// regular CONNECT: :path must be empty, :authority must be set
+				if req.URL.Path != "" {
+					t.Fatal("CONNECT request has non-empty URL.Path")
+				}
+			}
+			if req.Method != http.MethodConnect {
+				if req.Host == "" {
+					t.Fatal("non-CONNECT request has empty Host")
+				}
+				if req.RequestURI == "" {
+					t.Fatal("non-CONNECT request has empty RequestURI")
+				}
+			}
+			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
+				if req.Header.Get(name) != "" {
+					t.Fatalf("request contains connection-specific header %q", name)
+				}
+			}
+		}
+
+		rsp := &http.Response{}
+		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
+			if rsp.Proto != "HTTP/3.0" {
+				t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
+			}
+			if rsp.ProtoMajor != 3 {
+				t.Fatalf("expected ProtoMajor 3, got %d", rsp.ProtoMajor)
+			}
+			if rsp.ContentLength < -1 {
+				t.Fatalf("invalid ContentLength: %d", rsp.ContentLength)
+			}
+			if rsp.Header == nil {
+				t.Fatal("response has nil Header map")
+			}
+			if rsp.Status == "" {
+				t.Fatal("response has empty Status")
+			}
+			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
+				if rsp.Header.Get(name) != "" {
+					t.Fatalf("response contains connection-specific header %q", name)
+				}
+			}
+		}
+
+		if trailers, err := parseTrailers(decodeFromSlice(headers), nil); err == nil {
+			for name := range trailers {
+				if len(name) > 0 && name[0] == ':' {
+					t.Fatalf("trailer contains pseudo header %q", name)
+				}
+			}
+			// TODO(#5601): once parseTrailers validates header field names and values,
+			// add assertions here
+		}
+	})
 }

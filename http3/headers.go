@@ -175,6 +175,7 @@ func parseTrailers(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField)
 		if hf.IsPseudo() {
 			return nil, fmt.Errorf("http3: received pseudo header in trailer: %s", hf.Name)
 		}
+		// TODO(#5601): validate header field names and values
 		h.Add(hf.Name, hf.Value)
 	}
 	return h, nil
