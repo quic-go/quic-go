@@ -1,0 +1,26 @@
+name: ClusterFuzzLite pruning
+on:
+  schedule:
+    - cron: '0 2 * * *'
+permissions: read-all
+
+jobs:
+  Pruning:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Build Fuzzers
+      id: build
+      uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      with:
+        language: go
+    - name: Run Fuzzers
+      id: run
+      uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        fuzz-seconds: 600
+        mode: 'prune'
+        output-sarif: true
+        storage-repo: https://${{ secrets.CLUSTERFUZZ_LITE_STORAGE }}@github.com/quic-go/clusterfuzzlite-storage.git
+        storage-repo-branch: master
+        storage-repo-branch-coverage: gh-pages
