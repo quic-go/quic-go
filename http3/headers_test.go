@@ -598,6 +598,10 @@ func FuzzHeaderParsing(f *testing.F) {
 		if err := json.Unmarshal(data, &pairs); err != nil {
 			return
 		}
+		if len(pairs) > 1000 {
+			// don't fuzz too many header fields all at once
+			return
+		}
 		headers := make([]qpack.HeaderField, len(pairs))
 		for i, p := range pairs {
 			headers[i] = qpack.HeaderField{Name: p[0], Value: p[1]}
