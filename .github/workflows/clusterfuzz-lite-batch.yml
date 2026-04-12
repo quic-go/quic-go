@@ -1,0 +1,33 @@
+name: ClusterFuzzLite batch fuzzing
+on:
+  schedule:
+    - cron: '0 0/6 * * *'
+permissions: read-all
+
+jobs:
+  BatchFuzzing:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+        - address
+    steps:
+    - name: Build Fuzzers (${{ matrix.sanitizer }})
+      id: build
+      uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      with:
+        language: go
+        sanitizer: ${{ matrix.sanitizer }}
+    - name: Run Fuzzers (${{ matrix.sanitizer }})
+      id: run
+      uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        fuzz-seconds: 3600
+        mode: 'batch'
+        sanitizer: ${{ matrix.sanitizer }}
+        output-sarif: true
+        storage-repo: https://${{ secrets.CLUSTERFUZZ_LITE_STORAGE }}@github.com/quic-go/clusterfuzzlite-storage.git
+        storage-repo-branch: master
+        storage-repo-branch-coverage: gh-pages
