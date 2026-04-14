@@ -13,7 +13,7 @@ const (
 	// ModeAuto negotiates the best available mode with the peer
 	ModeAuto CryptoMode = "auto"
 
-	// ModeHybrid uses composite ECDSA-P256 + ML-DSA signatures with ML-KEM key exchange
+	// ModeHybrid uses composite Ed25519 + ML-DSA signatures with ML-KEM key exchange
 	ModeHybrid CryptoMode = "hybrid"
 )
 

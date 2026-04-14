@@ -862,7 +862,7 @@ func generatePQCCertificate(originalCert tls.Certificate, pqcSecurityLevel int) 
 	}, nil
 }
 
-// generateHybridCertificate creates a new certificate with composite ECDSA-P256 + ML-DSA for hybrid mode
+// generateHybridCertificate creates a new certificate with composite Ed25519 + ML-DSA for hybrid mode
 func generateHybridCertificate(originalCert tls.Certificate, pqcSecurityLevel int) (qtls.Certificate, error) {
 	mldsaLevel := 65 // default
 	if pqcSecurityLevel == 1024 {

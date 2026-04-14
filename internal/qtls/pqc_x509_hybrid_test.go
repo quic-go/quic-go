@@ -71,8 +71,8 @@ func TestParseHybridCertificate(t *testing.T) {
 	if hybridPub.MLDSALevel() != 65 {
 		t.Fatalf("ML-DSA level = %d, want 65", hybridPub.MLDSALevel())
 	}
-	if len(hybridPub.ECDSAPublicKeyBytes()) == 0 {
-		t.Fatal("ECDSA public key bytes are empty")
+	if len(hybridPub.Ed25519PublicKeyBytes()) == 0 {
+		t.Fatal("Ed25519 public key bytes are empty")
 	}
 	if len(hybridPub.MLDSAPublicKey().Bytes()) == 0 {
 		t.Fatal("ML-DSA public key bytes are empty")

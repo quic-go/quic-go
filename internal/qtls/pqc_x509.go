@@ -24,11 +24,11 @@ var (
 )
 
 // Composite hybrid OIDs (experimental, using private-use range)
-// These represent ECDSA-P256 + ML-DSA composite certificates
+// These represent Ed25519 + ML-DSA composite certificates
 var (
-	oidCompositeECDSAP256MLDSA44 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 32} // experimental
-	oidCompositeECDSAP256MLDSA65 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33} // experimental
-	oidCompositeECDSAP256MLDSA87 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34} // experimental
+	oidCompositeEd25519MLDSA44 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 32} // experimental
+	oidCompositeEd25519MLDSA65 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33} // experimental
+	oidCompositeEd25519MLDSA87 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34} // experimental
 )
 
 // ML-DSA public key sizes
@@ -324,27 +324,27 @@ func marshalExtension(ext pkix.Extension) (asn1.RawValue, error) {
 	return raw, nil
 }
 
-// compositePublicKeyASN1 is the ASN.1 structure for a composite ECDSA + ML-DSA public key.
+// compositePublicKeyASN1 is the ASN.1 structure for a composite Ed25519 + ML-DSA public key.
 type compositePublicKeyASN1 struct {
-	ECDSAPublicKey asn1.BitString
-	MLDSAPublicKey asn1.BitString
+	Ed25519PublicKey asn1.BitString
+	MLDSAPublicKey   asn1.BitString
 }
 
-// compositeSignatureASN1 is the ASN.1 structure for a composite ECDSA + ML-DSA signature.
+// compositeSignatureASN1 is the ASN.1 structure for a composite Ed25519 + ML-DSA signature.
 type compositeSignatureASN1 struct {
-	ECDSASignature asn1.BitString
-	MLDSASignature asn1.BitString
+	Ed25519Signature asn1.BitString
+	MLDSASignature   asn1.BitString
 }
 
 // getCompositeOID returns the composite OID for the given ML-DSA level.
 func getCompositeOID(mldsaLevel int) (asn1.ObjectIdentifier, error) {
 	switch mldsaLevel {
 	case 44:
-		return oidCompositeECDSAP256MLDSA44, nil
+		return oidCompositeEd25519MLDSA44, nil
 	case 65:
-		return oidCompositeECDSAP256MLDSA65, nil
+		return oidCompositeEd25519MLDSA65, nil
 	case 87:
-		return oidCompositeECDSAP256MLDSA87, nil
+		return oidCompositeEd25519MLDSA87, nil
 	default:
 		return nil, fmt.Errorf("unsupported ML-DSA level for hybrid: %d", mldsaLevel)
 	}
@@ -353,11 +353,11 @@ func getCompositeOID(mldsaLevel int) (asn1.ObjectIdentifier, error) {
 // isCompositeOID checks if an OID is a composite hybrid OID and returns the ML-DSA level.
 func isCompositeOID(oid asn1.ObjectIdentifier) (int, bool) {
 	switch {
-	case oid.Equal(oidCompositeECDSAP256MLDSA44):
+	case oid.Equal(oidCompositeEd25519MLDSA44):
 		return 44, true
-	case oid.Equal(oidCompositeECDSAP256MLDSA65):
+	case oid.Equal(oidCompositeEd25519MLDSA65):
 		return 65, true
-	case oid.Equal(oidCompositeECDSAP256MLDSA87):
+	case oid.Equal(oidCompositeEd25519MLDSA87):
 		return 87, true
 	default:
 		return 0, false
@@ -365,10 +365,10 @@ func isCompositeOID(oid asn1.ObjectIdentifier) (int, bool) {
 }
 
 // GenerateHybridCertificate generates a self-signed certificate with composite
-// ECDSA-P256 + ML-DSA signatures. Both keys are embedded in the certificate,
+// Ed25519 + ML-DSA signatures. Both keys are embedded in the certificate,
 // and both algorithms sign the TBSCertificate.
 func GenerateHybridCertificate(mldsaLevel int, organization string, dnsNames []string, validFor time.Duration) ([]byte, *HybridTLSSigner, error) {
-	// Create hybrid signer (generates both ECDSA + ML-DSA keypairs)
+	// Create hybrid signer (generates both Ed25519 + ML-DSA keypairs)
 	hybridPQCSigner, err := pqc.NewHybridSigner(mldsaLevel)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate hybrid signer: %w", err)
@@ -443,13 +443,13 @@ func GenerateHybridCertificate(mldsaLevel int, organization string, dnsNames []s
 	}
 	extensions = append(extensions, extKeyUsageRaw)
 
-	// Create composite public key: ASN.1 SEQUENCE { ECDSA pub, ML-DSA pub }
-	ecdsaPubBytes := hybridPQCSigner.ECDSAPublicKey()
+	// Create composite public key: ASN.1 SEQUENCE { Ed25519 pub, ML-DSA pub }
+	ed25519PubBytes := hybridPQCSigner.Ed25519PublicKey()
 	mldsaPubBytes := hybridPQCSigner.MLDSAPublicKey()
 
 	compositeKey := compositePublicKeyASN1{
-		ECDSAPublicKey: asn1.BitString{Bytes: ecdsaPubBytes, BitLength: len(ecdsaPubBytes) * 8},
-		MLDSAPublicKey: asn1.BitString{Bytes: mldsaPubBytes, BitLength: len(mldsaPubBytes) * 8},
+		Ed25519PublicKey: asn1.BitString{Bytes: ed25519PubBytes, BitLength: len(ed25519PubBytes) * 8},
+		MLDSAPublicKey:   asn1.BitString{Bytes: mldsaPubBytes, BitLength: len(mldsaPubBytes) * 8},
 	}
 	compositeKeyBytes, err := asn1.Marshal(compositeKey)
 	if err != nil {

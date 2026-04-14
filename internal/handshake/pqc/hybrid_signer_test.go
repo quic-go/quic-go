@@ -21,8 +21,8 @@ func TestHybridSignerNewAndSign(t *testing.T) {
 			if len(signer.PublicKey()) == 0 {
 				t.Fatal("PublicKey() returned empty bytes")
 			}
-			if len(signer.ECDSAPublicKey()) == 0 {
-				t.Fatal("ECDSAPublicKey() returned empty bytes")
+			if len(signer.Ed25519PublicKey()) == 0 {
+				t.Fatal("Ed25519PublicKey() returned empty bytes")
 			}
 			if len(signer.MLDSAPublicKey()) == 0 {
 				t.Fatal("MLDSAPublicKey() returned empty bytes")
@@ -44,7 +44,7 @@ func TestHybridSignerNewAndSign(t *testing.T) {
 	}
 }
 
-func TestHybridSignerVerifyFailsOnCorruptedECDSA(t *testing.T) {
+func TestHybridSignerVerifyFailsOnCorruptedEd25519(t *testing.T) {
 	signer, err := NewHybridSigner(65)
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestHybridSignerVerifyFailsOnCorruptedECDSA(t *testing.T) {
 	// Corrupt the signature by modifying a byte
 	corrupted := make([]byte, len(sig))
 	copy(corrupted, sig)
-	// Flip a byte near the start (inside the ECDSA portion of the ASN.1 structure)
+	// Flip a byte near the start (inside the Ed25519 portion of the ASN.1 structure)
 	if len(corrupted) > 10 {
 		corrupted[10] ^= 0xFF
 	}
@@ -100,12 +100,12 @@ func TestParseCompositePublicKey(t *testing.T) {
 	}
 
 	compositeKey := signer.PublicKey()
-	ecdsaPub, mldsaPub, err := ParseCompositePublicKey(compositeKey)
+	ed25519Pub, mldsaPub, err := ParseCompositePublicKey(compositeKey)
 	if err != nil {
 		t.Fatalf("ParseCompositePublicKey() failed: %v", err)
 	}
-	if len(ecdsaPub) == 0 {
-		t.Fatal("ECDSA public key is empty")
+	if len(ed25519Pub) == 0 {
+		t.Fatal("Ed25519 public key is empty")
 	}
 	if len(mldsaPub) == 0 {
 		t.Fatal("ML-DSA public key is empty")
@@ -124,12 +124,12 @@ func TestParseCompositeSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ecdsaSig, mldsaSig, err := ParseCompositeSignature(sig)
+	ed25519Sig, mldsaSig, err := ParseCompositeSignature(sig)
 	if err != nil {
 		t.Fatalf("ParseCompositeSignature() failed: %v", err)
 	}
-	if len(ecdsaSig) == 0 {
-		t.Fatal("ECDSA signature is empty")
+	if len(ed25519Sig) == 0 {
+		t.Fatal("Ed25519 signature is empty")
 	}
 	if len(mldsaSig) == 0 {
 		t.Fatal("ML-DSA signature is empty")
@@ -149,7 +149,7 @@ func TestVerifyHybridSignatureStandalone(t *testing.T) {
 	}
 
 	ok, err := VerifyHybridSignature(
-		signer.ECDSAPublicKey(),
+		signer.Ed25519PublicKey(),
 		signer.MLDSAPublicKey(),
 		message, sig, 65,
 	)

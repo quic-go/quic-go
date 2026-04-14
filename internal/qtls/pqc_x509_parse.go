@@ -226,11 +226,11 @@ func ParseHybridCertificate(certBytes []byte) (*HybridPublicKey, *x509.Certifica
 		return nil, nil, fmt.Errorf("failed to parse composite public key: %w", err)
 	}
 
-	ecdsaPubBytes := compositeKey.ECDSAPublicKey.Bytes
+	ed25519PubBytes := compositeKey.Ed25519PublicKey.Bytes
 	mldsaPubBytes := compositeKey.MLDSAPublicKey.Bytes
 
 	mldsaPubKey := NewMLDSAPublicKey(mldsaPubBytes, mldsaLevel)
-	hybridPubKey := NewHybridPublicKey(ecdsaPubBytes, mldsaPubKey)
+	hybridPubKey := NewHybridPublicKey(ed25519PubBytes, mldsaPubKey)
 
 	// Create a pseudo x509.Certificate for TLS compatibility
 	pseudoCert := &x509.Certificate{
@@ -286,12 +286,12 @@ func VerifyHybridCertificateSignature(certBytes []byte) error {
 		return fmt.Errorf("failed to parse composite public key: %w", err)
 	}
 
-	ecdsaPubBytes := compositeKey.ECDSAPublicKey.Bytes
+	ed25519PubBytes := compositeKey.Ed25519PublicKey.Bytes
 	mldsaPubBytes := compositeKey.MLDSAPublicKey.Bytes
 
 	// Verify the composite signature
 	mldsaPubKey := NewMLDSAPublicKey(mldsaPubBytes, mldsaLevel)
-	hybridPubKey := NewHybridPublicKey(ecdsaPubBytes, mldsaPubKey)
+	hybridPubKey := NewHybridPublicKey(ed25519PubBytes, mldsaPubKey)
 
 	return VerifyHybridCertSignature(hybridPubKey, tbsBytes, cert.SignatureValue.Bytes)
 }

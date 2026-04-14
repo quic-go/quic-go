@@ -2,7 +2,7 @@ package pqc
 
 import "fmt"
 
-// HybridProvider implements CryptoProvider for hybrid ECDSA-P256 + ML-DSA signatures
+// HybridProvider implements CryptoProvider for hybrid Ed25519 + ML-DSA signatures
 // with ML-KEM key exchange. This provides transitional security against both
 // classical and quantum adversaries.
 type HybridProvider struct {
@@ -44,7 +44,7 @@ func (p *HybridProvider) KeyExchangeAlgorithm() string {
 }
 
 func (p *HybridProvider) SignatureAlgorithm() string {
-	return fmt.Sprintf("Hybrid-ECDSA-P256-ML-DSA-%d", p.mldsaLevel)
+	return fmt.Sprintf("Hybrid-Ed25519-ML-DSA-%d", p.mldsaLevel)
 }
 
 func (p *HybridProvider) SecurityLevel() int {

@@ -3,6 +3,7 @@ package pqc
 import (
 	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
@@ -126,5 +127,47 @@ func (s *ECDSASigner) Algorithm() string {
 }
 
 func (s *ECDSASigner) SecurityLevel() int {
+	return 128
+}
+
+// Ed25519Signer implements Signer for Ed25519 (used by hybrid mode)
+type Ed25519Signer struct {
+	privateKey ed25519.PrivateKey
+	publicKey  ed25519.PublicKey
+}
+
+var _ Signer = &Ed25519Signer{}
+
+func NewEd25519Signer() (*Ed25519Signer, error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate Ed25519 keypair: %w", err)
+	}
+	return &Ed25519Signer{
+		privateKey: priv,
+		publicKey:  pub,
+	}, nil
+}
+
+func (s *Ed25519Signer) PublicKey() []byte {
+	return []byte(s.publicKey)
+}
+
+func (s *Ed25519Signer) Sign(message []byte) ([]byte, error) {
+	return ed25519.Sign(s.privateKey, message), nil
+}
+
+func (s *Ed25519Signer) Verify(message, signature []byte) bool {
+	if len(s.publicKey) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(s.publicKey, message, signature)
+}
+
+func (s *Ed25519Signer) Algorithm() string {
+	return "Ed25519"
+}
+
+func (s *Ed25519Signer) SecurityLevel() int {
 	return 128
 }

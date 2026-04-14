@@ -96,23 +96,23 @@ func isMLDSASigner(signer crypto.Signer) bool {
 	return ok
 }
 
-// HybridPublicKey represents a composite ECDSA-P256 + ML-DSA public key
+// HybridPublicKey represents a composite Ed25519 + ML-DSA public key
 type HybridPublicKey struct {
-	ecdsaPublicKeyBytes []byte
-	mldsaPublicKey      *MLDSAPublicKey
+	ed25519PublicKeyBytes []byte
+	mldsaPublicKey        *MLDSAPublicKey
 }
 
 // NewHybridPublicKey creates a new hybrid public key wrapper.
-func NewHybridPublicKey(ecdsaPubBytes []byte, mldsaPubKey *MLDSAPublicKey) *HybridPublicKey {
+func NewHybridPublicKey(ed25519PubBytes []byte, mldsaPubKey *MLDSAPublicKey) *HybridPublicKey {
 	return &HybridPublicKey{
-		ecdsaPublicKeyBytes: ecdsaPubBytes,
-		mldsaPublicKey:      mldsaPubKey,
+		ed25519PublicKeyBytes: ed25519PubBytes,
+		mldsaPublicKey:        mldsaPubKey,
 	}
 }
 
-// ECDSAPublicKeyBytes returns the raw ECDSA-P256 public key bytes.
-func (pk *HybridPublicKey) ECDSAPublicKeyBytes() []byte {
-	return pk.ecdsaPublicKeyBytes
+// Ed25519PublicKeyBytes returns the raw Ed25519 public key bytes.
+func (pk *HybridPublicKey) Ed25519PublicKeyBytes() []byte {
+	return pk.ed25519PublicKeyBytes
 }
 
 // MLDSAPublicKey returns the ML-DSA public key.
@@ -138,7 +138,7 @@ func NewHybridTLSSigner(signer *pqc.HybridSigner) *HybridTLSSigner {
 // Public returns the public key for this signer (a *HybridPublicKey).
 func (s *HybridTLSSigner) Public() crypto.PublicKey {
 	mldsaPub := NewMLDSAPublicKey(s.signer.MLDSAPublicKey(), s.signer.MLDSALevel())
-	return NewHybridPublicKey(s.signer.ECDSAPublicKey(), mldsaPub)
+	return NewHybridPublicKey(s.signer.Ed25519PublicKey(), mldsaPub)
 }
 
 // Sign signs the message with both ECDSA and ML-DSA, producing a composite signature.
@@ -159,7 +159,7 @@ func (s *HybridTLSSigner) SecurityLevel() int {
 // VerifyHybridCertSignature verifies a composite signature against a hybrid public key.
 func VerifyHybridCertSignature(publicKey *HybridPublicKey, message, signature []byte) error {
 	ok, err := pqc.VerifyHybridSignature(
-		publicKey.ecdsaPublicKeyBytes,
+		publicKey.ed25519PublicKeyBytes,
 		publicKey.mldsaPublicKey.publicKeyBytes,
 		message,
 		signature,

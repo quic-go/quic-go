@@ -228,7 +228,7 @@ const (
 	signatureECDSA
 	signatureEd25519
 	signatureMLDSA        // Post-quantum ML-DSA signatures
-	signatureHybridECDSA  // Hybrid ECDSA-P256 + ML-DSA composite
+	signatureHybridEd25519 // Hybrid Ed25519 + ML-DSA composite
 )
 
 // directSigning is a standard Hash value that signals that no pre-hashing
@@ -443,11 +443,11 @@ const (
 	MLDSA65 SignatureScheme = 0xFE01 // ML-DSA-65 (192-bit security, recommended)
 	MLDSA87 SignatureScheme = 0xFE02 // ML-DSA-87 (256-bit security)
 
-	// Hybrid composite signature schemes (ECDSA-P256 + ML-DSA).
+	// Hybrid composite signature schemes (Ed25519 + ML-DSA).
 	// Using private-use range for experimental/research use.
-	HybridECDSAP256MLDSA44 SignatureScheme = 0xFE10
-	HybridECDSAP256MLDSA65 SignatureScheme = 0xFE11
-	HybridECDSAP256MLDSA87 SignatureScheme = 0xFE12
+	HybridEd25519MLDSA44 SignatureScheme = 0xFE10
+	HybridEd25519MLDSA65 SignatureScheme = 0xFE11
+	HybridEd25519MLDSA87 SignatureScheme = 0xFE12
 
 	// Legacy signature and hash algorithms for TLS 1.2.
 	PKCS1WithSHA1 SignatureScheme = 0x0201

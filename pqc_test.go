@@ -63,6 +63,20 @@ func TestPQCHandshake(t *testing.T) {
 			expectedCurve:      "ML-KEM-768 or X25519",
 			expectedMinKeySize: 1184, // Should prefer ML-KEM-768
 		},
+		{
+			name:               "Hybrid Mode with ML-KEM-768 + Ed25519+ML-DSA-65",
+			cryptoMode:         "hybrid",
+			pqcSecurityLevel:   768,
+			expectedCurve:      "X25519+ML-KEM-768",
+			expectedMinKeySize: 32, // Ed25519 public key size
+		},
+		{
+			name:               "Hybrid Mode with ML-KEM-1024 + Ed25519+ML-DSA-87",
+			cryptoMode:         "hybrid",
+			pqcSecurityLevel:   1024,
+			expectedCurve:      "X25519+ML-KEM-1024",
+			expectedMinKeySize: 32, // Ed25519 public key size
+		},
 	}
 
 	for _, tc := range testCases {

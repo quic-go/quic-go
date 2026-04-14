@@ -1,45 +1,37 @@
 package pqc
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/sha256"
+	"crypto/ed25519"
 	"encoding/asn1"
 	"fmt"
-	"math/big"
 )
 
-// HybridSigner implements Signer using a composite of ECDSA-P256 + ML-DSA.
+// HybridSigner implements Signer using a composite of Ed25519 + ML-DSA.
 // Both signatures are required for verification (AND logic), providing
 // security against both classical and quantum attacks.
 type HybridSigner struct {
-	ecdsaSigner *ECDSASigner
-	mldsaSigner Signer
-	mldsaLevel  int
+	ed25519Signer *Ed25519Signer
+	mldsaSigner   Signer
+	mldsaLevel    int
 }
 
 // compositeSignature is the ASN.1 encoding of a hybrid signature.
 type compositeSignature struct {
-	ECDSASignature []byte
-	MLDSASignature []byte
+	Ed25519Signature []byte
+	MLDSASignature   []byte
 }
 
 // compositePublicKey is the ASN.1 encoding of a hybrid public key.
 type compositePublicKey struct {
-	ECDSAPublicKey []byte
-	MLDSAPublicKey []byte
+	Ed25519PublicKey []byte
+	MLDSAPublicKey   []byte
 }
 
-// NewHybridSigner creates a new composite ECDSA-P256 + ML-DSA signer.
+// NewHybridSigner creates a new composite Ed25519 + ML-DSA signer.
 func NewHybridSigner(mldsaLevel int) (*HybridSigner, error) {
-	classicalProvider := NewClassicalProvider()
-	ecdsaSignerIface, err := classicalProvider.GenerateSigner()
+	ed25519Signer, err := NewEd25519Signer()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ECDSA signer: %w", err)
-	}
-	ecdsaSigner, ok := ecdsaSignerIface.(*ECDSASigner)
-	if !ok {
-		return nil, fmt.Errorf("expected *ECDSASigner, got %T", ecdsaSignerIface)
+		return nil, fmt.Errorf("failed to generate Ed25519 signer: %w", err)
 	}
 
 	mldsaSigner, err := NewMLDSASigner(mldsaLevel)
@@ -48,25 +40,25 @@ func NewHybridSigner(mldsaLevel int) (*HybridSigner, error) {
 	}
 
 	return &HybridSigner{
-		ecdsaSigner: ecdsaSigner,
-		mldsaSigner: mldsaSigner,
-		mldsaLevel:  mldsaLevel,
+		ed25519Signer: ed25519Signer,
+		mldsaSigner:   mldsaSigner,
+		mldsaLevel:    mldsaLevel,
 	}, nil
 }
 
 // NewHybridSignerFromComponents creates a HybridSigner from existing signers.
-func NewHybridSignerFromComponents(ecdsaSigner *ECDSASigner, mldsaSigner Signer, mldsaLevel int) *HybridSigner {
+func NewHybridSignerFromComponents(ed25519Signer *Ed25519Signer, mldsaSigner Signer, mldsaLevel int) *HybridSigner {
 	return &HybridSigner{
-		ecdsaSigner: ecdsaSigner,
-		mldsaSigner: mldsaSigner,
-		mldsaLevel:  mldsaLevel,
+		ed25519Signer: ed25519Signer,
+		mldsaSigner:   mldsaSigner,
+		mldsaLevel:    mldsaLevel,
 	}
 }
 
 func (s *HybridSigner) PublicKey() []byte {
 	composite := compositePublicKey{
-		ECDSAPublicKey: s.ecdsaSigner.PublicKey(),
-		MLDSAPublicKey: s.mldsaSigner.PublicKey(),
+		Ed25519PublicKey: s.ed25519Signer.PublicKey(),
+		MLDSAPublicKey:   s.mldsaSigner.PublicKey(),
 	}
 	encoded, err := asn1.Marshal(composite)
 	if err != nil {
@@ -75,9 +67,9 @@ func (s *HybridSigner) PublicKey() []byte {
 	return encoded
 }
 
-// ECDSAPublicKey returns the raw ECDSA public key bytes.
-func (s *HybridSigner) ECDSAPublicKey() []byte {
-	return s.ecdsaSigner.PublicKey()
+// Ed25519PublicKey returns the raw Ed25519 public key bytes.
+func (s *HybridSigner) Ed25519PublicKey() []byte {
+	return s.ed25519Signer.PublicKey()
 }
 
 // MLDSAPublicKey returns the raw ML-DSA public key bytes.
@@ -85,9 +77,9 @@ func (s *HybridSigner) MLDSAPublicKey() []byte {
 	return s.mldsaSigner.PublicKey()
 }
 
-// ECDSASigner returns the underlying ECDSA signer.
-func (s *HybridSigner) ECDSASigner() *ECDSASigner {
-	return s.ecdsaSigner
+// Ed25519Signer returns the underlying Ed25519 signer.
+func (s *HybridSigner) GetEd25519Signer() *Ed25519Signer {
+	return s.ed25519Signer
 }
 
 // MLDSASigner returns the underlying ML-DSA signer.
@@ -101,9 +93,9 @@ func (s *HybridSigner) MLDSALevel() int {
 }
 
 func (s *HybridSigner) Sign(message []byte) ([]byte, error) {
-	ecdsaSig, err := s.ecdsaSigner.Sign(message)
+	ed25519Sig, err := s.ed25519Signer.Sign(message)
 	if err != nil {
-		return nil, fmt.Errorf("ECDSA signing failed: %w", err)
+		return nil, fmt.Errorf("Ed25519 signing failed: %w", err)
 	}
 
 	mldsaSig, err := s.mldsaSigner.Sign(message)
@@ -112,8 +104,8 @@ func (s *HybridSigner) Sign(message []byte) ([]byte, error) {
 	}
 
 	composite := compositeSignature{
-		ECDSASignature: ecdsaSig,
-		MLDSASignature: mldsaSig,
+		Ed25519Signature: ed25519Sig,
+		MLDSASignature:   mldsaSig,
 	}
 	encoded, err := asn1.Marshal(composite)
 	if err != nil {
@@ -129,7 +121,7 @@ func (s *HybridSigner) Verify(message, signature []byte) bool {
 		return false
 	}
 
-	if !s.ecdsaSigner.Verify(message, composite.ECDSASignature) {
+	if !s.ed25519Signer.Verify(message, composite.Ed25519Signature) {
 		return false
 	}
 	if !s.mldsaSigner.Verify(message, composite.MLDSASignature) {
@@ -139,7 +131,7 @@ func (s *HybridSigner) Verify(message, signature []byte) bool {
 }
 
 func (s *HybridSigner) Algorithm() string {
-	return fmt.Sprintf("Hybrid-ECDSA-P256-ML-DSA-%d", s.mldsaLevel)
+	return fmt.Sprintf("Hybrid-Ed25519-ML-DSA-%d", s.mldsaLevel)
 }
 
 func (s *HybridSigner) SecurityLevel() int {
@@ -147,7 +139,7 @@ func (s *HybridSigner) SecurityLevel() int {
 }
 
 // ParseCompositePublicKey decodes a composite public key from ASN.1.
-func ParseCompositePublicKey(data []byte) (ecdsaPub, mldsaPub []byte, err error) {
+func ParseCompositePublicKey(data []byte) (ed25519Pub, mldsaPub []byte, err error) {
 	var composite compositePublicKey
 	rest, err := asn1.Unmarshal(data, &composite)
 	if err != nil {
@@ -156,11 +148,11 @@ func ParseCompositePublicKey(data []byte) (ecdsaPub, mldsaPub []byte, err error)
 	if len(rest) > 0 {
 		return nil, nil, fmt.Errorf("trailing data after composite public key")
 	}
-	return composite.ECDSAPublicKey, composite.MLDSAPublicKey, nil
+	return composite.Ed25519PublicKey, composite.MLDSAPublicKey, nil
 }
 
 // ParseCompositeSignature decodes a composite signature from ASN.1.
-func ParseCompositeSignature(data []byte) (ecdsaSig, mldsaSig []byte, err error) {
+func ParseCompositeSignature(data []byte) (ed25519Sig, mldsaSig []byte, err error) {
 	var composite compositeSignature
 	rest, err := asn1.Unmarshal(data, &composite)
 	if err != nil {
@@ -169,29 +161,21 @@ func ParseCompositeSignature(data []byte) (ecdsaSig, mldsaSig []byte, err error)
 	if len(rest) > 0 {
 		return nil, nil, fmt.Errorf("trailing data after composite signature")
 	}
-	return composite.ECDSASignature, composite.MLDSASignature, nil
+	return composite.Ed25519Signature, composite.MLDSASignature, nil
 }
 
 // VerifyHybridSignature verifies a composite signature against component public keys.
-func VerifyHybridSignature(ecdsaPubBytes, mldsaPubBytes, message, signature []byte, mldsaLevel int) (bool, error) {
-	ecdsaSig, mldsaSig, err := ParseCompositeSignature(signature)
+func VerifyHybridSignature(ed25519PubBytes, mldsaPubBytes, message, signature []byte, mldsaLevel int) (bool, error) {
+	ed25519Sig, mldsaSig, err := ParseCompositeSignature(signature)
 	if err != nil {
 		return false, err
 	}
 
-	// Verify ECDSA component
-	x, y := elliptic.Unmarshal(elliptic.P256(), ecdsaPubBytes)
-	if x == nil {
-		return false, fmt.Errorf("failed to unmarshal ECDSA-P256 public key")
+	// Verify Ed25519 component
+	if len(ed25519PubBytes) != ed25519.PublicKeySize {
+		return false, fmt.Errorf("invalid Ed25519 public key length: %d", len(ed25519PubBytes))
 	}
-	ecdsaPub := &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}
-	if len(ecdsaSig) < 64 {
-		return false, nil
-	}
-	hash := sha256.Sum256(message)
-	r := new(big.Int).SetBytes(ecdsaSig[:32])
-	s := new(big.Int).SetBytes(ecdsaSig[32:64])
-	if !ecdsa.Verify(ecdsaPub, hash[:], r, s) {
+	if !ed25519.Verify(ed25519.PublicKey(ed25519PubBytes), message, ed25519Sig) {
 		return false, nil
 	}
 
