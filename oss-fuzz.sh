@@ -4,13 +4,6 @@ go version
 go env
 
 (
-# fuzz qpack
-cd $GOPATH/src/github.com/quic-go/qpack
-
-compile_native_go_fuzzer_v2 github.com/quic-go/qpack/fuzzing FuzzDecode qpack_decode_fuzzer
-)
-
-(
 # fuzz quic-go
 cd $GOPATH/src/github.com/quic-go/quic-go/
 
