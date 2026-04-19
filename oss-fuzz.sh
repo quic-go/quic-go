@@ -7,7 +7,7 @@ go env
 # fuzz qpack
 cd $GOPATH/src/github.com/quic-go/qpack
 
-compile_native_go_fuzzer_v2 github.com/quic-go/qpack/fuzzing FuzzDecode qpack_decode_fuzzer
+compile_native_go_fuzzer_v2 github.com/quic-go/qpack FuzzDecode qpack_decode_fuzzer
 )
 
 (
