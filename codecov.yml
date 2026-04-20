@@ -16,3 +16,10 @@ coverage:
       default:
         threshold: 0.5
     patch: false
+
+flags:
+  fuzz:
+    joined: false  # don't merge fuzz coverage into main coverage report
+    statuses:
+      - type: project
+        informational: true  # don't fail a PR because of fuzz coverage

@@ -1,0 +1,34 @@
+name: Fuzz Coverage → CodeCov
+
+on:
+  schedule:
+    - cron: '0 2 * * *' 
+  workflow_dispatch: # allows manual trigger
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  fuzz-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+      - name: Install gsutil (gcloud)
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Download latest OSS-Fuzz corpus
+        run: |
+          mkdir -p testdata/fuzz
+          gsutil -m cp -r 'gs://quic-go-corpus.clusterfuzz-external.appspot.com/*' testdata/fuzz/ || true
+      - name: Generate fuzz coverage report
+        run: go test -coverprofile=fuzz-coverage.out -coverpkg=./... ./... -run=^$
+      - name: Upload to CodeCov (separate "fuzz" flag)
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./fuzz-coverage.out
+          flags: fuzz
+          name: oss-fuzz-coverage
+          fail_ci_if_error: false
