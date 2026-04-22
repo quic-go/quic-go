@@ -1,40 +1,33 @@
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
 RUN apk add --no-cache git make
 
-# Set working directory
 WORKDIR /build
 
-# Copy go.mod and go.sum from parent
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build binaries
 WORKDIR /build/benchmark
-RUN CGO_ENABLED=0 GOOS=linux go build -o /benchmark_server ./server
-RUN CGO_ENABLED=0 GOOS=linux go build -o /benchmark_client ./client
-RUN CGO_ENABLED=0 GOOS=linux go build -o /benchmark_runner ./runner
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/benchmark_server ./server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/benchmark_client ./client
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/benchmark_runner ./runner
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/benchmark_comprehensive ./comprehensive_runner
 
 # Runtime stage
 FROM alpine:3.19
 
-# Install runtime dependencies
 RUN apk add --no-cache ca-certificates
 
-# Copy binaries
-COPY --from=builder /benchmark_server /usr/local/bin/
-COPY --from=builder /benchmark_client /usr/local/bin/
-COPY --from=builder /benchmark_runner /usr/local/bin/
+# Binaries that the runner expects in its CWD
+WORKDIR /app
+COPY --from=builder /out/benchmark_server /app/benchmark_server
+COPY --from=builder /out/benchmark_client /app/benchmark_client
+COPY --from=builder /out/benchmark_runner /app/benchmark_runner
+COPY --from=builder /out/benchmark_comprehensive /app/benchmark_comprehensive
 
-# Create results directory
 RUN mkdir /results
 
-WORKDIR /
-
-# Default command
-ENTRYPOINT ["/usr/local/bin/benchmark_runner"]
+ENTRYPOINT ["/app/benchmark_runner", "-skip-build"]
 CMD ["-output=/results/benchmark_results.csv"]

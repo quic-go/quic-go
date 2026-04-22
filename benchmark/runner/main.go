@@ -72,6 +72,7 @@ var (
 	runPQC        = flag.Bool("pqc", true, "Run PQC benchmarks")
 	serverAddr    = flag.String("server", "127.0.0.1:4433", "Server address")
 	buildOnly     = flag.Bool("build-only", false, "Only build binaries, don't run tests")
+	skipBuild     = flag.Bool("skip-build", false, "Skip building binaries (use prebuilt ones in CWD or ./benchmark/)")
 )
 
 var resultRegex = regexp.MustCompile(`BENCHMARK_RESULT: (.+)$`)
@@ -82,14 +83,17 @@ func main() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 	log.Println("=== QUIC PQC Benchmark Runner ===")
 
-	// Build binaries
-	if err := buildBinaries(); err != nil {
-		log.Fatalf("Failed to build binaries: %v", err)
-	}
-
-	if *buildOnly {
-		log.Println("Build completed. Exiting (build-only mode).")
-		return
+	// Build binaries (skippable when prebuilt)
+	if !*skipBuild {
+		if err := buildBinaries(); err != nil {
+			log.Fatalf("Failed to build binaries: %v", err)
+		}
+		if *buildOnly {
+			log.Println("Build completed. Exiting (build-only mode).")
+			return
+		}
+	} else {
+		log.Println("Skipping build (--skip-build set)")
 	}
 
 	// Prepare results
