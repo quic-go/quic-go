@@ -39,6 +39,13 @@ if not csv_files:
 
 output_dir = sys.argv[2] if len(sys.argv) > 2 else '.'
 
+def save_fig(name):
+    """Save current figure as both PNG and EPS."""
+    plt.savefig(os.path.join(output_dir, f'{name}.png'), dpi=300, bbox_inches='tight', facecolor='white')
+    plt.savefig(os.path.join(output_dir, f'{name}.eps'), format='eps', bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"Saved {name}.png + .eps")
+
 print(f"Found {len(csv_files)} result files")
 
 # Parse data
@@ -125,156 +132,314 @@ def safe_std(data, size, category, level, metric):
     vals = remove_outliers(vals)
     return np.std(vals) if len(vals) >= 2 else 0.0
 
-# Chart 1: Handshake vs Size (with ±1 stddev shaded bands)
+# Helper: build stddev text box for a chart
+def make_std_box(ax, std_entries, unit='ms'):
+    """Add a text box in top-right corner with average σ per config."""
+    lines = ['\u03c3 m\u00e9dio:']
+    for name, avg_std in std_entries:
+        lines.append(f'  {name}: {avg_std:.1f} {unit}')
+    box_text = '\n'.join(lines)
+    ax.text(0.98, 0.97, box_text, transform=ax.transAxes,
+            fontsize=7, verticalalignment='top', horizontalalignment='right',
+            fontfamily='monospace',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='white', edgecolor='#cccccc'))
+
+# Chart 1: Handshake vs Size
 fig, ax = plt.subplots(figsize=(10, 6))
+std_entries = []
 classical_med = [safe_median(data_by_size, s, 'classical', 0, 'handshake') for s in sizes]
 classical_std = [safe_std(data_by_size, s, 'classical', 0, 'handshake') for s in sizes]
-ax.plot(x_pos, classical_med, 'o-', color=color_classical, linewidth=2, markersize=8, label='Clássico')
-ax.fill_between(x_pos, [m - d for m, d in zip(classical_med, classical_std)],
-                [m + d for m, d in zip(classical_med, classical_std)], color=color_classical, alpha=0.15)
+ax.plot(x_pos, classical_med, 'o-', color=color_classical, linewidth=2, markersize=8, label='Cl\u00e1ssico')
+std_entries.append(('Cl\u00e1ssico', np.mean(classical_std)))
 for level in all_pqc:
     med = [safe_median(data_by_size, s, 'pqc', level, 'handshake') for s in sizes]
     std = [safe_std(data_by_size, s, 'pqc', level, 'handshake') for s in sizes]
     c = pqc_colors.get(level, '#999')
     ax.plot(x_pos, med, 'o-', color=c, linewidth=2, markersize=8, label=f'PQC-{level}')
-    ax.fill_between(x_pos, [m - d for m, d in zip(med, std)], [m + d for m, d in zip(med, std)], color=c, alpha=0.15)
+    std_entries.append((f'PQC-{level}', np.mean(std)))
 for level in all_hybrid:
     med = [safe_median(data_by_size, s, 'hybrid', level, 'handshake') for s in sizes]
     std = [safe_std(data_by_size, s, 'hybrid', level, 'handshake') for s in sizes]
     c = hybrid_colors.get(level, '#00aa44')
-    ax.plot(x_pos, med, 's--', color=c, linewidth=2, markersize=8, label=f'Híbrido-{level}')
-    ax.fill_between(x_pos, [m - d for m, d in zip(med, std)], [m + d for m, d in zip(med, std)], color=c, alpha=0.15)
+    ax.plot(x_pos, med, 's--', color=c, linewidth=2, markersize=8, label=f'H\u00edbrido-{level}')
+    std_entries.append((f'H\u00edbrido-{level}', np.mean(std)))
 ax.set_xlabel('Tamanho dos Dados', fontsize=12, fontweight='bold')
-ax.set_ylabel('Duração do Handshake (ms)', fontsize=12, fontweight='bold')
+ax.set_ylabel('Dura\u00e7\u00e3o do Handshake (ms)', fontsize=12, fontweight='bold')
 ax.set_title('Tempo de Handshake vs Tamanho dos Dados', fontsize=14, fontweight='bold')
 ax.set_xticks(x_pos)
 ax.set_xticklabels(size_labels)
-ax.legend(loc='best')
-ax.grid(True, alpha=0.3)
+ax.legend(loc='upper left')
+ax.grid(True, color='#cccccc', linewidth=0.5)
+make_std_box(ax, std_entries, 'ms')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'scaling_handshake.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print("Saved scaling_handshake.png")
+save_fig('scaling_handshake')
 
-# Chart 2: Throughput vs Size (auto-detect Kbps vs Mbps)
+# Chart 2: Throughput vs Size
 fig, ax = plt.subplots(figsize=(10, 6))
+std_entries = []
 classical_tp = [safe_median(data_by_size, s, 'classical', 0, 'throughput') for s in sizes]
+classical_tp_std = [safe_std(data_by_size, s, 'classical', 0, 'throughput') for s in sizes]
 max_tp = max(v for v in classical_tp if not np.isnan(v)) if classical_tp else 0
 if max_tp < 10:
     tp_scale, tp_unit = 1000, 'Kbps'
 else:
     tp_scale, tp_unit = 1, 'Mbps'
-ax.plot(x_pos, [v * tp_scale for v in classical_tp],
-        'o-', color=color_classical, linewidth=2, markersize=8, label='Clássico')
+c_med = [v * tp_scale for v in classical_tp]
+c_std_scaled = [v * tp_scale for v in classical_tp_std]
+ax.plot(x_pos, c_med, 'o-', color=color_classical, linewidth=2, markersize=8, label='Cl\u00e1ssico')
+std_entries.append(('Cl\u00e1ssico', np.mean(c_std_scaled)))
 for level in all_pqc:
-    vals = [safe_median(data_by_size, s, 'pqc', level, 'throughput') * tp_scale for s in sizes]
-    ax.plot(x_pos, vals,
-            'o-', color=pqc_colors.get(level, '#999'), linewidth=2, markersize=8, label=f'PQC-{level}')
+    med = [safe_median(data_by_size, s, 'pqc', level, 'throughput') * tp_scale for s in sizes]
+    std = [safe_std(data_by_size, s, 'pqc', level, 'throughput') * tp_scale for s in sizes]
+    c = pqc_colors.get(level, '#999')
+    ax.plot(x_pos, med, 'o-', color=c, linewidth=2, markersize=8, label=f'PQC-{level}')
+    std_entries.append((f'PQC-{level}', np.mean(std)))
 for level in all_hybrid:
-    vals = [safe_median(data_by_size, s, 'hybrid', level, 'throughput') * tp_scale for s in sizes]
-    ax.plot(x_pos, vals,
-            's--', color=hybrid_colors.get(level, '#00aa44'), linewidth=2, markersize=8, label=f'Híbrido-{level}')
+    med = [safe_median(data_by_size, s, 'hybrid', level, 'throughput') * tp_scale for s in sizes]
+    std = [safe_std(data_by_size, s, 'hybrid', level, 'throughput') * tp_scale for s in sizes]
+    c = hybrid_colors.get(level, '#00aa44')
+    ax.plot(x_pos, med, 's--', color=c, linewidth=2, markersize=8, label=f'H\u00edbrido-{level}')
+    std_entries.append((f'H\u00edbrido-{level}', np.mean(std)))
 ax.set_xlabel('Tamanho dos Dados', fontsize=12, fontweight='bold')
-ax.set_ylabel(f'Vazão ({tp_unit})', fontsize=12, fontweight='bold')
-ax.set_title('Vazão vs Tamanho dos Dados', fontsize=14, fontweight='bold')
+ax.set_ylabel(f'Vaz\u00e3o ({tp_unit})', fontsize=12, fontweight='bold')
+ax.set_title('Vaz\u00e3o vs Tamanho dos Dados', fontsize=14, fontweight='bold')
 ax.set_xticks(x_pos)
 ax.set_xticklabels(size_labels)
-ax.legend(loc='best')
-ax.grid(True, alpha=0.3)
+ax.legend(loc='upper left')
+ax.grid(True, color='#cccccc', linewidth=0.5)
+make_std_box(ax, std_entries, tp_unit)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'scaling_throughput.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"Saved scaling_throughput.png (unit: {tp_unit})")
+save_fig('scaling_throughput')
 
 # Chart 3: Total Duration vs Size (log scale)
 fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(x_pos, [safe_median(data_by_size, s, 'classical', 0, 'total_duration') for s in sizes],
-        'o-', color=color_classical, linewidth=2, markersize=8, label='Clássico')
+std_entries = []
+c_med_td = [safe_median(data_by_size, s, 'classical', 0, 'total_duration') for s in sizes]
+c_std_td = [safe_std(data_by_size, s, 'classical', 0, 'total_duration') for s in sizes]
+ax.plot(x_pos, c_med_td, 'o-', color=color_classical, linewidth=2, markersize=8, label='Cl\u00e1ssico')
+std_entries.append(('Cl\u00e1ssico', np.mean(c_std_td)))
 for level in all_pqc:
-    ax.plot(x_pos, [safe_median(data_by_size, s, 'pqc', level, 'total_duration') for s in sizes],
-            'o-', color=pqc_colors.get(level, '#999'), linewidth=2, markersize=8, label=f'PQC-{level}')
+    med = [safe_median(data_by_size, s, 'pqc', level, 'total_duration') for s in sizes]
+    std = [safe_std(data_by_size, s, 'pqc', level, 'total_duration') for s in sizes]
+    c = pqc_colors.get(level, '#999')
+    ax.plot(x_pos, med, 'o-', color=c, linewidth=2, markersize=8, label=f'PQC-{level}')
+    std_entries.append((f'PQC-{level}', np.mean(std)))
 for level in all_hybrid:
-    ax.plot(x_pos, [safe_median(data_by_size, s, 'hybrid', level, 'total_duration') for s in sizes],
-            's--', color=hybrid_colors.get(level, '#00aa44'), linewidth=2, markersize=8, label=f'Híbrido-{level}')
+    med = [safe_median(data_by_size, s, 'hybrid', level, 'total_duration') for s in sizes]
+    std = [safe_std(data_by_size, s, 'hybrid', level, 'total_duration') for s in sizes]
+    c = hybrid_colors.get(level, '#00aa44')
+    ax.plot(x_pos, med, 's--', color=c, linewidth=2, markersize=8, label=f'H\u00edbrido-{level}')
+    std_entries.append((f'H\u00edbrido-{level}', np.mean(std)))
 ax.set_xlabel('Tamanho dos Dados', fontsize=12, fontweight='bold')
-ax.set_ylabel('Duração Total (ms)', fontsize=12, fontweight='bold')
-ax.set_title('Duração Ponta-a-Ponta vs Tamanho dos Dados', fontsize=14, fontweight='bold')
+ax.set_ylabel('Dura\u00e7\u00e3o Total (ms)', fontsize=12, fontweight='bold')
+ax.set_title('Dura\u00e7\u00e3o Ponta-a-Ponta vs Tamanho dos Dados', fontsize=14, fontweight='bold')
 ax.set_xticks(x_pos)
 ax.set_xticklabels(size_labels)
-ax.set_yscale('log')
-ax.legend(loc='best')
-ax.grid(True, alpha=0.3)
+ax.legend(loc='upper left')
+ax.grid(True, color='#cccccc', linewidth=0.5)
+make_std_box(ax, std_entries, 'ms')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'scaling_total_duration.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print("Saved scaling_total_duration.png")
+save_fig('scaling_total_duration')
 
 # Chart 4: Handshake as % of Total Time
 fig, ax = plt.subplots(figsize=(10, 6))
+
+def compute_pct_with_std(data, size, category, level):
+    """Compute handshake % of total per-sample, return median and std of the ratio."""
+    if category == 'classical':
+        hs_vals = data[size]['classical']['handshake']
+        td_vals = data[size]['classical']['total_duration']
+    elif category == 'hybrid':
+        hs_vals = data[size]['hybrid'].get(level, {}).get('handshake', [])
+        td_vals = data[size]['hybrid'].get(level, {}).get('total_duration', [])
+    else:
+        hs_vals = data[size]['pqc'].get(level, {}).get('handshake', [])
+        td_vals = data[size]['pqc'].get(level, {}).get('total_duration', [])
+    ratios = [(h / t * 100) for h, t in zip(hs_vals, td_vals) if t > 0]
+    ratios = [r for r in ratios if r > 0]
+    if len(ratios) < 2:
+        return np.median(ratios) if ratios else np.nan, 0.0
+    return np.median(ratios), np.std(ratios)
+
+std_entries = []
 classical_pct = []
 for s in sizes:
-    hs = safe_median(data_by_size, s, 'classical', 0, 'handshake')
-    tot = safe_median(data_by_size, s, 'classical', 0, 'total_duration')
-    classical_pct.append((hs / tot * 100) if tot > 0 else np.nan)
-ax.plot(x_pos, classical_pct, 'o-', color=color_classical, linewidth=2, markersize=8, label='Clássico')
+    m, sd = compute_pct_with_std(data_by_size, s, 'classical', 0)
+    classical_pct.append(m)
+ax.plot(x_pos, classical_pct, 'o-', color=color_classical, linewidth=2, markersize=8, label='Cl\u00e1ssico')
+std_entries.append(('Cl\u00e1ssico', np.mean([compute_pct_with_std(data_by_size, s, 'classical', 0)[1] for s in sizes])))
 
 for level in all_pqc:
     pct = []
+    stds = []
     for s in sizes:
-        hs = safe_median(data_by_size, s, 'pqc', level, 'handshake')
-        tot = safe_median(data_by_size, s, 'pqc', level, 'total_duration')
-        pct.append((hs / tot * 100) if tot > 0 else np.nan)
-    ax.plot(x_pos, pct, 'o-', color=pqc_colors.get(level, '#999'), linewidth=2, markersize=8, label=f'PQC-{level}')
+        m, sd = compute_pct_with_std(data_by_size, s, 'pqc', level)
+        pct.append(m)
+        stds.append(sd)
+    c = pqc_colors.get(level, '#999')
+    ax.plot(x_pos, pct, 'o-', color=c, linewidth=2, markersize=8, label=f'PQC-{level}')
+    std_entries.append((f'PQC-{level}', np.mean(stds)))
 
 for level in all_hybrid:
     pct = []
+    stds = []
     for s in sizes:
-        hs = safe_median(data_by_size, s, 'hybrid', level, 'handshake')
-        tot = safe_median(data_by_size, s, 'hybrid', level, 'total_duration')
-        pct.append((hs / tot * 100) if tot > 0 else np.nan)
-    ax.plot(x_pos, pct, 's--', color=hybrid_colors.get(level, '#00aa44'), linewidth=2, markersize=8, label=f'Híbrido-{level}')
+        m, sd = compute_pct_with_std(data_by_size, s, 'hybrid', level)
+        pct.append(m)
+        stds.append(sd)
+    c = hybrid_colors.get(level, '#00aa44')
+    ax.plot(x_pos, pct, 's--', color=c, linewidth=2, markersize=8, label=f'H\u00edbrido-{level}')
+    std_entries.append((f'H\u00edbrido-{level}', np.mean(stds)))
 
 ax.set_xlabel('Tamanho dos Dados', fontsize=12, fontweight='bold')
 ax.set_ylabel('Handshake como % do Tempo Total', fontsize=12, fontweight='bold')
-ax.set_title('Sobrecarga do Handshake Diminui com Transferências Maiores', fontsize=14, fontweight='bold')
+ax.set_title('Sobrecarga do Handshake Diminui com Transfer\u00eancias Maiores', fontsize=14, fontweight='bold')
 ax.set_xticks(x_pos)
 ax.set_xticklabels(size_labels)
-ax.legend(loc='best')
-ax.grid(True, alpha=0.3)
+ax.legend(loc='upper right', bbox_to_anchor=(0.75, 1.0))
+ax.grid(True, color='#cccccc', linewidth=0.5)
+make_std_box(ax, std_entries, '%')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'scaling_handshake_pct.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print("Saved scaling_handshake_pct.png")
+save_fig('scaling_handshake_pct')
 
 # Chart 5: Handshake Overhead vs Classical
 fig, ax = plt.subplots(figsize=(10, 6))
+
+def compute_overhead_with_std(data, size, category, level):
+    """Compute per-sample overhead % vs classical median, return median and std."""
+    c_vals = data[size]['classical']['handshake']
+    c_median = np.median(remove_outliers(c_vals)) if c_vals else 0
+    if c_median <= 0:
+        return np.nan, 0.0
+    if category == 'hybrid':
+        vals = data[size]['hybrid'].get(level, {}).get('handshake', [])
+    else:
+        vals = data[size]['pqc'].get(level, {}).get('handshake', [])
+    vals = remove_outliers(vals)
+    overheads = [((v - c_median) / c_median * 100) for v in vals]
+    if len(overheads) < 2:
+        return np.median(overheads) if overheads else np.nan, 0.0
+    return np.median(overheads), np.std(overheads)
+
+std_entries = []
 for level in all_pqc:
     overhead = []
+    stds = []
     for s in sizes:
-        pqc_hs = safe_median(data_by_size, s, 'pqc', level, 'handshake')
-        c_hs = safe_median(data_by_size, s, 'classical', 0, 'handshake')
-        overhead.append(((pqc_hs - c_hs) / c_hs * 100) if c_hs > 0 else np.nan)
-    ax.plot(x_pos, overhead, 'o-', color=pqc_colors.get(level, '#999'), linewidth=2, markersize=8, label=f'PQC-{level}')
+        m, sd = compute_overhead_with_std(data_by_size, s, 'pqc', level)
+        overhead.append(m)
+        stds.append(sd)
+    c = pqc_colors.get(level, '#999')
+    ax.plot(x_pos, overhead, 'o-', color=c, linewidth=2, markersize=8, label=f'PQC-{level}')
+    std_entries.append((f'PQC-{level}', np.mean(stds)))
 
 for level in all_hybrid:
     overhead = []
+    stds = []
     for s in sizes:
-        h_hs = safe_median(data_by_size, s, 'hybrid', level, 'handshake')
-        c_hs = safe_median(data_by_size, s, 'classical', 0, 'handshake')
-        overhead.append(((h_hs - c_hs) / c_hs * 100) if c_hs > 0 else np.nan)
-    ax.plot(x_pos, overhead, 's--', color=hybrid_colors.get(level, '#00aa44'), linewidth=2, markersize=8, label=f'Híbrido-{level}')
+        m, sd = compute_overhead_with_std(data_by_size, s, 'hybrid', level)
+        overhead.append(m)
+        stds.append(sd)
+    c = hybrid_colors.get(level, '#00aa44')
+    ax.plot(x_pos, overhead, 's--', color=c, linewidth=2, markersize=8, label=f'H\u00edbrido-{level}')
+    std_entries.append((f'H\u00edbrido-{level}', np.mean(stds)))
 
-ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+ax.axhline(y=0, color='black', linestyle='--', linewidth=0.8)
 ax.set_xlabel('Tamanho dos Dados', fontsize=12, fontweight='bold')
 ax.set_ylabel('Sobrecarga do Handshake vs Clássico (%)', fontsize=12, fontweight='bold')
 ax.set_title('Sobrecarga do Handshake por Tamanho dos Dados', fontsize=14, fontweight='bold')
 ax.set_xticks(x_pos)
 ax.set_xticklabels(size_labels)
-ax.legend(loc='best')
-ax.grid(True, alpha=0.3)
+ax.legend(loc='upper left')
+ax.grid(True, color='#cccccc', linewidth=0.5)
+make_std_box(ax, std_entries, '%')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'scaling_overhead.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print("Saved scaling_overhead.png")
+save_fig('scaling_overhead')
+
+# --- Grouped box plot distribution charts ---
+
+def lighten(hex_color, factor=0.4):
+    """Lighten a hex color by blending toward white (EPS-safe, no alpha)."""
+    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+    r = int(r + (255 - r) * factor)
+    g = int(g + (255 - g) * factor)
+    b = int(b + (255 - b) * factor)
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+def get_raw_vals(data, size, category, level, metric):
+    """Get raw values for a given config/size/metric."""
+    if category == 'classical':
+        return data[size]['classical'].get(metric, [])
+    elif category == 'hybrid':
+        return data[size]['hybrid'].get(level, {}).get(metric, [])
+    else:
+        return data[size]['pqc'].get(level, {}).get(metric, [])
+
+# Build config list: (label, color, category, level)
+configs_list = [('Clássico', color_classical, 'classical', 0)]
+for level in all_pqc:
+    configs_list.append((f'PQC-{level}', pqc_colors.get(level, '#999'), 'pqc', level))
+for level in all_hybrid:
+    configs_list.append((f'Híbrido-{level}', hybrid_colors.get(level, '#00aa44'), 'hybrid', level))
+
+n_configs = len(configs_list)
+width = 0.12
+
+def make_grouped_boxplot(metric, ylabel, title, filename, scale_fn=None):
+    """Generate a grouped box plot chart for a metric across data sizes."""
+    fig, ax = plt.subplots(figsize=(12, 6))
+    offsets = (np.arange(n_configs) - (n_configs - 1) / 2) * width
+    legend_patches = []
+
+    for i, (label, color, category, level) in enumerate(configs_list):
+        positions = x_pos + offsets[i]
+        box_data = []
+        for s in sizes:
+            vals = remove_outliers(get_raw_vals(data_by_size, s, category, level, metric))
+            if scale_fn:
+                vals = [scale_fn(v) for v in vals]
+            box_data.append(vals if vals else [0])
+
+        bp = ax.boxplot(box_data, positions=positions, widths=width * 0.85,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color='black', linewidth=1.5),
+                        whiskerprops=dict(color=color, linewidth=1),
+                        capprops=dict(color=color, linewidth=1))
+        for patch in bp['boxes']:
+            patch.set_facecolor(lighten(color))
+            patch.set_edgecolor(color)
+            patch.set_linewidth(1)
+
+        legend_patches.append(plt.Rectangle((0, 0), 1, 1, fc=lighten(color), ec=color, label=label))
+
+    ax.set_xlabel('Tamanho dos Dados', fontsize=12, fontweight='bold')
+    ax.set_ylabel(ylabel, fontsize=12, fontweight='bold')
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(size_labels)
+    ax.legend(handles=legend_patches, loc='best', fontsize=8)
+    ax.grid(True, color='#cccccc', linewidth=0.5, axis='y')
+    plt.tight_layout()
+    save_fig(filename)
+
+# Chart 6: Handshake Distribution (grouped box plot)
+make_grouped_boxplot('handshake',
+    'Duração do Handshake (ms)',
+    'Distribuição do Handshake por Tamanho dos Dados',
+    'scaling_handshake_dist')
+
+# Chart 7: Throughput Distribution (grouped box plot)
+tp_scale_fn = (lambda v: v * 1000) if max_tp < 10 else None
+make_grouped_boxplot('throughput',
+    f'Vazão ({tp_unit})',
+    'Distribuição da Vazão por Tamanho dos Dados',
+    'scaling_throughput_dist',
+    scale_fn=tp_scale_fn)
+
+# Chart 8: Total Duration Distribution (grouped box plot)
+make_grouped_boxplot('total_duration',
+    'Duração Total (ms)',
+    'Distribuição da Duração Total por Tamanho dos Dados',
+    'scaling_total_duration_dist')
 
 print(f"\nAll scaling charts generated in {output_dir}/")

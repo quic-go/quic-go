@@ -176,4 +176,7 @@ for key, cell in table.get_celld().items():
 
 plt.tight_layout(rect=[0, 0.02, 1, 0.94])
 plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
-print(f"Table saved as {output_file}")
+# Also save EPS version
+eps_file = output_file.rsplit('.', 1)[0] + '.eps'
+plt.savefig(eps_file, format='eps', bbox_inches='tight', facecolor='white')
+print(f"Table saved as {output_file} + {eps_file}")
