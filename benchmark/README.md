@@ -24,9 +24,11 @@ This benchmark suite provides:
 - **Reproducible** measurements using isolated processes
 - **Scalable** test execution with configurable iterations
 - **CSV output** for easy analysis and plotting
-- **Comparison** between Classical (X25519) and PQC (ML-KEM-768/1024) key exchange
+- **Comparison** across Classical (X25519 + Ed25519/ECDSA-P256), PQC (ML-KEM-512/768/1024 + ML-DSA-44/65/87), and Hybrid (X25519+ML-KEM, Ed25519+ML-DSA) modes
 - **Automated** orchestration of server/client processes
-- **Statistical analysis** with overhead calculations
+- **Statistical analysis** with overhead calculations and standard deviation
+- **Size-segmented workloads** from 1KB to 1MB to isolate handshake vs. throughput effects
+- **Containerized runs** via multi-stage Docker image (Go builder + minimal Alpine runtime)
 
 ## Architecture
 
@@ -101,16 +103,16 @@ This benchmark suite provides:
 - Calculates PQC overhead percentage
 
 **Key Features:**
-- Automatic binary rebuilding
+- Automatic binary rebuilding (skippable via `-skip-build` when running prebuilt binaries, e.g. inside Docker)
 - Separate runs for classical and PQC modes
 - Real-time log capture and display
 - Concurrent process management
 
 ### 4. Comprehensive Runner (`comprehensive_runner/main.go`)
-- **NEW**: Tests all security levels in a single run
+- Tests all security levels in a single run
 - Automatically tests Classical + ML-KEM-512/768/1024
 - Sequential execution with proper cleanup between configurations
-- Comprehensive summary table comparing all levels
+- Summary table comparing all levels
 - Overhead calculations vs Classical baseline
 
 **Key Features:**
@@ -119,13 +121,16 @@ This benchmark suite provides:
 - Certificate size and packet overhead analysis
 - Throughput and handshake duration comparisons
 - Single CSV output with all results for easy analysis
+- Accepts `-skip-build` to reuse prebuilt binaries (used by the Docker runtime)
 
 ## Quick Start
 
 ### Prerequisites
 
-- Go 1.24 or 1.25
+- Go 1.25 (matches `go.mod`)
 - Make (optional, for convenience targets)
+- Docker (optional, for containerized runs)
+- Python 3 with `matplotlib` and `pandas` (optional, for chart/table generation)
 - ~50MB disk space for binaries
 
 ### Local Testing
@@ -133,10 +138,10 @@ This benchmark suite provides:
 ```bash
 cd benchmark
 
-# Quick test (2 iterations, 1MB data, classical + PQC)
+# Quick test (3 iterations, 1MB data, classical + PQC)
 make test
 
-# Full benchmark (10 iterations, 10MB data)
+# Full benchmark (10 iterations, 1MB data)
 make run-local
 
 # Custom parameters
@@ -154,7 +159,7 @@ make analyze
 
 ### Comprehensive Testing (All Security Levels)
 
-**NEW**: Test all ML-KEM security levels in a single run:
+Test all ML-KEM security levels in a single run:
 
 ```bash
 # Quick test: all 4 configurations (Classical + 3 PQC levels), 3 iterations each
@@ -167,10 +172,38 @@ make run-comprehensive
 ```
 
 This runner tests:
-- **Classical** (X25519 + ECDSA/RSA)
+- **Classical** (X25519 + ECDSA-P256)
 - **ML-KEM-512** (NIST Level 1) + ML-DSA-44
 - **ML-KEM-768** (NIST Level 3) + ML-DSA-65 ← Recommended
 - **ML-KEM-1024** (NIST Level 5) + ML-DSA-87
+
+### Size-Segmented Testing
+
+Run the comprehensive benchmark across fixed payload sizes (1KB → 1MB) to separate handshake overhead from throughput effects:
+
+```bash
+# Single size (50 iterations by default)
+make test-1kb
+make test-100kb
+make test-1mb
+
+# All sizes sequentially
+make test-all-sizes
+
+# Override iteration count
+make test-all-sizes ITERATIONS=20
+```
+
+Each target produces `comprehensive_results_<size>.csv` that the Python scripts below consume to generate per-size tables and cross-size scaling charts.
+
+### Hybrid Mode
+
+Hybrid mode composes a classical primitive with a PQC primitive so certificates remain verifiable even if one scheme is broken:
+
+- **Key exchange:** X25519 + ML-KEM
+- **Signatures:** Ed25519 + ML-DSA (composite X.509 certificates)
+
+Hybrid is exercised automatically by the comprehensive runner and is exposed as `-mode=hybrid` on the server/client binaries.
 
 ### Direct Binary Usage
 
@@ -196,14 +229,37 @@ make build
 
 ### Docker Testing
 
+The Dockerfile is a multi-stage build:
+
+1. **Builder stage** (`golang:1.25-alpine`) — downloads modules and compiles `benchmark_server`, `benchmark_client`, `benchmark_runner`, and `benchmark_comprehensive` as static Linux binaries (`CGO_ENABLED=0`).
+2. **Runtime stage** (`alpine:3.19` + `ca-certificates`) — only receives the four prebuilt binaries at `/app/` and runs them. Go is **not** present in the runtime image, so the runner is invoked with `-skip-build` (set by `ENTRYPOINT`) to avoid trying to rebuild anything.
+
 ```bash
-# Build Docker image
+# Build the image
 make docker-build
 
-# Run in container
+# Run benchmarks inside a container (results appear on the host)
 make docker-run
 
 # Results will be in ./results/benchmark_results.csv
+```
+
+To switch to the comprehensive runner or tweak flags, override the entrypoint:
+
+```bash
+docker run --rm -v "$PWD/results:/results" \
+  --entrypoint /app/benchmark_comprehensive \
+  quic-pqc-benchmark:latest \
+  -skip-build -iterations=10 -size=1048576 -output=/results/comprehensive.csv
+```
+
+To extract the Linux binaries for use on another host:
+
+```bash
+docker create --name tmp quic-pqc-benchmark:latest
+docker cp tmp:/app/benchmark_server  ./benchmark_server_linux
+docker cp tmp:/app/benchmark_client  ./benchmark_client_linux
+docker rm tmp
 ```
 
 ## Configuration
@@ -213,8 +269,8 @@ make docker-run
 ```bash
 ./benchmark_server \
   -addr "0.0.0.0:4433" \       # Listen address
-  -mode "classical" \           # Mode: classical or pqc
-  -security 768 \               # PQC security level: 768 or 1024
+  -mode "classical" \           # Mode: classical, pqc, or hybrid
+  -security 768 \               # PQC security level: 512, 768, or 1024
   -size 10485760 \              # Data size in bytes (10MB)
   -chunk 1048576                # Chunk size in bytes (1MB)
 ```
@@ -229,8 +285,8 @@ make docker-run
 ```bash
 ./benchmark_client \
   -server "127.0.0.1:4433" \    # Server address
-  -mode "classical" \            # Mode: classical or pqc
-  -security 768 \                # PQC security level: 768 or 1024
+  -mode "classical" \            # Mode: classical, pqc, or hybrid
+  -security 768 \                # PQC security level: 512, 768, or 1024
   -iterations 10 \               # Number of test iterations
   -timeout 30s                   # Connection timeout
 ```
@@ -247,12 +303,15 @@ make docker-run
   -output "results.csv" \        # Output CSV file
   -iterations 10 \               # Iterations per mode
   -size 10485760 \              # Data size in bytes
-  -security 768 \                # PQC security level
+  -security 768 \                # PQC security level: 512, 768, or 1024
   -classic=true \                # Run classical benchmarks
   -pqc=true \                    # Run PQC benchmarks
   -server "127.0.0.1:4433" \    # Server address
   -build-only                    # Only build, don't run
+  -skip-build                    # Skip `go build` and use prebuilt binaries in CWD (used by the Docker image)
 ```
+
+The `comprehensive_runner` accepts the same `-skip-build` flag and the shared `-iterations`, `-size`, `-output`, `-server`, and `-build-only` flags.
 
 ## Output Format
 
@@ -520,6 +579,26 @@ python3 generate_table.py results_100.csv benchmark_table.png
 - Algorithm-specific sizing information
 - Security level mapping
 - Overhead calculations
+
+#### 3. Generate Cross-Size Scaling Charts
+
+```bash
+# Reads comprehensive_results_{1kb,5kb,10kb,100kb,500kb,1mb}.csv
+python3 generate_size_comparison.py
+
+# Produces:
+#   scaling_handshake.{png,eps}      - handshake duration vs. payload size
+#   scaling_handshake_dist.{png,eps} - handshake distribution (box plot + stddev band)
+#   scaling_handshake_pct.{png,eps}  - handshake overhead percentage vs. classical
+#   scaling_throughput.{png,eps}     - throughput vs. payload size
+#   scaling_throughput_dist.{png,eps}- throughput distribution
+#   scaling_total_duration.{png,eps} - end-to-end duration vs. payload size
+#   scaling_total_duration_dist.{png,eps}
+#   scaling_overhead.{png,eps}       - combined overhead view
+#   benchmark_table_<size>.{png,eps} - per-size tables
+```
+
+This script is what drives the figures used in the TCC write-up.
 
 ### Manual Analysis Examples
 
@@ -902,20 +981,6 @@ sudo sysctl -w net.core.wmem_max=26214400
 sudo sysctl -w net.netfilter.nf_conntrack_max=1000000
 ```
 
-## QEMU Integration (Future Work)
-
-The infrastructure supports QEMU-based testing for reproducible environments:
-
-```bash
-# Build for QEMU (ARM64)
-make build-qemu-arm64
-
-# Build for QEMU (AMD64)
-make build-qemu-amd64
-```
-
-Note: QEMU integration is experimental. Use local testing for reliable results.
-
 ## Contributing
 
 To add new metrics:
@@ -935,8 +1000,6 @@ This benchmark suite has been tested and verified:
 - ✅ Throughput measurements reliable
 - ✅ Error handling robust
 - ✅ Statistical summary correct
-
-**Last verified**: 2025-11-09 with Go 1.25.2 on macOS
 
 ## License
 
