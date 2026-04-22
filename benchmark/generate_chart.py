@@ -10,6 +10,13 @@ import os
 input_file = sys.argv[1] if len(sys.argv) > 1 else 'test_results.csv'
 output_dir = sys.argv[2] if len(sys.argv) > 2 else '.'
 
+def save_fig(name):
+    """Save current figure as both PNG and EPS."""
+    plt.savefig(os.path.join(output_dir, f'{name}.png'), dpi=300, bbox_inches='tight', facecolor='white')
+    plt.savefig(os.path.join(output_dir, f'{name}.eps'), format='eps', bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"Saved {name}.png + .eps")
+
 # Read CSV data
 classical = {'handshake': [], 'throughput': [], 'cert_size': [], 'rtt': [], 'packets_sent': []}
 configs = {}
@@ -58,6 +65,14 @@ color_map = {
 def get_color(label):
     return color_map.get(label, '#999999')
 
+def lighten(hex_color, factor=0.4):
+    """Lighten a hex color by blending toward white (EPS-safe, no alpha)."""
+    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+    r = int(r + (255 - r) * factor)
+    g = int(g + (255 - g) * factor)
+    b = int(b + (255 - b) * factor)
+    return f'#{r:02x}{g:02x}{b:02x}'
+
 def remove_outliers(vals):
     """Remove values beyond 2x IQR from Q1/Q3."""
     vals = [v for v in vals if v > 0]
@@ -85,11 +100,9 @@ ax.set_ylabel('Duração do Handshake (ms)', fontsize=12, fontweight='bold')
 ax.set_title('Desempenho do Handshake por Modo Criptográfico', fontsize=14, fontweight='bold')
 ax.set_xticks(range(len(labels)))
 ax.set_xticklabels(labels, rotation=20, ha='right', fontsize=10)
-ax.grid(True, alpha=0.3, axis='y')
+ax.grid(True, color='#cccccc', linewidth=0.5, axis='y')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'chart_handshake.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"Saved chart_handshake.png")
+save_fig('chart_handshake')
 
 # Chart 2: Throughput (auto-detect Kbps vs Mbps)
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -113,11 +126,9 @@ ax.set_ylabel(f'Vazão ({tp_unit})', fontsize=12, fontweight='bold')
 ax.set_title('Desempenho de Transferência de Dados', fontsize=14, fontweight='bold')
 ax.set_xticks(range(len(labels)))
 ax.set_xticklabels(labels, rotation=20, ha='right', fontsize=10)
-ax.grid(True, alpha=0.3, axis='y')
+ax.grid(True, color='#cccccc', linewidth=0.5, axis='y')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'chart_throughput.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"Saved chart_throughput.png (unit: {tp_unit})")
+save_fig('chart_throughput')
 
 # Chart 3: Certificate Size
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -130,11 +141,9 @@ ax.set_ylabel('Tamanho da Cadeia de Certificados (KB)', fontsize=12, fontweight=
 ax.set_title('Sobrecarga no Tamanho do Certificado', fontsize=14, fontweight='bold')
 ax.set_xticks(range(len(labels)))
 ax.set_xticklabels(labels, rotation=20, ha='right', fontsize=10)
-ax.grid(True, alpha=0.3, axis='y')
+ax.grid(True, color='#cccccc', linewidth=0.5, axis='y')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'chart_cert_size.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"Saved chart_cert_size.png")
+save_fig('chart_cert_size')
 
 # Chart 4: Handshake Distribution (box plot) - outliers removed for clarity
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -147,8 +156,7 @@ bp = ax.boxplot(box_data, labels=labels, patch_artist=True, widths=0.6,
                 whiskerprops=dict(linewidth=1.5),
                 capprops=dict(linewidth=1.5))
 for patch, color in zip(bp['boxes'], box_colors):
-    patch.set_facecolor(color)
-    patch.set_alpha(0.7)
+    patch.set_facecolor(lighten(color))
 
 # Add median and stddev labels above the top whisker cap
 whisker_tops = [cap.get_ydata()[0] for cap in bp['caps'][1::2]]
@@ -162,10 +170,45 @@ for i, data in enumerate(box_data):
 ax.set_ylabel('Duração do Handshake (ms)', fontsize=12, fontweight='bold')
 ax.set_title('Distribuição da Duração do Handshake', fontsize=14, fontweight='bold')
 ax.tick_params(axis='x', rotation=20)
-ax.grid(True, alpha=0.3, axis='y')
+ax.grid(True, color='#cccccc', linewidth=0.5, axis='y')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'chart_handshake_dist.png'), dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"Saved chart_handshake_dist.png")
+save_fig('chart_handshake_dist')
+
+# Chart 5: Throughput Distribution (box plot) - outliers removed for clarity
+fig, ax = plt.subplots(figsize=(10, 6))
+box_data_tp = [remove_outliers(classical['throughput'])] + [remove_outliers(configs[k]['throughput']) for k in configs]
+
+# Auto-detect unit
+all_medians_tp = [np.median(d) for d in box_data_tp if d]
+max_med_tp = max(all_medians_tp) if all_medians_tp else 0
+if max_med_tp < 10:
+    box_data_tp = [[v * 1000 for v in d] for d in box_data_tp]
+    tp_unit_box = 'Kbps'
+else:
+    tp_unit_box = 'Mbps'
+
+bp_tp = ax.boxplot(box_data_tp, labels=labels, patch_artist=True, widths=0.6,
+                   showfliers=False,
+                   medianprops=dict(color='black', linewidth=2),
+                   whiskerprops=dict(linewidth=1.5),
+                   capprops=dict(linewidth=1.5))
+for patch, color in zip(bp_tp['boxes'], box_colors):
+    patch.set_facecolor(lighten(color))
+
+whisker_tops_tp = [cap.get_ydata()[0] for cap in bp_tp['caps'][1::2]]
+for i, data in enumerate(box_data_tp):
+    median_val = np.median(data)
+    std_val = np.std(data)
+    top = whisker_tops_tp[i]
+    fmt_str = f'\n{median_val:.1f} {tp_unit_box}\n\u00b1{std_val:.1f} {tp_unit_box}'
+    ax.text(i + 1, top, fmt_str,
+            va='bottom', ha='center', fontsize=9, fontweight='bold', color=box_colors[i])
+
+ax.set_ylabel(f'Vazão ({tp_unit_box})', fontsize=12, fontweight='bold')
+ax.set_title('Distribuição da Vazão', fontsize=14, fontweight='bold')
+ax.tick_params(axis='x', rotation=20)
+ax.grid(True, color='#cccccc', linewidth=0.5, axis='y')
+plt.tight_layout()
+save_fig('chart_throughput_dist')
 
 print("All charts generated.")
