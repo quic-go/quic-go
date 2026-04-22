@@ -1,7 +1,10 @@
-.PHONY: all build clean run run-local run-qemu docker-build help
+.PHONY: build clean run-local test run-custom run-classic run-pqc \
+        run-comprehensive test-comprehensive \
+        test-1kb test-5kb test-10kb test-100kb test-500kb test-1mb test-all-sizes \
+        docker-build docker-run analyze help
 
 # Default target
-all: build
+.DEFAULT_GOAL := help
 
 # Build all binaries
 build:
@@ -147,20 +150,6 @@ test-all-sizes: build
 	@echo "✅ All size tests complete!"
 	@echo "Results: comprehensive_results_{1kb,5kb,10kb,100kb,500kb,1mb}.csv"
 
-# Build for QEMU (ARM64)
-build-qemu-arm64:
-	@echo "Building for ARM64 (QEMU)..."
-	@GOOS=linux GOARCH=arm64 CGO_ENABLED=0 cd server && go build -o ../benchmark_server_arm64 .
-	@GOOS=linux GOARCH=arm64 CGO_ENABLED=0 cd client && go build -o ../benchmark_client_arm64 .
-	@echo "ARM64 build complete!"
-
-# Build for QEMU (AMD64)
-build-qemu-amd64:
-	@echo "Building for AMD64 (QEMU)..."
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 cd server && go build -o ../benchmark_server_amd64 .
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 cd client && go build -o ../benchmark_client_amd64 .
-	@echo "AMD64 build complete!"
-
 # Build Docker image with Alpine Linux
 docker-build:
 	@echo "Building Docker image..."
@@ -175,25 +164,6 @@ docker-run: docker-build
 		quic-pqc-benchmark:latest \
 		-iterations=10 \
 		-output=/results/benchmark_results.csv
-
-# Download Alpine Linux image for QEMU
-qemu-alpine-download:
-	@echo "Downloading Alpine Linux image..."
-	@mkdir -p qemu-images
-	@cd qemu-images && \
-		wget -O alpine-virt.iso https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/x86_64/alpine-virt-3.19.1-x86_64.iso
-	@echo "Alpine image downloaded!"
-
-# Run server in QEMU (example)
-qemu-server: build-qemu-amd64
-	@echo "Starting QEMU server VM..."
-	@qemu-system-x86_64 \
-		-enable-kvm \
-		-m 512 \
-		-nographic \
-		-kernel ./benchmark_server_amd64 \
-		-netdev user,id=net0,hostfwd=tcp::4433-:4433 \
-		-device virtio-net-pci,netdev=net0
 
 # Analyze results
 analyze:
@@ -244,11 +214,9 @@ help:
 	@echo "  make test-all-sizes       - Run all sizes sequentially"
 	@echo ""
 	@echo "Other Targets:"
-	@echo "  make build-qemu-arm64     - Build for ARM64 QEMU"
-	@echo "  make build-qemu-amd64     - Build for AMD64 QEMU"
-	@echo "  make docker-build         - Build Docker image"
-	@echo "  make docker-run           - Run in Docker container"
-	@echo "  make analyze              - Analyze results"
+	@echo "  make docker-build         - Build Docker image (multi-stage: Go builder + Alpine runtime)"
+	@echo "  make docker-run           - Build image and run benchmarks inside container"
+	@echo "  make analyze              - Analyze benchmark_results.csv"
 	@echo "  make help                 - Show this help"
 	@echo ""
 	@echo "Configurable Parameters:"

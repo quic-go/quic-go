@@ -47,3 +47,4 @@ benchmark/*.png
 benchmark/*.eps
 benchmark/charts_*/
 benchmark/old_results/
+benchmark/results/
