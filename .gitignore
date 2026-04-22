@@ -21,18 +21,29 @@ gomock_reflect_*/
 wycheproof_test.go
 test_pqc_modes.sh
 
-# Benchmark artifact outputs (generated, not source)
-benchmark/*.csv
-benchmark/*.png
-benchmark/*.eps
-benchmark/*.log
-benchmark/benchmark_server
-benchmark/benchmark_client
-benchmark/benchmark_runner
-benchmark/benchmark_comprehensive
-benchmark/charts_*/
-benchmark/old_results/
-benchmark/.DS_Store
 
 # Analysis documents (generated locally)
 FILES_TO_REMOVE_FROM_GIT.md
+COMMIT_ANALYSIS.md
+GIT_CLEANUP_SUMMARY.md
+implementation_hybrid_plan.md
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Compiled binaries (regenerable via `go build`)
+/pqc_client
+/pqc_server
+benchmark/benchmark_client
+benchmark/benchmark_server
+benchmark/benchmark_runner
+benchmark/benchmark_comprehensive
+
+# Benchmark outputs (regenerable)
+benchmark/*.csv
+benchmark/*.log
+benchmark/*.png
+benchmark/*.eps
+benchmark/charts_*/
+benchmark/old_results/
