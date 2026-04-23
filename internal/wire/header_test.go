@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/stretchr/testify/require"
 )
@@ -574,11 +575,19 @@ func benchmarkArbitraryHeaderParsing(b *testing.B, destLen, srcLen int) {
 	}
 }
 
-func FuzzHeaderParser(f *testing.F) {
-	const version = protocol.Version1
+type discardLogger struct{}
 
+func (discardLogger) SetLogLevel(utils.LogLevel)     {}
+func (discardLogger) SetLogTimeFormat(string)        {}
+func (discardLogger) WithPrefix(string) utils.Logger { return discardLogger{} }
+func (discardLogger) Debug() bool                    { return false }
+func (discardLogger) Errorf(string, ...any)          {}
+func (discardLogger) Infof(string, ...any)           {}
+func (discardLogger) Debugf(string, ...any)          {}
+
+func FuzzHeaderParser(f *testing.F) {
 	addLongHeader := func(hdr *ExtendedHeader) {
-		b, err := hdr.Append(nil, version)
+		b, err := hdr.Append(nil, hdr.Version)
 		require.NoError(f, err)
 		if hdr.Type == protocol.PacketTypeRetry {
 			b = append(b, make([]byte, 16)...) // Retry Integrity Tag
@@ -589,87 +598,89 @@ func FuzzHeaderParser(f *testing.F) {
 		f.Add(uint8(hdr.DestConnectionID.Len()), b)
 	}
 
-	// Initial without token
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3}),
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-			Type:             protocol.PacketTypeInitial,
-			Length:           10,
-			Version:          version,
-		},
-		PacketNumberLen: protocol.PacketNumberLen2,
-		PacketNumber:    0x42,
-	})
-	// Initial without token, with zero-length src conn id
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-			Type:             protocol.PacketTypeInitial,
-			Length:           10,
-			Version:          version,
-		},
-		PacketNumberLen: protocol.PacketNumberLen2,
-		PacketNumber:    0x42,
-	})
-	// Initial with token
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}),
-			Type:             protocol.PacketTypeInitial,
-			Length:           10,
-			Token:            []byte("this is a token"),
-			Version:          version,
-		},
-		PacketNumberLen: protocol.PacketNumberLen4,
-		PacketNumber:    0xdecafbad,
-	})
-	// Handshake packet
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
-			Type:             protocol.PacketTypeHandshake,
-			Length:           10,
-			Version:          version,
-		},
-		PacketNumberLen: protocol.PacketNumberLen3,
-		PacketNumber:    0x1337,
-	})
-	// Handshake packet, with zero-length src conn id
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}),
-			Type:             protocol.PacketTypeHandshake,
-			Length:           10,
-			Version:          version,
-		},
-		PacketNumberLen: protocol.PacketNumberLen1,
-		PacketNumber:    0x42,
-	})
-	// 0-RTT packet
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}),
-			Type:             protocol.PacketType0RTT,
-			Length:           10,
-			Version:          version,
-		},
-		PacketNumberLen: protocol.PacketNumberLen2,
-		PacketNumber:    0x42,
-	})
-	// Retry packet
-	addLongHeader(&ExtendedHeader{
-		Header: Header{
-			SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-			DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}),
-			Type:             protocol.PacketTypeRetry,
-			Token:            []byte("foobar"),
-			Version:          version,
-		},
-	})
+	for _, v := range []protocol.Version{protocol.Version1, protocol.Version2} {
+		// Initial without token
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3}),
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+				Type:             protocol.PacketTypeInitial,
+				Length:           10,
+				Version:          v,
+			},
+			PacketNumberLen: protocol.PacketNumberLen2,
+			PacketNumber:    0x42,
+		})
+		// Initial without token, with zero-length src conn id
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+				Type:             protocol.PacketTypeInitial,
+				Length:           10,
+				Version:          v,
+			},
+			PacketNumberLen: protocol.PacketNumberLen2,
+			PacketNumber:    0x42,
+		})
+		// Initial with token
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}),
+				Type:             protocol.PacketTypeInitial,
+				Length:           10,
+				Token:            []byte("this is a token"),
+				Version:          v,
+			},
+			PacketNumberLen: protocol.PacketNumberLen4,
+			PacketNumber:    0xdecafbad,
+		})
+		// Handshake packet
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
+				Type:             protocol.PacketTypeHandshake,
+				Length:           10,
+				Version:          v,
+			},
+			PacketNumberLen: protocol.PacketNumberLen3,
+			PacketNumber:    0x1337,
+		})
+		// Handshake packet, with zero-length src conn id
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}),
+				Type:             protocol.PacketTypeHandshake,
+				Length:           10,
+				Version:          v,
+			},
+			PacketNumberLen: protocol.PacketNumberLen1,
+			PacketNumber:    0x42,
+		})
+		// 0-RTT packet
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}),
+				Type:             protocol.PacketType0RTT,
+				Length:           10,
+				Version:          v,
+			},
+			PacketNumberLen: protocol.PacketNumberLen2,
+			PacketNumber:    0x42,
+		})
+		// Retry packet
+		addLongHeader(&ExtendedHeader{
+			Header: Header{
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}),
+				Type:             protocol.PacketTypeRetry,
+				Token:            []byte("foobar"),
+				Version:          v,
+			},
+		})
+	}
 	// Short header
 	shortHdr, err := AppendShortHeader(nil, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), 0x1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 	require.NoError(f, err)
@@ -687,6 +698,8 @@ func FuzzHeaderParser(f *testing.F) {
 	))
 
 	f.Fuzz(func(t *testing.T, connIDLenRaw uint8, data []byte) {
+		is0RTTPacket := Is0RTTPacket(data)
+
 		if IsVersionNegotiationPacket(data) {
 			dest, src, versions, err := ParseVersionNegotiationPacket(data)
 			if err != nil {
@@ -698,17 +711,25 @@ func FuzzHeaderParser(f *testing.F) {
 		}
 
 		connIDLen := int(connIDLenRaw % 21)
-		connID, err := ParseConnectionID(data, connIDLen)
-		if err != nil {
+		// don't return early on error, we want to fuzz the length checks of other functions as well
+		connID, _ := ParseConnectionID(data, connIDLen)
+
+		if len(data) == 0 {
 			return
 		}
 
-		if !IsLongHeaderPacket(data[0]) {
+		_ = IsPotentialQUICPacket(data[0])
+
+		if IsLongHeaderPacket(data[0]) {
+			ParseVersion(data)
+		} else {
+			_, _, _, err := ParsePacket(data)
+			require.EqualError(t, err, "not a long header packet")
+
 			ParseShortHeader(data, connIDLen)
 			return
 		}
 
-		is0RTTPacket := Is0RTTPacket(data)
 		hdr, _, _, err := ParsePacket(data)
 		if err != nil {
 			return
@@ -717,6 +738,7 @@ func FuzzHeaderParser(f *testing.F) {
 		if (hdr.Type == protocol.PacketType0RTT) != is0RTTPacket {
 			t.Fatal("inconsistent 0-RTT packet detection")
 		}
+		_ = hdr.PacketType()
 
 		var extHdr *ExtendedHeader
 		if hdr.Type == protocol.PacketTypeRetry {
@@ -727,16 +749,18 @@ func FuzzHeaderParser(f *testing.F) {
 			if err != nil {
 				return
 			}
+			require.Equal(t, hdr.ParsedLen()+protocol.ByteCount(extHdr.PacketNumberLen), extHdr.ParsedLen())
 		}
+		extHdr.Log(discardLogger{})
 		// We always use a 2-byte encoding for the Length field in Long Header packets.
 		// Serializing the header will fail when using a higher value.
 		if hdr.Length > 16383 {
 			return
 		}
-		b, err := extHdr.Append(nil, version)
+		b, err := extHdr.Append(nil, hdr.Version)
 		if err != nil {
 			// We are able to parse packets with connection IDs longer than 20 bytes,
-			// but in QUIC version 1, we don't write headers with longer connection IDs.
+			// but in QUIC version 1 and 2, we don't write headers with longer connection IDs.
 			if hdr.DestConnectionID.Len() <= protocol.MaxConnIDLen &&
 				hdr.SrcConnectionID.Len() <= protocol.MaxConnIDLen {
 				t.Fatalf("error writing header: %s", err)
@@ -745,9 +769,21 @@ func FuzzHeaderParser(f *testing.F) {
 		}
 		// GetLength is not implemented for Retry packets
 		if hdr.Type != protocol.PacketTypeRetry {
-			if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(len(b)) {
+			if expLen := extHdr.GetLength(hdr.Version); expLen != protocol.ByteCount(len(b)) {
 				t.Fatalf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, len(b))
 			}
+			roundtripHdr, err := parseHeader(b)
+			require.NoError(t, err)
+			roundtripExtHdr, err := roundtripHdr.ParseExtended(b)
+			require.NoError(t, err)
+			require.Equal(t, extHdr.Type, roundtripExtHdr.Type)
+			require.Equal(t, extHdr.Version, roundtripExtHdr.Version)
+			require.Equal(t, extHdr.DestConnectionID, roundtripExtHdr.DestConnectionID)
+			require.Equal(t, extHdr.SrcConnectionID, roundtripExtHdr.SrcConnectionID)
+			require.Equal(t, extHdr.Length, roundtripExtHdr.Length)
+			require.Equal(t, extHdr.Token, roundtripExtHdr.Token)
+			require.Equal(t, extHdr.PacketNumberLen, roundtripExtHdr.PacketNumberLen)
+			require.Equal(t, extHdr.PacketNumber, roundtripExtHdr.PacketNumber)
 		}
 	})
 }
