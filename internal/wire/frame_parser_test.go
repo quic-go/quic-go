@@ -829,7 +829,7 @@ func benchmarkFrames(b *testing.B, frames ...Frame) {
 	}
 }
 
-func FuzzFrameParser(f *testing.F) {
+func FuzzFrames(f *testing.F) {
 	const version = protocol.Version1
 
 	for _, s := range []struct {
@@ -846,7 +846,7 @@ func FuzzFrameParser(f *testing.F) {
 	} {
 		b, err := s.frame.Append(nil, version)
 		require.NoError(f, err)
-		f.Add(uint8(s.encLevel), b)
+		f.Add(uint8(s.encLevel), uint16(0xffff), b)
 	}
 
 	for _, fr := range []Frame{
@@ -854,6 +854,7 @@ func FuzzFrameParser(f *testing.F) {
 		&StreamFrame{StreamID: 0x42, Fin: true},
 		&StreamFrame{StreamID: 0x42, Data: []byte("foobar"), Fin: true},
 		&StreamFrame{StreamID: 0x1337, Offset: 0xcafe, Data: []byte("foobar")},
+		&StreamFrame{Offset: quicvarint.Max, Data: []byte("foo")}, // exceeds maximum offset
 		&AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}},
 		&AckFrame{
 			AckRanges: []AckRange{{Smallest: 80, Largest: 100}, {Smallest: 1, Largest: 50}},
@@ -897,10 +898,17 @@ func FuzzFrameParser(f *testing.F) {
 	} {
 		b, err := fr.Append(nil, version)
 		require.NoError(f, err)
-		f.Add(uint8(protocol.Encryption1RTT), b)
+		maxSize := uint16(0xffff)
+		switch fr.(type) {
+		case *StreamFrame, *DatagramFrame:
+			maxSize = 256
+		case *AckFrame:
+			maxSize = 128
+		}
+		f.Add(uint8(protocol.Encryption1RTT), maxSize, b)
 	}
 
-	f.Fuzz(func(t *testing.T, encLevelRaw uint8, data []byte) {
+	f.Fuzz(func(t *testing.T, encLevelRaw uint8, maxSize uint16, data []byte) {
 		encLevel := protocol.EncryptionLevel(encLevelRaw)
 		if encLevel != protocol.EncryptionInitial && encLevel != protocol.EncryptionHandshake && encLevel != protocol.Encryption1RTT && encLevel != protocol.Encryption0RTT {
 			return
@@ -922,7 +930,7 @@ func FuzzFrameParser(f *testing.F) {
 			switch {
 			case frameType.IsStreamFrameType():
 				frame, l, err = parser.ParseStreamFrame(frameType, data, version)
-			case frameType == FrameTypeAck || frameType == FrameTypeAckECN:
+			case frameType.IsAckFrameType():
 				frame, l, err = parser.ParseAckFrame(frameType, data, encLevel, version)
 			case frameType == FrameTypeDatagramNoLength || frameType == FrameTypeDatagramWithLength:
 				frame, l, err = parser.ParseDatagramFrame(frameType, data, version)
@@ -946,19 +954,51 @@ func FuzzFrameParser(f *testing.F) {
 			startLen := len(b)
 			parsedLen := initialLen - len(data)
 			b, err = frame.Append(b, version)
-			if err != nil {
-				t.Fatalf("error writing frame %#v: %s", frame, err)
-			}
+			require.NoError(t, err)
 			frameLen := protocol.ByteCount(len(b) - startLen)
-			if frame.Length(version) != frameLen {
-				t.Fatalf("inconsistent frame length for %#v: expected %d, got %d", frame, frameLen, frame.Length(version))
+			require.Equal(t, frameLen, frame.Length(version), "re-serialized frame")
+			size := protocol.ByteCount(maxSize)
+			switch f := frame.(type) {
+			case *StreamFrame:
+				orig := slices.Clone(f.Data)
+				split, needsSplit := f.MaybeSplitOffFrame(size, version)
+				if split != nil {
+					require.LessOrEqual(t, split.Length(version), size, "split STREAM frame")
+					require.Equal(t, orig, append(slices.Clone(split.Data), f.Data...), "split STREAM frame data")
+					split.PutBack()
+				} else {
+					require.True(t, needsSplit || f.Length(version) <= size, "STREAM longer than maxSize but not split: len=%d maxSize=%d", f.Length(version), size)
+				}
+			case *CryptoFrame:
+				orig := slices.Clone(f.Data)
+				split, needsSplit := f.MaybeSplitOffFrame(size, version)
+				if split != nil {
+					require.LessOrEqual(t, split.Length(version), size, "split CRYPTO frame")
+					require.Equal(t, orig, append(slices.Clone(split.Data), f.Data...), "split CRYPTO frame data")
+				} else {
+					require.True(t, needsSplit || f.Length(version) <= size, "CRYPTO longer than maxSize but not split: len=%d maxSize=%d", f.Length(version), size)
+				}
+			case *AckFrame:
+				f.HasMissingRanges()
+				// Truncate requires maxSize to fit at least one ACK range;
+				// 64 bytes covers the worst case (8-byte varints, with ECN).
+				if size >= 64 {
+					f.Truncate(size, version)
+					require.LessOrEqual(t, f.Length(version), size, "truncated ACK")
+					checkFrameInvariants(t, f)
+				}
+			case *DatagramFrame:
+				if n := f.MaxDataLen(size, version); n > 0 && protocol.ByteCount(len(f.Data)) > n {
+					orig := f.Data
+					f.Data = f.Data[:n]
+					require.LessOrEqual(t, f.Length(version), size, "DATAGRAM with MaxDataLen")
+					f.Data = orig
+				}
 			}
 			if sf, ok := frame.(*StreamFrame); ok {
 				sf.PutBack()
 			}
-			if frameLen > protocol.ByteCount(parsedLen) {
-				t.Fatalf("serialized length (%d) is longer than parsed length (%d)", len(b), parsedLen)
-			}
+			require.LessOrEqual(t, frameLen, protocol.ByteCount(parsedLen), "serialized length vs parsed length")
 		}
 	})
 }
