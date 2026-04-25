@@ -944,6 +944,7 @@ func FuzzTransportParameters(f *testing.F) {
 		MaxBidiStreamNum:               1337,
 		MaxUniStreamNum:                7331,
 		ActiveConnectionIDLimit:        7,
+		MaxDatagramFrameSize:           protocol.InvalidByteCount,
 	}).MarshalForSessionTicket(nil)
 	zeroRTTParams := (&TransportParameters{
 		StatelessResetToken:     &protocol.StatelessResetToken{},
