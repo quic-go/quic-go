@@ -4,7 +4,10 @@ on:
     paths:
       - '**'
 
-permissions: read-all
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   PR:
     runs-on: ${{ fromJSON(vars['CLUSTERFUZZ_LITE_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}

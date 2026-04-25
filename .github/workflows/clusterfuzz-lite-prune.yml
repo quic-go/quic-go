@@ -2,7 +2,10 @@ name: ClusterFuzzLite pruning
 on:
   schedule:
     - cron: '0 2 * * *'
-permissions: read-all
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
   Pruning:

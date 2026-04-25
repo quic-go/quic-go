@@ -2,7 +2,10 @@ name: ClusterFuzzLite batch fuzzing
 on:
   schedule:
     - cron: '0 0/6 * * *'
-permissions: read-all
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
   BatchFuzzing:
