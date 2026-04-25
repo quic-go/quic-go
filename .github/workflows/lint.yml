@@ -1,5 +1,7 @@
 on: [push, pull_request]
 
+permissions: read-all
+
 jobs:
   check:
     runs-on: ubuntu-latest

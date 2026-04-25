@@ -5,6 +5,7 @@ on:
       - '**'
 
 permissions: read-all
+
 jobs:
   PR:
     runs-on: ${{ fromJSON(vars['CLUSTERFUZZ_LITE_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
