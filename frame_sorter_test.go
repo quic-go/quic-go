@@ -2,9 +2,11 @@ package quic
 
 import (
 	rand "crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"math"
 	mrand "math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -1509,4 +1511,198 @@ func TestFrameSorterPeek(t *testing.T) {
 	s.Push([]byte("qux"), 10, nil)
 	p = make([]byte, 10)
 	require.ErrorIs(t, s.Peek(0, p), errTooLittleData)
+}
+
+func FuzzFrameSorter(f *testing.F) {
+	const (
+		opPush uint8 = iota
+		opPop
+		opPeek
+		opSize = 5
+	)
+
+	const (
+		maxStreamLen = 1024
+		maxFrameLen  = 256
+		maxOps       = 128
+	)
+
+	type op struct {
+		Typ    byte
+		Offset int
+		Length int
+	}
+
+	for _, seed := range [][]op{
+		{
+			{Typ: opPush, Offset: 0, Length: 3},
+			{Typ: opPush, Offset: 3, Length: 3},
+			{Typ: opPop},
+		},
+		{
+			{Typ: opPush, Offset: 6, Length: 3},
+			{Typ: opPush, Offset: 0, Length: 3},
+			{Typ: opPush, Offset: 3, Length: 3},
+			{Typ: opPop},
+		},
+		{
+			{Typ: opPush, Offset: 0, Length: 6},
+			{Typ: opPush, Offset: 0, Length: 6},
+			{Typ: opPop},
+			{Typ: opPush, Offset: 0, Length: 6},
+		},
+		{
+			{Typ: opPush, Offset: 3, Length: 4},
+			{Typ: opPush, Offset: 5, Length: 4},
+			{Typ: opPush, Offset: 0, Length: 3},
+			{Typ: opPop},
+		},
+		{
+			{Typ: opPush, Offset: 3, Length: 3},
+			{Typ: opPush, Offset: 9, Length: 3},
+			{Typ: opPush, Offset: 5, Length: 10},
+			{Typ: opPush, Offset: 0, Length: 3},
+			{Typ: opPop},
+		},
+		{
+			{Typ: opPush, Offset: 0, Length: 6},
+			{Typ: opPeek, Offset: 0, Length: 3},
+			{Typ: opPush, Offset: 6, Length: 3},
+			{Typ: opPeek, Offset: 0, Length: 9},
+			{Typ: opPush, Offset: 10, Length: 3},
+			{Typ: opPeek, Offset: 0, Length: 12},
+		},
+	} {
+		// each operation is serialized as 1 byte op type, 2 bytes offset, and 2 bytes length
+		b := make([]byte, opSize*len(seed))
+		for i, op := range seed {
+			b[opSize*i] = op.Typ
+			binary.BigEndian.PutUint16(b[opSize*i+1:opSize*i+3], uint16(op.Offset))
+			binary.BigEndian.PutUint16(b[opSize*i+3:opSize*i+5], uint16(op.Length))
+		}
+		f.Add(b)
+	}
+
+	// use deterministic non-uniform data
+	streamData := make([]byte, maxStreamLen)
+	for i := range streamData {
+		streamData[i] = byte(31*i + 7)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data)%opSize != 0 || len(data) > opSize*maxOps {
+			return
+		}
+
+		s := newFrameSorter()
+		received := make([]bool, len(streamData))
+		var readPos protocol.ByteCount
+		var callbacks []callbackTracker
+
+		push := func(offset, length int) {
+			cb, tr := getFrameSorterTestCallback(t)
+			callbacks = append(callbacks, tr)
+			require.NoError(t, s.Push(streamData[offset:offset+length], protocol.ByteCount(offset), cb))
+			for i := max(offset, int(readPos)); i < offset+length; i++ {
+				received[i] = true
+			}
+		}
+
+		for len(data) > 0 {
+			op := op{
+				Typ:    data[0],
+				Offset: int(binary.BigEndian.Uint16(data[1:3])),
+				Length: int(binary.BigEndian.Uint16(data[3:5])),
+			}
+			data = data[opSize:]
+			if op.Offset >= len(streamData) || op.Length > maxFrameLen || op.Offset+op.Length > len(streamData) {
+				return
+			}
+
+			switch op.Typ {
+			case opPush:
+				push(op.Offset, op.Length)
+			case opPop:
+				readPos = frameSorterFuzzPop(t, s, streamData, received, readPos)
+			case opPeek:
+				frameSorterFuzzPeek(t, s, streamData, received, readPos, op.Offset, op.Length)
+			}
+		}
+
+		// Complete the stream so that all queued data is eventually popped or replaced.
+		// This lets us assert that every callback is called exactly once.
+		push(0, len(streamData))
+
+		for readPos < protocol.ByteCount(len(streamData)) {
+			readPos = frameSorterFuzzPop(t, s, streamData, received, readPos)
+		}
+		require.False(t, s.HasMoreData())
+		for _, cb := range callbacks {
+			require.True(t, cb.WasCalled())
+		}
+	})
+}
+
+func frameSorterFuzzPop(t *testing.T, s *frameSorter, streamData []byte, received []bool, readPos protocol.ByteCount) protocol.ByteCount {
+	t.Helper()
+
+	hasMoreData := func(received []bool) bool {
+		return slices.Contains(received, true)
+	}
+
+	offset, data, cb := s.Pop()
+	require.Equal(t, readPos, offset)
+
+	require.LessOrEqual(t, readPos, protocol.ByteCount(len(streamData)))
+	if readPos == protocol.ByteCount(len(streamData)) || !received[readPos] {
+		require.Nil(t, data)
+		require.Nil(t, cb)
+		require.Equal(t, hasMoreData(received[int(readPos):]), s.HasMoreData())
+		return readPos
+	}
+
+	require.NotEmpty(t, data)
+	nextGap := slices.Index(received[int(readPos):], false)
+	if nextGap == -1 {
+		nextGap = len(received) - int(readPos)
+	}
+	require.LessOrEqual(t, len(data), nextGap)
+	end := readPos + protocol.ByteCount(len(data))
+	require.LessOrEqual(t, end, protocol.ByteCount(len(streamData)))
+	require.Equal(t, streamData[readPos:end], data)
+	if cb != nil {
+		cb()
+	}
+	require.Equal(t, hasMoreData(received[int(end):]), s.HasMoreData())
+	return end
+}
+
+func frameSorterFuzzPeek(t *testing.T, s *frameSorter, streamData []byte, received []bool, readPos protocol.ByteCount, offset, length int) {
+	t.Helper()
+
+	p := make([]byte, length)
+	err := s.Peek(protocol.ByteCount(offset), p)
+
+	// Peek only succeeds if there is enough consecutive data queued starting at offset,
+	// and it only supports peeking from offsets where a frame starts.
+	if length == 0 {
+		require.NoError(t, err)
+		return
+	}
+
+	var mustSucceed bool
+	if protocol.ByteCount(offset) == readPos {
+		nextGap := slices.Index(received[offset:], false)
+		if nextGap == -1 {
+			nextGap = len(received) - offset
+		}
+		mustSucceed = length <= nextGap
+	}
+
+	if mustSucceed {
+		require.NoError(t, err)
+	} else if err != nil {
+		return
+	}
+	require.Equal(t, streamData[offset:offset+length], p)
 }
