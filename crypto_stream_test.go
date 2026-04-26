@@ -157,8 +157,9 @@ func TestInitialCryptoStreamClientStatic(t *testing.T) {
 	skipIfDisableScramblingEnvSet(t)
 
 	str := newInitialCryptoStream(true)
-	clientHello := getClientHello(t, "quic-go.net")
-	_, err := str.Write(clientHello)
+	clientHello, err := getClientHello("quic-go.net")
+	require.NoError(t, err)
+	_, err = str.Write(clientHello)
 	require.NoError(t, err)
 	require.True(t, str.HasData())
 	_, err = str.Write([]byte("foobar"))
@@ -222,10 +223,14 @@ func TestInitialCryptoStreamClientRandomizedSizes(t *testing.T) {
 			var clientHello []byte
 			if serverName == "" || !strings.Contains(serverName, ".") || mrand.Int()%2 == 0 {
 				t.Logf("using a ClientHello without ECH, hostname: %q", serverName)
-				clientHello = getClientHello(t, serverName)
+				var err error
+				clientHello, err = getClientHello(serverName)
+				require.NoError(t, err)
 			} else {
 				t.Logf("using a ClientHello with ECH, hostname: %q", serverName)
-				clientHello = getClientHelloWithECH(t, serverName)
+				var err error
+				clientHello, err = getClientHelloWithECH(serverName)
+				require.NoError(t, err)
 			}
 			testInitialCryptoStreamClientRandomizedSizes(t, clientHello, serverName)
 		})

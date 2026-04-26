@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/binary"
+	"fmt"
 	"io"
 	mrand "math/rand/v2"
 	"testing"
@@ -18,20 +19,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkClientHello(t testing.TB, clientHello []byte) {
-	t.Helper()
-
+func checkClientHello(clientHello []byte) error {
 	conn := tls.QUICServer(&tls.QUICConfig{
 		TLSConfig: testdata.GetTLSConfig(),
 	})
-	require.NoError(t, conn.Start(context.Background()))
+	if err := conn.Start(context.Background()); err != nil {
+		return err
+	}
 	defer conn.Close()
-	require.NoError(t, conn.HandleData(tls.QUICEncryptionLevelInitial, clientHello))
+	return conn.HandleData(tls.QUICEncryptionLevelInitial, clientHello)
 }
 
-func getClientHello(t testing.TB, serverName string) []byte {
-	t.Helper()
-
+func getClientHello(serverName string) ([]byte, error) {
 	c := tls.QUICClient(&tls.QUICConfig{
 		TLSConfig: &tls.Config{
 			ServerName:         serverName,
@@ -44,17 +43,21 @@ func getClientHello(t testing.TB, serverName string) []byte {
 	b := make([]byte, mrand.IntN(200))
 	rand.Read(b)
 	c.SetTransportParameters(b)
-	require.NoError(t, c.Start(context.Background()))
+	if err := c.Start(context.Background()); err != nil {
+		return nil, err
+	}
 
 	ev := c.NextEvent()
-	require.Equal(t, tls.QUICWriteData, ev.Kind)
-	checkClientHello(t, ev.Data)
-	return ev.Data
+	if ev.Kind != tls.QUICWriteData {
+		return nil, fmt.Errorf("expected QUICWriteData event, got %v", ev.Kind)
+	}
+	if err := checkClientHello(ev.Data); err != nil {
+		return nil, err
+	}
+	return ev.Data, nil
 }
 
-func getClientHelloWithECH(t testing.TB, serverName string) []byte {
-	t.Helper()
-
+func getClientHelloWithECH(serverName string) ([]byte, error) {
 	// various constants from the standard library's (internal) hpke package
 	const (
 		DHKEM_X25519_HKDF_SHA256 = 0x20
@@ -83,8 +86,7 @@ func getClientHelloWithECH(t testing.TB, serverName string) []byte {
 		return builder.BytesOrPanic()
 	}
 
-	echKey, err := ecdh.X25519().GenerateKey(rand.Reader)
-	require.NoError(t, err)
+	echKey, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	echConfig := marshalECHConfig(42, echKey.PublicKey().Bytes(), serverName, 32)
 
 	builder := cryptobyte.NewBuilder(nil)
@@ -103,12 +105,18 @@ func getClientHelloWithECH(t testing.TB, serverName string) []byte {
 	b := make([]byte, mrand.IntN(200))
 	rand.Read(b)
 	c.SetTransportParameters(b)
-	require.NoError(t, c.Start(context.Background()))
+	if err := c.Start(context.Background()); err != nil {
+		return nil, err
+	}
 
 	ev := c.NextEvent()
-	require.Equal(t, tls.QUICWriteData, ev.Kind)
-	checkClientHello(t, ev.Data)
-	return ev.Data
+	if ev.Kind != tls.QUICWriteData {
+		return nil, fmt.Errorf("expected QUICWriteData event, got %v", ev.Kind)
+	}
+	if err := checkClientHello(ev.Data); err != nil {
+		return nil, err
+	}
+	return ev.Data, nil
 }
 
 // shuffleClientHelloExtensions takes a TLS 1.3 ClientHello message (without the record layer)
@@ -192,7 +200,9 @@ func shuffleClientHelloExtensions(t testing.TB, clientHello []byte) []byte {
 	newClientHello = append(newClientHello, lengthBytes...)
 	newClientHello = append(newClientHello, newBody...)
 	// check that it's actually valid
-	checkClientHello(t, newClientHello)
+	if err := checkClientHello(newClientHello); err != nil {
+		t.Fatalf("invalid ClientHello: %v", err)
+	}
 	return newClientHello
 }
 
@@ -209,7 +219,8 @@ func TestFindSNI(t *testing.T) {
 }
 
 func testFindSNI(t *testing.T, serverName string) {
-	clientHello := getClientHello(t, serverName)
+	clientHello, err := getClientHello(serverName)
+	require.NoError(t, err)
 	sniPos, sniLen, echPos, err := findSNIAndECH(clientHello)
 	require.NoError(t, err)
 	assert.Equal(t, -1, echPos)
@@ -230,7 +241,9 @@ func testFindSNI(t *testing.T, serverName string) {
 
 func TestFindSNIWithECH(t *testing.T) {
 	const serverName = "public.example"
-	clientHello := shuffleClientHelloExtensions(t, getClientHelloWithECH(t, serverName))
+	clientHello, err := getClientHelloWithECH(serverName)
+	require.NoError(t, err)
+	clientHello = shuffleClientHelloExtensions(t, clientHello)
 	sniPos, sniLen, echPos, err := findSNIAndECH(clientHello)
 	require.NoError(t, err)
 	require.NotEqual(t, -1, echPos)
@@ -250,10 +263,21 @@ func TestFindSNIWithECH(t *testing.T) {
 // and doesn't need to be run in ClusterFuzz.
 // It's still useful to find potential corner cases in the parser.
 func FuzzFindSNI(f *testing.F) {
-	f.Add(getClientHello(f, ""), 10)
-	f.Add(getClientHello(f, "google.com"), 20)
-	f.Add(getClientHello(f, "sub.do.ma.in.quic-go.net"), 30)
-	f.Add(getClientHelloWithECH(f, "quic-go.net"), 40)
+	addSeed := func(serverName string, maxSize int) {
+		ch, err := getClientHello(serverName)
+		require.NoError(f, err)
+		f.Add(ch, maxSize)
+	}
+	addSeedWithECH := func(serverName string, maxSize int) {
+		ch, err := getClientHelloWithECH(serverName)
+		require.NoError(f, err)
+		f.Add(ch, maxSize)
+	}
+
+	addSeed("", 10)
+	addSeed("google.com", 20)
+	addSeed("sub.do.ma.in.quic-go.net", 30)
+	addSeedWithECH("quic-go.net", 40)
 
 	f.Fuzz(func(t *testing.T, data []byte, maxSize int) {
 		cs := newInitialCryptoStream(true)
