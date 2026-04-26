@@ -355,8 +355,15 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 		if initialPayload.length > 0 {
 			size += p.longHeaderPacketLength(initialHdr, initialPayload, v) + protocol.ByteCount(initialSealer.Overhead())
 		}
-	}
 
+		// Add a PING frame to Initial packets, if they don't contain any other frames.
+		// This is not strictly necessary, but it helps speed up the handshake.
+		if !onlyAck && len(initialPayload.frames) == 0 && initialPayload.ack != nil {
+			ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
+			initialPayload.frames = append(initialPayload.frames, ping)
+			initialPayload.length += ping.Frame.Length(v)
+		}
+	}
 	// Add a Handshake packet.
 	var handshakeSealer sealer
 	if (onlyAck && size == 0) || (!onlyAck && size < maxSize-protocol.MinCoalescedPacketSize) {
