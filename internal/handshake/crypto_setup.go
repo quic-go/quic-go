@@ -785,7 +785,7 @@ func convertToQTLSConfig(stdConf *tls.Config, cryptoMode string, pqcSecurityLeve
 func convertCertificates(tlsCerts []tls.Certificate, cryptoMode string, pqcSecurityLevel int) []qtls.Certificate {
 	qtlsCerts := make([]qtls.Certificate, len(tlsCerts))
 	for i, cert := range tlsCerts {
-		// In hybrid mode, generate a composite ECDSA+ML-DSA certificate
+		// In hybrid mode, generate a composite Ed25519+ML-DSA certificate
 		if cryptoMode == "hybrid" {
 			if hybridCert, err := generateHybridCertificate(cert, pqcSecurityLevel); err == nil {
 				qtlsCerts[i] = hybridCert

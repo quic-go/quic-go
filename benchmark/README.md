@@ -24,7 +24,7 @@ This benchmark suite provides:
 - **Reproducible** measurements using isolated processes
 - **Scalable** test execution with configurable iterations
 - **CSV output** for easy analysis and plotting
-- **Comparison** across Classical (X25519 + Ed25519/ECDSA-P256), PQC (ML-KEM-512/768/1024 + ML-DSA-44/65/87), and Hybrid (X25519+ML-KEM, Ed25519+ML-DSA) modes
+- **Comparison** across Classical (X25519 + RSA-2048), PQC (ML-KEM-512/768/1024 + ML-DSA-44/65/87), and Hybrid (X25519+ML-KEM, Ed25519+ML-DSA) modes
 - **Automated** orchestration of server/client processes
 - **Statistical analysis** with overhead calculations and standard deviation
 - **Size-segmented workloads** from 1KB to 1MB to isolate handshake vs. throughput effects
@@ -172,7 +172,7 @@ make run-comprehensive
 ```
 
 This runner tests:
-- **Classical** (X25519 + ECDSA-P256)
+- **Classical** (X25519 + RSA-2048)
 - **ML-KEM-512** (NIST Level 1) + ML-DSA-44
 - **ML-KEM-768** (NIST Level 3) + ML-DSA-65 ← Recommended
 - **ML-KEM-1024** (NIST Level 5) + ML-DSA-87
@@ -335,7 +335,7 @@ The benchmark suite collects extensive QUIC protocol and PQC performance metrics
 | mldsa_level   | ML-DSA security parameter       | 0, 44, 65, 87     | 65      |
 
 **Security Level Mapping:**
-- **Classical**: ML-KEM=0, ML-DSA=0 (X25519 + ECDSA/RSA)
+- **Classical**: ML-KEM=0, ML-DSA=0 (X25519 + RSA-2048)
 - **NIST Level 1**: ML-KEM-512 (800B pubkey) + ML-DSA-44 (2420B sig)
 - **NIST Level 3**: ML-KEM-768 (1184B pubkey) + ML-DSA-65 (3309B sig) ← **Recommended**
 - **NIST Level 5**: ML-KEM-1024 (1568B pubkey) + ML-DSA-87 (4627B sig)
