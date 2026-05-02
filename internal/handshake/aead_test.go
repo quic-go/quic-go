@@ -1,8 +1,6 @@
 package handshake
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
@@ -15,17 +13,13 @@ import (
 
 func getSealerAndOpener(t *testing.T, cs cipherSuite, v protocol.Version) (LongHeaderSealer, LongHeaderOpener) {
 	t.Helper()
-	key := make([]byte, 16)
+	trafficSecret := make([]byte, cs.Hash.Size())
 	hpKey := make([]byte, 16)
-	rand.Read(key)
+	rand.Read(trafficSecret)
 	rand.Read(hpKey)
-	block, err := aes.NewCipher(key)
-	require.NoError(t, err)
-	aead, err := cipher.NewGCM(block)
-	require.NoError(t, err)
-
-	return newLongHeaderSealer(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v)),
-		newLongHeaderOpener(&xorNonceAEAD{aead: aead}, newHeaderProtector(cs, hpKey, true, v))
+	aead := createAEAD(cs, trafficSecret, v)
+	return newLongHeaderSealer(aead, newHeaderProtector(cs, hpKey, true, v)),
+		newLongHeaderOpener(aead, newHeaderProtector(cs, hpKey, true, v))
 }
 
 func TestEncryptAndDecryptMessage(t *testing.T) {
