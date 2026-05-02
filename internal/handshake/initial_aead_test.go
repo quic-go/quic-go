@@ -272,21 +272,33 @@ func BenchmarkInitialAEAD(b *testing.B) {
 
 	b.ResetTimer()
 	b.Run("opening 100 bytes", func(b *testing.B) {
-		benchmarkOpen(b, serverOpener, clientSealer.Seal(nil, packetData[:100], 42, hdr), hdr)
+		sealer, _ := NewInitialAEAD(connectionID, protocol.PerspectiveClient, protocol.Version1)
+		_, opener := NewInitialAEAD(connectionID, protocol.PerspectiveServer, protocol.Version1)
+		benchmarkOpen(b, opener, sealer.Seal(nil, packetData[:100], 42, hdr), 42, hdr)
 	})
-	b.Run("opening 1200 bytes", func(b *testing.B) { benchmarkOpen(b, serverOpener, msg, hdr) })
+	b.Run("opening 1200 bytes", func(b *testing.B) {
+		sealer, _ := NewInitialAEAD(connectionID, protocol.PerspectiveClient, protocol.Version1)
+		_, opener := NewInitialAEAD(connectionID, protocol.PerspectiveServer, protocol.Version1)
+		benchmarkOpen(b, opener, sealer.Seal(nil, packetData, 42, hdr), 42, hdr)
+	})
 
-	b.Run("sealing 100 bytes", func(b *testing.B) { benchmarkSeal(b, clientSealer, packetData[:100], hdr) })
-	b.Run("sealing 1200 bytes", func(b *testing.B) { benchmarkSeal(b, clientSealer, packetData, hdr) })
+	b.Run("sealing 100 bytes", func(b *testing.B) {
+		sealer, _ := NewInitialAEAD(connectionID, protocol.PerspectiveClient, protocol.Version1)
+		benchmarkSeal(b, sealer, packetData[:100], hdr)
+	})
+	b.Run("sealing 1200 bytes", func(b *testing.B) {
+		sealer, _ := NewInitialAEAD(connectionID, protocol.PerspectiveClient, protocol.Version1)
+		benchmarkSeal(b, sealer, packetData, hdr)
+	})
 }
 
-func benchmarkOpen(b *testing.B, aead LongHeaderOpener, msg, hdr []byte) {
+func benchmarkOpen(b *testing.B, aead LongHeaderOpener, msg []byte, pn protocol.PacketNumber, hdr []byte) {
 	b.ReportAllocs()
 	dst := make([]byte, 0, 1500)
 
 	for b.Loop() {
 		dst = dst[:0]
-		if _, err := aead.Open(dst, msg, 42, hdr); err != nil {
+		if _, err := aead.Open(dst, msg, pn, hdr); err != nil {
 			b.Fatalf("opening failed: %s", err)
 		}
 	}
