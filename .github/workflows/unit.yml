@@ -44,6 +44,10 @@ jobs:
         env:
           TIMESCALE_FACTOR: 20
         run: go test -v -shuffle on ./...
+      - name: Run handshake tests in FIPS140 mode
+        env:
+          GODEBUG: fips140=only
+        run: go test -v ./internal/handshake -run TestToken
       - name: Run benchmark tests
         run: go test -v -run=^$ -benchtime 0.5s -bench=. ./...
       - name: Upload coverage to Codecov
