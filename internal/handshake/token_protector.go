@@ -47,6 +47,9 @@ func (s *tokenProtector) DecodeToken(p []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(p[tokenSaltSize:]) < aead.Overhead() {
+		return nil, fmt.Errorf("token too short: %d", len(p))
+	}
 	return aead.Open(nil, nil, p[tokenSaltSize:], nil)
 }
 

@@ -64,4 +64,7 @@ func TestTokenProtectorTooShortTokens(t *testing.T) {
 
 	_, err := tp.DecodeToken([]byte("foobar"))
 	require.EqualError(t, err, "token too short: 6")
+
+	_, err = tp.DecodeToken(make([]byte, tokenSaltSize))
+	require.EqualError(t, err, "token too short: 32")
 }
