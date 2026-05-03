@@ -12,6 +12,9 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/quicvarint"
+
+	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -830,6 +833,8 @@ func benchmarkFrames(b *testing.B, frames ...Frame) {
 }
 
 func FuzzFrames(f *testing.F) {
+	corpus := ossfuzzseeds.New(f)
+
 	const version = protocol.Version1
 
 	for _, s := range []struct {
@@ -846,7 +851,7 @@ func FuzzFrames(f *testing.F) {
 	} {
 		b, err := s.frame.Append(nil, version)
 		require.NoError(f, err)
-		f.Add(uint8(s.encLevel), uint16(0xffff), b)
+		corpus.Add(uint8(s.encLevel), uint16(0xffff), b)
 	}
 
 	for _, fr := range []Frame{
@@ -905,7 +910,7 @@ func FuzzFrames(f *testing.F) {
 		case *AckFrame:
 			maxSize = 128
 		}
-		f.Add(uint8(protocol.Encryption1RTT), maxSize, b)
+		corpus.Add(uint8(protocol.Encryption1RTT), maxSize, b)
 	}
 
 	f.Fuzz(func(t *testing.T, encLevelRaw uint8, maxSize uint16, data []byte) {

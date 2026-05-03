@@ -14,6 +14,8 @@ import (
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/quicvarint"
 
+	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -936,6 +938,8 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 }
 
 func FuzzTransportParameters(f *testing.F) {
+	corpus := ossfuzzseeds.New(f)
+
 	savedParams := (&TransportParameters{
 		InitialMaxStreamDataBidiLocal:  1234,
 		InitialMaxStreamDataBidiRemote: 2345,
@@ -986,7 +990,7 @@ func FuzzTransportParameters(f *testing.F) {
 			},
 		}).Marshal(protocol.PerspectiveServer), savedParams},
 	} {
-		f.Add(seed.Data, seed.SavedData)
+		corpus.Add(seed.Data, seed.SavedData)
 	}
 
 	f.Fuzz(func(t *testing.T, data, savedData []byte) {

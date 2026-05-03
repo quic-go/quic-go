@@ -14,6 +14,8 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/quic-go/quic-go/testutils/events"
 
+	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -416,6 +418,8 @@ func TestParserGoAwayFrame(t *testing.T) {
 }
 
 func FuzzFrameParser(f *testing.F) {
+	corpus := ossfuzzseeds.New(f)
+
 	frames := []interface{ Append([]byte) []byte }{
 		&dataFrame{Length: 5},
 		&headersFrame{Length: 3},
@@ -428,13 +432,13 @@ func FuzzFrameParser(f *testing.F) {
 		&goAwayFrame{StreamID: 42},
 	}
 	for _, fr := range frames {
-		f.Add(fr.Append(nil))
+		corpus.Add(fr.Append(nil))
 	}
 
 	unknown := quicvarint.Append(nil, 0xdead)
 	unknown = quicvarint.Append(unknown, 6)
 	unknown = append(unknown, []byte("foobar")...)
-	f.Add(unknown)
+	corpus.Add(unknown)
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fp := frameParser{

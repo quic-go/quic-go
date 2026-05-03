@@ -11,6 +11,8 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 
+	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -586,6 +588,8 @@ func (discardLogger) Infof(string, ...any)           {}
 func (discardLogger) Debugf(string, ...any)          {}
 
 func FuzzHeaderParser(f *testing.F) {
+	corpus := ossfuzzseeds.New(f)
+
 	addLongHeader := func(hdr *ExtendedHeader) {
 		b, err := hdr.Append(nil, hdr.Version)
 		require.NoError(f, err)
@@ -595,7 +599,7 @@ func FuzzHeaderParser(f *testing.F) {
 		if hdr.Length > 0 {
 			b = append(b, make([]byte, hdr.Length)...)
 		}
-		f.Add(uint8(hdr.DestConnectionID.Len()), b)
+		corpus.Add(uint8(hdr.DestConnectionID.Len()), b)
 	}
 
 	for _, v := range []protocol.Version{protocol.Version1, protocol.Version2} {
@@ -684,14 +688,14 @@ func FuzzHeaderParser(f *testing.F) {
 	// Short header
 	shortHdr, err := AppendShortHeader(nil, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), 0x1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 	require.NoError(f, err)
-	f.Add(uint8(8), shortHdr)
+	corpus.Add(uint8(8), shortHdr)
 	// Version Negotiation packets
-	f.Add(uint8(0), ComposeVersionNegotiation(
+	corpus.Add(uint8(0), ComposeVersionNegotiation(
 		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 		[]protocol.Version{0x1234, 0x5678, 0x9abc, 0xdef0},
 	))
-	f.Add(uint8(0), ComposeVersionNegotiation(
+	corpus.Add(uint8(0), ComposeVersionNegotiation(
 		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3}),
 		protocol.ArbitraryLenConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}),
 		[]protocol.Version{0xdeadbeef},
