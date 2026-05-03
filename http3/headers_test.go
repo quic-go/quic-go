@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"testing"
 
+	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
 	"github.com/quic-go/qpack"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -545,6 +547,8 @@ func BenchmarkRequestFromHeaders(b *testing.B) {
 }
 
 func FuzzHeaderParsing(f *testing.F) {
+	corpus := ossfuzzseeds.New(f)
+
 	for _, s := range [][]qpack.HeaderField{
 		{ // GET request
 			{Name: ":method", Value: "GET"},
@@ -587,7 +591,7 @@ func FuzzHeaderParsing(f *testing.F) {
 		}
 		data, err := json.Marshal(seedsStrings)
 		require.NoError(f, err)
-		f.Add(data)
+		corpus.Add(data)
 	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {

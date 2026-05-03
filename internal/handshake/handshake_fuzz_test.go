@@ -17,6 +17,8 @@ import (
 	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
+
+	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
 )
 
 var (
@@ -75,7 +77,9 @@ var fuzzSessionTicketKey = [32]byte{
 }
 
 func FuzzHandshake(f *testing.F) {
-	f.Add(
+	corpus := ossfuzzseeds.New(f)
+
+	corpus.Add(
 		uint8(0),    // cipherSuite
 		uint8(0),    // clientAuth
 		uint8(0xFF), // messageToReplace: won't match
@@ -88,7 +92,7 @@ func FuzzHandshake(f *testing.F) {
 		uint8(0),    // alpnMode
 		[]byte("foobar"),
 	)
-	f.Add(
+	corpus.Add(
 		uint8(2), // cipherSuite: ChaCha20
 		uint8(0), // clientAuth
 		uint8(1), // messageToReplace: ClientHello
