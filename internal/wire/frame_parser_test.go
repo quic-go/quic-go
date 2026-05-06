@@ -851,7 +851,7 @@ func FuzzFrames(f *testing.F) {
 	} {
 		b, err := s.frame.Append(nil, version)
 		require.NoError(f, err)
-		corpus.Add(uint8(s.encLevel), uint16(0xffff), b)
+		corpus.Add(uint8(s.encLevel), uint16(protocol.MaxPacketBufferSize), b)
 	}
 
 	for _, fr := range []Frame{
@@ -903,7 +903,7 @@ func FuzzFrames(f *testing.F) {
 	} {
 		b, err := fr.Append(nil, version)
 		require.NoError(f, err)
-		maxSize := uint16(0xffff)
+		maxSize := uint16(protocol.MaxPacketBufferSize)
 		switch fr.(type) {
 		case *StreamFrame, *DatagramFrame:
 			maxSize = 256
