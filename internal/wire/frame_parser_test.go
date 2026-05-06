@@ -918,6 +918,12 @@ func FuzzFrames(f *testing.F) {
 		if encLevel != protocol.EncryptionInitial && encLevel != protocol.EncryptionHandshake && encLevel != protocol.Encryption1RTT && encLevel != protocol.Encryption0RTT {
 			return
 		}
+		// maxSize is used to split off frames from the original frame (in the case of CRYPTO and STREAM frames),
+		// and to truncate ACK frames.
+		// This happens at the packet boundary, so values larger than the packet size are not interesting.
+		if maxSize > 10_000 {
+			return
+		}
 
 		parser := NewFrameParser(true, true, true)
 		parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
