@@ -1,0 +1,79 @@
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master # for debugging
+
+permissions: read-all
+
+jobs:
+  fuzz-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: quic-go
+      - uses: actions/checkout@v6
+        with:
+          repository: google/oss-fuzz
+          path: oss-fuzz
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: List fuzz targets
+        id: fuzz_targets
+        run: |
+          targets=$(awk '/^build_native_go_fuzzer / && $4 ~ /^[A-Za-z0-9_]+$/ { print $4 }' quic-go/oss-fuzz.sh)
+          echo "$targets"
+          target_count=$(awk 'NF { count++ } END { print count + 0 }' <<< "$targets")
+          test "$target_count" -ge 5
+          {
+            echo 'targets<<EOF'
+            echo "$targets"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Use local oss-fuzz.sh
+        working-directory: oss-fuzz
+        run: |
+          cp "$GITHUB_WORKSPACE/quic-go/oss-fuzz.sh" projects/quic-go/oss-fuzz.sh
+          sed -i -e 's/^RUN cp/# RUN cp/' -e 's/^# COPY oss-fuzz.sh/COPY oss-fuzz.sh/' projects/quic-go/Dockerfile
+      - name: Download backup corpus
+        working-directory: oss-fuzz
+        env:
+          FUZZ_TARGETS: ${{ steps.fuzz_targets.outputs.targets }}
+        run: |
+          bucket="gs://quic-go-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer"
+          while read -r target; do
+            test -n "$target" || continue
+            mkdir -p "corpus/$target"
+            gsutil cp "$bucket/quic-go_$target/latest.zip" "corpus/$target.zip"
+            unzip -q "corpus/$target.zip" -d "corpus/$target"
+            rm "corpus/$target.zip"
+            test -n "$(find "corpus/$target" -type f -print -quit)"
+          done <<< "$FUZZ_TARGETS"
+      - name: Build coverage fuzzers
+        working-directory: oss-fuzz
+        run: |
+          python3 infra/helper.py build_image --no-pull quic-go
+          python3 infra/helper.py build_fuzzers --sanitizer coverage --mount_path /root/go/src/github.com/quic-go/quic-go quic-go "$GITHUB_WORKSPACE/quic-go"
+      - name: Generate coverage
+        working-directory: oss-fuzz
+        run: |
+          set -o pipefail
+          echo "mode: set" > "$GITHUB_WORKSPACE/quic-go/fuzz-coverage.out"
+          for corpus_dir in corpus/*; do
+            test -d "$corpus_dir" || continue
+            target=${corpus_dir#corpus/}
+            python3 infra/helper.py coverage --no-serve --fuzz-target "$target" --corpus-dir "corpus/$target" quic-go
+            sed "s#^/out/#$(pwd)/build/out/quic-go/#" build/out/quic-go/fuzz.cov | tail -n +2 >> "$GITHUB_WORKSPACE/quic-go/fuzz-coverage.out"
+          done
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        if: github.event_name != 'pull_request'
+        with:
+          working-directory: ./quic-go
+          files: fuzz-coverage.out
+          disable_search: true
+          flags: fuzz
+          name: OSS-Fuzz
+          token: ${{ secrets.CODECOV_TOKEN }}
