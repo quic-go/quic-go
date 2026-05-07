@@ -2,10 +2,10 @@ package handshake
 
 import (
 	"crypto"
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/tls"
 	"fmt"
+	_ "unsafe"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -18,7 +18,7 @@ type cipherSuite struct {
 	ID     uint16
 	Hash   crypto.Hash
 	KeyLen int
-	AEAD   func(key, nonceMask []byte) *xorNonceAEAD
+	AEAD   func(key, nonceMask []byte) cipher.AEAD
 }
 
 func (s cipherSuite) IVLen() int { return aeadNonceLength }
@@ -36,25 +36,14 @@ func getCipherSuite(id uint16) cipherSuite {
 	}
 }
 
-func aeadAESGCMTLS13(key, nonceMask []byte) *xorNonceAEAD {
-	if len(nonceMask) != aeadNonceLength {
-		panic("tls: internal error: wrong nonce length")
-	}
-	aes, err := aes.NewCipher(key)
-	if err != nil {
-		panic(err)
-	}
-	aead, err := cipher.NewGCM(aes)
-	if err != nil {
-		panic(err)
-	}
+//go:linkname cryptoTLSAEAD_AESGCMTLS13 crypto/tls.aeadAESGCMTLS13
+func cryptoTLSAEAD_AESGCMTLS13(key, nonceMask []byte) cipher.AEAD
 
-	ret := &xorNonceAEAD{aead: aead}
-	copy(ret.nonceMask[:], nonceMask)
-	return ret
+func aeadAESGCMTLS13(key, nonceMask []byte) cipher.AEAD {
+	return &tls13AESGCMAEAD{aead: cryptoTLSAEAD_AESGCMTLS13(key, nonceMask)}
 }
 
-func aeadChaCha20Poly1305(key, nonceMask []byte) *xorNonceAEAD {
+func aeadChaCha20Poly1305(key, nonceMask []byte) cipher.AEAD {
 	if len(nonceMask) != aeadNonceLength {
 		panic("tls: internal error: wrong nonce length")
 	}
@@ -68,6 +57,33 @@ func aeadChaCha20Poly1305(key, nonceMask []byte) *xorNonceAEAD {
 	return ret
 }
 
+type tls13AESGCMAEAD struct {
+	aead       cipher.AEAD
+	primedSeal bool
+}
+
+func (f *tls13AESGCMAEAD) NonceSize() int { return f.aead.NonceSize() }
+func (f *tls13AESGCMAEAD) Overhead() int  { return f.aead.Overhead() }
+
+func (f *tls13AESGCMAEAD) Seal(out, nonce, plaintext, additionalData []byte) []byte {
+	if !f.primedSeal {
+		f.primedSeal = true
+		if nonce[0]|nonce[1]|nonce[2]|nonce[3]|nonce[4]|nonce[5]|nonce[6]|nonce[7] != 0 {
+			// Go's TLS 1.3 AES-GCM AEAD learns the XOR mask from the first Seal
+			// call and enforces monotonically increasing packet numbers after that.
+			// QUIC packet numbers don't reset on key updates, so prime it with
+			// packet number 0 before the first real, non-zero packet number.
+			var zeroNonce [8]byte
+			f.aead.Seal(nil, zeroNonce[:], nil, nil)
+		}
+	}
+	return f.aead.Seal(out, nonce, plaintext, additionalData)
+}
+
+func (f *tls13AESGCMAEAD) Open(out, nonce, ciphertext, additionalData []byte) ([]byte, error) {
+	return f.aead.Open(out, nonce, ciphertext, additionalData)
+}
+
 // xorNonceAEAD wraps an AEAD by XORing in a fixed pattern to the nonce
 // before each call.
 type xorNonceAEAD struct {
@@ -75,9 +91,8 @@ type xorNonceAEAD struct {
 	aead      cipher.AEAD
 }
 
-func (f *xorNonceAEAD) NonceSize() int        { return 8 } // 64-bit sequence number
-func (f *xorNonceAEAD) Overhead() int         { return f.aead.Overhead() }
-func (f *xorNonceAEAD) explicitNonceLen() int { return 0 }
+func (f *xorNonceAEAD) NonceSize() int { return 8 } // 64-bit sequence number
+func (f *xorNonceAEAD) Overhead() int  { return f.aead.Overhead() }
 
 func (f *xorNonceAEAD) Seal(out, nonce, plaintext, additionalData []byte) []byte {
 	for i, b := range nonce {

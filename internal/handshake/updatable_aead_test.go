@@ -556,8 +556,8 @@ func TestKeyUpdateKeyPhaseSkipping(t *testing.T) {
 
 	// The server never received a packet at key phase 1.
 	// Make sure the key phase 0 is still there at a much later point.
-	data2 := client.Seal(nil, []byte(msg), 1, []byte(ad))
-	_, err = server.Open(nil, data2, now.Add(10*rttStats.PTO(true)), 1, protocol.KeyPhaseZero, []byte(ad))
+	data2 := client.Seal(nil, []byte(msg), 2, []byte(ad))
+	_, err = server.Open(nil, data2, now.Add(10*rttStats.PTO(true)), 2, protocol.KeyPhaseZero, []byte(ad))
 	require.NoError(t, err)
 	require.Empty(t, eventRecorder.Events())
 }
