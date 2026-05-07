@@ -45,9 +45,10 @@ jobs:
           TIMESCALE_FACTOR: 20
         run: go test -v -shuffle on ./...
       - name: Run handshake tests in FIPS140 mode
+        if: ${{ matrix.go == '1.26.x' }}
         env:
           GODEBUG: fips140=only
-        run: go test -v ./internal/handshake -run TestToken
+        run: go test -v ./internal/handshake -run 'TestToken|TestRetry'
       - name: Run benchmark tests
         run: go test -v -run=^$ -benchtime 0.5s -bench=. ./...
       - name: Upload coverage to Codecov
