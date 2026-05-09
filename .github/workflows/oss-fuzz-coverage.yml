@@ -43,18 +43,16 @@ jobs:
         run: |
           cp "$GITHUB_WORKSPACE/quic-go/oss-fuzz.sh" projects/quic-go/oss-fuzz.sh
           sed -i -e 's/^RUN cp/# RUN cp/' -e 's/^# COPY oss-fuzz.sh/COPY oss-fuzz.sh/' projects/quic-go/Dockerfile
-      - name: Download backup corpus
+      - name: Download corpus
         working-directory: oss-fuzz
         env:
           FUZZ_TARGETS: ${{ steps.fuzz_targets.outputs.targets }}
         run: |
-          bucket="gs://quic-go-backup.clusterfuzz-external.appspot.com/corpus/libFuzzer"
+          bucket="gs://quic-go-corpus.clusterfuzz-external.appspot.com/libFuzzer"
           while read -r target; do
             test -n "$target" || continue
-            mkdir -p "corpus/$target"
-            gcloud storage cp "$bucket/quic-go_$target/latest.zip" "corpus/$target.zip"
-            unzip -q "corpus/$target.zip" -d "corpus/$target"
-            rm "corpus/$target.zip"
+            gcloud storage cp --recursive "$bucket/quic-go_$target" corpus/
+            mv "corpus/quic-go_$target" "corpus/$target"
             test -n "$(find "corpus/$target" -type f -print -quit)"
           done <<< "$FUZZ_TARGETS"
       - name: Build coverage fuzzers
