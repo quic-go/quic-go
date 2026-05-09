@@ -2,6 +2,9 @@ on:
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
+  pull_request:
+    branches:
+      - master # for debugging
 
 permissions:
   contents: read
