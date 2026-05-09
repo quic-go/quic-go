@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"context"
+	"crypto/fips140"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -121,6 +122,10 @@ func TestHandshakeCipherSuites(t *testing.T) {
 		tls.TLS_CHACHA20_POLY1305_SHA256,
 	} {
 		t.Run(tls.CipherSuiteName(suiteID), func(t *testing.T) {
+			if fips140.Enabled() && suiteID == tls.TLS_CHACHA20_POLY1305_SHA256 {
+				t.Skip("ChaCha20-Poly1305 is not allowed in FIPS 140-3 mode")
+			}
+
 			reset := qtls.SetCipherSuite(suiteID)
 			defer reset()
 

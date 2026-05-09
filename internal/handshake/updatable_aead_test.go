@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto/fips140"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
@@ -76,6 +77,10 @@ func bothSides(ev qlogwriter.Event) []qlogwriter.Event {
 }
 
 func TestChaChaTestVector(t *testing.T) {
+	if fips140.Enabled() {
+		t.Skip("ChaCha20-Poly1305 is not allowed in FIPS 140-3 mode")
+	}
+
 	testCases := []struct {
 		name            string
 		version         protocol.Version
@@ -98,7 +103,7 @@ func TestChaChaTestVector(t *testing.T) {
 		t.Run(fmt.Sprintf("QUIC %s", tc.version), func(t *testing.T) {
 			secret := splitHexString(t, "9ac312a7f877468ebe69422748ad00a1 5443f18203a07d6060f688f30f21632b")
 			aead := newUpdatableAEAD(utils.NewRTTStats(), nil, nil, tc.version)
-			chacha := cipherSuites[2]
+			chacha := getCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
 			require.Equal(t, tls.TLS_CHACHA20_POLY1305_SHA256, chacha.ID)
 			aead.SetWriteKey(chacha, secret)
 			const pnOffset = 1
