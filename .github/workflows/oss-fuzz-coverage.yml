@@ -2,11 +2,10 @@ on:
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
-  pull_request:
-    branches:
-      - master # for debugging
 
-permissions: read-all
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   fuzz-coverage:
@@ -19,6 +18,10 @@ jobs:
         with:
           repository: google/oss-fuzz
           path: oss-fuzz
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.OSS_FUZZ_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.OSS_FUZZ_GCP_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v3
       - name: List fuzz targets
         id: fuzz_targets
@@ -46,7 +49,7 @@ jobs:
           while read -r target; do
             test -n "$target" || continue
             mkdir -p "corpus/$target"
-            gsutil cp "$bucket/quic-go_$target/latest.zip" "corpus/$target.zip"
+            gcloud storage cp "$bucket/quic-go_$target/latest.zip" "corpus/$target.zip"
             unzip -q "corpus/$target.zip" -d "corpus/$target"
             rm "corpus/$target.zip"
             test -n "$(find "corpus/$target" -type f -print -quit)"
@@ -69,7 +72,6 @@ jobs:
           done
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
-        if: github.event_name != 'pull_request'
         with:
           working-directory: ./quic-go
           files: fuzz-coverage.out
