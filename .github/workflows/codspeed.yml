@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26.x"
+          check-latest: true
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v4
         with:
