@@ -49,6 +49,7 @@ jobs:
           FUZZ_TARGETS: ${{ steps.fuzz_targets.outputs.targets }}
         run: |
           bucket="gs://quic-go-corpus.clusterfuzz-external.appspot.com/libFuzzer"
+          mkdir -p corpus
           while read -r target; do
             test -n "$target" || continue
             gcloud storage cp --recursive "$bucket/quic-go_$target" corpus/
