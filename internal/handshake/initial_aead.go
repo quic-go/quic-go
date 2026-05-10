@@ -47,8 +47,8 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v p
 		encrypter := initialSuite.AEAD(myKey, myIV)
 		decrypter := initialSuite.AEAD(otherKey, otherIV)
 
-		sealer = newLongHeaderSealer(encrypter, newAESHeaderProtector(initialSuite, mySecret, true, hkdfHeaderProtectionLabel(v)))
-		opener = newLongHeaderOpener(decrypter, newAESHeaderProtector(initialSuite, otherSecret, true, hkdfHeaderProtectionLabel(v)))
+		sealer = newLongHeaderSealer(encrypter, newHeaderProtector(initialSuite, mySecret, true, v))
+		opener = newLongHeaderOpener(decrypter, newHeaderProtector(initialSuite, otherSecret, true, v))
 	})
 	return sealer, opener
 }
