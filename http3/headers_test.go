@@ -358,6 +358,18 @@ func TestRequestHeadersExtendedConnectRequestValidation(t *testing.T) {
 	require.EqualError(t, err, "extended CONNECT: :scheme, :path and :authority must not be empty")
 }
 
+func TestRequestHeadersExtendedConnectInvalidProtocol(t *testing.T) {
+	headers := []qpack.HeaderField{
+		{Name: ":protocol", Value: "HTTP/3.0"},
+		{Name: ":scheme", Value: "https"},
+		{Name: ":method", Value: http.MethodConnect},
+		{Name: ":authority", Value: "quic-go.net"},
+		{Name: ":path", Value: "/foo"},
+	}
+	_, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
+	require.EqualError(t, err, `invalid :protocol: "HTTP/3.0"`)
+}
+
 func TestResponseHeaderParsing(t *testing.T) {
 	headers := []qpack.HeaderField{
 		{Name: ":status", Value: "200"},
