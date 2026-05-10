@@ -16,3 +16,6 @@ coverage:
       default:
         threshold: 0.5
     patch: false
+flags:
+  clusterfuzz-lite-batch:
+    joined: false
