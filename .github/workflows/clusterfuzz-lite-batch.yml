@@ -16,24 +16,24 @@ jobs:
         sanitizer:
         - address
     steps:
-    - name: Build Fuzzers (${{ matrix.sanitizer }})
-      id: build
-      uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
-      with:
-        language: go
-        sanitizer: ${{ matrix.sanitizer }}
-    - name: Run Fuzzers (${{ matrix.sanitizer }})
-      id: run
-      uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        fuzz-seconds: 3600
-        mode: 'batch'
-        sanitizer: ${{ matrix.sanitizer }}
-        output-sarif: true
-        storage-repo: https://${{ secrets.CLUSTERFUZZ_LITE_STORAGE }}@github.com/quic-go/clusterfuzzlite-storage.git
-        storage-repo-branch: master
-        storage-repo-branch-coverage: gh-pages
+      - name: Build Fuzzers (${{ matrix.sanitizer }})
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: go
+          sanitizer: ${{ matrix.sanitizer }}
+      - name: Run Fuzzers (${{ matrix.sanitizer }})
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 3600
+          mode: 'batch'
+          sanitizer: ${{ matrix.sanitizer }}
+          output-sarif: true
+          storage-repo: https://${{ secrets.CLUSTERFUZZ_LITE_STORAGE }}@github.com/quic-go/clusterfuzzlite-storage.git
+          storage-repo-branch: master
+          storage-repo-branch-coverage: gh-pages
 
   coverage:
     needs: batch-fuzzing
@@ -41,47 +41,47 @@ jobs:
     env:
       DOCKER_DEFAULT_PLATFORM: linux/amd64
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/checkout@v6
-      with:
-        repository: google/oss-fuzz
-        path: oss-fuzz
-    - uses: actions/checkout@v6
-      with:
-        repository: quic-go/clusterfuzzlite-storage
-        ref: master
-        path: clusterfuzzlite-storage
-        token: ${{ secrets.CLUSTERFUZZ_LITE_STORAGE }}
-    - name: List fuzz targets
-      run: find clusterfuzzlite-storage/corpus -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
-    - name: Prepare corpus
-      run: |
-        mkdir -p oss-fuzz/build/corpus
-        mv clusterfuzzlite-storage/corpus oss-fuzz/build/corpus/quic-go
-    - name: Use ClusterFuzzLite build script
-      run: |
-        cp .clusterfuzzlite/build.sh oss-fuzz/projects/quic-go/build.sh
-        sed -i '4i cd "$SRC/quic-go"' oss-fuzz/projects/quic-go/build.sh
-    - name: Build coverage fuzzers
-      working-directory: oss-fuzz
-      run: |
-        python3 infra/helper.py build_image --no-pull quic-go
-        python3 infra/helper.py build_fuzzers --sanitizer coverage --mount_path /src/quic-go quic-go "$GITHUB_WORKSPACE"
-    - name: Generate coverage
-      working-directory: oss-fuzz
-      run: python3 infra/helper.py coverage --no-corpus-download --no-serve quic-go
-    - name: Prepare Codecov coverage
-      working-directory: oss-fuzz
-      run: |
-        sed "s#^/out/src/quic-go/#${GITHUB_WORKSPACE}/#" \
-          build/out/quic-go/fuzz.cov > "$GITHUB_WORKSPACE/clusterfuzz-lite-batch.coverprofile"
-        test -s "$GITHUB_WORKSPACE/clusterfuzz-lite-batch.coverprofile"
-    - name: Upload coverage to Codecov
-      if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
-      with:
-        disable_search: true
-        files: clusterfuzz-lite-batch.coverprofile
-        flags: clusterfuzz-lite-batch
-        name: ClusterFuzzLite batch fuzzing
-        token: ${{ secrets.CODECOV_TOKEN }}
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: google/oss-fuzz
+          path: oss-fuzz
+      - uses: actions/checkout@v6
+        with:
+          repository: quic-go/clusterfuzzlite-storage
+          ref: master
+          path: clusterfuzzlite-storage
+          token: ${{ secrets.CLUSTERFUZZ_LITE_STORAGE }}
+      - name: List fuzz targets
+        run: find clusterfuzzlite-storage/corpus -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
+      - name: Prepare corpus
+        run: |
+          mkdir -p oss-fuzz/build/corpus
+          mv clusterfuzzlite-storage/corpus oss-fuzz/build/corpus/quic-go
+      - name: Use ClusterFuzzLite build script
+        run: |
+          cp .clusterfuzzlite/build.sh oss-fuzz/projects/quic-go/build.sh
+          sed -i '4i cd "$SRC/quic-go"' oss-fuzz/projects/quic-go/build.sh
+      - name: Build coverage fuzzers
+        working-directory: oss-fuzz
+        run: |
+          python3 infra/helper.py build_image --no-pull quic-go
+          python3 infra/helper.py build_fuzzers --sanitizer coverage --mount_path /src/quic-go quic-go "$GITHUB_WORKSPACE"
+      - name: Generate coverage
+        working-directory: oss-fuzz
+        run: python3 infra/helper.py coverage --no-corpus-download --no-serve quic-go
+      - name: Prepare Codecov coverage
+        working-directory: oss-fuzz
+        run: |
+          sed "s#^/out/src/quic-go/#${GITHUB_WORKSPACE}/#" \
+            build/out/quic-go/fuzz.cov > "$GITHUB_WORKSPACE/clusterfuzz-lite-batch.coverprofile"
+          test -s "$GITHUB_WORKSPACE/clusterfuzz-lite-batch.coverprofile"
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          disable_search: true
+          files: clusterfuzz-lite-batch.coverprofile
+          flags: clusterfuzz-lite-batch
+          name: ClusterFuzzLite batch fuzzing
+          token: ${{ secrets.CODECOV_TOKEN }}
