@@ -129,6 +129,18 @@ func TestRequestWriterExtendedConnect(t *testing.T) {
 	require.Equal(t, "webtransport", headerFields[":protocol"])
 }
 
+func TestRequestWriterExtendedConnectInvalidProtocol(t *testing.T) {
+	// httptest.NewRequest does not properly support the CONNECT method
+	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
+	require.NoError(t, err)
+	req.Proto = "HTTP/3.0"
+	rw := newRequestWriter()
+	require.EqualError(t,
+		rw.WriteRequestHeader(&bytes.Buffer{}, req, false, 0, nil),
+		`invalid request :protocol "HTTP/3.0"`,
+	)
+}
+
 func TestRequestWriterTrailers(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://quic-go.net/upload", nil)
 	req.Trailer = http.Header{
