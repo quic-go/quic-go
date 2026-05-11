@@ -456,18 +456,104 @@ func TestResponseTrailerParsingTE(t *testing.T) {
 
 func TestResponseTrailerParsing(t *testing.T) {
 	trailerHdr, err := parseTrailers(decodeFromSlice([]qpack.HeaderField{
-		{Name: "content-length", Value: "42"},
-	}), nil)
+		{Name: "foo", Value: "42"},
+	}), math.MaxInt, nil)
 	require.NoError(t, err)
-	require.Equal(t, "42", trailerHdr.Get("Content-Length"))
+	require.Equal(t, "42", trailerHdr.Get("Foo"))
 }
 
 func TestResponseTrailerParsingValidation(t *testing.T) {
-	headers := []qpack.HeaderField{
-		{Name: ":status", Value: "200"},
+	for _, tc := range []struct {
+		name        string
+		headers     []qpack.HeaderField
+		sizeLimit   int
+		err         string
+		errContains string
+		errIs       error
+	}{
+		{
+			name: "field list too large",
+			headers: []qpack.HeaderField{
+				{Name: "foo", Value: "bar"},
+			},
+			sizeLimit: 5,
+			errIs:     errHeaderTooLarge,
+		},
+		{
+			name: "upper-case field name",
+			headers: []qpack.HeaderField{
+				{Name: "Foo", Value: "bar"},
+			},
+			err: "header field is not lower-case: Foo",
+		},
+		{
+			name: "pseudo header",
+			headers: []qpack.HeaderField{
+				{Name: ":status", Value: "200"},
+			},
+			err: "http3: received pseudo header in trailer: :status",
+		},
+		{
+			name: "invalid field name",
+			headers: []qpack.HeaderField{
+				{Name: "@", Value: "bar"},
+			},
+			err: `invalid header field name: "@"`,
+		},
+		{
+			name: "invalid field value",
+			headers: []qpack.HeaderField{
+				{Name: "foo", Value: "\n"},
+			},
+			err: `invalid header field value for foo: "\n"`,
+		},
+		{
+			name: "connection-specific field",
+			headers: []qpack.HeaderField{
+				{Name: "connection", Value: "close"},
+			},
+			err: `invalid header field name: "connection"`,
+		},
+		{
+			name: "invalid te field value",
+			headers: []qpack.HeaderField{
+				{Name: "te", Value: "gzip"},
+			},
+			err: `invalid TE header field value: "gzip"`,
+		},
+		{
+			name: "invalid trailer field",
+			headers: []qpack.HeaderField{
+				{Name: "content-length", Value: "42"},
+			},
+			err: `invalid trailer field name: "content-length"`,
+		},
+		{
+			name: "valid header field name disallowed in trailers",
+			headers: []qpack.HeaderField{
+				{Name: "if-match", Value: "etag"},
+			},
+			err: `invalid trailer field name: "if-match"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sizeLimit := tc.sizeLimit
+			if sizeLimit == 0 {
+				sizeLimit = math.MaxInt
+			}
+			_, err := parseTrailers(decodeFromSlice(tc.headers), sizeLimit, nil)
+			if tc.errIs != nil {
+				require.ErrorIs(t, err, tc.errIs)
+			}
+			if tc.errContains != "" {
+				require.ErrorContains(t, err, tc.errContains)
+			}
+			if tc.err != "" {
+				require.EqualError(t, err, tc.err)
+			}
+			require.NotErrorAs(t, err, new(*qpackError))
+		})
 	}
-	_, err := parseTrailers(decodeFromSlice(headers), nil)
-	require.EqualError(t, err, "http3: received pseudo header in trailer: :status")
 }
 
 func TestQpackError(t *testing.T) {
