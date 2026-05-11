@@ -13,6 +13,7 @@ import (
 	"github.com/quic-go/qpack"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http/httpguts"
 )
 
 func decodeFromSlice(headers []qpack.HeaderField) qpack.DecodeFunc {
@@ -712,9 +713,7 @@ func FuzzHeaderParsing(f *testing.F) {
 				require.NotEmpty(t, req.Host, "non-CONNECT request has empty Host")
 				require.NotEmpty(t, req.RequestURI, "non-CONNECT request has empty RequestURI")
 			}
-			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
-				require.Emptyf(t, req.Header.Get(name), "request contains connection-specific header %q", name)
-			}
+			requireValidFuzzHeader(t, req.Header, "request")
 		}
 
 		rsp := &http.Response{}
@@ -724,18 +723,32 @@ func FuzzHeaderParsing(f *testing.F) {
 			require.GreaterOrEqualf(t, rsp.ContentLength, int64(-1), "invalid ContentLength: %d", rsp.ContentLength)
 			require.NotNil(t, rsp.Header, "response has nil Header map")
 			require.NotEmpty(t, rsp.Status, "response has empty Status")
-			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
-				require.Emptyf(t, rsp.Header.Get(name), "response contains connection-specific header %q", name)
-			}
+			requireValidFuzzHeader(t, rsp.Header, "response")
 		}
 
 		if trailers, err := parseTrailers(decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
 			for name := range trailers {
 				require.Falsef(t, len(name) > 0 && name[0] == ':', "trailer contains pseudo header %q", name)
 			}
-			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
-				require.Emptyf(t, trailers.Get(name), "trailer contains connection-specific header %q", name)
-			}
+			requireValidFuzzHeader(t, trailers, "trailer")
 		}
 	})
+}
+
+func requireValidFuzzHeader(t *testing.T, h http.Header, context string) {
+	t.Helper()
+	for name, values := range h {
+		require.Truef(t, httpguts.ValidHeaderFieldName(name), "%s contains invalid header field name %q", context, name)
+		for _, value := range values {
+			require.Truef(t, httpguts.ValidHeaderFieldValue(value), "%s contains invalid header field value for %q: %q", context, name, value)
+		}
+	}
+	for _, name := range invalidHeaderFields {
+		require.Emptyf(t, h.Get(name), "%s contains connection-specific header %q", context, name)
+	}
+	if te := h.Values("Te"); len(te) > 0 {
+		for _, value := range te {
+			require.Equalf(t, "trailers", value, "%s contains invalid TE header field value: %q", context, value)
+		}
+	}
 }
