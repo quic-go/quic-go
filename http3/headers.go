@@ -172,6 +172,16 @@ func validateRegularHeaderField(h qpack.HeaderField) error {
 	return nil
 }
 
+func validateTrailerHeaderField(h qpack.HeaderField) error {
+	if err := validateRegularHeaderField(h); err != nil {
+		return err
+	}
+	if !httpguts.ValidTrailerHeader(h.Name) {
+		return fmt.Errorf("invalid trailer field name: %q", h.Name)
+	}
+	return nil
+}
+
 func parseTrailers(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpack.HeaderField) (http.Header, error) {
 	h := make(http.Header)
 	for {
@@ -198,7 +208,7 @@ func parseTrailers(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpa
 		if hf.IsPseudo() {
 			return nil, fmt.Errorf("http3: received pseudo header in trailer: %s", hf.Name)
 		}
-		if err := validateRegularHeaderField(hf); err != nil {
+		if err := validateTrailerHeaderField(hf); err != nil {
 			return nil, err
 		}
 		h.Add(hf.Name, hf.Value)

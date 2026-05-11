@@ -491,10 +491,10 @@ func TestResponseTrailerParsingTE(t *testing.T) {
 
 func TestResponseTrailerParsing(t *testing.T) {
 	trailerHdr, err := parseTrailers(decodeFromSlice([]qpack.HeaderField{
-		{Name: "content-length", Value: "42"},
+		{Name: "foo", Value: "42"},
 	}), math.MaxInt, nil)
 	require.NoError(t, err)
-	require.Equal(t, "42", trailerHdr.Get("Content-Length"))
+	require.Equal(t, "42", trailerHdr.Get("Foo"))
 }
 
 func TestResponseTrailerParsingValidation(t *testing.T) {
@@ -555,6 +555,20 @@ func TestResponseTrailerParsingValidation(t *testing.T) {
 				{Name: "te", Value: "gzip"},
 			},
 			err: `invalid TE header field value: "gzip"`,
+		},
+		{
+			name: "invalid trailer field",
+			headers: []qpack.HeaderField{
+				{Name: "content-length", Value: "42"},
+			},
+			err: `invalid trailer field name: "content-length"`,
+		},
+		{
+			name: "valid header field name disallowed in trailers",
+			headers: []qpack.HeaderField{
+				{Name: "if-match", Value: "etag"},
+			},
+			err: `invalid trailer field name: "if-match"`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -730,7 +744,7 @@ func FuzzHeaderParsing(f *testing.F) {
 			for name := range trailers {
 				require.Falsef(t, len(name) > 0 && name[0] == ':', "trailer contains pseudo header %q", name)
 			}
-			requireValidFuzzHeader(t, trailers, "trailer")
+			requireValidFuzzTrailer(t, trailers)
 		}
 	})
 }
@@ -750,5 +764,13 @@ func requireValidFuzzHeader(t *testing.T, h http.Header, context string) {
 		for _, value := range te {
 			require.Equalf(t, "trailers", value, "%s contains invalid TE header field value: %q", context, value)
 		}
+	}
+}
+
+func requireValidFuzzTrailer(t *testing.T, h http.Header) {
+	t.Helper()
+	requireValidFuzzHeader(t, h, "trailer")
+	for name := range h {
+		require.Truef(t, httpguts.ValidTrailerHeader(name), "trailer contains invalid trailer field name %q", name)
 	}
 }
