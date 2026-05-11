@@ -13,6 +13,7 @@ import (
 	"github.com/quic-go/qpack"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http/httpguts"
 )
 
 func decodeFromSlice(headers []qpack.HeaderField) qpack.DecodeFunc {
@@ -490,18 +491,104 @@ func TestResponseTrailerParsingTE(t *testing.T) {
 
 func TestResponseTrailerParsing(t *testing.T) {
 	trailerHdr, err := parseTrailers(decodeFromSlice([]qpack.HeaderField{
-		{Name: "content-length", Value: "42"},
-	}), nil)
+		{Name: "foo", Value: "42"},
+	}), math.MaxInt, nil)
 	require.NoError(t, err)
-	require.Equal(t, "42", trailerHdr.Get("Content-Length"))
+	require.Equal(t, "42", trailerHdr.Get("Foo"))
 }
 
 func TestResponseTrailerParsingValidation(t *testing.T) {
-	headers := []qpack.HeaderField{
-		{Name: ":status", Value: "200"},
+	for _, tc := range []struct {
+		name        string
+		headers     []qpack.HeaderField
+		sizeLimit   int
+		err         string
+		errContains string
+		errIs       error
+	}{
+		{
+			name: "field list too large",
+			headers: []qpack.HeaderField{
+				{Name: "foo", Value: "bar"},
+			},
+			sizeLimit: 5,
+			errIs:     errHeaderTooLarge,
+		},
+		{
+			name: "upper-case field name",
+			headers: []qpack.HeaderField{
+				{Name: "Foo", Value: "bar"},
+			},
+			err: "header field is not lower-case: Foo",
+		},
+		{
+			name: "pseudo header",
+			headers: []qpack.HeaderField{
+				{Name: ":status", Value: "200"},
+			},
+			err: "http3: received pseudo header in trailer: :status",
+		},
+		{
+			name: "invalid field name",
+			headers: []qpack.HeaderField{
+				{Name: "@", Value: "bar"},
+			},
+			err: `invalid header field name: "@"`,
+		},
+		{
+			name: "invalid field value",
+			headers: []qpack.HeaderField{
+				{Name: "foo", Value: "\n"},
+			},
+			err: `invalid header field value for foo: "\n"`,
+		},
+		{
+			name: "connection-specific field",
+			headers: []qpack.HeaderField{
+				{Name: "connection", Value: "close"},
+			},
+			err: `invalid header field name: "connection"`,
+		},
+		{
+			name: "invalid te field value",
+			headers: []qpack.HeaderField{
+				{Name: "te", Value: "gzip"},
+			},
+			err: `invalid TE header field value: "gzip"`,
+		},
+		{
+			name: "invalid trailer field",
+			headers: []qpack.HeaderField{
+				{Name: "content-length", Value: "42"},
+			},
+			err: `invalid trailer field name: "content-length"`,
+		},
+		{
+			name: "valid header field name disallowed in trailers",
+			headers: []qpack.HeaderField{
+				{Name: "if-match", Value: "etag"},
+			},
+			err: `invalid trailer field name: "if-match"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sizeLimit := tc.sizeLimit
+			if sizeLimit == 0 {
+				sizeLimit = math.MaxInt
+			}
+			_, err := parseTrailers(decodeFromSlice(tc.headers), sizeLimit, nil)
+			if tc.errIs != nil {
+				require.ErrorIs(t, err, tc.errIs)
+			}
+			if tc.errContains != "" {
+				require.ErrorContains(t, err, tc.errContains)
+			}
+			if tc.err != "" {
+				require.EqualError(t, err, tc.err)
+			}
+			require.NotErrorAs(t, err, new(*qpackError))
+		})
 	}
-	_, err := parseTrailers(decodeFromSlice(headers), nil)
-	require.EqualError(t, err, "http3: received pseudo header in trailer: :status")
 }
 
 func TestQpackError(t *testing.T) {
@@ -626,77 +713,64 @@ func FuzzHeaderParsing(f *testing.F) {
 		}
 
 		if req, err := requestFromHeaders(decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
-			if req.Method == "" {
-				t.Fatal("request has empty Method")
-			}
-			if req.URL == nil {
-				t.Fatal("request has nil URL")
-			}
-			if req.Proto == "" {
-				t.Fatal("request has empty Proto")
-			}
-			if req.ProtoMajor != 3 || req.ProtoMinor != 0 {
-				t.Fatalf("expected HTTP/3.0, got %d.%d", req.ProtoMajor, req.ProtoMinor)
-			}
-			if req.ContentLength < -1 {
-				t.Fatalf("invalid ContentLength: %d", req.ContentLength)
-			}
-			if req.Header == nil {
-				t.Fatal("request has nil Header map")
-			}
+			require.NotEmpty(t, req.Method, "request has empty Method")
+			require.NotNil(t, req.URL, "request has nil URL")
+			require.NotEmpty(t, req.Proto, "request has empty Proto")
+			require.Truef(t, req.ProtoMajor == 3 && req.ProtoMinor == 0, "expected HTTP/3.0, got %d.%d", req.ProtoMajor, req.ProtoMinor)
+			require.GreaterOrEqualf(t, req.ContentLength, int64(-1), "invalid ContentLength: %d", req.ContentLength)
+			require.NotNil(t, req.Header, "request has nil Header map")
 			if req.Method == http.MethodConnect && req.Proto == "HTTP/3.0" {
 				// regular CONNECT: :path must be empty, :authority must be set
-				if req.URL.Path != "" {
-					t.Fatal("CONNECT request has non-empty URL.Path")
-				}
+				require.Empty(t, req.URL.Path, "CONNECT request has non-empty URL.Path")
 			}
 			if req.Method != http.MethodConnect {
-				if req.Host == "" {
-					t.Fatal("non-CONNECT request has empty Host")
-				}
-				if req.RequestURI == "" {
-					t.Fatal("non-CONNECT request has empty RequestURI")
-				}
+				require.NotEmpty(t, req.Host, "non-CONNECT request has empty Host")
+				require.NotEmpty(t, req.RequestURI, "non-CONNECT request has empty RequestURI")
 			}
-			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
-				if req.Header.Get(name) != "" {
-					t.Fatalf("request contains connection-specific header %q", name)
-				}
-			}
+			requireValidFuzzHeader(t, req.Header, "request")
 		}
 
 		rsp := &http.Response{}
 		if err := updateResponseFromHeaders(rsp, decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
-			if rsp.Proto != "HTTP/3.0" {
-				t.Fatalf("expected Proto HTTP/3.0, got %q", rsp.Proto)
-			}
-			if rsp.ProtoMajor != 3 {
-				t.Fatalf("expected ProtoMajor 3, got %d", rsp.ProtoMajor)
-			}
-			if rsp.ContentLength < -1 {
-				t.Fatalf("invalid ContentLength: %d", rsp.ContentLength)
-			}
-			if rsp.Header == nil {
-				t.Fatal("response has nil Header map")
-			}
-			if rsp.Status == "" {
-				t.Fatal("response has empty Status")
-			}
-			for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
-				if rsp.Header.Get(name) != "" {
-					t.Fatalf("response contains connection-specific header %q", name)
-				}
-			}
+			require.Equalf(t, "HTTP/3.0", rsp.Proto, "expected Proto HTTP/3.0, got %q", rsp.Proto)
+			require.Equalf(t, 3, rsp.ProtoMajor, "expected ProtoMajor 3, got %d", rsp.ProtoMajor)
+			require.GreaterOrEqualf(t, rsp.ContentLength, int64(-1), "invalid ContentLength: %d", rsp.ContentLength)
+			require.NotNil(t, rsp.Header, "response has nil Header map")
+			require.NotEmpty(t, rsp.Status, "response has empty Status")
+			requireValidFuzzHeader(t, rsp.Header, "response")
 		}
 
-		if trailers, err := parseTrailers(decodeFromSlice(headers), nil); err == nil {
+		if trailers, err := parseTrailers(decodeFromSlice(headers), maxHeaderBytes, nil); err == nil {
 			for name := range trailers {
-				if len(name) > 0 && name[0] == ':' {
-					t.Fatalf("trailer contains pseudo header %q", name)
-				}
+				require.Falsef(t, len(name) > 0 && name[0] == ':', "trailer contains pseudo header %q", name)
 			}
-			// TODO(#5601): once parseTrailers validates header field names and values,
-			// add assertions here
+			requireValidFuzzTrailer(t, trailers)
 		}
 	})
+}
+
+func requireValidFuzzHeader(t *testing.T, h http.Header, context string) {
+	t.Helper()
+	for name, values := range h {
+		require.Truef(t, httpguts.ValidHeaderFieldName(name), "%s contains invalid header field name %q", context, name)
+		for _, value := range values {
+			require.Truef(t, httpguts.ValidHeaderFieldValue(value), "%s contains invalid header field value for %q: %q", context, name, value)
+		}
+	}
+	for _, name := range invalidHeaderFields {
+		require.Emptyf(t, h.Get(name), "%s contains connection-specific header %q", context, name)
+	}
+	if te := h.Values("Te"); len(te) > 0 {
+		for _, value := range te {
+			require.Equalf(t, "trailers", value, "%s contains invalid TE header field value: %q", context, value)
+		}
+	}
+}
+
+func requireValidFuzzTrailer(t *testing.T, h http.Header) {
+	t.Helper()
+	requireValidFuzzHeader(t, h, "trailer")
+	for name := range h {
+		require.Truef(t, httpguts.ValidTrailerHeader(name), "trailer contains invalid trailer field name %q", name)
+	}
 }
