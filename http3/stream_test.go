@@ -233,3 +233,40 @@ func TestRequestStream(t *testing.T) {
 	require.Equal(t, 6, n)
 	require.Equal(t, []byte("foobar"), b[:n])
 }
+
+func TestRequestStreamGzipNotNegotiatedForConnect(t *testing.T) {
+	newRequestStreamForMethod := func(t *testing.T, method string) (*RequestStream, *bytes.Buffer) {
+		t.Helper()
+		mockCtrl := gomock.NewController(t)
+		qstr := NewMockDatagramStream(mockCtrl)
+		qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+		var buf bytes.Buffer
+		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+		clientConn, _ := newConnPair(t)
+		str := newRequestStream(
+			newStream(
+				qstr,
+				newRawConn(clientConn, false, nil, nil, nil, nil),
+				nil,
+				func(io.Reader, *headersFrame) error { return nil },
+				nil,
+			),
+			newRequestWriter(),
+			make(chan struct{}),
+			qpack.NewDecoder(),
+			false,
+			math.MaxInt,
+			&http.Response{},
+		)
+		req, err := http.NewRequest(method, "https://quic-go.net/", nil)
+		require.NoError(t, err)
+		require.NoError(t, str.SendRequestHeader(req))
+		return str, &buf
+	}
+
+	_, getBuf := newRequestStreamForMethod(t, http.MethodGet)
+	require.Equal(t, []string{"gzip"}, decodeHeader(t, getBuf)["accept-encoding"])
+
+	_, connectBuf := newRequestStreamForMethod(t, http.MethodConnect)
+	require.NotContains(t, decodeHeader(t, connectBuf), "accept-encoding")
+}

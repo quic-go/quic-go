@@ -296,11 +296,13 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	if s.sentRequest {
 		return errors.New("http3: invalid duplicate use of RequestStream.SendRequestHeader")
 	}
-	if !s.disableCompression && req.Method != http.MethodHead &&
+	s.isConnect = req.Method == http.MethodConnect
+	// Content-Encoding does not apply to CONNECT (and Extended CONNECT) requests:
+	// capsules are not content, so they are never gzipped even if gzip is negotiated.
+	if !s.disableCompression && req.Method != http.MethodHead && !s.isConnect &&
 		req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		s.requestedGzip = true
 	}
-	s.isConnect = req.Method == http.MethodConnect
 	s.sentRequest = true
 	return s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip, s.str.StreamID(), s.str.qlogger)
 }
