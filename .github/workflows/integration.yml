@@ -48,6 +48,9 @@ jobs:
         run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/tools/... 2>&1 | go-junit-report -set-exit-code -iocopy -out report_tools.xml
       - name: Run version negotiation tests
         run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/versionnegotiation ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_versionnegotiation.xml
+      - name: Run FIPS 140 tests
+        if: ${{ matrix.go == '1.26.x' && (success() || failure()) }}
+        run: go test -v -timeout 1m -shuffle=on ./integrationtests/fips 2>&1 | go-junit-report -set-exit-code -iocopy -out report_fips.xml
       - name: Run self tests, using QUIC v1
         if: success() || failure() # run this step even if the previous one failed
         run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_self.xml
@@ -80,6 +83,6 @@ jobs:
         with:
           report_type: test_results
           name: Unit tests
-          files: report_tools.xml,report_versionnegotiation.xml,report_self.xml,report_self_v2.xml,report_self_nogso.xml,report_self_noecn.xml
+          files: report_tools.xml,report_versionnegotiation.xml,report_self.xml,report_self_v2.xml,report_self_nogso.xml,report_self_noecn.xml,report_fips.xml
           env_vars: OS,GO
           token: ${{ secrets.CODECOV_TOKEN }}
