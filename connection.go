@@ -3026,19 +3026,30 @@ func (c *Conn) SendDatagram(p []byte) error {
 		return errors.New("datagram support disabled")
 	}
 
-	f := &wire.DatagramFrame{DataLenPresent: true}
-	// The payload size estimate is conservative.
-	// Under many circumstances we could send a few more bytes.
-	maxDataLen := min(
-		f.MaxDataLen(c.peerParams.MaxDatagramFrameSize, c.version),
-		protocol.ByteCount(c.currentMTUEstimate.Load()),
-	)
+	maxDataLen := c.currentMaxDatagramPayloadSize()
 	if protocol.ByteCount(len(p)) > maxDataLen {
 		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
 	}
-	f.Data = make([]byte, len(p))
+	f := &wire.DatagramFrame{DataLenPresent: true, Data: make([]byte, len(p))}
 	copy(f.Data, p)
 	return c.datagramQueue.Add(f)
+}
+
+// MaxDatagramPayloadSize returns the maximum payload size that can currently
+// be sent using SendDatagram, or 0 if the peer did not enable datagram support.
+func (c *Conn) MaxDatagramPayloadSize() int64 {
+	if !c.supportsDatagrams() {
+		return 0
+	}
+	return int64(c.currentMaxDatagramPayloadSize())
+}
+
+func (c *Conn) currentMaxDatagramPayloadSize() protocol.ByteCount {
+	f := wire.DatagramFrame{DataLenPresent: true}
+	return min(
+		f.MaxDataLen(c.peerParams.MaxDatagramFrameSize, c.version),
+		protocol.ByteCount(c.currentMTUEstimate.Load()),
+	)
 }
 
 // ReceiveDatagram gets a message received in a QUIC datagram, as specified in RFC 9221.
