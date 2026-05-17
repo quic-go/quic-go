@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,9 +36,10 @@ import (
 )
 
 const (
-	helperRoleEnv = "QUIC_GO_FIPS_TRANSFER_ROLE"
-	helperAddrEnv = "QUIC_GO_FIPS_TRANSFER_ADDR"
-	helperDirEnv  = "QUIC_GO_FIPS_TRANSFER_DIR"
+	helperRoleEnv  = "QUIC_GO_FIPS_TRANSFER_ROLE"
+	helperAddrEnv  = "QUIC_GO_FIPS_TRANSFER_ADDR"
+	helperDirEnv   = "QUIC_GO_FIPS_TRANSFER_DIR"
+	helperRetryEnv = "QUIC_GO_FIPS_TRANSFER_RETRY"
 
 	keyUpdatePackets = 32
 	minKeyUpdates    = 3
@@ -63,16 +65,20 @@ func TestFIPS140Transfers(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "data.bin"), transferData, 0o600))
 
 	for _, tc := range []struct {
-		name       string
 		serverFIPS bool
 		clientFIPS bool
+		retry      bool
 	}{
-		{name: "server_off_client_off"},
-		{name: "server_on_client_off", serverFIPS: true},
-		{name: "server_off_client_on", clientFIPS: true},
-		{name: "server_on_client_on", serverFIPS: true, clientFIPS: true},
+		{},
+		{retry: true},
+		{serverFIPS: true},
+		{serverFIPS: true, retry: true},
+		{clientFIPS: true},
+		{clientFIPS: true, retry: true},
+		{serverFIPS: true, clientFIPS: true},
+		{serverFIPS: true, clientFIPS: true, retry: true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("server: %t, client: %t, retry: %t", tc.serverFIPS, tc.clientFIPS, tc.retry), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
@@ -80,6 +86,7 @@ func TestFIPS140Transfers(t *testing.T) {
 			server.Env = append(os.Environ(),
 				helperRoleEnv+"=server",
 				helperDirEnv+"="+dir,
+				helperRetryEnv+"="+fmt.Sprint(tc.retry),
 				"GODEBUG="+fipsGODEBUG(tc.serverFIPS),
 			)
 			serverStdout, err := server.StdoutPipe()
@@ -98,7 +105,7 @@ func TestFIPS140Transfers(t *testing.T) {
 			select {
 			case addr = <-addrChan:
 				require.NotEmptyf(t, addr, "server didn't print its address:\n%s", serverStderr.Bytes())
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				require.FailNowf(t, "server didn't start listening", "%s", serverStderr.Bytes())
 			}
 
@@ -203,7 +210,16 @@ func runServer(dir string) error {
 		return err
 	}
 
-	ln, err := quic.ListenAddr("127.0.0.1:0", &tls.Config{
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	if err != nil {
+		return err
+	}
+	tr := &quic.Transport{
+		Conn:                udpConn,
+		VerifySourceAddress: func(net.Addr) bool { return os.Getenv(helperRetryEnv) == "true" },
+	}
+	defer tr.Close()
+	ln, err := tr.Listen(&tls.Config{
 		Certificates:     []tls.Certificate{cert},
 		NextProtos:       []string{tools.ALPN},
 		MinVersion:       tls.VersionTLS13,
