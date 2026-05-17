@@ -24,6 +24,10 @@ Support for WebTransport over HTTP/3 ([draft-ietf-webtrans-http3](https://datatr
 
 Detailed documentation can be found on [quic-go.net](https://quic-go.net/docs/).
 
+## FIPS 140
+
+quic-go relies on the standard library's [Go Cryptographic Module](https://go.dev/blog/fips140) for all cryptographic operations. Starting with v0.60, when built with Go 1.26 or newer, quic-go is intended to be ready for use in environments that require FIPS 140-3. See [FIPS140.md](FIPS140.md) for details on which QUIC operations are covered and which are explicitly out of scope.
+
 ## Projects using quic-go
 
 | Project                                                   | Description                                                                                                                                                       | Stars                                                                                               |
