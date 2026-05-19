@@ -29,6 +29,11 @@ func getCipherSuite(id uint16) cipherSuite {
 	case tls.TLS_AES_128_GCM_SHA256:
 		return cipherSuite{ID: tls.TLS_AES_128_GCM_SHA256, Hash: crypto.SHA256, KeyLen: 16, AEAD: aeadAESGCMTLS13}
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
+		// The usual convention is to only panic on fips140.Enforced (and not on fips140.Enabled),
+		// but this function panics in the default case anyway, so we might as well panic here.
+		if fips140.Enabled() {
+			panic("tls: TLS_CHACHA20_POLY1305_SHA256 is not allowed in FIPS 140-3 mode")
+		}
 		return cipherSuite{ID: tls.TLS_CHACHA20_POLY1305_SHA256, Hash: crypto.SHA256, KeyLen: 32, AEAD: aeadChaCha20Poly1305}
 	case tls.TLS_AES_256_GCM_SHA384:
 		return cipherSuite{ID: tls.TLS_AES_256_GCM_SHA384, Hash: crypto.SHA384, KeyLen: 32, AEAD: aeadAESGCMTLS13}
