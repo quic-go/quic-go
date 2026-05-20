@@ -38,7 +38,7 @@ type framer struct {
 	streamsWithControlFrames map[protocol.StreamID]streamControlFrameGetter
 
 	controlFrameMutex          sync.Mutex
-	controlFrames              []wire.Frame
+	controlFrames              []ackhandler.Frame
 	pathResponses              []*wire.PathResponseFrame
 	connFlowController         flowcontrol.ConnectionFlowController
 	queuedTooManyControlFrames bool
@@ -64,11 +64,11 @@ func (f *framer) HasData() bool {
 	return len(f.streamsWithControlFrames) > 0 || len(f.controlFrames) > 0 || len(f.pathResponses) > 0
 }
 
-func (f *framer) QueueControlFrame(frame wire.Frame) {
+func (f *framer) QueueControlFrame(frame ackhandler.Frame) {
 	f.controlFrameMutex.Lock()
 	defer f.controlFrameMutex.Unlock()
 
-	if pr, ok := frame.(*wire.PathResponseFrame); ok {
+	if pr, ok := frame.Frame.(*wire.PathResponseFrame); ok {
 		// Only queue up to maxPathResponses PATH_RESPONSE frames.
 		// This limit should be high enough to never be hit in practice,
 		// unless the peer is doing something malicious.
@@ -119,7 +119,7 @@ func (f *framer) Append(
 			l := blocked.Length(v)
 			// In case it doesn't fit, queue it for the next packet.
 			if maxLen < l {
-				f.controlFrames = append(f.controlFrames, blocked)
+				f.controlFrames = append(f.controlFrames, ackhandler.Frame{Frame: blocked})
 				break
 			}
 			frames = append(frames, ackhandler.Frame{Frame: blocked})
@@ -137,7 +137,7 @@ func (f *framer) Append(
 			frames = append(frames, ackhandler.Frame{Frame: blocked})
 			controlFrameLen += l
 		} else {
-			f.controlFrames = append(f.controlFrames, blocked)
+			f.controlFrames = append(f.controlFrames, ackhandler.Frame{Frame: blocked})
 		}
 	}
 
@@ -197,11 +197,11 @@ func (f *framer) appendControlFrames(
 
 	for len(f.controlFrames) > 0 {
 		frame := f.controlFrames[len(f.controlFrames)-1]
-		frameLen := frame.Length(v)
+		frameLen := frame.Frame.Length(v)
 		if length+frameLen > maxLen {
 			break
 		}
-		frames = append(frames, ackhandler.Frame{Frame: frame})
+		frames = append(frames, frame)
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
@@ -282,7 +282,7 @@ func (f *framer) Handle0RTTRejection() {
 	}
 	var j int
 	for i, frame := range f.controlFrames {
-		switch frame.(type) {
+		switch frame.Frame.(type) {
 		case *wire.MaxDataFrame, *wire.MaxStreamDataFrame, *wire.MaxStreamsFrame,
 			*wire.DataBlockedFrame, *wire.StreamDataBlockedFrame, *wire.StreamsBlockedFrame:
 			continue
