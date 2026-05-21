@@ -4,7 +4,7 @@
 [![batch fuzz coverage](https://img.shields.io/codecov/c/github/quic-go/quic-go/master.svg?flag=clusterfuzz-lite-batch&label=ClusterFuzz%20Lite%20Batch%20coverage&logo=codecov&logoColor=white&style=flat)](https://app.codecov.io/gh/quic-go/quic-go?flags%5B0%5D=clusterfuzz-lite-batch)
 
 Run the commands below from a local [`google/oss-fuzz`](https://github.com/google/oss-fuzz) checkout.
-Fuzz target names match the binary names listed in `oss-fuzz.sh` (for example, `frame_fuzzer`).
+Fuzz target names match the binary names listed in `oss-fuzz.sh` (for example, `frame_fuzzer_v2`).
 
 Update the base images:
 ```sh
