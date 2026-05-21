@@ -16,6 +16,16 @@ import (
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
+// The StreamType is the type of a QUIC stream (unidirectional or bidirectional).
+type StreamType = protocol.StreamType
+
+const (
+	// StreamTypeUni is a unidirectional stream
+	StreamTypeUni = protocol.StreamTypeUni
+	// StreamTypeBidi is a bidirectional stream
+	StreamTypeBidi = protocol.StreamTypeBidi
+)
+
 // A Version is a QUIC version number.
 type Version = protocol.Version
 
