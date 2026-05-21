@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/testutils/simnet"
 
@@ -125,6 +126,69 @@ func TestDatagramSizeLimit(t *testing.T) {
 	datagram, err := serverConn.ReceiveDatagram(ctx)
 	require.NoError(t, err)
 	require.Equal(t, bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize)), datagram)
+}
+
+func TestDatagramSizeLimitIncludesPacketOverhead(t *testing.T) {
+	// This test verifies that MaxDatagramPayloadSize accounts for:
+	// 1. QUIC short header overhead (1 byte type + dest connID + packet number)
+	// 2. AEAD encryption overhead (authentication tag)
+	//
+	// When currentMTUEstimate becomes the limiting factor (peerParams.MaxDatagramFrameSize is large),
+	// the returned MaxDatagramPayloadSize should be MTU - overhead.
+
+	server, err := quic.Listen(
+		newUDPConnLocalhost(t),
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{
+			EnableDatagrams:         true,
+			DisablePathMTUDiscovery: true,
+		}),
+	)
+	require.NoError(t, err)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	clientConn, err := quic.Dial(
+		ctx,
+		newUDPConnLocalhost(t),
+		server.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{
+			EnableDatagrams:         true,
+			DisablePathMTUDiscovery: true,
+		}),
+	)
+	require.NoError(t, err)
+	defer clientConn.CloseWithError(0, "")
+
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+
+ 	// wait for the MTU discovery to complete	
+	time.Sleep(time.Millisecond * 500)
+
+	// Find the maximum payload size reported by DatagramTooLargeError
+	var maxPayloadSize protocol.ByteCount
+	size := protocol.ByteCount(2000)
+	err = clientConn.SendDatagram(bytes.Repeat([]byte("x"), int(size)))
+	var sizeErr *quic.DatagramTooLargeError
+	require.ErrorAs(t, err, &sizeErr)
+	maxPayloadSize = protocol.ByteCount(sizeErr.MaxDatagramPayloadSize)
+	require.Greater(t, maxPayloadSize, protocol.ByteCount(0)) 
+
+	// Try to send a datagram with exactly MaxDatagramPayloadSize
+	err = clientConn.SendDatagram(bytes.Repeat([]byte("z"), int(maxPayloadSize)))
+	require.NoError(t, err)
+
+	// Verify the datagram was actually delivered and data matches
+	serverCtx, serverCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer serverCancel()
+	datagram, err := serverConn.ReceiveDatagram(serverCtx)
+	require.NoError(t, err, "datagram should be actually deliverable when respecting MaxDatagramPayloadSize")
+	require.Equal(t, int(maxPayloadSize), len(datagram))
+	require.Equal(t, bytes.Repeat([]byte("z"), int(maxPayloadSize)), datagram)
 }
 
 func TestDatagramLoss(t *testing.T) {
