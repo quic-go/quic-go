@@ -14,7 +14,7 @@ func TestRandomNumbers(t *testing.T) {
 
 	var values [num]int32
 	var r Rand
-	for i := 0; i < num; i++ {
+	for i := range num {
 		v := r.Int31n(max)
 		require.GreaterOrEqual(t, v, int32(0))
 		require.Less(t, v, int32(max))

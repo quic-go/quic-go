@@ -250,7 +250,7 @@ func TestCubicSenderSlowStartPacketLossPRR(t *testing.T) {
 	// triggered the loss.
 	remainingPacketsInRecovery := sendWindowBeforeLoss/maxDatagramSize - 2
 
-	for i := protocol.ByteCount(0); i < remainingPacketsInRecovery; i++ {
+	for range remainingPacketsInRecovery {
 		sender.AckNPackets(1)
 		sender.SendAvailableSendWindow()
 		require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())

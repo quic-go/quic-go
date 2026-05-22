@@ -286,7 +286,7 @@ func (c *mockBatchConn) ReadBatch(ms []ipv4.Message, _ int) (int, error) {
 	for i := 0; i < c.numMsgRead; i++ {
 		require.Len(c.t, ms[i].Buffers, 1)
 		require.Len(c.t, ms[i].Buffers[0], protocol.MaxPacketBufferSize)
-		data := []byte(fmt.Sprintf("message %d", c.callCounter*c.numMsgRead+i))
+		data := fmt.Appendf(nil, "message %d", c.callCounter*c.numMsgRead+i)
 		ms[i].Buffers[0] = data
 		ms[i].N = len(data)
 	}
@@ -302,7 +302,7 @@ func TestReadsMultipleMessagesInOneBatch(t *testing.T) {
 	require.NoError(t, err)
 	oobConn.batchConn = bc
 
-	for i := 0; i < batchSize+1; i++ {
+	for i := range batchSize + 1 {
 		p, err := oobConn.ReadPacket()
 		require.NoError(t, err)
 		require.Equal(t, fmt.Sprintf("message %d", i), string(p.data))

@@ -115,7 +115,7 @@ func TestParseACKUseAckDelayExponent(t *testing.T) {
 	}
 	b, err := f.Append(nil, protocol.Version1)
 	require.NoError(t, err)
-	for i := uint8(0); i < 8; i++ {
+	for i := range uint8(8) {
 		typ, l, err := quicvarint.Parse(b)
 		require.NoError(t, err)
 		var frame AckFrame

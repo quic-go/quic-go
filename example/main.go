@@ -41,7 +41,7 @@ type Size interface {
 func generatePRData(l int) []byte {
 	res := make([]byte, l)
 	seed := uint64(1)
-	for i := 0; i < l; i++ {
+	for i := range l {
 		seed = seed * 48271 % 2147483647
 		res[i] = byte(seed)
 	}
@@ -81,7 +81,7 @@ func setupHandler(www string) http.Handler {
 
 	mux.HandleFunc("/demo/tiles", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "<html><head><style>img{width:40px;height:40px;}</style></head><body>")
-		for i := 0; i < 200; i++ {
+		for i := range 200 {
 			fmt.Fprintf(w, `<img src="/demo/tile?cachebust=%d">`, i)
 		}
 		io.WriteString(w, "</body></html>")

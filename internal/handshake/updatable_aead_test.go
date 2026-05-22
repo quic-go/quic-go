@@ -136,7 +136,7 @@ func TestUpdatableAEADHeaderProtection(t *testing.T) {
 				server.SetWriteKey(cs, trafficSecret2)
 
 				var lastFiveBitsDifferent int
-				for i := 0; i < 100; i++ {
+				for range 100 {
 					sample := make([]byte, 16)
 					rand.Read(sample)
 					header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
@@ -215,7 +215,7 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 func TestAEADLimitReached(t *testing.T) {
 	client, _, _ := setupEndpoints(t, utils.NewRTTStats())
 	client.invalidPacketLimit = 10
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		_, err := client.Open(nil, []byte("foobar"), monotime.Now(), protocol.PacketNumber(i), protocol.KeyPhaseZero, []byte("ad"))
 		require.Equal(t, ErrDecryptionFailed, err)
 	}

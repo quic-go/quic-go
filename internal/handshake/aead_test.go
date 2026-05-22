@@ -81,7 +81,7 @@ func testEncryptAndDecryptHeader(t *testing.T, cs cipherSuite, v protocol.Versio
 	sealer, opener := getSealerAndOpener(t, cs, v)
 	var lastFourBitsDifferent int
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		sample := make([]byte, 16)
 		rand.Read(sample)
 		header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}

@@ -9,7 +9,7 @@ import (
 )
 
 func mockToken(num int) *ClientToken {
-	return &ClientToken{data: []byte(fmt.Sprintf("%d", num)), rtt: 1337 * time.Millisecond}
+	return &ClientToken{data: fmt.Appendf(nil, "%d", num), rtt: 1337 * time.Millisecond}
 }
 
 func TestTokenStoreSingleOrigin(t *testing.T) {

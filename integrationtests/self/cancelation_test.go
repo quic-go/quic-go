@@ -352,7 +352,7 @@ func TestCancelAcceptStream(t *testing.T) {
 		defer cancel()
 		ticker := time.NewTicker(5 * time.Millisecond)
 		defer ticker.Stop()
-		for i := 0; i < numStreams; i++ {
+		for range numStreams {
 			<-ticker.C
 			str, err := serverConn.OpenUniStreamSync(ctx)
 			if err != nil {
@@ -573,7 +573,7 @@ func TestHeavyStreamCancellation(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < maxIncomingStreams; i++ {
+	for range maxIncomingStreams {
 		str, err := conn.OpenStreamSync(context.Background())
 		require.NoError(t, err)
 		handleStream(str)

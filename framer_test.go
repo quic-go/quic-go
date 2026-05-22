@@ -211,7 +211,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 
 func TestFramerDetectsFrameDoS(t *testing.T) {
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
-	for i := 0; i < maxControlFrames-1; i++ {
+	for i := range maxControlFrames - 1 {
 		framer.QueueControlFrame(&wire.PingFrame{})
 		framer.QueueControlFrame(&wire.PingFrame{})
 		require.False(t, framer.QueuedTooManyControlFrames())
@@ -230,13 +230,13 @@ func TestFramerDetectsFrameDoS(t *testing.T) {
 func TestFramerDetectsFramePathResponseDoS(t *testing.T) {
 	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
 	var pathResponses []*wire.PathResponseFrame
-	for i := 0; i < 2*maxPathResponses; i++ {
+	for range 2 * maxPathResponses {
 		var f wire.PathResponseFrame
 		binary.BigEndian.PutUint64(f.Data[:], rand.Uint64())
 		pathResponses = append(pathResponses, &f)
 		framer.QueueControlFrame(&f)
 	}
-	for i := 0; i < maxPathResponses; i++ {
+	for i := range maxPathResponses {
 		require.True(t, framer.HasData())
 		frames, _, length := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 		require.Len(t, frames, 1)

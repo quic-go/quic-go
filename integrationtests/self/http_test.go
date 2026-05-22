@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	mrand "math/rand/v2"
 	"net"
 	"net/http"
@@ -174,7 +175,7 @@ func TestHTTPMultipleRequests(t *testing.T) {
 
 		cl := newHTTP3Client(t)
 		var eg errgroup.Group
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			eg.Go(func() error {
 				resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 				if err != nil {
@@ -204,7 +205,7 @@ func TestHTTPMultipleRequests(t *testing.T) {
 		cl := newHTTP3Client(t)
 		const num = 150
 
-		for i := 0; i < num; i++ {
+		for range num {
 			resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/prdata", port))
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -434,9 +435,7 @@ func TestHTTPRequestTrailers(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/client-trailers", func(w http.ResponseWriter, r *http.Request) {
 		trailerBeforeBody := make(http.Header)
-		for k, v := range r.Trailer {
-			trailerBeforeBody[k] = v
-		}
+		maps.Copy(trailerBeforeBody, r.Trailer)
 		trailerChan <- trailerBeforeBody
 
 		body, err := io.ReadAll(r.Body)
@@ -447,9 +446,7 @@ func TestHTTPRequestTrailers(t *testing.T) {
 		bodyChan <- string(body)
 
 		trailer := make(http.Header)
-		for k, v := range r.Trailer {
-			trailer[k] = v
-		}
+		maps.Copy(trailer, r.Trailer)
 		trailerChan <- trailer
 
 		w.WriteHeader(http.StatusOK)
@@ -977,7 +974,7 @@ func TestHTTPStreamedRequests(t *testing.T) {
 	require.Equal(t, 200, rsp.StatusCode)
 
 	reader := bufio.NewReader(rsp.Body)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		msg := fmt.Sprintf("Hello world, %d!\n", i)
 		fmt.Fprint(w, msg)
 		msgRcvd, err := reader.ReadString('\n')
@@ -1157,8 +1154,7 @@ func TestHTTPStreamer(t *testing.T) {
 	require.NoError(t, err)
 	tlsConf := getTLSClientConfigWithoutServerName()
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}, tlsConf, getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")

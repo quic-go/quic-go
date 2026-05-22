@@ -20,7 +20,7 @@ func TestBidirectionalStreamMultiplexing(t *testing.T) {
 
 	runSendingPeer := func(conn *quic.Conn) error {
 		g := new(errgroup.Group)
-		for i := 0; i < numStreams; i++ {
+		for i := range numStreams {
 			str, err := conn.OpenStreamSync(context.Background())
 			if err != nil {
 				return err
@@ -48,7 +48,7 @@ func TestBidirectionalStreamMultiplexing(t *testing.T) {
 
 	runReceivingPeer := func(conn *quic.Conn) error {
 		g := new(errgroup.Group)
-		for i := 0; i < numStreams; i++ {
+		for range numStreams {
 			str, err := conn.AcceptStream(context.Background())
 			if err != nil {
 				return err
@@ -176,7 +176,7 @@ func TestUnidirectionalStreams(t *testing.T) {
 
 	runSendingPeer := func(conn *quic.Conn) error {
 		g := new(errgroup.Group)
-		for i := 0; i < numStreams; i++ {
+		for range numStreams {
 			str, err := conn.OpenUniStreamSync(context.Background())
 			if err != nil {
 				return err
@@ -193,7 +193,7 @@ func TestUnidirectionalStreams(t *testing.T) {
 
 	runReceivingPeer := func(conn *quic.Conn) error {
 		g := new(errgroup.Group)
-		for i := 0; i < numStreams; i++ {
+		for range numStreams {
 			str, err := conn.AcceptUniStream(context.Background())
 			if err != nil {
 				return err

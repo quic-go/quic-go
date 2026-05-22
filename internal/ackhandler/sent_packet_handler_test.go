@@ -472,7 +472,7 @@ func testSentPacketHandlerAmplificationLimitServer(t *testing.T, addressValidate
 	// As long as we haven't sent out 3x the amount of bytes received, we can send out new packets,
 	// even if we go above the 3x limit by sending the last packet.
 	sph.ReceivedBytes(1000, monotime.Now())
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		require.Equal(t, SendAny, sph.SendMode(monotime.Now()))
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
 		sph.SentPacket(monotime.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 999, false, false)
@@ -487,7 +487,7 @@ func testSentPacketHandlerAmplificationLimitServer(t *testing.T, addressValidate
 	// receiving more data allows us to send out more packets
 	sph.ReceivedBytes(1000, monotime.Now())
 	require.NotZero(t, sph.GetLossDetectionTimeout())
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.Equal(t, SendAny, sph.SendMode(monotime.Now()))
 		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
 		sph.SentPacket(monotime.Now(), pn, protocol.InvalidPacketNumber, nil, []Frame{{Frame: &wire.PingFrame{}}}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
