@@ -12,7 +12,7 @@ import (
 
 func splitHexString(t *testing.T, s string) (slice []byte) {
 	t.Helper()
-	for _, ss := range strings.Split(s, " ") {
+	for ss := range strings.SplitSeq(s, " ") {
 		if ss[0:2] == "0x" {
 			ss = ss[2:]
 		}

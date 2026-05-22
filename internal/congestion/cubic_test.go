@@ -93,7 +93,7 @@ func TestCubicAboveOriginWithFineGrainedCubing(t *testing.T) {
 	clock.Advance(600 * time.Millisecond)
 	currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		clock.Advance(10 * time.Millisecond)
 		expectedCwnd := cubicConvexCwnd(initialCwnd, rttMin, clock.Now().Sub(initialTime))
 		nextCwnd := cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())

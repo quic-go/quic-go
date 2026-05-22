@@ -186,7 +186,7 @@ func TestConnIDManagerConnIDRotation(t *testing.T) {
 	// Note that we're missing the connection ID with sequence number 2.
 	// It will be received later.
 	var queuedConnIDs []protocol.ConnectionID
-	for i := 0; i < protocol.MaxActiveConnectionIDs-1; i++ {
+	for i := range protocol.MaxActiveConnectionIDs - 1 {
 		b := make([]byte, 4)
 		rand.Read(b)
 		connID := protocol.ParseConnectionID(b)

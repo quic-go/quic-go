@@ -725,7 +725,7 @@ func TestPackRetransmissions(t *testing.T) {
 
 func packMaxNumNonAckElicitingAcks(t *testing.T, tp *testPacketPacker, mockCtrl *gomock.Controller, maxPacketSize protocol.ByteCount) {
 	t.Helper()
-	for i := 0; i < protocol.MaxNonAckElicitingAcks; i++ {
+	for range protocol.MaxNonAckElicitingAcks {
 		tp.pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 		tp.pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 		tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)

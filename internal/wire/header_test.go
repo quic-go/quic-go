@@ -56,7 +56,7 @@ func TestParseConnIDEOFLongHeader(t *testing.T) {
 	data := b[:len(b)-2] // cut the packet number
 	_, err = ParseConnectionID(data, 8)
 	require.NoError(t, err)
-	for i := 0; i < 1 /* first byte */ +4 /* version */ +1 /* conn ID lengths */ +6; /* dest conn ID */ i++ {
+	for i := range 1 /* first byte */ + 4 /* version */ + 1 /* conn ID lengths */ + 6 {
 		b := make([]byte, i)
 		copy(b, data[:i])
 		_, err := ParseConnectionID(b, 8)

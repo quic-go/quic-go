@@ -12,7 +12,7 @@ func TestStatelessResetter(t *testing.T) {
 	t.Run("no key", func(t *testing.T) {
 		r1 := newStatelessResetter(nil)
 		r2 := newStatelessResetter(nil)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			b := make([]byte, 15)
 			rand.Read(b)
 			connID := protocol.ParseConnectionID(b)

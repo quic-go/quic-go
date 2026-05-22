@@ -92,7 +92,7 @@ func TestACKBundling(t *testing.T) {
 	require.NoError(t, err)
 	b := make([]byte, 1)
 	// Send numMsg 1-byte messages.
-	for i := 0; i < numMsg; i++ {
+	for i := range numMsg {
 		_, err = str.Write([]byte{uint8(i)})
 		require.NoError(t, err)
 		_, err = str.Read(b)
@@ -246,7 +246,7 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	}
 
 	var expectedBlockOffsets []protocol.ByteCount
-	for i := 0; i < numBatches; i++ {
+	for i := range numBatches {
 		var offset protocol.ByteCount
 		for _, s := range windowSizes[:i+1] {
 			offset += s

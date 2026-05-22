@@ -54,7 +54,7 @@ func TestHybridSlowStartWithDelay(t *testing.T) {
 
 	// Will not trigger since our lowest RTT in our burst is the same as the long
 	// term RTT provided.
-	for n := 0; n < hybridStartMinSamples; n++ {
+	for n := range hybridStartMinSamples {
 		require.False(t, slowStart.ShouldExitSlowStart(rtt+time.Duration(n)*time.Millisecond, rtt, 100))
 	}
 	endPacketNumber++

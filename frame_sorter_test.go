@@ -1368,7 +1368,7 @@ func TestFrameSorterGapHandling(t *testing.T) {
 
 func TestFrameSorterTooManyGaps(t *testing.T) {
 	s := newFrameSorter()
-	for i := 0; i < protocol.MaxStreamFrameSorterGaps; i++ {
+	for i := range protocol.MaxStreamFrameSorterGaps {
 		require.NoError(t, s.Push([]byte("foobar"), protocol.ByteCount(i*7), nil))
 	}
 	require.Equal(t, protocol.MaxStreamFrameSorterGaps, s.gaps.Len())
@@ -1412,7 +1412,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 	random.Read(data)
 
 	frames := make([]frame, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		b := make([]byte, dataLen)
 		offset := i * int(dataLen)
 		copy(b, data[offset:offset+int(dataLen)])
@@ -1432,7 +1432,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 		callbacks = append(callbacks, tr)
 	}
 	if injectDuplicates {
-		for i := 0; i < num/10; i++ {
+		for range num / 10 {
 			cb, tr := getFrameSorterTestCallback(t)
 			df := frames[mrand.IntN(len(frames))]
 			require.NoError(t, s.Push(df.data, df.offset, cb))
@@ -1441,7 +1441,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 	}
 	if injectOverlaps {
 		finalOffset := num * dataLen
-		for i := 0; i < num/3; i++ {
+		for range num / 3 {
 			cb, tr := getFrameSorterTestCallback(t)
 			startOffset := protocol.ByteCount(mrand.IntN(int(finalOffset)))
 			endOffset := startOffset + protocol.ByteCount(mrand.IntN(int(finalOffset-startOffset)))

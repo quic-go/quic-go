@@ -220,7 +220,7 @@ func (w *responseWriter) writeHeader(status int) error {
 	// Handle trailer fields
 	if vals, ok := w.header["Trailer"]; ok {
 		for _, val := range vals {
-			for _, trailer := range strings.Split(val, ",") {
+			for trailer := range strings.SplitSeq(val, ",") {
 				// We need to convert to the canonical header key value here because this will be called when using
 				// headers.Add or headers.Set.
 				trailer = textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(trailer))

@@ -332,7 +332,7 @@ func TestStreamSplittingProducesCorrectLengthFramesWithoutDataLen(t *testing.T) 
 		Data:     []byte{0},
 	}
 	minFrameSize := f.Length(protocol.Version1)
-	for i := protocol.ByteCount(0); i < minFrameSize; i++ {
+	for i := range minFrameSize {
 		frame, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
 		require.True(t, needsSplit)
 		require.Nil(t, frame)
@@ -355,7 +355,7 @@ func TestStreamSplittingProducesCorrectLengthFramesWithDataLen(t *testing.T) {
 		Data:           []byte{0},
 	}
 	minFrameSize := f.Length(protocol.Version1)
-	for i := protocol.ByteCount(0); i < minFrameSize; i++ {
+	for i := range minFrameSize {
 		frame, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
 		require.True(t, needsSplit)
 		require.Nil(t, frame)

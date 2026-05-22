@@ -343,7 +343,7 @@ func extractAnnouncedTrailers(header http.Header) http.Header {
 
 	trailers := make(http.Header)
 	for _, rawVal := range rawTrailers {
-		for _, val := range strings.Split(rawVal, ",") {
+		for val := range strings.SplitSeq(rawVal, ",") {
 			trailers[http.CanonicalHeaderKey(textproto.TrimString(val))] = nil
 		}
 	}
