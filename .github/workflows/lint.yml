@@ -36,8 +36,12 @@ jobs:
       - name: Run gcassert
         if: success() || failure() # run this step even if the previous one failed
         run: go tool gcassert ./...
+        # Only run govulncheck on pull requests, not on pushes (including merge commits to master).
+        # govulncheck queries the vulnerability database at runtime, so a newly disclosed vulnerability
+        # could otherwise cause the post-merge run to fail even though nothing in the repository changed,
+        # breaking master through no fault of the merged PR.
       - name: Run govulncheck
-        if: success() || failure() # run this step even if the previous one failed
+        if: ${{ (success() || failure()) && github.event_name == 'pull_request' }}
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
   golangci-lint:
     runs-on: ubuntu-latest
