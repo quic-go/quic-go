@@ -24,6 +24,10 @@ Support for WebTransport over HTTP/3 ([draft-ietf-webtrans-http3](https://datatr
 
 Detailed documentation can be found on [quic-go.net](https://quic-go.net/docs/).
 
+## FIPS 140-3
+
+Starting with v0.60, quic-go supports use in FIPS 140-3 environments when built with Go 1.26 or newer, using Go standard library cryptography for the QUIC code paths relevant in FIPS mode; see [FIPS140.md](FIPS140.md) for details.
+
 ## Projects using quic-go
 
 | Project                                                   | Description                                                                                                                                                       | Stars                                                                                               |
