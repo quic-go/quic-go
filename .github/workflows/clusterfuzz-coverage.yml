@@ -73,7 +73,7 @@ jobs:
         working-directory: oss-fuzz
         run: |
           python3 infra/helper.py build_image --no-pull quic-go
-          python3 infra/helper.py build_fuzzers --sanitizer coverage --mount_path /root/go/src/github.com/quic-go/quic-go quic-go "$GITHUB_WORKSPACE"
+          python3 infra/helper.py build_fuzzers --sanitizer coverage --mount_path /src/quic-go quic-go "$GITHUB_WORKSPACE"
       - name: Generate coverage
         working-directory: oss-fuzz
         run: |
@@ -82,7 +82,7 @@ jobs:
       - name: Prepare Codecov coverage
         working-directory: oss-fuzz
         run: |
-          sed "s#^/out/root/go/src/github.com/quic-go/quic-go/#${GITHUB_WORKSPACE}/#" \
+          sed "s#^/out/src/quic-go/#${GITHUB_WORKSPACE}/#" \
             build/out/quic-go/fuzz.cov > "$GITHUB_WORKSPACE/clusterfuzz.coverprofile"
           test -s "$GITHUB_WORKSPACE/clusterfuzz.coverprofile"
       - name: Upload coverage to Codecov
