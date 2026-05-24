@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   PR:
+    if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
     env:
       # Forked PRs don't receive repository secrets, so they run without corpus storage.
       CLUSTERFUZZ_LITE_STORAGE_REPO: >-
