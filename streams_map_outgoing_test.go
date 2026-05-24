@@ -521,7 +521,6 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 		maxStream := firstStream + 4*(n-1)
 		var limits []protocol.StreamID
 		seen := make(map[protocol.StreamID]struct{})
-		var lastStreamSeen protocol.StreamID
 		var numCancelledSeen int
 		for limit < maxStream {
 			add := 4 * protocol.StreamID(rand.IntN(n/5)+1)
@@ -532,7 +531,8 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 			t.Logf("setting stream limit to %d", limit)
 			m.SetMaxStream(limit)
 
-			for lastStreamSeen < min(maxStream, limit) {
+			expectedOpened := int((min(maxStream, limit)-firstStream)/4) + 1
+			for len(seen) < expectedOpened {
 				select {
 				case res := <-resultChan:
 					if errors.Is(res.err, context.Canceled) {
@@ -540,8 +540,8 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 					} else {
 						require.NoError(t, res.err)
 						require.NotContains(t, seen, res.str.id)
+						require.LessOrEqual(t, res.str.id, min(maxStream, limit))
 						seen[res.str.id] = struct{}{}
-						lastStreamSeen = res.str.id
 					}
 				case <-time.After(time.Second):
 					t.Fatalf("timed out waiting for stream to open")
@@ -549,6 +549,15 @@ func TestStreamsMapOutgoingRandomizedWithCancellation(t *testing.T) {
 			}
 		}
 		require.Len(t, seen, n)
+		for numCancelledSeen < numCancelled {
+			select {
+			case res := <-resultChan:
+				require.ErrorIs(t, res.err, context.Canceled)
+				numCancelledSeen++
+			case <-time.After(time.Second):
+				t.Fatalf("timed out waiting for stream opening to be canceled")
+			}
+		}
 		t.Logf("saw %d streams, %d cancelled", len(seen), numCancelledSeen)
 		require.Equal(t, numCancelled, numCancelledSeen)
 
