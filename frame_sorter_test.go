@@ -1683,25 +1683,16 @@ func frameSorterFuzzPeek(t *testing.T, s *frameSorter, streamData []byte, receiv
 	p := make([]byte, length)
 	err := s.Peek(protocol.ByteCount(offset), p)
 
-	// Peek only succeeds if there is enough consecutive data queued starting at offset,
-	// and it only supports peeking from offsets where a frame starts.
-	if length == 0 {
-		require.NoError(t, err)
-		return
-	}
-
-	var mustSucceed bool
-	if protocol.ByteCount(offset) == readPos {
+	// Peek only supports peeking from offsets where a frame starts. The model only
+	// knows that frame boundaries are guaranteed at readPos, so when peeking from
+	// there with enough consecutive received data, Peek must succeed.
+	if length > 0 && protocol.ByteCount(offset) == readPos {
 		nextGap := slices.Index(received[offset:], false)
-		if nextGap == -1 {
-			nextGap = len(received) - offset
+		if nextGap == -1 || nextGap >= length {
+			require.NoError(t, err)
 		}
-		mustSucceed = length <= nextGap
 	}
-
-	if mustSucceed {
-		require.NoError(t, err)
-	} else if err != nil {
+	if err != nil {
 		return
 	}
 	require.Equal(t, streamData[offset:offset+length], p)
