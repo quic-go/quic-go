@@ -50,6 +50,25 @@ jobs:
             gcloud storage cp --recursive "$source_dir/*" "$corpus_dir"
             echo "$target: $(find "$corpus_dir" -type f | wc -l) corpus files"
           done
+      - name: Summarize ClusterFuzz corpus
+        run: |
+          set -euo pipefail
+
+          corpus_root=oss-fuzz/build/corpus/quic-go
+          {
+            echo "## ClusterFuzz corpus"
+            echo
+            echo "| Fuzzer | Corpus files downloaded |"
+            echo "| --- | ---: |"
+
+            for corpus_dir in "$corpus_root"/*; do
+              [ -d "$corpus_dir" ] || continue
+
+              target=$(basename "$corpus_dir")
+              corpus_files=$(find "$corpus_dir" -type f | wc -l | tr -d ' ')
+              echo "| \`$target\` | $corpus_files |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Build coverage fuzzers
         working-directory: oss-fuzz
         run: |
