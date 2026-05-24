@@ -155,6 +155,52 @@ func testStreamsMapOutgoingLimits(t *testing.T, perspective protocol.Perspective
 	})
 }
 
+// This test checks that OpenStreamSync returns the context error when the context is canceled
+// at the same time that the stream limit is increased (see https://github.com/quic-go/quic-go/issues/5659).
+// The race is inherently hard to trigger: even without the fix, this test only fails intermittently.
+// To gain confidence in the fix, run it many times (e.g. 10000 times) with the race detector enabled.
+func TestStreamsMapOutgoingOpenStreamSyncCancel(t *testing.T) {
+	queued := make(chan struct{}, 1)
+	m := newOutgoingStreamsMap(
+		protocol.StreamTypeUni,
+		func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
+		func(f wire.Frame) { queued <- struct{}{} },
+		protocol.PerspectiveClient,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	type result struct {
+		str *mockStream
+		err error
+	}
+	resultChan := make(chan result, 1)
+	go func() {
+		str, err := m.OpenStreamSync(ctx)
+		resultChan <- result{str: str, err: err}
+	}()
+
+	select {
+	case <-queued:
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not queue")
+	}
+
+	cancel()
+	m.SetMaxStream(protocol.FirstOutgoingUniStreamClient)
+
+	select {
+	case res := <-resultChan:
+		require.ErrorIs(t, res.err, context.Canceled)
+		require.Nil(t, res.str)
+	case <-time.After(time.Second):
+		t.Fatal("OpenStreamSync did not return after the context was canceled")
+	}
+
+	str, err := m.OpenStream()
+	require.NoError(t, err)
+	require.Equal(t, protocol.FirstOutgoingUniStreamClient, str.id)
+}
+
 func TestStreamsMapOutgoingConcurrentOpenStreamSync(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := newOutgoingStreamsMap(
