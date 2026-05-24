@@ -19,3 +19,5 @@ coverage:
 flags:
   clusterfuzz-lite-batch:
     joined: false
+  clusterfuzz:
+    joined: false

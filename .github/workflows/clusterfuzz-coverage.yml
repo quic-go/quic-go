@@ -1,0 +1,77 @@
+name: ClusterFuzz coverage
+on:
+  schedule:
+    - cron: '12 3,11,19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_DEFAULT_PLATFORM: linux/amd64
+      CLUSTERFUZZ_CORPUS_BUCKET: quic-go-corpus.clusterfuzz-external.appspot.com
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: google/oss-fuzz
+          path: oss-fuzz
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Configure Google Cloud credentials
+        run: |
+          cat > "$RUNNER_TEMP/gcp-ossfuzz-user-credentials.json" <<'EOF'
+          ${{ secrets.GCP_OSSFUZZ_USER_CREDENTIALS }}
+          EOF
+          echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$RUNNER_TEMP/gcp-ossfuzz-user-credentials.json" >> "$GITHUB_ENV"
+      - name: Download ClusterFuzz corpus
+        run: |
+          set -euo pipefail
+
+          targets=(
+            frame_fuzzer_v2
+            transportparameter_fuzzer_v2
+            http3_frame_fuzzer
+            header_fuzzer_v2
+            handshake_fuzzer_v2
+            http3_header_parsing_fuzzer
+          )
+
+          mkdir -p oss-fuzz/build/corpus/quic-go
+          for target in "${targets[@]}"; do
+            source_dir="gs://${CLUSTERFUZZ_CORPUS_BUCKET}/libFuzzer/quic-go_${target}"
+            corpus_dir="oss-fuzz/build/corpus/quic-go/${target}"
+
+            echo "$target: downloading live corpus"
+            rm -rf "$corpus_dir"
+            mkdir -p "$corpus_dir"
+            gcloud storage cp --recursive "$source_dir/*" "$corpus_dir"
+            echo "$target: $(find "$corpus_dir" -type f | wc -l) corpus files"
+          done
+      - name: Build coverage fuzzers
+        working-directory: oss-fuzz
+        run: |
+          python3 infra/helper.py build_image --no-pull quic-go
+          python3 infra/helper.py build_fuzzers --sanitizer coverage --mount_path /root/go/src/github.com/quic-go/quic-go quic-go "$GITHUB_WORKSPACE"
+      - name: Generate coverage
+        working-directory: oss-fuzz
+        run: |
+          rm -f build/out/quic-go/qpack_decode_fuzzer
+          python3 infra/helper.py coverage --no-corpus-download --no-serve quic-go
+      - name: Prepare Codecov coverage
+        working-directory: oss-fuzz
+        run: |
+          sed "s#^/out/root/go/src/github.com/quic-go/quic-go/#${GITHUB_WORKSPACE}/#" \
+            build/out/quic-go/fuzz.cov > "$GITHUB_WORKSPACE/clusterfuzz.coverprofile"
+          test -s "$GITHUB_WORKSPACE/clusterfuzz.coverprofile"
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          disable_search: true
+          files: clusterfuzz.coverprofile
+          flags: clusterfuzz
+          name: ClusterFuzz fuzzing
+          token: ${{ secrets.CODECOV_TOKEN }}
