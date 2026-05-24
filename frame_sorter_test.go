@@ -2,7 +2,6 @@ package quic
 
 import (
 	rand "crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"math"
 	mrand "math/rand/v2"
@@ -1518,69 +1517,31 @@ func FuzzFrameSorter(f *testing.F) {
 		opPush uint8 = iota
 		opPop
 		opPeek
-		opSize = 5
 	)
 
+	// Each operation is encoded as 3 bytes: 1 byte op type, 1 byte offset, 1 byte length.
+	// maxStreamLen is chosen larger than protocol.MinStreamFrameBufferSize so that overlapping
+	// frames can be cut down to less than that threshold. This ensures the small-cut code path
+	// in frameSorter.push (which copies the cut frame and fires the doneCb early) is exercised,
+	// while still allowing un-cut frames to be at or above the minimum size.
 	const (
-		maxStreamLen = 1024
-		maxFrameLen  = 256
+		opSize       = 3
+		maxStreamLen = 256
 		maxOps       = 128
 	)
+	// If MinStreamFrameBufferSize is ever changed to grow beyond maxStreamLen,
+	// the small-cut path becomes unreachable. Keep them in sync.
+	require.Less(f, protocol.MinStreamFrameBufferSize, maxStreamLen)
 
-	type op struct {
-		Typ    byte
-		Offset int
-		Length int
-	}
-
-	for _, seed := range [][]op{
-		{
-			{Typ: opPush, Offset: 0, Length: 3},
-			{Typ: opPush, Offset: 3, Length: 3},
-			{Typ: opPop},
-		},
-		{
-			{Typ: opPush, Offset: 6, Length: 3},
-			{Typ: opPush, Offset: 0, Length: 3},
-			{Typ: opPush, Offset: 3, Length: 3},
-			{Typ: opPop},
-		},
-		{
-			{Typ: opPush, Offset: 0, Length: 6},
-			{Typ: opPush, Offset: 0, Length: 6},
-			{Typ: opPop},
-			{Typ: opPush, Offset: 0, Length: 6},
-		},
-		{
-			{Typ: opPush, Offset: 3, Length: 4},
-			{Typ: opPush, Offset: 5, Length: 4},
-			{Typ: opPush, Offset: 0, Length: 3},
-			{Typ: opPop},
-		},
-		{
-			{Typ: opPush, Offset: 3, Length: 3},
-			{Typ: opPush, Offset: 9, Length: 3},
-			{Typ: opPush, Offset: 5, Length: 10},
-			{Typ: opPush, Offset: 0, Length: 3},
-			{Typ: opPop},
-		},
-		{
-			{Typ: opPush, Offset: 0, Length: 6},
-			{Typ: opPeek, Offset: 0, Length: 3},
-			{Typ: opPush, Offset: 6, Length: 3},
-			{Typ: opPeek, Offset: 0, Length: 9},
-			{Typ: opPush, Offset: 10, Length: 3},
-			{Typ: opPeek, Offset: 0, Length: 12},
-		},
+	for _, seed := range [][]uint8{
+		{opPush, 0, 3, opPush, 3, 3, opPop, 0, 0},
+		{opPush, 6, 3, opPush, 0, 3, opPush, 3, 3, opPop, 0, 0},
+		{opPush, 0, 6, opPush, 0, 6, opPop, 0, 0, opPush, 0, 6},
+		{opPush, 3, 4, opPush, 5, 4, opPush, 0, 3, opPop, 0, 0},
+		{opPush, 3, 3, opPush, 9, 3, opPush, 5, 10, opPush, 0, 3, opPop, 0, 0},
+		{opPush, 0, 6, opPeek, 0, 3, opPush, 6, 3, opPeek, 0, 9, opPush, 10, 3, opPeek, 0, 12},
 	} {
-		// each operation is serialized as 1 byte op type, 2 bytes offset, and 2 bytes length
-		b := make([]byte, opSize*len(seed))
-		for i, op := range seed {
-			b[opSize*i] = op.Typ
-			binary.BigEndian.PutUint16(b[opSize*i+1:opSize*i+3], uint16(op.Offset))
-			binary.BigEndian.PutUint16(b[opSize*i+3:opSize*i+5], uint16(op.Length))
-		}
-		f.Add(b)
+		f.Add(seed)
 	}
 
 	// use deterministic non-uniform data
@@ -1608,24 +1569,19 @@ func FuzzFrameSorter(f *testing.F) {
 			}
 		}
 
-		for len(data) > 0 {
-			op := op{
-				Typ:    data[0],
-				Offset: int(binary.BigEndian.Uint16(data[1:3])),
-				Length: int(binary.BigEndian.Uint16(data[3:5])),
-			}
-			data = data[opSize:]
-			if op.Offset >= len(streamData) || op.Length > maxFrameLen || op.Offset+op.Length > len(streamData) {
+		for ; len(data) >= opSize; data = data[opSize:] {
+			op, offset, length := data[0], int(data[1]), int(data[2])
+			if offset+length > len(streamData) {
 				return
 			}
 
-			switch op.Typ {
+			switch op {
 			case opPush:
-				push(op.Offset, op.Length)
+				push(offset, length)
 			case opPop:
 				readPos = frameSorterFuzzPop(t, s, streamData, received, readPos)
 			case opPeek:
-				frameSorterFuzzPeek(t, s, streamData, received, readPos, op.Offset, op.Length)
+				frameSorterFuzzPeek(t, s, streamData, received, readPos, offset, length)
 			}
 		}
 
