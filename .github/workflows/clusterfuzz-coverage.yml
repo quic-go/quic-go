@@ -36,6 +36,7 @@ jobs:
             http3_frame_fuzzer
             header_fuzzer_v2
             handshake_fuzzer_v2
+            frame_sorter_fuzzer
             http3_header_parsing_fuzzer
           )
 
@@ -47,9 +48,15 @@ jobs:
             echo "$target: downloading live corpus"
             rm -rf "$corpus_dir"
             mkdir -p "$corpus_dir"
-            gcloud storage cp --recursive "$source_dir/*" "$corpus_dir"
-            echo "$target: $(find "$corpus_dir" -type f | wc -l) corpus files"
+
+            gcloud storage cp --recursive "$source_dir/*" "$corpus_dir" || echo "$target: no live corpus found"
           done
+
+          corpus_files=$(find oss-fuzz/build/corpus/quic-go -type f | wc -l | tr -d ' ')
+          if [ "$corpus_files" = 0 ]; then
+            echo "no ClusterFuzz corpus files downloaded"
+            exit 1
+          fi
       - name: Summarize ClusterFuzz corpus
         run: |
           set -euo pipefail
@@ -66,6 +73,9 @@ jobs:
 
               target=$(basename "$corpus_dir")
               corpus_files=$(find "$corpus_dir" -type f | wc -l | tr -d ' ')
+              if [ "$corpus_files" = 0 ]; then
+                corpus_files="---"
+              fi
               echo "| \`$target\` | $corpus_files |"
             done
           } >> "$GITHUB_STEP_SUMMARY"

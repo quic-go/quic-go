@@ -187,7 +187,8 @@ func testPackLongHeaders(t *testing.T, includeACK bool) {
 		tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
 		tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
 	}
-	clientHello := getClientHello(t, "quic-go.net")
+	clientHello, err := getClientHello("quic-go.net")
+	require.NoError(t, err)
 	tp.initialStream.Write(clientHello)
 	tp.initialStream.Write(make([]byte, 900-len(clientHello))) // add some more data
 	tp.packer.retransmissionQueue.addHandshake(&wire.PingFrame{})
@@ -902,7 +903,9 @@ func testPackProbePacket(t *testing.T, encLevel protocol.EncryptionLevel, perspe
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
-		cryptoData = getClientHello(t, "")
+		var err error
+		cryptoData, err = getClientHello("")
+		require.NoError(t, err)
 		tp.packer.initialStream.Write(cryptoData)
 	case protocol.EncryptionHandshake:
 		tp.sealingManager.EXPECT().GetHandshakeSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
