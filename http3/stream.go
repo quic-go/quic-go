@@ -377,7 +377,8 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	if (isInformational || isNoContent || isSuccessfulConnect) && res.ContentLength == -1 {
 		res.ContentLength = 0
 	}
-	if s.requestedGzip && res.Header.Get("Content-Encoding") == "gzip" {
+	responseHasContent := !isInformational && !isNoContent && !isSuccessfulConnect
+	if s.requestedGzip && responseHasContent && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")
 		res.ContentLength = -1

@@ -233,3 +233,55 @@ func TestRequestStream(t *testing.T) {
 	require.Equal(t, 6, n)
 	require.Equal(t, []byte("foobar"), b[:n])
 }
+
+func TestRequestStreamConnectDoesNotApplyContentEncoding(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	requestWriter := newRequestWriter()
+	clientConn, _ := newConnPair(t)
+	str := newRequestStream(
+		newStream(
+			qstr,
+			newRawConn(clientConn, false, nil, nil, nil, nil),
+			&httptrace.ClientTrace{},
+			func(io.Reader, *headersFrame) error { return nil },
+			nil,
+		),
+		requestWriter,
+		make(chan struct{}),
+		qpack.NewDecoder(),
+		false,
+		math.MaxInt,
+		&http.Response{},
+	)
+
+	req, err := http.NewRequest(http.MethodConnect, "http://quic-go.net:443", nil)
+	require.NoError(t, err)
+	qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+	require.NoError(t, str.sendRequestHeader(req))
+
+	var rspBuf bytes.Buffer
+	rstr := NewMockDatagramStream(gomock.NewController(t))
+	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
+	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
+	rw.header.Set("Content-Encoding", "gzip")
+	rw.WriteHeader(http.StatusOK)
+	rw.Flush()
+
+	buf := bytes.NewBuffer(rspBuf.Bytes())
+	buf.Write(getDataFrame([]byte("capsule-data")))
+	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+
+	rsp, err := str.ReadResponse()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	require.Equal(t, "gzip", rsp.Header.Get("Content-Encoding"))
+	require.Equal(t, int64(0), rsp.ContentLength)
+
+	b := make([]byte, 20)
+	n, err := str.Read(b)
+	require.NoError(t, err)
+	require.Equal(t, "capsule-data", string(b[:n]))
+}
