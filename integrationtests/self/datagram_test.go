@@ -147,7 +147,7 @@ func TestDatagramSizeLimitIncludesPacketOverhead(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(5*time.Second))
 	defer cancel()
 	clientConn, err := quic.Dial(
 		ctx,
@@ -167,7 +167,7 @@ func TestDatagramSizeLimitIncludesPacketOverhead(t *testing.T) {
 	defer serverConn.CloseWithError(0, "")
 
  	// wait for the MTU discovery to complete	
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(scaleDuration(time.Millisecond * 500))
 
 	// Find the maximum payload size reported by DatagramTooLargeError
 	var maxPayloadSize protocol.ByteCount
@@ -183,7 +183,7 @@ func TestDatagramSizeLimitIncludesPacketOverhead(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the datagram was actually delivered and data matches
-	serverCtx, serverCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	serverCtx, serverCancel := context.WithTimeout(ctx, scaleDuration(500*time.Millisecond))
 	defer serverCancel()
 	datagram, err := serverConn.ReceiveDatagram(serverCtx)
 	require.NoError(t, err, "datagram should be actually deliverable when respecting MaxDatagramPayloadSize")
