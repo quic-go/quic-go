@@ -274,7 +274,9 @@ func (w *responseWriter) flushTrailers() {
 		return
 	}
 	if err := w.writeTrailers(); err != nil {
-		w.logger.Debug("could not write trailers", "error", err)
+		if w.logger != nil {
+			w.logger.Debug("could not write trailers", "error", err)
+		}
 	}
 }
 
@@ -291,7 +293,9 @@ func (w *responseWriter) Flush() {
 func (w *responseWriter) declareTrailer(k string) {
 	if !httpguts.ValidTrailerHeader(k) {
 		// Forbidden by RFC 9110, section 6.5.1.
-		w.logger.Debug("ignoring invalid trailer", slog.String("header", k))
+		if w.logger != nil {
+			w.logger.Debug("ignoring invalid trailer", slog.String("header", k))
+		}
 		return
 	}
 	if w.trailers == nil {
