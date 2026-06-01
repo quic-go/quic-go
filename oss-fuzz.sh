@@ -2,15 +2,19 @@
 
 set -euo pipefail
 
+echo "Build date (UTC): $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
 go version
 go env
 
 # fuzz qpack
 cd $GOPATH/src/github.com/quic-go/qpack
+git log -1 --format='qpack revision: %H (%cI) %s'
 compile_native_go_fuzzer_v2 github.com/quic-go/qpack FuzzDecode qpack_decode_fuzzer
 
 # fuzz quic-go
 cd $GOPATH/src/github.com/quic-go/quic-go/
+git log -1 --format='quic-go revision: %H (%cI) %s'
 
 build_native_go_fuzzer() {
 	local pkg=$1
