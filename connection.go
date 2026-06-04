@@ -2128,8 +2128,10 @@ func (c *Conn) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encryption
 	}
 	// If one of the acknowledged packets was a Path MTU probe packet, this might have increased the Path MTU estimate.
 	if c.mtuDiscoverer != nil {
-		if mtu := c.mtuDiscoverer.CurrentSize(); mtu > protocol.ByteCount(c.maxPayloadSizeEstimate.Load()) {
-			c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(mtu)))
+		mtu := c.mtuDiscoverer.CurrentSize()
+		maxPayloadSize := estimateMaxPayloadSize(mtu)
+		if maxPayloadSize > protocol.ByteCount(c.maxPayloadSizeEstimate.Load()) {
+			c.maxPayloadSizeEstimate.Store(uint32(maxPayloadSize))
 			c.sentPacketHandler.SetMaxDatagramSize(mtu)
 		}
 	}
