@@ -15,6 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newBenchmarkRequestWriterRequest() *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net/index.html?foo=bar", nil)
+	req.AddCookie(&http.Cookie{Name: "foo", Value: "bar"})
+	req.AddCookie(&http.Cookie{Name: "baz", Value: "lorem ipsum"})
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Referer", "https://quic-go.net/docs/http3/")
+	return req
+}
+
 func decodeRequest(t *testing.T, str io.Reader, streamID quic.StreamID, eventRecorder *events.Recorder) map[string]string {
 	t.Helper()
 
@@ -84,6 +95,18 @@ func testRequestWriterGzip(t *testing.T, gzip bool) {
 	case false:
 		require.NotContains(t, headerFields, "accept-encoding")
 	}
+}
+
+func TestWriteRequestHeaderAllocs(t *testing.T) {
+	req := newBenchmarkRequestWriterRequest()
+	rw := newRequestWriter()
+	buf := &bytes.Buffer{}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		buf.Reset()
+		require.NoError(t, rw.WriteRequestHeader(buf, req, false, 0, nil))
+	})
+	t.Logf("WriteRequestHeader allocations per run: %.0f", allocs)
 }
 
 func TestRequestWriterInvalidHostHeader(t *testing.T) {
@@ -165,4 +188,18 @@ func TestRequestWriterTrailers(t *testing.T) {
 		"trailer1": {"foo"},
 		"trailer2": {"bar"},
 	}, trailers)
+}
+
+func BenchmarkWriteRequestHeader(b *testing.B) {
+	req := newBenchmarkRequestWriterRequest()
+	rw := newRequestWriter()
+	buf := &bytes.Buffer{}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		buf.Reset()
+		if err := rw.WriteRequestHeader(buf, req, false, 0, nil); err != nil {
+			b.Fatalf("failed to write request headers: %v", err)
+		}
+	}
 }

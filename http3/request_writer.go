@@ -28,6 +28,14 @@ type requestWriter struct {
 	mutex     sync.Mutex
 	encoder   *qpack.Encoder
 	headerBuf *bytes.Buffer
+	scratch   requestWriterScratch
+}
+
+type requestWriterScratch struct {
+	trailerKeys      []string
+	trailerBuf       []byte
+	frameHeaderBuf   []byte
+	qlogHeaderFields []qlog.HeaderField
 }
 
 func newRequestWriter() *requestWriter {
@@ -36,15 +44,15 @@ func newRequestWriter() *requestWriter {
 	return &requestWriter{
 		encoder:   encoder,
 		headerBuf: headerBuf,
+		scratch: requestWriterScratch{
+			frameHeaderBuf:   make([]byte, 0, 16),
+			qlogHeaderFields: make([]qlog.HeaderField, 0, 16),
+		},
 	}
 }
 
 func (w *requestWriter) WriteRequestHeader(wr io.Writer, req *http.Request, gzip bool, streamID quic.StreamID, qlogger qlogwriter.Recorder) error {
-	buf := &bytes.Buffer{}
-	if err := w.writeHeaders(buf, req, gzip, streamID, qlogger); err != nil {
-		return err
-	}
-	if _, err := wr.Write(buf.Bytes()); err != nil {
+	if err := w.writeHeaders(wr, req, gzip, streamID, qlogger); err != nil {
 		return err
 	}
 	trace := httptrace.ContextClientTrace(req.Context())
@@ -58,28 +66,44 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool,
 	defer w.encoder.Close()
 	defer w.headerBuf.Reset()
 
+	scratch := &w.scratch
+	scratch.trailerKeys = scratch.trailerKeys[:0]
+	scratch.trailerBuf = scratch.trailerBuf[:0]
+	scratch.frameHeaderBuf = scratch.frameHeaderBuf[:0]
+	scratch.qlogHeaderFields = scratch.qlogHeaderFields[:0]
+
 	var trailers string
 	if len(req.Trailer) > 0 {
-		keys := make([]string, 0, len(req.Trailer))
 		for k := range req.Trailer {
 			if httpguts.ValidTrailerHeader(k) {
-				keys = append(keys, k)
+				scratch.trailerKeys = append(scratch.trailerKeys, k)
 			}
 		}
-		trailers = strings.Join(keys, ", ")
+		for i, k := range scratch.trailerKeys {
+			if i > 0 {
+				scratch.trailerBuf = append(scratch.trailerBuf, ',', ' ')
+			}
+			scratch.trailerBuf = append(scratch.trailerBuf, k...)
+		}
+		if len(scratch.trailerBuf) > 0 {
+			trailers = string(scratch.trailerBuf)
+		}
 	}
 
-	headerFields, err := w.encodeHeaders(req, gzip, trailers, actualContentLength(req), qlogger != nil)
+	var headerFields []qlog.HeaderField
+	if qlogger != nil {
+		headerFields = scratch.qlogHeaderFields
+	}
+	headerFields, err := w.encodeHeaders(req, gzip, trailers, actualContentLength(req), headerFields)
 	if err != nil {
 		return err
 	}
 
-	b := make([]byte, 0, 128)
-	b = (&headersFrame{Length: uint64(w.headerBuf.Len())}).Append(b)
+	scratch.frameHeaderBuf = (&headersFrame{Length: uint64(w.headerBuf.Len())}).Append(scratch.frameHeaderBuf)
 	if qlogger != nil {
-		qlogCreatedHeadersFrame(qlogger, streamID, len(b)+w.headerBuf.Len(), w.headerBuf.Len(), headerFields)
+		qlogCreatedHeadersFrame(qlogger, streamID, len(scratch.frameHeaderBuf)+w.headerBuf.Len(), w.headerBuf.Len(), headerFields)
 	}
-	if _, err := wr.Write(b); err != nil {
+	if _, err := wr.Write(scratch.frameHeaderBuf); err != nil {
 		return err
 	}
 	_, err = wr.Write(w.headerBuf.Bytes())
@@ -95,8 +119,8 @@ func isExtendedConnectRequest(req *http.Request) bool {
 // Contrary to what the godoc for the http.Request says,
 // we do respect the Proto field if the method is CONNECT.
 //
-// The returned header fields are only set if doQlog is true.
-func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, trailers string, contentLength int64, doQlog bool) ([]qlog.HeaderField, error) {
+// The returned header fields are only set if qlogHeaderFields is non-nil.
+func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, trailers string, contentLength int64, qlogHeaderFields []qlog.HeaderField) ([]qlog.HeaderField, error) {
 	host := req.Host
 	if host == "" {
 		host = req.URL.Host
@@ -228,22 +252,18 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	traceHeaders := traceHasWroteHeaderField(trace)
 
 	// Header list size is ok. Write the headers.
-	var headerFields []qlog.HeaderField
-	if doQlog {
-		headerFields = make([]qlog.HeaderField, 0, len(req.Header))
-	}
 	enumerateHeaders(func(name, value string) {
 		name = strings.ToLower(name)
 		w.encoder.WriteField(qpack.HeaderField{Name: name, Value: value})
 		if traceHeaders {
 			traceWroteHeaderField(trace, name, value)
 		}
-		if doQlog {
-			headerFields = append(headerFields, qlog.HeaderField{Name: name, Value: value})
+		if qlogHeaderFields != nil {
+			qlogHeaderFields = append(qlogHeaderFields, qlog.HeaderField{Name: name, Value: value})
 		}
 	})
 
-	return headerFields, nil
+	return qlogHeaderFields, nil
 }
 
 // authorityAddr returns a given authority (a host/IP, or host:port / ip:port)
