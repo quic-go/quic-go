@@ -223,6 +223,10 @@ type Conn struct {
 	connStateMutex sync.Mutex
 	connState      ConnectionState
 
+	// ptoRequested requests an immediate execution of PTO handling,
+	// regardless of the current PTO timer state.
+	ptoRequested atomic.Bool
+
 	logID     string
 	qlogTrace qlogwriter.Trace
 	qlogger   qlogwriter.Recorder
@@ -676,7 +680,8 @@ runLoop:
 		// Check for loss detection timeout.
 		// This could cause packets to be declared lost, and retransmissions to be enqueued.
 		now := monotime.Now()
-		if timeout := c.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() && !timeout.After(now) {
+		if timeout := c.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() &&
+			(!timeout.After(now) || c.ptoRequested.Swap(false)) {
 			if err := c.sentPacketHandler.OnLossDetectionTimeout(now); err != nil {
 				c.setCloseError(&closeError{err: err})
 				break runLoop
@@ -3139,6 +3144,20 @@ func (c *Conn) NextConnection(ctx context.Context) (*Conn, error) {
 		c.streamsMap.UseResetMaps()
 	}
 	return c, nil
+}
+
+// TriggerPTO requests immediate Probe Timeout (PTO) handling.
+//
+// This is intended for applications that have external knowledge that
+// connectivity is likely available again (for example, after a VPN
+// reconnect or a network-path change) and want to expedite QUIC's
+// recovery and probing logic instead of waiting for the PTO timer.
+//
+// Applications should not use this as part of normal operation, since
+// PTO handling is performed automatically by QUIC.
+func (c *Conn) TriggerPTO() {
+	c.ptoRequested.Store(true)
+	c.scheduleSending()
 }
 
 // estimateMaxPayloadSize estimates the maximum payload size for short header packets.
