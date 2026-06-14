@@ -89,9 +89,10 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
-	congestion congestion.SendAlgorithmWithDebugInfos
-	rttStats   *utils.RTTStats
-	connStats  *utils.ConnectionStats
+	congestion       congestion.SendAlgorithmWithDebugInfos
+	customCongestion congestion.SendAlgorithmWithDebugInfos // non-nil if set via NewSentPacketHandlerWithCC
+	rttStats         *utils.RTTStats
+	connStats        *utils.ConnectionStats
 
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
@@ -129,14 +130,61 @@ func NewSentPacketHandler(
 	qlogger qlogwriter.Recorder,
 	logger utils.Logger,
 ) SentPacketHandler {
-	congestion := congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		rttStats,
-		connStats,
-		initialMaxDatagramSize,
-		true, // use Reno
-		qlogger,
+	return newSentPacketHandler(
+		initialPN, initialMaxDatagramSize, rttStats, connStats,
+		clientAddressValidated, enableECN, ignorePacketsBelow, pers, qlogger, logger,
+		nil,
 	)
+}
+
+// NewSentPacketHandlerWithCC is like NewSentPacketHandler but uses cc as the congestion
+// controller instead of the default NewReno/Cubic sender. If cc is nil, the default is used.
+func NewSentPacketHandlerWithCC(
+	initialPN protocol.PacketNumber,
+	initialMaxDatagramSize protocol.ByteCount,
+	rttStats *utils.RTTStats,
+	connStats *utils.ConnectionStats,
+	clientAddressValidated bool,
+	enableECN bool,
+	ignorePacketsBelow func(protocol.PacketNumber),
+	pers protocol.Perspective,
+	qlogger qlogwriter.Recorder,
+	logger utils.Logger,
+	cc congestion.SendAlgorithmWithDebugInfos,
+) SentPacketHandler {
+	return newSentPacketHandler(
+		initialPN, initialMaxDatagramSize, rttStats, connStats,
+		clientAddressValidated, enableECN, ignorePacketsBelow, pers, qlogger, logger,
+		cc,
+	)
+}
+
+func newSentPacketHandler(
+	initialPN protocol.PacketNumber,
+	initialMaxDatagramSize protocol.ByteCount,
+	rttStats *utils.RTTStats,
+	connStats *utils.ConnectionStats,
+	clientAddressValidated bool,
+	enableECN bool,
+	ignorePacketsBelow func(protocol.PacketNumber),
+	pers protocol.Perspective,
+	qlogger qlogwriter.Recorder,
+	logger utils.Logger,
+	customCC congestion.SendAlgorithmWithDebugInfos,
+) *sentPacketHandler {
+	var cc congestion.SendAlgorithmWithDebugInfos
+	if customCC != nil {
+		cc = customCC
+	} else {
+		cc = congestion.NewCubicSender(
+			congestion.DefaultClock{},
+			rttStats,
+			connStats,
+			initialMaxDatagramSize,
+			true, // use Reno
+			qlogger,
+		)
+	}
 
 	h := &sentPacketHandler{
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
@@ -147,7 +195,8 @@ func NewSentPacketHandler(
 		lostPackets:                    *newLostPacketTracker(64),
 		rttStats:                       rttStats,
 		connStats:                      connStats,
-		congestion:                     congestion,
+		congestion:                     cc,
+		customCongestion:               customCC,
 		ignorePacketsBelow:             ignorePacketsBelow,
 		perspective:                    pers,
 		qlogger:                        qlogger,
@@ -1131,13 +1180,15 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	for pn := range h.appDataPackets.history.PathProbes() {
 		h.appDataPackets.history.RemovePathProbe(pn)
 	}
-	h.congestion = congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		h.rttStats,
-		h.connStats,
-		initialMaxDatagramSize,
-		true, // use Reno
-		h.qlogger,
-	)
+	if h.customCongestion == nil {
+		h.congestion = congestion.NewCubicSender(
+			congestion.DefaultClock{},
+			h.rttStats,
+			h.connStats,
+			initialMaxDatagramSize,
+			true, // use Reno
+			h.qlogger,
+		)
+	}
 	h.setLossDetectionTimer(now)
 }

@@ -310,18 +310,7 @@ var newConnection = func(
 	)
 	s.preSetup()
 	s.rttStats.SetInitialRTT(rtt)
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
-		0,
-		protocol.ByteCount(s.config.InitialPacketSize),
-		s.rttStats,
-		&s.connStats,
-		clientAddressValidated,
-		s.conn.capabilities().ECN,
-		s.receivedPacketHandler.IgnorePacketsBelow,
-		s.perspective,
-		s.qlogger,
-		s.logger,
-	)
+	s.sentPacketHandler = newSentPacketHandlerForConn(s, 0, clientAddressValidated)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
 	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
@@ -439,18 +428,7 @@ var newClientConnection = func(
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
-		initialPacketNumber,
-		protocol.ByteCount(s.config.InitialPacketSize),
-		s.rttStats,
-		&s.connStats,
-		false, // has no effect
-		s.conn.capabilities().ECN,
-		s.receivedPacketHandler.IgnorePacketsBelow,
-		s.perspective,
-		s.qlogger,
-		s.logger,
-	)
+	s.sentPacketHandler = newSentPacketHandlerForConn(s, initialPacketNumber, false)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
@@ -507,6 +485,41 @@ var newClientConnection = func(
 		}
 	}
 	return &wrappedConn{Conn: s}
+}
+
+func newSentPacketHandlerForConn(
+	s *Conn,
+	initialPN protocol.PacketNumber,
+	clientAddressValidated bool,
+) ackhandler.SentPacketHandler {
+	if s.config.CongestionController != nil {
+		cc := &ccAdapter{cc: s.config.CongestionController()}
+		return ackhandler.NewSentPacketHandlerWithCC(
+			initialPN,
+			protocol.ByteCount(s.config.InitialPacketSize),
+			s.rttStats,
+			&s.connStats,
+			clientAddressValidated,
+			s.conn.capabilities().ECN,
+			s.receivedPacketHandler.IgnorePacketsBelow,
+			s.perspective,
+			s.qlogger,
+			s.logger,
+			cc,
+		)
+	}
+	return ackhandler.NewSentPacketHandler(
+		initialPN,
+		protocol.ByteCount(s.config.InitialPacketSize),
+		s.rttStats,
+		&s.connStats,
+		clientAddressValidated,
+		s.conn.capabilities().ECN,
+		s.receivedPacketHandler.IgnorePacketsBelow,
+		s.perspective,
+		s.qlogger,
+		s.logger,
+	)
 }
 
 func (c *Conn) preSetup() {

@@ -167,6 +167,12 @@ type Config struct {
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.
 	DisablePathMTUDiscovery bool
+	// CongestionController is a constructor for a per-connection congestion controller.
+	// It is called once per connection. If nil, the default NewReno controller is used.
+	//
+	// Note: the pacing layer is separate from the congestion controller
+	// and cannot be customized via this interface.
+	CongestionController func() CongestionController
 	// Allow0RTT allows the application to decide if a 0-RTT connection attempt should be accepted.
 	// Only valid for the server.
 	Allow0RTT bool
