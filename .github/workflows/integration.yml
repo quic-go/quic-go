@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu" ]
-        go: [ "1.25.x", "1.26.x" ]
+        go: [ "1.25.x", "1.26.x", "1.27.0-rc.1" ]
         race: [ false ]
         include:
           - os: "ubuntu"
@@ -49,7 +49,7 @@ jobs:
       - name: Run version negotiation tests
         run: go test ${{ env.RACEFLAG }} -v -timeout 30s -shuffle=on ./integrationtests/versionnegotiation ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_versionnegotiation.xml
       - name: Run FIPS 140 tests
-        if: ${{ matrix.go == '1.26.x' && (success() || failure()) }}
+        if: ${{ matrix.go != '1.25.x' && (success() || failure()) }}
         run: go test -v -timeout 1m -shuffle=on ./integrationtests/fips 2>&1 | go-junit-report -set-exit-code -iocopy -out report_fips.xml
       - name: Run self tests, using QUIC v1
         if: success() || failure() # run this step even if the previous one failed
