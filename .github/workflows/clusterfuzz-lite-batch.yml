@@ -41,12 +41,12 @@ jobs:
     env:
       DOCKER_DEFAULT_PLATFORM: linux/amd64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: google/oss-fuzz
           path: oss-fuzz
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: quic-go/clusterfuzzlite-storage
           ref: master
