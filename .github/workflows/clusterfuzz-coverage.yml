@@ -14,8 +14,8 @@ jobs:
       DOCKER_DEFAULT_PLATFORM: linux/amd64
       CLUSTERFUZZ_CORPUS_BUCKET: quic-go-corpus.clusterfuzz-external.appspot.com
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: google/oss-fuzz
           path: oss-fuzz
