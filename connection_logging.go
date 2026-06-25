@@ -265,12 +265,12 @@ func toQlogPacketType(pt protocol.PacketType) qlog.PacketType {
 }
 
 func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
-	if addr == nil {
+	if addr == nil || addr.IP == nil {
 		return qlog.PathEndpointInfo{}
 	}
 
 	var info qlog.PathEndpointInfo
-	if addr.IP == nil || addr.IP.To4() != nil {
+	if addr.IP.To4() != nil {
 		addrPort := netip.AddrPortFrom(netip.AddrFrom4([4]byte(addr.IP.To4())), uint16(addr.Port))
 		if addrPort.IsValid() {
 			info.IPv4 = addrPort
