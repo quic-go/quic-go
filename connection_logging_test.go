@@ -141,3 +141,8 @@ func TestConnectionLoggingStartedConnectionEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestToPathEndpointInfoNilIP(t *testing.T) {
+	info := toPathEndpointInfo(&net.UDPAddr{Port: 1234})
+	require.Equal(t, qlog.PathEndpointInfo{}, info)
+}
