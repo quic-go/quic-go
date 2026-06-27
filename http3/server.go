@@ -141,6 +141,11 @@ type Server struct {
 	// used.
 	MaxHeaderBytes int
 
+	// MaxHeaderValueCount controls the maximum number of header values
+	// the server will read parsing the request HEADERS frame.
+	// If zero or negative, a default limit of 500 is used.
+	MaxHeaderValueCount int
+
 	// AdditionalSettings specifies additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
@@ -449,6 +454,7 @@ func (s *Server) newRawServerConn(conn *quic.Conn) (*RawServerConn, *quic.SendSt
 		connCtx,
 		s.Handler,
 		s.maxHeaderBytes(),
+		s.maxHeaderValueCount(),
 	)
 
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
@@ -559,6 +565,16 @@ func (s *Server) maxHeaderBytes() int {
 		return http.DefaultMaxHeaderBytes
 	}
 	return s.MaxHeaderBytes
+}
+
+const defaultMaxHeaderValueCount = 500
+
+func (s *Server) maxHeaderValueCount() int {
+	if s.MaxHeaderValueCount <= 0 {
+		return defaultMaxHeaderValueCount
+	}
+
+	return s.MaxHeaderValueCount
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.

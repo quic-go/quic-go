@@ -23,9 +23,10 @@ type RawServerConn struct {
 	idleTimeout time.Duration
 	idleTimer   *time.Timer
 
-	serverContext  context.Context
-	requestHandler http.Handler
-	maxHeaderBytes int
+	serverContext       context.Context
+	requestHandler      http.Handler
+	maxHeaderBytes      int
+	maxHeaderValueCount int
 
 	decoder *qpack.Decoder
 
@@ -42,15 +43,17 @@ func newRawServerConn(
 	serverContext context.Context,
 	requestHandler http.Handler,
 	maxHeaderBytes int,
+	maxHeaderValueCount int,
 ) *RawServerConn {
 	c := &RawServerConn{
-		idleTimeout:    idleTimeout,
-		serverContext:  serverContext,
-		requestHandler: requestHandler,
-		maxHeaderBytes: maxHeaderBytes,
-		decoder:        qpack.NewDecoder(),
-		qlogger:        qlogger,
-		logger:         logger,
+		idleTimeout:         idleTimeout,
+		serverContext:       serverContext,
+		requestHandler:      requestHandler,
+		maxHeaderBytes:      maxHeaderBytes,
+		maxHeaderValueCount: maxHeaderValueCount,
+		decoder:             qpack.NewDecoder(),
+		qlogger:             qlogger,
+		logger:              logger,
 	}
 	c.rawConn = *newRawConn(conn, enableDatagrams, c.onStreamsEmpty, nil, qlogger, logger)
 	if idleTimeout > 0 {
@@ -92,6 +95,13 @@ func (c *RawServerConn) requestMaxHeaderBytes() int {
 	return c.maxHeaderBytes
 }
 
+func (c *RawServerConn) requestMaxHeaderValueCount() int {
+	if c.maxHeaderValueCount <= 0 {
+		return defaultMaxHeaderValueCount
+	}
+	return c.maxHeaderValueCount
+}
+
 func (c *RawServerConn) openControlStream(settings *settingsFrame) (*quic.SendStream, error) {
 	return c.rawConn.openControlStream(settings)
 }
@@ -108,6 +118,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	decoder := c.decoder
 	connCtx := c.serverContext
 	maxHeaderBytes := c.requestMaxHeaderBytes()
+	maxHeaderValueCount := c.requestMaxHeaderValueCount()
 
 	fp := &frameParser{closeConn: conn.CloseWithError, r: str, streamID: str.StreamID()}
 	frame, err := fp.ParseNext(qlogger)
@@ -141,7 +152,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	if qlogger != nil {
 		hfs = make([]qpack.HeaderField, 0, 16)
 	}
-	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, &hfs)
+	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, maxHeaderValueCount, &hfs)
 	if qlogger != nil {
 		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
 	}
@@ -175,7 +186,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		contentLength = req.ContentLength
 	}
 	hstr := newStream(str, conn, nil, func(r io.Reader, hf *headersFrame) error {
-		trailers, err := decodeTrailers(r, hf, maxHeaderBytes, decoder, qlogger, str.StreamID())
+		trailers, err := decodeTrailers(r, hf, maxHeaderBytes, maxHeaderValueCount, decoder, qlogger, str.StreamID())
 		if err != nil {
 			return err
 		}

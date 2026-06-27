@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
@@ -188,7 +189,7 @@ func (c *ClientConn) openRequestStream(
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
 		newStream(hstr, c.rawConn, trace, func(r io.Reader, hf *headersFrame) error {
-			hdr, err := decodeTrailers(r, hf, maxHeaderBytes, c.decoder, c.qlogger, str.StreamID())
+			hdr, err := decodeTrailers(r, hf, maxHeaderBytes, math.MaxInt, c.decoder, c.qlogger, str.StreamID())
 			if err != nil {
 				return err
 			}
