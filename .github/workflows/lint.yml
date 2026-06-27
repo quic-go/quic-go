@@ -22,6 +22,10 @@ jobs:
       - name: Check that go.mod is tidied
         if: success() || failure() # run this step even if the previous one failed
         run: go mod tidy -diff
+      - name: Check that FIPS go.mod is tidied
+        if: success() || failure() # run this step even if the previous one failed
+        working-directory: integrationtests/fips
+        run: go mod tidy -diff
       - name: Run go fix
         if: success() || failure() # run this step even if the previous one failed
         run: go fix -diff ./...
