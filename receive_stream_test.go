@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -541,6 +542,83 @@ func TestReceiveStreamImmediateFINs(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
+func TestReceiveStreamWaitForFinalSizeAfterFIN(t *testing.T) {
+	fc := newTestStreamFlowController(42)
+	str := newReceiveStream(42, nil, fc)
+
+	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar"), Fin: true}, monotime.Now()))
+
+	size, err := str.WaitForFinalSize(context.Background())
+	require.NoError(t, err)
+	require.EqualValues(t, 6, size)
+
+	str.closeForShutdown(assert.AnError)
+	size, err = str.WaitForFinalSize(context.Background())
+	require.NoError(t, err)
+	require.EqualValues(t, 6, size)
+}
+
+func TestReceiveStreamWaitForFinalSizeAfterCancelRead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		fc := newTestStreamFlowController(42)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newReceiveStream(42, mockSender, fc)
+
+		type result struct {
+			size int64
+			err  error
+		}
+		resultChan := make(chan result, 1)
+		go func() {
+			size, err := str.WaitForFinalSize(context.Background())
+			resultChan <- result{size: size, err: err}
+		}()
+
+		synctest.Wait()
+		select {
+		case result := <-resultChan:
+			t.Fatalf("WaitForFinalSize returned before the final size was known: %v", result.err)
+		default:
+		}
+
+		mockSender.EXPECT().onHasStreamControlFrame(str.StreamID(), str)
+		str.CancelRead(1234)
+
+		synctest.Wait()
+		select {
+		case result := <-resultChan:
+			t.Fatalf("WaitForFinalSize returned after CancelRead, before the final size was known: %v", result.err)
+		default:
+		}
+
+		mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
+		require.NoError(t, str.handleResetStreamFrame(
+			&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 4321, FinalSize: 42},
+			monotime.Now(),
+		))
+
+		synctest.Wait()
+		select {
+		case result := <-resultChan:
+			require.NoError(t, result.err)
+			require.EqualValues(t, 42, result.size)
+		default:
+			t.Fatal("WaitForFinalSize did not return")
+		}
+	})
+}
+
+func TestReceiveStreamWaitForFinalSizeContextCanceled(t *testing.T) {
+	str := newReceiveStream(42, nil, nil)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(assert.AnError)
+
+	size, err := str.WaitForFinalSize(ctx)
+	require.Zero(t, size)
+	require.ErrorIs(t, err, assert.AnError)
+}
+
 func TestReceiveStreamCloseForShutdown(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
@@ -573,6 +651,10 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 
 		str.closeForShutdown(assert.AnError)
 		synctest.Wait()
+
+		size, err := str.WaitForFinalSize(context.Background())
+		require.Zero(t, size)
+		require.ErrorIs(t, err, assert.AnError)
 
 		select {
 		case err := <-readErrChan:
