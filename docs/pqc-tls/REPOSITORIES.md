@@ -45,17 +45,20 @@ Changed/added on `pqc-native` (vs `upstream/master`): `pqctls/*`,
 `example/pqc_client`, `example/pqc_server`, `pqc_test.go`, `docs/pqc-tls/*`.
 **No** changes to quic-go core files.
 
-### 2. `go-pqc` — patched Go toolchain (NOT yet published)
+### 2. `go-pqc` — patched Go toolchain
 
-- **Remote (origin):** `https://go.googlesource.com/go` (read-only Google source)
+- **Remotes:**
+  - `origin` = `https://go.googlesource.com/go` (read-only Google source)
+  - `fork` = `git@github.com:MauricioMachadoFF/go.git` (your fork — published)
 - **Local checkout:** `~/Development/go-pqc`
-- **Branch:** `pqc-crypto-tls` (base: `golang/go` master @ `6565f551`)
+- **Branch:** `pqc-crypto-tls` (base: `golang/go` master @ `6565f551`), pushed to
+  `fork/pqc-crypto-tls`
 - **Commit:** `crypto/tls,crypto/x509: add pure ML-KEM-768 and composite Ed25519+ML-DSA`
 
-> There is currently **no personal GitHub fork** of Go to push this to. To
-> publish it, create a fork (e.g. `github.com/MauricioMachadoFF/go`), add it as a
-> remote, and push `pqc-crypto-tls`. Until then, the patch lives in
-> `quic-go-pqc/docs/pqc-tls/crypto-tls-pqc.patch`.
+The toolchain source is published at
+`https://github.com/MauricioMachadoFF/go/tree/pqc-crypto-tls`. The same changes
+are also captured as `quic-go-pqc/docs/pqc-tls/crypto-tls-pqc.patch` for easy
+re-application onto a fresh Go checkout.
 
 ## Reproducing the toolchain from the patch
 
@@ -81,7 +84,11 @@ $GOROOT/bin/go test -run TestPQC .
 
 ## Push status (as of writing)
 
-| Repo / branch | Remote | Pushable? |
-|---------------|--------|-----------|
-| quic-go-pqc / `pqc-native` | `origin` (your fork) | ✅ yes |
-| go-pqc / `pqc-crypto-tls` | none owned by you | ⚠️ needs a Go fork first |
+| Repo / branch | Remote | Pushed? |
+|---------------|--------|---------|
+| quic-go-pqc / `pqc-native` | `origin` = MauricioMachadoFF/quic-go-pqc | ✅ pushed |
+| go-pqc / `pqc-crypto-tls` | `fork` = MauricioMachadoFF/go | ✅ pushed |
+
+Untouched (not overwritten): `quic-go-pqc` `master` and `post-quantum-crypto-draft`
+already contain the original embedded-qtls approach on the remote. The
+intermediate `pqc-tls-module` branch is kept local only.
