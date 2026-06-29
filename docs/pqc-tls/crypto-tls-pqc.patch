@@ -1,0 +1,651 @@
+From f57b66eba60fd526448b5eab4f5269f00b919f7d Mon Sep 17 00:00:00 2001
+From: "mauricio.machado" <mauricio.machado@ssp.df.gov.br>
+Date: Mon, 29 Jun 2026 12:33:50 -0300
+Subject: [PATCH] crypto/tls,crypto/x509: add pure ML-KEM-768 and composite
+ Ed25519+ML-DSA
+
+Adds two post-quantum features for the quic-go-pqc TCC, on top of Go's native
+ML-KEM/ML-DSA support:
+
+- Pure ML-KEM-768 key exchange (CurveID 513), mirroring the native ML-KEM-1024
+  plumbing in crypto/tls.
+- Experimental composite Ed25519+ML-DSA certificates and TLS 1.3 signature
+  schemes (private-use codepoints), with x509 parse/marshal/create/verify and
+  a config-opt-in Config.SignatureSchemes field.
+
+All crypto/tls, crypto/x509, crypto/mldsa and crypto/mlkem tests pass.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+---
+ src/crypto/tls/auth.go                   |  34 ++++++
+ src/crypto/tls/common.go                 |  37 ++++++-
+ src/crypto/tls/defaults.go               |   2 +-
+ src/crypto/tls/defaults_fips140.go       |   1 +
+ src/crypto/tls/fips140_test.go           |   5 +-
+ src/crypto/tls/handshake_client.go       |   7 +-
+ src/crypto/tls/handshake_client_tls13.go |   2 +-
+ src/crypto/tls/key_schedule.go           |  31 ++++++
+ src/crypto/tls/tls_test.go               |   2 +
+ src/crypto/x509/composite.go             | 135 +++++++++++++++++++++++
+ src/crypto/x509/parser.go                |   5 +
+ src/crypto/x509/x509.go                  |  59 ++++++++--
+ 12 files changed, 306 insertions(+), 14 deletions(-)
+ create mode 100644 src/crypto/x509/composite.go
+
+diff --git a/src/crypto/tls/auth.go b/src/crypto/tls/auth.go
+index 9f8ae62f..adb7a399 100644
+--- a/src/crypto/tls/auth.go
++++ b/src/crypto/tls/auth.go
+@@ -12,6 +12,7 @@ import (
+ 	"crypto/elliptic"
+ 	"crypto/mldsa"
+ 	"crypto/rsa"
++	"crypto/x509"
+ 	"errors"
+ 	"fmt"
+ 	"hash"
+@@ -54,6 +55,22 @@ func verifyHandshakeSignature(sigType uint8, pubkey crypto.PublicKey, hashFunc c
+ 		if err := mldsa.Verify(pubKey, signed, sig, nil); err != nil {
+ 			return fmt.Errorf("ML-DSA verification failure: %w", err)
+ 		}
++	case signatureComposite:
++		pubKey, ok := pubkey.(*x509.CompositePublicKey)
++		if !ok {
++			return fmt.Errorf("expected a composite Ed25519+ML-DSA public key, got %T", pubkey)
++		}
++		edSig, mldsaSig, err := x509.ParseCompositeSignature(sig)
++		if err != nil {
++			return err
++		}
++		// Both component signatures must verify.
++		if !ed25519.Verify(pubKey.Ed25519, signed, edSig) {
++			return errors.New("composite Ed25519 verification failure")
++		}
++		if err := mldsa.Verify(pubKey.MLDSA, signed, mldsaSig, nil); err != nil {
++			return fmt.Errorf("composite ML-DSA verification failure: %w", err)
++		}
+ 	case signaturePKCS1v15:
+ 		pubKey, ok := pubkey.(*rsa.PublicKey)
+ 		if !ok {
+@@ -144,6 +161,8 @@ func typeAndHashFromSignatureScheme(signatureAlgorithm SignatureScheme) (sigType
+ 		sigType = signatureEd25519
+ 	case MLDSA44, MLDSA65, MLDSA87:
+ 		sigType = signatureMLDSA
++	case CompositeEd25519MLDSA44, CompositeEd25519MLDSA65, CompositeEd25519MLDSA87:
++		sigType = signatureComposite
+ 	default:
+ 		return 0, 0, fmt.Errorf("unsupported signature algorithm: %v", signatureAlgorithm)
+ 	}
+@@ -160,6 +179,8 @@ func typeAndHashFromSignatureScheme(signatureAlgorithm SignatureScheme) (sigType
+ 		hash = directSigning
+ 	case MLDSA44, MLDSA65, MLDSA87:
+ 		hash = directSigning
++	case CompositeEd25519MLDSA44, CompositeEd25519MLDSA65, CompositeEd25519MLDSA87:
++		hash = directSigning
+ 	default:
+ 		return 0, 0, fmt.Errorf("unsupported signature algorithm: %v", signatureAlgorithm)
+ 	}
+@@ -183,6 +204,8 @@ func legacyTypeAndHashFromPublicKey(pub crypto.PublicKey) (sigType uint8, hash c
+ 		return 0, 0, fmt.Errorf("tls: Ed25519 public keys are not supported before TLS 1.2")
+ 	case *mldsa.PublicKey:
+ 		return 0, 0, fmt.Errorf("tls: ML-DSA public keys are not supported before TLS 1.3")
++	case *x509.CompositePublicKey:
++		return 0, 0, fmt.Errorf("tls: composite Ed25519+ML-DSA public keys are not supported before TLS 1.3")
+ 	default:
+ 		return 0, 0, fmt.Errorf("tls: unsupported public key: %T", pub)
+ 	}
+@@ -250,6 +273,17 @@ func signatureSchemesForPublicKey(version uint16, pub crypto.PublicKey) []Signat
+ 		default:
+ 			panic("tls: internal error: unknown ML-DSA parameter set: " + pub.Parameters().String())
+ 		}
++	case *x509.CompositePublicKey:
++		switch pub.MLDSA.Parameters() {
++		case mldsa.MLDSA44():
++			return []SignatureScheme{CompositeEd25519MLDSA44}
++		case mldsa.MLDSA65():
++			return []SignatureScheme{CompositeEd25519MLDSA65}
++		case mldsa.MLDSA87():
++			return []SignatureScheme{CompositeEd25519MLDSA87}
++		default:
++			panic("tls: internal error: unknown composite ML-DSA parameter set: " + pub.MLDSA.Parameters().String())
++		}
+ 	default:
+ 		return nil
+ 	}
+diff --git a/src/crypto/tls/common.go b/src/crypto/tls/common.go
+index dd4aaf54..ee354523 100644
+--- a/src/crypto/tls/common.go
++++ b/src/crypto/tls/common.go
+@@ -155,12 +155,13 @@ const (
+ 	X25519MLKEM768     CurveID = 4588
+ 	SecP256r1MLKEM768  CurveID = 4587
+ 	SecP384r1MLKEM1024 CurveID = 4589
++	MLKEM768           CurveID = 513
+ 	MLKEM1024          CurveID = 514
+ )
+ 
+ func isTLS13OnlyKeyExchange(curve CurveID) bool {
+ 	switch curve {
+-	case X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM1024:
++	case X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM768, MLKEM1024:
+ 		return true
+ 	default:
+ 		return false
+@@ -169,7 +170,7 @@ func isTLS13OnlyKeyExchange(curve CurveID) bool {
+ 
+ func isPQKeyExchange(curve CurveID) bool {
+ 	switch curve {
+-	case X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM1024:
++	case X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM768, MLKEM1024:
+ 		return true
+ 	default:
+ 		return false
+@@ -220,6 +221,7 @@ const (
+ 	signatureECDSA
+ 	signatureEd25519
+ 	signatureMLDSA
++	signatureComposite // Experimental composite Ed25519+ML-DSA.
+ )
+ 
+ // directSigning is a standard Hash value that signals that no pre-hashing
+@@ -434,6 +436,12 @@ const (
+ 	MLDSA65 SignatureScheme = 0x0905
+ 	MLDSA87 SignatureScheme = 0x0906
+ 
++	// Composite Ed25519+ML-DSA algorithms (experimental, non-standard,
++	// private-use codepoints).
++	CompositeEd25519MLDSA44 SignatureScheme = 0xFE10
++	CompositeEd25519MLDSA65 SignatureScheme = 0xFE11
++	CompositeEd25519MLDSA87 SignatureScheme = 0xFE12
++
+ 	// Legacy signature and hash algorithms for TLS 1.2.
+ 	PKCS1WithSHA1 SignatureScheme = 0x0201
+ 	ECDSAWithSHA1 SignatureScheme = 0x0203
+@@ -820,6 +828,13 @@ type Config struct {
+ 	// GODEBUG=tlsmlkem=0 or the GODEBUG=tlssecpmlkem=0 environment variable.
+ 	CurvePreferences []CurveID
+ 
++	// SignatureSchemes lists additional signature schemes, beyond the built-in
++	// defaults, that this endpoint advertises and is willing to verify. It exists
++	// to enable experimental/non-standard schemes (such as the composite
++	// Ed25519+ML-DSA schemes) without changing the defaults advertised by every
++	// connection. The schemes are tried in the order given, before the defaults.
++	SignatureSchemes []SignatureScheme
++
+ 	// DynamicRecordSizingDisabled disables adaptive sizing of TLS records.
+ 	// When true, the largest possible TLS record size is always used. When
+ 	// false, the size of TLS records may be adjusted in an attempt to
+@@ -1039,6 +1054,7 @@ func (c *Config) Clone() *Config {
+ 		MinVersion:                          c.MinVersion,
+ 		MaxVersion:                          c.MaxVersion,
+ 		CurvePreferences:                    c.CurvePreferences,
++		SignatureSchemes:                    c.SignatureSchemes,
+ 		DynamicRecordSizingDisabled:         c.DynamicRecordSizingDisabled,
+ 		Renegotiation:                       c.Renegotiation,
+ 		KeyLogWriter:                        c.KeyLogWriter,
+@@ -1774,11 +1790,21 @@ var testingOnlySupportedSignatureAlgorithms []SignatureScheme
+ // the given range of TLS versions, to advertise in ClientHello and
+ // CertificateRequest messages. An algorithm is included if it is enabled at any
+ // version in the range.
+-func supportedSignatureAlgorithms(minVers, maxVers uint16) []SignatureScheme {
++func supportedSignatureAlgorithms(minVers, maxVers uint16, extra ...[]SignatureScheme) []SignatureScheme {
+ 	sigAlgs := defaultSupportedSignatureAlgorithms()
+ 	if testingOnlySupportedSignatureAlgorithms != nil {
+ 		sigAlgs = slices.Clone(testingOnlySupportedSignatureAlgorithms)
+ 	}
++	// Prepend any additional schemes configured via Config.SignatureSchemes,
++	// preserving their order and de-duplicating against the defaults.
++	for i := len(extra) - 1; i >= 0; i-- {
++		for j := len(extra[i]) - 1; j >= 0; j-- {
++			s := extra[i][j]
++			if !slices.Contains(sigAlgs, s) {
++				sigAlgs = append([]SignatureScheme{s}, sigAlgs...)
++			}
++		}
++	}
+ 	return slices.DeleteFunc(sigAlgs, func(s SignatureScheme) bool {
+ 		for v := minVers; v <= maxVers; v++ {
+ 			if !isDisabledSignatureAlgorithm(v, s, false) {
+@@ -1806,6 +1832,11 @@ func isDisabledSignatureAlgorithm(version uint16, s SignatureScheme, isCert bool
+ 		if version < VersionTLS13 {
+ 			return true
+ 		}
++	case CompositeEd25519MLDSA44, CompositeEd25519MLDSA65, CompositeEd25519MLDSA87:
++		// Experimental composite codepoints are only defined for TLS 1.3.
++		if version < VersionTLS13 {
++			return true
++		}
+ 	}
+ 
+ 	// For the _cert extension we include all algorithms, including SHA-1 and
+diff --git a/src/crypto/tls/defaults.go b/src/crypto/tls/defaults.go
+index c8903604..0e9ed8b1 100644
+--- a/src/crypto/tls/defaults.go
++++ b/src/crypto/tls/defaults.go
+@@ -37,7 +37,7 @@ func defaultCurveEnabled(c CurveID) bool {
+ // include every supported key exchange.
+ func curvePreferenceOrder() []CurveID {
+ 	return []CurveID{
+-		X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM1024,
++		X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM768, MLKEM1024,
+ 		X25519, CurveP256, CurveP384, CurveP521,
+ 	}
+ }
+diff --git a/src/crypto/tls/defaults_fips140.go b/src/crypto/tls/defaults_fips140.go
+index 1c713898..05a6d130 100644
+--- a/src/crypto/tls/defaults_fips140.go
++++ b/src/crypto/tls/defaults_fips140.go
+@@ -36,6 +36,7 @@ var (
+ 		X25519MLKEM768,
+ 		SecP256r1MLKEM768,
+ 		SecP384r1MLKEM1024,
++		MLKEM768,
+ 		MLKEM1024,
+ 		CurveP256,
+ 		CurveP384,
+diff --git a/src/crypto/tls/fips140_test.go b/src/crypto/tls/fips140_test.go
+index c3f6ec91..c92dc173 100644
+--- a/src/crypto/tls/fips140_test.go
++++ b/src/crypto/tls/fips140_test.go
+@@ -151,7 +151,7 @@ func isFIPSCurve(id CurveID) bool {
+ 	switch id {
+ 	case CurveP256, CurveP384, CurveP521:
+ 		return true
+-	case X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM1024:
++	case X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024, MLKEM768, MLKEM1024:
+ 		// Only for the native module.
+ 		return !boring.Enabled
+ 	case X25519:
+@@ -187,6 +187,9 @@ func isFIPSSignatureScheme(alg SignatureScheme) bool {
+ 		return !boring.Enabled
+ 	case PKCS1WithSHA1, ECDSAWithSHA1:
+ 		return false
++	case CompositeEd25519MLDSA44, CompositeEd25519MLDSA65, CompositeEd25519MLDSA87:
++		// Experimental composite scheme; not FIPS-approved.
++		return false
+ 	default:
+ 		panic("unknown signature scheme: " + alg.String())
+ 	}
+diff --git a/src/crypto/tls/handshake_client.go b/src/crypto/tls/handshake_client.go
+index 54227aab..a68ee8ef 100644
+--- a/src/crypto/tls/handshake_client.go
++++ b/src/crypto/tls/handshake_client.go
+@@ -120,7 +120,7 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, *keySharePrivateKeys, *echCli
+ 	}
+ 
+ 	if maxVersion >= VersionTLS12 {
+-		hello.supportedSignatureAlgorithms = supportedSignatureAlgorithms(minVersion, maxVersion)
++		hello.supportedSignatureAlgorithms = supportedSignatureAlgorithms(minVersion, maxVersion, config.SignatureSchemes)
+ 		hello.supportedSignatureAlgorithmsCert = supportedSignatureAlgorithmsCert(minVersion, maxVersion)
+ 	}
+ 
+@@ -1171,6 +1171,11 @@ func (c *Conn) verifyServerCertificate(certificates [][]byte) error {
+ 			c.sendAlert(alertIllegalParameter)
+ 			return errors.New("tls: server's certificate uses ML-DSA, which requires TLS 1.3")
+ 		}
++	case *x509.CompositePublicKey:
++		if c.vers < VersionTLS13 {
++			c.sendAlert(alertIllegalParameter)
++			return errors.New("tls: server's certificate uses composite Ed25519+ML-DSA, which requires TLS 1.3")
++		}
+ 	default:
+ 		c.sendAlert(alertUnsupportedCertificate)
+ 		return fmt.Errorf("tls: server's certificate contains an unsupported type of public key: %T", certs[0].PublicKey)
+diff --git a/src/crypto/tls/handshake_client_tls13.go b/src/crypto/tls/handshake_client_tls13.go
+index f5515069..8b6b94c2 100644
+--- a/src/crypto/tls/handshake_client_tls13.go
++++ b/src/crypto/tls/handshake_client_tls13.go
+@@ -654,7 +654,7 @@ func (hs *clientHandshakeStateTLS13) readServerCertificate() error {
+ 	// See RFC 8446, Section 4.4.3.
+ 	// We don't use hs.hello.supportedSignatureAlgorithms because it might
+ 	// include PKCS#1 v1.5 and SHA-1 if the ClientHello also supported TLS 1.2.
+-	if !isSupportedSignatureAlgorithm(certVerify.signatureAlgorithm, supportedSignatureAlgorithms(c.vers, c.vers)) ||
++	if !isSupportedSignatureAlgorithm(certVerify.signatureAlgorithm, supportedSignatureAlgorithms(c.vers, c.vers, c.config.SignatureSchemes)) ||
+ 		!isSupportedSignatureAlgorithm(certVerify.signatureAlgorithm, signatureSchemesForPublicKey(c.vers, c.peerCertificates[0].PublicKey)) {
+ 		c.sendAlert(alertIllegalParameter)
+ 		return errors.New("tls: certificate used with invalid signature algorithm")
+diff --git a/src/crypto/tls/key_schedule.go b/src/crypto/tls/key_schedule.go
+index 652a6489..b24441cd 100644
+--- a/src/crypto/tls/key_schedule.go
++++ b/src/crypto/tls/key_schedule.go
+@@ -107,6 +107,8 @@ func keyExchangeForCurveID(id CurveID) (keyExchange, error) {
+ 		return &hybridKeyExchange{id, ecdhKeyExchange{CurveP384, ecdh.P384()},
+ 			97, mlkem.EncapsulationKeySize1024, mlkem.CiphertextSize1024,
+ 			mlkemGenerateKey1024, mlkemNewPublicKey1024}, nil
++	case MLKEM768:
++		return &mlkem768KeyExchange{}, nil
+ 	case MLKEM1024:
+ 		return &mlkem1024KeyExchange{}, nil
+ 	default:
+@@ -114,6 +116,35 @@ func keyExchangeForCurveID(id CurveID) (keyExchange, error) {
+ 	}
+ }
+ 
++// mlkem768KeyExchange implements pure (non-hybrid) ML-KEM-768 key exchange.
++// Mirrors mlkem1024KeyExchange using the ML-KEM-768 parameter set.
++type mlkem768KeyExchange struct{}
++
++func (ke *mlkem768KeyExchange) keyShares(_ io.Reader) (*keySharePrivateKeys, []keyShare, error) {
++	priv, err := mlkem.GenerateKey768()
++	if err != nil {
++		return nil, nil, err
++	}
++	return &keySharePrivateKeys{mlkem: priv}, []keyShare{{MLKEM768, priv.EncapsulationKey().Bytes()}}, nil
++}
++
++func (ke *mlkem768KeyExchange) serverSharedSecret(_ io.Reader, clientKeyShare []byte) ([]byte, keyShare, error) {
++	peerKey, err := mlkem.NewEncapsulationKey768(clientKeyShare)
++	if err != nil {
++		return nil, keyShare{}, err
++	}
++	sharedKey, keyShareData := peerKey.Encapsulate()
++	return sharedKey, keyShare{MLKEM768, keyShareData}, nil
++}
++
++func (ke *mlkem768KeyExchange) clientSharedSecret(priv *keySharePrivateKeys, serverKeyShare []byte) ([]byte, error) {
++	sharedKey, err := priv.mlkem.Decapsulate(serverKeyShare)
++	if err != nil {
++		return nil, err
++	}
++	return sharedKey, nil
++}
++
+ type mlkem1024KeyExchange struct{}
+ 
+ func (ke *mlkem1024KeyExchange) keyShares(_ io.Reader) (*keySharePrivateKeys, []keyShare, error) {
+diff --git a/src/crypto/tls/tls_test.go b/src/crypto/tls/tls_test.go
+index 6fe44907..c188dc22 100644
+--- a/src/crypto/tls/tls_test.go
++++ b/src/crypto/tls/tls_test.go
+@@ -988,6 +988,8 @@ func TestCloneNonFuncFields(t *testing.T) {
+ 			f.Set(reflect.ValueOf([]uint16{1, 2}))
+ 		case "CurvePreferences":
+ 			f.Set(reflect.ValueOf([]CurveID{CurveP256}))
++		case "SignatureSchemes":
++			f.Set(reflect.ValueOf([]SignatureScheme{Ed25519}))
+ 		case "Renegotiation":
+ 			f.Set(reflect.ValueOf(RenegotiateOnceAsClient))
+ 		case "EncryptedClientHelloConfigList":
+diff --git a/src/crypto/x509/composite.go b/src/crypto/x509/composite.go
+new file mode 100644
+index 00000000..241c4df4
+--- /dev/null
++++ b/src/crypto/x509/composite.go
+@@ -0,0 +1,135 @@
++// Copyright 2026 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package x509
++
++import (
++	"crypto"
++	"crypto/ed25519"
++	"crypto/mldsa"
++	"encoding/asn1"
++	"errors"
++)
++
++// Experimental private-use OIDs for composite Ed25519+ML-DSA public keys and
++// signatures. These are NOT standardized; they interoperate only between peers
++// using this toolchain.
++var (
++	oidPublicKeyCompositeEd25519MLDSA44 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 32}
++	oidPublicKeyCompositeEd25519MLDSA65 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33}
++	oidPublicKeyCompositeEd25519MLDSA87 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34}
++)
++
++// CompositePublicKey is a composite public key combining a classical Ed25519 key
++// and a post-quantum ML-DSA key. A signature is valid only if BOTH component
++// signatures verify, so authentication holds as long as either scheme is
++// unbroken. It is an experimental, non-standard construction.
++type CompositePublicKey struct {
++	Ed25519 ed25519.PublicKey
++	MLDSA   *mldsa.PublicKey
++}
++
++// Equal reports whether both components are equal.
++func (pub *CompositePublicKey) Equal(x crypto.PublicKey) bool {
++	xx, ok := x.(*CompositePublicKey)
++	if !ok {
++		return false
++	}
++	return pub.Ed25519.Equal(xx.Ed25519) && pub.MLDSA.Equal(xx.MLDSA)
++}
++
++// compositeKeyASN1 is the DER structure carried in the SubjectPublicKeyInfo BIT
++// STRING for a composite key (and analogously for a composite signature).
++type compositeKeyASN1 struct {
++	Ed25519 []byte
++	MLDSA   []byte
++}
++
++func compositeOIDForParameters(p mldsa.Parameters) (asn1.ObjectIdentifier, bool) {
++	switch p {
++	case mldsa.MLDSA44():
++		return oidPublicKeyCompositeEd25519MLDSA44, true
++	case mldsa.MLDSA65():
++		return oidPublicKeyCompositeEd25519MLDSA65, true
++	case mldsa.MLDSA87():
++		return oidPublicKeyCompositeEd25519MLDSA87, true
++	default:
++		return nil, false
++	}
++}
++
++func compositeParametersFromOID(oid asn1.ObjectIdentifier) (mldsa.Parameters, bool) {
++	switch {
++	case oid.Equal(oidPublicKeyCompositeEd25519MLDSA44):
++		return mldsa.MLDSA44(), true
++	case oid.Equal(oidPublicKeyCompositeEd25519MLDSA65):
++		return mldsa.MLDSA65(), true
++	case oid.Equal(oidPublicKeyCompositeEd25519MLDSA87):
++		return mldsa.MLDSA87(), true
++	default:
++		return mldsa.Parameters{}, false
++	}
++}
++
++func isCompositeOID(oid asn1.ObjectIdentifier) bool {
++	_, ok := compositeParametersFromOID(oid)
++	return ok
++}
++
++// marshalCompositePublicKey returns the SubjectPublicKeyInfo BIT STRING contents
++// and the algorithm OID for a composite public key.
++func marshalCompositePublicKey(pub *CompositePublicKey) ([]byte, asn1.ObjectIdentifier, error) {
++	oid, ok := compositeOIDForParameters(pub.MLDSA.Parameters())
++	if !ok {
++		return nil, nil, errors.New("x509: unsupported ML-DSA parameters for composite key")
++	}
++	der, err := asn1.Marshal(compositeKeyASN1{
++		Ed25519: pub.Ed25519,
++		MLDSA:   pub.MLDSA.Bytes(),
++	})
++	if err != nil {
++		return nil, nil, err
++	}
++	return der, oid, nil
++}
++
++// parseCompositePublicKey parses the SubjectPublicKeyInfo BIT STRING contents of
++// a composite public key identified by oid.
++func parseCompositePublicKey(oid asn1.ObjectIdentifier, data []byte) (*CompositePublicKey, error) {
++	params, ok := compositeParametersFromOID(oid)
++	if !ok {
++		return nil, errors.New("x509: unsupported composite parameters")
++	}
++	var raw compositeKeyASN1
++	if _, err := asn1.Unmarshal(data, &raw); err != nil {
++		return nil, errors.New("x509: invalid composite public key encoding")
++	}
++	if len(raw.Ed25519) != ed25519.PublicKeySize {
++		return nil, errors.New("x509: invalid Ed25519 component in composite key")
++	}
++	mldsaPub, err := mldsa.NewPublicKey(params, raw.MLDSA)
++	if err != nil {
++		return nil, err
++	}
++	return &CompositePublicKey{
++		Ed25519: ed25519.PublicKey(raw.Ed25519),
++		MLDSA:   mldsaPub,
++	}, nil
++}
++
++// MarshalCompositeSignature encodes the two component signatures of a composite
++// signature into a single DER blob. Used by signers and TLS verification.
++func MarshalCompositeSignature(ed25519Sig, mldsaSig []byte) ([]byte, error) {
++	return asn1.Marshal(compositeKeyASN1{Ed25519: ed25519Sig, MLDSA: mldsaSig})
++}
++
++// ParseCompositeSignature decodes a composite signature into its Ed25519 and
++// ML-DSA components.
++func ParseCompositeSignature(sig []byte) (ed25519Sig, mldsaSig []byte, err error) {
++	var raw compositeKeyASN1
++	if _, err := asn1.Unmarshal(sig, &raw); err != nil {
++		return nil, nil, errors.New("x509: invalid composite signature encoding")
++	}
++	return raw.Ed25519, raw.MLDSA, nil
++}
+diff --git a/src/crypto/x509/parser.go b/src/crypto/x509/parser.go
+index 4a1416e3..ebfd9afa 100644
+--- a/src/crypto/x509/parser.go
++++ b/src/crypto/x509/parser.go
+@@ -372,6 +372,11 @@ func parsePublicKey(keyData *publicKeyInfo) (any, error) {
+ 			return nil, errors.New("x509: unsupported ML-DSA parameters")
+ 		}
+ 		return mldsa.NewPublicKey(params, data)
++	case isCompositeOID(oid):
++		if len(params.FullBytes) != 0 {
++			return nil, errors.New("x509: composite key encoded with illegal parameters")
++		}
++		return parseCompositePublicKey(oid, data)
+ 	case oid.Equal(oidPublicKeyX25519):
+ 		// RFC 8410, Section 3
+ 		// > For all of the OIDs, the parameters MUST be absent.
+diff --git a/src/crypto/x509/x509.go b/src/crypto/x509/x509.go
+index 755007f5..0c787fc5 100644
+--- a/src/crypto/x509/x509.go
++++ b/src/crypto/x509/x509.go
+@@ -124,6 +124,13 @@ func marshalPublicKey(pub any) (publicKeyBytes []byte, publicKeyAlgorithm pkix.A
+ 		}
+ 		publicKeyBytes = pub.Bytes()
+ 		publicKeyAlgorithm.Algorithm = oid
++	case *CompositePublicKey:
++		der, oid, err := marshalCompositePublicKey(pub)
++		if err != nil {
++			return nil, pkix.AlgorithmIdentifier{}, err
++		}
++		publicKeyBytes = der
++		publicKeyAlgorithm.Algorithm = oid
+ 	case *ecdh.PublicKey:
+ 		publicKeyBytes = pub.Bytes()
+ 		if pub.Curve() == ecdh.X25519() {
+@@ -243,6 +250,9 @@ const (
+ 	MLDSA44
+ 	MLDSA65
+ 	MLDSA87
++	CompositeEd25519MLDSA44 // Experimental, non-standard.
++	CompositeEd25519MLDSA65 // Experimental, non-standard.
++	CompositeEd25519MLDSA87 // Experimental, non-standard.
+ )
+ 
+ func (algo SignatureAlgorithm) isRSAPSS() bool {
+@@ -281,14 +291,16 @@ const (
+ 	ECDSA
+ 	Ed25519
+ 	MLDSA
++	CompositeEd25519MLDSA // Experimental, non-standard.
+ )
+ 
+ var publicKeyAlgoName = [...]string{
+-	RSA:     "RSA",
+-	DSA:     "DSA",
+-	ECDSA:   "ECDSA",
+-	Ed25519: "Ed25519",
+-	MLDSA:   "ML-DSA",
++	RSA:                   "RSA",
++	DSA:                   "DSA",
++	ECDSA:                 "ECDSA",
++	Ed25519:               "Ed25519",
++	MLDSA:                 "ML-DSA",
++	CompositeEd25519MLDSA: "Composite-Ed25519-ML-DSA",
+ }
+ 
+ func (algo PublicKeyAlgorithm) String() string {
+@@ -401,6 +413,9 @@ var signatureAlgorithmDetails = []struct {
+ 	{MLDSA44, "ML-DSA-44", oidPublicKeyMLDSA44, emptyRawValue, MLDSA, crypto.Hash(0) /* no pre-hashing */, false},
+ 	{MLDSA65, "ML-DSA-65", oidPublicKeyMLDSA65, emptyRawValue, MLDSA, crypto.Hash(0) /* no pre-hashing */, false},
+ 	{MLDSA87, "ML-DSA-87", oidPublicKeyMLDSA87, emptyRawValue, MLDSA, crypto.Hash(0) /* no pre-hashing */, false},
++	{CompositeEd25519MLDSA44, "Composite-Ed25519-ML-DSA-44", oidPublicKeyCompositeEd25519MLDSA44, emptyRawValue, CompositeEd25519MLDSA, crypto.Hash(0) /* no pre-hashing */, false},
++	{CompositeEd25519MLDSA65, "Composite-Ed25519-ML-DSA-65", oidPublicKeyCompositeEd25519MLDSA65, emptyRawValue, CompositeEd25519MLDSA, crypto.Hash(0) /* no pre-hashing */, false},
++	{CompositeEd25519MLDSA87, "Composite-Ed25519-ML-DSA-87", oidPublicKeyCompositeEd25519MLDSA87, emptyRawValue, CompositeEd25519MLDSA, crypto.Hash(0) /* no pre-hashing */, false},
+ }
+ 
+ var emptyRawValue = asn1.RawValue{}
+@@ -553,6 +568,8 @@ func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) PublicKeyAlgorithm
+ 			return UnknownPublicKeyAlgorithm
+ 		}
+ 		return MLDSA
++	case isCompositeOID(oid):
++		return CompositeEd25519MLDSA
+ 	}
+ 	return UnknownPublicKeyAlgorithm
+ }
+@@ -1066,7 +1083,7 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
+ 
+ 	switch hashType {
+ 	case crypto.Hash(0):
+-		if pubKeyAlgo != Ed25519 && pubKeyAlgo != MLDSA {
++		if pubKeyAlgo != Ed25519 && pubKeyAlgo != MLDSA && pubKeyAlgo != CompositeEd25519MLDSA {
+ 			return ErrUnsupportedAlgorithm
+ 		}
+ 	case crypto.MD5:
+@@ -1136,6 +1153,21 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
+ 			return fmt.Errorf("x509: ML-DSA verification failure: %w", err)
+ 		}
+ 		return
++	case *CompositePublicKey:
++		if pubKeyAlgo != CompositeEd25519MLDSA {
++			return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
++		}
++		edSig, mldsaSig, perr := ParseCompositeSignature(signature)
++		if perr != nil {
++			return perr
++		}
++		if !ed25519.Verify(pub.Ed25519, signed, edSig) {
++			return errors.New("x509: composite Ed25519 verification failure")
++		}
++		if verr := mldsa.Verify(pub.MLDSA, signed, mldsaSig, nil); verr != nil {
++			return fmt.Errorf("x509: composite ML-DSA verification failure: %w", verr)
++		}
++		return nil
+ 	}
+ 	return ErrUnsupportedAlgorithm
+ }
+@@ -1679,8 +1711,21 @@ func signingParamsForKey(key crypto.Signer, sigAlgo SignatureAlgorithm) (Signatu
+ 			return 0, ai, fmt.Errorf("x509: unsupported ML-DSA parameters: %s", pub.Parameters())
+ 		}
+ 
++	case *CompositePublicKey:
++		pubType = CompositeEd25519MLDSA
++		switch pub.MLDSA.Parameters() {
++		case mldsa.MLDSA44():
++			defaultAlgo = CompositeEd25519MLDSA44
++		case mldsa.MLDSA65():
++			defaultAlgo = CompositeEd25519MLDSA65
++		case mldsa.MLDSA87():
++			defaultAlgo = CompositeEd25519MLDSA87
++		default:
++			return 0, ai, fmt.Errorf("x509: unsupported composite ML-DSA parameters: %s", pub.MLDSA.Parameters())
++		}
++
+ 	default:
+-		return 0, ai, errors.New("x509: only RSA, ECDSA, ML-DSA and Ed25519 keys supported")
++		return 0, ai, errors.New("x509: only RSA, ECDSA, ML-DSA, Ed25519 and composite keys supported")
+ 	}
+ 
+ 	if sigAlgo == 0 {
+-- 
+2.50.1 (Apple Git-155)
+
