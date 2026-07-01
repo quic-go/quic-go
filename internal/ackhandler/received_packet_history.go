@@ -50,28 +50,28 @@ func (h *receivedPacketHistory) addToRanges(p protocol.PacketNumber) bool /* is 
 		return true
 	}
 
-	for i := len(h.ranges) - 1; i >= 0; i-- {
+	for i, v := range slices.Backward(h.ranges) {
 		// p already included in an existing range. Nothing to do here
-		if p >= h.ranges[i].Start && p <= h.ranges[i].End {
+		if p >= v.Start && p <= v.End {
 			return false
 		}
 
-		if h.ranges[i].End == p-1 { // extend a range at the end
-			h.ranges[i].End = p
+		if v.End == p-1 { // extend a range at the end
+			v.End = p
 			return true
 		}
-		if h.ranges[i].Start == p+1 { // extend a range at the beginning
-			h.ranges[i].Start = p
+		if v.Start == p+1 { // extend a range at the beginning
+			v.Start = p
 
-			if i > 0 && h.ranges[i-1].End+1 == h.ranges[i].Start { // merge two ranges
-				h.ranges[i-1].End = h.ranges[i].End
+			if i > 0 && h.ranges[i-1].End+1 == v.Start { // merge two ranges
+				h.ranges[i-1].End = v.End
 				h.ranges = slices.Delete(h.ranges, i, i+1)
 			}
 			return true
 		}
 
 		// create a new range after the current one
-		if p > h.ranges[i].End {
+		if p > v.End {
 			h.ranges = slices.Insert(h.ranges, i+1, interval{Start: p, End: p})
 			return true
 		}
@@ -112,8 +112,8 @@ func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
 // Backward returns an iterator over the ranges in reverse order
 func (h *receivedPacketHistory) Backward() iter.Seq[interval] {
 	return func(yield func(interval) bool) {
-		for i := len(h.ranges) - 1; i >= 0; i-- {
-			if !yield(h.ranges[i]) {
+		for _, v := range slices.Backward(h.ranges) {
+			if !yield(v) {
 				return
 			}
 		}
@@ -125,8 +125,8 @@ func (h *receivedPacketHistory) HighestMissingUpTo(p protocol.PacketNumber) prot
 		return protocol.InvalidPacketNumber
 	}
 	p = min(h.ranges[len(h.ranges)-1].End, p)
-	for i := len(h.ranges) - 1; i >= 0; i-- {
-		r := h.ranges[i]
+	for i, r := range slices.Backward(h.ranges) {
+
 		if p >= r.Start && p <= r.End { // p is contained in this range
 			highest := r.Start - 1 // highest packet in the gap before this range
 			if h.deletedBelow != protocol.InvalidPacketNumber && highest < h.deletedBelow {
@@ -147,11 +147,11 @@ func (h *receivedPacketHistory) IsPotentiallyDuplicate(p protocol.PacketNumber) 
 		return true
 	}
 	// Iterating over the slices is faster than using a binary search (using slices.BinarySearchFunc).
-	for i := len(h.ranges) - 1; i >= 0; i-- {
-		if p > h.ranges[i].End {
+	for _, v := range slices.Backward(h.ranges) {
+		if p > v.End {
 			return false
 		}
-		if p <= h.ranges[i].End && p >= h.ranges[i].Start {
+		if p <= v.End && p >= v.Start {
 			return true
 		}
 	}
