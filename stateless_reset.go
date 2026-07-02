@@ -15,7 +15,7 @@ type statelessResetter struct {
 	h  hash.Hash
 }
 
-// newStatelessRetter creates a new stateless reset generator.
+// newStatelessResetter creates a new stateless reset generator.
 // It is valid to use a nil key. In that case, a random key will be used.
 // This makes is impossible for on-path attackers to shut down established connections.
 func newStatelessResetter(key *StatelessResetKey) *statelessResetter {

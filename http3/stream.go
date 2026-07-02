@@ -263,7 +263,7 @@ func (s *RequestStream) SetDeadline(t time.Time) error {
 	return s.str.SetDeadline(t)
 }
 
-// SendDatagrams send a new HTTP Datagram (RFC 9297).
+// SendDatagram send a new HTTP Datagram (RFC 9297).
 //
 // It is only possible to send datagrams if the server enabled support for this extension.
 // It is recommended (though not required) to send the request before calling this method,
