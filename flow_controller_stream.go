@@ -10,7 +10,11 @@ import (
 )
 
 type streamFlowController struct {
-	baseFlowController
+	receiveFlowController
+
+	bytesSent     protocol.ByteCount
+	sendWindow    protocol.ByteCount
+	lastBlockedAt protocol.ByteCount
 
 	streamID protocol.StreamID
 
@@ -32,12 +36,12 @@ func newStreamFlowController(
 	return &streamFlowController{
 		streamID:   streamID,
 		connection: cfc,
-		baseFlowController: baseFlowController{
+		sendWindow: initialSendWindow,
+		receiveFlowController: receiveFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
 			receiveWindowSize:    receiveWindow,
 			maxReceiveWindowSize: maxReceiveWindow,
-			sendWindow:           initialSendWindow,
 			logger:               logger,
 		},
 	}
@@ -116,17 +120,32 @@ func (c *streamFlowController) Abandon() {
 }
 
 func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
-	c.baseFlowController.AddBytesSent(n)
+	c.bytesSent += n
 	c.connection.AddBytesSent(n)
 }
 
+func (c *streamFlowController) UpdateSendWindow(offset protocol.ByteCount) (updated bool) {
+	if offset > c.sendWindow {
+		c.sendWindow = offset
+		return true
+	}
+	return false
+}
+
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	return min(c.baseFlowController.SendWindowSize(), c.connection.SendWindowSize())
+	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
+	if c.bytesSent > c.sendWindow {
+		return 0
+	}
+	return min(c.sendWindow-c.bytesSent, c.connection.SendWindowSize())
 }
 
 func (c *streamFlowController) IsNewlyBlocked() bool {
-	blocked, _ := c.baseFlowController.IsNewlyBlocked()
-	return blocked
+	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
+		return false
+	}
+	c.lastBlockedAt = c.sendWindow
+	return true
 }
 
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {

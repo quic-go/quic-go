@@ -11,7 +11,11 @@ import (
 )
 
 type connectionFlowController struct {
-	baseFlowController
+	receiveFlowController
+
+	bytesSent     protocol.ByteCount
+	sendWindow    protocol.ByteCount
+	lastBlockedAt protocol.ByteCount
 }
 
 // newConnectionFlowController gets a new flow controller for the connection.
@@ -24,7 +28,7 @@ func newConnectionFlowController(
 	logger utils.Logger,
 ) *connectionFlowController {
 	return &connectionFlowController{
-		baseFlowController: baseFlowController{
+		receiveFlowController: receiveFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
 			receiveWindowSize:    receiveWindow,
@@ -61,6 +65,37 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) (hasWindow
 
 	c.addBytesRead(n)
 	return c.hasWindowUpdate()
+}
+
+func (c *connectionFlowController) AddBytesSent(n protocol.ByteCount) {
+	c.bytesSent += n
+}
+
+func (c *connectionFlowController) UpdateSendWindow(offset protocol.ByteCount) (updated bool) {
+	if offset > c.sendWindow {
+		c.sendWindow = offset
+		return true
+	}
+	return false
+}
+
+func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
+	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
+	if c.bytesSent > c.sendWindow {
+		return 0
+	}
+	return c.sendWindow - c.bytesSent
+}
+
+// IsNewlyBlocked says if it is newly blocked by connection flow control.
+// For every offset, it only returns true once.
+// If it is blocked, the offset is returned.
+func (c *connectionFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
+	if c.SendWindowSize() != 0 || c.sendWindow == c.lastBlockedAt {
+		return false, 0
+	}
+	c.lastBlockedAt = c.sendWindow
+	return true, c.sendWindow
 }
 
 func (c *connectionFlowController) GetWindowUpdate(now monotime.Time) protocol.ByteCount {
