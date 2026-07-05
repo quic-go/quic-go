@@ -142,6 +142,9 @@ func TestSendStreamWriteImmediately(t *testing.T) {
 	mockSender := NewMockStreamSender(mockCtrl)
 	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
 
+	require.NoError(t, str.WriteImmediately(nil))
+	require.NoError(t, str.WriteImmediately([]byte{}))
+
 	mockSender.EXPECT().onHasStreamData(streamID, str)
 	data := []byte("foobar")
 	require.NoError(t, str.WriteImmediately(data))
@@ -168,6 +171,16 @@ func TestSendStreamWriteImmediatelyFlowControlBlocked(t *testing.T) {
 	frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	require.NoError(t, str.WriteImmediately([]byte("foo")))
+	frame, blocked, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.False(t, hasMore)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
+		frame.Frame,
+	)
+	require.Equal(t, &wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: 3}, blocked)
 }
 
 func TestSendStreamWriteImmediatelyAfterBufferedWrite(t *testing.T) {
@@ -660,6 +673,7 @@ func TestSendStreamClose(t *testing.T) {
 	// further calls to Write return an error
 	_, err = strWithTimeout.Write([]byte("foobar"))
 	require.ErrorContains(t, err, "write on closed stream 1234")
+	require.ErrorContains(t, str.WriteImmediately([]byte("foobar")), "write on closed stream 1234")
 	frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 	require.Nil(t, frame.Frame)
 	require.False(t, hasMore)
@@ -873,6 +887,8 @@ func TestSendStreamCancellation(t *testing.T) {
 
 		// future calls to Write should return an error
 		_, err = strWithTimeout.Write([]byte("foo"))
+		require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
+		err = str.WriteImmediately([]byte("foo"))
 		require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
 		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.Nil(t, frame.Frame)
