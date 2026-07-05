@@ -21,7 +21,7 @@ jobs:
           go-version: "1.26.x"
           check-latest: true
       - name: Run the benchmarks
-        uses: CodSpeedHQ/action@3194d9a39c4d46684cb44bf7207fc56626aad8fd # v4.15.1
+        uses: CodSpeedHQ/action@a4a36bb07c0638b0b4ca52bf1f3dad1b4289e52f # v4.18.1
         with:
           mode: walltime
           run: go test -run=^$ -bench=. ./...
