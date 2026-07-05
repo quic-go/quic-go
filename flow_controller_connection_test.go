@@ -1,4 +1,4 @@
-package flowcontrol
+package quic
 
 import (
 	"testing"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestConnectionFlowControlWindowUpdate(t *testing.T) {
-	fc := NewConnectionFlowController(
+	fc := newConnectionFlowController(
 		100, // initial receive window
 		100, // max receive window
 		nil,
@@ -33,7 +33,7 @@ func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
 	require.Equal(t, time.Second, rttStats.SmoothedRTT())
 
 	callbackCalledWith := protocol.InvalidByteCount
-	fc := NewConnectionFlowController(
+	fc := newConnectionFlowController(
 		100, // initial receive window
 		150, // max receive window
 		func(size protocol.ByteCount) bool {
@@ -52,7 +52,7 @@ func TestConnectionWindowAutoTuningNotAllowed(t *testing.T) {
 }
 
 func TestConnectionFlowControlViolation(t *testing.T) {
-	fc := NewConnectionFlowController(100, 100, nil, utils.NewRTTStats(), utils.DefaultLogger)
+	fc := newConnectionFlowController(100, 100, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	require.NoError(t, fc.IncrementHighestReceived(40, monotime.Now()))
 	require.NoError(t, fc.IncrementHighestReceived(60, monotime.Now()))
 	err := fc.IncrementHighestReceived(1, monotime.Now())
@@ -62,7 +62,7 @@ func TestConnectionFlowControlViolation(t *testing.T) {
 }
 
 func TestConnectionFlowControllerReset(t *testing.T) {
-	fc := NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	fc.UpdateSendWindow(100)
 	fc.AddBytesSent(10)
 	require.Equal(t, protocol.ByteCount(90), fc.SendWindowSize())
@@ -71,7 +71,7 @@ func TestConnectionFlowControllerReset(t *testing.T) {
 }
 
 func TestConnectionFlowControllerResetAfterReading(t *testing.T) {
-	fc := NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	fc.AddBytesRead(1)
 	require.EqualError(t, fc.Reset(), "flow controller reset after reading data")
 }

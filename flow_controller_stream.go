@@ -1,4 +1,4 @@
-package flowcontrol
+package quic
 
 import (
 	"fmt"
@@ -14,26 +14,24 @@ type streamFlowController struct {
 
 	streamID protocol.StreamID
 
-	connection connectionFlowControllerI
+	connection *connectionFlowController
 
 	receivedFinalOffset bool
 }
 
-var _ StreamFlowController = &streamFlowController{}
-
-// NewStreamFlowController gets a new flow controller for a stream
-func NewStreamFlowController(
+// newStreamFlowController gets a new flow controller for a stream.
+func newStreamFlowController(
 	streamID protocol.StreamID,
-	cfc ConnectionFlowController,
+	cfc *connectionFlowController,
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
-) StreamFlowController {
+) *streamFlowController {
 	return &streamFlowController{
 		streamID:   streamID,
-		connection: cfc.(connectionFlowControllerI),
+		connection: cfc,
 		baseFlowController: baseFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,

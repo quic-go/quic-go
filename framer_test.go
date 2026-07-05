@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -20,7 +19,7 @@ func TestFramerControlFrames(t *testing.T) {
 	pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
 	msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
 
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
 	framer.QueueControlFrame(pc)
 	require.True(t, framer.HasData())
@@ -46,7 +45,7 @@ func TestFramerControlFrameSizing(t *testing.T) {
 	bf := &wire.DataBlockedFrame{MaximumData: 0x1337}
 	bfLen := bf.Length(protocol.Version1)
 
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
 	for i := 0; i < numFrames+1; i++ {
 		framer.QueueControlFrame(bf)
@@ -66,7 +65,7 @@ func TestFramerStreamControlFrames(t *testing.T) {
 	mdf1 := &wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1337}
 	mdf2 := &wire.MaxStreamDataFrame{StreamID: streamID, MaximumStreamData: 1338}
 
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.QueueControlFrame(ping)
 	str := NewMockStreamControlFrameGetter(gomock.NewController(t))
 	framer.AddStreamWithControlFrames(streamID, str)
@@ -88,7 +87,7 @@ func TestFramerStreamControlFramesSizing(t *testing.T) {
 	mdf1 := &wire.MaxStreamDataFrame{MaximumStreamData: 1337}
 
 	str := NewMockStreamControlFrameGetter(gomock.NewController(t))
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.AddStreamWithControlFrames(10, str)
 	str.EXPECT().getControlFrame(gomock.Any()).Return(ackhandler.Frame{Frame: mdf1}, true, true).AnyTimes()
 	frames, _, l := framer.Append(nil, nil, 100, monotime.Now(), protocol.Version1)
@@ -115,7 +114,7 @@ func TestFramerStreamDataBlocked(t *testing.T) {
 func testFramerStreamDataBlocked(t *testing.T, fits bool) {
 	const streamID = 5
 	str := NewMockStreamFrameGetter(gomock.NewController(t))
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.AddActiveStream(streamID, str)
 	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
@@ -171,7 +170,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 	const streamID = 5
 	const offset = 100
 
-	fc := flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil)
+	fc := newConnectionFlowController(0, 0, nil, nil, nil)
 	fc.UpdateSendWindow(offset)
 	fc.AddBytesSent(offset)
 
@@ -210,7 +209,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 }
 
 func TestFramerDetectsFrameDoS(t *testing.T) {
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	for i := range maxControlFrames - 1 {
 		framer.QueueControlFrame(&wire.PingFrame{})
 		framer.QueueControlFrame(&wire.PingFrame{})
@@ -228,7 +227,7 @@ func TestFramerDetectsFrameDoS(t *testing.T) {
 }
 
 func TestFramerDetectsFramePathResponseDoS(t *testing.T) {
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	var pathResponses []*wire.PathResponseFrame
 	for range 2 * maxPathResponses {
 		var f wire.PathResponseFrame
@@ -250,7 +249,7 @@ func TestFramerDetectsFramePathResponseDoS(t *testing.T) {
 }
 
 func TestFramerPacksSinglePathResponsePerPacket(t *testing.T) {
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	f1 := &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
 	f2 := &wire.PathResponseFrame{Data: [8]byte{2, 3, 4, 5, 6, 7, 8, 9}}
 	cf1 := &wire.DataBlockedFrame{MaximumData: 1337}
@@ -282,7 +281,7 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 	f2 := &wire.StreamFrame{StreamID: str2ID, Data: []byte("bar"), DataLenPresent: true}
 	totalLen := f1.Length(protocol.Version1) + f2.Length(protocol.Version1)
 
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
 	// no frames added yet
 	controlFrames, fs, length := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
@@ -330,7 +329,7 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 
 func TestFramerRemoveActiveStream(t *testing.T) {
 	const id = protocol.StreamID(42)
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
 	framer.AddActiveStream(id, NewMockStreamFrameGetter(gomock.NewController(t)))
 	require.True(t, framer.HasData())
@@ -343,7 +342,7 @@ func TestFramerRemoveActiveStream(t *testing.T) {
 
 func TestFramerMinStreamFrameSize(t *testing.T) {
 	const id = protocol.StreamID(42)
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer.AddActiveStream(id, str)
 
@@ -368,7 +367,7 @@ func TestFramerMinStreamFrameSize(t *testing.T) {
 
 func TestFramerMinStreamFrameSizeMultipleStreamFrames(t *testing.T) {
 	const id = protocol.StreamID(42)
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer.AddActiveStream(id, str)
 
@@ -389,7 +388,7 @@ func TestFramerMinStreamFrameSizeMultipleStreamFrames(t *testing.T) {
 func TestFramerFillPacketOneStream(t *testing.T) {
 	const id = protocol.StreamID(42)
 	str := NewMockStreamFrameGetter(gomock.NewController(t))
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 
 	for i := protocol.MinStreamFrameSize; i < 2000; i++ {
 		str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
@@ -420,7 +419,7 @@ func TestFramerFillPacketMultipleStreams(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	stream1 := NewMockStreamFrameGetter(mockCtrl)
 	stream2 := NewMockStreamFrameGetter(mockCtrl)
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 
 	for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
 		stream1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
@@ -456,7 +455,7 @@ func TestFramer0RTTRejection(t *testing.T) {
 	ping := &wire.PingFrame{}
 	pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
 
-	framer := newFramer(flowcontrol.NewConnectionFlowController(0, 0, nil, nil, nil))
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.QueueControlFrame(ncid)
 	framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: 1337})
 	framer.QueueControlFrame(&wire.StreamDataBlockedFrame{StreamID: 42, MaximumStreamData: 1337})

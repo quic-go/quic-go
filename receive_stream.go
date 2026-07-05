@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -49,7 +48,7 @@ type ReceiveStream struct {
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
 	deadline monotime.Time
 
-	flowController flowcontrol.StreamFlowController
+	flowController *streamFlowController
 }
 
 var (
@@ -60,7 +59,7 @@ var (
 func newReceiveStream(
 	streamID protocol.StreamID,
 	sender streamSender,
-	flowController flowcontrol.StreamFlowController,
+	flowController *streamFlowController,
 ) *ReceiveStream {
 	return &ReceiveStream{
 		streamID:       streamID,

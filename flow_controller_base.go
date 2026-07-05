@@ -1,4 +1,4 @@
-package flowcontrol
+package quic
 
 import (
 	"sync"
