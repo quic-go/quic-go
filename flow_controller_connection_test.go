@@ -64,7 +64,7 @@ func TestConnectionFlowControlViolation(t *testing.T) {
 func TestConnectionFlowControllerReset(t *testing.T) {
 	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	fc.UpdateSendWindow(100)
-	fc.AddBytesSent(10)
+	require.True(t, fc.TryAddBytesSent(10))
 	require.Equal(t, protocol.ByteCount(90), fc.SendWindowSize())
 	require.NoError(t, fc.Reset())
 	require.Zero(t, fc.SendWindowSize())

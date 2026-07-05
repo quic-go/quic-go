@@ -132,6 +132,12 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return s.sendStr.Write(p)
 }
 
+// WriteImmediately writes data to the stream if it can be queued immediately.
+// See [SendStream.WriteImmediately] for more details.
+func (s *Stream) WriteImmediately(p []byte) error {
+	return s.sendStr.WriteImmediately(p)
+}
+
 // SetReliableBoundary marks the data written to this stream so far as reliable.
 // It is valid to call this function multiple times, thereby increasing the reliable size.
 // It only has an effect if the peer enabled support for the RESET_STREAM_AT extension,
