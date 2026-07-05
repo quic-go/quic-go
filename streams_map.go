@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -28,7 +27,7 @@ type streamsMap struct {
 
 	sender            streamSender
 	queueControlFrame func(wire.Frame)
-	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController
+	newFlowController func(protocol.StreamID) *streamFlowController
 
 	mutex                 sync.Mutex
 	outgoingBidiStreams   *outgoingStreamsMap[*Stream]
@@ -43,7 +42,7 @@ func newStreamsMap(
 	ctx context.Context,
 	sender streamSender,
 	queueControlFrame func(wire.Frame),
-	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
+	newFlowController func(protocol.StreamID) *streamFlowController,
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,

@@ -1,4 +1,4 @@
-package flowcontrol
+package quic
 
 import (
 	"errors"
@@ -14,11 +14,9 @@ type connectionFlowController struct {
 	baseFlowController
 }
 
-var _ ConnectionFlowController = &connectionFlowController{}
-
-// NewConnectionFlowController gets a new flow controller for the connection
+// newConnectionFlowController gets a new flow controller for the connection.
 // It is created before we receive the peer's transport parameters, thus it starts with a sendWindow of 0.
-func NewConnectionFlowController(
+func newConnectionFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	allowWindowIncrease func(size protocol.ByteCount) bool,

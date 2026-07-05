@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -156,7 +155,7 @@ type Conn struct {
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	retransmissionQueue   *retransmissionQueue
 	framer                *framer
-	connFlowController    flowcontrol.ConnectionFlowController
+	connFlowController    *connectionFlowController
 	tokenStoreKey         string                    // only set for the client
 	tokenGenerator        *handshake.TokenGenerator // only set for the server
 
@@ -521,7 +520,7 @@ func (c *Conn) preSetup() {
 		false, // ACK_FREQUENCY is not supported yet
 	)
 	c.rttStats = utils.NewRTTStats()
-	c.connFlowController = flowcontrol.NewConnectionFlowController(
+	c.connFlowController = newConnectionFlowController(
 		protocol.ByteCount(c.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(c.config.MaxConnectionReceiveWindow),
 		func(size protocol.ByteCount) bool {
@@ -2930,7 +2929,7 @@ func (c *Conn) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
 	return c.streamsMap.OpenUniStreamSync(ctx)
 }
 
-func (c *Conn) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
+func (c *Conn) newFlowController(id protocol.StreamID) *streamFlowController {
 	initialSendWindow := c.peerParams.InitialMaxStreamDataUni
 	if id.Type() == protocol.StreamTypeBidi {
 		if id.InitiatedBy() == c.perspective {
@@ -2939,7 +2938,7 @@ func (c *Conn) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowCon
 			initialSendWindow = c.peerParams.InitialMaxStreamDataBidiLocal
 		}
 	}
-	return flowcontrol.NewStreamFlowController(
+	return newStreamFlowController(
 		id,
 		c.connFlowController,
 		protocol.ByteCount(c.config.InitialStreamReceiveWindow),

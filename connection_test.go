@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/flowcontrol"
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/mocks"
 	mockackhandler "github.com/quic-go/quic-go/internal/mocks/ackhandler"
@@ -39,7 +38,7 @@ func connectionOptCryptoSetup(cs *mocks.MockCryptoSetup) testConnectionOpt {
 	return func(conn *Conn) { conn.cryptoStreamHandler = cs }
 }
 
-func connectionOptConnFlowController(cfc flowcontrol.ConnectionFlowController) testConnectionOpt {
+func connectionOptConnFlowController(cfc *connectionFlowController) testConnectionOpt {
 	return func(conn *Conn) { conn.connFlowController = cfc }
 }
 
@@ -239,7 +238,7 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 
 func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+	connFC := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	require.Zero(t, connFC.SendWindowSize())
 	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
 	now := monotime.Now()
@@ -1033,7 +1032,7 @@ func TestConnectionHandshakeIdleTimeout(t *testing.T) {
 func TestConnectionTransportParameters(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	var eventRecorder events.Recorder
-	connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+	connFC := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	require.Zero(t, connFC.SendWindowSize())
 	tc := newServerTestConnection(t,
 		mockCtrl,
@@ -1086,7 +1085,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
-		connFC := flowcontrol.NewConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+		connFC := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
 		tc.conn.handleTransportParameters(&wire.TransportParameters{})
 
