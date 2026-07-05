@@ -334,6 +334,35 @@ func TestSendStreamResetFinalSizeIncludesReservedData(t *testing.T) {
 	}
 }
 
+func TestSendStreamSetReliableBoundaryAfterWriteImmediately(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 100)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, true)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	require.NoError(t, str.WriteImmediately(make([]byte, 100)))
+
+	frame, _, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+40, protocol.Version1)
+	require.True(t, hasMore)
+	require.Equal(t, protocol.ByteCount(40), frame.Frame.DataLen())
+
+	str.SetReliableBoundary()
+
+	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	str.CancelWrite(42)
+	cf, ok, hasMore := str.getControlFrame(monotime.Now())
+	require.True(t, ok)
+	require.False(t, hasMore)
+	require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 100, ErrorCode: 42, ReliableSize: 100}, cf.Frame)
+
+	frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.False(t, hasMore)
+	require.Equal(t, protocol.ByteCount(40), frame.Frame.Offset)
+	require.Equal(t, protocol.ByteCount(60), frame.Frame.DataLen())
+}
+
 func TestSendStreamLargeWrites(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const streamID protocol.StreamID = 1337
