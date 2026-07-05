@@ -172,7 +172,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 
 	fc := newConnectionFlowController(0, 0, nil, nil, nil)
 	fc.UpdateSendWindow(offset)
-	fc.AddBytesSent(offset)
+	require.True(t, fc.TryAddBytesSent(offset))
 
 	str := NewMockStreamFrameGetter(gomock.NewController(t))
 	framer := newFramer(fc)

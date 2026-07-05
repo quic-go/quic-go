@@ -70,12 +70,6 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) (hasWindow
 	return c.hasWindowUpdate()
 }
 
-func (c *connectionFlowController) AddBytesSent(n protocol.ByteCount) {
-	c.sendMutex.Lock()
-	c.bytesSent += n
-	c.sendMutex.Unlock()
-}
-
 func (c *connectionFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
 	c.sendMutex.Lock()
 	defer c.sendMutex.Unlock()

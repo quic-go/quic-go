@@ -155,10 +155,10 @@ func TestStreamSendWindow(t *testing.T) {
 	)
 	// first, we're limited by the stream flow controller
 	require.Equal(t, protocol.ByteCount(100), fc.SendWindowSize())
-	fc.AddBytesSent(50)
+	require.True(t, fc.TryAddBytesSent(50))
 	require.False(t, fc.IsNewlyBlocked())
 	require.Equal(t, protocol.ByteCount(50), fc.SendWindowSize())
-	fc.AddBytesSent(50)
+	require.True(t, fc.TryAddBytesSent(50))
 	require.True(t, fc.IsNewlyBlocked())
 	require.Zero(t, fc.SendWindowSize())
 	require.False(t, fc.IsNewlyBlocked()) // we're still blocked, but it's not new
@@ -171,7 +171,7 @@ func TestStreamSendWindow(t *testing.T) {
 
 	require.False(t, fc.IsNewlyBlocked()) // we're not blocked anymore
 	require.Equal(t, protocol.ByteCount(200), fc.SendWindowSize())
-	fc.AddBytesSent(200)
+	require.True(t, fc.TryAddBytesSent(200))
 	require.Zero(t, fc.SendWindowSize())
 	require.False(t, fc.IsNewlyBlocked()) // we're blocked, but not on stream flow control
 }

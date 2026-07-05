@@ -119,11 +119,6 @@ func (c *streamFlowController) Abandon() {
 	}
 }
 
-func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
-	c.bytesSent += n
-	c.connection.AddBytesSent(n)
-}
-
 func (c *streamFlowController) UpdateSendWindow(offset protocol.ByteCount) (updated bool) {
 	if offset > c.sendWindow {
 		c.sendWindow = offset
