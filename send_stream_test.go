@@ -135,6 +135,205 @@ func TestSendStreamWriteData(t *testing.T) {
 	)
 }
 
+func TestSendStreamWriteImmediately(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockFC := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	data := []byte("foobar")
+	require.NoError(t, str.WriteImmediately(data))
+	data[0] = 'x' // make sure the data was copied
+
+	frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.False(t, hasMore)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Data: []byte("foobar"), DataLenPresent: true},
+		frame.Frame,
+	)
+}
+
+func TestSendStreamWriteImmediatelyFlowControlBlocked(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 3)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	require.ErrorIs(t, str.WriteImmediately([]byte("foobar")), ErrWouldBlock)
+	require.Equal(t, protocol.ByteCount(3), mockFC.SendWindowSize())
+
+	frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
+	require.False(t, hasMore)
+}
+
+func TestSendStreamWriteImmediatelyAfterBufferedWrite(t *testing.T) {
+	const streamID protocol.StreamID = 42
+
+	t.Run("enough credit", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 6)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str).Times(2)
+		n, err := str.Write([]byte("foo"))
+		require.NoError(t, err)
+		require.Equal(t, 3, n)
+		require.NoError(t, str.WriteImmediately([]byte("bar")))
+
+		frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.False(t, hasMore)
+		require.EqualExportedValues(t,
+			&wire.StreamFrame{StreamID: streamID, Data: []byte("foobar"), DataLenPresent: true},
+			frame.Frame,
+		)
+		require.Zero(t, mockFC.SendWindowSize())
+	})
+
+	t.Run("not enough credit", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 5)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str)
+		n, err := str.Write([]byte("foo"))
+		require.NoError(t, err)
+		require.Equal(t, 3, n)
+		require.ErrorIs(t, str.WriteImmediately([]byte("bar")), ErrWouldBlock)
+
+		frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.False(t, hasMore)
+		require.EqualExportedValues(t,
+			&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
+			frame.Frame,
+		)
+		require.Equal(t, protocol.ByteCount(2), mockFC.SendWindowSize())
+	})
+}
+
+func TestSendStreamWriteAfterWriteImmediately(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const streamID protocol.StreamID = 42
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str).Times(2)
+		require.NoError(t, str.WriteImmediately([]byte("foo")))
+
+		errChan := make(chan error, 1)
+		go func() {
+			n, err := str.Write([]byte("bar"))
+			if n != 3 {
+				errChan <- fmt.Errorf("expected to write 3 bytes, wrote %d", n)
+				return
+			}
+			errChan <- err
+		}()
+		synctest.Wait()
+		select {
+		case err := <-errChan:
+			t.Fatalf("Write should not have returned yet: %v", err)
+		default:
+		}
+
+		frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.True(t, hasMore)
+		require.EqualExportedValues(t,
+			&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
+			frame.Frame,
+		)
+
+		synctest.Wait()
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("Write should have returned")
+		}
+
+		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.False(t, hasMore)
+		require.EqualExportedValues(t,
+			&wire.StreamFrame{StreamID: streamID, Offset: 3, Data: []byte("bar"), DataLenPresent: true},
+			frame.Frame,
+		)
+	})
+}
+
+func TestSendStreamLargeWriteImmediately(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockFC := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+	data := make([]byte, 10*protocol.MaxPacketBufferSize)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	require.NoError(t, str.WriteImmediately(data))
+
+	var offset protocol.ByteCount
+	for offset < protocol.ByteCount(len(data)) {
+		frame, _, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, offset)+40, protocol.Version1)
+		require.NotNil(t, frame.Frame)
+		require.Equal(t, offset, frame.Frame.Offset)
+		require.Equal(t, data[offset:offset+40], frame.Frame.Data)
+		offset += 40
+		require.Equal(t, offset < protocol.ByteCount(len(data)), hasMore)
+	}
+}
+
+func TestSendStreamResetFinalSizeIncludesReservedData(t *testing.T) {
+	const streamID protocol.StreamID = 42
+
+	for _, tc := range []struct {
+		name  string
+		reset func(*SendStream)
+	}{
+		{
+			name:  "CancelWrite",
+			reset: func(str *SendStream) { str.CancelWrite(42) },
+		},
+		{
+			name: "STOP_SENDING",
+			reset: func(str *SendStream) {
+				str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 42})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 100)
+			mockSender := NewMockStreamSender(mockCtrl)
+			str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+			mockSender.EXPECT().onHasStreamData(streamID, str)
+			require.NoError(t, str.WriteImmediately(make([]byte, 100)))
+
+			frame, _, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+40, protocol.Version1)
+			require.True(t, hasMore)
+			require.Equal(t, protocol.ByteCount(40), frame.Frame.DataLen())
+
+			mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+			tc.reset(str)
+			cf, ok, hasMore := str.getControlFrame(monotime.Now())
+			require.True(t, ok)
+			require.False(t, hasMore)
+			require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 100, ErrorCode: 42}, cf.Frame)
+		})
+	}
+}
+
 func TestSendStreamLargeWrites(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const streamID protocol.StreamID = 1337

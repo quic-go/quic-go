@@ -176,6 +176,30 @@ func TestStreamSendWindow(t *testing.T) {
 	require.False(t, fc.IsNewlyBlocked()) // we're blocked, but not on stream flow control
 }
 
+func TestStreamFlowControllerTryAddBytesSent(t *testing.T) {
+	connFC := newConnectionFlowController(
+		protocol.MaxByteCount,
+		protocol.MaxByteCount,
+		nil,
+		utils.NewRTTStats(),
+		utils.DefaultLogger,
+	)
+	require.True(t, connFC.UpdateSendWindow(10))
+	fc := newStreamFlowController(
+		42,
+		connFC,
+		protocol.MaxByteCount,
+		protocol.MaxByteCount,
+		100,
+		utils.NewRTTStats(),
+		utils.DefaultLogger,
+	)
+
+	require.True(t, fc.TryAddBytesSent(6))
+	require.False(t, fc.TryAddBytesSent(5))
+	require.Equal(t, protocol.ByteCount(4), connFC.SendWindowSize())
+}
+
 func TestStreamWindowUpdate(t *testing.T) {
 	fc := newStreamFlowController(
 		42,

@@ -132,6 +132,17 @@ func (c *streamFlowController) UpdateSendWindow(offset protocol.ByteCount) (upda
 	return false
 }
 
+func (c *streamFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
+	if c.bytesSent > c.sendWindow || n > c.sendWindow-c.bytesSent {
+		return false
+	}
+	if !c.connection.TryAddBytesSent(n) {
+		return false
+	}
+	c.bytesSent += n
+	return true
+}
+
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
 	if c.bytesSent > c.sendWindow {
@@ -141,11 +152,16 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 }
 
 func (c *streamFlowController) IsNewlyBlocked() bool {
+	blocked, _ := c.isNewlyBlocked()
+	return blocked
+}
+
+func (c *streamFlowController) isNewlyBlocked() (bool, protocol.ByteCount) {
 	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
-		return false
+		return false, 0
 	}
 	c.lastBlockedAt = c.sendWindow
-	return true
+	return true, c.sendWindow
 }
 
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {

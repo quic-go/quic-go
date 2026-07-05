@@ -3,6 +3,7 @@ package quic
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -13,6 +14,8 @@ import (
 type connectionFlowController struct {
 	receiveFlowController
 
+	// Protects send-side state, which WriteImmediately can access from application goroutines.
+	sendMutex     sync.Mutex
 	bytesSent     protocol.ByteCount
 	sendWindow    protocol.ByteCount
 	lastBlockedAt protocol.ByteCount
@@ -68,10 +71,27 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) (hasWindow
 }
 
 func (c *connectionFlowController) AddBytesSent(n protocol.ByteCount) {
+	c.sendMutex.Lock()
 	c.bytesSent += n
+	c.sendMutex.Unlock()
 }
 
+func (c *connectionFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	if c.bytesSent > c.sendWindow || n > c.sendWindow-c.bytesSent {
+		return false
+	}
+	c.bytesSent += n
+	return true
+}
+
+// UpdateSendWindow is called after receiving a MAX_DATA frame.
 func (c *connectionFlowController) UpdateSendWindow(offset protocol.ByteCount) (updated bool) {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
 	if offset > c.sendWindow {
 		c.sendWindow = offset
 		return true
@@ -80,7 +100,9 @@ func (c *connectionFlowController) UpdateSendWindow(offset protocol.ByteCount) (
 }
 
 func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
-	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
 	if c.bytesSent > c.sendWindow {
 		return 0
 	}
@@ -91,7 +113,10 @@ func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
 // For every offset, it only returns true once.
 // If it is blocked, the offset is returned.
 func (c *connectionFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
-	if c.SendWindowSize() != 0 || c.sendWindow == c.lastBlockedAt {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
 		return false, 0
 	}
 	c.lastBlockedAt = c.sendWindow
@@ -139,6 +164,9 @@ func (c *connectionFlowController) Reset() error {
 	if c.bytesRead > 0 || c.highestReceived > 0 || !c.epochStartTime.IsZero() {
 		return errors.New("flow controller reset after reading data")
 	}
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
 	c.bytesSent = 0
 	c.lastBlockedAt = 0
 	c.sendWindow = 0
