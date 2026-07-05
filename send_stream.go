@@ -380,10 +380,7 @@ func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	if !s.nextFrameReserved && !s.flowController.TryAddBytesSent(maxDataLen) {
 		return nil, nil, true
 	}
-	f, hasMoreData := s.popNewStreamFrame(maxBytes, maxDataLen, v)
-	if f == nil {
-		return nil, nil, hasMoreData
-	}
+	f, hasMoreData := s.popNewStreamFrame(maxDataLen)
 	if f.DataLen() > 0 {
 		s.writeOffset += f.DataLen()
 	}
@@ -405,12 +402,8 @@ func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 
 // popNewStreamFrame returns a new STREAM frame to send for this stream
 // hasMoreData says if there's more data to send, *not* taking into account the reliable size
-func (s *SendStream) popNewStreamFrame(maxBytes, maxDataLen protocol.ByteCount, v protocol.Version) (_ *wire.StreamFrame, hasMoreData bool) {
+func (s *SendStream) popNewStreamFrame(maxDataLen protocol.ByteCount) (_ *wire.StreamFrame, hasMoreData bool) {
 	if s.nextFrame != nil {
-		maxDataLen := min(maxDataLen, s.nextFrame.MaxDataLen(maxBytes, v))
-		if maxDataLen == 0 {
-			return nil, true
-		}
 		nextFrame := s.nextFrame
 		nextFrameReserved := s.nextFrameReserved
 		s.nextFrame = nil
@@ -443,22 +436,8 @@ func (s *SendStream) popNewStreamFrame(maxBytes, maxDataLen protocol.ByteCount, 
 	f.DataLenPresent = true
 	f.Data = f.Data[:0]
 
-	hasMoreData = s.popNewStreamFrameWithoutBuffer(f, maxBytes, maxDataLen, v)
-	if len(f.Data) == 0 && !f.Fin {
-		f.PutBack()
-		return nil, hasMoreData
-	}
-	return f, hasMoreData
-}
-
-func (s *SendStream) popNewStreamFrameWithoutBuffer(f *wire.StreamFrame, maxBytes, sendWindow protocol.ByteCount, v protocol.Version) bool {
-	maxDataLen := f.MaxDataLen(maxBytes, v)
-	if maxDataLen == 0 { // a STREAM frame must have at least one byte of data
-		return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
-	}
-	s.getDataForWriting(f, min(maxDataLen, sendWindow))
-
-	return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
+	s.getDataForWriting(f, maxDataLen)
+	return f, s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 }
 
 func (s *SendStream) maybeGetRetransmission(maxBytes protocol.ByteCount, v protocol.Version) (*wire.StreamFrame, bool /* has more retransmissions */) {
