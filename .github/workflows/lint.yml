@@ -63,13 +63,13 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - name: golangci-lint (Linux)
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (Windows)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOOS: "windows"
         with:
@@ -77,7 +77,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (OSX)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOOS: "darwin"
         with:
@@ -85,7 +85,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (FreeBSD)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOOS: "freebsd"
         with:
@@ -93,7 +93,7 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (others)
         if: success() || failure() # run this step even if the previous one failed
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOOS: "solaris" # some OS that we don't have any build tags for
         with:
