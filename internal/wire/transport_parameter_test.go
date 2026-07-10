@@ -130,6 +130,30 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 	require.Equal(t, minAckDelay, *p.MinAckDelay)
 }
 
+func TestResetStreamAtTransportParameterCodepoints(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ids  []transportParameterID
+	}{
+		{name: "current", ids: []transportParameterID{resetStreamAtParameterID}},
+		{name: "legacy", ids: []transportParameterID{legacyResetStreamAtParameterID}},
+		{name: "both", ids: []transportParameterID{resetStreamAtParameterID, legacyResetStreamAtParameterID}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var data []byte
+			for _, id := range tc.ids {
+				data = quicvarint.Append(data, uint64(id))
+				data = quicvarint.Append(data, 0)
+			}
+			data = appendInitialSourceConnectionID(data)
+
+			var p TransportParameters
+			require.NoError(t, p.Unmarshal(data, protocol.PerspectiveClient))
+			require.True(t, p.EnableResetStreamAt)
+		})
+	}
+}
+
 func TestMarshalAdditionalTransportParameters(t *testing.T) {
 	origAdditionalTransportParametersClient := AdditionalTransportParametersClient
 	t.Cleanup(func() {
@@ -394,6 +418,17 @@ func TestTransportParameterErrors(t *testing.T) {
 			expectedErrMsg: "wrong length for reset_stream_at: 1 (expected empty)",
 		},
 		{
+			name: "invalid value for legacy reset_stream_at",
+			data: func() []byte {
+				b := quicvarint.Append(nil, uint64(legacyResetStreamAtParameterID))
+				b = quicvarint.Append(b, 1)
+				b = quicvarint.Append(b, 1)
+				return appendInitialSourceConnectionID(b)
+			}(),
+			perspective:    protocol.PerspectiveClient,
+			expectedErrMsg: "wrong length for reset_stream_at: 1 (expected empty)",
+		},
+		{
 			name: "min ack delay is greater than max ack delay",
 			data: func() []byte {
 				b := quicvarint.Append(nil, uint64(minAckDelayParameterID))
@@ -636,6 +671,16 @@ func TestTransportParametersFromSessionTicket(t *testing.T) {
 func TestSessionTicketInvalidTransportParameters(t *testing.T) {
 	var p TransportParameters
 	require.Error(t, p.UnmarshalFromSessionTicket([]byte("foobar")))
+}
+
+func TestSessionTicketLegacyResetStreamAtTransportParameter(t *testing.T) {
+	b := quicvarint.Append(nil, transportParameterMarshalingVersion)
+	b = quicvarint.Append(b, uint64(legacyResetStreamAtParameterID))
+	b = quicvarint.Append(b, 0)
+
+	var p TransportParameters
+	require.NoError(t, p.UnmarshalFromSessionTicket(b))
+	require.True(t, p.EnableResetStreamAt)
 }
 
 func TestSessionTicketTransportParameterVersionMismatch(t *testing.T) {

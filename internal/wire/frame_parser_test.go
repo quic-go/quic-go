@@ -452,6 +452,15 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 			allowedZeroRTT:   true,
 			allowedOneRTT:    true,
 		},
+		{
+			name:             "RESET_STREAM_AT",
+			frameType:        FrameTypeResetStreamAt,
+			frame:            &ResetStreamFrame{StreamID: 1, FinalSize: 1, ReliableSize: 1},
+			allowedInitial:   false,
+			allowedHandshake: false,
+			allowedZeroRTT:   true,
+			allowedOneRTT:    true,
+		},
 	} {
 		for _, encLevel := range []protocol.EncryptionLevel{
 			protocol.EncryptionInitial,
