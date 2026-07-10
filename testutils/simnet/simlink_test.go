@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -109,14 +110,10 @@ func TestMTUEnforcement(t *testing.T) {
 			MTU: MTU,
 		}
 
-		packetsReceived := 0
-		packetHandler := func(p Packet) {
-			packetsReceived++
-		}
-
+		var packetsReceived atomic.Uint32
 		router := &testRouter{
-			onSend: packetHandler,
-			onRecv: packetHandler,
+			onSend: func(p Packet) { packetsReceived.Add(1) },
+			onRecv: func(p Packet) { packetsReceived.Add(1) },
 		}
 		link := SimulatedLink{
 			UplinkSettings:   linkSettings,
@@ -149,8 +146,8 @@ func TestMTUEnforcement(t *testing.T) {
 		link.Close()
 
 		// Only packets within MTU should be received (2 packets: 1 from SendPacket, 1 from RecvPacket)
-		if packetsReceived != 2 {
-			t.Fatalf("expected 2 packets to be received, got %d", packetsReceived)
+		if packetsReceived.Load() != 2 {
+			t.Fatalf("expected 2 packets to be received, got %d", packetsReceived.Load())
 		}
 	})
 }
