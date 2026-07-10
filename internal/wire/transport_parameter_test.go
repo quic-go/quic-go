@@ -657,6 +657,7 @@ func TestTransportParametersValidFor0RTT(t *testing.T) {
 		MaxUniStreamNum:                6,
 		ActiveConnectionIDLimit:        7,
 		MaxDatagramFrameSize:           1000,
+		EnableResetStreamAt:            true,
 	}
 
 	tests := []struct {
@@ -668,6 +669,11 @@ func TestTransportParametersValidFor0RTT(t *testing.T) {
 			name:   "No Changes",
 			modify: func(p *TransportParameters) {},
 			valid:  true,
+		},
+		{
+			name:   "ResetStreamAt disabled",
+			modify: func(p *TransportParameters) { p.EnableResetStreamAt = false },
+			valid:  false,
 		},
 		{
 			name: "InitialMaxStreamDataBidiLocal reduced",
@@ -761,6 +767,12 @@ func TestTransportParametersValidFor0RTT(t *testing.T) {
 			require.Equal(t, tt.valid, p.ValidFor0RTT(saved))
 		})
 	}
+	t.Run("ResetStreamAt enabled", func(t *testing.T) {
+		p := *saved
+		withoutResetStreamAt := *saved
+		withoutResetStreamAt.EnableResetStreamAt = false
+		require.True(t, p.ValidFor0RTT(&withoutResetStreamAt))
+	})
 }
 
 func TestTransportParametersValidAfter0RTT(t *testing.T) {
@@ -773,6 +785,7 @@ func TestTransportParametersValidAfter0RTT(t *testing.T) {
 		MaxUniStreamNum:                6,
 		ActiveConnectionIDLimit:        7,
 		MaxDatagramFrameSize:           1000,
+		EnableResetStreamAt:            true,
 	}
 
 	tests := []struct {
@@ -784,6 +797,11 @@ func TestTransportParametersValidAfter0RTT(t *testing.T) {
 			name:   "no changes",
 			modify: func(p *TransportParameters) {},
 			reject: false,
+		},
+		{
+			name:   "ResetStreamAt disabled",
+			modify: func(p *TransportParameters) { p.EnableResetStreamAt = false },
+			reject: true,
 		},
 		{
 			name: "InitialMaxStreamDataBidiLocal reduced",
@@ -886,6 +904,12 @@ func TestTransportParametersValidAfter0RTT(t *testing.T) {
 			}
 		})
 	}
+	t.Run("ResetStreamAt enabled", func(t *testing.T) {
+		p := *saved
+		withoutResetStreamAt := *saved
+		withoutResetStreamAt.EnableResetStreamAt = false
+		require.True(t, p.ValidForUpdate(&withoutResetStreamAt))
+	})
 }
 
 func BenchmarkTransportParameters(b *testing.B) {

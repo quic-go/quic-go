@@ -530,6 +530,9 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 	if saved.MaxDatagramFrameSize != protocol.InvalidByteCount && (p.MaxDatagramFrameSize == protocol.InvalidByteCount || p.MaxDatagramFrameSize < saved.MaxDatagramFrameSize) {
 		return false
 	}
+	if saved.EnableResetStreamAt && !p.EnableResetStreamAt {
+		return false
+	}
 	return p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
 		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
 		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
@@ -543,6 +546,9 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 // It is only used on the client side.
 func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
 	if saved.MaxDatagramFrameSize != protocol.InvalidByteCount && (p.MaxDatagramFrameSize == protocol.InvalidByteCount || p.MaxDatagramFrameSize < saved.MaxDatagramFrameSize) {
+		return false
+	}
+	if saved.EnableResetStreamAt && !p.EnableResetStreamAt {
 		return false
 	}
 	return p.ActiveConnectionIDLimit >= saved.ActiveConnectionIDLimit &&
