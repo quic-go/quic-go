@@ -543,6 +543,36 @@ func TestStreamsMap0RTT(t *testing.T) {
 	require.Equal(t, protocol.ByteCount(4321), fcs[1].SendWindowSize())
 }
 
+func TestStreamsMap0RTTResetStreamAt(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled: %t", enabled), func(t *testing.T) {
+			mockSender := NewMockStreamSender(gomock.NewController(t))
+			mockSender.EXPECT().onHasStreamData(gomock.Any(), gomock.Any()).AnyTimes()
+			mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()).AnyTimes()
+			m := newStreamsMap(
+				context.Background(),
+				mockSender,
+				func(wire.Frame) {},
+				func(id protocol.StreamID) *streamFlowController {
+					return newTestStreamFlowControllerWithSendWindow(id, 1)
+				},
+				1,
+				1,
+				protocol.PerspectiveClient,
+			)
+			m.HandleTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 1, MaxUniStreamNum: 1})
+			str, err := m.OpenStream()
+			require.NoError(t, err)
+			uniStr, err := m.OpenUniStream()
+			require.NoError(t, err)
+
+			m.HandleTransportParameters(&wire.TransportParameters{EnableResetStreamAt: enabled})
+			require.Equal(t, enabled, supportsResetStreamAt(t, str))
+			require.Equal(t, enabled, sendStreamSupportsResetStreamAt(t, uniStr))
+		})
+	}
+}
+
 func TestStreamsMap0RTTRejection(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockSender := NewMockStreamSender(mockCtrl)
@@ -574,4 +604,30 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 	_, err = m.OpenStream()
 	require.Error(t, err)
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
+}
+
+func supportsResetStreamAt(t *testing.T, str *Stream) bool {
+	t.Helper()
+	_, err := str.Write([]byte{0})
+	require.NoError(t, err)
+	str.SetReliableBoundary()
+	str.CancelWrite(0)
+	frame, ok, _ := str.getControlFrame(monotime.Now())
+	require.True(t, ok)
+	reset, ok := frame.Frame.(*wire.ResetStreamFrame)
+	require.True(t, ok)
+	return reset.ReliableSize > 0
+}
+
+func sendStreamSupportsResetStreamAt(t *testing.T, str *SendStream) bool {
+	t.Helper()
+	_, err := str.Write([]byte{0})
+	require.NoError(t, err)
+	str.SetReliableBoundary()
+	str.CancelWrite(0)
+	frame, ok, _ := str.getControlFrame(monotime.Now())
+	require.True(t, ok)
+	reset, ok := frame.Frame.(*wire.ResetStreamFrame)
+	require.True(t, ok)
+	return reset.ReliableSize > 0
 }
