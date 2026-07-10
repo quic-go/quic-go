@@ -279,6 +279,7 @@ func (f *framer) Handle0RTTRejection() {
 	for id := range f.activeStreams {
 		delete(f.activeStreams, id)
 	}
+	clear(f.streamsWithControlFrames)
 	var j int
 	for i, frame := range f.controlFrames {
 		switch frame.(type) {
