@@ -464,6 +464,7 @@ func TestFramer0RTTRejection(t *testing.T) {
 	framer.QueueControlFrame(pc)
 
 	framer.AddActiveStream(10, NewMockStreamFrameGetter(gomock.NewController(t)))
+	framer.AddStreamWithControlFrames(10, NewMockStreamControlFrameGetter(gomock.NewController(t)))
 
 	framer.Handle0RTTRejection()
 	controlFrames, streamFrames, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
