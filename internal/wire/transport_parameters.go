@@ -211,6 +211,11 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			}
 			p.EnableResetStreamAt = true
 		default:
+			if fromSessionTicket {
+				// A ticket might contain a parameter for an extension supported by an older
+				// version of this endpoint. If we can't parse it, don't resume with it.
+				return fmt.Errorf("unknown transport parameter %#x in session ticket", paramID)
+			}
 			b = b[paramLen:]
 		}
 	}

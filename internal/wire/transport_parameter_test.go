@@ -462,6 +462,20 @@ func TestTransportParameterUnknownParameters(t *testing.T) {
 	require.Equal(t, protocol.ByteCount(0x42), p.InitialMaxStreamDataBidiRemote)
 }
 
+func TestSessionTicketTransportParameterRejectsUnknownParameter(t *testing.T) {
+	b := (&TransportParameters{
+		ActiveConnectionIDLimit: 2,
+		MaxDatagramFrameSize:    protocol.InvalidByteCount,
+	}).MarshalForSessionTicket(nil)
+	b = quicvarint.Append(b, 0x42)
+	b = quicvarint.Append(b, 6)
+	b = append(b, []byte("foobar")...)
+
+	var p TransportParameters
+	err := p.UnmarshalFromSessionTicket(b)
+	require.EqualError(t, err, "unknown transport parameter 0x42 in session ticket")
+}
+
 func TestTransportParameterRejectsDuplicateParameters(t *testing.T) {
 	// write first parameter
 	b := quicvarint.Append(nil, uint64(initialMaxStreamDataBidiLocalParameterID))
