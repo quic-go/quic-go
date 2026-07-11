@@ -107,7 +107,6 @@ func TestCapsuleParserRequiresConsumption(t *testing.T) {
 	require.ErrorIs(t, err, errReaderInvalid)
 	_, err = r.Read(make([]byte, 1))
 	require.ErrorIs(t, err, errReaderInvalid)
-	require.ErrorIs(t, err, errReaderInvalid)
 }
 
 func TestCopiedCapsuleReadersShareProgress(t *testing.T) {
