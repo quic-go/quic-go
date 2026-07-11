@@ -46,8 +46,12 @@ const (
 	retrySourceConnectionIDParameterID         transportParameterID = 0x10
 	// RFC 9221
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
-	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
-	resetStreamAtParameterID transportParameterID = 0x17f7586d2cb571
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/09/
+	resetStreamAtParameterID transportParameterID = 0x1d
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/07/
+	// When removing support for this codepoint, increment transportParameterMarshalingVersion
+	// to prevent 0-RTT resumption with tickets that remember it.
+	legacyResetStreamAtParameterID transportParameterID = 0x17f7586d2cb571
 	// https://datatracker.ietf.org/doc/draft-ietf-quic-ack-frequency/11/
 	minAckDelayParameterID transportParameterID = 0xff04de1b
 )
@@ -88,7 +92,7 @@ type TransportParameters struct {
 	ActiveConnectionIDLimit uint64
 
 	MaxDatagramFrameSize protocol.ByteCount // RFC 9221
-	EnableResetStreamAt  bool               // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
+	EnableResetStreamAt  bool               // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/09/
 	MinAckDelay          *time.Duration
 }
 
@@ -205,7 +209,7 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			connID := protocol.ParseConnectionID(b[:paramLen])
 			b = b[paramLen:]
 			p.RetrySourceConnectionID = &connID
-		case resetStreamAtParameterID:
+		case resetStreamAtParameterID, legacyResetStreamAtParameterID:
 			if paramLen != 0 {
 				return fmt.Errorf("wrong length for reset_stream_at: %d (expected empty)", paramLen)
 			}
