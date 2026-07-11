@@ -608,8 +608,12 @@ func TestHTTPServerIdleTimeout(t *testing.T) {
 	t.Cleanup(func() { tr.Close() })
 	cl := &http.Client{Transport: tr}
 
-	_, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 	require.NoError(t, err)
+	// Wait for the server to close the request stream and start the idle timer.
+	_, err = io.Copy(io.Discard, resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 
 	var conn *quic.Conn
 	select {
