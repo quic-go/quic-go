@@ -345,6 +345,7 @@ func (m *streamsMap) ResetFor0RTT() {
 	defer m.mutex.Unlock()
 	m.reset = true
 	m.CloseWithError(Err0RTTRejected)
+	m.supportsResetStreamAt = false
 	m.initMaps()
 }
 

@@ -606,6 +606,47 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
 }
 
+func TestStreamsMap0RTTRejectionResetStreamAt(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled: %t", enabled), func(t *testing.T) {
+			testStreamsMap0RTTRejectionResetStreamAt(t, enabled)
+		})
+	}
+}
+
+func testStreamsMap0RTTRejectionResetStreamAt(t *testing.T, enabled bool) {
+	mockSender := NewMockStreamSender(gomock.NewController(t))
+	mockSender.EXPECT().onHasStreamData(gomock.Any(), gomock.Any()).AnyTimes()
+	mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any()).AnyTimes()
+	m := newStreamsMap(
+		context.Background(),
+		mockSender,
+		func(wire.Frame) {},
+		func(id protocol.StreamID) *streamFlowController {
+			return newTestStreamFlowControllerWithSendWindow(id, 1)
+		},
+		2,
+		1,
+		protocol.PerspectiveClient,
+	)
+	m.HandleTransportParameters(&wire.TransportParameters{EnableResetStreamAt: true})
+	m.ResetFor0RTT()
+
+	// The server can send 0.5-RTT data before the handshake completes.
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: 1}, monotime.Now()))
+	m.UseResetMaps()
+
+	str, err := m.AcceptStream(context.Background())
+	require.NoError(t, err)
+	require.False(t, supportsResetStreamAt(t, str))
+
+	m.HandleTransportParameters(&wire.TransportParameters{EnableResetStreamAt: enabled})
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: 5}, monotime.Now()))
+	str, err = m.AcceptStream(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, enabled, supportsResetStreamAt(t, str))
+}
+
 func supportsResetStreamAt(t *testing.T, str *Stream) bool {
 	t.Helper()
 	_, err := str.Write([]byte{0})
