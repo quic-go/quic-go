@@ -643,7 +643,7 @@ func testClientConnGoAway(t *testing.T, withStream bool) {
 	)
 }
 
-func TestClientConnGoawayConcurrent(t *testing.T) {
+func TestClientConnGoAwayConcurrent(t *testing.T) {
 	clientConn, serverConn := newConnPair(t, withServerBidiStreamLimit(2)) // allows streams 0 and 4
 
 	cc := (&Transport{}).NewClientConn(clientConn)
