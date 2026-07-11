@@ -34,11 +34,16 @@ func NewCapsuleParser(r io.Reader) *CapsuleParser {
 	return &CapsuleParser{r: quicvarint.NewReader(r)}
 }
 
+var (
+	errReaderInvalid      = errors.New("http3: capsule reader is no longer valid")
+	errCapsuleNotConsumed = errors.New("http3: previous capsule was not fully consumed")
+)
+
 // Next returns the type and contents of the next capsule.
 // The previous capsule's contents must be fully consumed or discarded before calling Next.
 func (p *CapsuleParser) Next() (CapsuleType, CapsuleReader, error) {
 	if p.remaining > 0 {
-		return 0, CapsuleReader{}, errors.New("http3: previous capsule was not fully consumed")
+		return 0, CapsuleReader{}, errCapsuleNotConsumed
 	}
 
 	r := &countingByteReader{Reader: p.r}
@@ -72,10 +77,17 @@ type CapsuleReader struct {
 	generation uint64
 }
 
+var _ quicvarint.Reader = CapsuleReader{}
+
+// valid reports whether the reader still refers to the parser's current capsule.
+func (r CapsuleReader) valid() bool {
+	return r.parser != nil && r.generation == r.parser.generation
+}
+
 // Read reads from the capsule contents.
 func (r CapsuleReader) Read(b []byte) (int, error) {
-	if r.parser == nil || r.generation != r.parser.generation {
-		return 0, errors.New("http3: capsule reader is no longer valid")
+	if !r.valid() {
+		return 0, errReaderInvalid
 	}
 	if r.parser.remaining == 0 {
 		return 0, io.EOF
@@ -93,8 +105,8 @@ func (r CapsuleReader) Read(b []byte) (int, error) {
 
 // ReadByte reads one byte from the capsule contents.
 func (r CapsuleReader) ReadByte() (byte, error) {
-	if r.generation != r.parser.generation {
-		return 0, errors.New("http3: capsule reader is no longer valid")
+	if !r.valid() {
+		return 0, errReaderInvalid
 	}
 	if r.parser.remaining == 0 {
 		return 0, io.EOF
@@ -111,7 +123,7 @@ func (r CapsuleReader) ReadByte() (byte, error) {
 
 // Remaining returns the number of bytes remaining in the capsule.
 func (r CapsuleReader) Remaining() int64 {
-	if r.generation != r.parser.generation {
+	if !r.valid() {
 		return 0
 	}
 	return int64(r.parser.remaining)

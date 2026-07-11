@@ -93,7 +93,7 @@ func TestCapsuleParserRequiresConsumption(t *testing.T) {
 	_, err = r.ReadByte()
 	require.NoError(t, err)
 	_, _, err = p.Next()
-	require.Error(t, err)
+	require.ErrorIs(t, err, errCapsuleNotConsumed)
 
 	require.NoError(t, r.Discard())
 	ct, next, err := p.Next()
@@ -104,7 +104,10 @@ func TestCapsuleParserRequiresConsumption(t *testing.T) {
 	require.Equal(t, []byte("second"), data)
 
 	_, err = r.ReadByte()
-	require.Error(t, err)
+	require.ErrorIs(t, err, errReaderInvalid)
+	_, err = r.Read(make([]byte, 1))
+	require.ErrorIs(t, err, errReaderInvalid)
+	require.ErrorIs(t, err, errReaderInvalid)
 }
 
 func TestCopiedCapsuleReadersShareProgress(t *testing.T) {
