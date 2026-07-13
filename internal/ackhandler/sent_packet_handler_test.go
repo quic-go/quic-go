@@ -1774,6 +1774,122 @@ func TestSentPacketHandlerAdaptivePacketThreshold(t *testing.T) {
 	require.Empty(t, packets.Lost)
 }
 
+func TestSentPacketHandlerAdaptivePacketThresholdCap(t *testing.T) {
+	sph := NewSentPacketHandler(
+		0,
+		1200,
+		utils.NewRTTStats(),
+		&utils.ConnectionStats{},
+		true,
+		false,
+		nil,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	var packets packetTracker
+	start := monotime.Now()
+	var pns []protocol.PacketNumber
+	for range 67 {
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(start, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+		pns = append(pns, pn)
+	}
+
+	// Acking only pns[66] declares pns[0] through pns[63] lost (reordering depth >= 3).
+	now := start.Add(100 * time.Millisecond)
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[66])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Len(t, packets.Lost, 64)
+
+	// pns[0] arriving after all is a spurious loss with a reordering depth of 66.
+	// The adaptive threshold saturates at maxPacketThreshold instead of rising to 67.
+	now = now.Add(50 * time.Millisecond)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[64], pns[65], pns[66])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(maxPacketThreshold), sph.(*sentPacketHandler).packetThreshold)
+}
+
+func TestSentPacketHandlerAdaptiveTimeThresholdCushion(t *testing.T) {
+	sph := NewSentPacketHandler(
+		0,
+		1200,
+		utils.NewRTTStats(),
+		&utils.ConnectionStats{},
+		true,
+		false,
+		nil,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	var packets packetTracker
+	start := monotime.Now()
+	sendPacket := func(t *testing.T, ti monotime.Time) protocol.PacketNumber {
+		t.Helper()
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+		return pn
+	}
+
+	// pns[1] is sent 50ms after pns[0] and acked 100ms later (RTT: 100ms).
+	// At that point pns[0] has been outstanding for 150ms, which exceeds the
+	// time threshold (9/8 * 100ms = 112.5ms), so it is declared lost.
+	pn0 := sendPacket(t, start)
+	pn1 := sendPacket(t, start.Add(50*time.Millisecond))
+	pn2 := sendPacket(t, start.Add(100*time.Millisecond))
+	now := start.Add(150 * time.Millisecond)
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pn1)},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pn1}, packets.Acked)
+	require.Equal(t, []protocol.PacketNumber{pn0}, packets.Lost)
+
+	// pns[0] now arrives after all, 200ms after it was sent: a spurious loss with a
+	// time reordering of 200ms. The cushion grows to cover the observed extra delay
+	// (200ms - 112.5ms), while the packet threshold (reordering depth of 2) is unchanged.
+	now = start.Add(200 * time.Millisecond)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pn0, pn1, pn2)},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pn1, pn2}, packets.Acked)
+	require.Equal(t, protocol.PacketNumber(initialPacketThreshold), sph.(*sentPacketHandler).packetThreshold)
+	require.Equal(t, 87500*time.Microsecond, sph.(*sentPacketHandler).timeThresholdCushion)
+
+	// The same pattern again: with the widened time threshold (112.5ms + 87.5ms = 200ms),
+	// the first packet is no longer declared lost after being outstanding for 150ms.
+	packets.Reset()
+	later := start.Add(300 * time.Millisecond)
+	pn3 := sendPacket(t, later)
+	pn4 := sendPacket(t, later.Add(50*time.Millisecond))
+	now = later.Add(150 * time.Millisecond)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pn4)},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pn4}, packets.Acked)
+	require.Empty(t, packets.Lost)
+	_ = pn3
+}
+
 func BenchmarkSendAndAcknowledge(b *testing.B) {
 	b.Run("ack every: 2, in flight: 0", func(b *testing.B) {
 		benchmarkSendAndAcknowledge(b, 2, 0)
