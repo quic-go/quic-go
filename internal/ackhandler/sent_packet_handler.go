@@ -20,7 +20,14 @@ const (
 	// Specified as an RTT multiplier.
 	timeThreshold = 9.0 / 8
 	// Maximum reordering in packets before packet threshold loss detection considers a packet lost.
-	packetThreshold = 3
+	// This is the initial value: when spurious losses reveal that the path reorders more deeply,
+	// the per-connection threshold adapts upward (see detectSpuriousLosses), as recommended by
+	// RFC 9002, section 6.1.1.
+	initialPacketThreshold = 3
+	// The adaptive packet threshold is never raised beyond this value. Even if packet-based
+	// loss detection is effectively disabled by deep reordering, time-based detection and
+	// PTOs still detect real losses.
+	maxPacketThreshold = 64
 	// Before validating the client's address, the server won't send more than 3x bytes than it received.
 	amplificationFactor = 3
 	// We use Retry packets to derive an RTT estimate. Make sure we don't set the RTT to a super low value yet.
@@ -93,6 +100,15 @@ type sentPacketHandler struct {
 	rttStats   *utils.RTTStats
 	connStats  *utils.ConnectionStats
 
+	// packetThreshold is the packet-based loss detection threshold (RFC 9002, section 6.1.1).
+	// It starts at initialPacketThreshold and is raised (never lowered) when spurious losses
+	// show that the path reorders packets more deeply, similar to TCP RACK's reordering
+	// window (RFC 8985).
+	packetThreshold protocol.PacketNumber
+	// timeThresholdCushion widens the time-based loss detection delay when spurious losses
+	// show that packets arrive later than timeThreshold * RTT. It is capped at one smoothed RTT.
+	timeThresholdCushion time.Duration
+
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
 	ptoMode  SendMode
@@ -145,6 +161,7 @@ func NewSentPacketHandler(
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
 		lostPackets:                    *newLostPacketTracker(64),
+		packetThreshold:                initialPacketThreshold,
 		rttStats:                       rttStats,
 		connStats:                      connStats,
 		congestion:                     congestion,
@@ -520,6 +537,26 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	for _, pn := range spuriousLosses {
 		h.lostPackets.Delete(pn)
 	}
+
+	// Adapt the loss detection thresholds (RFC 9002, section 6.1.1): the path just proved
+	// that it reorders at least this deeply, so declaring that reordering depth lost only
+	// produces spurious retransmissions and needless congestion window reductions.
+	if len(spuriousLosses) > 0 {
+		if t := maxPacketReordering + 1; t > h.packetThreshold {
+			h.packetThreshold = min(t, maxPacketThreshold)
+			if h.logger.Debug() {
+				h.logger.Debugf("\traising packet reordering threshold to %d", h.packetThreshold)
+			}
+		}
+		srtt := h.rttStats.SmoothedRTT()
+		lossDelay := time.Duration(timeThreshold * float64(max(h.rttStats.LatestRTT(), srtt)))
+		if cushion := maxTimeReordering - lossDelay; cushion > h.timeThresholdCushion {
+			h.timeThresholdCushion = min(cushion, srtt)
+			if h.logger.Debug() {
+				h.logger.Debugf("\traising time threshold cushion to %s", h.timeThresholdCushion)
+			}
+		}
+	}
 }
 
 // Packets are returned in ascending packet number order.
@@ -789,7 +826,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 	pnSpace.lossTime = 0
 
 	maxRTT := float64(max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
-	lossDelay := time.Duration(timeThreshold * maxRTT)
+	lossDelay := time.Duration(timeThreshold*maxRTT) + h.timeThresholdCushion
 
 	// Minimum time of granularity before packets are deemed lost.
 	lossDelay = max(lossDelay, protocol.TimerGranularity)
@@ -820,7 +857,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 					})
 				}
 			}
-		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
+		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= h.packetThreshold {
 			packetLost = true
 			if !p.isPathProbePacket && p.IsAckEliciting() {
 				if h.logger.Debug() {

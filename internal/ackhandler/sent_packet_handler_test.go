@@ -1671,7 +1671,10 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16], pns[17], pns[18]}, packets.Acked)
-	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13], pns[14], pns[15]}, packets.Lost)
+	// The spurious losses detected on the previous ACK (reordering depth of 15) raised the
+	// adaptive packet threshold to 16, so pns[14] and pns[15] (reordering depth of 4 and 3
+	// relative to pns[18]) are no longer declared lost.
+	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13]}, packets.Lost)
 
 	require.Equal(t,
 		[]qlogwriter.Event{
@@ -1702,6 +1705,73 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		},
 		eventRecorder.Events(qlog.SpuriousLoss{}),
 	)
+}
+
+func TestSentPacketHandlerAdaptivePacketThreshold(t *testing.T) {
+	sph := NewSentPacketHandler(
+		0,
+		1200,
+		utils.NewRTTStats(),
+		&utils.ConnectionStats{},
+		true,
+		false,
+		nil,
+		protocol.PerspectiveClient,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	var packets packetTracker
+	start := monotime.Now()
+	sendPacket := func(t *testing.T, ti monotime.Time) protocol.PacketNumber {
+		t.Helper()
+		pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+		return pn
+	}
+
+	var pns []protocol.PacketNumber
+	for range 10 {
+		pns = append(pns, sendPacket(t, start))
+	}
+
+	// Acking only pns[9] declares pns[0] through pns[6] lost (reordering depth >= 3).
+	now := start.Add(100 * time.Millisecond)
+	_, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[9])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[9]}, packets.Acked)
+	require.Equal(t, []protocol.PacketNumber{pns[0], pns[1], pns[2], pns[3], pns[4], pns[5], pns[6]}, packets.Lost)
+
+	// pns[0] now arrives after all: a spurious loss with a reordering depth of 9,
+	// raising the packet threshold to 10.
+	now = now.Add(50 * time.Millisecond)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[7], pns[8], pns[9])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(10), sph.(*sentPacketHandler).packetThreshold)
+
+	// The same reordering pattern again: acking only the newest packet no longer
+	// declares anything lost, since all reordering depths are below the threshold.
+	packets.Reset()
+	for range 10 {
+		pns = append(pns, sendPacket(t, now))
+	}
+	now = now.Add(100 * time.Millisecond)
+	_, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[19])},
+		protocol.Encryption1RTT,
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{pns[19]}, packets.Acked)
+	require.Empty(t, packets.Lost)
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {
