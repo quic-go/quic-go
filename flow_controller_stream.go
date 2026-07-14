@@ -127,15 +127,12 @@ func (c *streamFlowController) UpdateSendWindow(offset protocol.ByteCount) (upda
 	return false
 }
 
-func (c *streamFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
-	if c.bytesSent > c.sendWindow || n > c.sendWindow-c.bytesSent {
-		return false
-	}
-	if !c.connection.TryAddBytesSent(n) {
-		return false
-	}
+// ReserveBytesSent reserves the largest amount allowed by stream and connection flow control,
+// but reserves nothing unless at least minimum bytes are available.
+func (c *streamFlowController) ReserveBytesSent(minimum, maximum protocol.ByteCount) protocol.ByteCount {
+	n := c.connection.ReserveBytesSent(minimum, min(maximum, c.sendWindow-c.bytesSent))
 	c.bytesSent += n
-	return true
+	return n
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {

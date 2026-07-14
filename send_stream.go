@@ -105,53 +105,76 @@ func (s *SendStream) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// TryWrite writes as much data as possible without blocking.
+// It doesn't block for flow control credit or concurrent Write calls, and doesn't respect the write deadline.
+// If the entire slice can't be queued immediately, it returns the number of bytes queued and [ErrWouldBlock].
+func (s *SendStream) TryWrite(p []byte) (int, error) {
+	return s.writeNonblocking(p, true)
+}
+
 // TryWriteAll writes data to the stream if it can be queued immediately.
 // It doesn't block for flow control credit and doesn't respect the write deadline.
 // If the entire slice can't be queued immediately, it queues nothing and returns [ErrWouldBlock].
 func (s *SendStream) TryWriteAll(p []byte) error {
+	_, err := s.writeNonblocking(p, false)
+	return err
+}
+
+func (s *SendStream) writeNonblocking(p []byte, partial bool) (int, error) {
+	if partial && len(p) == 0 {
+		return 0, nil
+	}
 	select {
 	case s.writeOnce <- struct{}{}:
 		defer func() { <-s.writeOnce }()
 	default:
-		return ErrWouldBlock
+		return 0, ErrWouldBlock
 	}
 
-	isNewlyCompleted, hasData, err := s.tryWriteAll(p)
+	isNewlyCompleted, n, hasData, err := s.tryWrite(p, partial)
 	if isNewlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
 	}
 	if hasData {
 		s.sender.onHasStreamData(s.streamID, s)
 	}
-	return err
+	return n, err
 }
 
-func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool /* has data */, error) {
+func (s *SendStream) tryWrite(p []byte, partial bool) (bool /* is newly completed */, int, bool /* has data */, error) {
 	// This might wait briefly while a packet is dequeuing stream data.
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if s.resetErr != nil {
 		s.cancellationFlagged = true
-		return s.isNewlyCompleted(), false, s.resetErr
+		return s.isNewlyCompleted(), 0, false, s.resetErr
 	}
 	if s.shutdownErr != nil {
-		return false, false, s.shutdownErr
+		return false, 0, false, s.shutdownErr
 	}
 	if s.finishedWriting {
-		return false, false, fmt.Errorf("write on closed stream %d", s.streamID)
+		return false, 0, false, fmt.Errorf("write on closed stream %d", s.streamID)
 	}
 	if len(p) == 0 {
-		return false, false, nil
+		return false, 0, false, nil
 	}
 
-	bytesToReserve := protocol.ByteCount(len(p))
+	maximum := protocol.ByteCount(len(p))
+	var unreserved protocol.ByteCount
 	if s.nextFrame != nil && !s.nextFrameReserved {
-		bytesToReserve += s.nextFrame.DataLen()
+		unreserved = s.nextFrame.DataLen()
+		maximum += unreserved
 	}
-	if !s.flowController.TryAddBytesSent(bytesToReserve) {
-		return false, false, ErrWouldBlock
+	minimum := maximum
+	if partial {
+		minimum = max(1, unreserved)
 	}
+	reserved := s.flowController.ReserveBytesSent(minimum, maximum)
+	if reserved == 0 {
+		return false, 0, false, ErrWouldBlock
+	}
+	n := int(reserved - unreserved)
 
 	if s.nextFrame == nil {
 		s.nextFrame = wire.GetStreamFrame()
@@ -161,24 +184,27 @@ func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool 
 		s.nextFrame.Data = s.nextFrame.Data[:0]
 	}
 	l := len(s.nextFrame.Data)
-	if l+len(p) > cap(s.nextFrame.Data) {
+	if l+n > cap(s.nextFrame.Data) {
 		// Pooled STREAM frames must keep their packet-sized buffer.
 		// Use a non-pooled frame when the queued data grows beyond that.
 		nextFrame := &wire.StreamFrame{
 			StreamID:       s.streamID,
 			Offset:         s.nextFrame.Offset,
 			DataLenPresent: true,
-			Data:           make([]byte, l+len(p)),
+			Data:           make([]byte, l+n),
 		}
 		copy(nextFrame.Data, s.nextFrame.Data)
 		s.nextFrame.PutBack()
 		s.nextFrame = nextFrame
 	} else {
-		s.nextFrame.Data = s.nextFrame.Data[:l+len(p)]
+		s.nextFrame.Data = s.nextFrame.Data[:l+n]
 	}
-	copy(s.nextFrame.Data[l:], p)
+	copy(s.nextFrame.Data[l:], p[:n])
 	s.nextFrameReserved = true
-	return false, true, nil
+	if n < len(p) {
+		return false, n, true, ErrWouldBlock
+	}
+	return false, n, true, nil
 }
 
 func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error) {
@@ -377,7 +403,7 @@ func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	if maxDataLen == 0 {
 		return nil, nil, true
 	}
-	if !s.nextFrameReserved && !s.flowController.TryAddBytesSent(maxDataLen) {
+	if !s.nextFrameReserved && s.flowController.ReserveBytesSent(maxDataLen, maxDataLen) != maxDataLen {
 		return nil, nil, true
 	}
 	f, hasMoreData := s.popNewStreamFrame(maxDataLen)

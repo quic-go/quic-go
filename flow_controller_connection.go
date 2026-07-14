@@ -14,7 +14,7 @@ import (
 type connectionFlowController struct {
 	receiveFlowController
 
-	// Protects send-side state, which TryWriteAll can access from application goroutines.
+	// Protects send-side state, which TryWrite and TryWriteAll can access from application goroutines.
 	sendMutex     sync.Mutex
 	bytesSent     protocol.ByteCount
 	sendWindow    protocol.ByteCount
@@ -70,15 +70,16 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) (hasWindow
 	return c.hasWindowUpdate()
 }
 
-func (c *connectionFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
+func (c *connectionFlowController) ReserveBytesSent(minimum, maximum protocol.ByteCount) protocol.ByteCount {
 	c.sendMutex.Lock()
 	defer c.sendMutex.Unlock()
 
-	if c.bytesSent > c.sendWindow || n > c.sendWindow-c.bytesSent {
-		return false
+	n := min(maximum, max(0, c.sendWindow-c.bytesSent))
+	if n < minimum {
+		return 0
 	}
 	c.bytesSent += n
-	return true
+	return n
 }
 
 // UpdateSendWindow is called after receiving a MAX_DATA frame.

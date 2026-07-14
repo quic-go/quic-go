@@ -155,10 +155,10 @@ func TestStreamSendWindow(t *testing.T) {
 	)
 	// first, we're limited by the stream flow controller
 	require.Equal(t, protocol.ByteCount(100), fc.SendWindowSize())
-	require.True(t, fc.TryAddBytesSent(50))
+	require.Equal(t, protocol.ByteCount(50), fc.ReserveBytesSent(50, 50))
 	require.False(t, fc.IsNewlyBlocked())
 	require.Equal(t, protocol.ByteCount(50), fc.SendWindowSize())
-	require.True(t, fc.TryAddBytesSent(50))
+	require.Equal(t, protocol.ByteCount(50), fc.ReserveBytesSent(50, 50))
 	require.True(t, fc.IsNewlyBlocked())
 	require.Zero(t, fc.SendWindowSize())
 	require.False(t, fc.IsNewlyBlocked()) // we're still blocked, but it's not new
@@ -171,12 +171,12 @@ func TestStreamSendWindow(t *testing.T) {
 
 	require.False(t, fc.IsNewlyBlocked()) // we're not blocked anymore
 	require.Equal(t, protocol.ByteCount(200), fc.SendWindowSize())
-	require.True(t, fc.TryAddBytesSent(200))
+	require.Equal(t, protocol.ByteCount(200), fc.ReserveBytesSent(200, 200))
 	require.Zero(t, fc.SendWindowSize())
 	require.False(t, fc.IsNewlyBlocked()) // we're blocked, but not on stream flow control
 }
 
-func TestStreamFlowControllerTryAddBytesSent(t *testing.T) {
+func TestStreamFlowControllerReserveBytesSent(t *testing.T) {
 	connFC := newConnectionFlowController(
 		protocol.MaxByteCount,
 		protocol.MaxByteCount,
@@ -195,9 +195,12 @@ func TestStreamFlowControllerTryAddBytesSent(t *testing.T) {
 		utils.DefaultLogger,
 	)
 
-	require.True(t, fc.TryAddBytesSent(6))
-	require.False(t, fc.TryAddBytesSent(5))
+	require.Equal(t, protocol.ByteCount(6), fc.ReserveBytesSent(6, 6))
+	require.Zero(t, fc.ReserveBytesSent(5, 5))
 	require.Equal(t, protocol.ByteCount(4), connFC.SendWindowSize())
+	require.Equal(t, protocol.ByteCount(4), fc.ReserveBytesSent(3, 5))
+	require.Zero(t, fc.SendWindowSize())
+	require.Zero(t, connFC.SendWindowSize())
 }
 
 func TestStreamWindowUpdate(t *testing.T) {

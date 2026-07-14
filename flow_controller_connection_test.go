@@ -64,10 +64,18 @@ func TestConnectionFlowControlViolation(t *testing.T) {
 func TestConnectionFlowControllerReset(t *testing.T) {
 	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 	fc.UpdateSendWindow(100)
-	require.True(t, fc.TryAddBytesSent(10))
+	require.Equal(t, protocol.ByteCount(10), fc.ReserveBytesSent(10, 10))
 	require.Equal(t, protocol.ByteCount(90), fc.SendWindowSize())
 	require.NoError(t, fc.Reset())
 	require.Zero(t, fc.SendWindowSize())
+}
+
+func TestConnectionFlowControllerReserveBytesSent(t *testing.T) {
+	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+	fc.UpdateSendWindow(10)
+	require.Equal(t, protocol.ByteCount(8), fc.ReserveBytesSent(6, 8))
+	require.Zero(t, fc.ReserveBytesSent(3, 5))
+	require.Equal(t, protocol.ByteCount(2), fc.SendWindowSize())
 }
 
 func TestConnectionFlowControllerResetAfterReading(t *testing.T) {
