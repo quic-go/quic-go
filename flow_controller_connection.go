@@ -97,9 +97,6 @@ func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
 	c.sendMutex.Lock()
 	defer c.sendMutex.Unlock()
 
-	if c.bytesSent > c.sendWindow {
-		return 0
-	}
 	return c.sendWindow - c.bytesSent
 }
 

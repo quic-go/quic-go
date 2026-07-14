@@ -139,10 +139,6 @@ func (c *streamFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
-	if c.bytesSent > c.sendWindow {
-		return 0
-	}
 	return min(c.sendWindow-c.bytesSent, c.connection.SendWindowSize())
 }
 
