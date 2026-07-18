@@ -9,11 +9,69 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestWriteWithLimitStreamFlowControl(t *testing.T) {
+	testWriteWithLimitFlowControl(t, &quic.Config{
+		InitialStreamReceiveWindow:     100,
+		InitialConnectionReceiveWindow: quicvarint.Max,
+	})
+}
+
+func TestWriteWithLimitConnectionFlowControl(t *testing.T) {
+	testWriteWithLimitFlowControl(t, &quic.Config{
+		InitialStreamReceiveWindow:     quicvarint.Max,
+		InitialConnectionReceiveWindow: 100,
+	})
+}
+
+func testWriteWithLimitFlowControl(t *testing.T, config *quic.Config) {
+	ln, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(config))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	deadline := time.Now().Add(time.Second)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	client, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer client.CloseWithError(0, "")
+
+	server, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	str, err := client.OpenUniStreamSync(ctx)
+	require.NoError(t, err)
+	require.NoError(t, str.SetWriteDeadline(deadline))
+
+	data := GeneratePRData(101)
+	n, err := str.WriteWithLimit(data, func(maxBytes int) int {
+		return min(maxBytes, 25)
+	})
+	require.Equal(t, 25, n)
+	require.ErrorIs(t, err, quic.ErrWriteLimitReached)
+
+	receiveStr, err := server.AcceptUniStream(ctx)
+	require.NoError(t, err)
+	require.NoError(t, receiveStr.SetReadDeadline(deadline))
+	received := make([]byte, n)
+	_, err = io.ReadFull(receiveStr, received)
+	require.NoError(t, err)
+	require.Equal(t, data[:n], received)
+
+	written, err := str.WriteWithLimit(data[n:], func(maxBytes int) int { return maxBytes })
+	require.Equal(t, len(data)-n, written)
+	require.NoError(t, err)
+
+	require.NoError(t, str.Close())
+	rest, err := io.ReadAll(receiveStr)
+	require.NoError(t, err)
+	require.Equal(t, data, append(received, rest...))
+}
 
 func TestBidirectionalStreamMultiplexing(t *testing.T) {
 	const numStreams = 75
