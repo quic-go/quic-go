@@ -112,6 +112,21 @@ func (s *SendStream) TryWrite(p []byte) (int, error) {
 	return s.writeNonblocking(p, true)
 }
 
+// WriteCreditAvailable returns a channel that's closed when [SendStream.TryWrite] can make flow-control progress.
+// The channel is already closed if flow-control credit is currently available.
+// Otherwise, it is closed when the limiting stream- or connection-level flow-control window increases.
+// It only signals flow-control availability. Callers must retry TryWrite and watch Context().Done() for cancellation.
+func (s *SendStream) WriteCreditAvailable() <-chan struct{} {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	minimum := protocol.ByteCount(1)
+	if s.nextFrame != nil && !s.nextFrameReserved {
+		minimum += s.nextFrame.DataLen()
+	}
+	return s.flowController.WriteCreditAvailable(minimum)
+}
+
 // TryWriteAll writes data to the stream if it can be queued immediately.
 // It doesn't block for flow control credit and doesn't respect the write deadline.
 // If the entire slice can't be queued immediately, it queues nothing and returns [ErrWouldBlock].

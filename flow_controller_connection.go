@@ -14,11 +14,12 @@ import (
 type connectionFlowController struct {
 	receiveFlowController
 
-	// Protects send-side state, which TryWrite and TryWriteAll can access from application goroutines.
-	sendMutex     sync.Mutex
-	bytesSent     protocol.ByteCount
-	sendWindow    protocol.ByteCount
-	lastBlockedAt protocol.ByteCount
+	// Protects send-side state accessed from application goroutines.
+	sendMutex         sync.Mutex
+	bytesSent         protocol.ByteCount
+	sendWindow        protocol.ByteCount
+	lastBlockedAt     protocol.ByteCount
+	sendWindowUpdated chan struct{}
 }
 
 // newConnectionFlowController gets a new flow controller for the connection.
@@ -89,9 +90,24 @@ func (c *connectionFlowController) UpdateSendWindow(offset protocol.ByteCount) (
 
 	if offset > c.sendWindow {
 		c.sendWindow = offset
+		if c.sendWindowUpdated != nil {
+			close(c.sendWindowUpdated)
+			c.sendWindowUpdated = nil
+		}
 		return true
 	}
 	return false
+}
+
+// WriteCredit returns the current credit and the channel for the next update atomically.
+func (c *connectionFlowController) WriteCredit() (protocol.ByteCount, <-chan struct{}) {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	if c.sendWindowUpdated == nil {
+		c.sendWindowUpdated = make(chan struct{})
+	}
+	return max(0, c.sendWindow-c.bytesSent), c.sendWindowUpdated
 }
 
 func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {

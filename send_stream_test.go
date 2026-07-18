@@ -254,6 +254,87 @@ func TestSendStreamTryWriteFlowControlBlocked(t *testing.T) {
 	}
 }
 
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+func TestSendStreamWriteCreditAvailable(t *testing.T) {
+	const streamID protocol.StreamID = 42
+
+	t.Run("stream-level blocking", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 3)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str).Times(2)
+		n, err := str.TryWrite([]byte("foobar"))
+		require.Equal(t, 3, n)
+		require.ErrorIs(t, err, ErrWouldBlock)
+		credit := str.WriteCreditAvailable()
+		require.False(t, isClosed(credit))
+
+		str.updateSendWindow(4)
+		require.True(t, isClosed(credit))
+	})
+
+	t.Run("connection-level blocking", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
+		mockFC.connection.sendWindow = 3
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str)
+		n, err := str.TryWrite([]byte("foobar"))
+		require.Equal(t, 3, n)
+		require.ErrorIs(t, err, ErrWouldBlock)
+		credit := str.WriteCreditAvailable()
+		require.False(t, isClosed(credit))
+
+		mockFC.connection.UpdateSendWindow(4)
+		require.True(t, isClosed(credit))
+	})
+
+	t.Run("already available", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 1)
+		str := newSendStream(context.Background(), streamID, NewMockStreamSender(mockCtrl), mockFC, false)
+
+		require.True(t, isClosed(str.WriteCreditAvailable()))
+	})
+
+	t.Run("update before call", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
+		mockFC.connection.sendWindow = 0
+		str := newSendStream(context.Background(), streamID, NewMockStreamSender(mockCtrl), mockFC, false)
+
+		_, err := str.TryWrite([]byte("foo"))
+		require.ErrorIs(t, err, ErrWouldBlock)
+		mockFC.connection.UpdateSendWindow(1)
+		require.True(t, isClosed(str.WriteCreditAvailable()))
+	})
+
+	t.Run("unreserved buffered data", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 3)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str)
+		n, err := str.Write([]byte("foo"))
+		require.Equal(t, 3, n)
+		require.NoError(t, err)
+		require.False(t, isClosed(str.WriteCreditAvailable()))
+	})
+}
+
 func TestSendStreamTryWriteAfterBufferedWrite(t *testing.T) {
 	const streamID protocol.StreamID = 42
 

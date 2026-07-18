@@ -144,6 +144,12 @@ func (s *Stream) TryWrite(p []byte) (int, error) {
 	return s.sendStr.TryWrite(p)
 }
 
+// WriteCreditAvailable returns a channel that's closed when [Stream.TryWrite] can make flow-control progress.
+// See [SendStream.WriteCreditAvailable] for more details.
+func (s *Stream) WriteCreditAvailable() <-chan struct{} {
+	return s.sendStr.WriteCreditAvailable()
+}
+
 // SetReliableBoundary marks the data written to this stream so far as reliable.
 // It is valid to call this function multiple times, thereby increasing the reliable size.
 // It only has an effect if the peer enabled support for the RESET_STREAM_AT extension,

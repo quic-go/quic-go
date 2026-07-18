@@ -12,9 +12,10 @@ import (
 type streamFlowController struct {
 	receiveFlowController
 
-	bytesSent     protocol.ByteCount
-	sendWindow    protocol.ByteCount
-	lastBlockedAt protocol.ByteCount
+	bytesSent         protocol.ByteCount
+	sendWindow        protocol.ByteCount
+	lastBlockedAt     protocol.ByteCount
+	sendWindowUpdated chan struct{}
 
 	streamID protocol.StreamID
 
@@ -122,6 +123,10 @@ func (c *streamFlowController) Abandon() {
 func (c *streamFlowController) UpdateSendWindow(offset protocol.ByteCount) (updated bool) {
 	if offset > c.sendWindow {
 		c.sendWindow = offset
+		if c.sendWindowUpdated != nil {
+			close(c.sendWindowUpdated)
+			c.sendWindowUpdated = nil
+		}
 		return true
 	}
 	return false
@@ -137,6 +142,25 @@ func (c *streamFlowController) ReserveBytesSent(minimum, maximum protocol.ByteCo
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return min(c.sendWindow-c.bytesSent, c.connection.SendWindowSize())
+}
+
+// WriteCreditAvailable returns a channel that is closed when at least minimum bytes of send credit are available.
+// minimum includes credit for unreserved buffered STREAM data and one new byte.
+func (c *streamFlowController) WriteCreditAvailable(minimum protocol.ByteCount) <-chan struct{} {
+	streamCredit := c.sendWindow - c.bytesSent
+	connCredit, connUpdated := c.connection.WriteCredit()
+	if min(streamCredit, connCredit) >= minimum {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	if streamCredit <= connCredit {
+		if c.sendWindowUpdated == nil {
+			c.sendWindowUpdated = make(chan struct{})
+		}
+		return c.sendWindowUpdated
+	}
+	return connUpdated
 }
 
 func (c *streamFlowController) IsNewlyBlocked() bool {
