@@ -96,6 +96,13 @@ func TestRequestWriterInvalidHostHeader(t *testing.T) {
 	)
 }
 
+func TestRequestWriterInvalidHeaderValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+	req.Header.Set("Authorization", "Bearer secret\x00")
+	err := newRequestWriter().WriteRequestHeader(&bytes.Buffer{}, req, false, 0, nil)
+	require.EqualError(t, err, `invalid HTTP header value for header "Authorization"`)
+}
+
 func TestRequestWriterConnect(t *testing.T) {
 	// httptest.NewRequest does not properly support the CONNECT method
 	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)
