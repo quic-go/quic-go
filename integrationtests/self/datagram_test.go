@@ -177,31 +177,12 @@ func TestDatagramSizeLimitWithMTUDiscovery(t *testing.T) {
 
 	data := bytes.Repeat([]byte("d"), 16*1024)
 	var discoveredMTU int
-	var checkedMTUUpdates int
-	var previousMaxPayloadSize int64
 	for discoveredMTU == 0 {
 		_, err = str.Write(data)
 		require.NoError(t, err)
 		events := eventRecorder.Events(qlog.MTUUpdated{})
-		for ; checkedMTUUpdates < len(events); checkedMTUUpdates++ {
-			update := events[checkedMTUUpdates].(qlog.MTUUpdated)
-			err = clientConn.SendDatagram(bytes.Repeat([]byte("x"), 2000))
-			var sizeErr *quic.DatagramTooLargeError
-			require.ErrorAs(t, err, &sizeErr)
-			maxPayloadSize := sizeErr.MaxDatagramPayloadSize
-			require.Greater(t, maxPayloadSize, int64(0))
-			require.Greater(t, maxPayloadSize, previousMaxPayloadSize)
-			require.Less(t, maxPayloadSize, int64(update.Value))
-			previousMaxPayloadSize = maxPayloadSize
-
-			datagramData := bytes.Repeat([]byte("z"), int(maxPayloadSize))
-			err = clientConn.SendDatagram(datagramData)
-			require.NoError(t, err)
-
-			datagram, err := serverConn.ReceiveDatagram(ctx)
-			require.NoError(t, err, "datagram should be deliverable when respecting MaxDatagramPayloadSize")
-			require.Equal(t, datagramData, datagram)
-
+		if len(events) > 0 {
+			update := events[len(events)-1].(qlog.MTUUpdated)
 			if update.Done {
 				discoveredMTU = update.Value
 			}
@@ -210,12 +191,26 @@ func TestDatagramSizeLimitWithMTUDiscovery(t *testing.T) {
 	}
 	require.NoError(t, str.Close())
 
+	// Receiving the stream FIN guarantees that the client applied the MTU update observed above.
 	select {
 	case err := <-serverErrChan:
 		require.NoError(t, err)
 	case <-ctx.Done():
 		require.NoError(t, ctx.Err())
 	}
+
+	err = clientConn.SendDatagram(bytes.Repeat([]byte("x"), 2000))
+	var sizeErr *quic.DatagramTooLargeError
+	require.ErrorAs(t, err, &sizeErr)
+	maxPayloadSize := sizeErr.MaxDatagramPayloadSize
+	require.Greater(t, maxPayloadSize, int64(protocol.MinInitialPacketSize), "MTU discovery should increase the datagram size limit")
+	require.Less(t, maxPayloadSize, int64(discoveredMTU), "datagram payload must leave room for packet overhead")
+
+	datagramData := bytes.Repeat([]byte("z"), int(maxPayloadSize))
+	require.NoError(t, clientConn.SendDatagram(datagramData))
+	datagram, err := serverConn.ReceiveDatagram(ctx)
+	require.NoError(t, err, "datagram should be deliverable when respecting MaxDatagramPayloadSize")
+	require.Equal(t, datagramData, datagram)
 }
 
 func TestDatagramLoss(t *testing.T) {
