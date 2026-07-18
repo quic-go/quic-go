@@ -9,8 +9,9 @@ import (
 )
 
 type qmuxPacker struct {
-	state  *qmuxState
-	framer *framer
+	state         *qmuxState
+	framer        *framer
+	datagramQueue *datagramQueue
 }
 
 var _ packer = &qmuxPacker{}
@@ -38,6 +39,26 @@ func (p *qmuxPacker) AppendPacket(buf *packetBuffer, maxSize protocol.ByteCount,
 		buf.Data, err = f.Append(buf.Data, v)
 		if err != nil {
 			return shortHeaderPacket{}, err
+		}
+	}
+
+	if p.datagramQueue != nil {
+		if f := p.datagramQueue.Peek(); f != nil {
+			// Pack DATAGRAM before STREAM frames. A final STREAM frame can omit its length and then consumes
+			// the rest of the record by definition.
+			payloadLen := protocol.ByteCount(len(buf.Data) - recordStart - prefixLen)
+			if payloadLen+f.Length(v) <= maxRecordSize {
+				frames = append(frames, ackhandler.Frame{Frame: f})
+				var err error
+				buf.Data, err = f.Append(buf.Data, v)
+				if err != nil {
+					return shortHeaderPacket{}, err
+				}
+				p.datagramQueue.Pop()
+			} else if payloadLen == 0 {
+				// This should not happen, since SendDatagram checks that the DATAGRAM fits before admitting it to the queue.
+				p.datagramQueue.Pop()
+			}
 		}
 	}
 

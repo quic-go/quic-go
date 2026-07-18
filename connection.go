@@ -2593,7 +2593,10 @@ func (c *Conn) applyTransportParameters() {
 	c.streamsMap.HandleTransportParameters(params)
 	if c.qmux != nil {
 		c.connFlowController.UpdateSendWindow(params.InitialMaxData)
-		c.maxPayloadSizeEstimate.Store(uint32(params.MaxRecordSize))
+		// Use the effective record size (capped to the packet buffer size), not the peer's
+		// raw max_record_size, and account for the DATAGRAM frame header, so that every
+		// datagram accepted by SendDatagram fits into a record.
+		c.maxPayloadSizeEstimate.Store(uint32(c.qmux.maxDatagramPayloadSize()))
 		return
 	}
 	c.frameParser.SetAckDelayExponent(params.AckDelayExponent)

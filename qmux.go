@@ -132,7 +132,7 @@ func newQMuxConnection(ctx context.Context, conn net.Conn, perspective protocol.
 		c.queueControlFrame,
 		zeroLengthConnectionIDGenerator{},
 	)
-	c.packer = &qmuxPacker{state: state, framer: c.framer}
+	c.packer = &qmuxPacker{state: state, framer: c.framer, datagramQueue: c.datagramQueue}
 	c.peerParams = peerParams
 	c.applyTransportParameters()
 	close(c.handshakeCompleteChan)
@@ -172,6 +172,15 @@ func effectiveQMuxMaxRecordSize(peerMaxRecordSize protocol.ByteCount) protocol.B
 	return min(peerMaxRecordSize, maxSize)
 }
 
+// maxDatagramPayloadSize returns the largest DATAGRAM frame payload that is guaranteed to fit
+// into a record: the effective record size minus the frame's type byte and the worst-case
+// length encoding. Using this as the payload size estimate ensures that any datagram accepted
+// by SendDatagram can actually be packed (QMux runs over a reliable transport, so a datagram
+// that can never be sent would otherwise be dropped silently).
+func (s *qmuxState) maxDatagramPayloadSize() protocol.ByteCount {
+	return s.maxRecordSize - 1 /* frame type */ - protocol.ByteCount(quicvarint.Len(uint64(s.maxRecordSize)))
+}
+
 func newQMuxTransportParameters(conf *Config) *wire.TransportParameters {
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(conf.InitialStreamReceiveWindow),
@@ -183,6 +192,9 @@ func newQMuxTransportParameters(conf *Config) *wire.TransportParameters {
 		MaxUniStreamNum:                protocol.StreamNum(conf.MaxIncomingUniStreams),
 		MaxDatagramFrameSize:           protocol.InvalidByteCount,
 		MaxRecordSize:                  wire.DefaultMaxRecordSize,
+	}
+	if conf.EnableDatagrams {
+		params.MaxDatagramFrameSize = wire.MaxDatagramSize
 	}
 	return params
 }
