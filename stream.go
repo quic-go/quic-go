@@ -132,10 +132,10 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return s.sendStr.Write(p)
 }
 
-// WriteImmediately writes data to the stream if it can be queued immediately.
-// See [SendStream.WriteImmediately] for more details.
-func (s *Stream) WriteImmediately(p []byte) error {
-	return s.sendStr.WriteImmediately(p)
+// TryWriteAll writes data to the stream if it can be queued immediately.
+// See [SendStream.TryWriteAll] for more details.
+func (s *Stream) TryWriteAll(p []byte) error {
+	return s.sendStr.TryWriteAll(p)
 }
 
 // SetReliableBoundary marks the data written to this stream so far as reliable.

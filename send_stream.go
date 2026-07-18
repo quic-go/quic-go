@@ -105,10 +105,10 @@ func (s *SendStream) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// WriteImmediately writes data to the stream if it can be queued immediately.
+// TryWriteAll writes data to the stream if it can be queued immediately.
 // It doesn't block for flow control credit and doesn't respect the write deadline.
 // If the entire slice can't be queued immediately, it queues nothing and returns [ErrWouldBlock].
-func (s *SendStream) WriteImmediately(p []byte) error {
+func (s *SendStream) TryWriteAll(p []byte) error {
 	select {
 	case s.writeOnce <- struct{}{}:
 		defer func() { <-s.writeOnce }()
@@ -116,7 +116,7 @@ func (s *SendStream) WriteImmediately(p []byte) error {
 		return ErrWouldBlock
 	}
 
-	isNewlyCompleted, hasData, err := s.writeImmediately(p)
+	isNewlyCompleted, hasData, err := s.tryWriteAll(p)
 	if isNewlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
 	}
@@ -126,7 +126,7 @@ func (s *SendStream) WriteImmediately(p []byte) error {
 	return err
 }
 
-func (s *SendStream) writeImmediately(p []byte) (bool /* is newly completed */, bool /* has data */, error) {
+func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool /* has data */, error) {
 	// This might wait briefly while a packet is dequeuing stream data.
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

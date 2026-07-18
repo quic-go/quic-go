@@ -58,7 +58,7 @@ type TokenStore interface {
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// ErrWouldBlock is returned by [SendStream.WriteImmediately] if the entire slice can't be queued immediately.
+// ErrWouldBlock is returned by [SendStream.TryWriteAll] if the entire slice can't be queued immediately.
 var ErrWouldBlock = errors.New("operation would block")
 
 // QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the

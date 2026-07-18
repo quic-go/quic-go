@@ -14,7 +14,7 @@ import (
 type connectionFlowController struct {
 	receiveFlowController
 
-	// Protects send-side state, which WriteImmediately can access from application goroutines.
+	// Protects send-side state, which TryWriteAll can access from application goroutines.
 	sendMutex     sync.Mutex
 	bytesSent     protocol.ByteCount
 	sendWindow    protocol.ByteCount
