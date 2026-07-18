@@ -10,18 +10,18 @@ func TestInvalidStreamIDSmallerThanAllValidStreamIDs(t *testing.T) {
 	require.Less(t, InvalidStreamID, StreamID(0))
 }
 
-func TestStreamIDInitiatedBy(t *testing.T) {
-	require.Equal(t, PerspectiveClient, StreamID(4).InitiatedBy())
-	require.Equal(t, PerspectiveServer, StreamID(5).InitiatedBy())
-	require.Equal(t, PerspectiveClient, StreamID(6).InitiatedBy())
-	require.Equal(t, PerspectiveServer, StreamID(7).InitiatedBy())
+func TestStreamInitiator(t *testing.T) {
+	require.Equal(t, PerspectiveClient, StreamInitiator(4))
+	require.Equal(t, PerspectiveServer, StreamInitiator(5))
+	require.Equal(t, PerspectiveClient, StreamInitiator(6))
+	require.Equal(t, PerspectiveServer, StreamInitiator(7))
 }
 
-func TestStreamIDType(t *testing.T) {
-	require.Equal(t, StreamTypeBidi, StreamID(4).Type())
-	require.Equal(t, StreamTypeBidi, StreamID(5).Type())
-	require.Equal(t, StreamTypeUni, StreamID(6).Type())
-	require.Equal(t, StreamTypeUni, StreamID(7).Type())
+func TestStreamTypeOf(t *testing.T) {
+	require.Equal(t, StreamTypeBidi, StreamTypeOf(4))
+	require.Equal(t, StreamTypeBidi, StreamTypeOf(5))
+	require.Equal(t, StreamTypeUni, StreamTypeOf(6))
+	require.Equal(t, StreamTypeUni, StreamTypeOf(7))
 }
 
 func TestStreamIDStreamNum(t *testing.T) {
