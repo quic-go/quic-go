@@ -76,7 +76,7 @@ func newReceiveStream(
 }
 
 // StreamID returns the stream ID.
-func (s *ReceiveStream) StreamID() protocol.StreamID {
+func (s *ReceiveStream) StreamID() StreamID {
 	return s.streamID
 }
 
