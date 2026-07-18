@@ -164,14 +164,14 @@ func (m *streamsMap) AcceptUniStream(ctx context.Context) (*ReceiveStream, error
 }
 
 func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
-	switch id.Type() {
+	switch protocol.StreamTypeOf(id) {
 	case protocol.StreamTypeUni:
-		if id.InitiatedBy() == m.perspective {
+		if protocol.StreamInitiator(id) == m.perspective {
 			return m.outgoingUniStreams.DeleteStream(id)
 		}
 		return m.incomingUniStreams.DeleteStream(id)
 	case protocol.StreamTypeBidi:
-		if id.InitiatedBy() == m.perspective {
+		if protocol.StreamInitiator(id) == m.perspective {
 			return m.outgoingBidiStreams.DeleteStream(id)
 		}
 		return m.incomingBidiStreams.DeleteStream(id)
@@ -194,9 +194,9 @@ type sendStreamFrameHandler interface {
 }
 
 func (m *streamsMap) getSendStream(id protocol.StreamID) (sendStreamFrameHandler, error) {
-	switch id.Type() {
+	switch protocol.StreamTypeOf(id) {
 	case protocol.StreamTypeUni:
-		if id.InitiatedBy() != m.perspective {
+		if protocol.StreamInitiator(id) != m.perspective {
 			// an outgoing unidirectional stream is a send stream, not a receive stream
 			return nil, &qerr.TransportError{
 				ErrorCode:    qerr.StreamStateError,
@@ -209,7 +209,7 @@ func (m *streamsMap) getSendStream(id protocol.StreamID) (sendStreamFrameHandler
 		}
 		return str, nil
 	case protocol.StreamTypeBidi:
-		if id.InitiatedBy() == m.perspective {
+		if protocol.StreamInitiator(id) == m.perspective {
 			str, err := m.outgoingBidiStreams.GetStream(id)
 			if str == nil || err != nil {
 				return nil, err
@@ -255,10 +255,10 @@ type receiveStreamFrameHandler interface {
 }
 
 func (m *streamsMap) getReceiveStream(id protocol.StreamID) (receiveStreamFrameHandler, error) {
-	switch id.Type() {
+	switch protocol.StreamTypeOf(id) {
 	case protocol.StreamTypeUni:
 		// an outgoing unidirectional stream is a send stream, not a receive stream
-		if id.InitiatedBy() == m.perspective {
+		if protocol.StreamInitiator(id) == m.perspective {
 			return nil, &qerr.TransportError{
 				ErrorCode:    qerr.StreamStateError,
 				ErrorMessage: fmt.Sprintf("invalid frame for receive stream %d", id),
@@ -272,7 +272,7 @@ func (m *streamsMap) getReceiveStream(id protocol.StreamID) (receiveStreamFrameH
 	case protocol.StreamTypeBidi:
 		var str *Stream
 		var err error
-		if id.InitiatedBy() == m.perspective {
+		if protocol.StreamInitiator(id) == m.perspective {
 			str, err = m.outgoingBidiStreams.GetStream(id)
 		} else {
 			str, err = m.incomingBidiStreams.GetOrOpenStream(id)

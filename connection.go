@@ -2931,8 +2931,8 @@ func (c *Conn) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
 
 func (c *Conn) newFlowController(id protocol.StreamID) *streamFlowController {
 	initialSendWindow := c.peerParams.InitialMaxStreamDataUni
-	if id.Type() == protocol.StreamTypeBidi {
-		if id.InitiatedBy() == c.perspective {
+	if protocol.StreamTypeOf(id) == protocol.StreamTypeBidi {
+		if protocol.StreamInitiator(id) == c.perspective {
 			initialSendWindow = c.peerParams.InitialMaxStreamDataBidiRemote
 		} else {
 			initialSendWindow = c.peerParams.InitialMaxStreamDataBidiLocal
