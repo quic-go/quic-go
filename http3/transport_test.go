@@ -100,10 +100,10 @@ func TestRequestValidation(t *testing.T) {
 			name: "invalid header value",
 			req: func() *http.Request {
 				r := httptest.NewRequest(http.MethodGet, "https://www.example.org/", nil)
-				r.Header.Add("foo", string([]byte{0x7}))
+				r.Header.Add("Authorization", "Bearer secret\x00")
 				return r
 			}(),
-			expectedErrContains: "http3: invalid http header field value",
+			expectedErr: `http3: invalid http header field value for key "Authorization"`,
 		},
 		{
 			name: "invalid method",
