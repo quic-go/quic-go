@@ -210,6 +210,7 @@ type Conn struct {
 	pacingDeadline monotime.Time
 
 	peerParams *wire.TransportParameters
+	qmux       *qmuxState
 
 	timer *time.Timer
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
@@ -519,6 +520,9 @@ func (c *Conn) preSetup() {
 		c.config.EnableStreamResetPartialDelivery,
 		false, // ACK_FREQUENCY is not supported yet
 	)
+	if c.qmux != nil {
+		c.frameParser.SetSupportsQMux(true)
+	}
 	c.rttStats = utils.NewRTTStats()
 	c.connFlowController = newConnectionFlowController(
 		protocol.ByteCount(c.config.InitialConnectionReceiveWindow),
@@ -576,6 +580,10 @@ func (c *Conn) run() (err error) {
 	}()
 
 	c.timer = time.NewTimer(monotime.Until(c.idleTimeoutStartTime().Add(c.config.HandshakeIdleTimeout)))
+	var qmuxWrittenFrameBatchesAvailable <-chan struct{}
+	if c.qmux != nil {
+		qmuxWrittenFrameBatchesAvailable = c.qmux.writtenFrameBatchesAvailable
+	}
 
 	if err := c.cryptoStreamHandler.StartHandshake(c.ctx); err != nil {
 		return err
@@ -659,6 +667,8 @@ runLoop:
 			case <-c.timer.C:
 			case <-c.sendingScheduled:
 			case <-sendQueueAvailable:
+			case <-qmuxWrittenFrameBatchesAvailable:
+				c.handleQMuxWrittenFrameBatches()
 			case <-c.notifyReceivedPacket:
 				wasProcessed, err := c.handlePackets()
 				if err != nil {
@@ -685,7 +695,12 @@ runLoop:
 		if keepAliveTime := c.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the connection
 			c.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
-			c.framer.QueueControlFrame(&wire.PingFrame{})
+			if c.qmux != nil {
+				// QMux prohibits PING frames; use a QX_PING frame instead.
+				c.framer.QueueControlFrame(&wire.QXPingFrame{SequenceNumber: c.qmux.nextPingRequest()})
+			} else {
+				c.framer.QueueControlFrame(&wire.PingFrame{})
+			}
 			c.keepAlivePingSent = true
 		} else if !c.handshakeComplete && now.Sub(c.creationTime) >= c.config.handshakeTimeout() {
 			c.destroyImpl(qerr.ErrHandshakeTimeout)
@@ -1000,6 +1015,9 @@ func (c *Conn) handleHandshakeConfirmed(now monotime.Time) error {
 const maxPacketsToProcess = 32
 
 func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
+	if c.qmux != nil {
+		return c.handleQMuxRecords()
+	}
 	// Process packets from the receivedPackets queue.
 	// Limit the number of packets to process to maxPacketsToProcess,
 	// so we eventually get a chance to send out an ACK when receiving a lot of packets.
@@ -1046,6 +1064,103 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		}
 	}
 	return wasProcessed, nil
+}
+
+func (c *Conn) handleQMuxRecords() (wasProcessed bool, _ error) {
+	c.receivedPacketMx.Lock()
+
+	if c.receivedPackets.Empty() {
+		c.receivedPacketMx.Unlock()
+		return false, nil
+	}
+
+	var remaining int
+	for range maxPacketsToProcess {
+		p := c.receivedPackets.PopFront()
+		c.receivedPacketMx.Unlock()
+
+		processed, err := c.handleOneQMuxRecord(p)
+		p.buffer.Release()
+		if err != nil {
+			return false, err
+		}
+		if processed {
+			wasProcessed = true
+		}
+		c.receivedPacketMx.Lock()
+		remaining = c.receivedPackets.Len()
+		if remaining == 0 {
+			break
+		}
+	}
+	c.receivedPacketMx.Unlock()
+
+	// Unblock the read loop if it paused because the receive queue was full.
+	if remaining < protocol.MaxConnUnprocessedPackets {
+		select {
+		case c.qmux.recordQueueSpace <- struct{}{}:
+		default:
+		}
+	}
+	if remaining > 0 {
+		select {
+		case c.notifyReceivedPacket <- struct{}{}:
+		default:
+		}
+	}
+	return wasProcessed, nil
+}
+
+// queuedQMuxRecordCount returns the number of records queued for processing.
+func (c *Conn) queuedQMuxRecordCount() int {
+	c.receivedPacketMx.Lock()
+	defer c.receivedPacketMx.Unlock()
+	return c.receivedPackets.Len()
+}
+
+func (c *Conn) handleOneQMuxRecord(p receivedPacket) (bool, error) {
+	c.sentPacketHandler.ReceivedBytes(p.Size(), p.rcvTime)
+
+	var log func([]qlog.Frame)
+	if c.qlogger != nil {
+		log = func(frames []qlog.Frame) {
+			c.qlogger.RecordEvent(qlog.PacketReceived{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketType1RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					DestConnectionID: protocol.ConnectionID{},
+					KeyPhaseBit:      protocol.KeyPhaseZero,
+				},
+				Raw: qlog.RawInfo{
+					Length:        int(p.Size()),
+					PayloadLength: int(p.Size()),
+				},
+				Frames: frames,
+				ECN:    toQlogECN(p.ecn),
+			})
+		}
+	}
+
+	_, _, err := c.handleUnpackedQMuxRecord(p.data, p.rcvTime, log)
+	if err != nil {
+		return false, err
+	}
+	c.blocked = blockModeNone
+	return true, nil
+}
+
+func (c *Conn) handleQMuxWrittenFrameBatches() bool {
+	if c.qmux == nil {
+		return false
+	}
+	packets := c.qmux.popWrittenFrameBatches()
+	if len(packets) == 0 {
+		return false
+	}
+	for _, p := range packets {
+		acknowledgeWrittenFrames(p)
+	}
+	return true
 }
 
 func (c *Conn) handleOnePacket(rp receivedPacket, datagramID qlog.DatagramID) (wasProcessed bool, _ error) {
@@ -1765,6 +1880,22 @@ func (c *Conn) handleUnpackedShortHeaderPacket(
 	return isNonProbing, pathChallenge, nil
 }
 
+func (c *Conn) handleUnpackedQMuxRecord(
+	data []byte,
+	rcvTime monotime.Time,
+	log func([]qlog.Frame),
+) (isNonProbing bool, pathChallenge *wire.PathChallengeFrame, _ error) {
+	c.lastPacketReceivedTime = rcvTime
+	c.firstAckElicitingPacketAfterIdleSentTime = 0
+
+	_, isNonProbing, pathChallenge, err := c.handleFrames(data, protocol.ConnectionID{}, protocol.Encryption1RTT, log, rcvTime)
+	if err != nil {
+		return false, nil, err
+	}
+	c.sentPacketHandler.ReceivedPacket(protocol.Encryption1RTT, rcvTime)
+	return isNonProbing, pathChallenge, nil
+}
+
 // handleFrames parses the frames, one after the other, and handles them.
 // It returns the last PATH_CHALLENGE frame contained in the packet, if any.
 func (c *Conn) handleFrames(
@@ -1820,7 +1951,12 @@ func (c *Conn) handleFrames(
 				continue
 			}
 			wire.LogFrame(c.logger, streamFrame, false)
-			handleErr = c.streamsMap.HandleStreamFrame(streamFrame, rcvTime)
+			if c.qmux != nil {
+				handleErr = c.qmux.checkStreamFrameOrdering(streamFrame)
+			}
+			if handleErr == nil {
+				handleErr = c.streamsMap.HandleStreamFrame(streamFrame, rcvTime)
+			}
 		} else if frameType.IsAckFrameType() {
 			ackFrame, l, err := c.frameParser.ParseAckFrame(frameType, data, encLevel, c.version)
 			if err != nil {
@@ -1929,6 +2065,29 @@ func (c *Conn) handleFrame(
 	case *wire.StopSendingFrame:
 		err = c.streamsMap.HandleStopSendingFrame(frame)
 	case *wire.PingFrame:
+	case *wire.QXPingFrame:
+		if c.qmux == nil {
+			err = &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				ErrorMessage: "received QX_PING on non-QMux connection",
+			}
+			break
+		}
+		if frame.IsResponse {
+			var matched bool
+			matched, err = c.qmux.receivedPingResponse(frame.SequenceNumber)
+			if matched {
+				c.keepAlivePingSent = false
+			}
+		} else {
+			c.qmux.queuePingResponse(frame.SequenceNumber)
+			c.scheduleSending()
+		}
+	case *wire.QXTransportParametersFrame:
+		err = &qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "received QX_TRANSPORT_PARAMETERS after connection setup",
+		}
 	case *wire.PathChallengeFrame:
 		c.handlePathChallengeFrame(frame)
 		pathChallenge = frame
@@ -1968,6 +2127,17 @@ func (c *Conn) handlePacket(p receivedPacket) {
 		c.receivedPacketMx.Unlock()
 		return
 	}
+	c.receivedPackets.PushBack(p)
+	c.receivedPacketMx.Unlock()
+
+	select {
+	case c.notifyReceivedPacket <- struct{}{}:
+	default:
+	}
+}
+
+func (c *Conn) queueQMuxRecord(p receivedPacket) {
+	c.receivedPacketMx.Lock()
 	c.receivedPackets.PushBack(p)
 	c.receivedPacketMx.Unlock()
 
@@ -2421,6 +2591,11 @@ func (c *Conn) applyTransportParameters() {
 	}
 	c.keepAliveInterval = min(c.config.KeepAlivePeriod, c.idleTimeout/2)
 	c.streamsMap.HandleTransportParameters(params)
+	if c.qmux != nil {
+		c.connFlowController.UpdateSendWindow(params.InitialMaxData)
+		c.maxPayloadSizeEstimate.Store(uint32(params.MaxRecordSize))
+		return
+	}
 	c.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	c.rttStats.SetMaxAckDelay(params.MaxAckDelay)
@@ -2558,17 +2733,33 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 
 func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 	for {
-		buf := getPacketBuffer()
-		ecn := c.sentPacketHandler.ECNMode(true)
-		if _, err := c.appendOneShortHeaderPacket(buf, c.maxPacketSize(), ecn, now); err != nil {
-			if err == errNothingToPack {
-				buf.Release()
-				return nil
-			}
-			return err
+		var buf *packetBuffer
+		if c.qmux != nil {
+			buf = getLargePacketBuffer()
+		} else {
+			buf = getPacketBuffer()
 		}
-
-		c.sendQueue.Send(buf, 0, ecn)
+		ecn := c.sentPacketHandler.ECNMode(true)
+		if c.qmux != nil {
+			completion, err := c.appendOneQMuxRecord(buf, c.maxPacketSize(), ecn, now)
+			if err != nil {
+				if err == errNothingToPack {
+					buf.Release()
+					return nil
+				}
+				return err
+			}
+			c.sendQueue.(*qmuxSender).sendRecord(qmuxOutboundRecord{buf: buf, ecn: ecn, completion: completion})
+		} else {
+			if _, err := c.appendOneShortHeaderPacket(buf, c.maxPacketSize(), ecn, now); err != nil {
+				if err == errNothingToPack {
+					buf.Release()
+					return nil
+				}
+				return err
+			}
+			c.sendQueue.Send(buf, 0, ecn)
+		}
 
 		if c.sendQueue.WouldBlock() {
 			return nil
@@ -2744,6 +2935,18 @@ func (c *Conn) appendOneShortHeaderPacket(buf *packetBuffer, maxSize protocol.By
 	return size, nil
 }
 
+func (c *Conn) appendOneQMuxRecord(buf *packetBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now monotime.Time) (qmuxWrittenFrameBatch, error) {
+	startLen := buf.Len()
+	p, err := c.packer.AppendPacket(buf, maxSize, now, c.version)
+	if err != nil {
+		return qmuxWrittenFrameBatch{}, err
+	}
+	size := buf.Len() - startLen
+	c.logShortHeaderPacket(p, ecn, size)
+	c.registerPackedShortHeaderPacket(p, ecn, now)
+	return qmuxWrittenFrameBatch{frames: p.Frames, streamFrames: p.StreamFrames}, nil
+}
+
 func (c *Conn) registerPackedShortHeaderPacket(p shortHeaderPacket, ecn protocol.ECN, now monotime.Time) {
 	if p.IsPathProbePacket {
 		c.sentPacketHandler.SentPacket(
@@ -2858,12 +3061,31 @@ func (c *Conn) sendConnectionClose(e error) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if c.qmux != nil {
+		// Ordinary QUIC retains these bytes in ReplaceWithClosed. QMux writes the close
+		// directly and its no-op replacement doesn't retain them, so release this buffer here.
+		defer packet.buffer.Release()
+	}
 	ecn := c.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket())
 	c.logCoalescedPacket(packet, ecn)
-	return packet.buffer.Data, c.conn.Write(packet.buffer.Data, 0, ecn)
+	// Unlike UDP writes, writes to a QMux transport can block. Sending the CONNECTION_CLOSE
+	// is best-effort: use a short write deadline so a peer that stopped reading can't block
+	// connection teardown. The transport is closed right after the run loop returns.
+	if qconn, ok := c.conn.(*qmuxSendConn); ok {
+		_ = qconn.setWriteDeadline(time.Now().Add(time.Second))
+	}
+	err = c.conn.Write(packet.buffer.Data, 0, ecn)
+	if c.qmux != nil {
+		// QMux has no closed-connection handler to retransmit CONNECTION_CLOSE.
+		return nil, err
+	}
+	return packet.buffer.Data, err
 }
 
 func (c *Conn) maxPacketSize() protocol.ByteCount {
+	if c.qmux != nil {
+		return c.qmux.maxRecordSize
+	}
 	if c.mtuDiscoverer == nil {
 		// Use the configured packet size on the client side.
 		// If the server sends a max_udp_payload_size that's smaller than this size, we can ignore this:
@@ -3014,6 +3236,9 @@ func (c *Conn) onStreamCompleted(id protocol.StreamID) {
 		c.closeLocal(err)
 	}
 	c.framer.RemoveActiveStream(id)
+	if c.qmux != nil {
+		c.qmux.removeStreamOffset(id)
+	}
 }
 
 // SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221,
@@ -3080,6 +3305,9 @@ func (c *Conn) getPathManager() *pathManagerOutgoing {
 }
 
 func (c *Conn) AddPath(t *Transport) (*Path, error) {
+	if c.qmux != nil {
+		return nil, errors.New("QMux connections don't support connection migration")
+	}
 	if c.perspective == protocol.PerspectiveServer {
 		return nil, errors.New("server cannot initiate connection migration")
 	}
