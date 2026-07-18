@@ -542,23 +542,23 @@ func TestReceiveStreamImmediateFINs(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
-func TestReceiveStreamWaitForFinalSizeAfterFIN(t *testing.T) {
+func TestReceiveStreamWaitForReceiveFinalSizeAfterFIN(t *testing.T) {
 	fc := newTestStreamFlowController(42)
 	str := newReceiveStream(42, nil, fc)
 
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar"), Fin: true}, monotime.Now()))
 
-	size, err := str.WaitForFinalSize(context.Background())
+	size, err := str.WaitForReceiveFinalSize(context.Background())
 	require.NoError(t, err)
 	require.EqualValues(t, 6, size)
 
 	str.closeForShutdown(assert.AnError)
-	size, err = str.WaitForFinalSize(context.Background())
+	size, err = str.WaitForReceiveFinalSize(context.Background())
 	require.NoError(t, err)
 	require.EqualValues(t, 6, size)
 }
 
-func TestReceiveStreamWaitForFinalSizeAfterCancelRead(t *testing.T) {
+func TestReceiveStreamWaitForReceiveFinalSizeAfterCancelRead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		fc := newTestStreamFlowController(42)
@@ -571,14 +571,14 @@ func TestReceiveStreamWaitForFinalSizeAfterCancelRead(t *testing.T) {
 		}
 		resultChan := make(chan result, 1)
 		go func() {
-			size, err := str.WaitForFinalSize(context.Background())
+			size, err := str.WaitForReceiveFinalSize(context.Background())
 			resultChan <- result{size: size, err: err}
 		}()
 
 		synctest.Wait()
 		select {
 		case result := <-resultChan:
-			t.Fatalf("WaitForFinalSize returned before the final size was known: %v", result.err)
+			t.Fatalf("WaitForReceiveFinalSize returned before the final size was known: %v", result.err)
 		default:
 		}
 
@@ -588,7 +588,7 @@ func TestReceiveStreamWaitForFinalSizeAfterCancelRead(t *testing.T) {
 		synctest.Wait()
 		select {
 		case result := <-resultChan:
-			t.Fatalf("WaitForFinalSize returned after CancelRead, before the final size was known: %v", result.err)
+			t.Fatalf("WaitForReceiveFinalSize returned after CancelRead, before the final size was known: %v", result.err)
 		default:
 		}
 
@@ -604,17 +604,17 @@ func TestReceiveStreamWaitForFinalSizeAfterCancelRead(t *testing.T) {
 			require.NoError(t, result.err)
 			require.EqualValues(t, 42, result.size)
 		default:
-			t.Fatal("WaitForFinalSize did not return")
+			t.Fatal("WaitForReceiveFinalSize did not return")
 		}
 	})
 }
 
-func TestReceiveStreamWaitForFinalSizeContextCanceled(t *testing.T) {
+func TestReceiveStreamWaitForReceiveFinalSizeContextCanceled(t *testing.T) {
 	str := newReceiveStream(42, nil, nil)
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(assert.AnError)
 
-	size, err := str.WaitForFinalSize(ctx)
+	size, err := str.WaitForReceiveFinalSize(ctx)
 	require.Zero(t, size)
 	require.ErrorIs(t, err, assert.AnError)
 }
@@ -652,7 +652,7 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 		str.closeForShutdown(assert.AnError)
 		synctest.Wait()
 
-		size, err := str.WaitForFinalSize(context.Background())
+		size, err := str.WaitForReceiveFinalSize(context.Background())
 		require.Zero(t, size)
 		require.ErrorIs(t, err, assert.AnError)
 

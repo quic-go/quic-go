@@ -159,11 +159,11 @@ func (s *Stream) CancelRead(errorCode StreamErrorCode) {
 }
 
 // WaitForReceiveFinalSize waits until the receive side's final size is known.
-// See [ReceiveStream.WaitForFinalSize] for more details.
+// See [ReceiveStream.WaitForReceiveFinalSize] for more details.
 // Most applications don't need this. It is mainly useful for protocol layers
 // that need exact stream final sizes, such as WebTransport flow control accounting.
 func (s *Stream) WaitForReceiveFinalSize(ctx context.Context) (int64, error) {
-	return s.receiveStr.WaitForFinalSize(ctx)
+	return s.receiveStr.WaitForReceiveFinalSize(ctx)
 }
 
 // The Context is canceled as soon as the write-side of the stream is closed.

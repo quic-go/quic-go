@@ -80,11 +80,11 @@ func (s *ReceiveStream) StreamID() StreamID {
 	return s.streamID
 }
 
-// WaitForFinalSize waits until the receive stream's final size is known.
+// WaitForReceiveFinalSize waits until the receive stream's final size is known.
 // The final size is learned from a FIN or RESET_STREAM frame.
 // Most applications don't need this. It is mainly useful for protocol layers
 // that need exact stream final sizes, such as WebTransport flow control accounting.
-func (s *ReceiveStream) WaitForFinalSize(ctx context.Context) (int64, error) {
+func (s *ReceiveStream) WaitForReceiveFinalSize(ctx context.Context) (int64, error) {
 	for {
 		s.mutex.Lock()
 		size := s.finalOffset
