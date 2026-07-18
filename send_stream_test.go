@@ -174,7 +174,7 @@ func TestSendStreamWriteWithLimit(t *testing.T) {
 		synctest.Wait()
 		writeResult := <-results
 		require.Equal(t, 25, writeResult.n)
-		require.ErrorIs(t, writeResult.err, ErrWouldBlock)
+		require.ErrorIs(t, writeResult.err, ErrWriteLimitReached)
 		require.Equal(t, 1, calls)
 
 		go func() {

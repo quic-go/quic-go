@@ -40,8 +40,8 @@ type SendStream struct {
 	dataForWriting []byte // during a Write() call, this slice is the part of p that still needs to be sent out
 
 	writeLimiter func(int) int
-	// Set by the packetizer when writeLimiter shortens a reservation. It makes the blocked
-	// WriteWithLimit return ErrWouldBlock and prevents another dequeue before it wakes up.
+	// Set by the packetizer when writeLimiter reduces the allowed byte count. It makes the blocked
+	// WriteWithLimit return ErrWriteLimitReached and prevents another dequeue before it wakes up.
 	writeLimited bool
 
 	nextFrame *wire.StreamFrame
@@ -104,7 +104,7 @@ func (s *SendStream) Write(p []byte) (int, error) {
 // WriteWithLimit writes data to the stream, subject to an additional send limit.
 // During packetization, limiter receives the bytes allowed for the next STREAM frame after
 // QUIC flow control and returns how many may be sent. Values outside [0, maxBytes] are clamped.
-// A short result returns the accepted prefix and [ErrWouldBlock]; the caller can wait
+// A short result returns the accepted prefix and [ErrWriteLimitReached]; the caller can wait
 // for external credit and retry the suffix. QUIC blocking behaves like [SendStream.Write].
 // limiter can run multiple times on another goroutine while QUIC send flow-control accounting
 // is locked. It must be concurrency-safe and must not block or call QUIC methods.
@@ -314,7 +314,7 @@ func (s *SendStream) write(p []byte, limiter func(int) int) (bool /* is newly co
 		return s.isNewlyCompleted(), bytesWritten, s.resetErr
 	}
 	if s.writeLimited {
-		return false, bytesWritten, ErrWouldBlock
+		return false, bytesWritten, ErrWriteLimitReached
 	}
 	return false, bytesWritten, nil
 }
