@@ -18,6 +18,7 @@ type FrameParser struct {
 	supportsDatagrams     bool
 	supportsResetStreamAt bool
 	supportsAckFrequency  bool
+	supportsQMux          bool
 
 	// To avoid allocating when parsing, keep a single ACK frame struct.
 	// It is used over and over again.
@@ -55,12 +56,20 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		valid := ft.isValidRFC9000() ||
 			(p.supportsDatagrams && ft.IsDatagramFrameType()) ||
 			(p.supportsResetStreamAt && ft == FrameTypeResetStreamAt) ||
-			(p.supportsAckFrequency && (ft == FrameTypeAckFrequency || ft == FrameTypeImmediateAck))
+			(p.supportsAckFrequency && (ft == FrameTypeAckFrequency || ft == FrameTypeImmediateAck)) ||
+			(p.supportsQMux && (ft.IsQXPingFrameType() || ft == FrameTypeQXTransportParametersFrame))
 		if !valid {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,
 				FrameType:    typ,
 				ErrorMessage: errUnknownFrameType.Error(),
+			}
+		}
+		if p.supportsQMux && !p.isAllowedInQMux(ft) {
+			return 0, parsed, &qerr.TransportError{
+				ErrorCode:    qerr.FrameEncodingError,
+				FrameType:    typ,
+				ErrorMessage: fmt.Sprintf("%d not allowed in QMux", ft),
 			}
 		}
 		if !ft.isAllowedAtEncLevel(encLevel) {
@@ -73,6 +82,33 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		return ft, parsed, nil
 	}
 	return 0, parsed, io.EOF
+}
+
+func (p *FrameParser) isAllowedInQMux(ft FrameType) bool {
+	if ft.IsStreamFrameType() || ft.IsQXPingFrameType() || ft == FrameTypeQXTransportParametersFrame {
+		return true
+	}
+	if p.supportsDatagrams && ft.IsDatagramFrameType() {
+		return true
+	}
+	//nolint:exhaustive // QMux only allows the frame types listed below.
+	switch ft {
+	case FrameTypeResetStream,
+		FrameTypeStopSending,
+		FrameTypeMaxData,
+		FrameTypeMaxStreamData,
+		FrameTypeBidiMaxStreams,
+		FrameTypeUniMaxStreams,
+		FrameTypeDataBlocked,
+		FrameTypeStreamDataBlocked,
+		FrameTypeBidiStreamBlocked,
+		FrameTypeUniStreamBlocked,
+		FrameTypeConnectionClose,
+		FrameTypeApplicationClose:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *FrameParser) ParseStreamFrame(frameType FrameType, data []byte, v protocol.Version) (*StreamFrame, int, error) {
@@ -165,6 +201,10 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 		frame, l, err = parseAckFrequencyFrame(data, v)
 	case FrameTypeImmediateAck:
 		frame = &ImmediateAckFrame{}
+	case FrameTypeQXPingRequest, FrameTypeQXPingResponse:
+		frame, l, err = parseQXPingFrame(frameType, data, v)
+	case FrameTypeQXTransportParametersFrame:
+		frame, l, err = parseQXTransportParametersFrame(data, v)
 	default:
 		err = errUnknownFrameType
 	}
@@ -182,6 +222,10 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 // This value is used to scale the ACK Delay field in the ACK frame.
 func (p *FrameParser) SetAckDelayExponent(exp uint8) {
 	p.ackDelayExponent = exp
+}
+
+func (p *FrameParser) SetSupportsQMux(supportsQMux bool) {
+	p.supportsQMux = supportsQMux
 }
 
 func replaceUnexpectedEOF(e error) error {

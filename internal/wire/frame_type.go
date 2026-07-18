@@ -38,6 +38,11 @@ const (
 
 	FrameTypeDatagramNoLength   FrameType = 0x30
 	FrameTypeDatagramWithLength FrameType = 0x31
+
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-qmux/01/
+	FrameTypeQXPingRequest              FrameType = 0x348c67529ef8c7bd
+	FrameTypeQXPingResponse             FrameType = 0x348c67529ef8c7be
+	FrameTypeQXTransportParametersFrame FrameType = 0x3f5153300d0a0d0a
 )
 
 func (t FrameType) IsStreamFrameType() bool {
@@ -54,6 +59,10 @@ func (t FrameType) IsAckFrameType() bool {
 
 func (t FrameType) IsDatagramFrameType() bool {
 	return t == FrameTypeDatagramNoLength || t == FrameTypeDatagramWithLength
+}
+
+func (t FrameType) IsQXPingFrameType() bool {
+	return t == FrameTypeQXPingRequest || t == FrameTypeQXPingResponse
 }
 
 func (t FrameType) isAllowedAtEncLevel(encLevel protocol.EncryptionLevel) bool {
