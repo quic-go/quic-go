@@ -132,6 +132,12 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return s.sendStr.Write(p)
 }
 
+// WriteWithLimit writes data to the stream, subject to an additional send limit.
+// See [SendStream.WriteWithLimit] for more details.
+func (s *Stream) WriteWithLimit(p []byte, limiter func(maxBytes int) int) (int, error) {
+	return s.sendStr.WriteWithLimit(p, limiter)
+}
+
 // TryWriteAll writes data to the stream if it can be queued immediately.
 // See [SendStream.TryWriteAll] for more details.
 func (s *Stream) TryWriteAll(p []byte) error {
