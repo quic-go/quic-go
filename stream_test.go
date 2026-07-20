@@ -34,7 +34,7 @@ func TestStreamDeadlines(t *testing.T) {
 	require.Zero(t, n)
 }
 
-func TestStreamWaitForReceiveFinalSize(t *testing.T) {
+func TestStreamReceiveFinalSizeCallback(t *testing.T) {
 	const streamID protocol.StreamID = 1337
 	mockCtrl := gomock.NewController(t)
 	mockSender := NewMockStreamSender(mockCtrl)
@@ -43,8 +43,8 @@ func TestStreamWaitForReceiveFinalSize(t *testing.T) {
 
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar"), Fin: true}, monotime.Now()))
 
-	size, err := str.WaitForReceiveFinalSize(context.Background())
-	require.NoError(t, err)
+	var size int64
+	str.SetReceiveFinalSizeCallback(func(s int64) { size = s })
 	require.EqualValues(t, 6, size)
 }
 

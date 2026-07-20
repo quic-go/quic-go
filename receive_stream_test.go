@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -542,81 +541,53 @@ func TestReceiveStreamImmediateFINs(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
-func TestReceiveStreamWaitForReceiveFinalSizeAfterFIN(t *testing.T) {
+func TestReceiveStreamFinalSizeCallbackAfterFIN(t *testing.T) {
 	fc := newTestStreamFlowController(42)
 	str := newReceiveStream(42, nil, fc)
 
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar"), Fin: true}, monotime.Now()))
 
-	size, err := str.WaitForReceiveFinalSize(context.Background())
-	require.NoError(t, err)
+	var size int64
+	str.SetReceiveFinalSizeCallback(func(s int64) { size = s })
 	require.EqualValues(t, 6, size)
 
 	str.closeForShutdown(assert.AnError)
-	size, err = str.WaitForReceiveFinalSize(context.Background())
-	require.NoError(t, err)
+	str.SetReceiveFinalSizeCallback(func(s int64) { size = s })
 	require.EqualValues(t, 6, size)
 }
 
-func TestReceiveStreamWaitForReceiveFinalSizeAfterCancelRead(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		fc := newTestStreamFlowController(42)
-		mockSender := NewMockStreamSender(mockCtrl)
-		str := newReceiveStream(42, mockSender, fc)
+func TestReceiveStreamFinalSizeCallbackAfterCancelRead(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	fc := newTestStreamFlowController(42)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newReceiveStream(42, mockSender, fc)
 
-		type result struct {
-			size int64
-			err  error
-		}
-		resultChan := make(chan result, 1)
-		go func() {
-			size, err := str.WaitForReceiveFinalSize(context.Background())
-			resultChan <- result{size: size, err: err}
-		}()
-
-		synctest.Wait()
-		select {
-		case result := <-resultChan:
-			t.Fatalf("WaitForReceiveFinalSize returned before the final size was known: %v", result.err)
-		default:
-		}
-
-		mockSender.EXPECT().onHasStreamControlFrame(str.StreamID(), str)
-		str.CancelRead(1234)
-
-		synctest.Wait()
-		select {
-		case result := <-resultChan:
-			t.Fatalf("WaitForReceiveFinalSize returned after CancelRead, before the final size was known: %v", result.err)
-		default:
-		}
-
-		mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
-		require.NoError(t, str.handleResetStreamFrame(
-			&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 4321, FinalSize: 42},
-			monotime.Now(),
-		))
-
-		synctest.Wait()
-		select {
-		case result := <-resultChan:
-			require.NoError(t, result.err)
-			require.EqualValues(t, 42, result.size)
-		default:
-			t.Fatal("WaitForReceiveFinalSize did not return")
-		}
+	var size int64
+	var called bool
+	str.SetReceiveFinalSizeCallback(func(s int64) {
+		size, called = s, true
 	})
+	require.False(t, called)
+
+	mockSender.EXPECT().onHasStreamControlFrame(str.StreamID(), str)
+	str.CancelRead(1234)
+	require.False(t, called)
+
+	mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
+	require.NoError(t, str.handleResetStreamFrame(
+		&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 4321, FinalSize: 42},
+		monotime.Now(),
+	))
+
+	require.True(t, called)
+	require.EqualValues(t, 42, size)
 }
 
-func TestReceiveStreamWaitForReceiveFinalSizeContextCanceled(t *testing.T) {
-	str := newReceiveStream(42, nil, nil)
-	ctx, cancel := context.WithCancelCause(context.Background())
-	cancel(assert.AnError)
-
-	size, err := str.WaitForReceiveFinalSize(ctx)
-	require.Zero(t, size)
-	require.ErrorIs(t, err, assert.AnError)
+func TestReceiveStreamFinalSizeCallbackRemoved(t *testing.T) {
+	str := newReceiveStream(42, nil, newTestStreamFlowController(42))
+	str.SetReceiveFinalSizeCallback(func(int64) { t.Fatal("callback called") })
+	str.SetReceiveFinalSizeCallback(nil)
+	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Fin: true}, monotime.Now()))
 }
 
 func TestReceiveStreamCloseForShutdown(t *testing.T) {
@@ -652,9 +623,8 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 		str.closeForShutdown(assert.AnError)
 		synctest.Wait()
 
-		size, err := str.WaitForReceiveFinalSize(context.Background())
-		require.Zero(t, size)
-		require.ErrorIs(t, err, assert.AnError)
+		require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Fin: true}, monotime.Now()))
+		str.SetReceiveFinalSizeCallback(func(int64) { t.Fatal("callback called") })
 
 		select {
 		case err := <-readErrChan:
