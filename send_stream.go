@@ -154,7 +154,7 @@ func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool 
 	}
 
 	if s.nextFrame == nil {
-		s.nextFrame = wire.GetStreamFrame()
+		s.nextFrame = wire.GetStreamFrame(protocol.ByteCount(len(p)))
 		s.nextFrame.Offset = s.writeOffset
 		s.nextFrame.StreamID = s.streamID
 		s.nextFrame.DataLenPresent = true
@@ -219,7 +219,7 @@ func (s *SendStream) write(p []byte) (bool /* is newly completed */, int, error)
 		// allowing us to set the FIN bit on that frame (instead of sending an empty STREAM frame with FIN).
 		if s.canBufferStreamFrame() && len(s.dataForWriting) > 0 {
 			if s.nextFrame == nil {
-				f := wire.GetStreamFrame()
+				f := wire.GetStreamFrame(protocol.ByteCount(len(s.dataForWriting)))
 				f.Offset = s.writeOffset
 				f.StreamID = s.streamID
 				f.DataLenPresent = true
@@ -409,14 +409,8 @@ func (s *SendStream) popNewStreamFrame(maxDataLen protocol.ByteCount) (_ *wire.S
 		s.nextFrame = nil
 		s.nextFrameReserved = false
 		if nextFrame.DataLen() > maxDataLen {
-			if nextFrame.DataLen()-maxDataLen > protocol.MaxPacketBufferSize {
-				s.nextFrame = &wire.StreamFrame{
-					Data: make([]byte, nextFrame.DataLen()-maxDataLen),
-				}
-			} else {
-				s.nextFrame = wire.GetStreamFrame()
-				s.nextFrame.Data = s.nextFrame.Data[:nextFrame.DataLen()-maxDataLen]
-			}
+			s.nextFrame = wire.GetStreamFrame(nextFrame.DataLen() - maxDataLen)
+			s.nextFrame.Data = s.nextFrame.Data[:nextFrame.DataLen()-maxDataLen]
 			s.nextFrame.StreamID = s.streamID
 			s.nextFrame.Offset = s.writeOffset + maxDataLen
 			s.nextFrame.DataLenPresent = true
@@ -429,7 +423,7 @@ func (s *SendStream) popNewStreamFrame(maxDataLen protocol.ByteCount) (_ *wire.S
 		return nextFrame, s.nextFrame != nil || s.dataForWriting != nil
 	}
 
-	f := wire.GetStreamFrame()
+	f := wire.GetStreamFrame(maxDataLen)
 	f.Fin = false
 	f.StreamID = s.streamID
 	f.Offset = s.writeOffset

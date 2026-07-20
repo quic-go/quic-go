@@ -154,6 +154,73 @@ func TestResetStreamAtTransportParameterCodepoints(t *testing.T) {
 	}
 }
 
+func TestTransportParametersDefaultMaxRecordSize(t *testing.T) {
+	data := (&TransportParameters{
+		StatelessResetToken:     &protocol.StatelessResetToken{},
+		ActiveConnectionIDLimit: protocol.DefaultActiveConnectionIDLimit,
+	}).Marshal(protocol.PerspectiveServer)
+	var p TransportParameters
+	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
+	require.Equal(t, DefaultMaxRecordSize, p.MaxRecordSize)
+}
+
+func TestTransportParameterMaxRecordSizeQMuxMarshalOnly(t *testing.T) {
+	params := &TransportParameters{
+		StatelessResetToken:     &protocol.StatelessResetToken{},
+		ActiveConnectionIDLimit: protocol.DefaultActiveConnectionIDLimit,
+		MaxRecordSize:           DefaultMaxRecordSize + 42,
+	}
+	var p TransportParameters
+	require.NoError(t, p.Unmarshal(params.Marshal(protocol.PerspectiveServer), protocol.PerspectiveServer))
+	require.Equal(t, DefaultMaxRecordSize, p.MaxRecordSize)
+
+	p = TransportParameters{}
+	require.NoError(t, p.UnmarshalQMux(params.MarshalQMux()))
+	require.Equal(t, DefaultMaxRecordSize+42, p.MaxRecordSize)
+}
+
+func TestTransportParameterMaxRecordSizeIgnoredByQUICUnmarshal(t *testing.T) {
+	// RFC 9000, section 7.4.2: transport parameters an endpoint doesn't support must be
+	// ignored. max_record_size is only defined for QMux, so a regular QUIC connection
+	// treats it as an unknown transport parameter.
+	b := quicvarint.Append(nil, uint64(maxRecordSizeParameterID))
+	b = quicvarint.Append(b, uint64(quicvarint.Len(uint64(DefaultMaxRecordSize+42))))
+	b = quicvarint.Append(b, uint64(DefaultMaxRecordSize+42))
+	data := appendInitialSourceConnectionID(b)
+
+	var p TransportParameters
+	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveClient))
+	require.Equal(t, DefaultMaxRecordSize, p.MaxRecordSize)
+}
+
+func TestTransportParameterQMuxIgnoresExtensionParameters(t *testing.T) {
+	// Section 5.1 of draft-ietf-quic-qmux: only transport parameters defined in QUIC
+	// version 1 are prohibited. Extension transport parameters without a QMux mapping
+	// (like reset_stream_at and min_ack_delay) are ignored.
+	b := quicvarint.Append(nil, uint64(resetStreamAtParameterID))
+	b = quicvarint.Append(b, 0)
+	b = quicvarint.Append(b, uint64(minAckDelayParameterID))
+	b = quicvarint.Append(b, uint64(quicvarint.Len(1000)))
+	b = quicvarint.Append(b, 1000)
+
+	var p TransportParameters
+	require.NoError(t, p.UnmarshalQMux(b))
+	require.False(t, p.EnableResetStreamAt)
+	require.Nil(t, p.MinAckDelay)
+}
+
+func TestTransportParameterQMuxMaxRecordSizeTooSmall(t *testing.T) {
+	b := quicvarint.Append(nil, uint64(maxRecordSizeParameterID))
+	b = quicvarint.Append(b, uint64(quicvarint.Len(uint64(DefaultMaxRecordSize-1))))
+	b = quicvarint.Append(b, uint64(DefaultMaxRecordSize-1))
+
+	err := (&TransportParameters{}).UnmarshalQMux(b)
+	require.Error(t, err)
+	transportErr, ok := err.(*qerr.TransportError)
+	require.True(t, ok)
+	require.Equal(t, qerr.TransportParameterError, transportErr.ErrorCode)
+	require.Equal(t, "invalid value for max_record_size: 16381 (minimum 16382)", transportErr.ErrorMessage)
+}
 func TestMarshalAdditionalTransportParameters(t *testing.T) {
 	origAdditionalTransportParametersClient := AdditionalTransportParametersClient
 	t.Cleanup(func() {

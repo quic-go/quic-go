@@ -63,12 +63,9 @@ func ParseStreamFrame(b []byte, typ FrameType, _ protocol.Version) (*StreamFrame
 			frame.Data = make([]byte, dataLen)
 		}
 	} else {
-		frame = GetStreamFrame()
-		// The STREAM frame can't be larger than the StreamFrame we obtained from the buffer,
-		// since those StreamFrames have a buffer length of the maximum packet size.
-		if dataLen > uint64(cap(frame.Data)) {
-			return nil, 0, io.EOF
-		}
+		// dataLen was checked against len(b), so the frame is known to fit into the packet
+		// (or, for QMux, the record) it was received in, bounding the buffer size.
+		frame = GetStreamFrame(protocol.ByteCount(dataLen))
 		frame.Data = frame.Data[:dataLen]
 	}
 
@@ -168,7 +165,9 @@ func (f *StreamFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version pro
 		return nil, true
 	}
 
-	new := GetStreamFrame()
+	// The frames swap data buffers below: f keeps the remaining f.DataLen() - n bytes,
+	// so the buffer obtained here needs to be large enough for them.
+	new := GetStreamFrame(f.DataLen() - n)
 	new.StreamID = f.StreamID
 	new.Offset = f.Offset
 	new.Fin = false

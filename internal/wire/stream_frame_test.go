@@ -68,12 +68,44 @@ func TestParseStreamFrameRejectsOverflow(t *testing.T) {
 	require.EqualError(t, err, "stream data overflows maximum offset")
 }
 
-func TestParseStreamFrameRejectsLongFrames(t *testing.T) {
-	data := encodeVarInt(0x12345)                                                // stream ID
-	data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
-	data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
-	_, _, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
-	require.Equal(t, io.EOF, err)
+func TestParseStreamFrameLargerThanPacketBuffer(t *testing.T) {
+	// Frames with more data than protocol.MaxPacketBufferSize are only possible in QMux
+	// records; QUIC packets are never larger. They use the large frame buffer pool.
+	payload := make([]byte, protocol.MaxPacketBufferSize+1)
+	payload[0] = 'f'
+	payload[len(payload)-1] = 'r'
+	data := encodeVarInt(0x12345)                              // stream ID
+	data = append(data, encodeVarInt(uint64(len(payload)))...) // data length
+	data = append(data, payload...)
+	frame, l, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
+	require.NoError(t, err)
+	require.Equal(t, len(data), l)
+	require.Equal(t, payload, frame.Data)
+	require.Equal(t, protocol.MaxLargePacketBufferSize, cap(frame.Data))
+	require.NotPanics(t, frame.PutBack)
+}
+
+func TestStreamFrameSplittingLargeFrame(t *testing.T) {
+	// Splitting a frame larger than protocol.MaxPacketBufferSize must obtain a buffer
+	// large enough for the remaining data.
+	payload := make([]byte, 4*protocol.MaxPacketBufferSize)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	f := &StreamFrame{
+		StreamID:       0x1337,
+		Offset:         0x42,
+		Data:           append([]byte{}, payload...),
+		DataLenPresent: true,
+	}
+	frame, needsSplit := f.MaybeSplitOffFrame(500, protocol.Version1)
+	require.True(t, needsSplit)
+	require.NotNil(t, frame)
+	require.Equal(t, protocol.ByteCount(0x42), frame.Offset)
+	require.Equal(t, protocol.ByteCount(0x42)+frame.DataLen(), f.Offset)
+	require.Equal(t, payload, append(append([]byte{}, frame.Data...), f.Data...))
+	require.NotPanics(t, frame.PutBack)
+	require.NotPanics(t, f.PutBack)
 }
 
 func TestParseStreamFrameRejectsFramesExceedingRemainingSize(t *testing.T) {

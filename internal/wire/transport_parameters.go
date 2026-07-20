@@ -24,6 +24,8 @@ var AdditionalTransportParametersClient map[uint64][]byte
 
 const transportParameterMarshalingVersion = 1
 
+const DefaultMaxRecordSize protocol.ByteCount = 16382
+
 type transportParameterID uint64
 
 const (
@@ -46,6 +48,8 @@ const (
 	retrySourceConnectionIDParameterID         transportParameterID = 0x10
 	// RFC 9221
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-qmux/01/
+	maxRecordSizeParameterID transportParameterID = 0x0571c59429cd0845
 	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/09/
 	resetStreamAtParameterID transportParameterID = 0x1d
 	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/07/
@@ -94,6 +98,7 @@ type TransportParameters struct {
 	MaxDatagramFrameSize protocol.ByteCount // RFC 9221
 	EnableResetStreamAt  bool               // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/09/
 	MinAckDelay          *time.Duration
+	MaxRecordSize        protocol.ByteCount // https://datatracker.ietf.org/doc/draft-ietf-quic-qmux/01/
 }
 
 // Unmarshal the transport parameters
@@ -102,6 +107,86 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 		return &qerr.TransportError{
 			ErrorCode:    qerr.TransportParameterError,
 			ErrorMessage: err.Error(),
+		}
+	}
+	return nil
+}
+
+func (p *TransportParameters) UnmarshalQMux(data []byte) error {
+	if err := p.unmarshalQMux(data); err != nil {
+		return &qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: err.Error(),
+		}
+	}
+	return nil
+}
+
+func (p *TransportParameters) unmarshalQMux(b []byte) error {
+	parameterIDs := make([]transportParameterID, 0, 16)
+	p.AckDelayExponent = protocol.DefaultAckDelayExponent
+	p.MaxAckDelay = protocol.DefaultMaxAckDelay
+	p.MaxDatagramFrameSize = protocol.InvalidByteCount
+	p.MaxRecordSize = DefaultMaxRecordSize
+
+	for len(b) > 0 {
+		paramIDInt, l, err := quicvarint.Parse(b)
+		if err != nil {
+			return err
+		}
+		paramID := transportParameterID(paramIDInt)
+		b = b[l:]
+		paramLen, l, err := quicvarint.Parse(b)
+		if err != nil {
+			return err
+		}
+		b = b[l:]
+		if uint64(len(b)) < paramLen {
+			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", len(b), paramLen)
+		}
+		parameterIDs = append(parameterIDs, paramID)
+		switch paramID {
+		case maxIdleTimeoutParameterID,
+			initialMaxDataParameterID,
+			initialMaxStreamDataBidiLocalParameterID,
+			initialMaxStreamDataBidiRemoteParameterID,
+			initialMaxStreamDataUniParameterID,
+			initialMaxStreamsBidiParameterID,
+			initialMaxStreamsUniParameterID,
+			maxDatagramFrameSizeParameterID,
+			maxRecordSizeParameterID:
+			if err := p.readNumericTransportParameter(b, paramID, int(paramLen)); err != nil {
+				return err
+			}
+		// Section 5.1 of draft-ietf-quic-qmux: only transport parameters defined in
+		// QUIC version 1 are prohibited. Extension transport parameters (e.g.
+		// reset_stream_at, min_ack_delay) are ignored, unless they are specified to be
+		// usable on QMux.
+		case originalDestinationConnectionIDParameterID,
+			statelessResetTokenParameterID,
+			maxUDPPayloadSizeParameterID,
+			ackDelayExponentParameterID,
+			maxAckDelayParameterID,
+			disableActiveMigrationParameterID,
+			preferredAddressParameterID,
+			activeConnectionIDLimitParameterID,
+			initialSourceConnectionIDParameterID,
+			retrySourceConnectionIDParameterID:
+			return fmt.Errorf("transport parameter %#x is prohibited by QMux", paramID)
+		default:
+		}
+		b = b[paramLen:]
+	}
+
+	slices.SortFunc(parameterIDs, func(a, b transportParameterID) int {
+		if a < b {
+			return -1
+		}
+		return 1
+	})
+	for i := 0; i < len(parameterIDs)-1; i++ {
+		if parameterIDs[i] == parameterIDs[i+1] {
+			return fmt.Errorf("received duplicate transport parameter %#x", parameterIDs[i])
 		}
 	}
 	return nil
@@ -120,6 +205,7 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 	p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	p.MaxDatagramFrameSize = protocol.InvalidByteCount
 	p.ActiveConnectionIDLimit = protocol.DefaultActiveConnectionIDLimit
+	p.MaxRecordSize = DefaultMaxRecordSize
 
 	for len(b) > 0 {
 		paramIDInt, l, err := quicvarint.Parse(b)
@@ -348,6 +434,11 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 			mad = math.MaxInt64
 		}
 		p.MinAckDelay = &mad
+	case maxRecordSizeParameterID:
+		if val < uint64(DefaultMaxRecordSize) {
+			return fmt.Errorf("invalid value for max_record_size: %d (minimum %d)", val, DefaultMaxRecordSize)
+		}
+		p.MaxRecordSize = protocol.ByteCount(val)
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
@@ -474,6 +565,24 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	return b
 }
 
+func (p *TransportParameters) MarshalQMux() []byte {
+	b := make([]byte, 0, 128)
+	b = p.marshalVarintParam(b, initialMaxStreamDataBidiLocalParameterID, uint64(p.InitialMaxStreamDataBidiLocal))
+	b = p.marshalVarintParam(b, initialMaxStreamDataBidiRemoteParameterID, uint64(p.InitialMaxStreamDataBidiRemote))
+	b = p.marshalVarintParam(b, initialMaxStreamDataUniParameterID, uint64(p.InitialMaxStreamDataUni))
+	b = p.marshalVarintParam(b, initialMaxDataParameterID, uint64(p.InitialMaxData))
+	b = p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
+	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+	b = p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
+	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
+		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
+	}
+	if p.MaxRecordSize != 0 && p.MaxRecordSize != DefaultMaxRecordSize {
+		b = p.marshalVarintParam(b, maxRecordSizeParameterID, uint64(p.MaxRecordSize))
+	}
+	return b
+}
+
 func (p *TransportParameters) marshalVarintParam(b []byte, id transportParameterID, val uint64) []byte {
 	b = quicvarint.Append(b, uint64(id))
 	b = quicvarint.Append(b, uint64(quicvarint.Len(val)))
@@ -587,6 +696,10 @@ func (p *TransportParameters) String() string {
 	if p.MinAckDelay != nil {
 		logString += ", MinAckDelay: %s"
 		logParams = append(logParams, *p.MinAckDelay)
+	}
+	if p.MaxRecordSize != 0 && p.MaxRecordSize != DefaultMaxRecordSize {
+		logString += ", MaxRecordSize: %d"
+		logParams = append(logParams, p.MaxRecordSize)
 	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)
