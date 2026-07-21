@@ -135,6 +135,79 @@ func TestSendStreamWriteData(t *testing.T) {
 	)
 }
 
+func TestSendStreamWriteWithLimit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const streamID protocol.StreamID = 42
+		mockCtrl := gomock.NewController(t)
+		mockFC := newTestStreamFlowControllerWithSendWindow(streamID, 56)
+		mockSender := NewMockStreamSender(mockCtrl)
+		str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+
+		mockSender.EXPECT().onHasStreamData(streamID, str).Times(4)
+		_, err := str.Write([]byte("header"))
+		require.NoError(t, err)
+
+		type result struct {
+			n   int
+			err error
+		}
+		results := make(chan result, 1)
+		data := make([]byte, 51)
+		calls := 0
+		go func() {
+			n, err := str.WriteWithLimit(data, func(maxBytes int) int {
+				calls++
+				return min(maxBytes, 25)
+			})
+			results <- result{n: n, err: err}
+		}()
+
+		synctest.Wait()
+		frame, _, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.True(t, hasMore)
+		require.Equal(t, []byte("header"), frame.Frame.Data)
+		require.Zero(t, calls)
+
+		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.False(t, hasMore)
+		require.Equal(t, data[:25], frame.Frame.Data)
+		synctest.Wait()
+		writeResult := <-results
+		require.Equal(t, 25, writeResult.n)
+		require.ErrorIs(t, writeResult.err, ErrWriteLimitReached)
+		require.Equal(t, 1, calls)
+
+		go func() {
+			n, err := str.WriteWithLimit(data[25:], func(maxBytes int) int {
+				calls++
+				return maxBytes
+			})
+			results <- result{n: n, err: err}
+		}()
+		synctest.Wait()
+
+		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.True(t, hasMore)
+		require.Equal(t, data[25:50], frame.Frame.Data)
+		require.Equal(t, 2, calls)
+
+		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.Nil(t, frame.Frame)
+		require.True(t, hasMore)
+		require.Equal(t, 2, calls)
+
+		str.updateSendWindow(57)
+		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		require.False(t, hasMore)
+		require.Equal(t, data[50:], frame.Frame.Data)
+		synctest.Wait()
+		writeResult = <-results
+		require.Equal(t, 26, writeResult.n)
+		require.NoError(t, writeResult.err)
+		require.Equal(t, 3, calls)
+	})
+}
+
 func TestSendStreamTryWriteAll(t *testing.T) {
 	const streamID protocol.StreamID = 42
 	mockCtrl := gomock.NewController(t)

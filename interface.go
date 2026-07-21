@@ -61,6 +61,9 @@ var Err0RTTRejected = errors.New("0-RTT rejected")
 // ErrWouldBlock is returned by [SendStream.TryWriteAll] if the entire slice can't be queued immediately.
 var ErrWouldBlock = errors.New("operation would block")
 
+// ErrWriteLimitReached is returned by [SendStream.WriteWithLimit] when its limiter prevents accepting the entire slice.
+var ErrWriteLimitReached = errors.New("write limit reached")
+
 // QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the
 // context returned by tls.Config.ClientInfo.Context.
 var QUICVersionContextKey = handshake.QUICVersionContextKey
