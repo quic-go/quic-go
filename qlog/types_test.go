@@ -15,6 +15,6 @@ func TestEncryptionLevelToPacketType(t *testing.T) {
 	require.Equal(t, "1RTT", string(EncryptionLevelToPacketType(protocol.Encryption1RTT)))
 }
 
-func TestCalculateDatagramID(t *testing.T) {
-	require.Equal(t, DatagramID(0xcbf43926), CalculateDatagramID([]byte("123456789")))
+func TestCalculateDatagramPayloadChecksum(t *testing.T) {
+	require.Equal(t, DatagramPayloadChecksum(0xe3069283), CalculateDatagramPayloadChecksum([]byte("123456789")))
 }
