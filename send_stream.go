@@ -103,7 +103,9 @@ func (s *SendStream) Write(p []byte) (int, error) {
 
 // WriteWithLimit writes data to the stream, subject to an additional send limit.
 // During packetization, limiter receives the bytes allowed for the next STREAM frame after
-// QUIC flow control and returns how many may be sent. Values outside [0, maxBytes] are clamped.
+// QUIC flow control and returns how many may be sent. Returning n in [0, maxBytes] commits
+// n bytes of limiter credit; the limiter is not called again when those bytes are retransmitted.
+// Values outside [0, maxBytes] are clamped.
 // A short result returns the accepted prefix and [ErrWriteLimitReached]; the caller can wait
 // for external credit and retry the suffix. QUIC blocking behaves like [SendStream.Write].
 // limiter can run multiple times on another goroutine while QUIC send flow-control accounting
