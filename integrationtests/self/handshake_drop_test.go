@@ -387,15 +387,15 @@ func TestHandshakePacketBuffering(t *testing.T) {
 		buffered := clientEventRecorder.Events(qlog.PacketBuffered{})
 		t.Logf("buffered packets: %d", len(buffered))
 		require.NotEmpty(t, buffered)
-		receivedPackets := make(map[qlog.DatagramID][]qlog.PacketType)
+		receivedPackets := make(map[qlog.DatagramPayloadChecksum][]qlog.PacketType)
 		for _, ev := range clientEventRecorder.Events(qlog.PacketReceived{}) {
-			id := ev.(qlog.PacketReceived).DatagramID
-			receivedPackets[id] = append(receivedPackets[id], ev.(qlog.PacketReceived).Header.PacketType)
+			checksum := ev.(qlog.PacketReceived).DatagramPayloadChecksum
+			receivedPackets[checksum] = append(receivedPackets[checksum], ev.(qlog.PacketReceived).Header.PacketType)
 		}
 		for _, ev := range buffered {
-			id := ev.(qlog.PacketBuffered).DatagramID
-			require.Contains(t, receivedPackets, id)
-			require.Contains(t, receivedPackets[id], qlog.PacketTypeHandshake)
+			checksum := ev.(qlog.PacketBuffered).DatagramPayloadChecksum
+			require.Contains(t, receivedPackets, checksum)
+			require.Contains(t, receivedPackets[checksum], qlog.PacketTypeHandshake)
 		}
 
 		sconn, err := ln.Accept(context.Background())
