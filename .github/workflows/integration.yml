@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "ubuntu" ]
-        go: [ "1.25.x", "1.26.x", "1.27.0-rc.1" ]
+        go: [ "1.25.x", "1.26.x", "1.27.0-rc.2" ]
         race: [ false ]
         include:
           - os: "ubuntu"
