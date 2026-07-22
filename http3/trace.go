@@ -28,8 +28,19 @@ func (c *fakeConn) Write(p []byte) (int, error)        { panic("connection opera
 func (c *fakeConn) SetDeadline(t time.Time) error      { panic("connection operation prohibited") }
 func (c *fakeConn) SetReadDeadline(t time.Time) error  { panic("connection operation prohibited") }
 func (c *fakeConn) SetWriteDeadline(t time.Time) error { panic("connection operation prohibited") }
-func (c *fakeConn) RemoteAddr() net.Addr               { return c.conn.RemoteAddr() }
-func (c *fakeConn) LocalAddr() net.Addr                { return c.conn.LocalAddr() }
+func (c *fakeConn) RemoteAddr() net.Addr {
+	if c.conn != nil {
+		return c.conn.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *fakeConn) LocalAddr() net.Addr {
+	if c.conn != nil {
+		return c.conn.LocalAddr()
+	}
+	return nil
+}
 
 func traceGotConn(trace *httptrace.ClientTrace, conn *quic.Conn, reused bool) {
 	if trace != nil && trace.GotConn != nil {
