@@ -96,35 +96,50 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 }
 
 func TestDrainServerAcceptQueue(t *testing.T) {
-	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
-	require.NoError(t, err)
-	defer server.Close()
+	synctest.Test(t, func(t *testing.T) {
+		const rtt = 10 * time.Millisecond
+		clientPacketConn, serverPacketConn, close := newSimnetLink(t, rtt)
+		defer close(t)
 
-	dialer := &quic.Transport{Conn: newUDPConnLocalhost(t)}
-	defer dialer.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	// fill up the accept queue
-	conns := make([]*quic.Conn, 0, protocol.MaxAcceptQueueSize)
-	for range protocol.MaxAcceptQueueSize {
-		conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		server, err := quic.Listen(serverPacketConn, getTLSConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
-		conns = append(conns, conn)
-	}
-	time.Sleep(scaleDuration(25 * time.Millisecond)) // wait for connections to be queued
+		defer server.Close()
 
-	server.Close()
-	for i := range protocol.MaxAcceptQueueSize {
-		c, err := server.Accept(ctx)
-		require.NoError(t, err)
-		// make sure the connection is not closed
-		require.NoError(t, context.Cause(conns[i].Context()), "client connection closed")
-		require.NoError(t, context.Cause(c.Context()), "server connection closed")
-		c.CloseWithError(0, "")
-	}
-	_, err = server.Accept(ctx)
-	require.ErrorIs(t, err, quic.ErrServerClosed)
+		dialer := &quic.Transport{Conn: clientPacketConn}
+		defer dialer.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		// fill up the accept queue
+		conns := make([]*quic.Conn, 0, protocol.MaxAcceptQueueSize)
+		for range protocol.MaxAcceptQueueSize {
+			conn, err := dialer.Dial(ctx, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+			require.NoError(t, err)
+			conns = append(conns, conn)
+		}
+		// wait for all handshakes to complete before closing the server
+		for _, conn := range conns {
+			select {
+			case <-conn.HandshakeComplete():
+			case <-ctx.Done():
+				t.Fatal("handshake did not complete in time")
+			}
+		}
+		// Give a small amount of time to ensure connections are queued after handshake
+		time.Sleep(rtt)
+
+		server.Close()
+		for i := range protocol.MaxAcceptQueueSize {
+			c, err := server.Accept(ctx)
+			require.NoError(t, err)
+			// make sure the connection is not closed
+			require.NoError(t, context.Cause(conns[i].Context()), "client connection closed")
+			require.NoError(t, context.Cause(c.Context()), "server connection closed")
+			c.CloseWithError(0, "")
+		}
+		_, err = server.Accept(ctx)
+		require.ErrorIs(t, err, quic.ErrServerClosed)
+	})
 }
 
 type brokenConn struct {
