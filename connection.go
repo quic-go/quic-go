@@ -938,8 +938,17 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 	c.connIDGenerator.SetHandshakeComplete(now.Add(3 * c.rttStats.PTO(false)))
 
 	if c.qlogger != nil {
+		state := c.cryptoStreamHandler.ConnectionState()
 		c.qlogger.RecordEvent(qlog.ALPNInformation{
-			ChosenALPN: c.cryptoStreamHandler.ConnectionState().NegotiatedProtocol,
+			ChosenALPN: state.NegotiatedProtocol,
+		})
+		c.qlogger.RecordEvent(qlog.DebugEvent{
+			Message: fmt.Sprintf(
+				"TLS handshake complete: did_resume=%t cipher_suite=%s curve_id=%s",
+				state.DidResume,
+				tls.CipherSuiteName(state.CipherSuite),
+				state.CurveID,
+			),
 		})
 	}
 

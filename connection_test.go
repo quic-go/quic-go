@@ -1234,6 +1234,7 @@ func TestConnectionHandshakeServer(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cs := mocks.NewMockCryptoSetup(mockCtrl)
 	unpacker := NewMockUnpacker(mockCtrl)
+	var eventRecorder events.Recorder
 	tc := newServerTestConnection(
 		t,
 		mockCtrl,
@@ -1241,6 +1242,7 @@ func TestConnectionHandshakeServer(t *testing.T) {
 		false,
 		connectionOptCryptoSetup(cs),
 		connectionOptUnpacker(unpacker),
+		connectionOptTracer(&eventRecorder),
 	)
 
 	// the state transition is driven by processing of a CRYPTO frame
@@ -1261,6 +1263,12 @@ func TestConnectionHandshakeServer(t *testing.T) {
 		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionHandshake),
 		cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventHandshakeComplete}),
 		cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent}),
+		cs.EXPECT().ConnectionState().Return(handshake.ConnectionState{ConnectionState: tls.ConnectionState{
+			NegotiatedProtocol: "h3",
+			DidResume:          true,
+			CipherSuite:        tls.TLS_AES_128_GCM_SHA256,
+			CurveID:            tls.X25519,
+		}}),
 		cs.EXPECT().SetHandshakeConfirmed(),
 		cs.EXPECT().GetSessionTicket().Return([]byte("session ticket"), nil),
 	)
@@ -1278,6 +1286,13 @@ func TestConnectionHandshakeServer(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.DebugEvent{Message: "TLS handshake complete: did_resume=true cipher_suite=TLS_AES_128_GCM_SHA256 curve_id=X25519"},
+		},
+		eventRecorder.Events(qlog.DebugEvent{}),
+	)
 
 	var foundSessionTicket, foundHandshakeDone, foundNewToken bool
 	frames, _, _ := tc.conn.framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
