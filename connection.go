@@ -288,11 +288,17 @@ var newConnection = func(
 	} else {
 		s.logID = destConnID.String()
 	}
+	queueControlFrame := func(f wire.Frame) {
+		if f, ok := f.(*wire.RetireConnectionIDFrame); ok && f.SequenceNumber == 0 {
+			return
+		}
+		s.queueControlFrame(f)
+	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
 		runner.RemoveResetToken,
-		s.queueControlFrame,
+		queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
 		runner,
