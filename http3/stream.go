@@ -25,6 +25,7 @@ type datagramStream interface {
 	SetDeadline(time.Time) error
 	SetReadDeadline(time.Time) error
 	SetWriteDeadline(time.Time) error
+	TryWriteAll([]byte) error
 	SendDatagram(b []byte) error
 	ReceiveDatagram(ctx context.Context) ([]byte, error)
 
@@ -135,6 +136,28 @@ func (s *Stream) Write(b []byte) (int, error) {
 	return s.datagramStream.Write(b)
 }
 
+// TryWriteAll writes b in a DATA frame if the entire frame can be queued immediately.
+// It returns [quic.ErrWouldBlock] without queueing anything otherwise.
+func (s *Stream) TryWriteAll(b []byte) error {
+	data := make([]byte, 0, frameHeaderLen+len(b))
+	data = (&dataFrame{Length: uint64(len(b))}).Append(data)
+	data = append(data, b...)
+	if err := s.datagramStream.TryWriteAll(data); err != nil {
+		return err
+	}
+	if s.qlogger != nil {
+		s.qlogger.RecordEvent(qlog.FrameCreated{
+			StreamID: s.StreamID(),
+			Raw: qlog.RawInfo{
+				Length:        len(data),
+				PayloadLength: len(b),
+			},
+			Frame: qlog.Frame{Frame: qlog.DataFrame{}},
+		})
+	}
+	return nil
+}
+
 func (s *Stream) writeUnframed(b []byte) (int, error) {
 	return s.datagramStream.Write(b)
 }
@@ -221,6 +244,15 @@ func (s *RequestStream) Write(b []byte) (int, error) {
 		return 0, errors.New("http3: invalid use of RequestStream.Write before SendRequestHeader")
 	}
 	return s.str.Write(b)
+}
+
+// TryWriteAll writes b if the entire DATA frame can be queued immediately.
+// It can only be used after the request has been sent (using SendRequestHeader).
+func (s *RequestStream) TryWriteAll(b []byte) error {
+	if !s.sentRequest {
+		return errors.New("http3: invalid use of RequestStream.TryWriteAll before SendRequestHeader")
+	}
+	return s.str.TryWriteAll(b)
 }
 
 // Close closes the send-direction of the stream.
