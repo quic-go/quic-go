@@ -116,6 +116,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
 			InitialPacketSize: protocol.MinInitialPacketSize,
+			MaxPacketSize:     protocol.MaxPacketBufferSize,
 			EnableDatagrams:   true,
 			Tracer:            newTracer(&eventRecorder),
 		}),

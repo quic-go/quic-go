@@ -917,7 +917,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	if c.peerParams.MaxUDPPayloadSize > 0 && c.peerParams.MaxUDPPayloadSize < maxPacketSize {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
-	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
+	c.mtuDiscoverer.Reset(now, initialPacketSize, c.cappedMaxPacketSize(maxPacketSize))
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
 	c.sendQueue = newSendQueue(c.conn)
@@ -1300,7 +1300,7 @@ func (c *Conn) handleShortHeaderPacket(
 	c.mtuDiscoverer.Reset(
 		p.rcvTime,
 		protocol.ByteCount(c.config.InitialPacketSize),
-		maxPacketSize,
+		c.cappedMaxPacketSize(maxPacketSize),
 	)
 	c.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	return true, nil
@@ -2442,9 +2442,22 @@ func (c *Conn) applyTransportParameters() {
 	c.mtuDiscoverer = newMTUDiscoverer(
 		c.rttStats,
 		protocol.ByteCount(c.config.InitialPacketSize),
-		maxPacketSize,
+		c.cappedMaxPacketSize(maxPacketSize),
 		c.qlogger,
 	)
+}
+
+// cappedMaxPacketSize caps a Path MTU Discovery upper limit to the configured MaxPacketSize.
+// The result is never smaller than the configured InitialPacketSize: a MaxPacketSize below the
+// initial packet size disables upward probing rather than producing an invalid probing range.
+func (c *Conn) cappedMaxPacketSize(maxPacketSize protocol.ByteCount) protocol.ByteCount {
+	if limit := protocol.ByteCount(c.config.MaxPacketSize); limit < maxPacketSize {
+		maxPacketSize = limit
+	}
+	if initialPacketSize := protocol.ByteCount(c.config.InitialPacketSize); maxPacketSize < initialPacketSize {
+		maxPacketSize = initialPacketSize
+	}
+	return maxPacketSize
 }
 
 func (c *Conn) triggerSending(now monotime.Time) error {

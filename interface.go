@@ -169,6 +169,16 @@ type Config struct {
 	// If set too high, the path might not support packets of that size, leading to a timeout of the QUIC handshake.
 	// Values below 1200 are invalid.
 	InitialPacketSize uint16
+	// MaxPacketSize is the upper limit for packets sent, and thereby for Path MTU Discovery.
+	// If unset, it defaults to 1352 bytes, i.e. a 1400-byte IPv6 packet (1380 bytes on IPv4).
+	// Some paths transparently fragment or intermittently lose packets above a certain size
+	// instead of dropping them outright; DPLPMTUD (RFC 8899) cannot detect this, since probe
+	// packets are delivered and acknowledged. On such paths the residual loss degrades
+	// throughput, and capping the packet size is the only remedy.
+	// Set this to 1452 to probe up to the maximum packet size supported on 1500-byte MTU paths.
+	// Values below 1200 are invalid, values above 1452 are clipped to 1452,
+	// and values below InitialPacketSize disable upward probing altogether.
+	MaxPacketSize uint16
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.

@@ -3482,3 +3482,23 @@ func testConnectionDatagrams(t *testing.T, enabled bool) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("bar"), d)
 }
+
+func TestConnectionCappedMaxPacketSize(t *testing.T) {
+	newConn := func(maxPacketSize, initialPacketSize uint16) *Conn {
+		return &Conn{config: &Config{MaxPacketSize: maxPacketSize, InitialPacketSize: initialPacketSize}}
+	}
+	const maxBuf = protocol.ByteCount(protocol.MaxPacketBufferSize) // 1452
+
+	// the default caps discovery at 1352 bytes
+	c := newConn(protocol.DefaultMaxPacketSize, protocol.InitialPacketSize)
+	require.Equal(t, protocol.ByteCount(protocol.DefaultMaxPacketSize), c.cappedMaxPacketSize(maxBuf))
+	// setting MaxPacketSize to the buffer size imposes no additional limit
+	c = newConn(protocol.MaxPacketBufferSize, protocol.InitialPacketSize)
+	require.Equal(t, maxBuf, c.cappedMaxPacketSize(maxBuf))
+	// a smaller limit (e.g. the peer's max_udp_payload_size) is preserved
+	c = newConn(protocol.MaxPacketBufferSize, protocol.InitialPacketSize)
+	require.Equal(t, protocol.ByteCount(1300), c.cappedMaxPacketSize(1300))
+	// the limit never drops below the initial packet size, disabling upward probing instead
+	c = newConn(1200, 1400)
+	require.Equal(t, protocol.ByteCount(1400), c.cappedMaxPacketSize(maxBuf))
+}

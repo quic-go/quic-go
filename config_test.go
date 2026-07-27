@@ -65,6 +65,23 @@ func TestConfigValidation(t *testing.T) {
 		require.NoError(t, validateConfig(conf))
 		require.Equal(t, uint16(protocol.MaxPacketBufferSize), conf.InitialPacketSize)
 	})
+
+	t.Run("max packet size", func(t *testing.T) {
+		// not set
+		conf := &Config{MaxPacketSize: 0}
+		require.NoError(t, validateConfig(conf))
+		require.Zero(t, conf.MaxPacketSize)
+
+		// too small
+		conf = &Config{MaxPacketSize: 10}
+		require.NoError(t, validateConfig(conf))
+		require.Equal(t, uint16(1200), conf.MaxPacketSize)
+
+		// too large
+		conf = &Config{MaxPacketSize: protocol.MaxPacketBufferSize + 1}
+		require.NoError(t, validateConfig(conf))
+		require.Equal(t, uint16(protocol.MaxPacketBufferSize), conf.MaxPacketSize)
+	})
 }
 
 func TestConfigHandshakeIdleTimeout(t *testing.T) {
@@ -122,6 +139,8 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			f.Set(reflect.ValueOf(true))
 		case "InitialPacketSize":
 			f.Set(reflect.ValueOf(uint16(1350)))
+		case "MaxPacketSize":
+			f.Set(reflect.ValueOf(uint16(1390)))
 		case "DisablePathMTUDiscovery":
 			f.Set(reflect.ValueOf(true))
 		case "Allow0RTT":
@@ -184,6 +203,7 @@ func TestConfigDefaultValues(t *testing.T) {
 	require.EqualValues(t, protocol.DefaultMaxReceiveConnectionFlowControlWindow, c.MaxConnectionReceiveWindow)
 	require.EqualValues(t, protocol.DefaultMaxIncomingStreams, c.MaxIncomingStreams)
 	require.EqualValues(t, protocol.DefaultMaxIncomingUniStreams, c.MaxIncomingUniStreams)
+	require.EqualValues(t, protocol.DefaultMaxPacketSize, c.MaxPacketSize)
 	require.False(t, c.DisablePathMTUDiscovery)
 	require.Nil(t, c.GetConfigForClient)
 }

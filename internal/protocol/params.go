@@ -11,6 +11,13 @@ const DesiredSendBufferSize = (1 << 20) * 7 // 7 MB
 // InitialPacketSize is the initial (before Path MTU discovery) maximum packet size used.
 const InitialPacketSize = 1280
 
+// DefaultMaxPacketSize is the default upper limit for Path MTU Discovery: a 1352-byte UDP
+// payload produces a 1400-byte IPv6 packet (1380 bytes on IPv4). Tunnels (PPPoE, GTP, VXLAN,
+// DS-Lite, IPsec) commonly reduce the path MTU below Ethernet's 1500, and some of them
+// fragment or lose larger packets in ways DPLPMTUD cannot detect. This size matches the
+// 1350/1370-byte payloads Chrome established from large-scale reachability measurements.
+const DefaultMaxPacketSize = 1352
+
 // MaxCongestionWindowPackets is the maximum congestion window in packet.
 const MaxCongestionWindowPackets = 10000
 
