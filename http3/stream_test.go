@@ -175,6 +175,31 @@ func TestStreamWrite(t *testing.T) {
 	)
 }
 
+func TestStreamTryWriteAll(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	qstr.EXPECT().TryWriteAll(getDataFrame([]byte("foobar"))).Return(nil)
+	qstr.EXPECT().TryWriteAll(getDataFrame([]byte("blocked"))).Return(quic.ErrWouldBlock)
+
+	var eventRecorder events.Recorder
+	str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder)
+	require.NoError(t, str.TryWriteAll([]byte("foobar")))
+	require.ErrorIs(t, str.TryWriteAll([]byte("blocked")), quic.ErrWouldBlock)
+
+	frameLen, payloadLen := expectedFrameLength(t, &dataFrame{Length: 6})
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameCreated{
+				StreamID: 42,
+				Raw:      qlog.RawInfo{Length: frameLen, PayloadLength: payloadLen},
+				Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
+			},
+		},
+		eventRecorder.Events(qlog.FrameCreated{}),
+	)
+}
+
 func TestRequestStream(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
@@ -201,6 +226,10 @@ func TestRequestStream(t *testing.T) {
 	require.EqualError(t, err, "http3: invalid use of RequestStream.Read before ReadResponse")
 	_, err = str.Write([]byte{0})
 	require.EqualError(t, err, "http3: invalid use of RequestStream.Write before SendRequestHeader")
+	require.EqualError(t,
+		str.TryWriteAll([]byte{0}),
+		"http3: invalid use of RequestStream.TryWriteAll before SendRequestHeader",
+	)
 
 	// calling ReadResponse before SendRequestHeader is not valid
 	_, err = str.ReadResponse()
@@ -218,6 +247,8 @@ func TestRequestStream(t *testing.T) {
 	require.NoError(t, str.SendRequestHeader(req))
 	// duplicate calls are not allowed
 	require.EqualError(t, str.SendRequestHeader(req), "http3: invalid duplicate use of RequestStream.SendRequestHeader")
+	qstr.EXPECT().TryWriteAll(getDataFrame([]byte("request body"))).Return(nil)
+	require.NoError(t, str.TryWriteAll([]byte("request body")))
 
 	buf := bytes.NewBuffer(encodeResponse(t, http.StatusOK))
 	buf.Write((&dataFrame{Length: 6}).Append(nil))
