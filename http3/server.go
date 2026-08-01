@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -45,21 +46,58 @@ var _ QUICListener = &quic.EarlyListener{}
 // ConfigureTLSConfig creates a new tls.Config which can be used
 // to create a quic.Listener meant for serving HTTP/3.
 func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
+	return configureTLSConfig(tlsConf, nil)
+}
+
+func configureTLSConfig(tlsConf *tls.Config, configure func(*tls.Config)) *tls.Config {
 	// Workaround for https://github.com/golang/go/issues/60506.
 	// This initializes the session tickets _before_ cloning the config.
 	_, _ = tlsConf.DecryptTicket(nil, tls.ConnectionState{})
 	config := tlsConf.Clone()
 	config.NextProtos = []string{NextProtoH3}
+	if configure != nil {
+		configure(config)
+	}
 	if gfc := config.GetConfigForClient; gfc != nil {
 		config.GetConfigForClient = func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			conf, err := gfc(ch)
 			if conf == nil || err != nil {
 				return conf, err
 			}
-			return ConfigureTLSConfig(conf), nil
+			return configureTLSConfig(conf, configure), nil
 		}
 	}
 	return config
+}
+
+func (s *Server) configureTLSConfig(tlsConf *tls.Config) *tls.Config {
+	settings := s.settings()
+	settingsExtra := settingsForSessionTicket(settings)
+	return configureTLSConfig(tlsConf, func(config *tls.Config) {
+		wrapSession := config.WrapSession
+		if wrapSession == nil {
+			wrapSession = config.EncryptTicket
+		}
+		config.WrapSession = func(cs tls.ConnectionState, ss *tls.SessionState) ([]byte, error) {
+			ss.Extra = append(ss.Extra, bytes.Clone(settingsExtra))
+			return wrapSession(cs, ss)
+		}
+		unwrapSession := config.UnwrapSession
+		if unwrapSession == nil {
+			unwrapSession = config.DecryptTicket
+		}
+		config.UnwrapSession = func(identity []byte, cs tls.ConnectionState) (*tls.SessionState, error) {
+			ss, err := unwrapSession(identity, cs)
+			if err != nil || ss == nil || !ss.EarlyData {
+				return ss, err
+			}
+			settingsData, ok := settingsDataFromSessionTicket(ss.Extra)
+			if !ok || !settingsCompatibleFor0RTT(settingsData, settings) {
+				ss.EarlyData = false
+			}
+			return ss, nil
+		}
+	})
 }
 
 // contextKey is a value for use with context.WithValue. It's used as
@@ -297,7 +335,7 @@ func (s *Server) setupListenerForConn(tlsConf *tls.Config, conn net.PacketConn) 
 		return nil, errServerWithoutTLSConfig
 	}
 
-	baseConf := ConfigureTLSConfig(tlsConf)
+	baseConf := s.configureTLSConfig(tlsConf)
 	quicConf := s.QUICConfig
 	if quicConf == nil {
 		quicConf = &quic.Config{Allow0RTT: true}
@@ -453,16 +491,20 @@ func (s *Server) newRawServerConn(conn *quic.Conn) (*RawServerConn, *quic.SendSt
 
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
 	// when the server is gracefully closed
-	ctrlStr, err := hconn.openControlStream(&settingsFrame{
-		MaxFieldSectionSize: int64(s.maxHeaderBytes()),
-		Datagram:            s.EnableDatagrams,
-		ExtendedConnect:     true,
-		Other:               s.AdditionalSettings,
-	})
+	ctrlStr, err := hconn.openControlStream(s.settings())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("opening the control stream failed: %w", err)
 	}
 	return hconn, ctrlStr, qlogger, nil
+}
+
+func (s *Server) settings() *settings {
+	return &settings{
+		MaxFieldSectionSize: int64(s.maxHeaderBytes()),
+		Datagram:            s.EnableDatagrams,
+		ExtendedConnect:     true,
+		Other:               s.AdditionalSettings,
+	}
 }
 
 // handleConn handles the HTTP/3 exchange on a QUIC connection.
