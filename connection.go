@@ -3006,6 +3006,11 @@ func (c *Conn) onHasStreamData(id protocol.StreamID, str *SendStream) {
 	c.scheduleSending()
 }
 
+func (c *Conn) onHasStreamRetransmission(id protocol.StreamID, str *SendStream) {
+	c.framer.AddStreamWithRetransmission(id, str)
+	c.scheduleSending()
+}
+
 func (c *Conn) onHasStreamControlFrame(id protocol.StreamID, str streamControlFrameGetter) {
 	c.framer.AddStreamWithControlFrames(id, str)
 	c.scheduleSending()

@@ -327,11 +327,47 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 	require.False(t, framer.HasData())
 }
 
+func TestFramerPrioritizesStreamRetransmissions(t *testing.T) {
+	const (
+		newDataStreamID       = protocol.StreamID(1)
+		firstRetransStreamID  = protocol.StreamID(4)
+		secondRetransStreamID = protocol.StreamID(8)
+	)
+	newDataStream := NewMockStreamFrameGetter(gomock.NewController(t))
+	firstRetransStream := NewMockStreamFrameGetter(gomock.NewController(t))
+	secondRetransStream := NewMockStreamFrameGetter(gomock.NewController(t))
+	firstRetransmission := &wire.StreamFrame{StreamID: firstRetransStreamID, Data: []byte("first"), DataLenPresent: true}
+	secondRetransmission := &wire.StreamFrame{StreamID: secondRetransStreamID, Data: []byte("second"), DataLenPresent: true}
+	thirdRetransmission := &wire.StreamFrame{StreamID: secondRetransStreamID, Offset: 6, Data: []byte("third"), DataLenPresent: true}
+	newData := &wire.StreamFrame{StreamID: newDataStreamID, Data: []byte("new"), DataLenPresent: true}
+
+	firstRetransStream.EXPECT().popRetransmissionFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: firstRetransmission}, false)
+	secondRetransStream.EXPECT().popRetransmissionFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: secondRetransmission}, true)
+	secondRetransStream.EXPECT().popRetransmissionFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: thirdRetransmission}, false)
+	newDataStream.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: newData}, nil, false)
+
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
+	framer.AddActiveStream(newDataStreamID, newDataStream)
+	framer.AddStreamWithRetransmission(secondRetransStreamID, secondRetransStream)
+	framer.AddStreamWithRetransmission(secondRetransStreamID, secondRetransStream) // duplicate calls are no-ops
+	framer.AddStreamWithRetransmission(firstRetransStreamID, firstRetransStream)
+
+	_, frames, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	require.Len(t, frames, 4)
+	require.Equal(t,
+		[]protocol.StreamID{secondRetransStreamID, secondRetransStreamID, firstRetransStreamID, newDataStreamID},
+		[]protocol.StreamID{frames[0].Frame.StreamID, frames[1].Frame.StreamID, frames[2].Frame.StreamID, frames[3].Frame.StreamID},
+	)
+	require.False(t, framer.HasData())
+}
+
 func TestFramerRemoveActiveStream(t *testing.T) {
 	const id = protocol.StreamID(42)
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
-	framer.AddActiveStream(id, NewMockStreamFrameGetter(gomock.NewController(t)))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
+	framer.AddActiveStream(id, str)
+	framer.AddStreamWithRetransmission(id, str)
 	require.True(t, framer.HasData())
 	framer.RemoveActiveStream(id) // no calls will be issued to the mock stream
 	// we can't assert on framer.HasData here, since it's not removed from the ringbuffer
@@ -463,7 +499,9 @@ func TestFramer0RTTRejection(t *testing.T) {
 	framer.QueueControlFrame(&wire.StreamsBlockedFrame{StreamLimit: 13})
 	framer.QueueControlFrame(pc)
 
-	framer.AddActiveStream(10, NewMockStreamFrameGetter(gomock.NewController(t)))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
+	framer.AddActiveStream(10, str)
+	framer.AddStreamWithRetransmission(10, str)
 	framer.AddStreamWithControlFrames(10, NewMockStreamControlFrameGetter(gomock.NewController(t)))
 
 	framer.Handle0RTTRejection()

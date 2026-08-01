@@ -23,6 +23,7 @@ const maxStreamControlFrameSize = 25
 
 type streamFrameGetter interface {
 	popStreamFrame(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool)
+	popRetransmissionFrame(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, bool)
 }
 
 type streamControlFrameGetter interface {
@@ -32,8 +33,15 @@ type streamControlFrameGetter interface {
 type framer struct {
 	mutex sync.Mutex
 
-	activeStreams            map[protocol.StreamID]streamFrameGetter
-	streamQueue              ringbuffer.RingBuffer[protocol.StreamID]
+	activeStreams map[protocol.StreamID]streamFrameGetter
+	// New stream data is sent incrementally. The ring buffer provides
+	// round-robin scheduling between active streams.
+	streamQueue           ringbuffer.RingBuffer[protocol.StreamID]
+	retransmissionStreams map[protocol.StreamID]streamFrameGetter
+	// Retransmissions are not incremental: repair all lost data for the first queued stream.
+	// New losses extend its batch, so A, B, A is repaired as A, A, B, delaying B.
+	// The ring buffer provides FIFO scheduling while reusing its storage.
+	retransmissionQueue      ringbuffer.RingBuffer[protocol.StreamID]
 	streamsWithControlFrames map[protocol.StreamID]streamControlFrameGetter
 
 	controlFrameMutex          sync.Mutex
@@ -46,6 +54,7 @@ type framer struct {
 func newFramer(connFlowController *connectionFlowController) *framer {
 	return &framer{
 		activeStreams:            make(map[protocol.StreamID]streamFrameGetter),
+		retransmissionStreams:    make(map[protocol.StreamID]streamFrameGetter),
 		streamsWithControlFrames: make(map[protocol.StreamID]streamControlFrameGetter),
 		connFlowController:       connFlowController,
 	}
@@ -53,7 +62,7 @@ func newFramer(connFlowController *connectionFlowController) *framer {
 
 func (f *framer) HasData() bool {
 	f.mutex.Lock()
-	hasData := !f.streamQueue.Empty()
+	hasData := !f.retransmissionQueue.Empty() || !f.streamQueue.Empty()
 	f.mutex.Unlock()
 	if hasData {
 		return true
@@ -99,6 +108,33 @@ func (f *framer) Append(
 	var lastFrame ackhandler.StreamFrame
 	var streamFrameLen protocol.ByteCount
 	f.mutex.Lock()
+	// retransmit all lost STREAM data before sending new STREAM data
+	for !f.retransmissionQueue.Empty() && protocol.MinStreamFrameSize <= maxLen {
+		id := f.retransmissionQueue.PeekFront()
+		str, ok := f.retransmissionStreams[id]
+		if !ok { // the stream was removed after being enqueued
+			f.retransmissionQueue.PopFront()
+			continue
+		}
+		// For the last STREAM frame, we'll remove the DataLen field later.
+		frameMaxLen := maxLen + protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
+		sf, hasMoreRetransmissions := str.popRetransmissionFrame(frameMaxLen, v)
+		if !hasMoreRetransmissions {
+			f.retransmissionQueue.PopFront()
+			delete(f.retransmissionStreams, id)
+		}
+		if sf.Frame == nil {
+			// If the retransmission didn't fit, retry it in the next packet.
+			if hasMoreRetransmissions {
+				break
+			}
+			continue
+		}
+		streamFrames = append(streamFrames, sf)
+		maxLen -= sf.Frame.Length(v)
+		lastFrame = sf
+		streamFrameLen += sf.Frame.Length(v)
+	}
 	// pop STREAM frames, until less than 128 bytes are left in the packet
 	numActiveStreams := f.streamQueue.Len()
 	for range numActiveStreams {
@@ -226,6 +262,15 @@ func (f *framer) AddActiveStream(id protocol.StreamID, str streamFrameGetter) {
 	f.mutex.Unlock()
 }
 
+func (f *framer) AddStreamWithRetransmission(id protocol.StreamID, str streamFrameGetter) {
+	f.mutex.Lock()
+	if _, ok := f.retransmissionStreams[id]; !ok {
+		f.retransmissionQueue.PushBack(id)
+		f.retransmissionStreams[id] = str
+	}
+	f.mutex.Unlock()
+}
+
 func (f *framer) AddStreamWithControlFrames(id protocol.StreamID, str streamControlFrameGetter) {
 	f.controlFrameMutex.Lock()
 	if _, ok := f.streamsWithControlFrames[id]; !ok {
@@ -238,9 +283,9 @@ func (f *framer) AddStreamWithControlFrames(id protocol.StreamID, str streamCont
 func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	f.mutex.Lock()
 	delete(f.activeStreams, id)
-	// We don't delete the stream from the streamQueue,
-	// since we'd have to iterate over the ringbuffer.
-	// Instead, we check if the stream is still in activeStreams when appending STREAM frames.
+	delete(f.retransmissionStreams, id)
+	// We don't delete the stream from the queues, since we'd have to search them.
+	// Instead, we check if the stream is still in the corresponding map when appending STREAM frames.
 	f.mutex.Unlock()
 }
 
@@ -276,9 +321,9 @@ func (f *framer) Handle0RTTRejection() {
 	defer f.controlFrameMutex.Unlock()
 
 	f.streamQueue.Clear()
-	for id := range f.activeStreams {
-		delete(f.activeStreams, id)
-	}
+	clear(f.activeStreams)
+	f.retransmissionQueue.Clear()
+	clear(f.retransmissionStreams)
 	clear(f.streamsWithControlFrames)
 	var j int
 	for i, frame := range f.controlFrames {

@@ -42,6 +42,45 @@ func (m *MockStreamFrameGetter) EXPECT() *MockStreamFrameGetterMockRecorder {
 	return m.recorder
 }
 
+// popRetransmissionFrame mocks base method.
+func (m *MockStreamFrameGetter) popRetransmissionFrame(arg0 protocol.ByteCount, arg1 protocol.Version) (ackhandler.StreamFrame, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "popRetransmissionFrame", arg0, arg1)
+	ret0, _ := ret[0].(ackhandler.StreamFrame)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// popRetransmissionFrame indicates an expected call of popRetransmissionFrame.
+func (mr *MockStreamFrameGetterMockRecorder) popRetransmissionFrame(arg0, arg1 any) *MockStreamFrameGetterpopRetransmissionFrameCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popRetransmissionFrame", reflect.TypeOf((*MockStreamFrameGetter)(nil).popRetransmissionFrame), arg0, arg1)
+	return &MockStreamFrameGetterpopRetransmissionFrameCall{Call: call}
+}
+
+// MockStreamFrameGetterpopRetransmissionFrameCall wrap *gomock.Call
+type MockStreamFrameGetterpopRetransmissionFrameCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamFrameGetterpopRetransmissionFrameCall) Return(arg0 ackhandler.StreamFrame, arg1 bool) *MockStreamFrameGetterpopRetransmissionFrameCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamFrameGetterpopRetransmissionFrameCall) Do(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, bool)) *MockStreamFrameGetterpopRetransmissionFrameCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamFrameGetterpopRetransmissionFrameCall) DoAndReturn(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, bool)) *MockStreamFrameGetterpopRetransmissionFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // popStreamFrame mocks base method.
 func (m *MockStreamFrameGetter) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
 	m.ctrl.T.Helper()
