@@ -7,6 +7,7 @@ import (
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils/minheap"
 	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -22,7 +23,8 @@ const (
 const maxStreamControlFrameSize = 25
 
 type streamFrameGetter interface {
-	popStreamFrame(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool)
+	priority() (urgency int8, incremental bool, generation uint32)
+	popStreamFrame(protocol.ByteCount, protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMoreData bool)
 	popRetransmissionFrame(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, bool)
 }
 
@@ -30,19 +32,42 @@ type streamControlFrameGetter interface {
 	getControlFrame(monotime.Time) (_ ackhandler.Frame, ok, hasMore bool)
 }
 
+// streamQueueEntry identifies a queued generation of a stream.
+type streamQueueEntry struct {
+	id         protocol.StreamID
+	generation uint32
+}
+
+// streamPriorityBucket contains streams with the same urgency
+type streamPriorityBucket struct {
+	Incremental    ringbuffer.RingBuffer[streamQueueEntry]
+	NonIncremental minheap.Heap[protocol.StreamID, uint32 /* generation */]
+	// If a bucket contains both incremental and non-incremental streams,
+	// we round-robin between incremental and non-incremental streams.
+	LastSendWasIncremental bool
+}
+
+func (b *streamPriorityBucket) Len() int {
+	return b.Incremental.Len() + b.NonIncremental.Len()
+}
+
+type queuedStream struct {
+	streamFrameGetter
+	generation uint32
+}
+
 type framer struct {
 	mutex sync.Mutex
 
-	activeStreams map[protocol.StreamID]streamFrameGetter
-	// New stream data is sent incrementally. The ring buffer provides
-	// round-robin scheduling between active streams.
-	streamQueue           ringbuffer.RingBuffer[protocol.StreamID]
+	activeStreams         map[protocol.StreamID]queuedStream
 	retransmissionStreams map[protocol.StreamID]streamFrameGetter
+
+	streamQueue              [8]streamPriorityBucket
+	streamsWithControlFrames map[protocol.StreamID]streamControlFrameGetter
 	// Retransmissions are not incremental: repair all lost data for the first queued stream.
 	// New losses extend its batch, so A, B, A is repaired as A, A, B, delaying B.
 	// The ring buffer provides FIFO scheduling while reusing its storage.
-	retransmissionQueue      ringbuffer.RingBuffer[protocol.StreamID]
-	streamsWithControlFrames map[protocol.StreamID]streamControlFrameGetter
+	retransmissionQueue [8]ringbuffer.RingBuffer[protocol.StreamID]
 
 	controlFrameMutex          sync.Mutex
 	controlFrames              []wire.Frame
@@ -53,7 +78,7 @@ type framer struct {
 
 func newFramer(connFlowController *connectionFlowController) *framer {
 	return &framer{
-		activeStreams:            make(map[protocol.StreamID]streamFrameGetter),
+		activeStreams:            make(map[protocol.StreamID]queuedStream),
 		retransmissionStreams:    make(map[protocol.StreamID]streamFrameGetter),
 		streamsWithControlFrames: make(map[protocol.StreamID]streamControlFrameGetter),
 		connFlowController:       connFlowController,
@@ -61,15 +86,24 @@ func newFramer(connFlowController *connectionFlowController) *framer {
 }
 
 func (f *framer) HasData() bool {
-	f.mutex.Lock()
-	hasData := !f.retransmissionQueue.Empty() || !f.streamQueue.Empty()
-	f.mutex.Unlock()
-	if hasData {
+	f.controlFrameMutex.Lock()
+	hasControlFrames := len(f.streamsWithControlFrames) > 0 || len(f.controlFrames) > 0 || len(f.pathResponses) > 0
+	f.controlFrameMutex.Unlock()
+
+	if hasControlFrames {
 		return true
 	}
-	f.controlFrameMutex.Lock()
-	defer f.controlFrameMutex.Unlock()
-	return len(f.streamsWithControlFrames) > 0 || len(f.controlFrames) > 0 || len(f.pathResponses) > 0
+
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	for urgency := range f.streamQueue {
+		bucket := &f.streamQueue[urgency]
+		if !bucket.Incremental.Empty() || !bucket.NonIncremental.Empty() || !f.retransmissionQueue[urgency].Empty() {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *framer) QueueControlFrame(frame wire.Frame) {
@@ -109,57 +143,71 @@ func (f *framer) Append(
 	var streamFrameLen protocol.ByteCount
 	f.mutex.Lock()
 	// retransmit all lost STREAM data before sending new STREAM data
-	for !f.retransmissionQueue.Empty() && protocol.MinStreamFrameSize <= maxLen {
-		id := f.retransmissionQueue.PeekFront()
-		str, ok := f.retransmissionStreams[id]
-		if !ok { // the stream was removed after being enqueued
-			f.retransmissionQueue.PopFront()
-			continue
-		}
-		// For the last STREAM frame, we'll remove the DataLen field later.
-		frameMaxLen := maxLen + protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
-		sf, hasMoreRetransmissions := str.popRetransmissionFrame(frameMaxLen, v)
-		if !hasMoreRetransmissions {
-			f.retransmissionQueue.PopFront()
-			delete(f.retransmissionStreams, id)
-		}
-		if sf.Frame == nil {
-			// If the retransmission didn't fit, retry it in the next packet.
-			if hasMoreRetransmissions {
-				break
+retransmissions:
+	for urgency := range f.retransmissionQueue {
+		bucket := &f.retransmissionQueue[urgency]
+		for !bucket.Empty() && protocol.MinStreamFrameSize <= maxLen {
+			id := bucket.PeekFront()
+			str, ok := f.retransmissionStreams[id]
+			if !ok {
+				bucket.PopFront()
+				continue
 			}
-			continue
-		}
-		streamFrames = append(streamFrames, sf)
-		maxLen -= sf.Frame.Length(v)
-		lastFrame = sf
-		streamFrameLen += sf.Frame.Length(v)
-	}
-	// pop STREAM frames, until less than 128 bytes are left in the packet
-	numActiveStreams := f.streamQueue.Len()
-	for range numActiveStreams {
-		if protocol.MinStreamFrameSize > maxLen {
-			break
-		}
-		sf, blocked := f.getNextStreamFrame(maxLen, v)
-		if sf.Frame != nil {
+			currentUrgency, _, _ := str.priority()
+			if currentUrgency != int8(urgency) {
+				bucket.PopFront()
+				f.retransmissionQueue[currentUrgency].PushBack(id)
+				continue
+			}
+			// For the last STREAM frame, we'll remove the DataLen field later.
+			frameMaxLen := maxLen + protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
+			sf, hasMoreRetransmissions := str.popRetransmissionFrame(frameMaxLen, v)
+			if !hasMoreRetransmissions {
+				bucket.PopFront()
+				delete(f.retransmissionStreams, id)
+			}
+			if sf.Frame == nil {
+				// If the retransmission didn't fit, retry it in the next packet.
+				if hasMoreRetransmissions {
+					break retransmissions
+				}
+				continue
+			}
 			streamFrames = append(streamFrames, sf)
 			maxLen -= sf.Frame.Length(v)
 			lastFrame = sf
 			streamFrameLen += sf.Frame.Length(v)
 		}
-		// If the stream just became blocked on stream flow control, attempt to pack the
-		// STREAM_DATA_BLOCKED into the same packet.
-		if blocked != nil {
-			l := blocked.Length(v)
-			// In case it doesn't fit, queue it for the next packet.
-			if maxLen < l {
-				f.controlFrames = append(f.controlFrames, blocked)
+	}
+	// pop STREAM frames, until less than 128 bytes are left in the packet
+	for urgency := range f.streamQueue {
+		bucket := &f.streamQueue[urgency]
+		numActiveStreams := bucket.Len()
+
+		for range numActiveStreams {
+			if protocol.MinStreamFrameSize > maxLen {
 				break
 			}
-			frames = append(frames, ackhandler.Frame{Frame: blocked})
-			maxLen -= l
-			controlFrameLen += l
+			sf, blocked := f.getNextStreamFrame(maxLen, int8(urgency), v)
+			if sf.Frame != nil {
+				streamFrames = append(streamFrames, sf)
+				maxLen -= sf.Frame.Length(v)
+				lastFrame = sf
+				streamFrameLen += sf.Frame.Length(v)
+			}
+			// If the stream just became blocked on stream flow control, attempt to pack the
+			// STREAM_DATA_BLOCKED into the same packet.
+			if blocked != nil {
+				l := blocked.Length(v)
+				// In case it doesn't fit, queue it for the next packet.
+				if maxLen < l {
+					f.controlFrames = append(f.controlFrames, blocked)
+					break
+				}
+				frames = append(frames, ackhandler.Frame{Frame: blocked})
+				maxLen -= l
+				controlFrameLen += l
+			}
 		}
 	}
 
@@ -255,63 +303,163 @@ func (f *framer) QueuedTooManyControlFrames() bool {
 
 func (f *framer) AddActiveStream(id protocol.StreamID, str streamFrameGetter) {
 	f.mutex.Lock()
-	if _, ok := f.activeStreams[id]; !ok {
-		f.streamQueue.PushBack(id)
-		f.activeStreams[id] = str
+	defer f.mutex.Unlock()
+
+	urgency, incremental, generation := str.priority()
+	if activeStr, ok := f.activeStreams[id]; ok && activeStr.generation == generation {
+		return
 	}
-	f.mutex.Unlock()
+	bucket := &f.streamQueue[urgency]
+	if incremental {
+		bucket.Incremental.PushBack(streamQueueEntry{id: id, generation: generation})
+	} else {
+		bucket.NonIncremental.Push(id, generation)
+	}
+	f.activeStreams[id] = queuedStream{streamFrameGetter: str, generation: generation}
 }
 
 func (f *framer) AddStreamWithRetransmission(id protocol.StreamID, str streamFrameGetter) {
 	f.mutex.Lock()
-	if _, ok := f.retransmissionStreams[id]; !ok {
-		f.retransmissionQueue.PushBack(id)
-		f.retransmissionStreams[id] = str
+	defer f.mutex.Unlock()
+
+	urgency, _, _ := str.priority()
+	if _, ok := f.retransmissionStreams[id]; ok {
+		return
 	}
-	f.mutex.Unlock()
+	f.retransmissionQueue[urgency].PushBack(id)
+	f.retransmissionStreams[id] = str
 }
 
 func (f *framer) AddStreamWithControlFrames(id protocol.StreamID, str streamControlFrameGetter) {
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
 	if _, ok := f.streamsWithControlFrames[id]; !ok {
 		f.streamsWithControlFrames[id] = str
 	}
-	f.controlFrameMutex.Unlock()
 }
 
 // RemoveActiveStream is called when a stream completes.
 func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	// We don't delete the stream from the ring buffers and heaps,
+	// since we'd have to find it there first.
+	// Instead, we check if the stream is still in active when appending STREAM frames.
 	delete(f.activeStreams, id)
 	delete(f.retransmissionStreams, id)
-	// We don't delete the stream from the queues, since we'd have to search them.
-	// Instead, we check if the stream is still in the corresponding map when appending STREAM frames.
-	f.mutex.Unlock()
 }
 
-func (f *framer) getNextStreamFrame(maxLen protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
-	id := f.streamQueue.PopFront()
-	// This should never return an error. Better check it anyway.
-	// The stream will only be in the streamQueue, if it enqueued itself there.
+func (f *framer) UpdateStreamPriority(id protocol.StreamID) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
 	str, ok := f.activeStreams[id]
-	// The stream might have been removed after being enqueued.
 	if !ok {
+		return
+	}
+	urgency, incremental, generation := str.priority()
+	if str.generation != generation {
+		// Leave the old queue entry in place. It will be discarded when it reaches
+		// the front of that queue and no longer matches the stream's generation.
+		bucket := &f.streamQueue[urgency]
+		if incremental {
+			bucket.Incremental.PushBack(streamQueueEntry{id: id, generation: generation})
+		} else {
+			bucket.NonIncremental.Push(id, generation)
+		}
+		str.generation = generation
+		f.activeStreams[id] = str
+	}
+}
+
+func (f *framer) getNextStreamFrame(
+	maxLen protocol.ByteCount,
+	urgency int8,
+	v protocol.Version,
+) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
+	bucket := &f.streamQueue[urgency]
+	if bucket.NonIncremental.Empty() || (!bucket.LastSendWasIncremental && !bucket.Incremental.Empty()) {
+		return f.getNextIncrementalStreamFrame(maxLen, urgency, v)
+	}
+	return f.getNextNonIncrementalStreamFrame(maxLen, urgency, v)
+}
+
+func (f *framer) getNextIncrementalStreamFrame(
+	maxLen protocol.ByteCount,
+	urgency int8,
+	v protocol.Version,
+) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
+	bucket := &f.streamQueue[urgency]
+	if bucket.Incremental.Empty() {
 		return ackhandler.StreamFrame{}, nil
 	}
+	entry := bucket.Incremental.PopFront()
+	str, ok := f.activeStreams[entry.id]
+	if !ok || str.generation != entry.generation {
+		return ackhandler.StreamFrame{}, nil
+	}
+	_, _, generation := str.priority()
+	if generation != entry.generation {
+		return ackhandler.StreamFrame{}, nil
+	}
+
+	frame, blocked, hasMoreData := f.popStreamFrame(entry.id, str, maxLen, v)
+	if hasMoreData {
+		bucket.Incremental.PushBack(entry)
+	}
+	bucket.LastSendWasIncremental = true
+	return frame, blocked
+}
+
+func (f *framer) getNextNonIncrementalStreamFrame(
+	maxLen protocol.ByteCount,
+	urgency int8,
+	v protocol.Version,
+) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
+	bucket := &f.streamQueue[urgency]
+	if bucket.NonIncremental.Empty() {
+		return ackhandler.StreamFrame{}, nil
+	}
+	id, queuedGeneration := bucket.NonIncremental.Peek()
+	str, ok := f.activeStreams[id]
+	if !ok || str.generation != queuedGeneration {
+		bucket.NonIncremental.Pop()
+		return ackhandler.StreamFrame{}, nil
+	}
+	_, _, currentGeneration := str.priority()
+	if currentGeneration != queuedGeneration {
+		bucket.NonIncremental.Pop()
+		return ackhandler.StreamFrame{}, nil
+	}
+
+	frame, blocked, hasMoreData := f.popStreamFrame(id, str, maxLen, v)
+	if !hasMoreData {
+		bucket.NonIncremental.Pop()
+	}
+	bucket.LastSendWasIncremental = false
+	return frame, blocked
+}
+
+func (f *framer) popStreamFrame(
+	id protocol.StreamID,
+	str queuedStream,
+	maxLen protocol.ByteCount,
+	v protocol.Version,
+) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
 	// For the last STREAM frame, we'll remove the DataLen field later.
 	// Therefore, we can pretend to have more bytes available when popping
 	// the STREAM frame (which will always have the DataLen set).
 	maxLen += protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
 	frame, blocked, hasMoreData := str.popStreamFrame(maxLen, v)
-	if hasMoreData { // put the stream back in the queue (at the end)
-		f.streamQueue.PushBack(id)
-	} else { // no more data to send. Stream is not active
+	if !hasMoreData {
 		delete(f.activeStreams, id)
 	}
 	// Note that the frame.Frame can be nil:
 	// * if the stream was canceled after it said it had data
 	// * the remaining size doesn't allow us to add another STREAM frame
-	return frame, blocked
+	return frame, blocked, hasMoreData
 }
 
 func (f *framer) Handle0RTTRejection() {
@@ -320,11 +468,17 @@ func (f *framer) Handle0RTTRejection() {
 	f.controlFrameMutex.Lock()
 	defer f.controlFrameMutex.Unlock()
 
-	f.streamQueue.Clear()
+	for urgency := range f.streamQueue {
+		bucket := &f.streamQueue[urgency]
+		bucket.Incremental.Clear()
+		bucket.NonIncremental.Clear()
+		bucket.LastSendWasIncremental = false
+		f.retransmissionQueue[urgency].Clear()
+	}
 	clear(f.activeStreams)
-	f.retransmissionQueue.Clear()
 	clear(f.retransmissionStreams)
 	clear(f.streamsWithControlFrames)
+
 	var j int
 	for i, frame := range f.controlFrames {
 		switch frame.(type) {

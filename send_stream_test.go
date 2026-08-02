@@ -59,6 +59,26 @@ func TestSendStreamSetup(t *testing.T) {
 	require.Equal(t, protocol.StreamID(1337), str.StreamID())
 }
 
+func TestSendStreamPriorityGeneration(t *testing.T) {
+	const streamID = protocol.StreamID(42)
+	mockSender := NewMockStreamSender(gomock.NewController(t))
+	str := newSendStream(context.Background(), streamID, mockSender, newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount), false)
+
+	str.SetPriority(defaultUrgency, true)
+	_, _, generation := str.priority()
+	require.Zero(t, generation)
+
+	mockSender.EXPECT().updateStreamPriority(streamID).Times(2)
+	str.SetPriority(2, false)
+	str.SetPriority(2, false)
+	_, _, generation = str.priority()
+	require.Equal(t, uint32(1), generation)
+
+	str.SetPriority(1, false)
+	_, _, generation = str.priority()
+	require.Equal(t, uint32(2), generation)
+}
+
 func TestSendStreamWriteData(t *testing.T) {
 	const streamID protocol.StreamID = 42
 	mockCtrl := gomock.NewController(t)
@@ -187,7 +207,7 @@ func TestSendStreamWriteWithLimit(t *testing.T) {
 		synctest.Wait()
 
 		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-		require.True(t, hasMore)
+		require.False(t, hasMore)
 		require.Equal(t, data[25:50], frame.Frame.Data)
 		require.Equal(t, 2, calls)
 
@@ -791,18 +811,23 @@ func TestSendStreamFlowControlBlocked(t *testing.T) {
 	_, err := str.Write([]byte("foobar"))
 	require.NoError(t, err)
 
-	frame, blocked, hasMore := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.True(t, hasMore)
+	frame, blocked, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.False(t, hasMoreData)
 	require.EqualExportedValues(t,
 		&wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true},
 		frame.Frame,
 	)
 	require.Equal(t, &wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: 3}, blocked)
 
-	frame, blocked, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.Nil(t, frame.Frame)
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	str.updateSendWindow(10)
+	frame, blocked, hasMoreData = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.EqualExportedValues(t,
+		&wire.StreamFrame{StreamID: streamID, Offset: 3, Data: []byte("bar"), DataLenPresent: true},
+		frame.Frame,
+	)
 	require.Nil(t, blocked)
-	require.True(t, hasMore)
+	require.False(t, hasMoreData)
 
 	_, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.False(t, ok)
