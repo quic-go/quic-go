@@ -12,6 +12,8 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
+const defaultUrgency = 3
+
 // A SendStream is a unidirectional Send Stream.
 type SendStream struct {
 	mutex sync.Mutex
@@ -57,6 +59,11 @@ type SendStream struct {
 	cancellationFlagged bool
 	completed           bool // set when this stream has been reported to the streamSender as completed
 
+	// priority
+	urgency            int8
+	incremental        bool
+	priorityGeneration uint32
+
 	writeChan chan struct{}
 	writeOnce chan struct{}
 	deadline  monotime.Time
@@ -84,6 +91,8 @@ func newSendStream(
 		writeChan:             make(chan struct{}, 1),
 		writeOnce:             make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 		supportsResetStreamAt: supportsResetStreamAt,
+		urgency:               defaultUrgency,
+		incremental:           true,
 	}
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	return s
@@ -334,13 +343,18 @@ func (s *SendStream) canBufferStreamFrame() bool {
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
-func (s *SendStream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
+// hasMoreData says if more data can be sent after this call without first
+// receiving a MAX_STREAM_DATA frame.
+func (s *SendStream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMoreData bool) {
 	s.mutex.Lock()
 	f, blocked, hasMoreData := s.popNewStreamFrameForPacket(maxBytes, v)
 	if f != nil {
 		s.numOutstandingFrames++
 	}
 	s.mutex.Unlock()
+	if blocked != nil {
+		hasMoreData = false
+	}
 
 	if f == nil {
 		return ackhandler.StreamFrame{}, blocked, hasMoreData
@@ -428,7 +442,9 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 		hasMoreData = false
 	}
 	var blocked *wire.StreamDataBlockedFrame
-	if f.DataLen() > 0 {
+	// Flow control for a reserved frame was consumed when it was queued. Don't
+	// report the stream blocked while reserved bytes can still be sent.
+	if f.DataLen() > 0 && !s.nextFrameReserved {
 		if isBlocked, offset := s.flowController.isNewlyBlocked(); isBlocked {
 			blocked = &wire.StreamDataBlockedFrame{StreamID: s.streamID, MaximumStreamData: offset}
 		}
@@ -765,6 +781,33 @@ func (s *SendStream) reliableOffset() protocol.ByteCount {
 	return s.reliableSize
 }
 
+// SetPriority sets the scheduling priority for data sent on the stream.
+// It uses the urgency and incremental parameters defined by [RFC 9218].
+// Urgency is clipped to the range 0 through 7, with lower values taking priority.
+// Within an urgency level, incremental streams are scheduled round-robin,
+// while non-incremental streams are scheduled by stream ID.
+//
+// The default priority is urgency 3 with incremental set to true. RFC 9218
+// instead defaults incremental to false.
+//
+// [RFC 9218]: https://www.rfc-editor.org/rfc/rfc9218.html
+func (s *SendStream) SetPriority(urgency int8, incremental bool) {
+	var changed bool
+	s.mutex.Lock()
+	urgency = max(0, min(urgency, 7)) // urgency must be between 0 and 7
+	if s.urgency != urgency || s.incremental != incremental {
+		s.urgency = urgency
+		s.incremental = incremental
+		s.priorityGeneration++
+		changed = true
+	}
+	s.mutex.Unlock()
+
+	if changed {
+		s.sender.updateStreamPriority(s.streamID)
+	}
+}
+
 // The Context is canceled as soon as the write-side of the stream is closed.
 // This happens when Close() or CancelWrite() is called, or when the peer
 // cancels the read-side of their stream.
@@ -807,6 +850,13 @@ func (s *SendStream) signalWrite() {
 	case s.writeChan <- struct{}{}:
 	default:
 	}
+}
+
+func (s *SendStream) priority() (urgency int8, incremental bool, generation uint32) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return s.urgency, s.incremental, s.priorityGeneration
 }
 
 type sendStreamAckHandler SendStream

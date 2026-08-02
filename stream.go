@@ -28,6 +28,7 @@ type streamSender interface {
 	onHasStreamData(protocol.StreamID, *SendStream)
 	onHasStreamRetransmission(protocol.StreamID, *SendStream)
 	onHasStreamControlFrame(protocol.StreamID, streamControlFrameGetter)
+	updateStreamPriority(protocol.StreamID)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
 }
@@ -108,6 +109,12 @@ func newStream(
 func (s *Stream) StreamID() StreamID {
 	// the result is same for receiveStream and sendStream
 	return s.sendStr.StreamID()
+}
+
+// SetPriority sets the scheduling priority for data sent on the stream.
+// See [SendStream.SetPriority] for details.
+func (s *Stream) SetPriority(urgency int8, incremental bool) {
+	s.sendStr.SetPriority(urgency, incremental)
 }
 
 // Read reads data from the stream.
@@ -207,10 +214,6 @@ func (s *Stream) enableResetStreamAt() {
 
 func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
 	return s.sendStr.popStreamFrame(maxBytes, v)
-}
-
-func (s *Stream) popRetransmissionFrame(maxBytes protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool) {
-	return s.sendStr.popRetransmissionFrame(maxBytes, v)
 }
 
 func (s *Stream) getControlFrame(now monotime.Time) (_ ackhandler.Frame, ok, hasMore bool) {
