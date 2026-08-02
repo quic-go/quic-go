@@ -23,10 +23,13 @@ func TestPushPeekPop(t *testing.T) {
 	require.Equal(t, 3, r.Len())
 	r.PushBack(6)
 	require.Equal(t, 4, r.Len())
+	r.PushBack(7) // grow with the buffer wrapped around
+	require.Equal(t, 5, r.Len())
 	require.Equal(t, 3, r.PopFront())
 	require.Equal(t, 4, r.PopFront())
 	require.Equal(t, 5, r.PopFront())
 	require.Equal(t, 6, r.PopFront())
+	require.Equal(t, 7, r.PopFront())
 }
 
 func TestPanicOnEmptyBuffer(t *testing.T) {
@@ -42,8 +45,34 @@ func TestClear(t *testing.T) {
 	r.Init(2)
 	r.PushBack(1)
 	r.PushBack(2)
-	require.True(t, r.full)
+	require.Equal(t, 2, r.Len())
 	r.Clear()
-	require.False(t, r.full)
-	require.Equal(t, 0, r.Len())
+	require.True(t, r.Empty())
+	r.PushBack(3)
+	require.Equal(t, 3, r.PopFront())
+}
+
+func BenchmarkRingBuffer(b *testing.B) {
+	r := RingBuffer[int]{}
+
+	var val int
+	for b.Loop() {
+		r.PushBack(val)
+		r.PopFront()
+		val++
+	}
+}
+
+func BenchmarkRingBufferWrapped(b *testing.B) {
+	var r RingBuffer[int]
+	r.Init(32)
+	for i := range 16 {
+		r.PushBack(i)
+	}
+
+	var val int
+	for b.Loop() {
+		r.PushBack(val)
+		val = r.PopFront()
+	}
 }
