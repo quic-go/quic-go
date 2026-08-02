@@ -26,6 +26,7 @@ var errDeadline net.Error = &deadlineError{}
 type streamSender interface {
 	onHasConnectionData()
 	onHasStreamData(protocol.StreamID, *SendStream)
+	onHasStreamRetransmission(protocol.StreamID, *SendStream)
 	onHasStreamControlFrame(protocol.StreamID, streamControlFrameGetter)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
@@ -206,6 +207,10 @@ func (s *Stream) enableResetStreamAt() {
 
 func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
 	return s.sendStr.popStreamFrame(maxBytes, v)
+}
+
+func (s *Stream) popRetransmissionFrame(maxBytes protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool) {
+	return s.sendStr.popRetransmissionFrame(maxBytes, v)
 }
 
 func (s *Stream) getControlFrame(now monotime.Time) (_ ackhandler.Frame, ok, hasMore bool) {

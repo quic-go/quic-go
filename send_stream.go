@@ -336,7 +336,7 @@ func (s *SendStream) canBufferStreamFrame() bool {
 // maxBytes is the maximum length this frame (including frame header) will have.
 func (s *SendStream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
 	s.mutex.Lock()
-	f, blocked, hasMoreData := s.popNewOrRetransmittedStreamFrame(maxBytes, v)
+	f, blocked, hasMoreData := s.popNewStreamFrameForPacket(maxBytes, v)
 	if f != nil {
 		s.numOutstandingFrames++
 	}
@@ -351,28 +351,17 @@ func (s *SendStream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Vers
 	}, blocked, hasMoreData
 }
 
-func (s *SendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ *wire.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMoreData bool) {
+func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v protocol.Version) (_ *wire.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMoreData bool) {
 	if s.shutdownErr != nil {
 		return nil, nil, false
 	}
 	if s.resetErr != nil {
 		reliableOffset := s.reliableOffset()
-		if reliableOffset == 0 || (s.writeOffset >= reliableOffset && len(s.retransmissionQueue) == 0) {
+		if reliableOffset == 0 || s.writeOffset >= reliableOffset {
 			return nil, nil, false
 		}
 	}
 
-	if len(s.retransmissionQueue) > 0 {
-		f, hasMoreRetransmissions := s.maybeGetRetransmission(maxBytes, v)
-		if f != nil || hasMoreRetransmissions {
-			if f == nil {
-				return nil, nil, true
-			}
-			// We always claim that we have more data to send.
-			// This might be incorrect, in which case there'll be a spurious call to popStreamFrame in the future.
-			return f, nil, true
-		}
-	}
 	if s.writeLimited {
 		return nil, nil, false
 	}
@@ -491,14 +480,30 @@ func (s *SendStream) popNewStreamFrame(maxDataLen protocol.ByteCount) (_ *wire.S
 	return f, s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 }
 
-func (s *SendStream) maybeGetRetransmission(maxBytes protocol.ByteCount, v protocol.Version) (*wire.StreamFrame, bool /* has more retransmissions */) {
+func (s *SendStream) popRetransmissionFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, hasMore bool) {
+	s.mutex.Lock()
+	if s.shutdownErr != nil || len(s.retransmissionQueue) == 0 {
+		s.mutex.Unlock()
+		return ackhandler.StreamFrame{}, false
+	}
 	f := s.retransmissionQueue[0]
 	newFrame, needsSplit := f.MaybeSplitOffFrame(maxBytes, v)
 	if needsSplit {
-		return newFrame, true
+		f = newFrame
+		hasMore = true
+	} else {
+		s.retransmissionQueue = s.retransmissionQueue[1:]
+		hasMore = len(s.retransmissionQueue) > 0
 	}
-	s.retransmissionQueue = s.retransmissionQueue[1:]
-	return f, len(s.retransmissionQueue) > 0
+	if f != nil {
+		s.numOutstandingFrames++
+	}
+	s.mutex.Unlock()
+
+	if f == nil {
+		return ackhandler.StreamFrame{}, hasMore
+	}
+	return ackhandler.StreamFrame{Frame: f, Handler: (*sendStreamAckHandler)(s)}, hasMore
 }
 
 func (s *SendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.ByteCount) {
@@ -866,10 +871,13 @@ func (s *sendStreamAckHandler) OnLost(f wire.Frame) {
 	}
 
 	sf.DataLenPresent = true
+	wasEmpty := len(s.retransmissionQueue) == 0
 	s.retransmissionQueue = append(s.retransmissionQueue, sf)
 	s.mutex.Unlock()
 
-	s.sender.onHasStreamData(s.streamID, (*SendStream)(s))
+	if wasEmpty {
+		s.sender.onHasStreamRetransmission(s.streamID, (*SendStream)(s))
+	}
 }
 
 type sendStreamResetStreamHandler SendStream

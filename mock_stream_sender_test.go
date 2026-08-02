@@ -148,6 +148,42 @@ func (c *MockStreamSenderonHasStreamDataCall) DoAndReturn(f func(protocol.Stream
 	return c
 }
 
+// onHasStreamRetransmission mocks base method.
+func (m *MockStreamSender) onHasStreamRetransmission(arg0 protocol.StreamID, arg1 *SendStream) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "onHasStreamRetransmission", arg0, arg1)
+}
+
+// onHasStreamRetransmission indicates an expected call of onHasStreamRetransmission.
+func (mr *MockStreamSenderMockRecorder) onHasStreamRetransmission(arg0, arg1 any) *MockStreamSenderonHasStreamRetransmissionCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasStreamRetransmission", reflect.TypeOf((*MockStreamSender)(nil).onHasStreamRetransmission), arg0, arg1)
+	return &MockStreamSenderonHasStreamRetransmissionCall{Call: call}
+}
+
+// MockStreamSenderonHasStreamRetransmissionCall wrap *gomock.Call
+type MockStreamSenderonHasStreamRetransmissionCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamSenderonHasStreamRetransmissionCall) Return() *MockStreamSenderonHasStreamRetransmissionCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamSenderonHasStreamRetransmissionCall) Do(f func(protocol.StreamID, *SendStream)) *MockStreamSenderonHasStreamRetransmissionCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamSenderonHasStreamRetransmissionCall) DoAndReturn(f func(protocol.StreamID, *SendStream)) *MockStreamSenderonHasStreamRetransmissionCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // onStreamCompleted mocks base method.
 func (m *MockStreamSender) onStreamCompleted(arg0 protocol.StreamID) {
 	m.ctrl.T.Helper()
