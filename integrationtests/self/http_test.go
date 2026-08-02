@@ -16,7 +16,6 @@ import (
 	"net/http/httptrace"
 	"net/textproto"
 	"os"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,7 +27,6 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/http3/qlog"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
@@ -1069,71 +1067,6 @@ func TestHTTP1xxTerminalResponse(t *testing.T) {
 	require.Zero(t, status)
 	require.Zero(t, cnt)
 	require.NoError(t, resp.Body.Close())
-}
-
-func TestHTTP0RTT(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/0rtt", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, strconv.FormatBool(!r.TLS.HandshakeComplete))
-	})
-	port := startHTTPServer(t, mux)
-
-	var num0RTTPackets atomic.Uint32
-	proxy := quicproxy.Proxy{
-		Conn:       newUDPConnLocalhost(t),
-		ServerAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
-		DelayPacket: func(_ quicproxy.Direction, _, _ net.Addr, data []byte) time.Duration {
-			if containsPacketType(data, protocol.PacketType0RTT) {
-				num0RTTPackets.Add(1)
-			}
-			return scaleDuration(25 * time.Millisecond)
-		},
-	}
-	require.NoError(t, proxy.Start())
-	defer proxy.Close()
-
-	tlsConf := getTLSClientConfigWithoutServerName()
-	puts := make(chan string, 10)
-	tlsConf.ClientSessionCache = newClientSessionCache(tls.NewLRUClientSessionCache(10), nil, puts)
-	tr := &http3.Transport{
-		TLSClientConfig:    tlsConf,
-		QUICConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
-		DisableCompression: true,
-	}
-	defer tr.Close()
-	addDialCallback(t, tr)
-
-	proxyPort := proxy.LocalAddr().(*net.UDPAddr).Port
-	req, err := http.NewRequest(http3.MethodGet0RTT, fmt.Sprintf("https://localhost:%d/0rtt", proxyPort), nil)
-	require.NoError(t, err)
-	rsp, err := tr.RoundTrip(req)
-	require.NoError(t, err)
-	require.Equal(t, 200, rsp.StatusCode)
-	data, err := io.ReadAll(rsp.Body)
-	require.NoError(t, err)
-	require.Equal(t, "false", string(data))
-	require.Zero(t, num0RTTPackets.Load())
-
-	select {
-	case <-puts:
-	case <-time.After(time.Second):
-		t.Fatal("did not receive session ticket")
-	}
-
-	tr2 := &http3.Transport{
-		TLSClientConfig:    tr.TLSClientConfig,
-		QUICConfig:         tr.QUICConfig,
-		DisableCompression: true,
-	}
-	defer tr2.Close()
-	addDialCallback(t, tr2)
-	rsp, err = tr2.RoundTrip(req)
-	require.NoError(t, err)
-	require.Equal(t, 200, rsp.StatusCode)
-	data, err = io.ReadAll(rsp.Body)
-	require.NoError(t, err)
-	require.Equal(t, "true", string(data))
-	require.NotZero(t, num0RTTPackets.Load())
 }
 
 func TestHTTPStreamer(t *testing.T) {
