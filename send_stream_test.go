@@ -1319,23 +1319,23 @@ func TestSendStreamRetransmissions(t *testing.T) {
 	f1.Handler.OnLost(f1.Frame)
 	require.True(t, mockCtrl.Satisfied())
 
-	// The retransmission queue returns the lost data.
-	f2, hasMoreRetransmissions := str.popRetransmissionFrame(protocol.MaxByteCount, protocol.Version1)
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true}, f2.Frame)
-	require.False(t, hasMoreRetransmissions)
-	require.True(t, mockCtrl.Satisfied())
-
-	// We can then get the new data from the normal stream queue.
-	f3, _, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
-	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Offset: 3, Fin: true, Data: []byte("bar"), DataLenPresent: true}, f3.Frame)
+	// popping new data doesn't take queued retransmissions into account
+	f2, _, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Offset: 3, Fin: true, Data: []byte("bar"), DataLenPresent: true}, f2.Frame)
 	require.False(t, hasMoreData)
 	require.True(t, mockCtrl.Satisfied())
 
+	// the retransmission queue independently returns the lost data
+	f3, hasMoreRetransmissions := str.popRetransmissionFrame(protocol.MaxByteCount, protocol.Version1)
+	require.EqualExportedValues(t, &wire.StreamFrame{StreamID: streamID, Data: []byte("foo"), DataLenPresent: true}, f3.Frame)
+	require.False(t, hasMoreRetransmissions)
+	require.True(t, mockCtrl.Satisfied())
+
 	// acknowledge the retransmission...
-	f2.Handler.OnAcked(f2.Frame)
+	f3.Handler.OnAcked(f3.Frame)
 	// ... and the last frame, which concludes this stream
 	mockSender.EXPECT().onStreamCompleted(streamID)
-	f3.Handler.OnAcked(f3.Frame)
+	f2.Handler.OnAcked(f2.Frame)
 }
 
 func TestSendStreamRetransmissionFraming(t *testing.T) {
