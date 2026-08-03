@@ -28,6 +28,36 @@ func decodeFromSlice(headers []qpack.HeaderField) qpack.DecodeFunc {
 	}
 }
 
+func newBenchmarkRequestHeaders() []qpack.HeaderField {
+	return []qpack.HeaderField{
+		{Name: ":path", Value: "/api/v1/users/12345"},
+		{Name: ":authority", Value: "quic-go.net"},
+		{Name: ":method", Value: http.MethodPost},
+		{Name: "content-type", Value: "application/json"},
+		{Name: "content-length", Value: "1024"},
+		{Name: "user-agent", Value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"},
+		{Name: "accept", Value: "application/json, text/plain, */*"},
+		{Name: "accept-encoding", Value: "gzip, deflate, br"},
+		{Name: "accept-language", Value: "en-US,en;q=0.9"},
+		{Name: "cache-control", Value: "no-cache"},
+		{Name: "cookie", Value: "session_id=abc123"},
+		{Name: "cookie", Value: "user_pref=dark_mode"},
+		{Name: "referer", Value: "https://quic-go.net/docs/http3/"},
+	}
+}
+
+func encodeBenchmarkRequestHeaders(t testing.TB) []byte {
+	t.Helper()
+
+	headers := newBenchmarkRequestHeaders()
+	var buf bytes.Buffer
+	enc := qpack.NewEncoder(&buf)
+	for _, hf := range headers {
+		require.NoError(t, enc.WriteField(hf))
+	}
+	return buf.Bytes()
+}
+
 func TestRequestHeaderParsing(t *testing.T) {
 	t.Run("regular path", func(t *testing.T) {
 		testRequestHeaderParsing(t, "/foo")
@@ -612,33 +642,25 @@ func TestQpackError(t *testing.T) {
 	})
 }
 
+func TestRequestFromHeadersAllocs(t *testing.T) {
+	encoded := encodeBenchmarkRequestHeaders(t)
+
+	allocs := testing.AllocsPerRun(100, func() {
+		dec := qpack.NewDecoder()
+		decodeFn := dec.Decode(encoded)
+		_, err := requestFromHeaders(decodeFn, math.MaxInt, nil)
+		require.NoError(t, err)
+	})
+	t.Logf("requestFromHeaders allocations per run: %.0f", allocs)
+}
+
 func BenchmarkRequestFromHeaders(b *testing.B) {
 	b.ReportAllocs()
 
-	headers := []qpack.HeaderField{
-		{Name: ":path", Value: "/api/v1/users/12345"},
-		{Name: ":authority", Value: "quic-go.net"},
-		{Name: ":method", Value: http.MethodPost},
-		{Name: "content-type", Value: "application/json"},
-		{Name: "content-length", Value: "1024"},
-		{Name: "user-agent", Value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"},
-		{Name: "accept", Value: "application/json, text/plain, */*"},
-		{Name: "accept-encoding", Value: "gzip, deflate, br"},
-		{Name: "accept-language", Value: "en-US,en;q=0.9"},
-		{Name: "cache-control", Value: "no-cache"},
-		{Name: "cookie", Value: "session_id=abc123"},
-		{Name: "cookie", Value: "user_pref=dark_mode"},
-		{Name: "referer", Value: "https://quic-go.net/docs/http3/"},
-	}
-	var buf bytes.Buffer
-	enc := qpack.NewEncoder(&buf)
-	for _, hf := range headers {
-		require.NoError(b, enc.WriteField(hf))
-	}
-
+	encoded := encodeBenchmarkRequestHeaders(b)
 	dec := qpack.NewDecoder()
 	for b.Loop() {
-		decodeFn := dec.Decode(buf.Bytes())
+		decodeFn := dec.Decode(encoded)
 		if _, err := requestFromHeaders(decodeFn, math.MaxInt, nil); err != nil {
 			b.Fatalf("failed to parse request: %v", err)
 		}
