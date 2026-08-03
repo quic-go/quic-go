@@ -3023,6 +3023,11 @@ func (c *Conn) onStreamCompleted(id protocol.StreamID) {
 	c.framer.RemoveActiveStream(id)
 }
 
+func (c *Conn) updateStreamPriority(id protocol.StreamID) {
+	c.framer.UpdateStreamPriority(id)
+	c.scheduleSending()
+}
+
 // SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221,
 // if the peer enabled datagram support.
 // There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.
