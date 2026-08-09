@@ -306,12 +306,7 @@ func TestPack0RTTPacket(t *testing.T) {
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42))
 	cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
 	tp.framer.EXPECT().HasData().Return(true)
-	// TODO: check sizes
-	tp.framer.EXPECT().Append(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(fs []ackhandler.Frame, sf []ackhandler.StreamFrame, _ protocol.ByteCount, _ monotime.Time, _ protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
-			return append(fs, cf), sf, cf.Frame.Length(protocol.Version1)
-		},
-	)
+	expectAppendFrames(tp.framer, []ackhandler.Frame{cf}, nil)
 	p, err := tp.packer.PackCoalescedPacket(false, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, p)
