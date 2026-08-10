@@ -104,8 +104,8 @@ type MockStreamFrameGetterpopStreamFrameCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFrameGetterpopStreamFrameCall) Return(arg0 ackhandler.StreamFrame, arg1 *wire.StreamDataBlockedFrame, arg2 bool) *MockStreamFrameGetterpopStreamFrameCall {
-	c.Call = c.Call.Return(arg0, arg1, arg2)
+func (c *MockStreamFrameGetterpopStreamFrameCall) Return(arg0 ackhandler.StreamFrame, arg1 *wire.StreamDataBlockedFrame, hasMoreData bool) *MockStreamFrameGetterpopStreamFrameCall {
+	c.Call = c.Call.Return(arg0, arg1, hasMoreData)
 	return c
 }
 
@@ -117,6 +117,46 @@ func (c *MockStreamFrameGetterpopStreamFrameCall) Do(f func(protocol.ByteCount, 
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockStreamFrameGetterpopStreamFrameCall) DoAndReturn(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool)) *MockStreamFrameGetterpopStreamFrameCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// priority mocks base method.
+func (m *MockStreamFrameGetter) priority() (int8, bool, uint32) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "priority")
+	ret0, _ := ret[0].(int8)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(uint32)
+	return ret0, ret1, ret2
+}
+
+// priority indicates an expected call of priority.
+func (mr *MockStreamFrameGetterMockRecorder) priority() *MockStreamFrameGetterpriorityCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "priority", reflect.TypeOf((*MockStreamFrameGetter)(nil).priority))
+	return &MockStreamFrameGetterpriorityCall{Call: call}
+}
+
+// MockStreamFrameGetterpriorityCall wrap *gomock.Call
+type MockStreamFrameGetterpriorityCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamFrameGetterpriorityCall) Return(urgency int8, incremental bool, generation uint32) *MockStreamFrameGetterpriorityCall {
+	c.Call = c.Call.Return(urgency, incremental, generation)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamFrameGetterpriorityCall) Do(f func() (int8, bool, uint32)) *MockStreamFrameGetterpriorityCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamFrameGetterpriorityCall) DoAndReturn(f func() (int8, bool, uint32)) *MockStreamFrameGetterpriorityCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
