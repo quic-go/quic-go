@@ -38,19 +38,6 @@ type streamQueueEntry struct {
 	generation uint32
 }
 
-// streamPriorityBucket contains streams with the same urgency
-type streamPriorityBucket struct {
-	Incremental    ringbuffer.RingBuffer[streamQueueEntry]
-	NonIncremental minheap.Heap[protocol.StreamID, uint32 /* generation */]
-	// If a bucket contains both incremental and non-incremental streams,
-	// we round-robin between incremental and non-incremental streams.
-	LastSendWasIncremental bool
-}
-
-func (b *streamPriorityBucket) Len() int {
-	return b.Incremental.Len() + b.NonIncremental.Len()
-}
-
 type queuedStream struct {
 	streamFrameGetter
 	generation uint32
@@ -62,7 +49,12 @@ type framer struct {
 	activeStreams         map[protocol.StreamID]queuedStream
 	retransmissionStreams map[protocol.StreamID]streamFrameGetter
 
-	streamQueue              [8]streamPriorityBucket
+	incrementalStreams    [8]ringbuffer.RingBuffer[streamQueueEntry]
+	nonIncrementalStreams [8]minheap.Heap[protocol.StreamID, uint32 /* generation */]
+	// If an urgency level contains both incremental and non-incremental streams,
+	// we round-robin between incremental and non-incremental streams.
+	lastSendWasIncremental [8]bool
+
 	streamsWithControlFrames map[protocol.StreamID]streamControlFrameGetter
 	// Retransmissions are not incremental: repair all lost data for the first queued stream.
 	// New losses extend its batch, so A, B, A is repaired as A, A, B, delaying B.
@@ -97,9 +89,9 @@ func (f *framer) HasData() bool {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
-	for urgency := range f.streamQueue {
-		bucket := &f.streamQueue[urgency]
-		if !bucket.Incremental.Empty() || !bucket.NonIncremental.Empty() || !f.retransmissionQueue[urgency].Empty() {
+	for urgency := range f.incrementalStreams {
+		if !f.incrementalStreams[urgency].Empty() || !f.nonIncrementalStreams[urgency].Empty() ||
+			!f.retransmissionQueue[urgency].Empty() {
 			return true
 		}
 	}
@@ -180,9 +172,8 @@ retransmissions:
 		}
 	}
 	// pop STREAM frames, until less than 128 bytes are left in the packet
-	for urgency := range f.streamQueue {
-		bucket := &f.streamQueue[urgency]
-		numActiveStreams := bucket.Len()
+	for urgency := range f.incrementalStreams {
+		numActiveStreams := f.incrementalStreams[urgency].Len() + f.nonIncrementalStreams[urgency].Len()
 
 		for range numActiveStreams {
 			if protocol.MinStreamFrameSize > maxLen {
@@ -309,11 +300,10 @@ func (f *framer) AddActiveStream(id protocol.StreamID, str streamFrameGetter) {
 	if activeStr, ok := f.activeStreams[id]; ok && activeStr.generation == generation {
 		return
 	}
-	bucket := &f.streamQueue[urgency]
 	if incremental {
-		bucket.Incremental.PushBack(streamQueueEntry{id: id, generation: generation})
+		f.incrementalStreams[urgency].PushBack(streamQueueEntry{id: id, generation: generation})
 	} else {
-		bucket.NonIncremental.Push(id, generation)
+		f.nonIncrementalStreams[urgency].Push(id, generation)
 	}
 	f.activeStreams[id] = queuedStream{streamFrameGetter: str, generation: generation}
 }
@@ -363,11 +353,10 @@ func (f *framer) UpdateStreamPriority(id protocol.StreamID) {
 	if str.generation != generation {
 		// Leave the old queue entry in place. It will be discarded when it reaches
 		// the front of that queue and no longer matches the stream's generation.
-		bucket := &f.streamQueue[urgency]
 		if incremental {
-			bucket.Incremental.PushBack(streamQueueEntry{id: id, generation: generation})
+			f.incrementalStreams[urgency].PushBack(streamQueueEntry{id: id, generation: generation})
 		} else {
-			bucket.NonIncremental.Push(id, generation)
+			f.nonIncrementalStreams[urgency].Push(id, generation)
 		}
 		str.generation = generation
 		f.activeStreams[id] = str
@@ -379,8 +368,7 @@ func (f *framer) getNextStreamFrame(
 	urgency int8,
 	v protocol.Version,
 ) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
-	bucket := &f.streamQueue[urgency]
-	if bucket.NonIncremental.Empty() || (!bucket.LastSendWasIncremental && !bucket.Incremental.Empty()) {
+	if f.nonIncrementalStreams[urgency].Empty() || (!f.lastSendWasIncremental[urgency] && !f.incrementalStreams[urgency].Empty()) {
 		return f.getNextIncrementalStreamFrame(maxLen, urgency, v)
 	}
 	return f.getNextNonIncrementalStreamFrame(maxLen, urgency, v)
@@ -391,11 +379,11 @@ func (f *framer) getNextIncrementalStreamFrame(
 	urgency int8,
 	v protocol.Version,
 ) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
-	bucket := &f.streamQueue[urgency]
-	if bucket.Incremental.Empty() {
+	queue := &f.incrementalStreams[urgency]
+	if queue.Empty() {
 		return ackhandler.StreamFrame{}, nil
 	}
-	entry := bucket.Incremental.PopFront()
+	entry := queue.PopFront()
 	str, ok := f.activeStreams[entry.id]
 	if !ok || str.generation != entry.generation {
 		return ackhandler.StreamFrame{}, nil
@@ -407,9 +395,9 @@ func (f *framer) getNextIncrementalStreamFrame(
 
 	frame, blocked, hasMoreData := f.popStreamFrame(entry.id, str, maxLen, v)
 	if hasMoreData {
-		bucket.Incremental.PushBack(entry)
+		queue.PushBack(entry)
 	}
-	bucket.LastSendWasIncremental = true
+	f.lastSendWasIncremental[urgency] = true
 	return frame, blocked
 }
 
@@ -418,27 +406,28 @@ func (f *framer) getNextNonIncrementalStreamFrame(
 	urgency int8,
 	v protocol.Version,
 ) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
-	bucket := &f.streamQueue[urgency]
-	if bucket.NonIncremental.Empty() {
+	queue := &f.nonIncrementalStreams[urgency]
+	if queue.Empty() {
 		return ackhandler.StreamFrame{}, nil
 	}
-	id, queuedGeneration := bucket.NonIncremental.Peek()
+	id, queuedGeneration := queue.Peek()
 	str, ok := f.activeStreams[id]
 	if !ok || str.generation != queuedGeneration {
-		bucket.NonIncremental.Pop()
+		queue.Pop()
 		return ackhandler.StreamFrame{}, nil
 	}
+
 	_, _, currentGeneration := str.priority()
 	if currentGeneration != queuedGeneration {
-		bucket.NonIncremental.Pop()
+		queue.Pop()
 		return ackhandler.StreamFrame{}, nil
 	}
 
 	frame, blocked, hasMoreData := f.popStreamFrame(id, str, maxLen, v)
 	if !hasMoreData {
-		bucket.NonIncremental.Pop()
+		queue.Pop()
 	}
-	bucket.LastSendWasIncremental = false
+	f.lastSendWasIncremental[urgency] = false
 	return frame, blocked
 }
 
@@ -468,11 +457,10 @@ func (f *framer) Handle0RTTRejection() {
 	f.controlFrameMutex.Lock()
 	defer f.controlFrameMutex.Unlock()
 
-	for urgency := range f.streamQueue {
-		bucket := &f.streamQueue[urgency]
-		bucket.Incremental.Clear()
-		bucket.NonIncremental.Clear()
-		bucket.LastSendWasIncremental = false
+	for urgency := range f.incrementalStreams {
+		f.incrementalStreams[urgency].Clear()
+		f.nonIncrementalStreams[urgency].Clear()
+		f.lastSendWasIncremental[urgency] = false
 		f.retransmissionQueue[urgency].Clear()
 	}
 	clear(f.activeStreams)
