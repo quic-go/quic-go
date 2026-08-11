@@ -382,6 +382,42 @@ func (c *MockDatagramStreamSetDeadlineCall) DoAndReturn(f func(time.Time) error)
 	return c
 }
 
+// SetPriority mocks base method.
+func (m *MockDatagramStream) SetPriority(urgency int8, incremental bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPriority", urgency, incremental)
+}
+
+// SetPriority indicates an expected call of SetPriority.
+func (mr *MockDatagramStreamMockRecorder) SetPriority(urgency, incremental any) *MockDatagramStreamSetPriorityCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPriority", reflect.TypeOf((*MockDatagramStream)(nil).SetPriority), urgency, incremental)
+	return &MockDatagramStreamSetPriorityCall{Call: call}
+}
+
+// MockDatagramStreamSetPriorityCall wrap *gomock.Call
+type MockDatagramStreamSetPriorityCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockDatagramStreamSetPriorityCall) Return() *MockDatagramStreamSetPriorityCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockDatagramStreamSetPriorityCall) Do(f func(int8, bool)) *MockDatagramStreamSetPriorityCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockDatagramStreamSetPriorityCall) DoAndReturn(f func(int8, bool)) *MockDatagramStreamSetPriorityCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // SetReadDeadline mocks base method.
 func (m *MockDatagramStream) SetReadDeadline(arg0 time.Time) error {
 	m.ctrl.T.Helper()
