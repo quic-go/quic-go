@@ -42,7 +42,10 @@ type rawConn struct {
 
 	onStreamsEmpty func()
 
-	settings         *Settings
+	settings *Settings
+	// rcvdSettings is the SETTINGS frame the peer sent, as received on the control stream.
+	// Unlike settings, it also carries the values that are not part of the public Settings API.
+	rcvdSettings     *settingsFrame
 	receivedSettings chan struct{}
 
 	qlogger   qlogwriter.Recorder
@@ -238,6 +241,7 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 		EnableExtendedConnect: sf.ExtendedConnect,
 		Other:                 sf.Other,
 	}
+	c.rcvdSettings = sf
 	close(c.receivedSettings)
 	if sf.Datagram {
 		// If datagram support was enabled on our side as well as on the server side,

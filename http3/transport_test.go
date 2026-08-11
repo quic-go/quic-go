@@ -225,7 +225,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 			dialCount++
 			return conn, nil
 		},
-		newClientConn: func(*quic.Conn) clientConn { return cl },
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn { return cl },
 	}
 
 	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
@@ -322,7 +322,7 @@ func testTransportConnectionRedial(t *testing.T, req *http.Request, roundtripErr
 			dialCount++
 			return conn, nil
 		},
-		newClientConn: func(*quic.Conn) clientConn { return cl },
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn { return cl },
 	}
 
 	var body string
@@ -358,7 +358,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 			dialCount++
 			return conn, nil
 		},
-		newClientConn: func(*quic.Conn) clientConn { return cl },
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn { return cl },
 	}
 
 	// the first request succeeds
@@ -405,7 +405,7 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 			}
 			return conn, nil
 		},
-		newClientConn: func(*quic.Conn) clientConn { return cl },
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn { return cl },
 	}
 
 	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
@@ -428,7 +428,7 @@ func TestTransportCloseEstablishedConnections(t *testing.T) {
 		Dial: func(context.Context, string, *tls.Config, *quic.Config) (*quic.Conn, error) {
 			return conn, nil
 		},
-		newClientConn: func(*quic.Conn) clientConn {
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn {
 			cl := NewMockClientConn(mockCtrl)
 			cl.EXPECT().RoundTrip(gomock.Any()).Return(&http.Response{}, nil)
 			return cl
@@ -499,7 +499,7 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 				return nil, errors.New("unexpected hostname")
 			}
 		},
-		newClientConn: func(*quic.Conn) clientConn {
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn {
 			cl := NewMockClientConn(mockCtrl)
 			cl.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(r *http.Request) (*http.Response, error) {
 				roundTripCalled <- struct{}{}
@@ -556,7 +556,7 @@ func TestTransportClose(t *testing.T) {
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			return conn, nil
 		},
-		newClientConn: func(*quic.Conn) clientConn {
+		newClientConn: func(*quic.Conn, *zeroRTTSettings) clientConn {
 			cl := NewMockClientConn(mockCtrl)
 			cl.EXPECT().RoundTrip(gomock.Any()).Return(nil, nil)
 			return cl

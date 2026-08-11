@@ -105,7 +105,7 @@ type Transport struct {
 	initOnce sync.Once
 	initErr  error
 
-	newClientConn func(*quic.Conn) clientConn
+	newClientConn func(*quic.Conn, *zeroRTTSettings) clientConn
 
 	clients   map[string]*roundTripperWithCount
 	transport *quic.Transport
@@ -128,13 +128,14 @@ var (
 
 func (t *Transport) init() error {
 	if t.newClientConn == nil {
-		t.newClientConn = func(conn *quic.Conn) clientConn {
+		t.newClientConn = func(conn *quic.Conn, zeroRTTSettings *zeroRTTSettings) clientConn {
 			return newClientConn(
 				conn,
 				t.EnableDatagrams,
 				t.AdditionalSettings,
 				t.MaxResponseHeaderBytes,
 				t.DisableCompression,
+				zeroRTTSettings,
 				t.Logger,
 			)
 		}
@@ -360,6 +361,18 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 	// Replace existing ALPNs by H3
 	tlsConf.NextProtos = []string{NextProtoH3}
 
+	// Store the server's SETTINGS alongside the session ticket, so that they are available
+	// as the initial values when this session is resumed using 0-RTT.
+	// Without a session cache, sessions are never resumed, and there's nothing to track.
+	var zeroRTT *zeroRTTSettings
+	if tlsConf.ClientSessionCache != nil {
+		zeroRTT = &zeroRTTSettings{}
+		tlsConf.ClientSessionCache = &clientSessionCache{
+			ClientSessionCache: tlsConf.ClientSessionCache,
+			settings:           zeroRTT,
+		}
+	}
+
 	dial := t.Dial
 	if dial == nil {
 		dial = func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
@@ -385,7 +398,7 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 	if err != nil {
 		return nil, nil, err
 	}
-	clientConn := t.newClientConn(conn)
+	clientConn := t.newClientConn(conn, zeroRTT)
 	go func() {
 		for {
 			str, err := conn.AcceptUniStream(context.Background())
@@ -439,6 +452,9 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 		t.AdditionalSettings,
 		t.MaxResponseHeaderBytes,
 		t.DisableCompression,
+		// The application dialed this connection itself, so the Transport didn't get to
+		// wrap the session cache, and has no settings from a previous session to check against.
+		nil,
 		t.Logger,
 	)
 	go func() {
@@ -465,6 +481,7 @@ func (t *Transport) NewRawClientConn(conn *quic.Conn) *RawClientConn {
 			t.AdditionalSettings,
 			t.MaxResponseHeaderBytes,
 			t.DisableCompression,
+			nil,
 			t.Logger,
 		),
 	}

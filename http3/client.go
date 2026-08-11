@@ -76,6 +76,11 @@ type ClientConn struct {
 	qlogger qlogwriter.Recorder
 	logger  *slog.Logger
 
+	// zeroRTTSettings tracks the server's SETTINGS across session resumption.
+	// It is nil if the connection can't use 0-RTT, i.e. if no session cache is configured,
+	// or if the application manages the QUIC connection itself.
+	zeroRTTSettings *zeroRTTSettings
+
 	requestWriter *requestWriter
 }
 
@@ -87,6 +92,7 @@ func newClientConn(
 	additionalSettings map[uint64]uint64,
 	maxResponseHeaderBytes int,
 	disableCompression bool,
+	zeroRTTSettings *zeroRTTSettings,
 	logger *slog.Logger,
 ) *ClientConn {
 	var qlogger qlogwriter.Recorder
@@ -98,6 +104,7 @@ func newClientConn(
 		additionalSettings: additionalSettings,
 		disableCompression: disableCompression,
 		maxStreamID:        invalidStreamID,
+		zeroRTTSettings:    zeroRTTSettings,
 		logger:             logger,
 		qlogger:            qlogger,
 		decoder:            qpack.NewDecoder(),
@@ -199,6 +206,9 @@ func (c *ClientConn) handleUnidirectionalStream(str *quic.ReceiveStream) {
 }
 
 func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParser) {
+	if !c.checkSettingsAfter0RTT(c.rawConn.rcvdSettings) {
+		return
+	}
 	for {
 		f, err := fp.ParseNext(c.qlogger)
 		if err != nil {
@@ -244,6 +254,37 @@ func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParse
 			return
 		}
 	}
+}
+
+// checkSettingsAfter0RTT saves the server's SETTINGS, so that they can be stored alongside the
+// session ticket, and verifies them against the settings that were restored from a session ticket.
+//
+// If the server accepted 0-RTT, but then sent SETTINGS that are incompatible with the ones the
+// client used for its 0-RTT data, the connection is closed with H3_SETTINGS_ERROR,
+// as required by RFC 9114, section 7.2.4.2. It returns false if the connection was closed.
+func (c *ClientConn) checkSettingsAfter0RTT(current *settingsFrame) bool {
+	if c.zeroRTTSettings == nil {
+		return true
+	}
+	c.zeroRTTSettings.setCurrent(current)
+	restored := c.zeroRTTSettings.getRestored()
+	// Nothing to check: this connection didn't resume a session, or no settings were stored.
+	if restored == nil {
+		return true
+	}
+	if settingsCompatibleAfter0RTT(restored, current) {
+		return true
+	}
+	// Only if the server actually accepted our 0-RTT data can it have violated the old settings.
+	// This is checked last: ConnectionState blocks until the handshake is complete.
+	if !c.conn.ConnectionState().Used0RTT {
+		return true
+	}
+	c.conn.CloseWithError(
+		quic.ApplicationErrorCode(ErrCodeSettingsError),
+		"server accepted 0-RTT, but sent incompatible SETTINGS",
+	)
+	return false
 }
 
 func (c *ClientConn) onStreamsEmpty() {
