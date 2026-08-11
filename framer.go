@@ -32,12 +32,15 @@ type streamControlFrameGetter interface {
 	getControlFrame(monotime.Time) (_ ackhandler.Frame, ok, hasMore bool)
 }
 
-// streamQueueEntry identifies a queued generation of a stream.
+// streamQueueEntry captures the stream's generation when it is queued.
+// A mismatch with the current generation identifies an entry left behind by a priority change.
 type streamQueueEntry struct {
 	id         protocol.StreamID
 	generation uint32
 }
 
+// queuedStream tracks the latest generation added to a scheduling queue,
+// preventing duplicate and out-of-order notifications from queueing it again.
 type queuedStream struct {
 	streamFrameGetter
 	generation uint32
@@ -385,7 +388,7 @@ func (f *framer) getNextIncrementalStreamFrame(
 	}
 	entry := queue.PopFront()
 	str, ok := f.activeStreams[entry.id]
-	if !ok || str.generation != entry.generation {
+	if !ok {
 		return ackhandler.StreamFrame{}, nil
 	}
 	_, _, generation := str.priority()
@@ -412,13 +415,12 @@ func (f *framer) getNextNonIncrementalStreamFrame(
 	}
 	id, queuedGeneration := queue.Peek()
 	str, ok := f.activeStreams[id]
-	if !ok || str.generation != queuedGeneration {
+	if !ok {
 		queue.Pop()
 		return ackhandler.StreamFrame{}, nil
 	}
-
-	_, _, currentGeneration := str.priority()
-	if currentGeneration != queuedGeneration {
+	_, _, generation := str.priority()
+	if generation != queuedGeneration {
 		queue.Pop()
 		return ackhandler.StreamFrame{}, nil
 	}

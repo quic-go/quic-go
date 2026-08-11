@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
@@ -13,6 +14,18 @@ import (
 )
 
 const defaultUrgency = 3
+
+func encodeStreamPriority(urgency int8, incremental bool, generation uint32) uint64 {
+	priorityValue := uint64(uint8(urgency)) | uint64(generation)<<32
+	if incremental {
+		priorityValue |= 1 << 8
+	}
+	return priorityValue
+}
+
+func decodeStreamPriority(priorityValue uint64) (urgency int8, incremental bool, generation uint32) {
+	return int8(priorityValue), uint8(priorityValue>>8) != 0, uint32(priorityValue >> 32)
+}
 
 // A SendStream is a unidirectional Send Stream.
 type SendStream struct {
@@ -59,10 +72,7 @@ type SendStream struct {
 	cancellationFlagged bool
 	completed           bool // set when this stream has been reported to the streamSender as completed
 
-	// priority
-	urgency            int8
-	incremental        bool
-	priorityGeneration uint32
+	priorityValue atomic.Uint64
 
 	writeChan chan struct{}
 	writeOnce chan struct{}
@@ -91,9 +101,8 @@ func newSendStream(
 		writeChan:             make(chan struct{}, 1),
 		writeOnce:             make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 		supportsResetStreamAt: supportsResetStreamAt,
-		urgency:               defaultUrgency,
-		incremental:           true,
 	}
+	s.priorityValue.Store(encodeStreamPriority(defaultUrgency, true, 0))
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	return s
 }
@@ -792,20 +801,18 @@ func (s *SendStream) reliableOffset() protocol.ByteCount {
 //
 // [RFC 9218]: https://www.rfc-editor.org/rfc/rfc9218.html
 func (s *SendStream) SetPriority(urgency int8, incremental bool) {
-	var changed bool
-	s.mutex.Lock()
 	urgency = max(0, min(urgency, 7)) // urgency must be between 0 and 7
-	if s.urgency != urgency || s.incremental != incremental {
-		s.urgency = urgency
-		s.incremental = incremental
-		s.priorityGeneration++
-		changed = true
+	// This use of the mutex only serializes concurrent SetPriority calls.
+	// priorityValue itself is atomic and doesn't need the mutex.
+	s.mutex.Lock()
+	oldUrgency, oldIncremental, generation := decodeStreamPriority(s.priorityValue.Load())
+	if oldUrgency == urgency && oldIncremental == incremental {
+		s.mutex.Unlock()
+		return
 	}
+	s.priorityValue.Store(encodeStreamPriority(urgency, incremental, generation+1))
 	s.mutex.Unlock()
-
-	if changed {
-		s.sender.updateStreamPriority(s.streamID)
-	}
+	s.sender.updateStreamPriority(s.streamID)
 }
 
 // The Context is canceled as soon as the write-side of the stream is closed.
@@ -853,10 +860,7 @@ func (s *SendStream) signalWrite() {
 }
 
 func (s *SendStream) priority() (urgency int8, incremental bool, generation uint32) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	return s.urgency, s.incremental, s.priorityGeneration
+	return decodeStreamPriority(s.priorityValue.Load())
 }
 
 type sendStreamAckHandler SendStream
