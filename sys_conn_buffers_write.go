@@ -56,6 +56,15 @@ func setSendBuffer(c net.PacketConn) error {
 			return fmt.Errorf("failed to determine send buffer size: %w", err)
 		}
 	}
+	if err == nil && newSize < protocol.DesiredSendBufferSize {
+		// Some kernels (e.g. OpenBSD, Darwin) reject sizes exceeding their
+		// limit outright instead of clamping. Probe for the largest size the
+		// kernel accepts.
+		newSize = largestBufferSize(newSize, protocol.DesiredSendBufferSize,
+			conn.SetWriteBuffer,
+			func() (int, error) { return inspectWriteBuffer(syscallConn) },
+		)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to determine send buffer size: %w", err)
 	}

@@ -54,6 +54,15 @@ func setReceiveBuffer(c net.PacketConn) error {
 			return fmt.Errorf("failed to determine receive buffer size: %w", err)
 		}
 	}
+	if err == nil && newSize < protocol.DesiredReceiveBufferSize {
+		// Some kernels (e.g. OpenBSD, Darwin) reject sizes exceeding their
+		// limit outright instead of clamping. Probe for the largest size the
+		// kernel accepts.
+		newSize = largestBufferSize(newSize, protocol.DesiredReceiveBufferSize,
+			conn.SetReadBuffer,
+			func() (int, error) { return inspectReadBuffer(syscallConn) },
+		)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
