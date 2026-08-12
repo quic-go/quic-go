@@ -42,7 +42,8 @@ func TestLargestBufferSizeFailAtomicKernel(t *testing.T) {
 	// OpenBSD 7.9: default 41600, SB_MAX caps buffers at exactly 2 MiB,
 	// larger requests fail with ENOBUFS. quic-go desires 7 MiB.
 	k := &failAtomicKernel{cap: 2 << 20, size: 41600}
-	got := largestBufferSize(41600, 7<<20, k.set, k.inspect)
+	got, err := largestBufferSize(41600, 7<<20, k.set, k.inspect)
+	require.NoError(t, err)
 	require.Equal(t, 2<<20, got)
 	require.Equal(t, 2<<20, k.size, "socket should be left at the discovered size")
 }
@@ -51,21 +52,27 @@ func TestLargestBufferSizeClampingKernel(t *testing.T) {
 	// Linux with a low rmem_max: sets succeed but silently clamp, so the
 	// search must rely on reading the value back, not on the set error.
 	k := &clampingKernel{cap: 416 << 10, size: 208 << 10}
-	got := largestBufferSize(208<<10, 7<<20, k.set, k.inspect)
+	got, err := largestBufferSize(208<<10, 7<<20, k.set, k.inspect)
+	require.NoError(t, err)
 	require.Equal(t, 416<<10, got)
 	require.Equal(t, 416<<10, k.size)
 }
 
 func TestLargestBufferSizeNothingToGain(t *testing.T) {
 	k := &failAtomicKernel{cap: 2 << 20, size: 2 << 20}
-	require.Equal(t, 2<<20, largestBufferSize(2<<20, 2<<20, k.set, k.inspect))
-	require.Equal(t, 3<<20, largestBufferSize(3<<20, 2<<20, k.set, k.inspect),
-		"desired below current should return current untouched")
+	got, err := largestBufferSize(2<<20, 2<<20, k.set, k.inspect)
+	require.NoError(t, err)
+	require.Equal(t, 2<<20, got)
+	got, err = largestBufferSize(3<<20, 2<<20, k.set, k.inspect)
+	require.NoError(t, err)
+	require.Equal(t, 3<<20, got, "desired below current should return current untouched")
 }
 
 func TestLargestBufferSizeInspectFailure(t *testing.T) {
-	set := func(int) error { return nil }
-	inspect := func() (int, error) { return 0, errors.New("not supported") }
-	require.Equal(t, 41600, largestBufferSize(41600, 7<<20, set, inspect),
-		"unverifiable probing should report the last known size")
+	// If inspection fails after a set may have changed the socket, the
+	// probed size is unverifiable and the error must be propagated.
+	k := &failAtomicKernel{cap: 2 << 20, size: 41600}
+	inspectErr := errors.New("not supported")
+	_, err := largestBufferSize(41600, 7<<20, k.set, func() (int, error) { return 0, inspectErr })
+	require.ErrorIs(t, err, inspectErr)
 }

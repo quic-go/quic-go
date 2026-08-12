@@ -58,7 +58,7 @@ func setReceiveBuffer(c net.PacketConn) error {
 		// Some kernels (e.g. OpenBSD, Darwin) reject sizes exceeding their
 		// limit outright instead of clamping. Probe for the largest size the
 		// kernel accepts.
-		newSize = largestBufferSize(newSize, protocol.DesiredReceiveBufferSize,
+		newSize, err = largestBufferSize(newSize, protocol.DesiredReceiveBufferSize,
 			conn.SetReadBuffer,
 			func() (int, error) { return inspectReadBuffer(syscallConn) },
 		)

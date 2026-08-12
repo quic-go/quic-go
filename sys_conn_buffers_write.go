@@ -60,7 +60,7 @@ func setSendBuffer(c net.PacketConn) error {
 		// Some kernels (e.g. OpenBSD, Darwin) reject sizes exceeding their
 		// limit outright instead of clamping. Probe for the largest size the
 		// kernel accepts.
-		newSize = largestBufferSize(newSize, protocol.DesiredSendBufferSize,
+		newSize, err = largestBufferSize(newSize, protocol.DesiredSendBufferSize,
 			conn.SetWriteBuffer,
 			func() (int, error) { return inspectWriteBuffer(syscallConn) },
 		)

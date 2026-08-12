@@ -8,9 +8,9 @@ package quic
 // its (much smaller) default size.
 // Success is verified by reading the size back, not by the error returned from
 // setting it: Linux, for example, silently clamps instead of failing.
-func largestBufferSize(current, desired int, set func(int) error, inspect func() (int, error)) int {
+func largestBufferSize(current, desired int, set func(int) error, inspect func() (int, error)) (int, error) {
 	if desired <= current {
-		return current
+		return current, nil
 	}
 	known := current // largest size read back after a successful set
 	// Invariant: lo took effect (or is the starting size), hi didn't.
@@ -20,7 +20,7 @@ func largestBufferSize(current, desired int, set func(int) error, inspect func()
 		_ = set(mid)
 		size, err := inspect()
 		if err != nil {
-			return known
+			return known, err
 		}
 		if size >= mid {
 			lo, known = mid, size
@@ -28,5 +28,5 @@ func largestBufferSize(current, desired int, set func(int) error, inspect func()
 			hi = mid
 		}
 	}
-	return known
+	return known, nil
 }
