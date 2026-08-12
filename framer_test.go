@@ -483,7 +483,7 @@ func TestFramerSchedulesReprioritizedStream(t *testing.T) {
 	updatedStr := NewMockStreamFrameGetter(gomock.NewController(t))
 	gomock.InOrder(
 		updatedStr.EXPECT().priority().Return(0, true, 0).Times(2),
-		updatedStr.EXPECT().priority().Return(2, false, 1).Times(2),
+		updatedStr.EXPECT().priority().Return(2, false, 1).Times(3),
 	)
 	remaining := 2
 	updatedStr.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(

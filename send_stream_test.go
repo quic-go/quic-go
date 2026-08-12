@@ -65,17 +65,23 @@ func TestSendStreamPriorityGeneration(t *testing.T) {
 	str := newSendStream(context.Background(), streamID, mockSender, newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount), false)
 
 	str.SetPriority(defaultUrgency, true)
-	_, _, generation := str.priority()
+	urgency, incremental, generation := str.priority()
+	require.Equal(t, int8(defaultUrgency), urgency)
+	require.True(t, incremental)
 	require.Zero(t, generation)
 
 	mockSender.EXPECT().updateStreamPriority(streamID).Times(2)
 	str.SetPriority(2, false)
 	str.SetPriority(2, false)
-	_, _, generation = str.priority()
+	urgency, incremental, generation = str.priority()
+	require.Equal(t, int8(2), urgency)
+	require.False(t, incremental)
 	require.Equal(t, uint32(1), generation)
 
 	str.SetPriority(1, false)
-	_, _, generation = str.priority()
+	urgency, incremental, generation = str.priority()
+	require.Equal(t, int8(1), urgency)
+	require.False(t, incremental)
 	require.Equal(t, uint32(2), generation)
 }
 
