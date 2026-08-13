@@ -17,6 +17,11 @@ func setReceiveBuffer(c net.PacketConn) error {
 		return errors.New("connection doesn't allow setting of receive buffer size. Not a *net.UDPConn?")
 	}
 
+	// Some kernels (e.g. OpenBSD) reject buffer sizes exceeding their limit instead of clamping
+	// (see maxSocketBufferSize). The full size is still requested first: kernels that accept it
+	// get it, and only if that request didn't succeed do we fall back to the platform limit.
+	desired := min(protocol.DesiredReceiveBufferSize, maxSocketBufferSize)
+
 	var syscallConn syscall.RawConn
 	if sc, ok := c.(interface {
 		SyscallConn() (syscall.RawConn, error)
@@ -32,15 +37,19 @@ func setReceiveBuffer(c net.PacketConn) error {
 	// net.PacketConn interface and the SetReadBuffer method.
 	// We have no way of checking if increasing the buffer size actually worked.
 	if syscallConn == nil {
-		return conn.SetReadBuffer(protocol.DesiredReceiveBufferSize)
+		err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize)
+		if err != nil && desired < protocol.DesiredReceiveBufferSize {
+			err = conn.SetReadBuffer(desired)
+		}
+		return err
 	}
 
 	size, err := inspectReadBuffer(syscallConn)
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
-	if size >= protocol.DesiredReceiveBufferSize {
-		utils.DefaultLogger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
+	if size >= desired {
+		utils.DefaultLogger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, desired/1024)
 		return nil
 	}
 	// Ignore the error. We check if we succeeded by querying the buffer size afterward.
@@ -54,14 +63,19 @@ func setReceiveBuffer(c net.PacketConn) error {
 			return fmt.Errorf("failed to determine receive buffer size: %w", err)
 		}
 	}
+	if newSize < desired && desired < protocol.DesiredReceiveBufferSize {
+		// The full request exceeds the platform's socket buffer limit. Retry with the limit.
+		_ = conn.SetReadBuffer(desired)
+		newSize, err = inspectReadBuffer(syscallConn)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
 	if newSize == size {
-		return fmt.Errorf("failed to increase receive buffer size (wanted: %d kiB, got %d kiB)", protocol.DesiredReceiveBufferSize/1024, newSize/1024)
+		return fmt.Errorf("failed to increase receive buffer size (wanted: %d kiB, got %d kiB)", desired/1024, newSize/1024)
 	}
-	if newSize < protocol.DesiredReceiveBufferSize {
-		return fmt.Errorf("failed to sufficiently increase receive buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
+	if newSize < desired {
+		return fmt.Errorf("failed to sufficiently increase receive buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, desired/1024, newSize/1024)
 	}
 	utils.DefaultLogger.Debugf("Increased receive buffer size to %d kiB", newSize/1024)
 	return nil
