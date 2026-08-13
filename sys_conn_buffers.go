@@ -48,8 +48,8 @@ func setReceiveBuffer(c net.PacketConn) error {
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
-	if size >= desired {
-		utils.DefaultLogger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, desired/1024)
+	if size >= protocol.DesiredReceiveBufferSize {
+		utils.DefaultLogger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
 		return nil
 	}
 	// Ignore the error. We check if we succeeded by querying the buffer size afterward.
@@ -71,11 +71,16 @@ func setReceiveBuffer(c net.PacketConn) error {
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
-	if newSize == size {
-		return fmt.Errorf("failed to increase receive buffer size (wanted: %d kiB, got %d kiB)", desired/1024, newSize/1024)
-	}
 	if newSize < desired {
+		if newSize == size {
+			return fmt.Errorf("failed to increase receive buffer size (wanted: %d kiB, got %d kiB)", desired/1024, newSize/1024)
+		}
 		return fmt.Errorf("failed to sufficiently increase receive buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, desired/1024, newSize/1024)
+	}
+	if newSize == size {
+		// The buffer already met the platform limit, but the full request didn't succeed.
+		utils.DefaultLogger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", newSize/1024, desired/1024)
+		return nil
 	}
 	utils.DefaultLogger.Debugf("Increased receive buffer size to %d kiB", newSize/1024)
 	return nil
