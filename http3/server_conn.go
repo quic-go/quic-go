@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/qpack"
@@ -27,7 +29,8 @@ type RawServerConn struct {
 	requestHandler http.Handler
 	maxHeaderBytes int
 
-	decoder *qpack.Decoder
+	decoder       *qpack.Decoder
+	priorityAware atomic.Bool // whether the client sent an RFC 9218 priority signal
 
 	qlogger qlogwriter.Recorder
 	logger  *slog.Logger
@@ -180,6 +183,14 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		req.Trailer = trailers
 		return nil
 	}, qlogger)
+
+	// We only use the client's priority for local scheduling.
+	// A Priority response header is only transmitted so that potential intermediaries can use it,
+	// it doesn't affect local scheduling.
+	// This mirrors the behavior of HTTP/2, see https://github.com/golang/go/issues/75500.
+	urgency, incremental := c.requestPriority(req.Header)
+	hstr.SetPriority(urgency, incremental)
+
 	body := newRequestBody(hstr, contentLength, connCtx, conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
@@ -243,6 +254,15 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 	str.Close()
+}
+
+func (c *RawServerConn) requestPriority(header http.Header) (int8, bool) {
+	values, ok := header["Priority"]
+	if !ok {
+		return defaultPriorityUrgency, !c.priorityAware.Load()
+	}
+	c.priorityAware.Store(true)
+	return parsePriority(strings.Join(values, ","), defaultPriorityUrgency, false)
 }
 
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {

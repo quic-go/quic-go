@@ -104,6 +104,7 @@ func TestResponseWriterInvalidStatus(t *testing.T) {
 func TestResponseWriterHeader(t *testing.T) {
 	rw := newTestResponseWriter(t)
 	rw.Header().Add("Content-Length", "42")
+	rw.Header().Set("Priority", "u=0")
 	rw.WriteHeader(http.StatusTeapot) // 418
 	// repeated WriteHeader calls are ignored
 	rw.WriteHeader(http.StatusInternalServerError)
@@ -117,6 +118,7 @@ func TestResponseWriterHeader(t *testing.T) {
 	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"418"}, fields[":status"])
 	require.Equal(t, []string{"42"}, fields["content-length"])
+	require.Equal(t, []string{"u=0"}, fields["priority"])
 	require.Equal(t,
 		[]string{"foo=bar", `baz="lorem ipsum"`},
 		fields["set-cookie"],

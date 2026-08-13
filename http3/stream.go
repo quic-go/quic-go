@@ -25,6 +25,7 @@ type datagramStream interface {
 	SetDeadline(time.Time) error
 	SetReadDeadline(time.Time) error
 	SetWriteDeadline(time.Time) error
+	SetPriority(urgency int8, incremental bool)
 	TryWriteAll([]byte) error
 	SendDatagram(b []byte) error
 	ReceiveDatagram(ctx context.Context) ([]byte, error)
