@@ -253,6 +253,31 @@ func TestServerFirstFrameNotHeaders(t *testing.T) {
 	}
 }
 
+func TestServerRejectsPriorityUpdateForPush(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	go (&Server{}).ServeQUICConn(serverConn)
+
+	str, err := clientConn.OpenUniStream()
+	require.NoError(t, err)
+	b := quicvarint.Append(nil, streamTypeControlStream)
+	b = (&settingsFrame{}).Append(b)
+	b = quicvarint.Append(b, 0xf0701)
+	b = quicvarint.Append(b, 42)
+	b = append(b, make([]byte, 42)...)
+	_, err = str.Write(b)
+	require.NoError(t, err)
+
+	select {
+	case <-clientConn.Context().Done():
+		require.ErrorIs(t,
+			context.Cause(clientConn.Context()),
+			&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeIDError)},
+		)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for close")
+	}
+}
+
 func TestServerHandlerBodyNotRead(t *testing.T) {
 	t.Run("GET request with a body", func(t *testing.T) {
 		testServerHandlerBodyNotRead(t,

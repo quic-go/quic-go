@@ -55,7 +55,7 @@ func newRawServerConn(
 		qlogger:        qlogger,
 		logger:         logger,
 	}
-	c.rawConn = *newRawConn(conn, enableDatagrams, c.onStreamsEmpty, nil, qlogger, logger)
+	c.rawConn = *newRawConn(conn, enableDatagrams, c.onStreamsEmpty, c.handleControlStream, qlogger, logger)
 	if idleTimeout > 0 {
 		c.idleTimer = time.AfterFunc(idleTimeout, func() {
 			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "idle timeout")
@@ -113,6 +113,10 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	fp := &frameParser{closeConn: conn.CloseWithError, r: str, streamID: str.StreamID()}
 	frame, err := fp.ParseNext(qlogger)
 	if err != nil {
+		if errors.Is(err, errPriorityUpdateForPush) {
+			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return
+		}
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return
@@ -188,7 +192,14 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	// A Priority response header is only transmitted so that potential intermediaries can use it,
 	// it doesn't affect local scheduling.
 	// This mirrors the behavior of HTTP/2, see https://github.com/golang/go/issues/75500.
-	urgency, incremental := c.requestPriority(req.Header)
+	var urgency int8
+	var incremental bool
+	if values, ok := req.Header["Priority"]; !ok {
+		urgency, incremental = defaultPriorityUrgency, !c.priorityAware.Load()
+	} else {
+		c.priorityAware.Store(true)
+		urgency, incremental = parsePriority(strings.Join(values, ","), defaultPriorityUrgency, false)
+	}
 	hstr.SetPriority(urgency, incremental)
 
 	body := newRequestBody(hstr, contentLength, connCtx, conn.ReceivedSettings(), conn.Settings)
@@ -256,13 +267,40 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	str.Close()
 }
 
-func (c *RawServerConn) requestPriority(header http.Header) (int8, bool) {
-	values, ok := header["Priority"]
-	if !ok {
-		return defaultPriorityUrgency, !c.priorityAware.Load()
+func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *frameParser) {
+	for {
+		f, err := fp.ParseNext(c.qlogger)
+		if err != nil {
+			if errors.Is(err, errPriorityUpdateForPush) {
+				// Server push is not supported. Since we never send PUSH_PROMISE frames,
+				// the client can't reference a valid push ID.
+				c.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+				return
+			}
+			var streamErr *quic.StreamError
+			if err == io.EOF || errors.As(err, &streamErr) {
+				c.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
+				return
+			}
+			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+			return
+		}
+		switch frame := f.(type) {
+		case *priorityUpdateFrame:
+			if frame.ElementID%4 != 0 {
+				c.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
+				return
+			}
+			c.priorityAware.Store(true)
+			urgency, incremental := parsePriority(frame.PriorityFieldValue, defaultPriorityUrgency, false)
+			c.rawConn.UpdateStreamPriority(quic.StreamID(frame.ElementID), urgency, incremental)
+		case *goAwayFrame:
+			// Server push is not supported, so there is no push state to update.
+		default:
+			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return
+		}
 	}
-	c.priorityAware.Store(true)
-	return parsePriority(strings.Join(values, ","), defaultPriorityUrgency, false)
 }
 
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {

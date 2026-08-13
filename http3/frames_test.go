@@ -417,6 +417,25 @@ func TestParserGoAwayFrame(t *testing.T) {
 	require.Equal(t, f, f2)
 }
 
+func TestParserPriorityUpdateFrame(t *testing.T) {
+	frame := &priorityUpdateFrame{ElementID: 12, PriorityFieldValue: "u=1, i"}
+	payload := quicvarint.Append(nil, frame.ElementID)
+	payload = append(payload, frame.PriorityFieldValue...)
+	data := quicvarint.Append(nil, 0xf0700)
+	data = quicvarint.Append(data, uint64(len(payload)))
+	data = append(data, payload...)
+	testFrameParserEOF(t, data)
+
+	parsed, err := (&frameParser{r: bytes.NewReader(data)}).ParseNext(nil)
+	require.NoError(t, err)
+	require.Equal(t, frame, parsed)
+
+	data = quicvarint.Append(nil, 0xf0701)
+	data = quicvarint.Append(data, 42) // the payload is intentionally omitted
+	_, err = (&frameParser{r: bytes.NewReader(data)}).ParseNext(nil)
+	require.ErrorIs(t, err, errPriorityUpdateForPush)
+}
+
 func FuzzFrameParser(f *testing.F) {
 	corpus := ossfuzzseeds.New(f)
 

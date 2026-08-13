@@ -2,6 +2,7 @@ package http3
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,29 +58,38 @@ func FuzzParsePriority(f *testing.F) {
 func TestServerRequestPriority(t *testing.T) {
 	conn := &RawServerConn{}
 
-	urgency, incremental := conn.requestPriority(http.Header{})
+	requestPriority := func(header http.Header) (int8, bool) {
+		values, ok := header["Priority"]
+		if !ok {
+			return defaultPriorityUrgency, !conn.priorityAware.Load()
+		}
+		conn.priorityAware.Store(true)
+		return parsePriority(strings.Join(values, ","), defaultPriorityUrgency, false)
+	}
+
+	urgency, incremental := requestPriority(http.Header{})
 	require.Equal(t, defaultPriorityUrgency, urgency)
 	require.True(t, incremental)
 
 	header := http.Header{}
 	header.Set("Priority", "u=0")
-	urgency, incremental = conn.requestPriority(header)
+	urgency, incremental = requestPriority(header)
 	require.Equal(t, int8(0), urgency)
 	require.False(t, incremental)
 	require.True(t, conn.priorityAware.Load())
 
-	urgency, incremental = conn.requestPriority(http.Header{})
+	urgency, incremental = requestPriority(http.Header{})
 	require.Equal(t, defaultPriorityUrgency, urgency)
 	require.False(t, incremental)
 
 	header.Set("Priority", "i")
-	urgency, incremental = conn.requestPriority(header)
+	urgency, incremental = requestPriority(header)
 	require.Equal(t, defaultPriorityUrgency, urgency)
 	require.True(t, incremental)
 
 	conn = &RawServerConn{}
 	header.Set("Priority", `u=0, invalid="`)
-	urgency, incremental = conn.requestPriority(header)
+	urgency, incremental = requestPriority(header)
 	require.Equal(t, defaultPriorityUrgency, urgency)
 	require.False(t, incremental)
 	require.True(t, conn.priorityAware.Load())
