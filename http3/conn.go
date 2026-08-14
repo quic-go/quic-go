@@ -256,9 +256,7 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 		})
 	}
 
-	if c.controlStrHandler != nil {
-		c.controlStrHandler(str, fp)
-	}
+	c.controlStrHandler(str, fp)
 }
 
 func (c *rawConn) sendDatagram(streamID quic.StreamID, b []byte) error {

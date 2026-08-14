@@ -40,7 +40,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 	clientConn, _ := newConnPair(t, withClientRecorder(&eventRecorder))
 	str := newStream(
 		qstr,
-		newRawConn(clientConn, false, nil, nil, &eventRecorder, nil),
+		newRawConn(clientConn, false, nil, nopControlStrHandler, &eventRecorder, nil),
 		nil,
 		func(io.Reader, *headersFrame) error { return nil },
 		&eventRecorder,
@@ -108,7 +108,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 
 	str := newStream(
 		qstr,
-		newRawConn(clientConn, false, nil, nil, nil, nil),
+		newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
 		nil,
 		func(io.Reader, *headersFrame) error { return nil },
 		nil,
@@ -209,7 +209,7 @@ func TestRequestStream(t *testing.T) {
 	str := newRequestStream(
 		newStream(
 			qstr,
-			newRawConn(clientConn, false, nil, nil, nil, nil),
+			newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
 			&httptrace.ClientTrace{},
 			func(io.Reader, *headersFrame) error { return nil },
 			nil,
