@@ -6,8 +6,9 @@ const defaultPriorityUrgency int8 = 3
 
 // parsePriority parses the RFC 9218 Priority header field value. It only
 // recognizes the u and i parameters; malformed members return both defaults.
-func parsePriority(value string, defaultUrgency int8, defaultIncremental bool) (urgency int8, incremental bool) {
-	urgency, incremental = defaultUrgency, defaultIncremental
+func parsePriority(value string) (urgency int8, incremental bool) {
+	urgency = defaultPriorityUrgency
+
 	var inString, escapes bool
 	for i, start := 0, 0; i <= len(value); i++ {
 		switch {
@@ -16,7 +17,7 @@ func parsePriority(value string, defaultUrgency int8, defaultIncremental bool) (
 			start = i + 1
 			key, item, hasValue := strings.Cut(member, "=")
 			if key == "" || hasValue && item == "" {
-				return defaultUrgency, defaultIncremental
+				return defaultPriorityUrgency, false
 			}
 			switch key {
 			case "u":
@@ -38,7 +39,7 @@ func parsePriority(value string, defaultUrgency int8, defaultIncremental bool) (
 		}
 	}
 	if inString {
-		return defaultUrgency, defaultIncremental
+		return defaultPriorityUrgency, false
 	}
 	return urgency, incremental
 }

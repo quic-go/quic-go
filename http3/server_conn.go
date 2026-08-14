@@ -198,7 +198,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		urgency, incremental = defaultPriorityUrgency, !c.priorityAware.Load()
 	} else {
 		c.priorityAware.Store(true)
-		urgency, incremental = parsePriority(strings.Join(values, ","), defaultPriorityUrgency, false)
+		urgency, incremental = parsePriority(strings.Join(values, ","))
 	}
 	hstr.SetPriority(urgency, incremental)
 
@@ -292,7 +292,7 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 				return
 			}
 			c.priorityAware.Store(true)
-			urgency, incremental := parsePriority(frame.PriorityFieldValue, defaultPriorityUrgency, false)
+			urgency, incremental := parsePriority(frame.PriorityFieldValue)
 			c.rawConn.UpdateStreamPriority(quic.StreamID(frame.ElementID), urgency, incremental)
 		case *goAwayFrame:
 			// Server push is not supported, so there is no push state to update.
