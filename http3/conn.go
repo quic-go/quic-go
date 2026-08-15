@@ -123,6 +123,16 @@ func (c *rawConn) TrackStream(str *quic.Stream) *stateTrackingStream {
 	return hstr
 }
 
+func (c *rawConn) UpdateStreamPriority(id quic.StreamID, urgency int8, incremental bool) {
+	c.streamMx.Lock()
+	str := c.streams[id]
+	c.streamMx.Unlock()
+	// A PRIORITY_UPDATE can arrive before its request stream. We deliberately ignore such reordered frames.
+	if str != nil {
+		str.SetPriority(urgency, incremental)
+	}
+}
+
 func (c *rawConn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
@@ -206,6 +216,10 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 	fp := &frameParser{closeConn: c.conn.CloseWithError, r: str, streamID: str.StreamID()}
 	f, err := fp.ParseNext(c.qlogger)
 	if err != nil {
+		if errors.Is(err, errPriorityUpdateForPush) {
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
+			return
+		}
 		var serr *quic.StreamError
 		if err == io.EOF || errors.As(err, &serr) {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
@@ -242,9 +256,7 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 		})
 	}
 
-	if c.controlStrHandler != nil {
-		c.controlStrHandler(str, fp)
-	}
+	c.controlStrHandler(str, fp)
 }
 
 func (c *rawConn) sendDatagram(streamID quic.StreamID, b []byte) error {

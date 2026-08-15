@@ -202,6 +202,10 @@ func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParse
 	for {
 		f, err := fp.ParseNext(c.qlogger)
 		if err != nil {
+			if errors.Is(err, errPriorityUpdateForPush) {
+				c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+				return
+			}
 			var serr *quic.StreamError
 			if err == io.EOF || errors.As(err, &serr) {
 				c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")

@@ -78,6 +78,9 @@ func (s *Stream) Read(b []byte) (int, error) {
 		for {
 			frame, err := s.frameParser.ParseNext(s.qlogger)
 			if err != nil {
+				if errors.Is(err, errPriorityUpdateForPush) {
+					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+				}
 				return 0, err
 			}
 			switch f := frame.(type) {
@@ -356,6 +359,10 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	}
 	frame, err := s.str.frameParser.ParseNext(s.str.qlogger)
 	if err != nil {
+		if errors.Is(err, errPriorityUpdateForPush) {
+			s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return nil, err
+		}
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return nil, fmt.Errorf("http3: parsing frame failed: %w", err)
