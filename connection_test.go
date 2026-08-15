@@ -1309,6 +1309,31 @@ func TestConnectionHandshakeServer(t *testing.T) {
 	}
 }
 
+func TestConnectionFinishesCryptoStreamWhenReadKeysBecomeAvailable(t *testing.T) {
+	for _, test := range []struct {
+		event    handshake.EventKind
+		previous protocol.EncryptionLevel
+	}{
+		{handshake.EventReceivedHandshakeReadKeys, protocol.EncryptionInitial},
+		{handshake.EventReceived1RTTReadKeys, protocol.EncryptionHandshake},
+	} {
+		t.Run(test.event.String(), func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			cs := mocks.NewMockCryptoSetup(mockCtrl)
+			tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptCryptoSetup(cs))
+			require.NoError(t, tc.conn.cryptoStreamManager.HandleCryptoFrame(
+				&wire.CryptoFrame{Offset: 1, Data: []byte("foo")},
+				test.previous,
+			))
+
+			cs.EXPECT().NextEvent().Return(handshake.Event{Kind: test.event})
+			err := tc.conn.handleHandshakeEvents(monotime.Now())
+			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
+			require.ErrorContains(t, err, "encryption level changed, but crypto stream has more data to read")
+		})
+	}
+}
+
 func TestConnectionHandshakeClient(t *testing.T) {
 	t.Run("without preferred address", func(t *testing.T) {
 		testConnectionHandshakeClient(t, false)
@@ -1682,7 +1707,7 @@ func TestConnectionPacketBuffering(t *testing.T) {
 		hdr3.PacketNumber = 3
 		hdrs["packet3"] = &hdr3
 		tc.packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-		cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventReceivedReadKeys})
+		cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventReceived1RTTReadKeys})
 		cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
 
 		gomock.InOrder(
