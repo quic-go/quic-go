@@ -66,12 +66,6 @@ func TestConnectionFlowControllerReset(t *testing.T) {
 	fc.UpdateSendWindow(100)
 	require.True(t, fc.TryAddBytesSent(10))
 	require.Equal(t, protocol.ByteCount(90), fc.SendWindowSize())
-	require.NoError(t, fc.Reset())
+	fc.Reset()
 	require.Zero(t, fc.SendWindowSize())
-}
-
-func TestConnectionFlowControllerResetAfterReading(t *testing.T) {
-	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
-	fc.AddBytesRead(1)
-	require.EqualError(t, fc.Reset(), "flow controller reset after reading data")
 }
