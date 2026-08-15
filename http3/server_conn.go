@@ -79,7 +79,7 @@ func (c *RawServerConn) CloseWithError(code quic.ApplicationErrorCode, msg strin
 }
 
 // HandleRequestStream handles an HTTP/3 request on a bidirectional request stream.
-// The stream can either be obtained by calling AcceptStream on the underlying QUIC connection,
+// The stream can either be obtained by calling [quic.Conn.AcceptStream] on the underlying QUIC connection,
 // or (internally) by using the server's stream accept loop.
 func (c *RawServerConn) HandleRequestStream(str *quic.Stream) {
 	hstr := c.rawConn.TrackStream(str)

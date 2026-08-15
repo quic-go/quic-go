@@ -434,7 +434,7 @@ func (e MTUUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 
 // MetricsUpdated logs RTT and congestion metrics as defined in the
 // recovery:metrics_updated event.
-// The PTO count is logged via PTOCountUpdated.
+// The PTO count is logged via [PTOCountUpdated].
 type MetricsUpdated struct {
 	MinRTT           time.Duration
 	SmoothedRTT      time.Duration

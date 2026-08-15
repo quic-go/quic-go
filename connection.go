@@ -3034,7 +3034,7 @@ func (c *Conn) updateStreamPriority(id protocol.StreamID) {
 // There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.
 // The payload of the datagram needs to fit into a single QUIC packet.
 // In addition, a datagram may be dropped before being sent out if the available packet size suddenly decreases.
-// If the payload is too large to be sent at the current time, a DatagramTooLargeError is returned.
+// If the payload is too large to be sent at the current time, a [DatagramTooLargeError] is returned.
 func (c *Conn) SendDatagram(p []byte) error {
 	if !c.supportsDatagrams() {
 		return errors.New("datagram support disabled")

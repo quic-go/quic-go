@@ -576,9 +576,9 @@ func (s *SendStream) isNewlyCompleted() bool {
 }
 
 // Close closes the write-direction of the stream.
-// Future calls to Write are not permitted after calling Close.
-// It must not be called concurrently with Write.
-// It must not be called after calling CancelWrite.
+// Future calls to [SendStream.Write] are not permitted after calling Close.
+// It must not be called concurrently with [SendStream.Write].
+// It must not be called after calling [SendStream.CancelWrite].
 func (s *SendStream) Close() error {
 	s.mutex.Lock()
 	if s.shutdownErr != nil || s.finishedWriting {
@@ -636,9 +636,9 @@ func (s *SendStream) returnFramesToPool() {
 
 // CancelWrite aborts sending on this stream.
 // Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
-// Write will unblock immediately, and future calls to Write will fail.
+// [SendStream.Write] will unblock immediately, and future calls to it will fail.
 // When called multiple times it is a no-op.
-// When called after Close, it aborts reliable delivery of outstanding stream data.
+// When called after [SendStream.Close], it aborts reliable delivery of outstanding stream data.
 // Note that there is no guarantee if the peer will receive the FIN or the cancellation error first.
 func (s *SendStream) CancelWrite(errorCode StreamErrorCode) {
 	s.mutex.Lock()
@@ -816,19 +816,19 @@ func (s *SendStream) SetPriority(urgency int8, incremental bool) {
 }
 
 // The Context is canceled as soon as the write-side of the stream is closed.
-// This happens when Close() or CancelWrite() is called, or when the peer
+// This happens when [SendStream.Close] or [SendStream.CancelWrite] is called, or when the peer
 // cancels the read-side of their stream.
 // The cancellation cause is set to the error that caused the stream to
-// close, or `context.Canceled` in case the stream is closed without error.
+// close, or [context.Canceled] in case the stream is closed without error.
 func (s *SendStream) Context() context.Context {
 	return s.ctx
 }
 
-// SetWriteDeadline sets the deadline for future Write calls
-// and any currently-blocked Write call.
+// SetWriteDeadline sets the deadline for future [SendStream.Write] calls
+// and any currently blocked call.
 // Even if write times out, it may return n > 0, indicating that
 // some data was successfully written.
-// A zero value for t means Write will not time out.
+// A zero value for t means [SendStream.Write] will not time out.
 func (s *SendStream) SetWriteDeadline(t time.Time) error {
 	s.mutex.Lock()
 	s.deadline = monotime.FromTime(t)
