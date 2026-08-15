@@ -162,7 +162,7 @@ type Conn struct {
 	unpacker      unpacker
 	frameParser   wire.FrameParser
 	packer        packer
-	mtuDiscoverer mtuDiscoverer // initialized when the transport parameters are received
+	mtuDiscoverer *mtuFinder // initialized when the transport parameters are received
 
 	maxPayloadSizeEstimate atomic.Uint32
 
