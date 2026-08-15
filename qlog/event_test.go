@@ -103,6 +103,20 @@ func TestVersionInformationWithNegotiation(t *testing.T) {
 	require.Equal(t, []any{"4", "5", "6"}, ev["server_versions"])
 }
 
+func TestStreamPriorityUpdated(t *testing.T) {
+	name, ev := testEventEncoding(t, &StreamPriorityUpdated{
+		StreamID:    42,
+		Urgency:     2,
+		Incremental: true,
+	})
+
+	require.Equal(t, "transport:priority_updated", name)
+	require.Equal(t, map[string]any{
+		"stream_id": float64(42),
+		"new":       "u=2, i",
+	}, ev)
+}
+
 func TestIdleTimeouts(t *testing.T) {
 	name, ev := testEventEncoding(t, &ConnectionClosed{
 		Initiator: InitiatorLocal,

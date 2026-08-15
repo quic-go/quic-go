@@ -541,6 +541,7 @@ func (c *Conn) preSetup() {
 		uint64(c.config.MaxIncomingStreams),
 		uint64(c.config.MaxIncomingUniStreams),
 		c.perspective,
+		c.qlogger,
 	)
 	c.framer = newFramer(c.connFlowController)
 	c.receivedPackets.Init(8)

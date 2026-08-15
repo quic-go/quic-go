@@ -11,6 +11,8 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 const defaultUrgency = 3
@@ -39,6 +41,7 @@ type SendStream struct {
 
 	streamID protocol.StreamID
 	sender   streamSender
+	qlogger  qlogwriter.Recorder
 
 	// reliableSize is the portion of the stream that needs to be transmitted reliably,
 	// even if the stream is cancelled.
@@ -93,10 +96,12 @@ func newSendStream(
 	sender streamSender,
 	flowController *streamFlowController,
 	supportsResetStreamAt bool,
+	qlogger qlogwriter.Recorder,
 ) *SendStream {
 	s := &SendStream{
 		streamID:              streamID,
 		sender:                sender,
+		qlogger:               qlogger,
 		flowController:        flowController,
 		writeChan:             make(chan struct{}, 1),
 		writeOnce:             make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
@@ -811,6 +816,13 @@ func (s *SendStream) SetPriority(urgency int8, incremental bool) {
 		return
 	}
 	s.priorityValue.Store(encodeStreamPriority(urgency, incremental, generation+1))
+	if s.qlogger != nil {
+		s.qlogger.RecordEvent(qlog.StreamPriorityUpdated{
+			StreamID:    s.streamID,
+			Urgency:     urgency,
+			Incremental: incremental,
+		})
+	}
 	s.mutex.Unlock()
 	s.sender.updateStreamPriority(s.streamID)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 type deadlineError struct{}
@@ -74,6 +75,7 @@ func newStream(
 	sender streamSender,
 	flowController *streamFlowController,
 	supportsResetStreamAt bool,
+	qlogger qlogwriter.Recorder,
 ) *Stream {
 	s := &Stream{sender: sender}
 	senderForSendStream := &uniStreamSender{
@@ -88,7 +90,7 @@ func newStream(
 			sender.onHasStreamControlFrame(streamID, s)
 		},
 	}
-	s.sendStr = newSendStream(ctx, streamID, senderForSendStream, flowController, supportsResetStreamAt)
+	s.sendStr = newSendStream(ctx, streamID, senderForSendStream, flowController, supportsResetStreamAt, qlogger)
 	senderForReceiveStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {

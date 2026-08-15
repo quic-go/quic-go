@@ -9,6 +9,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 // StreamLimitReachedError is returned from [Conn.OpenStream] and [Conn.OpenUniStream]
@@ -28,6 +29,7 @@ type streamsMap struct {
 	sender            streamSender
 	queueControlFrame func(wire.Frame)
 	newFlowController func(protocol.StreamID) *streamFlowController
+	qlogger           qlogwriter.Recorder
 
 	mutex                 sync.Mutex
 	outgoingBidiStreams   *outgoingStreamsMap[*Stream]
@@ -46,6 +48,7 @@ func newStreamsMap(
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
+	qlogger qlogwriter.Recorder,
 ) *streamsMap {
 	m := &streamsMap{
 		ctx:                    ctx,
@@ -55,6 +58,7 @@ func newStreamsMap(
 		maxIncomingBidiStreams: maxIncomingBidiStreams,
 		maxIncomingUniStreams:  maxIncomingUniStreams,
 		sender:                 sender,
+		qlogger:                qlogger,
 	}
 	m.initMaps()
 	return m
@@ -64,7 +68,7 @@ func (m *streamsMap) initMaps() {
 	m.outgoingBidiStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
 		func(id protocol.StreamID) *Stream {
-			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
+			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt, m.qlogger)
 		},
 		m.queueControlFrame,
 		m.perspective,
@@ -72,7 +76,7 @@ func (m *streamsMap) initMaps() {
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
 		func(id protocol.StreamID) *Stream {
-			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
+			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt, m.qlogger)
 		},
 		m.maxIncomingBidiStreams,
 		m.queueControlFrame,
@@ -81,7 +85,7 @@ func (m *streamsMap) initMaps() {
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
 		func(id protocol.StreamID) *SendStream {
-			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
+			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt, m.qlogger)
 		},
 		m.queueControlFrame,
 		m.perspective,
