@@ -2,7 +2,4 @@
 
 package quic
 
-import "math"
-
-// No platform limit on the requestable socket buffer size; see sys_conn_buffers_openbsd.go.
-const maxSocketBufferSize = math.MaxInt
+const desiredBufferSize = 7 << 20 // 7 MiB

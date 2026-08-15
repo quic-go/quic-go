@@ -14,6 +14,8 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
+const desiredBufferSize = 2 << 20 // 2 MiB
+
 // Connection is a UDP connection
 type connection struct {
 	ClientAddr *net.UDPAddr // Address of the client
@@ -172,10 +174,10 @@ func (p *Proxy) Start() error {
 	p.closeChan = make(chan struct{})
 	p.logger = utils.DefaultLogger.WithPrefix("proxy")
 
-	if err := p.Conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
+	if err := p.Conn.SetReadBuffer(desiredBufferSize); err != nil {
 		return err
 	}
-	if err := p.Conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
+	if err := p.Conn.SetWriteBuffer(desiredBufferSize); err != nil {
 		return err
 	}
 
@@ -187,10 +189,10 @@ func (p *Proxy) Start() error {
 // SwitchConn switches the connection for a client,
 // identified the address that the client is sending from.
 func (p *Proxy) SwitchConn(clientAddr *net.UDPAddr, conn *net.UDPConn) error {
-	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
+	if err := conn.SetReadBuffer(desiredBufferSize); err != nil {
 		return err
 	}
-	if err := conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
+	if err := conn.SetWriteBuffer(desiredBufferSize); err != nil {
 		return err
 	}
 	p.mutex.Lock()
@@ -227,10 +229,10 @@ func (p *Proxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
+	if err := conn.SetReadBuffer(desiredBufferSize); err != nil {
 		return nil, err
 	}
-	if err := conn.SetWriteBuffer(protocol.DesiredSendBufferSize); err != nil {
+	if err := conn.SetWriteBuffer(desiredBufferSize); err != nil {
 		return nil, err
 	}
 	return &connection{
