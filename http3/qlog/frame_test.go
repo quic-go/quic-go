@@ -189,6 +189,14 @@ func TestMaxPushIDFrame(t *testing.T) {
 	})
 }
 
+func TestPriorityUpdateFrame(t *testing.T) {
+	check(t, PriorityUpdateFrame{StreamID: 12, PriorityFieldValue: "u=1, i"}, map[string]any{
+		"frame_type":           "priority_update",
+		"stream_id":            12,
+		"priority_field_value": "u=1, i",
+	})
+}
+
 func TestReservedFrame(t *testing.T) {
 	check(t, ReservedFrame{Type: 0x1f}, map[string]any{
 		"frame_type":       "reserved",

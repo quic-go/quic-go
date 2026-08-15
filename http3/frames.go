@@ -104,7 +104,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 		case 0x7: // GOAWAY
 			return parseGoAwayFrame(r, l, p.streamID, qlogger)
 		case 0xf0700: // PRIORITY_UPDATE for a request stream
-			return parsePriorityUpdateFrame(r, l)
+			return parsePriorityUpdateFrame(r, l, p.streamID, qlogger)
 		case 0xf0701: // PRIORITY_UPDATE for a push stream
 			return nil, errPriorityUpdateForPush
 		case 0xd: // unsupported: MAX_PUSH_ID
@@ -342,7 +342,7 @@ type priorityUpdateFrame struct {
 
 const maxPriorityUpdateFrameSize = 4 << 10
 
-func parsePriorityUpdateFrame(r *countingByteReader, l uint64) (*priorityUpdateFrame, error) {
+func parsePriorityUpdateFrame(r *countingByteReader, l uint64, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*priorityUpdateFrame, error) {
 	if l > maxPriorityUpdateFrameSize {
 		return nil, fmt.Errorf("unexpected size for PRIORITY_UPDATE frame: %d", l)
 	}
@@ -357,8 +357,19 @@ func parsePriorityUpdateFrame(r *countingByteReader, l uint64) (*priorityUpdateF
 	if err != nil {
 		return nil, err
 	}
-	return &priorityUpdateFrame{
+	frame := &priorityUpdateFrame{
 		ElementID:          id,
 		PriorityFieldValue: string(buf[n:]),
-	}, nil
+	}
+	if qlogger != nil {
+		qlogger.RecordEvent(qlog.FrameParsed{
+			StreamID: streamID,
+			Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+			Frame: qlog.Frame{Frame: qlog.PriorityUpdateFrame{
+				StreamID:           quic.StreamID(frame.ElementID),
+				PriorityFieldValue: frame.PriorityFieldValue,
+			}},
+		})
+	}
+	return frame, nil
 }
