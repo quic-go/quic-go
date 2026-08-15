@@ -91,6 +91,14 @@ jobs:
         with:
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
+      - name: golangci-lint (OpenBSD)
+        if: success() || failure() # run this step even if the previous one failed
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        env:
+          GOOS: "openbsd"
+        with:
+          args: --timeout=3m
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: golangci-lint (others)
         if: success() || failure() # run this step even if the previous one failed
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
