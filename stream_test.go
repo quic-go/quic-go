@@ -20,7 +20,7 @@ func TestStreamDeadlines(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockSender := NewMockStreamSender(mockCtrl)
 	fc := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
-	str := newStream(context.Background(), streamID, mockSender, fc, false, nil)
+	str := newStream(context.Background(), streamID, mockSender, fc, false)
 
 	// SetDeadline sets both read and write deadlines
 	str.SetDeadline(time.Now().Add(-time.Second))
@@ -39,7 +39,7 @@ func TestStreamReceiveFinalSizeCallback(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockSender := NewMockStreamSender(mockCtrl)
 	fc := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
-	str := newStream(context.Background(), streamID, mockSender, fc, false, nil)
+	str := newStream(context.Background(), streamID, mockSender, fc, false)
 
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Data: []byte("foobar"), Fin: true}, monotime.Now()))
 
@@ -89,7 +89,7 @@ func TestStreamCompletion(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		mockSender := NewMockStreamSender(mockCtrl)
 		fc := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
-		str := newStream(context.Background(), streamID, mockSender, fc, false, nil)
+		str := newStream(context.Background(), streamID, mockSender, fc, false)
 
 		completeReadSide(t, str, mockCtrl)
 		mockSender.EXPECT().onStreamCompleted(streamID)
@@ -100,7 +100,7 @@ func TestStreamCompletion(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		mockSender := NewMockStreamSender(mockCtrl)
 		fc := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
-		str := newStream(context.Background(), streamID, mockSender, fc, false, nil)
+		str := newStream(context.Background(), streamID, mockSender, fc, false)
 
 		completeWriteSide(t, str, mockCtrl, mockSender)
 		mockSender.EXPECT().onStreamCompleted(streamID)

@@ -11,7 +11,6 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 type deadlineError struct{}
@@ -30,6 +29,7 @@ type streamSender interface {
 	onHasStreamRetransmission(protocol.StreamID, *SendStream)
 	onHasStreamControlFrame(protocol.StreamID, streamControlFrameGetter)
 	updateStreamPriority(protocol.StreamID)
+	recordStreamPriorityUpdated(protocol.StreamID, int8, bool)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
 }
@@ -75,7 +75,6 @@ func newStream(
 	sender streamSender,
 	flowController *streamFlowController,
 	supportsResetStreamAt bool,
-	qlogger qlogwriter.Recorder,
 ) *Stream {
 	s := &Stream{sender: sender}
 	senderForSendStream := &uniStreamSender{
@@ -90,7 +89,7 @@ func newStream(
 			sender.onHasStreamControlFrame(streamID, s)
 		},
 	}
-	s.sendStr = newSendStream(ctx, streamID, senderForSendStream, flowController, supportsResetStreamAt, qlogger)
+	s.sendStr = newSendStream(ctx, streamID, senderForSendStream, flowController, supportsResetStreamAt)
 	senderForReceiveStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {

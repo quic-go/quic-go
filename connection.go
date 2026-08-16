@@ -541,7 +541,6 @@ func (c *Conn) preSetup() {
 		uint64(c.config.MaxIncomingStreams),
 		uint64(c.config.MaxIncomingUniStreams),
 		c.perspective,
-		c.qlogger,
 	)
 	c.framer = newFramer(c.connFlowController)
 	c.receivedPackets.Init(8)
@@ -3028,6 +3027,16 @@ func (c *Conn) onStreamCompleted(id protocol.StreamID) {
 func (c *Conn) updateStreamPriority(id protocol.StreamID) {
 	c.framer.UpdateStreamPriority(id)
 	c.scheduleSending()
+}
+
+func (c *Conn) recordStreamPriorityUpdated(id protocol.StreamID, urgency int8, incremental bool) {
+	if c.qlogger != nil {
+		c.qlogger.RecordEvent(qlog.StreamPriorityUpdated{
+			StreamID:    id,
+			Urgency:     urgency,
+			Incremental: incremental,
+		})
+	}
 }
 
 // SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221,
