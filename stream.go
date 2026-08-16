@@ -29,6 +29,7 @@ type streamSender interface {
 	onHasStreamRetransmission(protocol.StreamID, *SendStream)
 	onHasStreamControlFrame(protocol.StreamID, streamControlFrameGetter)
 	updateStreamPriority(protocol.StreamID)
+	recordStreamPriorityUpdated(protocol.StreamID, int8, bool)
 	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
 }

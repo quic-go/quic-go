@@ -3029,6 +3029,16 @@ func (c *Conn) updateStreamPriority(id protocol.StreamID) {
 	c.scheduleSending()
 }
 
+func (c *Conn) recordStreamPriorityUpdated(id protocol.StreamID, urgency int8, incremental bool) {
+	if c.qlogger != nil {
+		c.qlogger.RecordEvent(qlog.StreamPriorityUpdated{
+			StreamID:    id,
+			Urgency:     urgency,
+			Incremental: incremental,
+		})
+	}
+}
+
 // SendDatagram sends a message using a QUIC datagram, as specified in RFC 9221,
 // if the peer enabled datagram support.
 // There is no delivery guarantee for DATAGRAM frames, they are not retransmitted if lost.

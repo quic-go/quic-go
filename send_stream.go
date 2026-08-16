@@ -70,7 +70,7 @@ type SendStream struct {
 	// This can happen because the application called CancelWrite,
 	// or because Write returned the error (for remote cancellations).
 	cancellationFlagged bool
-	completed           bool // set when this stream has been reported to the streamSender as completed
+	completed           bool // set when this stream no longer needs to be scheduled
 
 	priorityValue atomic.Uint64
 
@@ -802,16 +802,21 @@ func (s *SendStream) reliableOffset() protocol.ByteCount {
 // [RFC 9218]: https://www.rfc-editor.org/rfc/rfc9218.html
 func (s *SendStream) SetPriority(urgency int8, incremental bool) {
 	urgency = max(0, min(urgency, 7)) // urgency must be between 0 and 7
-	// This use of the mutex only serializes concurrent SetPriority calls.
-	// priorityValue itself is atomic and doesn't need the mutex.
 	s.mutex.Lock()
+	if s.completed {
+		s.mutex.Unlock()
+		return
+	}
 	oldUrgency, oldIncremental, generation := decodeStreamPriority(s.priorityValue.Load())
 	if oldUrgency == urgency && oldIncremental == incremental {
 		s.mutex.Unlock()
 		return
 	}
 	s.priorityValue.Store(encodeStreamPriority(urgency, incremental, generation+1))
+	// Keep qlogging under the lock so shutdown can't close the qlogger concurrently.
+	s.sender.recordStreamPriorityUpdated(s.streamID, urgency, incremental)
 	s.mutex.Unlock()
+	// The framer calls back into the stream while holding its lock.
 	s.sender.updateStreamPriority(s.streamID)
 }
 
@@ -842,6 +847,7 @@ func (s *SendStream) SetWriteDeadline(t time.Time) error {
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
 func (s *SendStream) closeForShutdown(err error) {
 	s.mutex.Lock()
+	s.completed = true
 	if s.shutdownErr == nil && !s.finishedWriting {
 		s.shutdownErr = err
 		s.returnFramesToPool()

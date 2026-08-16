@@ -70,7 +70,10 @@ func TestSendStreamPriorityGeneration(t *testing.T) {
 	require.True(t, incremental)
 	require.Zero(t, generation)
 
-	mockSender.EXPECT().updateStreamPriority(streamID).Times(2)
+	mockSender.EXPECT().updateStreamPriority(streamID).Times(3)
+	mockSender.EXPECT().recordStreamPriorityUpdated(streamID, int8(2), false)
+	mockSender.EXPECT().recordStreamPriorityUpdated(streamID, int8(2), true)
+	mockSender.EXPECT().recordStreamPriorityUpdated(streamID, int8(1), false)
 	str.SetPriority(2, false)
 	str.SetPriority(2, false)
 	urgency, incremental, generation = str.priority()
@@ -78,11 +81,24 @@ func TestSendStreamPriorityGeneration(t *testing.T) {
 	require.False(t, incremental)
 	require.Equal(t, uint32(1), generation)
 
+	str.SetPriority(2, true)
+	urgency, incremental, generation = str.priority()
+	require.Equal(t, int8(2), urgency)
+	require.True(t, incremental)
+	require.Equal(t, uint32(2), generation)
+
 	str.SetPriority(1, false)
 	urgency, incremental, generation = str.priority()
 	require.Equal(t, int8(1), urgency)
 	require.False(t, incremental)
-	require.Equal(t, uint32(2), generation)
+	require.Equal(t, uint32(3), generation)
+
+	str.closeForShutdown(assert.AnError)
+	str.SetPriority(0, true)
+	urgency, incremental, generation = str.priority()
+	require.Equal(t, int8(1), urgency)
+	require.False(t, incremental)
+	require.Equal(t, uint32(3), generation)
 }
 
 func TestSendStreamWriteData(t *testing.T) {
