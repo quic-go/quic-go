@@ -285,3 +285,46 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		require.ErrorIs(t, p2.Switch(), ErrPathClosed)
 	})
 }
+
+// TestPathManagerOutgoingAbandonValidatedPath tests that closing a path that has
+// already been validated retires the connection ID allocated to it.
+// TestPathManagerOutgoingAbandonPath covers closing a path before validation,
+// which is a different case: pathChallenges is cleared once the path validates.
+func TestPathManagerOutgoingAbandonValidatedPath(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		connIDs := []protocol.ConnectionID{
+			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+		}
+		var retiredPaths []pathID
+		pm := newPathManagerOutgoing(
+			func(id pathID) (protocol.ConnectionID, bool) {
+				if len(connIDs) == 0 {
+					return protocol.ConnectionID{}, false
+				}
+				connID := connIDs[0]
+				connIDs = connIDs[1:]
+				return connID, true
+			},
+			func(id pathID) { retiredPaths = append(retiredPaths, id) },
+			func() {},
+		)
+
+		p := pm.NewPath(&Transport{}, time.Second, func() {})
+		errChan := make(chan error, 1)
+		go func() { errChan <- p.Probe(context.Background()) }()
+		synctest.Wait()
+
+		_, f, _, ok := pm.NextPathToProbe()
+		require.True(t, ok)
+
+		// Validate the path before abandoning it. This is the ordering an
+		// application produces: probe, use the path, and abandon it later.
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+		synctest.Wait()
+		require.NoError(t, <-errChan)
+
+		require.NoError(t, p.Close())
+		require.Equal(t, []pathID{p.id}, retiredPaths,
+			"the connection ID of a validated path must be retired when the path is abandoned")
+	})
+}

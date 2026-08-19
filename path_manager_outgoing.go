@@ -192,7 +192,9 @@ func (pm *pathManagerOutgoing) removePathImpl(id pathID) error {
 	if !ok {
 		return nil
 	}
-	if len(p.pathChallenges) > 0 {
+	// A connection ID was allocated to this path if it was ever probed. Both
+	// terms are needed: pathChallenges is cleared when the path validates.
+	if len(p.pathChallenges) > 0 || p.isValidated {
 		pm.retireConnID(id)
 	}
 	delete(pm.paths, id)
