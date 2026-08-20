@@ -109,18 +109,15 @@ func TestFrameSorterGapHandling(t *testing.T) {
 	}
 
 	checkGaps := func(t *testing.T, s *frameSorter, expectedGaps []byteInterval) {
+		actualGaps := s.gaps.values()
 		if s.gaps.Len() != len(expectedGaps) {
 			fmt.Println("Gaps:")
-			for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-				fmt.Printf("\t%d - %d\n", gap.Value.Start, gap.Value.End)
+			for _, gap := range actualGaps {
+				fmt.Printf("\t%d - %d\n", gap.Start, gap.End)
 			}
 			require.Equal(t, len(expectedGaps), s.gaps.Len())
 		}
-		var i int
-		for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-			require.Equal(t, expectedGaps[i], gap.Value)
-			i++
-		}
+		require.Equal(t, expectedGaps, actualGaps)
 	}
 
 	// ---xxx--------------
@@ -1452,7 +1449,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 		}
 	}
 	require.Equal(t, 1, s.gaps.Len())
-	require.Equal(t, byteInterval{Start: num * dataLen, End: protocol.MaxByteCount}, s.gaps.Front().Value)
+	require.Equal(t, byteInterval{Start: num * dataLen, End: protocol.MaxByteCount}, s.gaps.First())
 
 	// read all data
 	var read []byte
