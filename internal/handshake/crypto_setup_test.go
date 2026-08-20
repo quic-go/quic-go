@@ -232,6 +232,11 @@ func TestHandshake(t *testing.T) {
 func TestHelloRetryRequest(t *testing.T) {
 	clientConf, serverConf := getTLSConfigs()
 	serverConf.CurvePreferences = []tls.CurveID{tls.CurveP384}
+	var helloRetryRequest bool
+	serverConf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		helloRetryRequest = info.HelloRetryRequest
+		return nil, nil
+	}
 	_, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
@@ -241,6 +246,7 @@ func TestHelloRetryRequest(t *testing.T) {
 	)
 	require.NoError(t, clientErr)
 	require.NoError(t, serverErr)
+	require.True(t, helloRetryRequest)
 }
 
 func TestWithClientAuth(t *testing.T) {
