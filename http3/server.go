@@ -540,8 +540,8 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 		if err != nil {
 			// the underlying connection was closed (by either side)
 			if conn.Context().Err() != nil {
-				var appErr *quic.ApplicationError
-				if !errors.As(err, &appErr) || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
+				appErr, ok := errors.AsType[*quic.ApplicationError](err)
+				if !ok || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
 					handleErr = fmt.Errorf("accepting stream failed: %w", err)
 				}
 				break
@@ -554,8 +554,8 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 			}
 			inGracefulShutdown = s.graceCtx.Err() != nil
 			if !inGracefulShutdown {
-				var appErr *quic.ApplicationError
-				if !errors.As(err, &appErr) || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
+				appErr, ok := errors.AsType[*quic.ApplicationError](err)
+				if !ok || appErr.ErrorCode != quic.ApplicationErrorCode(ErrCodeNoError) {
 					handleErr = fmt.Errorf("accepting stream failed: %w", err)
 				}
 				break

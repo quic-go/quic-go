@@ -160,8 +160,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		}
 
 		errCode := ErrCodeMessageError
-		var qpackErr *qpackError
-		if errors.As(err, &qpackErr) {
+		if _, ok := errors.AsType[*qpackError](err); ok {
 			errCode = ErrCodeQPACKDecompressionFailed
 		}
 		str.CancelRead(quic.StreamErrorCode(errCode))
@@ -277,8 +276,8 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 				c.CloseWithError(quic.ApplicationErrorCode(ErrCodeIDError), "")
 				return
 			}
-			var streamErr *quic.StreamError
-			if err == io.EOF || errors.As(err, &streamErr) {
+			_, isStreamError := errors.AsType[*quic.StreamError](err)
+			if err == io.EOF || isStreamError {
 				c.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
 				return
 			}

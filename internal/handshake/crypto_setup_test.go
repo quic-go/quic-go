@@ -76,9 +76,9 @@ func TestErrorBeforeClientHelloGeneration(t *testing.T) {
 		protocol.Version1,
 	)
 
-	var terr *qerr.TransportError
 	err := cl.StartHandshake(context.Background())
-	require.True(t, errors.As(err, &terr))
+	terr, ok := errors.AsType[*qerr.TransportError](err)
+	require.True(t, ok)
 	require.Equal(t, uint64(0x100+0x50), uint64(terr.ErrorCode))
 	require.Contains(t, err.Error(), "tls: invalid NextProtos value")
 }

@@ -258,15 +258,14 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 
 func canRetryRequest(err error, req *http.Request) (*http.Request, error) {
 	// error occurred while opening the stream, we can be sure that the request wasn't sent out
-	var connErr *errConnUnusable
-	if errors.As(err, &connErr) {
+	if _, ok := errors.AsType[*errConnUnusable](err); ok {
 		return req, nil
 	}
 
 	// If the request stream is reset, we can only be sure that the request wasn't processed
 	// if the error code is H3_REQUEST_REJECTED.
-	var e *Error
-	if !errors.As(err, &e) || e.ErrorCode != ErrCodeRequestRejected {
+	e, ok := errors.AsType[*Error](err)
+	if !ok || e.ErrorCode != ErrCodeRequestRejected {
 		return nil, err
 	}
 	// if the body is nil (or http.NoBody), it's safe to reuse this request and its body

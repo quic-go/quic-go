@@ -220,8 +220,8 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 			return
 		}
-		var serr *quic.StreamError
-		if err == io.EOF || errors.As(err, &serr) {
+		_, isStreamError := errors.AsType[*quic.StreamError](err)
+		if err == io.EOF || isStreamError {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
 			return
 		}

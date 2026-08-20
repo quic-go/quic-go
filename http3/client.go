@@ -206,8 +206,8 @@ func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParse
 				c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				return
 			}
-			var serr *quic.StreamError
-			if err == io.EOF || errors.As(err, &serr) {
+			_, isStreamError := errors.AsType[*quic.StreamError](err)
+			if err == io.EOF || isStreamError {
 				c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
 				return
 			}
