@@ -28,7 +28,11 @@ jobs:
         run: go mod tidy -diff
       - name: Run go fix
         if: success() || failure() # run this step even if the previous one failed
-        run: go fix -diff ./...
+        run: |
+          set -o pipefail
+          # slices.Backward is measurably slower in receivedPacketHistory.
+          go list ./... | grep -v '/internal/ackhandler$' | xargs go fix -diff
+          go fix -diff -slicesbackward=false ./internal/ackhandler
       - name: Run code generators
         if: success() || failure() # run this step even if the previous one failed
         run: .github/workflows/go-generate.sh
