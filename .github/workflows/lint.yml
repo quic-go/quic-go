@@ -54,7 +54,7 @@ jobs:
       matrix:
         go: [ "1.25.x", "1.26.x" ]
     env:
-      GOLANGCI_LINT_VERSION: v2.11.4
+      GOLANGCI_LINT_VERSION: v2.13.0
     name: golangci-lint (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v7
