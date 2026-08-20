@@ -80,10 +80,6 @@ func TestGoAwayFrame(t *testing.T) {
 	})
 }
 
-func pointer[T any](v T) *T {
-	return &v
-}
-
 func TestSettingsFrame(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -94,7 +90,7 @@ func TestSettingsFrame(t *testing.T) {
 			name: "datagram: true",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				Datagram:            pointer(true),
+				Datagram:            new(true),
 			},
 			expected: map[string]any{
 				"frame_type": "settings",
@@ -108,7 +104,7 @@ func TestSettingsFrame(t *testing.T) {
 			name: "extended_connect: false",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				ExtendedConnect:     pointer(false),
+				ExtendedConnect:     new(false),
 			},
 			expected: map[string]any{
 				"frame_type": "settings",
@@ -133,8 +129,8 @@ func TestSettingsFrame(t *testing.T) {
 			name: "datagram: false, extended_connect: false",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				Datagram:            pointer(false),
-				ExtendedConnect:     pointer(false),
+				Datagram:            new(false),
+				ExtendedConnect:     new(false),
 			},
 			expected: map[string]any{
 				"frame_type": "settings",

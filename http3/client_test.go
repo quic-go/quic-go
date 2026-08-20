@@ -60,7 +60,7 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 
 	var datagramValue *bool
 	if enableDatagrams {
-		datagramValue = pointer(true)
+		datagramValue = new(true)
 	}
 	require.Equal(t,
 		[]qlogwriter.Event{
