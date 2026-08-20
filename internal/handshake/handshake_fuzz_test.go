@@ -185,12 +185,12 @@ func fuzzRunHandshake(
 	}
 
 	serverConf := &tls.Config{
-		MinVersion:       tls.VersionTLS13,
-		Certificates:     []tls.Certificate{*fuzzCert},
-		NextProtos:       []string{fuzzALPN},
-		SessionTicketKey: fuzzSessionTicketKey,
-		ClientAuth:       tlsClientAuth,
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{*fuzzCert},
+		NextProtos:   []string{fuzzALPN},
+		ClientAuth:   tlsClientAuth,
 	}
+	serverConf.SetSessionTicketKeys([][32]byte{fuzzSessionTicketKey})
 
 	enable0RTTClient := zeroRTTMode == 1 || zeroRTTMode == 3
 	enable0RTTServer := zeroRTTMode == 2 || zeroRTTMode == 3

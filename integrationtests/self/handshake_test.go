@@ -199,7 +199,7 @@ func TestTLSConfigGetConfigForClientAddresses(t *testing.T) {
 				defer close(done)
 				local2 = info.Conn.LocalAddr()
 				remote2 = info.Conn.RemoteAddr()
-				return &(conf.Certificates[0]), nil
+				return &conf.Certificates[0], nil
 			}
 			return conf, nil
 		},
