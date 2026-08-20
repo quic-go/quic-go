@@ -248,10 +248,9 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			return
 		}
 		c.qloggerWG.Go(func() {
-			if err := c.receiveDatagrams(); err != nil {
-				if c.logger != nil {
-					c.logger.Debug("receiving datagrams failed", "error", err)
-				}
+			err := c.receiveDatagrams()
+			if c.logger != nil {
+				c.logger.Debug("receiving datagrams failed", "error", err)
 			}
 		})
 	}

@@ -1061,7 +1061,7 @@ func (c *Conn) handleOnePacket(rp receivedPacket, datagramPayloadChecksum qlog.D
 	p := rp
 	for len(data) > 0 {
 		if counter > 0 {
-			p = *(p.Clone())
+			p = *p.Clone()
 			p.data = data
 
 			destConnID, err := wire.ParseConnectionID(p.data, c.srcConnIDLen)
