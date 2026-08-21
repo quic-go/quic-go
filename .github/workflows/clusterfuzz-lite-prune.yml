@@ -1,7 +1,10 @@
 name: ClusterFuzzLite pruning
 on:
-  schedule:
-    - cron: '0 2 * * *'
+  # Disabled because OSS-Fuzz still uses Go 1.25, while quic-go requires Go 1.27.
+  # Re-enable once OSS-Fuzz supports Go 1.27; tracked in https://github.com/google/oss-fuzz/issues/15307.
+  # schedule:
+  #   - cron: '0 2 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
