@@ -106,6 +106,7 @@ type Transport struct {
 	initErr  error
 
 	newClientConn func(*quic.Conn) clientConn
+	lookupIPAddr  func(context.Context, string) ([]net.IPAddr, error)
 
 	clients   map[string]*roundTripperWithCount
 	transport *quic.Transport
@@ -408,10 +409,16 @@ func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*
 	if err != nil {
 		return nil, err
 	}
-	resolver := net.DefaultResolver
-	ipAddrs, err := resolver.LookupIPAddr(ctx, host)
+	lookupIPAddr := t.lookupIPAddr
+	if lookupIPAddr == nil {
+		lookupIPAddr = net.DefaultResolver.LookupIPAddr
+	}
+	ipAddrs, err := lookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err
+	}
+	if len(ipAddrs) == 0 {
+		return nil, &net.AddrError{Err: "no suitable address found", Addr: host}
 	}
 	addrs := addrList(ipAddrs)
 	ip := addrs.forResolve(network, addr)

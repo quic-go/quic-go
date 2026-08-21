@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -172,6 +173,20 @@ func TestTransportDialHostname(t *testing.T) {
 			t.Fatal("timeout")
 		}
 	})
+}
+
+func TestTransportEmptyDNSResult(t *testing.T) {
+	tr := &Transport{
+		lookupIPAddr: func(context.Context, string) ([]net.IPAddr, error) { return nil, nil },
+	}
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
+
+	req := httptest.NewRequest(http.MethodGet, "https://empty.example", nil)
+	_, err := tr.RoundTrip(req)
+	var addrErr *net.AddrError
+	require.ErrorAs(t, err, &addrErr)
+	require.Equal(t, "no suitable address found", addrErr.Err)
+	require.Equal(t, "empty.example", addrErr.Addr)
 }
 
 func TestTransportDatagrams(t *testing.T) {
