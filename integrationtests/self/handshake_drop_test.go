@@ -306,7 +306,7 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 								defer ln.Close()
 
 								conn := test.fn(t, ln, clientConn, clientConf, timeout, data)
-								curveID := getCurveID(conn.ConnectionState().TLS)
+								curveID := conn.ConnectionState().TLS.CurveID
 								if conf.postQuantum {
 									require.Equal(t, tls.X25519MLKEM768, curveID)
 								} else {
