@@ -69,3 +69,17 @@ func TestConnectionFlowControllerReset(t *testing.T) {
 	fc.Reset()
 	require.Zero(t, fc.SendWindowSize())
 }
+
+func TestConnectionFlowControllerBlockedAtZero(t *testing.T) {
+	fc := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
+
+	blocked, _ := fc.IsNewlyBlocked(false)
+	require.False(t, blocked)
+
+	blocked, offset := fc.IsNewlyBlocked(true)
+	require.True(t, blocked)
+	require.Zero(t, offset)
+
+	blocked, _ = fc.IsNewlyBlocked(true)
+	require.False(t, blocked)
+}

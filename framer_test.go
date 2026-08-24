@@ -162,6 +162,20 @@ func TestFramerDataBlocked(t *testing.T) {
 	})
 }
 
+func TestFramerDataBlockedAtZero(t *testing.T) {
+	const streamID = 5
+
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
+	str.EXPECT().priority().Return(defaultUrgency, true, uint32(0)).AnyTimes()
+	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).Return(ackhandler.StreamFrame{}, nil, true)
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
+	framer.AddActiveStream(streamID, str)
+
+	frames, streamFrames, _ := framer.Append(nil, nil, 1000, monotime.Now(), protocol.Version1)
+	require.Empty(t, streamFrames)
+	require.Equal(t, []ackhandler.Frame{{Frame: &wire.DataBlockedFrame{MaximumData: 0}}}, frames)
+}
+
 // If the stream becomes blocked on connection flow control, we attempt to pack the
 // DATA_BLOCKED frame into the same packet.
 // However, there's the pathological case, where the STREAM frame and the DATA_BLOCKED frame

@@ -34,9 +34,10 @@ func newStreamFlowController(
 	logger utils.Logger,
 ) *streamFlowController {
 	return &streamFlowController{
-		streamID:   streamID,
-		connection: cfc,
-		sendWindow: initialSendWindow,
+		streamID:      streamID,
+		connection:    cfc,
+		sendWindow:    initialSendWindow,
+		lastBlockedAt: protocol.InvalidByteCount,
 		receiveFlowController: receiveFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,

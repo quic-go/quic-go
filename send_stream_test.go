@@ -856,6 +856,22 @@ func TestSendStreamFlowControlBlocked(t *testing.T) {
 	require.False(t, hasMore)
 }
 
+func TestSendStreamFlowControlBlockedAtZero(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, newTestStreamFlowController(streamID), false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err := str.Write([]byte("foobar"))
+	require.NoError(t, err)
+
+	frame, blocked, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Nil(t, frame.Frame)
+	require.False(t, hasMoreData)
+	require.Equal(t, &wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: 0}, blocked)
+}
+
 func TestSendStreamCloseForShutdown(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const streamID protocol.StreamID = 1337

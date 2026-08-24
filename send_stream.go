@@ -425,6 +425,9 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 		maxDataLen = min(maxDataLen, f.MaxDataLen(maxBytes, v), protocol.ByteCount(len(s.dataForWriting)))
 	}
 	if maxDataLen == 0 {
+		if isBlocked, offset := s.flowController.isNewlyBlocked(); isBlocked {
+			return nil, &wire.StreamDataBlockedFrame{StreamID: s.streamID, MaximumStreamData: offset}, false
+		}
 		return nil, nil, true
 	}
 	if limitedWrite {

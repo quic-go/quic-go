@@ -30,6 +30,7 @@ func newConnectionFlowController(
 	logger utils.Logger,
 ) *connectionFlowController {
 	return &connectionFlowController{
+		lastBlockedAt: protocol.InvalidByteCount,
 		receiveFlowController: receiveFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
@@ -122,12 +123,13 @@ func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
 
 // IsNewlyBlocked says if it is newly blocked by connection flow control.
 // For every offset, it only returns true once.
+// hasData distinguishes a zero send window from an idle connection.
 // If it is blocked, the offset is returned.
-func (c *connectionFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
+func (c *connectionFlowController) IsNewlyBlocked(hasData bool) (bool, protocol.ByteCount) {
 	c.sendMutex.Lock()
 	defer c.sendMutex.Unlock()
 
-	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
+	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt || (c.sendWindow == 0 && !hasData) {
 		return false, 0
 	}
 	c.lastBlockedAt = c.sendWindow
@@ -173,6 +175,6 @@ func (c *connectionFlowController) Reset() {
 	defer c.sendMutex.Unlock()
 
 	c.bytesSent = 0
-	c.lastBlockedAt = 0
+	c.lastBlockedAt = protocol.InvalidByteCount
 	c.sendWindow = 0
 }

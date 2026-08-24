@@ -136,6 +136,7 @@ func (f *framer) Append(
 
 	var lastFrame ackhandler.StreamFrame
 	var streamFrameLen protocol.ByteCount
+	var hasDataWithoutStreamFrame bool
 	f.mutex.Lock()
 	// retransmit all lost STREAM data before sending new STREAM data
 retransmissions:
@@ -182,7 +183,8 @@ retransmissions:
 			if protocol.MinStreamFrameSize > maxLen {
 				break
 			}
-			sf, blocked := f.getNextStreamFrame(maxLen, int8(urgency), v)
+			sf, blocked, hasData := f.getNextStreamFrame(maxLen, int8(urgency), v)
+			hasDataWithoutStreamFrame = hasDataWithoutStreamFrame || hasData
 			if sf.Frame != nil {
 				streamFrames = append(streamFrames, sf)
 				maxLen -= sf.Frame.Length(v)
@@ -205,8 +207,8 @@ retransmissions:
 		}
 	}
 
-	// The only way to become blocked on connection-level flow control is by sending STREAM frames.
-	if isBlocked, offset := f.connFlowController.IsNewlyBlocked(); isBlocked {
+	// A zero connection limit can block pending data before a STREAM frame is sent.
+	if isBlocked, offset := f.connFlowController.IsNewlyBlocked(hasDataWithoutStreamFrame); isBlocked {
 		blocked := &wire.DataBlockedFrame{MaximumData: offset}
 		l := blocked.Length(v)
 		// In case it doesn't fit, queue it for the next packet.
@@ -370,7 +372,7 @@ func (f *framer) getNextStreamFrame(
 	maxLen protocol.ByteCount,
 	urgency int8,
 	v protocol.Version,
-) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
+) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasDataWithoutStreamFrame bool) {
 	if f.nonIncrementalStreams[urgency].Empty() || (!f.lastSendWasIncremental[urgency] && !f.incrementalStreams[urgency].Empty()) {
 		return f.getNextIncrementalStreamFrame(maxLen, urgency, v)
 	}
@@ -381,19 +383,19 @@ func (f *framer) getNextIncrementalStreamFrame(
 	maxLen protocol.ByteCount,
 	urgency int8,
 	v protocol.Version,
-) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
+) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasDataWithoutStreamFrame bool) {
 	queue := &f.incrementalStreams[urgency]
 	if queue.Empty() {
-		return ackhandler.StreamFrame{}, nil
+		return ackhandler.StreamFrame{}, nil, false
 	}
 	entry := queue.PopFront()
 	str, ok := f.activeStreams[entry.id]
 	if !ok {
-		return ackhandler.StreamFrame{}, nil
+		return ackhandler.StreamFrame{}, nil, false
 	}
 	_, _, generation := str.priority()
 	if generation != entry.generation {
-		return ackhandler.StreamFrame{}, nil
+		return ackhandler.StreamFrame{}, nil, false
 	}
 
 	frame, blocked, hasMoreData := f.popStreamFrame(entry.id, str, maxLen, v)
@@ -401,28 +403,28 @@ func (f *framer) getNextIncrementalStreamFrame(
 		queue.PushBack(entry)
 	}
 	f.lastSendWasIncremental[urgency] = true
-	return frame, blocked
+	return frame, blocked, frame.Frame == nil && (blocked != nil || hasMoreData)
 }
 
 func (f *framer) getNextNonIncrementalStreamFrame(
 	maxLen protocol.ByteCount,
 	urgency int8,
 	v protocol.Version,
-) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame) {
+) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasDataWithoutStreamFrame bool) {
 	queue := &f.nonIncrementalStreams[urgency]
 	if queue.Empty() {
-		return ackhandler.StreamFrame{}, nil
+		return ackhandler.StreamFrame{}, nil, false
 	}
 	id, queuedGeneration := queue.Peek()
 	str, ok := f.activeStreams[id]
 	if !ok {
 		queue.Pop()
-		return ackhandler.StreamFrame{}, nil
+		return ackhandler.StreamFrame{}, nil, false
 	}
 	_, _, generation := str.priority()
 	if generation != queuedGeneration {
 		queue.Pop()
-		return ackhandler.StreamFrame{}, nil
+		return ackhandler.StreamFrame{}, nil, false
 	}
 
 	frame, blocked, hasMoreData := f.popStreamFrame(id, str, maxLen, v)
@@ -430,7 +432,7 @@ func (f *framer) getNextNonIncrementalStreamFrame(
 		queue.Pop()
 	}
 	f.lastSendWasIncremental[urgency] = false
-	return frame, blocked
+	return frame, blocked, frame.Frame == nil && (blocked != nil || hasMoreData)
 }
 
 func (f *framer) popStreamFrame(
