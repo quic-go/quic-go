@@ -1,7 +1,9 @@
 name: ClusterFuzz coverage
 on:
-  schedule:
-    - cron: '12 3,11,19 * * *'
+  # Disabled because OSS-Fuzz still uses Go 1.25, while quic-go requires Go 1.27.
+  # Re-enable once OSS-Fuzz supports Go 1.27; tracked in https://github.com/google/oss-fuzz/issues/15307.
+  # schedule:
+  #   - cron: '12 3,11,19 * * *'
   workflow_dispatch:
 
 permissions:
