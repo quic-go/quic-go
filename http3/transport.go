@@ -408,13 +408,21 @@ func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*
 	if err != nil {
 		return nil, err
 	}
-	resolver := net.DefaultResolver
-	ipAddrs, err := resolver.LookupIPAddr(ctx, host)
+	ipAddrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err
 	}
-	addrs := addrList(ipAddrs)
-	ip := addrs.forResolve(network, addr)
+	return udpAddrForIPs(network, addr, host, port, ipAddrs)
+}
+
+// udpAddrForIPs selects an address from the resolved IPs and builds a *net.UDPAddr.
+// A resolver may return an empty slice with a nil error, so the empty case is
+// reported as an error instead of indexing into the slice.
+func udpAddrForIPs(network, addr, host string, port int, ipAddrs []net.IPAddr) (*net.UDPAddr, error) {
+	if len(ipAddrs) == 0 {
+		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	}
+	ip := addrList(ipAddrs).forResolve(network, addr)
 	return &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}, nil
 }
 
