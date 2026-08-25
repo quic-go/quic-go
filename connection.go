@@ -745,7 +745,7 @@ runLoop:
 	c.sendQueue.Close() // close the send queue before sending the CONNECTION_CLOSE
 	c.handleCloseError(closeErr)
 	if c.qlogger != nil {
-		if e := (&errCloseForRecreating{}); !errors.As(closeErr.err, &e) {
+		if _, ok := errors.AsType[*errCloseForRecreating](closeErr.err); !ok {
 			c.qlogger.Close()
 		}
 	}
@@ -1435,8 +1435,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 		c.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", pt, p.Size(), err)
 		return false, nil
 	default:
-		var headerErr *headerParseError
-		if errors.As(err, &headerErr) {
+		if _, ok := errors.AsType[*headerParseError](err); ok {
 			// This might be a packet injected by an attacker. Drop it.
 			if c.qlogger != nil {
 				connID, _ := wire.ParseConnectionID(p.data, c.srcConnIDLen)
@@ -2846,11 +2845,9 @@ func (c *Conn) sendPackedCoalescedPacket(packet *coalescedPacket, ecn protocol.E
 func (c *Conn) sendConnectionClose(e error) ([]byte, error) {
 	var packet *coalescedPacket
 	var err error
-	var transportErr *qerr.TransportError
-	var applicationErr *qerr.ApplicationError
-	if errors.As(e, &transportErr) {
+	if transportErr, ok := errors.AsType[*qerr.TransportError](e); ok {
 		packet, err = c.packer.PackConnectionClose(transportErr, c.maxPacketSize(), c.version)
-	} else if errors.As(e, &applicationErr) {
+	} else if applicationErr, ok := errors.AsType[*qerr.ApplicationError](e); ok {
 		packet, err = c.packer.PackApplicationClose(applicationErr, c.maxPacketSize(), c.version)
 	} else {
 		packet, err = c.packer.PackConnectionClose(&qerr.TransportError{

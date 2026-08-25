@@ -185,8 +185,8 @@ func TestServerDisablesVersionNegotiation(t *testing.T) {
 		}),
 	)
 	require.Error(t, err)
-	var nerr net.Error
-	require.True(t, errors.As(err, &nerr))
+	nerr, ok := errors.AsType[net.Error](err)
+	require.True(t, ok)
 	require.True(t, nerr.Timeout())
 	require.Empty(t, clientEventTracer.Events(qlog.VersionNegotiationReceived{}))
 }

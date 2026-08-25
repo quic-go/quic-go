@@ -521,8 +521,8 @@ func TestHTTPErrAbortHandler(t *testing.T) {
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	require.Error(t, err)
-	var h3Err *http3.Error
-	require.True(t, errors.As(err, &h3Err))
+	h3Err, ok := errors.AsType[*http3.Error](err)
+	require.True(t, ok)
 	require.Equal(t, http3.ErrCodeInternalError, h3Err.ErrorCode)
 	// the body will be a prefix of what's written
 	require.True(t, bytes.HasPrefix([]byte("foobar"), body))
@@ -698,8 +698,8 @@ func TestHTTPClientRequestContextCancellation(t *testing.T) {
 		select {
 		case err := <-errChan:
 			require.Error(t, err)
-			var http3Err *http3.Error
-			require.True(t, errors.As(err, &http3Err))
+			http3Err, ok := errors.AsType[*http3.Error](err)
+			require.True(t, ok)
 			require.Equal(t, http3.ErrCodeRequestCanceled, http3Err.ErrorCode)
 			require.True(t, http3Err.Remote)
 		case <-time.After(time.Second):
@@ -707,8 +707,8 @@ func TestHTTPClientRequestContextCancellation(t *testing.T) {
 		}
 
 		_, err = resp.Body.Read([]byte{0})
-		var http3Err *http3.Error
-		require.True(t, errors.As(err, &http3Err))
+		http3Err, ok := errors.AsType[*http3.Error](err)
+		require.True(t, ok)
 		require.Equal(t, http3.ErrCodeRequestCanceled, http3Err.ErrorCode)
 		require.False(t, http3Err.Remote)
 	})

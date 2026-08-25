@@ -107,12 +107,12 @@ func TestHandshakeServerMismatch(t *testing.T) {
 	defer cancel()
 	_, err = quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), conf, getQuicConfig(nil))
 	require.Error(t, err)
-	var transportErr *quic.TransportError
-	require.True(t, errors.As(err, &transportErr))
+	transportErr, ok := errors.AsType[*quic.TransportError](err)
+	require.True(t, ok)
 	require.True(t, transportErr.ErrorCode.IsCryptoError())
 	require.Contains(t, transportErr.Error(), "x509: certificate is valid for localhost, not foo.bar")
-	var certErr *tls.CertificateVerificationError
-	require.True(t, errors.As(transportErr, &certErr))
+	_, ok = errors.AsType[*tls.CertificateVerificationError](transportErr)
+	require.True(t, ok)
 }
 
 func TestHandshakeCipherSuites(t *testing.T) {

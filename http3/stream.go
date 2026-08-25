@@ -394,8 +394,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	}
 	if err != nil {
 		errCode := ErrCodeMessageError
-		var qpackErr *qpackError
-		if errors.As(err, &qpackErr) {
+		if _, ok := errors.AsType[*qpackError](err); ok {
 			errCode = ErrCodeQPACKDecompressionFailed
 		}
 		s.str.CancelRead(quic.StreamErrorCode(errCode))

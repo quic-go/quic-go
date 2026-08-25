@@ -682,7 +682,7 @@ func (h *cryptoSetup) ConnectionState() ConnectionState {
 }
 
 func wrapError(err error) error {
-	if alertErr := tls.AlertError(0); errors.As(err, &alertErr) {
+	if alertErr, ok := errors.AsType[tls.AlertError](err); ok {
 		return qerr.NewLocalCryptoError(uint8(alertErr), err)
 	}
 	return &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: err.Error()}

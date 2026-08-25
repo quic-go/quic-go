@@ -180,10 +180,6 @@ type settingsFrame struct {
 	Other           map[uint64]uint64 // all settings that we don't explicitly recognize
 }
 
-func pointer[T any](v T) *T {
-	return &v
-}
-
 const maxSettingsFrameSize = 8 << 10
 
 func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*settingsFrame, error) {
@@ -229,7 +225,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 			}
 			frame.ExtendedConnect = val == 1
 			if qlogger != nil {
-				settingsFrame.ExtendedConnect = pointer(frame.ExtendedConnect)
+				settingsFrame.ExtendedConnect = new(frame.ExtendedConnect)
 			}
 		case settingDatagram:
 			if readDatagram {
@@ -241,7 +237,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 			}
 			frame.Datagram = val == 1
 			if qlogger != nil {
-				settingsFrame.Datagram = pointer(frame.Datagram)
+				settingsFrame.Datagram = new(frame.Datagram)
 			}
 		default:
 			if _, ok := frame.Other[id]; ok {

@@ -96,10 +96,10 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 			Other:               maps.Clone(settings.Other),
 		}
 		if settings.Datagram {
-			sf.Datagram = pointer(true)
+			sf.Datagram = new(true)
 		}
 		if settings.ExtendedConnect {
-			sf.ExtendedConnect = pointer(true)
+			sf.ExtendedConnect = new(true)
 		}
 		c.qlogger.RecordEvent(qlog.FrameCreated{
 			StreamID: str.StreamID(),
@@ -220,8 +220,8 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeMissingSettings), "")
 			return
 		}
-		var serr *quic.StreamError
-		if err == io.EOF || errors.As(err, &serr) {
+		_, isStreamError := errors.AsType[*quic.StreamError](err)
+		if err == io.EOF || isStreamError {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeClosedCriticalStream), "")
 			return
 		}

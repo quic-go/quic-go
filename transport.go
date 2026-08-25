@@ -327,8 +327,7 @@ func (t *Transport) doDial(
 	recreateChan := make(chan errCloseForRecreating, 1)
 	go func() {
 		err := conn.run()
-		var recreateErr *errCloseForRecreating
-		if errors.As(err, &recreateErr) {
+		if recreateErr, ok := errors.AsType[*errCloseForRecreating](err); ok {
 			recreateChan <- *recreateErr
 			return
 		}

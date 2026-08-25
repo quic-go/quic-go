@@ -13,8 +13,7 @@ import (
 // It's not clear why this happens.
 // See https://github.com/golang/go/issues/63322.
 func isPermissionError(err error) bool {
-	var serr *os.SyscallError
-	if errors.As(err, &serr) {
+	if serr, ok := errors.AsType[*os.SyscallError](err); ok {
 		return serr.Syscall == "sendmsg" && serr.Err == unix.EPERM
 	}
 	return false
