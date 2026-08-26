@@ -412,6 +412,9 @@ func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*
 	if err != nil {
 		return nil, err
 	}
+	if len(ipAddrs) == 0 {
+		return nil, fmt.Errorf("http3: no addresses found for host %q", host)
+	}
 	addrs := addrList(ipAddrs)
 	ip := addrs.forResolve(network, addr)
 	return &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}, nil
