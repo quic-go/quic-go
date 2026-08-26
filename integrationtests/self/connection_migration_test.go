@@ -154,20 +154,27 @@ func TestConnectionMigrationRepeated(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close()
 
-	// Record the DCIDs of short header packets sent by the client.
-	// Since the client switches to the connection ID used for probing when it switches paths,
-	// we expect to see a new connection ID after every migration.
+	// Record the DCIDs of short header packets sent by the client, and the source address
+	// each DCID is used from. Since the client switches to the connection ID used for probing
+	// when it switches paths, we expect to see a new connection ID after every migration,
+	// and no connection ID to ever be used from more than one source address (RFC 9000, section 9.5).
 	var mx sync.Mutex
 	dcids := make(map[string]struct{})
+	addrsByDCID := make(map[string]map[string]struct{})
 
 	const rtt = 5 * time.Millisecond
 	proxy := quicproxy.Proxy{
 		Conn:       newUDPConnLocalhost(t),
 		ServerAddr: ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(dir quicproxy.Direction, _, _ net.Addr, b []byte) time.Duration {
+		DelayPacket: func(dir quicproxy.Direction, from, _ net.Addr, b []byte) time.Duration {
 			if dir == quicproxy.DirectionIncoming && len(b) > connIDLen && b[0]&0x80 == 0 {
+				dcid := string(b[1 : 1+connIDLen])
 				mx.Lock()
-				dcids[string(b[1:1+connIDLen])] = struct{}{}
+				dcids[dcid] = struct{}{}
+				if addrsByDCID[dcid] == nil {
+					addrsByDCID[dcid] = make(map[string]struct{})
+				}
+				addrsByDCID[dcid][from.String()] = struct{}{}
 				mx.Unlock()
 			}
 			return rtt / 2
@@ -232,4 +239,10 @@ func TestConnectionMigrationRepeated(t *testing.T) {
 	mx.Lock()
 	defer mx.Unlock()
 	require.GreaterOrEqual(t, len(dcids), numMigrations+1)
+	// No connection ID is ever used from more than one source address.
+	// In particular, traffic sent after a path switch doesn't continue to use the
+	// connection ID that was active on the previous path.
+	for dcid, addrs := range addrsByDCID {
+		require.Lenf(t, addrs, 1, "connection ID %x used from multiple source addresses: %v", dcid, addrs)
+	}
 }
