@@ -68,7 +68,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		}
 
 		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
-		_, ok = pm.ShouldSwitchPath()
+		_, _, ok = pm.ShouldSwitchPath()
 		require.False(t, ok)
 
 		// ... neither does receiving a random PATH_RESPONSE...
@@ -97,14 +97,58 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
 
 		// now switch to the other path
-		_, ok = pm.ShouldSwitchPath()
+		_, _, ok = pm.ShouldSwitchPath()
 		require.False(t, ok)
 		require.NoError(t, p.Switch())
 		// the active path can't be closed
 		require.EqualError(t, p.Close(), "cannot close active path")
-		switchToTransport, ok := pm.ShouldSwitchPath()
+		switchToTransport, switchToPathID, ok := pm.ShouldSwitchPath()
 		require.True(t, ok)
 		require.Equal(t, tr1, switchToTransport)
+		require.Equal(t, p.id, switchToPathID)
+	})
+}
+
+func TestPathManagerOutgoingCloseValidatedPath(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		connIDs := []protocol.ConnectionID{
+			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+		}
+		var retiredPaths []pathID
+		pm := newPathManagerOutgoing(
+			func(id pathID) (protocol.ConnectionID, bool) {
+				connID := connIDs[0]
+				connIDs = connIDs[1:]
+				return connID, true
+			},
+			func(id pathID) { retiredPaths = append(retiredPaths, id) },
+			func() {},
+		)
+
+		p := pm.NewPath(&Transport{}, time.Second, func() {})
+		errChan := make(chan error, 1)
+		go func() { errChan <- p.Probe(context.Background()) }()
+
+		// wait for the path to be queued for probing
+		synctest.Wait()
+
+		_, f, _, ok := pm.NextPathToProbe()
+		require.True(t, ok)
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+
+		synctest.Wait()
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("expected path validation to have completed")
+		}
+
+		// Closing a validated (but not switched-to) path retires its connection ID,
+		// even though there are no outstanding PATH_CHALLENGEs anymore.
+		require.NoError(t, p.Close())
+		require.Equal(t, []pathID{p.id}, retiredPaths)
 	})
 }
 

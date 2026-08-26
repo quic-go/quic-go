@@ -333,6 +333,76 @@ func TestConnIDManagerPathMigration(t *testing.T) {
 	}, removedTokens)
 }
 
+func TestConnIDManagerSwitchToPathConnID(t *testing.T) {
+	var frameQueue []wire.Frame
+	var addedTokens, removedTokens []protocol.StatelessResetToken
+	m := newConnIDManager(
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		func(token protocol.StatelessResetToken) { addedTokens = append(addedTokens, token) },
+		func(token protocol.StatelessResetToken) { removedTokens = append(removedTokens, token) },
+		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+	)
+
+	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
+		SequenceNumber:      1,
+		ConnectionID:        protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
+		StatelessResetToken: protocol.StatelessResetToken{4, 3, 2, 1, 4, 3, 2, 1},
+	}))
+	connID, ok := m.GetConnIDForPath(1)
+	require.True(t, ok)
+	require.Equal(t, protocol.ParseConnectionID([]byte{4, 3, 2, 1}), connID)
+	require.Equal(t, []protocol.StatelessResetToken{{4, 3, 2, 1, 4, 3, 2, 1}}, addedTokens)
+	addedTokens = addedTokens[:0]
+
+	// Switching to the path makes its connection ID the active one,
+	// and retires the previously active connection ID.
+	m.SwitchToPathConnID(1)
+	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 0}}, frameQueue)
+	frameQueue = nil
+	require.Equal(t, protocol.ParseConnectionID([]byte{4, 3, 2, 1}), m.Get())
+	// The stateless reset token was already added when the connection ID was allocated for the path.
+	require.Empty(t, addedTokens)
+	require.Empty(t, removedTokens)
+	require.True(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{4, 3, 2, 1, 4, 3, 2, 1}))
+
+	// The connection ID is no longer allocated to the path.
+	_, ok = m.GetConnIDForPath(1)
+	require.False(t, ok)
+
+	// Probe another path using a new connection ID...
+	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
+		SequenceNumber:      2,
+		ConnectionID:        protocol.ParseConnectionID([]byte{5, 4, 3, 2}),
+		StatelessResetToken: protocol.StatelessResetToken{5, 4, 3, 2, 5, 4, 3, 2},
+	}))
+	connID, ok = m.GetConnIDForPath(2)
+	require.True(t, ok)
+	require.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2}), connID)
+	addedTokens = addedTokens[:0]
+
+	// ... and switch to it: the previously active connection ID (seq. 1) is retired.
+	m.SwitchToPathConnID(2)
+	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 1}}, frameQueue)
+	require.Equal(t, []protocol.StatelessResetToken{{4, 3, 2, 1, 4, 3, 2, 1}}, removedTokens)
+	frameQueue = nil
+	removedTokens = removedTokens[:0]
+	require.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2}), m.Get())
+
+	// Switching to a path that doesn't have a connection ID allocated
+	// (e.g. because the peer retired it) rotates to a fresh connection ID from the queue.
+	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
+		SequenceNumber:      3,
+		ConnectionID:        protocol.ParseConnectionID([]byte{6, 5, 4, 3}),
+		StatelessResetToken: protocol.StatelessResetToken{6, 5, 4, 3, 6, 5, 4, 3},
+	}))
+	addedTokens = addedTokens[:0]
+	m.SwitchToPathConnID(3)
+	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 2}}, frameQueue)
+	require.Equal(t, []protocol.StatelessResetToken{{5, 4, 3, 2, 5, 4, 3, 2}}, removedTokens)
+	require.Equal(t, []protocol.StatelessResetToken{{6, 5, 4, 3, 6, 5, 4, 3}}, addedTokens)
+	require.Equal(t, protocol.ParseConnectionID([]byte{6, 5, 4, 3}), m.Get())
+}
+
 func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 	m := newConnIDManager(
 		protocol.ConnectionID{},

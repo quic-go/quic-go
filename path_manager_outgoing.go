@@ -104,9 +104,11 @@ func (p *Path) Close() error {
 }
 
 type pathOutgoing struct {
+	id             pathID
 	pathChallenges [][8]byte // length is implicitly limited by exponential backoff
 	tr             *Transport
 	isValidated    bool
+	usesConnID     bool          // set when a connection ID is allocated for this path
 	probeSent      chan struct{} // receives when a PATH_CHALLENGE is sent
 	validated      chan struct{} // closed when the path the corresponding PATH_RESPONSE is received
 	enablePath     func()
@@ -157,6 +159,7 @@ func (pm *pathManagerOutgoing) addPath(p *Path, enablePath func()) *pathOutgoing
 	}
 
 	path := &pathOutgoing{
+		id:         p.id,
 		tr:         p.tr,
 		probeSent:  make(chan struct{}, 1),
 		validated:  make(chan struct{}),
@@ -192,7 +195,10 @@ func (pm *pathManagerOutgoing) removePathImpl(id pathID) error {
 	if !ok {
 		return nil
 	}
-	if len(p.pathChallenges) > 0 {
+	// Retire the connection ID allocated for this path.
+	// Checking the outstanding PATH_CHALLENGEs is not sufficient: they are cleared
+	// once the path is validated, but the connection ID remains allocated.
+	if p.usesConnID {
 		pm.retireConnID(id)
 	}
 	delete(pm.paths, id)
@@ -255,6 +261,7 @@ func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ack
 	if !ok {
 		return protocol.ConnectionID{}, ackhandler.Frame{}, nil, false
 	}
+	p.usesConnID = true
 
 	var b [8]byte
 	_, _ = rand.Read(b[:])
@@ -291,16 +298,16 @@ func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame
 	}
 }
 
-func (pm *pathManagerOutgoing) ShouldSwitchPath() (*Transport, bool) {
+func (pm *pathManagerOutgoing) ShouldSwitchPath() (*Transport, pathID, bool) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
 	if pm.pathToSwitchTo == nil {
-		return nil, false
+		return nil, invalidPathID, false
 	}
 	p := pm.pathToSwitchTo
 	pm.pathToSwitchTo = nil
-	return p.tr, true
+	return p.tr, p.id, true
 }
 
 type pathManagerOutgoingAckHandler pathManagerOutgoing

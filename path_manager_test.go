@@ -113,7 +113,9 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 	require.True(t, shouldSwitch)
 
 	// now switch to the new path
-	pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000})
+	require.Equal(t, pathID(1), pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000}))
+	// switching to an untracked path is a no-op
+	require.Equal(t, invalidPathID, pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(9, 9, 9, 9), Port: 1000}))
 
 	// switching to the path removes other paths
 	connID, frames, shouldSwitch = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, false)

@@ -294,6 +294,41 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	delete(h.pathProbing, pathID)
 }
 
+// SwitchToPathConnID makes the connection ID allocated for the given path the active connection ID,
+// and retires the previously active connection ID.
+// It is called when the connection switches to that path.
+func (h *connIDManager) SwitchToPathConnID(id pathID) {
+	h.assertNotClosed()
+	// if we're using zero-length connection IDs, we don't need to change the connection ID
+	if h.activeConnectionID.Len() == 0 {
+		return
+	}
+
+	entry, ok := h.pathProbing[id]
+	if !ok {
+		// The connection ID allocated for this path was retired by the peer.
+		// Switch to a new connection ID, if one is available.
+		if len(h.queue) > 0 {
+			h.updateConnectionID()
+		}
+		return
+	}
+	h.queueControlFrame(&wire.RetireConnectionIDFrame{
+		SequenceNumber: h.activeSequenceNumber,
+	})
+	h.highestRetired = max(h.highestRetired, h.activeSequenceNumber)
+	if h.activeStatelessResetToken != nil {
+		h.removeStatelessResetToken(*h.activeStatelessResetToken)
+	}
+	// The stateless reset token was already added when the connection ID was allocated for the path.
+	h.activeSequenceNumber = entry.SequenceNumber
+	h.activeConnectionID = entry.ConnectionID
+	h.activeStatelessResetToken = &entry.StatelessResetToken
+	h.packetsSinceLastChange = 0
+	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + uint32(h.rand.Int31n(protocol.PacketsPerConnectionID))
+	delete(h.pathProbing, id)
+}
+
 func (h *connIDManager) IsActiveStatelessResetToken(token protocol.StatelessResetToken) bool {
 	if h.activeStatelessResetToken != nil {
 		if *h.activeStatelessResetToken == token {

@@ -704,9 +704,9 @@ runLoop:
 		if c.perspective == protocol.PerspectiveClient {
 			pm := c.pathManagerOutgoing.Load()
 			if pm != nil {
-				tr, ok := pm.ShouldSwitchPath()
+				tr, id, ok := pm.ShouldSwitchPath()
 				if ok {
-					c.switchToNewPath(tr, now)
+					c.switchToNewPath(tr, id, now)
 				}
 			}
 		}
@@ -910,7 +910,10 @@ func (c *Conn) idleTimeoutStartTime() monotime.Time {
 	return startTime
 }
 
-func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
+func (c *Conn) switchToNewPath(tr *Transport, id pathID, now monotime.Time) {
+	// Start using the connection ID that was used for probing this path,
+	// and retire the connection ID used on the old path.
+	c.connIDManager.SwitchToPathConnID(id)
 	initialPacketSize := protocol.ByteCount(c.config.InitialPacketSize)
 	c.sentPacketHandler.MigratedPath(now, initialPacketSize)
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
@@ -1291,7 +1294,11 @@ func (c *Conn) handleShortHeaderPacket(
 	if !shouldSwitchPath || pn != c.largestRcvdAppData {
 		return true, nil
 	}
-	c.pathManager.SwitchToPath(p.remoteAddr)
+	if id := c.pathManager.SwitchToPath(p.remoteAddr); id != invalidPathID {
+		// Start using the connection ID that was used for probing this path,
+		// and retire the connection ID used on the old path.
+		c.connIDManager.SwitchToPathConnID(id)
+	}
 	c.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(c.config.InitialPacketSize))
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
 	if c.peerParams.MaxUDPPayloadSize > 0 && c.peerParams.MaxUDPPayloadSize < maxPacketSize {
