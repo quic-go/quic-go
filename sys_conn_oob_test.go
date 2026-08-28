@@ -310,6 +310,14 @@ func TestReadsMultipleMessagesInOneBatch(t *testing.T) {
 	require.Equal(t, 2, bc.callCounter)
 }
 
+func TestNewConnWithoutNetConn(t *testing.T) {
+	udpConn := newUDPConnLocalhost(t)
+	conn := struct{ OOBCapablePacketConn }{udpConn}
+
+	_, err := newConn(conn, true)
+	require.EqualError(t, err, "quic: OOBCapablePacketConn must implement net.Conn or ReadBatch")
+}
+
 func TestSysConnSendGSO(t *testing.T) {
 	if !platformSupportsGSO {
 		t.Skip("GSO not supported on this platform")

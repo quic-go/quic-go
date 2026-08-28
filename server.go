@@ -214,9 +214,8 @@ func listenUDP(addr string) (*net.UDPConn, error) {
 
 // Listen listens for QUIC connections on a given [net.PacketConn].
 // If the PacketConn satisfies the [OOBCapablePacketConn] interface (as a [net.UDPConn] does),
-// ECN and packet info support will be enabled. In this case, [OOBCapablePacketConn.ReadMsgUDP]
-// and [OOBCapablePacketConn.WriteMsgUDP] will be used instead of [net.PacketConn.ReadFrom]
-// and [net.PacketConn.WriteTo] to read/write packets.
+// ECN and packet info support will be enabled. In this case, packets will be read in batches,
+// and [OOBCapablePacketConn.WriteMsgUDP] will be used instead of [net.PacketConn.WriteTo].
 // A single [net.PacketConn] can only be used for a single call to Listen.
 //
 // The [tls.Config] must not be nil and must contain a certificate configuration.

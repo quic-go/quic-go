@@ -77,9 +77,8 @@ func DialEarly(ctx context.Context, c net.PacketConn, addr net.Addr, tlsConf *tl
 
 // Dial establishes a new QUIC connection to a server using a [net.PacketConn].
 // If the PacketConn satisfies the [OOBCapablePacketConn] interface (as a [net.UDPConn] does),
-// ECN and packet info support will be enabled. In this case, [OOBCapablePacketConn.ReadMsgUDP]
-// and [OOBCapablePacketConn.WriteMsgUDP] will be used instead of [net.PacketConn.ReadFrom]
-// and [net.PacketConn.WriteTo] to read/write packets.
+// ECN and packet info support will be enabled. In this case, packets will be read in batches,
+// and [OOBCapablePacketConn.WriteMsgUDP] will be used instead of [net.PacketConn.WriteTo].
 // The [tls.Config] must define an application protocol using [tls.Config.NextProtos].
 //
 // This is a convenience function. More advanced use cases should instantiate a [Transport],
