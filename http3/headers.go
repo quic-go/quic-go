@@ -98,7 +98,8 @@ func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, sizeLimit int, head
 				hdr.Protocol = h.Value
 			case ":scheme":
 				isDuplicatePseudoHeader = hdr.Scheme != ""
-				hdr.Scheme = h.Value
+				// URI schemes are case-insensitive and canonically lowercase, see section 3.1 of RFC 3986
+				hdr.Scheme = strings.ToLower(h.Value)
 			case ":status":
 				isDuplicatePseudoHeader = hdr.Status != ""
 				hdr.Status = h.Value
