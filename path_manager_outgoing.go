@@ -188,13 +188,10 @@ func (pm *pathManagerOutgoing) removePathImpl(id pathID) error {
 	if id == pm.activePath {
 		return errors.New("cannot close active path")
 	}
-	p, ok := pm.paths[id]
-	if !ok {
+	if _, ok := pm.paths[id]; !ok {
 		return nil
 	}
-	if len(p.pathChallenges) > 0 {
-		pm.retireConnID(id)
-	}
+	pm.retireConnID(id)
 	delete(pm.paths, id)
 	return nil
 }
