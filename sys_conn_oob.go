@@ -110,6 +110,9 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	if ibc, ok := c.(batchConn); ok {
 		bc = ibc
 	} else {
+		if _, ok := c.(net.Conn); !ok {
+			return nil, errors.New("quic: OOBCapablePacketConn must implement net.Conn or ReadBatch")
+		}
 		bc = ipv4.NewPacketConn(c)
 	}
 
