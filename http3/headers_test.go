@@ -184,7 +184,7 @@ func TestRequestHeadersValidation(t *testing.T) {
 				{Name: ":authority", Value: "quic-go.net"},
 				{Name: ":method", Value: http.MethodGet},
 			},
-			err: ":path, :authority and :method must not be empty",
+			err: ":path and :authority must not be empty",
 		},
 		{
 			name: "missing :authority",
@@ -192,7 +192,7 @@ func TestRequestHeadersValidation(t *testing.T) {
 				{Name: ":path", Value: "/foo"},
 				{Name: ":method", Value: http.MethodGet},
 			},
-			err: ":path, :authority and :method must not be empty",
+			err: ":path and :authority must not be empty",
 		},
 		{
 			name: "missing :method",
@@ -200,7 +200,18 @@ func TestRequestHeadersValidation(t *testing.T) {
 				{Name: ":path", Value: "/foo"},
 				{Name: ":authority", Value: "quic-go.net"},
 			},
-			err: ":path, :authority and :method must not be empty",
+			err: ":method must not be empty",
+		},
+		{
+			name: "invalid :method",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "quic-go.net"},
+				// a method must be a token, and tokens cannot contain spaces
+				{Name: ":method", Value: "GET POST"},
+			},
+			err: `invalid :method: "GET POST"`,
 		},
 		{
 			name: "duplicate :path",

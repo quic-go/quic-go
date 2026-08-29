@@ -221,6 +221,12 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if err != nil {
 		return nil, err
 	}
+	if hdr.Method == "" {
+		return nil, errors.New(":method must not be empty")
+	}
+	if !validMethod(hdr.Method) {
+		return nil, fmt.Errorf("invalid :method: %q", hdr.Method)
+	}
 	if strings.Contains(hdr.Authority, "@") && (hdr.Scheme == "http" || hdr.Scheme == "https") {
 		return nil, errors.New("userinfo is not allowed in :authority")
 	}
@@ -243,8 +249,8 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 		if hdr.Path != "" || hdr.Authority == "" { // normal CONNECT
 			return nil, errors.New(":path must be empty and :authority must not be empty")
 		}
-	} else if len(hdr.Path) == 0 || len(hdr.Authority) == 0 || len(hdr.Method) == 0 {
-		return nil, errors.New(":path, :authority and :method must not be empty")
+	} else if len(hdr.Path) == 0 || len(hdr.Authority) == 0 {
+		return nil, errors.New(":path and :authority must not be empty")
 	}
 
 	if !isExtendedConnected && len(hdr.Protocol) > 0 {
