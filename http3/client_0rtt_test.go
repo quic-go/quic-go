@@ -30,33 +30,53 @@ func TestClientSessionCacheStoresAndRestoresSettings(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, state.EarlyData)
 	require.NoError(t, restoring.HandleSettings(want, true))
+	// Omitting MAX_FIELD_SECTION_SIZE restores its unlimited default and is compatible.
+	require.NoError(t, restoring.HandleSettings(&settings{MaxFieldSectionSize: -1, Datagram: true, ExtendedConnect: true}, true))
 }
 
 func TestClientSessionCacheRejectsIncompatibleSettings(t *testing.T) {
-	stored := &settings{MaxFieldSectionSize: 100, Datagram: true, ExtendedConnect: true}
 	underlying := tls.NewLRUClientSessionCache(1)
-	session, err := tls.NewResumptionState([]byte("ticket"), &tls.SessionState{
-		EarlyData: true,
-		Extra:     [][]byte{settingsForSessionTicket(stored)},
-	})
-	require.NoError(t, err)
-	underlying.Put("key", session)
 	cache := newClientSessionCache(underlying)
-	_, ok := cache.Get("key")
-	require.True(t, ok)
 
 	const wantErr = "server sent incompatible settings after accepting 0-RTT"
+	limited := &settings{MaxFieldSectionSize: 100, Datagram: true, ExtendedConnect: true}
+	unlimited := &settings{MaxFieldSectionSize: -1, Datagram: true, ExtendedConnect: true}
+
 	for _, tc := range []struct {
-		name     string
-		settings *settings
+		name            string
+		stored, current *settings
 	}{
-		{name: "lower maximum field section size", settings: &settings{MaxFieldSectionSize: 99, Datagram: true, ExtendedConnect: true}},
-		{name: "restore unlimited to limited", settings: &settings{MaxFieldSectionSize: -1, Datagram: true, ExtendedConnect: true}},
-		{name: "disable datagrams", settings: &settings{MaxFieldSectionSize: 100, ExtendedConnect: true}},
-		{name: "disable extended connect", settings: &settings{MaxFieldSectionSize: 100, Datagram: true}},
+		{
+			name:    "lower maximum field section size",
+			stored:  limited,
+			current: &settings{MaxFieldSectionSize: 99, Datagram: true, ExtendedConnect: true},
+		},
+		{
+			name:    "restore unlimited to limited",
+			stored:  unlimited,
+			current: limited,
+		},
+		{
+			name:    "disable datagrams",
+			stored:  limited,
+			current: &settings{MaxFieldSectionSize: 100, ExtendedConnect: true},
+		},
+		{
+			name:    "disable extended connect",
+			stored:  limited,
+			current: &settings{MaxFieldSectionSize: 100, Datagram: true},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.EqualError(t, cache.HandleSettings(tc.settings, true), wantErr)
+			session, err := tls.NewResumptionState([]byte("ticket"), &tls.SessionState{
+				EarlyData: true,
+				Extra:     [][]byte{settingsForSessionTicket(tc.stored)},
+			})
+			require.NoError(t, err)
+			underlying.Put("key", session)
+			_, ok := cache.Get("key")
+			require.True(t, ok)
+			require.EqualError(t, cache.HandleSettings(tc.current, true), wantErr)
 		})
 	}
 }

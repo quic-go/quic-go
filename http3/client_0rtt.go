@@ -87,8 +87,9 @@ func (c *clientSessionCache) HandleSettings(current *settings, used0RTT bool) er
 
 	if used0RTT && c.restored != nil {
 		old := c.restored
-		if old.MaxFieldSectionSize < 0 && current.MaxFieldSectionSize >= 0 ||
-			old.MaxFieldSectionSize > current.MaxFieldSectionSize ||
+		// the default value for SETTINGS_MAX_FIELD_SECTION_SIZE is unlimited
+		if (current.MaxFieldSectionSize >= 0 &&
+			(old.MaxFieldSectionSize < 0 || old.MaxFieldSectionSize > current.MaxFieldSectionSize)) ||
 			old.Datagram && !current.Datagram ||
 			old.ExtendedConnect && !current.ExtendedConnect {
 			return errors.New("server sent incompatible settings after accepting 0-RTT")
