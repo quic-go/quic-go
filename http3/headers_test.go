@@ -230,6 +230,16 @@ func TestRequestHeadersValidation(t *testing.T) {
 			err: ":authority and Host header field values do not match",
 		},
 		{
+			name: "Host header field with authority-less scheme",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "urn"},
+				{Name: ":path", Value: "/"},
+				{Name: ":method", Value: http.MethodGet},
+				{Name: "host", Value: "example.com"},
+			},
+			err: ":path and :authority must not be empty",
+		},
+		{
 			name: "invalid :method",
 			headers: []qpack.HeaderField{
 				{Name: ":scheme", Value: "https"},

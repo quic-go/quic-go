@@ -237,9 +237,9 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 		return nil, errors.New(":authority and Host header field values do not match")
 	}
 	isConnect := hdr.Method == http.MethodConnect
-	// If :authority is missing, use Host as a fallback.
+	// If :authority is missing, use Host as a fallback for HTTP(S) requests.
 	// CONNECT requests are excluded since they must provide :authority (RFC 9114, Section 4.4).
-	if !isConnect && hdr.Authority == "" {
+	if !isConnect && hdr.Authority == "" && (hdr.Scheme == "http" || hdr.Scheme == "https") {
 		hdr.Authority = host
 	}
 	if strings.Contains(hdr.Authority, "@") && (hdr.Scheme == "http" || hdr.Scheme == "https") {
