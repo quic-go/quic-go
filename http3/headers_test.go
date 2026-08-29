@@ -29,41 +29,43 @@ func decodeFromSlice(headers []qpack.HeaderField) qpack.DecodeFunc {
 }
 
 func TestRequestHeaderParsing(t *testing.T) {
-	t.Run("regular path", func(t *testing.T) {
-		testRequestHeaderParsing(t, "/foo")
-	})
-
-	// see https://github.com/quic-go/quic-go/pull/1898
-	t.Run("path starting with //", func(t *testing.T) {
-		testRequestHeaderParsing(t, "//foo")
-	})
-}
-
-func testRequestHeaderParsing(t *testing.T, path string) {
-	headers := []qpack.HeaderField{
-		{Name: ":scheme", Value: "https"},
-		{Name: ":path", Value: path},
-		{Name: ":authority", Value: "quic-go.net:443"},
-		{Name: ":method", Value: http.MethodGet},
-		{Name: "content-length", Value: "42"},
+	for _, tc := range []struct {
+		name   string
+		path   string
+		scheme string
+	}{
+		{name: "regular path", path: "/foo", scheme: "https"},
+		// see https://github.com/quic-go/quic-go/pull/1898
+		{name: "path starting with //", path: "//foo", scheme: "https"},
+		{name: "upper-case scheme", path: "/foo", scheme: "HTTPS"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := []qpack.HeaderField{
+				{Name: ":scheme", Value: tc.scheme},
+				{Name: ":path", Value: tc.path},
+				{Name: ":authority", Value: "quic-go.net:443"},
+				{Name: ":method", Value: http.MethodGet},
+				{Name: "content-length", Value: "42"},
+			}
+			req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
+			require.NoError(t, err)
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, tc.path, req.URL.Path)
+			require.Equal(t, "quic-go.net:443", req.URL.Host)
+			require.Equal(t, "HTTP/3.0", req.Proto)
+			require.Equal(t, 3, req.ProtoMajor)
+			require.Zero(t, req.ProtoMinor)
+			require.Equal(t, int64(42), req.ContentLength)
+			require.Equal(t, 1, len(req.Header))
+			require.Equal(t, "42", req.Header.Get("Content-Length"))
+			require.Nil(t, req.Body)
+			require.Equal(t, "quic-go.net:443", req.Host)
+			require.Equal(t, tc.path, req.RequestURI)
+			require.Equal(t, "quic-go.net", req.URL.Hostname())
+			require.Equal(t, "https", req.URL.Scheme)
+			require.Equal(t, "443", req.URL.Port())
+		})
 	}
-	req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.MethodGet, req.Method)
-	require.Equal(t, path, req.URL.Path)
-	require.Equal(t, "quic-go.net:443", req.URL.Host)
-	require.Equal(t, "HTTP/3.0", req.Proto)
-	require.Equal(t, 3, req.ProtoMajor)
-	require.Zero(t, req.ProtoMinor)
-	require.Equal(t, int64(42), req.ContentLength)
-	require.Equal(t, 1, len(req.Header))
-	require.Equal(t, "42", req.Header.Get("Content-Length"))
-	require.Nil(t, req.Body)
-	require.Equal(t, "quic-go.net:443", req.Host)
-	require.Equal(t, path, req.RequestURI)
-	require.Equal(t, "quic-go.net", req.URL.Hostname())
-	require.Equal(t, "https", req.URL.Scheme)
-	require.Equal(t, "443", req.URL.Port())
 }
 
 func TestRequestHeadersContentLength(t *testing.T) {
