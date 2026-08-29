@@ -111,6 +111,7 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		false,
@@ -166,6 +167,7 @@ func TestSentPacketHandlerAcknowledgeSkippedPacket(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		false,
@@ -209,6 +211,7 @@ func TestSentPacketHandlerRTTAckEliciting(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		false,
@@ -297,6 +300,7 @@ func TestSentPacketHandlerRTTAcrossPacketNumberSpaces(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		false,
@@ -358,6 +362,7 @@ func testSentPacketHandlerRTTAckDelays(t *testing.T, encLevel protocol.Encryptio
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		false,
@@ -449,6 +454,7 @@ func testSentPacketHandlerAmplificationLimitServer(t *testing.T, addressValidate
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		addressValidated,
@@ -520,6 +526,7 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
@@ -576,6 +583,7 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -631,6 +639,7 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -693,6 +702,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -911,6 +921,7 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1004,6 +1015,7 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
@@ -1056,6 +1068,7 @@ func TestSentPacketHandlerCongestion(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1157,6 +1170,7 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1209,6 +1223,7 @@ func TestSentPacketHandlerRetryAfterPTO(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1254,6 +1269,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
@@ -1359,6 +1375,7 @@ func TestSentPacketHandlerPathProbe(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1440,6 +1457,7 @@ func TestSentPacketHandlerPathProbeAckAndLoss(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1517,6 +1535,7 @@ func testSentPacketHandlerRandomized(t *testing.T, seed uint64) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
@@ -1587,6 +1606,7 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		utils.NewRTTStats(),
 		&utils.ConnectionStats{},
 		true,
@@ -1723,6 +1743,7 @@ func benchmarkSendAndAcknowledge(b *testing.B, ackEvery, inFlight int) {
 	sph := NewSentPacketHandler(
 		0,
 		1200,
+		protocol.InitialCongestionWindow,
 		rttStats,
 		&utils.ConnectionStats{},
 		true,

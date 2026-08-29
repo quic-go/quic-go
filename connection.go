@@ -312,6 +312,7 @@ var newConnection = func(
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		0,
 		protocol.ByteCount(s.config.InitialPacketSize),
+		protocol.ByteCount(s.config.InitialCongestionWindow),
 		s.rttStats,
 		&s.connStats,
 		clientAddressValidated,
@@ -441,6 +442,7 @@ var newClientConnection = func(
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		initialPacketNumber,
 		protocol.ByteCount(s.config.InitialPacketSize),
+		protocol.ByteCount(s.config.InitialCongestionWindow),
 		s.rttStats,
 		&s.connStats,
 		false, // has no effect

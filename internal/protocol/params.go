@@ -5,6 +5,12 @@ import "time"
 // InitialPacketSize is the initial (before Path MTU discovery) maximum packet size used.
 const InitialPacketSize = 1280
 
+// InitialCongestionWindow is the default initial congestion window, in packets.
+const InitialCongestionWindow = 32
+
+// MinCongestionWindowPackets is the minimum congestion window in packets.
+const MinCongestionWindowPackets = 2
+
 // MaxCongestionWindowPackets is the maximum congestion window in packet.
 const MaxCongestionWindowPackets = 10000
 

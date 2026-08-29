@@ -45,6 +45,12 @@ func validateConfig(config *Config) error {
 	if config.InitialPacketSize > protocol.MaxPacketBufferSize {
 		config.InitialPacketSize = protocol.MaxPacketBufferSize
 	}
+	if config.InitialCongestionWindow > 0 && config.InitialCongestionWindow < protocol.MinCongestionWindowPackets {
+		config.InitialCongestionWindow = protocol.MinCongestionWindowPackets
+	}
+	if config.InitialCongestionWindow > protocol.MaxCongestionWindowPackets {
+		config.InitialCongestionWindow = protocol.MaxCongestionWindowPackets
+	}
 	// check that all QUIC versions are actually supported
 	for _, v := range config.Versions {
 		if !protocol.IsValidVersion(v) {
@@ -104,6 +110,10 @@ func populateConfig(config *Config) *Config {
 	if initialPacketSize == 0 {
 		initialPacketSize = protocol.InitialPacketSize
 	}
+	initialCongestionWindow := config.InitialCongestionWindow
+	if initialCongestionWindow == 0 {
+		initialCongestionWindow = protocol.InitialCongestionWindow
+	}
 
 	return &Config{
 		GetConfigForClient:               config.GetConfigForClient,
@@ -121,6 +131,7 @@ func populateConfig(config *Config) *Config {
 		TokenStore:                       config.TokenStore,
 		EnableDatagrams:                  config.EnableDatagrams,
 		InitialPacketSize:                initialPacketSize,
+		InitialCongestionWindow:          initialCongestionWindow,
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,
 		EnableStreamResetPartialDelivery: config.EnableStreamResetPartialDelivery,
 		Allow0RTT:                        config.Allow0RTT,

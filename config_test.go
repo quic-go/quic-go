@@ -49,6 +49,23 @@ func TestConfigValidation(t *testing.T) {
 		require.Equal(t, uint64(quicvarint.Max), conf.MaxConnectionReceiveWindow)
 	})
 
+	t.Run("initial congestion window", func(t *testing.T) {
+		// not set
+		conf := &Config{InitialCongestionWindow: 0}
+		require.NoError(t, validateConfig(conf))
+		require.Zero(t, conf.InitialCongestionWindow)
+
+		// too small
+		conf = &Config{InitialCongestionWindow: 1}
+		require.NoError(t, validateConfig(conf))
+		require.Equal(t, uint32(protocol.MinCongestionWindowPackets), conf.InitialCongestionWindow)
+
+		// too large
+		conf = &Config{InitialCongestionWindow: protocol.MaxCongestionWindowPackets + 1}
+		require.NoError(t, validateConfig(conf))
+		require.Equal(t, uint32(protocol.MaxCongestionWindowPackets), conf.InitialCongestionWindow)
+	})
+
 	t.Run("initial packet size", func(t *testing.T) {
 		// not set
 		conf := &Config{InitialPacketSize: 0}
@@ -122,6 +139,8 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			f.Set(reflect.ValueOf(true))
 		case "InitialPacketSize":
 			f.Set(reflect.ValueOf(uint16(1350)))
+		case "InitialCongestionWindow":
+			f.Set(reflect.ValueOf(uint32(20)))
 		case "DisablePathMTUDiscovery":
 			f.Set(reflect.ValueOf(true))
 		case "Allow0RTT":
@@ -178,6 +197,7 @@ func TestConfigDefaultValues(t *testing.T) {
 	require.Equal(t, protocol.SupportedVersions, c.Versions)
 	require.Equal(t, protocol.DefaultHandshakeIdleTimeout, c.HandshakeIdleTimeout)
 	require.Equal(t, protocol.DefaultIdleTimeout, c.MaxIdleTimeout)
+	require.EqualValues(t, protocol.InitialCongestionWindow, c.InitialCongestionWindow)
 	require.EqualValues(t, protocol.DefaultInitialMaxStreamData, c.InitialStreamReceiveWindow)
 	require.EqualValues(t, protocol.DefaultMaxReceiveStreamFlowControlWindow, c.MaxStreamReceiveWindow)
 	require.EqualValues(t, protocol.DefaultInitialMaxData, c.InitialConnectionReceiveWindow)

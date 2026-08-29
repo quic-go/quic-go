@@ -169,6 +169,13 @@ type Config struct {
 	// If set too high, the path might not support packets of that size, leading to a timeout of the QUIC handshake.
 	// Values below 1200 are invalid.
 	InitialPacketSize uint16
+	// InitialCongestionWindow is the initial congestion window, in number of packets.
+	// Under most circumstances, it is not necessary to manually set this value.
+	// If set to 0, the default value of 32 packets is used.
+	// RFC 9002 recommends 10 packets; a larger window starts faster, at the cost of a
+	// higher risk of congesting the path.
+	// Values are clamped to the minimum and maximum congestion window.
+	InitialCongestionWindow uint32
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.

@@ -108,7 +108,11 @@ type sentPacketHandler struct {
 
 	perspective protocol.Perspective
 
-	qlogger     qlogwriter.Recorder
+	qlogger qlogwriter.Recorder
+	// initialCongestionWindow is kept so that the congestion controller can be recreated
+	// with the same parameters when migrating to a new path.
+	initialCongestionWindow protocol.ByteCount
+
 	lastMetrics qlog.MetricsUpdated
 	logger      utils.Logger
 }
@@ -120,6 +124,7 @@ var _ SentPacketHandler = &sentPacketHandler{}
 func NewSentPacketHandler(
 	initialPN protocol.PacketNumber,
 	initialMaxDatagramSize protocol.ByteCount,
+	initialCongestionWindow protocol.ByteCount,
 	rttStats *utils.RTTStats,
 	connStats *utils.ConnectionStats,
 	clientAddressValidated bool,
@@ -134,11 +139,13 @@ func NewSentPacketHandler(
 		rttStats,
 		connStats,
 		initialMaxDatagramSize,
+		initialCongestionWindow,
 		true, // use Reno
 		qlogger,
 	)
 
 	h := &sentPacketHandler{
+		initialCongestionWindow:        initialCongestionWindow,
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
 		peerAddressValidated:           pers == protocol.PerspectiveClient || clientAddressValidated,
 		initialPackets:                 newPacketNumberSpace(initialPN, false),
@@ -1136,6 +1143,7 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 		h.rttStats,
 		h.connStats,
 		initialMaxDatagramSize,
+		h.initialCongestionWindow,
 		true, // use Reno
 		h.qlogger,
 	)
