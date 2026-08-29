@@ -316,14 +316,14 @@ func TestHeadersConcatenation(t *testing.T) {
 
 func TestRequestHeadersConnect(t *testing.T) {
 	headers := []qpack.HeaderField{
-		{Name: ":authority", Value: "quic-go.net"},
+		{Name: ":authority", Value: "quic-go.net:443"},
 		{Name: ":method", Value: http.MethodConnect},
 	}
 	req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodConnect, req.Method)
 	require.Equal(t, "HTTP/3.0", req.Proto)
-	require.Equal(t, "quic-go.net", req.RequestURI)
+	require.Equal(t, "quic-go.net:443", req.RequestURI)
 }
 
 func TestRequestHeadersConnectValidation(t *testing.T) {
@@ -337,15 +337,25 @@ func TestRequestHeadersConnectValidation(t *testing.T) {
 			headers: []qpack.HeaderField{
 				{Name: ":method", Value: http.MethodConnect},
 			},
-			err: ":path must be empty and :authority must not be empty",
+			err: ":scheme and :path must be empty and :authority must not be empty",
+		},
+		{
+			name: ":scheme set",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":authority", Value: "quic-go.net:443"},
+				{Name: ":method", Value: http.MethodConnect},
+			},
+			err: ":scheme and :path must be empty and :authority must not be empty",
 		},
 		{
 			name: ":path set",
 			headers: []qpack.HeaderField{
 				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "quic-go.net:443"},
 				{Name: ":method", Value: http.MethodConnect},
 			},
-			err: ":path must be empty and :authority must not be empty",
+			err: ":scheme and :path must be empty and :authority must not be empty",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -247,8 +247,8 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 			return nil, errors.New("extended CONNECT: :scheme, :path and :authority must not be empty")
 		}
 	} else if isConnect {
-		if hdr.Path != "" || hdr.Authority == "" { // normal CONNECT
-			return nil, errors.New(":path must be empty and :authority must not be empty")
+		if hdr.Scheme != "" || hdr.Path != "" || hdr.Authority == "" { // normal CONNECT
+			return nil, errors.New(":scheme and :path must be empty and :authority must not be empty")
 		}
 	} else if len(hdr.Path) == 0 || len(hdr.Authority) == 0 {
 		return nil, errors.New(":path and :authority must not be empty")
