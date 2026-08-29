@@ -471,6 +471,9 @@ func TestClientGzip(t *testing.T) {
 	t.Run("disable compression", func(t *testing.T) {
 		testClientGzip(t, gzippedFoobar, gzippedFoobar, true, true)
 	})
+	t.Run("CONNECT", func(t *testing.T) {
+		testClientGzip(t, gzippedFoobar, gzippedFoobar, false, true, http.MethodConnect)
+	})
 }
 
 func testClientGzip(t *testing.T,
@@ -478,6 +481,7 @@ func testClientGzip(t *testing.T,
 	expectedRsp []byte,
 	transportDisableCompression bool,
 	responseAddContentEncoding bool,
+	requestMethod ...string,
 ) {
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
@@ -498,9 +502,15 @@ func testClientGzip(t *testing.T,
 		err error
 	}
 	resultChan := make(chan result)
+	method := http.MethodGet
+	if len(requestMethod) > 0 {
+		method = requestMethod[0]
+	}
 	go func() {
 		cc := (&Transport{DisableCompression: transportDisableCompression}).NewClientConn(clientConn)
-		rsp, err := cc.RoundTrip(httptest.NewRequest(http.MethodGet, "http://quic-go.net", nil))
+		req, err := http.NewRequest(method, "https://quic-go.net", nil)
+		require.NoError(t, err)
+		rsp, err := cc.RoundTrip(req)
 		resultChan <- result{rsp: rsp, err: err}
 	}()
 
@@ -532,6 +542,9 @@ func testClientGzip(t *testing.T,
 	}
 
 	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	if method == http.MethodConnect {
+		require.Equal(t, "gzip", rsp.Header.Get("Content-Encoding"))
+	}
 	body, err := io.ReadAll(rsp.Body)
 	require.NoError(t, err)
 	require.Equal(t, expectedRsp, body)
