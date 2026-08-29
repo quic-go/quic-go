@@ -245,6 +245,16 @@ func TestRequestHeadersValidation(t *testing.T) {
 			},
 			errContains: "invalid request URI",
 		},
+		{
+			name: "userinfo in :authority",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "user@quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			err: "userinfo is not allowed in :authority",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := requestFromHeaders(decodeFromSlice(tc.headers), math.MaxInt, nil)

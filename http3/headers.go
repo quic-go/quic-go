@@ -221,6 +221,9 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if err != nil {
 		return nil, err
 	}
+	if strings.Contains(hdr.Authority, "@") && (hdr.Scheme == "http" || hdr.Scheme == "https") {
+		return nil, errors.New("userinfo is not allowed in :authority")
+	}
 	// concatenate cookie headers, see https://tools.ietf.org/html/rfc6265#section-5.4
 	if len(hdr.Headers["Cookie"]) > 0 {
 		hdr.Headers.Set("Cookie", strings.Join(hdr.Headers["Cookie"], "; "))
