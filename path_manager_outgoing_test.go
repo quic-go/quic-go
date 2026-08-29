@@ -264,7 +264,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		default:
 			t.Fatal("should have received a path closed error")
 		}
-		require.Empty(t, retiredPaths)
+		require.Equal(t, []pathID{p1.id}, retiredPaths)
 
 		p2 := pm.NewPath(&Transport{}, time.Second, func() {})
 		go func() { errChan <- p2.Probe(context.Background()) }()
@@ -277,7 +277,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		require.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), connID)
 
 		require.NoError(t, p2.Close())
-		require.Equal(t, []pathID{p2.id}, retiredPaths)
+		require.Equal(t, []pathID{p1.id, p2.id}, retiredPaths)
 		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
 		_, _, _, ok = pm.NextPathToProbe()
 		require.False(t, ok)
