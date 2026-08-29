@@ -490,23 +490,19 @@ func Test0RTT(t *testing.T) {
 	require.NoError(t, serverErr)
 
 	var tp *wire.TransportParameters
-	var clientReceived0RTTKeys bool
 	for _, ev := range clientEvents {
 		switch ev.Kind {
 		case EventRestoredTransportParameters:
 			tp = ev.TransportParameters
-		case EventReceivedReadKeys:
-			clientReceived0RTTKeys = true
 		}
 	}
-	require.True(t, clientReceived0RTTKeys)
 	require.NotNil(t, tp)
 	require.Equal(t, initialMaxData, tp.InitialMaxData)
 
 	var serverReceived0RTTKeys bool
 	for _, ev := range serverEvents {
 		switch ev.Kind {
-		case EventReceivedReadKeys:
+		case EventReceived0RTTReadKeys:
 			serverReceived0RTTKeys = true
 		}
 	}
@@ -554,16 +550,12 @@ func Test0RTTRejectionOnTransportParametersChanged(t *testing.T) {
 	require.NoError(t, serverErr)
 
 	var tp *wire.TransportParameters
-	var clientReceived0RTTKeys bool
 	for _, ev := range clientEvents {
 		switch ev.Kind {
 		case EventRestoredTransportParameters:
 			tp = ev.TransportParameters
-		case EventReceivedReadKeys:
-			clientReceived0RTTKeys = true
 		}
 	}
-	require.True(t, clientReceived0RTTKeys)
 	require.NotNil(t, tp)
 	require.Equal(t, initialMaxData, tp.InitialMaxData)
 
