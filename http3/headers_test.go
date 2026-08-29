@@ -230,6 +230,17 @@ func TestRequestHeadersValidation(t *testing.T) {
 			err: ":authority and Host header field values do not match",
 		},
 		{
+			name: "duplicate Host header field",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "/foo"},
+				{Name: ":method", Value: http.MethodGet},
+				{Name: "host", Value: "quic-go.net"},
+				{Name: "host", Value: "quic-go.net"},
+			},
+			err: "too many Host headers",
+		},
+		{
 			name: "Host header field with authority-less scheme",
 			headers: []qpack.HeaderField{
 				{Name: ":scheme", Value: "urn"},

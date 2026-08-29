@@ -230,9 +230,12 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	}
 
 	// RFC 9114, Section 4.3.1 allows Host as an alternative to :authority.
-	// If both are present, they must contain the same value.
-	// For simplicity, an empty :authority or Host field is treated as absent.
+	hosts := hdr.Headers["Host"]
+	if len(hosts) > 1 {
+		return nil, errors.New("too many Host headers")
+	}
 	host := hdr.Headers.Get("Host")
+	// If both are present, they must contain the same value.
 	if hdr.Authority != "" && host != "" && hdr.Authority != host {
 		return nil, errors.New(":authority and Host header field values do not match")
 	}
