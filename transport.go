@@ -529,18 +529,17 @@ var setBufferWarningOnce sync.Once
 func (t *Transport) listen(conn rawConn) {
 	for {
 		p, err := conn.ReadPacket()
-		//nolint:staticcheck // SA1019 ignore this!
-		// TODO: This code is used to ignore wsa errors on Windows.
-		// Since net.Error.Temporary is deprecated as of Go 1.18, we should find a better solution.
-		// See https://github.com/quic-go/quic-go/issues/1737 for details.
-		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
+		// Shutting down the transport wakes up this loop by setting a read deadline on the
+		// conn (see Transport.Close and maybeStopListening).
+		// Timeout errors must therefore not close the transport.
+		if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 			t.mutex.Lock()
 			closed := t.closeErr != nil
 			t.mutex.Unlock()
 			if closed {
 				return
 			}
-			t.logger.Debugf("Temporary error reading from conn: %w", err)
+			t.logger.Debugf("Timeout error reading from conn: %s", err)
 			continue
 		}
 		if err != nil {
