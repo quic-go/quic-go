@@ -68,6 +68,20 @@ func TestRequestHeaderParsing(t *testing.T) {
 	}
 }
 
+// TestRequestHeaderParsingWithHostHeader verifies that Host is used when :authority is omitted.
+func TestRequestHeaderParsingWithHostHeader(t *testing.T) {
+	headers := []qpack.HeaderField{
+		{Name: ":scheme", Value: "https"},
+		{Name: ":path", Value: "/"},
+		{Name: ":method", Value: http.MethodGet},
+		{Name: "host", Value: "quic-go.net"},
+	}
+	req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
+	require.NoError(t, err)
+	require.Equal(t, "quic-go.net", req.Host)
+	require.Equal(t, "quic-go.net", req.URL.Host)
+}
+
 func TestRequestHeadersContentLength(t *testing.T) {
 	t.Run("no content length", func(t *testing.T) {
 		headers := []qpack.HeaderField{
@@ -203,6 +217,27 @@ func TestRequestHeadersValidation(t *testing.T) {
 				{Name: ":authority", Value: "quic-go.net"},
 			},
 			err: ":method must not be empty",
+		},
+		{
+			name: "mismatching :authority and Host header field",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+				{Name: "host", Value: "example.com"},
+			},
+			err: ":authority and Host header field values do not match",
+		},
+		{
+			name: "Host header field with authority-less scheme",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "urn"},
+				{Name: ":path", Value: "/"},
+				{Name: ":method", Value: http.MethodGet},
+				{Name: "host", Value: "example.com"},
+			},
+			err: ":path and :authority must not be empty",
 		},
 		{
 			name: "invalid :method",

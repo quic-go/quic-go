@@ -228,15 +228,29 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if !validMethod(hdr.Method) {
 		return nil, fmt.Errorf("invalid :method: %q", hdr.Method)
 	}
+
+	// RFC 9114, Section 4.3.1 allows Host as an alternative to :authority.
+	// If both are present, they must contain the same value.
+	// For simplicity, an empty :authority or Host field is treated as absent.
+	host := hdr.Headers.Get("Host")
+	if hdr.Authority != "" && host != "" && hdr.Authority != host {
+		return nil, errors.New(":authority and Host header field values do not match")
+	}
+	isConnect := hdr.Method == http.MethodConnect
+	// If :authority is missing, use Host as a fallback for HTTP(S) requests.
+	// CONNECT requests are excluded since they must provide :authority (RFC 9114, Section 4.4).
+	if !isConnect && hdr.Authority == "" && (hdr.Scheme == "http" || hdr.Scheme == "https") {
+		hdr.Authority = host
+	}
 	if strings.Contains(hdr.Authority, "@") && (hdr.Scheme == "http" || hdr.Scheme == "https") {
 		return nil, errors.New("userinfo is not allowed in :authority")
 	}
+
 	// concatenate cookie headers, see https://tools.ietf.org/html/rfc6265#section-5.4
 	if len(hdr.Headers["Cookie"]) > 0 {
 		hdr.Headers.Set("Cookie", strings.Join(hdr.Headers["Cookie"], "; "))
 	}
 
-	isConnect := hdr.Method == http.MethodConnect
 	// Extended CONNECT, see https://datatracker.ietf.org/doc/html/rfc8441#section-4
 	isExtendedConnected := isConnect && hdr.Protocol != ""
 	if isExtendedConnected {
