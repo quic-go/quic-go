@@ -463,13 +463,20 @@ func TestClientGzip(t *testing.T) {
 	gzippedFoobar := buf.Bytes()
 
 	t.Run("gzipped", func(t *testing.T) {
-		testClientGzip(t, gzippedFoobar, []byte("foobar"), false, true)
+		testClientGzip(t, gzippedFoobar, []byte("foobar"), false, true, http.MethodGet, http.StatusOK)
 	})
 	t.Run("not gzipped", func(t *testing.T) {
-		testClientGzip(t, []byte("foobar"), []byte("foobar"), false, false)
+		testClientGzip(t, []byte("foobar"), []byte("foobar"), false, false, http.MethodGet, http.StatusOK)
 	})
 	t.Run("disable compression", func(t *testing.T) {
-		testClientGzip(t, gzippedFoobar, gzippedFoobar, true, true)
+		testClientGzip(t, gzippedFoobar, gzippedFoobar, true, true, http.MethodGet, http.StatusOK)
+	})
+	t.Run("successful CONNECT", func(t *testing.T) {
+		rsp := testClientGzip(t, gzippedFoobar, gzippedFoobar, false, true, http.MethodConnect, http.StatusOK)
+		require.Equal(t, "gzip", rsp.Header.Get("Content-Encoding"))
+	})
+	t.Run("failed CONNECT", func(t *testing.T) {
+		testClientGzip(t, gzippedFoobar, []byte("foobar"), false, true, http.MethodConnect, http.StatusBadRequest)
 	})
 }
 
@@ -478,13 +485,15 @@ func testClientGzip(t *testing.T,
 	expectedRsp []byte,
 	transportDisableCompression bool,
 	responseAddContentEncoding bool,
-) {
+	method string,
+	status int,
+) *http.Response {
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
-	rw.WriteHeader(http.StatusOK)
+	rw.WriteHeader(status)
 	if responseAddContentEncoding {
 		rw.header.Add("Content-Encoding", "gzip")
 	}
@@ -500,7 +509,7 @@ func testClientGzip(t *testing.T,
 	resultChan := make(chan result)
 	go func() {
 		cc := (&Transport{DisableCompression: transportDisableCompression}).NewClientConn(clientConn)
-		rsp, err := cc.RoundTrip(httptest.NewRequest(http.MethodGet, "http://quic-go.net", nil))
+		rsp, err := cc.RoundTrip(httptest.NewRequest(method, "http://quic-go.net", nil))
 		resultChan <- result{rsp: rsp, err: err}
 	}()
 
@@ -531,10 +540,11 @@ func testClientGzip(t *testing.T,
 		t.Fatal("timeout")
 	}
 
-	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	require.Equal(t, status, rsp.StatusCode)
 	body, err := io.ReadAll(rsp.Body)
 	require.NoError(t, err)
 	require.Equal(t, expectedRsp, body)
+	return rsp
 }
 
 func TestClientRequestCancellation(t *testing.T) {
