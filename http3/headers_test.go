@@ -466,7 +466,11 @@ func TestRequestHeadersExtendedConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.MethodConnect, req.Method)
 	require.Equal(t, "webtransport", req.Proto)
-	require.Equal(t, "ftp://quic-go.net/foo?val=1337", req.URL.String())
+	require.Equal(t, "quic-go.net", req.Host)
+	require.Equal(t, "/foo?val=1337", req.RequestURI)
+	require.Equal(t, "/foo?val=1337", req.URL.String())
+	require.Empty(t, req.URL.Scheme)
+	require.Empty(t, req.URL.Host)
 	require.Equal(t, "1337", req.URL.Query().Get("val"))
 	require.Empty(t, req.Header)
 }

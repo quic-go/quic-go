@@ -301,9 +301,7 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 		if err != nil {
 			return nil, err
 		}
-		u.Scheme = hdr.Scheme
-		u.Host = hdr.Authority
-		requestURI = hdr.Authority
+		requestURI = hdr.Path
 		protocol = hdr.Protocol
 	} else if isConnect {
 		u = &url.URL{Host: hdr.Authority}
