@@ -296,17 +296,17 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 
 	protocol := "HTTP/3.0"
 
-	if isConnect {
-		u = &url.URL{}
-		if isExtendedConnected {
-			u, err = url.ParseRequestURI(hdr.Path)
-			if err != nil {
-				return nil, err
-			}
-			protocol = hdr.Protocol
-		} else {
-			u.Path = hdr.Path
+	if isExtendedConnected {
+		u, err = url.ParseRequestURI(hdr.Path)
+		if err != nil {
+			return nil, err
 		}
+		u.Scheme = hdr.Scheme
+		u.Host = hdr.Authority
+		requestURI = hdr.Authority
+		protocol = hdr.Protocol
+	} else if isConnect {
+		u = &url.URL{Host: hdr.Authority}
 		requestURI = hdr.Authority
 	} else {
 		u, err = url.ParseRequestURI(hdr.Path)
@@ -315,8 +315,6 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 		}
 		requestURI = hdr.Path
 	}
-	u.Scheme = hdr.Scheme
-	u.Host = hdr.Authority
 
 	req := &http.Request{
 		Method:        hdr.Method,
