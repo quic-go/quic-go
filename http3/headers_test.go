@@ -51,7 +51,7 @@ func TestRequestHeaderParsing(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.MethodGet, req.Method)
 			require.Equal(t, tc.path, req.URL.Path)
-			require.Equal(t, "quic-go.net:443", req.URL.Host)
+			require.Empty(t, req.URL.Host)
 			require.Equal(t, "HTTP/3.0", req.Proto)
 			require.Equal(t, 3, req.ProtoMajor)
 			require.Zero(t, req.ProtoMinor)
@@ -61,9 +61,7 @@ func TestRequestHeaderParsing(t *testing.T) {
 			require.Nil(t, req.Body)
 			require.Equal(t, "quic-go.net:443", req.Host)
 			require.Equal(t, tc.path, req.RequestURI)
-			require.Equal(t, "quic-go.net", req.URL.Hostname())
-			require.Equal(t, "https", req.URL.Scheme)
-			require.Equal(t, "443", req.URL.Port())
+			require.Empty(t, req.URL.Scheme)
 		})
 	}
 }
@@ -79,7 +77,7 @@ func TestRequestHeaderParsingWithHostHeader(t *testing.T) {
 	req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
 	require.NoError(t, err)
 	require.Equal(t, "quic-go.net", req.Host)
-	require.Equal(t, "quic-go.net", req.URL.Host)
+	require.Empty(t, req.URL.Host)
 }
 
 func TestRequestHeadersContentLength(t *testing.T) {
@@ -392,6 +390,9 @@ func TestRequestHeadersConnect(t *testing.T) {
 	require.Equal(t, http.MethodConnect, req.Method)
 	require.Equal(t, "HTTP/3.0", req.Proto)
 	require.Equal(t, "quic-go.net:443", req.RequestURI)
+	require.Equal(t, "quic-go.net:443", req.URL.Host)
+	require.Empty(t, req.URL.Scheme)
+	require.Empty(t, req.URL.Path)
 }
 
 func TestRequestHeadersConnectValidation(t *testing.T) {
