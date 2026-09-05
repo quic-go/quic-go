@@ -165,11 +165,14 @@ func dropCallbackDropNthPacket(dir direction, ns ...int) func(direction, simnet.
 	}
 }
 
-func dropCallbackDropOneThird(_ direction) func(direction, simnet.Packet) bool {
+func dropCallbackDropOneThird(dir direction) func(direction, simnet.Packet) bool {
 	const maxSequentiallyDropped = 10
 	var mx sync.Mutex
 	var toClient, toServer int
 	return func(d direction, p simnet.Packet) bool {
+		if d != dir && dir != directionBoth {
+			return false
+		}
 		drop := mrand.IntN(3) == 0
 
 		mx.Lock()
