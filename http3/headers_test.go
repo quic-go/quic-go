@@ -322,7 +322,49 @@ func TestRequestHeadersValidation(t *testing.T) {
 				{Name: ":authority", Value: "quic-go.net"},
 				{Name: ":method", Value: http.MethodGet},
 			},
-			errContains: "invalid request URI",
+			err: `invalid :path: "invalid path"`,
+		},
+		{
+			name: "absolute URI in :path",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "https://attacker.example/foo"},
+				{Name: ":authority", Value: "quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			err: `invalid :path: "https://attacker.example/foo"`,
+		},
+		{
+			name: "absolute URI in :path for Extended CONNECT",
+			headers: []qpack.HeaderField{
+				{Name: ":protocol", Value: "webtransport"},
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "https://attacker.example/foo"},
+				{Name: ":authority", Value: "quic-go.net"},
+				{Name: ":method", Value: http.MethodConnect},
+			},
+			err: `invalid :path: "https://attacker.example/foo"`,
+		},
+		{
+			name: "asterisk-form for non-OPTIONS request",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "*"},
+				{Name: ":authority", Value: "quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			err: `invalid :path: "*"`,
+		},
+		{
+			name: "asterisk-form for Extended CONNECT",
+			headers: []qpack.HeaderField{
+				{Name: ":protocol", Value: "webtransport"},
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "*"},
+				{Name: ":authority", Value: "quic-go.net"},
+				{Name: ":method", Value: http.MethodConnect},
+			},
+			err: `invalid :path: "*"`,
 		},
 		{
 			name: "userinfo in :authority",

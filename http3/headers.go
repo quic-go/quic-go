@@ -290,6 +290,11 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if !isExtendedConnected && hasProtocol {
 		return nil, errors.New(":protocol must be omitted")
 	}
+	// url.ParseRequestURI accepts absolute URIs and "*", so validate :path before parsing.
+	validPath := strings.HasPrefix(hdr.Path, "/") || (hdr.Method == http.MethodOptions && hdr.Path == "*")
+	if (!isConnect || isExtendedConnected) && !validPath {
+		return nil, fmt.Errorf("invalid :path: %q", hdr.Path)
+	}
 
 	var u *url.URL
 	var requestURI string
