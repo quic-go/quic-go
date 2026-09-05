@@ -159,10 +159,12 @@ type Conn struct {
 	tokenStoreKey         string                    // only set for the client
 	tokenGenerator        *handshake.TokenGenerator // only set for the server
 
-	unpacker      unpacker
-	frameParser   wire.FrameParser
-	packer        packer
-	mtuDiscoverer *mtuFinder // initialized when the transport parameters are received
+	unpacker          unpacker
+	frameParser       wire.FrameParser
+	packer            packer
+	mtuDiscoverer     *mtuFinder         // initialized when the transport parameters are received
+	initialPacketSize protocol.ByteCount // reduced on EMSGSIZE during the handshake
+	sendMsgSizeErr    chan struct{}
 
 	maxPayloadSizeEstimate atomic.Uint32
 
@@ -509,10 +511,12 @@ var newClientConnection = func(
 }
 
 func (c *Conn) preSetup() {
+	c.initialPacketSize = protocol.ByteCount(c.config.InitialPacketSize)
+	c.sendMsgSizeErr = make(chan struct{}, 1)
 	c.largestRcvdAppData = protocol.InvalidPacketNumber
 	c.initialStream = newInitialCryptoStream(c.perspective == protocol.PerspectiveClient)
 	c.handshakeStream = newCryptoStream()
-	c.sendQueue = newSendQueue(c.conn)
+	c.sendQueue = newSendQueue(c.conn, c.sendMsgSizeErr)
 	c.retransmissionQueue = newRetransmissionQueue()
 	c.frameParser = *wire.NewFrameParser(
 		c.config.EnableDatagrams,
@@ -658,6 +662,8 @@ runLoop:
 				break runLoop
 			case <-c.timer.C:
 			case <-c.sendingScheduled:
+			case <-c.sendMsgSizeErr:
+				c.handleSendMsgSizeError()
 			case <-sendQueueAvailable:
 			case <-c.notifyReceivedPacket:
 				wasProcessed, err := c.handlePackets()
@@ -920,7 +926,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
-	c.sendQueue = newSendQueue(c.conn)
+	c.sendQueue = newSendQueue(c.conn, nil)
 	go func() {
 		if err := c.sendQueue.Run(); err != nil {
 			c.destroyImpl(err)
@@ -2442,7 +2448,7 @@ func (c *Conn) applyTransportParameters() {
 	}
 	c.mtuDiscoverer = newMTUDiscoverer(
 		c.rttStats,
-		protocol.ByteCount(c.config.InitialPacketSize),
+		c.initialPacketSize,
 		maxPacketSize,
 		c.qlogger,
 	)
@@ -2862,13 +2868,30 @@ func (c *Conn) sendConnectionClose(e error) ([]byte, error) {
 	return packet.buffer.Data, c.conn.Write(packet.buffer.Data, 0, ecn)
 }
 
+// handleSendMsgSizeError runs on the connection goroutine. Before handshake
+// confirmation, loss recovery alone would keep retransmitting at the rejected size.
+func (c *Conn) handleSendMsgSizeError() {
+	if c.handshakeConfirmed || c.initialPacketSize <= protocol.MinInitialPacketSize {
+		return
+	}
+	c.initialPacketSize = protocol.MinInitialPacketSize
+	if c.mtuDiscoverer != nil {
+		// Transport parameters can arrive before the first oversized server flight.
+		// No MTU probes have been sent yet, so only the starting size changes.
+		c.mtuDiscoverer = newMTUDiscoverer(c.rttStats, c.initialPacketSize, c.mtuDiscoverer.max(), c.qlogger)
+	}
+	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(c.initialPacketSize)))
+	c.sentPacketHandler.SetMaxDatagramSize(c.initialPacketSize)
+}
+
 func (c *Conn) maxPacketSize() protocol.ByteCount {
 	if c.mtuDiscoverer == nil {
-		// Use the configured packet size on the client side.
+		// Use the configured packet size on the client side, unless a local write
+		// error required a smaller size during the handshake.
 		// If the server sends a max_udp_payload_size that's smaller than this size, we can ignore this:
 		// Apparently the server still processed the (fully padded) Initial packet anyway.
 		if c.perspective == protocol.PerspectiveClient {
-			return protocol.ByteCount(c.config.InitialPacketSize)
+			return c.initialPacketSize
 		}
 		// On the server side, there's no downside to using 1200 bytes until we received the client's transport
 		// parameters:

@@ -1,8 +1,6 @@
 package congestion
 
 import (
-	"fmt"
-
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -318,9 +316,6 @@ func (c *cubicSender) maybeQlogStateChange(new qlog.CongestionState) {
 }
 
 func (c *cubicSender) SetMaxDatagramSize(s protocol.ByteCount) {
-	if s < c.maxDatagramSize {
-		panic(fmt.Sprintf("congestion BUG: decreased max datagram size from %d to %d", c.maxDatagramSize, s))
-	}
 	cwndIsMinCwnd := c.congestionWindow == c.minCongestionWindow()
 	c.maxDatagramSize = s
 	if cwndIsMinCwnd {

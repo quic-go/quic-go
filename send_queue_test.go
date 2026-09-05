@@ -1,8 +1,12 @@
 package quic
 
 import (
+	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"runtime"
+	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -25,7 +29,7 @@ func TestSendQueueSendOnePacket(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		c := NewMockSendConn(mockCtrl)
-		q := newSendQueue(c)
+		q := newSendQueue(c, nil)
 
 		written := make(chan struct{})
 		c.EXPECT().Write([]byte("foobar"), uint16(10), protocol.ECT1).Do(
@@ -62,7 +66,7 @@ func TestSendQueueBlocking(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		c := NewMockSendConn(mockCtrl)
-		q := newSendQueue(c)
+		q := newSendQueue(c, nil)
 
 		blockWrite := make(chan struct{})
 		written := make(chan struct{}, 1)
@@ -155,7 +159,7 @@ func TestSendQueueWriteError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		c := NewMockSendConn(mockCtrl)
-		q := newSendQueue(c)
+		q := newSendQueue(c, nil)
 
 		c.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Return(assert.AnError)
 		q.Send(getPacketWithContents([]byte("foobar")), 6, protocol.ECNNon)
@@ -194,7 +198,7 @@ func TestSendQueueWriteError(t *testing.T) {
 func TestSendQueueSendProbe(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	c := NewMockSendConn(mockCtrl)
-	q := newSendQueue(c)
+	q := newSendQueue(c, nil)
 
 	addr := &net.UDPAddr{IP: net.IPv4(42, 42, 42, 42), Port: 42}
 	localAddr := netip.MustParseAddr("43.43.43.43")
@@ -204,4 +208,41 @@ func TestSendQueueSendProbe(t *testing.T) {
 	q.SendProbe(getPacketWithContents([]byte("foobar")), addr, packetInfo{
 		addr: localAddr,
 	})
+}
+
+func TestSendQueueSendMessageTooLarge(t *testing.T) {
+	err := syscall.EMSGSIZE
+	if runtime.GOOS == "windows" {
+		err = syscall.Errno(10040) // WSAEMSGSIZE
+	}
+	if !isSendMsgSizeErr(err) {
+		t.Skip("send message size errors are not recognized on this platform")
+	}
+	for _, size := range []int{protocol.MinInitialPacketSize, protocol.InitialPacketSize} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				conn := NewMockSendConn(ctrl)
+				notify := make(chan struct{}, 1)
+				q := newSendQueue(conn, notify)
+				conn.EXPECT().Write(gomock.Any(), uint16(0), protocol.ECNNon).Return(
+					&net.OpError{Op: "write", Err: &os.SyscallError{Syscall: "sendmsg", Err: err}},
+				).Times(2 * sendQueueCapacity)
+				done := make(chan error, 1)
+				go func() { done <- q.Run() }()
+				// An unread notification must not block further writes or Close.
+				for range 2 * sendQueueCapacity {
+					q.Send(getPacketWithContents(make([]byte, size)), 0, protocol.ECNNon)
+					synctest.Wait()
+				}
+				q.Close()
+				require.NoError(t, <-done)
+				if size > protocol.MinInitialPacketSize {
+					require.Len(t, notify, 1)
+				} else {
+					require.Empty(t, notify)
+				}
+			})
+		})
+	}
 }

@@ -22,24 +22,26 @@ type queueEntry struct {
 }
 
 type sendQueue struct {
-	queue       chan queueEntry
-	closeCalled chan struct{} // runStopped when Close() is called
-	runStopped  chan struct{} // runStopped when the run loop returns
-	available   chan struct{}
-	conn        sendConn
+	queue          chan queueEntry
+	closeCalled    chan struct{} // runStopped when Close() is called
+	runStopped     chan struct{} // runStopped when the run loop returns
+	available      chan struct{}
+	conn           sendConn
+	sendMsgSizeErr chan<- struct{}
 }
 
 var _ sender = &sendQueue{}
 
 const sendQueueCapacity = 8
 
-func newSendQueue(conn sendConn) sender {
+func newSendQueue(conn sendConn, sendMsgSizeErr chan<- struct{}) sender {
 	return &sendQueue{
-		conn:        conn,
-		runStopped:  make(chan struct{}),
-		closeCalled: make(chan struct{}),
-		available:   make(chan struct{}, 1),
-		queue:       make(chan queueEntry, sendQueueCapacity),
+		conn:           conn,
+		sendMsgSizeErr: sendMsgSizeErr,
+		runStopped:     make(chan struct{}),
+		closeCalled:    make(chan struct{}),
+		available:      make(chan struct{}, 1),
+		queue:          make(chan queueEntry, sendQueueCapacity),
 	}
 }
 
@@ -88,12 +90,17 @@ func (h *sendQueue) Run() error {
 			shouldClose = true
 		case e := <-h.queue:
 			if err := h.conn.Write(e.buf.Data, e.gsoSize, e.ecn); err != nil {
-				// This additional check enables:
-				// 1. Checking for "datagram too large" message from the kernel, as such,
-				// 2. Path MTU discovery,and
-				// 3. Eventual detection of loss PingFrame.
 				if !isSendMsgSizeErr(err) {
 					return err
+				}
+				// Notify the connection without blocking the send queue. Loss recovery
+				// still handles the rejected packet; the connection can reduce the
+				// size used for handshake retransmissions before PMTUD starts.
+				if e.buf.Len() > protocol.MinInitialPacketSize {
+					select {
+					case h.sendMsgSizeErr <- struct{}{}:
+					default:
+					}
 				}
 			}
 			e.buf.Release()

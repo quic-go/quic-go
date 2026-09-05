@@ -511,8 +511,24 @@ func TestCubicSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 }
 
 func TestCubicSenderMaximumPacketSizeReduction(t *testing.T) {
-	sender := newTestCubicSender(false)
-	require.Panics(t, func() { sender.sender.SetMaxDatagramSize(initialMaxDatagramSize - 1) })
+	for _, minWindow := range []bool{false, true} {
+		t.Run(fmt.Sprintf("minimum window: %t", minWindow), func(t *testing.T) {
+			sender := newTestCubicSender(false).sender
+			if minWindow {
+				sender.congestionWindow = sender.minCongestionWindow()
+			}
+			oldWindow := sender.GetCongestionWindow()
+			sender.SetMaxDatagramSize(protocol.MinInitialPacketSize)
+			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), sender.maxDatagramSize)
+			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), sender.pacer.maxDatagramSize)
+			if minWindow {
+				// Keep the minimum window's size in packets constant.
+				require.Equal(t, sender.minCongestionWindow(), sender.GetCongestionWindow())
+			} else {
+				require.Equal(t, oldWindow, sender.GetCongestionWindow())
+			}
+		})
+	}
 }
 
 func TestCubicSenderSlowStartsPacketSizeIncrease(t *testing.T) {

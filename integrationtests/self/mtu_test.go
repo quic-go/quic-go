@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -43,6 +44,16 @@ func TestInitialPacketSize(t *testing.T) {
 }
 
 func TestPathMTUDiscovery(t *testing.T) {
+	t.Run("configured initial size", func(t *testing.T) { testPathMTUDiscovery(t, false) })
+	t.Run("handshake EMSGSIZE fallback", func(t *testing.T) {
+		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+			t.Skip("requires WriteMsgUDP support and send message size error recognition")
+		}
+		testPathMTUDiscovery(t, true)
+	})
+}
+
+func testPathMTUDiscovery(t *testing.T, handshakeFallback bool) {
 	rtt := scaleDuration(5 * time.Millisecond)
 	const mtu = 1400
 
@@ -106,7 +117,15 @@ func TestPathMTUDiscovery(t *testing.T) {
 
 	// Make sure to use v4-only socket here.
 	// We can't reliably set the DF bit on dual-stack sockets on older versions of macOS (before Sequoia).
-	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	udpConn := newUDPConnLocalhost(t)
+	tr := &quic.Transport{Conn: udpConn}
+	initialPacketSize := uint16(protocol.MinInitialPacketSize)
+	if handshakeFallback {
+		limited := &handshakeMTULimitedUDPConn{UDPConn: udpConn}
+		tr.Conn = limited
+		initialPacketSize = protocol.InitialPacketSize
+		defer func() { require.Positive(t, limited.rejected.Load()) }()
+	}
 	defer tr.Close()
 
 	var eventRecorder events.Recorder
@@ -115,7 +134,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 		proxy.LocalAddr(),
 		getTLSClientConfig(),
 		getQuicConfig(&quic.Config{
-			InitialPacketSize: protocol.MinInitialPacketSize,
+			InitialPacketSize: initialPacketSize,
 			EnableDatagrams:   true,
 			Tracer:            newTracer(&eventRecorder),
 		}),
@@ -128,6 +147,7 @@ func TestPathMTUDiscovery(t *testing.T) {
 	var datagramErr *quic.DatagramTooLargeError
 	require.ErrorAs(t, err, &datagramErr)
 	initialMaxDatagramSize := datagramErr.MaxDatagramPayloadSize
+	require.Less(t, initialMaxDatagramSize, int64(protocol.MinInitialPacketSize))
 
 	str, err := conn.OpenStream()
 	require.NoError(t, err)
