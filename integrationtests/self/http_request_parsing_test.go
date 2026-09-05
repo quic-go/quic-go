@@ -63,6 +63,7 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 
 	// Cover origin, asterisk and authority request-target forms, URL parsing
 	// edge cases, host authorities, body lengths and trailers.
+	// TODO: Add an extended CONNECT case once https://go.dev/issue/53208 is resolved.
 	tests := []struct {
 		name          string
 		method        string
