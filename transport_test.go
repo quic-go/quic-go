@@ -46,6 +46,13 @@ func (c *mockPacketConn) SetDeadline(t time.Time) error                      { r
 func (c *mockPacketConn) SetReadDeadline(t time.Time) error                  { return nil }
 func (c *mockPacketConn) SetWriteDeadline(t time.Time) error                 { return nil }
 
+// a net.Error that is temporary, but not a timeout
+type temporaryNetError struct{}
+
+func (temporaryNetError) Error() string   { return "temporary error" }
+func (temporaryNetError) Temporary() bool { return true }
+func (temporaryNetError) Timeout() bool   { return false }
+
 type mockPacketHandler struct {
 	packets     chan<- receivedPacket
 	destruction chan<- error
@@ -173,14 +180,14 @@ func TestTransportErrFromConn(t *testing.T) {
 		ph := &mockPacketHandler{destruction: errChan}
 		(*packetHandlerMap)(&tr).Add(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), ph)
 
-		// temporary errors don't lead to a shutdown...
-		var tempErr deadlineError
-		require.True(t, tempErr.Temporary())
-		readErrChan <- tempErr
+		// timeout errors don't lead to a shutdown...
+		var timeoutErr deadlineError
+		require.True(t, timeoutErr.Timeout())
+		readErrChan <- timeoutErr
 		// don't expect any calls to phm.Close
 		synctest.Wait()
 
-		// ...but non-temporary errors do
+		// ...but other errors do
 		readErrChan <- errors.New("read failed")
 		synctest.Wait()
 
@@ -193,6 +200,41 @@ func TestTransportErrFromConn(t *testing.T) {
 
 		_, err := tr.Listen(&tls.Config{}, nil)
 		require.ErrorIs(t, err, ErrTransportClosed)
+	})
+}
+
+func TestTransportTemporaryErrFromConn(t *testing.T) {
+	t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
+
+	synctest.Test(t, func(t *testing.T) {
+		readErrChan := make(chan error, 1)
+		tr := Transport{
+			Conn: &mockPacketConn{
+				readErrs:  readErrChan,
+				localAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234},
+			},
+		}
+		defer tr.Close()
+		tr.init(true)
+
+		errChan := make(chan error, 1)
+		ph := &mockPacketHandler{destruction: errChan}
+		(*packetHandlerMap)(&tr).Add(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), ph)
+
+		// temporary errors that are not timeouts close the transport
+		var tempErr temporaryNetError
+		require.True(t, tempErr.Temporary())
+		require.False(t, tempErr.Timeout())
+		readErrChan <- tempErr
+		synctest.Wait()
+
+		select {
+		case err := <-errChan:
+			require.ErrorIs(t, err, ErrTransportClosed)
+			require.ErrorIs(t, err, tempErr)
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
 	})
 }
 
