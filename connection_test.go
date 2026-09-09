@@ -230,7 +230,7 @@ func TestConnectionHandleStreamRelatedFrames(t *testing.T) {
 			tc := newServerTestConnection(t, gomock.NewController(t), nil, false)
 			data, err := test.frame.Append(nil, protocol.Version1)
 			require.NoError(t, err)
-			_, _, _, err = tc.conn.handleFrames(data, connID, protocol.Encryption1RTT, nil, monotime.Now())
+			_, _, _, err = tc.conn.handleFrames(data, connID, protocol.Encryption1RTT, nil, monotime.Now(), tc.conn.RemoteAddr())
 			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 		})
 	}
@@ -244,11 +244,11 @@ func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	now := monotime.Now()
 	connID := protocol.ConnectionID{}
 	// MAX_DATA frame
-	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now, tc.conn.RemoteAddr())
 	require.NoError(t, err)
 	require.Equal(t, protocol.ByteCount(1337), connFC.SendWindowSize())
 	// DATA_BLOCKED frame
-	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
+	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now, tc.conn.RemoteAddr())
 	require.NoError(t, err)
 }
 
@@ -265,7 +265,7 @@ func TestConnectionServerInvalidFrames(t *testing.T) {
 		{Name: "PATH_RESPONSE", Frame: &wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}},
 	} {
 		t.Run(test.Name, func(t *testing.T) {
-			_, err := tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, monotime.Now())
+			_, err := tc.conn.handleFrame(test.Frame, protocol.Encryption1RTT, protocol.ConnectionID{}, monotime.Now(), tc.conn.RemoteAddr())
 			require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
 		})
 	}
@@ -1117,6 +1117,7 @@ func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 			protocol.Encryption1RTT,
 			protocol.ConnectionID{},
 			monotime.Now(),
+			tc.conn.RemoteAddr(),
 		)
 		require.NoError(t, err)
 
@@ -1140,6 +1141,7 @@ func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 			protocol.Encryption1RTT,
 			protocol.ConnectionID{},
 			monotime.Now(),
+			tc.conn.RemoteAddr(),
 		)
 		require.NoError(t, err)
 
@@ -1419,6 +1421,39 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 	require.True(t, mockCtrl.Satisfied())
 	// the handshake isn't confirmed until we receive a HANDSHAKE_DONE frame from the server
 
+	// Confirming the handshake starts the move to the server's preferred address.
+	// The PATH_CHALLENGE goes out on the socket the connection is already using,
+	// addressed to the preferred address.
+	probedAddr := make(chan net.Addr, 1)
+	pathChallenges := make(chan [8]byte, 1)
+	if usePreferredAddress {
+		// The stateless reset token is registered when the offered connection
+		// ID first goes on the wire, i.e. with the first probe.
+		tc.connRunner.EXPECT().AddResetToken(preferredAddressResetToken, gomock.Any())
+		tc.packer.EXPECT().PackPathProbePacket(preferredAddressConnID, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				for _, f := range frames {
+					if pc, ok := f.Frame.(*wire.PathChallengeFrame); ok {
+						select {
+						case pathChallenges <- pc.Data:
+						default:
+						}
+					}
+				}
+				return shortHeaderPacket{PacketNumber: 1, Frames: frames, Length: 1200, IsPathProbePacket: true}, getPacketBuffer(), nil
+			},
+		).AnyTimes()
+		tc.sendConn.EXPECT().WriteTo(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ []byte, addr net.Addr, _ packetInfo) error {
+				select {
+				case probedAddr <- addr:
+				default:
+				}
+				return nil
+			},
+		).AnyTimes()
+	}
+
 	data, err = (&wire.HandshakeDoneFrame{}).Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	done := make(chan struct{})
@@ -1447,11 +1482,49 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 	}
 
 	if usePreferredAddress {
-		tc.connRunner.EXPECT().AddResetToken(preferredAddressResetToken, gomock.Any())
-	}
-	nextConnID := tc.conn.connIDManager.Get()
-	if usePreferredAddress {
-		require.Equal(t, preferredAddressConnID, nextConnID)
+		select {
+		case addr := <-probedAddr:
+			require.Equal(t, "127.0.0.1:42", addr.String())
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for the preferred address to be probed")
+		}
+		// The connection ID that came with the preferred address belongs to that
+		// path. Until the path has been validated it is only reserved, so the
+		// active connection ID is still the one from the handshake.
+		require.NotEqual(t, preferredAddressConnID, tc.conn.connIDManager.Get())
+
+		var pathChallenge [8]byte
+		select {
+		case pathChallenge = <-pathChallenges:
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+		// Answering the PATH_CHALLENGE validates the path: the connection moves
+		// to the preferred address and starts using the connection ID offered
+		// alongside it.
+		movedTo := make(chan net.Addr, 1)
+		tc.sendConn.EXPECT().ChangeRemoteAddr(gomock.Any(), gomock.Any()).Do(
+			func(addr net.Addr, _ packetInfo) { movedTo <- addr },
+		)
+		frameData, err := (&wire.PathResponseFrame{Data: pathChallenge}).Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+			protocol.PacketNumber(3), protocol.PacketNumberLen2, protocol.KeyPhaseOne, frameData, nil,
+		)
+		// The answer arrives from the preferred address, which is the path the
+		// PATH_CHALLENGE was sent to and the only one that can validate it.
+		preferredAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:42")
+		require.NoError(t, err)
+		tc.conn.handlePacket(getShortHeaderPacket(t, preferredAddr, tc.srcConnID, 3, nil))
+		select {
+		case addr := <-movedTo:
+			require.Equal(t, "127.0.0.1:42", addr.String())
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for the connection to move")
+		}
+		require.Equal(t, preferredAddressConnID, tc.conn.connIDManager.Get())
+	} else {
+		tc.conn.connIDManager.Get()
 	}
 
 	// test teardown
@@ -3442,7 +3515,7 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	_, err = tc.conn.handleFrame(&wire.NewConnectionIDFrame{
 		SequenceNumber: 1,
 		ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-	}, protocol.EncryptionInitial, tc.destConnID, monotime.Now())
+	}, protocol.EncryptionInitial, tc.destConnID, monotime.Now(), tc.conn.RemoteAddr())
 	require.NoError(t, err)
 	errChan := make(chan error, 1)
 	go func() { errChan <- tc.conn.run() }()
@@ -3490,7 +3563,7 @@ func testConnectionDatagrams(t *testing.T, enabled bool) {
 	require.NoError(t, err)
 	data, err = (&wire.DatagramFrame{Data: []byte("bar")}).Append(data, protocol.Version1)
 	require.NoError(t, err)
-	_, _, _, err = tc.conn.handleFrames(data, protocol.ConnectionID{}, protocol.Encryption1RTT, nil, monotime.Now())
+	_, _, _, err = tc.conn.handleFrames(data, protocol.ConnectionID{}, protocol.Encryption1RTT, nil, monotime.Now(), tc.conn.RemoteAddr())
 
 	if !enabled {
 		require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.FrameEncodingError, FrameType: uint64(wire.FrameTypeDatagramWithLength)})
@@ -3506,4 +3579,184 @@ func testConnectionDatagrams(t *testing.T, enabled bool) {
 	d, err = tc.conn.ReceiveDatagram(ctx)
 	require.NoError(t, err)
 	require.Equal(t, []byte("bar"), d)
+}
+
+// A packet from the preferred address may legally carry the matching
+// PATH_RESPONSE and, later in the same packet, a NEW_CONNECTION_ID retiring
+// the reserved sequence-1 connection ID. The retirement happened before the
+// connection moved, so the move must not happen: the migration decision is
+// committed only once every frame of the packet has been processed.
+func TestConnectionPreferredAddressSamePacketRetirement(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	unpacker := NewMockUnpacker(mockCtrl)
+	tc := newClientTestConnection(t, mockCtrl, nil, false, connectionOptUnpacker(unpacker))
+
+	preferredConnID := protocol.ParseConnectionID([]byte{10, 8, 6, 4})
+	preferredToken := protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
+
+	probed := make(chan [8]byte, 1)
+	tc.packer.EXPECT().PackPathProbePacket(preferredConnID, gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+			for _, f := range frames {
+				if pc, ok := f.Frame.(*wire.PathChallengeFrame); ok {
+					select {
+					case probed <- pc.Data:
+					default:
+					}
+				}
+			}
+			return shortHeaderPacket{PacketNumber: 1, Frames: frames, Length: 1200, IsPathProbePacket: true}, getPacketBuffer(), nil
+		},
+	).AnyTimes()
+	tc.packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	tc.packer.EXPECT().PackAckOnlyPacket(gomock.Any(), gomock.Any(), gomock.Any()).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+	tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shortHeaderPacket{}, errNothingToPack).AnyTimes()
+	tc.sendConn.EXPECT().WriteTo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().RemoveResetToken(gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+	tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	moved := make(chan net.Addr, 1)
+	tc.sendConn.EXPECT().ChangeRemoteAddr(gomock.Any(), gomock.Any()).Do(
+		func(addr net.Addr, _ packetInfo) { moved <- addr },
+	).AnyTimes()
+
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
+		PreferredAddress: &wire.PreferredAddress{
+			IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
+			ConnectionID:        preferredConnID,
+			StatelessResetToken: preferredToken,
+		},
+	}))
+	tc.conn.applyTransportParameters()
+	tc.conn.handshakeComplete = true
+	tc.conn.handshakeConfirmed = true
+	tc.conn.connIDManager.SetHandshakeComplete()
+	require.NoError(t, tc.conn.handleHandshakeConfirmed(monotime.Now()))
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- tc.conn.run() }()
+
+	var pathChallenge [8]byte
+	select {
+	case pathChallenge = <-probed:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for the preferred-address probe")
+	}
+
+	// Response first, retirement second, one packet, from the preferred address.
+	frameData, err := (&wire.PathResponseFrame{Data: pathChallenge}).Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	frameData, err = (&wire.NewConnectionIDFrame{
+		SequenceNumber:      2,
+		RetirePriorTo:       2,
+		ConnectionID:        protocol.ParseConnectionID([]byte{7, 7, 7, 7}),
+		StatelessResetToken: protocol.StatelessResetToken{7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7},
+	}).Append(frameData, protocol.Version1)
+	require.NoError(t, err)
+	unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+		protocol.PacketNumber(3), protocol.PacketNumberLen2, protocol.KeyPhaseOne, frameData, nil,
+	)
+	preferredUDPAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:42")
+	require.NoError(t, err)
+	tc.conn.handlePacket(getShortHeaderPacket(t, preferredUDPAddr, tc.srcConnID, 3, nil))
+
+	select {
+	case addr := <-moved:
+		t.Fatalf("the connection moved to %s although the same packet retired the connection ID the move depends on", addr)
+	case err := <-errChan:
+		t.Fatalf("connection died: %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	tc.conn.destroy(nil)
+	select {
+	case <-errChan:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for run loop to return")
+	}
+}
+
+// A confirmed client whose congestion controller refuses ordinary sends must
+// still probe the server's preferred address. The probe is a path probe,
+// accounted outside bytes in flight, so congestion on the path being left does
+// not gate it.
+func TestConnectionPreferredAddressProbeWhenCongestionLimited(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		tc := newClientTestConnection(t, mockCtrl, nil, false,
+			connectionOptSentPacketHandler(sph),
+		)
+
+		preferredConnID := protocol.ParseConnectionID([]byte{10, 8, 6, 4})
+		preferredToken := protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
+
+		// The congestion controller never allows ordinary sends.
+		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAck).AnyTimes()
+		sph.EXPECT().GetLossDetectionTimeout().Return(monotime.Now().Add(time.Hour)).AnyTimes()
+		sph.EXPECT().ECNMode(gomock.Any()).Return(protocol.ECNNon).AnyTimes()
+		sph.EXPECT().DropPackets(gomock.Any(), gomock.Any()).AnyTimes()
+		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+		probed := make(chan [8]byte, 1)
+		tc.packer.EXPECT().PackPathProbePacket(preferredConnID, gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				for _, f := range frames {
+					if pc, ok := f.Frame.(*wire.PathChallengeFrame); ok {
+						select {
+						case probed <- pc.Data:
+						default:
+						}
+					}
+				}
+				return shortHeaderPacket{PacketNumber: 1, Frames: frames, Length: 1200, IsPathProbePacket: true}, getPacketBuffer(), nil
+			},
+		).AnyTimes()
+		tc.packer.EXPECT().PackAckOnlyPacket(gomock.Any(), gomock.Any(), gomock.Any()).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+		tc.sendConn.EXPECT().WriteTo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any()).AnyTimes()
+		tc.connRunner.EXPECT().RemoveResetToken(gomock.Any()).AnyTimes()
+		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+		tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+			InitialSourceConnectionID:       tc.destConnID,
+			OriginalDestinationConnectionID: tc.destConnID,
+			ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
+			PreferredAddress: &wire.PreferredAddress{
+				IPv4:                netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 42),
+				ConnectionID:        preferredConnID,
+				StatelessResetToken: preferredToken,
+			},
+		}))
+		tc.conn.applyTransportParameters()
+		tc.conn.handshakeComplete = true
+		tc.conn.connIDManager.SetHandshakeComplete()
+		require.NoError(t, tc.conn.handleHandshakeConfirmed(monotime.Now()))
+
+		errChan := make(chan error, 1)
+		go func() { errChan <- tc.conn.run() }()
+		synctest.Wait()
+
+		select {
+		case <-probed:
+		default:
+			t.Fatal("the preferred address should have been probed despite the congestion limit")
+		}
+
+		// test teardown
+		tc.conn.destroy(nil)
+		synctest.Wait()
+		select {
+		case <-errChan:
+		default:
+			t.Fatal("run should have returned")
+		}
+	})
 }
