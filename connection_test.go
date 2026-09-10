@@ -3363,6 +3363,122 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 	})
 }
 
+func TestConnectionMigrationResetsMaxPayloadSizeEstimate(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		unpacker := NewMockUnpacker(mockCtrl)
+		tc := newServerTestConnection(
+			t,
+			mockCtrl,
+			nil,
+			false,
+			connectionOptUnpacker(unpacker),
+			connectionOptHandshakeConfirmed(),
+			connectionOptRTT(time.Second),
+		)
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{MaxUDPPayloadSize: 1456}))
+
+		// Simulate MTU discovery having grown the estimate on the original path.
+		const inflatedEstimate = 1400
+		tc.conn.maxPayloadSizeEstimate.Store(inflatedEstimate)
+		initialEstimate := uint32(estimateMaxPayloadSize(protocol.ByteCount(tc.conn.config.InitialPacketSize)))
+		require.Less(t, initialEstimate, uint32(inflatedEstimate))
+
+		newRemoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 1), Port: 1234}
+		require.NotEqual(t, tc.remoteAddr, newRemoteAddr)
+
+		errChan := make(chan error, 1)
+		go func() { errChan <- tc.conn.run() }()
+
+		probeSent := make(chan struct{})
+		var pathChallenge *wire.PathChallengeFrame
+		// A non-probing (PING) frame arriving on a new address, as happens on NAT rebinding.
+		payload := []byte{1}
+		gomock.InOrder(
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+				protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
+			),
+			tc.packer.EXPECT().PackPathProbePacket(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+					pathChallenge = frames[0].Frame.(*wire.PathChallengeFrame)
+					return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
+				},
+			),
+			tc.sendConn.EXPECT().WriteTo(gomock.Any(), newRemoteAddr, packetInfo{}).DoAndReturn(
+				func([]byte, net.Addr, packetInfo) error { close(probeSent); return nil },
+			),
+			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				shortHeaderPacket{}, errNothingToPack,
+			),
+		)
+		tc.conn.handlePacket(receivedPacket{
+			data:       make([]byte, 10),
+			buffer:     getPacketBuffer(),
+			remoteAddr: newRemoteAddr,
+			rcvTime:    monotime.Now(),
+		})
+
+		synctest.Wait()
+
+		select {
+		case <-probeSent:
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+
+		// The estimate must not drop until the path is actually validated and switched to.
+		require.Equal(t, uint32(inflatedEstimate), tc.conn.maxPayloadSizeEstimate.Load())
+
+		// Receive the matching PATH_RESPONSE on the new address: since the first packet on
+		// this address was already non-probing, this alone completes the migration.
+		migrated := make(chan struct{})
+		data, err := (&wire.PathResponseFrame{Data: pathChallenge.Data}).Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		gomock.InOrder(
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+				protocol.PacketNumber(11), protocol.PacketNumberLen2, protocol.KeyPhaseZero, data, nil,
+			),
+			tc.sendConn.EXPECT().ChangeRemoteAddr(newRemoteAddr, gomock.Any()).Do(
+				func(net.Addr, packetInfo) { close(migrated) },
+			),
+			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+				shortHeaderPacket{}, errNothingToPack,
+			).MaxTimes(1),
+		)
+		tc.conn.handlePacket(receivedPacket{
+			data:       make([]byte, 100),
+			buffer:     getPacketBuffer(),
+			remoteAddr: newRemoteAddr,
+			rcvTime:    monotime.Now(),
+		})
+
+		synctest.Wait()
+
+		select {
+		case <-migrated:
+		default:
+			t.Fatal("should have migrated")
+		}
+
+		// The new path might not support the old path's MTU: the estimate must have been
+		// reset, not carried over from the path we just migrated away from.
+		require.Equal(t, initialEstimate, tc.conn.maxPayloadSizeEstimate.Load())
+
+		// test teardown
+		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+		tc.conn.destroy(nil)
+
+		synctest.Wait()
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("should have shut down")
+		}
+	})
+}
+
 func TestConnectionMigrationServer(t *testing.T) {
 	tc := newServerTestConnection(t, nil, nil, false)
 	_, err := tc.conn.AddPath(&Transport{})

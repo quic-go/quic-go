@@ -1302,6 +1302,11 @@ func (c *Conn) handleShortHeaderPacket(
 		protocol.ByteCount(c.config.InitialPacketSize),
 		maxPacketSize,
 	)
+	// The new path might not support the old path's MTU. Since maxPayloadSizeEstimate
+	// only ever grows as MTU discovery confirms larger sizes work, it must be reset here
+	// too, or a datagram sized for the old path could be accepted and then fail to send
+	// on the new, smaller-MTU path.
+	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(c.config.InitialPacketSize))))
 	c.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	return true, nil
 }
@@ -3056,7 +3061,7 @@ func (c *Conn) SendDatagram(p []byte) error {
 // The value is conservative. Under many circumstances, a datagram with a
 // slightly larger payload might still fit into a packet. The value can change
 // as the path MTU changes.
-// It returns 0 if datagram support is not enabled by both endpoints.
+// It returns 0 if the peer has not enabled datagram support.
 func (c *Conn) MaxDatagramPayloadSize() int64 {
 	if !c.supportsDatagrams() {
 		return 0
