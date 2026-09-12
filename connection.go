@@ -1298,6 +1298,11 @@ func (c *Conn) handleShortHeaderPacket(
 		protocol.ByteCount(c.config.InitialPacketSize),
 		maxPacketSize,
 	)
+	// The new path might not support the old path's MTU. Since maxPayloadSizeEstimate
+	// only ever grows as MTU discovery confirms larger sizes work, it must be reset here
+	// too, or a datagram sized for the old path could be accepted and then fail to send
+	// on the new, smaller-MTU path.
+	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(c.config.InitialPacketSize))))
 	c.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	return true, nil
 }
@@ -3046,19 +3051,37 @@ func (c *Conn) SendDatagram(p []byte) error {
 		return errors.New("datagram support disabled")
 	}
 
-	f := &wire.DatagramFrame{DataLenPresent: true}
-	// The payload size estimate is conservative.
-	// Under many circumstances we could send a few more bytes.
-	maxDataLen := min(
-		f.MaxDataLen(c.peerParams.MaxDatagramFrameSize, c.version),
-		protocol.ByteCount(c.maxPayloadSizeEstimate.Load()),
-	)
+	maxDataLen := c.maxDatagramPayloadSize()
 	if protocol.ByteCount(len(p)) > maxDataLen {
 		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
 	}
+
+	f := &wire.DatagramFrame{DataLenPresent: true}
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)
 	return c.datagramQueue.Add(f)
+}
+
+// MaxDatagramPayloadSize returns the maximum payload size for a QUIC datagram
+// that can be sent at the current time.
+//
+// The value is conservative. Under many circumstances, a datagram with a
+// slightly larger payload might still fit into a packet. The value can change
+// as the path MTU changes.
+// It returns 0 if the peer has not enabled datagram support.
+func (c *Conn) MaxDatagramPayloadSize() int64 {
+	if !c.supportsDatagrams() {
+		return 0
+	}
+	return int64(c.maxDatagramPayloadSize())
+}
+
+func (c *Conn) maxDatagramPayloadSize() protocol.ByteCount {
+	f := &wire.DatagramFrame{DataLenPresent: true}
+	return min(
+		f.MaxDataLen(c.peerParams.MaxDatagramFrameSize, c.version),
+		protocol.ByteCount(c.maxPayloadSizeEstimate.Load()),
+	)
 }
 
 // ReceiveDatagram gets a message received in a QUIC datagram, as specified in RFC 9221.
