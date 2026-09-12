@@ -2,6 +2,37 @@
 
 set -euo pipefail
 
+# Go toolchain setup adapted from Tailscale:
+# https://github.com/tailscale/tailscale/pull/21057
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+# Pin the adapter to the commit used in that PR.
+fuzzbuild_ref=fc5dc53b9db8a38c394c53d6e439a1410cf8fc19
+
+# Copy downloaded toolchains out of the module cache so OSS-Fuzz can overlay
+# the standard library when building fuzzers.
+goroot=$(go env GOROOT)
+gomodcache=$(go env GOMODCACHE)
+if [[ "$goroot" == "$gomodcache"* ]]; then
+	cp -r "$goroot/." "$tmpdir/goroot"
+	# Toolchain files are read-only; make them writable so cleanup works for any user.
+	chmod -R u+rwX "$tmpdir/goroot"
+	export GOROOT="$tmpdir/goroot"
+	export PATH="$GOROOT/bin:$PATH"
+	export GOTOOLCHAIN=local
+fi
+
+# Rebuild the adapter with the selected Go version so it can process our source.
+git clone --depth 1 https://github.com/AdamKorcz/go-118-fuzz-build "$tmpdir/v2"
+(
+	cd "$tmpdir/v2"
+	git fetch --depth 1 origin "$fuzzbuild_ref"
+	git checkout -q FETCH_HEAD
+	GOFLAGS=-mod=mod go build -o "$tmpdir/bin/go-118-fuzz-build_v2" .
+)
+export PATH="$tmpdir/bin:$PATH"
+
 go version
 go env
 
