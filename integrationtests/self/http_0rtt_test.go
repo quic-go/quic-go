@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -155,4 +156,74 @@ func TestHTTP0RTTWithChangedServerSettings(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHTTP0RTTRejectsIncompatibleServerSettings(t *testing.T) {
+	const originalMaxHeaderBytes = 1024
+
+	// Establish a session and cache the server's original SETTINGS.
+	serverTLSConf := getTLSConfig()
+	port := startHTTPServer(t, http.NewServeMux(), func(s *http3.Server) {
+		s.TLSConfig = serverTLSConf
+		s.MaxHeaderBytes = originalMaxHeaderBytes
+	})
+
+	puts := make(chan string, 1)
+	clientTLSConf := getTLSClientConfigWithoutServerName()
+	clientTLSConf.ClientSessionCache = newClientSessionCache(tls.NewLRUClientSessionCache(1), nil, puts)
+	client := newHTTP3Client(t, func(tr *http3.Transport) { tr.TLSClientConfig = clientTLSConf })
+	rsp, err := client.Get(fmt.Sprintf("https://localhost:%d/", port))
+	require.NoError(t, err)
+	require.NoError(t, rsp.Body.Close())
+	select {
+	case <-puts:
+	case <-time.After(time.Second):
+		t.Fatal("did not receive session ticket")
+	}
+
+	// Deliberately bypass the HTTP/3 server's 0-RTT SETTINGS compatibility check.
+	ln, err := quic.ListenEarly(
+		newUDPConnLocalhost(t),
+		http3.ConfigureTLSConfig(serverTLSConf),
+		getQuicConfig(&quic.Config{Allow0RTT: true, EnableDatagrams: true}),
+	)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	resultChan := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept(t.Context())
+		if err != nil {
+			resultChan <- err
+			return
+		}
+		defer conn.CloseWithError(0, "")
+		// Send reduced SETTINGS after accepting 0-RTT, simulating a misbehaving HTTP/3 server.
+		if _, err := (&http3.Server{MaxHeaderBytes: originalMaxHeaderBytes - 1}).NewRawServerConn(conn); err != nil {
+			resultChan <- err
+			return
+		}
+		<-conn.Context().Done()
+		resultChan <- context.Cause(conn.Context())
+	}()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	client = newHTTP3Client(t, func(tr *http3.Transport) { tr.TLSClientConfig = clientTLSConf })
+	req, err := http.NewRequestWithContext(ctx, http3.MethodGet0RTT, fmt.Sprintf("https://localhost:%d/", ln.Addr().(*net.UDPAddr).Port), nil)
+	require.NoError(t, err)
+	_, err = client.Do(req)
+	require.Error(t, err)
+
+	var serverErr error
+	select {
+	case serverErr = <-resultChan:
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for connection close")
+	}
+	require.ErrorIs(t, serverErr, &quic.ApplicationError{
+		Remote:    true,
+		ErrorCode: quic.ApplicationErrorCode(http3.ErrCodeSettingsError),
+	})
+	require.ErrorContains(t, serverErr, "server sent incompatible settings after accepting 0-RTT")
 }
