@@ -142,6 +142,9 @@ type Conn struct {
 	pathManager         *pathManager
 	largestRcvdAppData  protocol.PacketNumber
 	pathManagerOutgoing atomic.Pointer[pathManagerOutgoing]
+	// The client's move to the address the server asked it to use.
+	// Only set on clients, and only touched from the run loop.
+	preferredAddress *preferredAddressMigration
 
 	streamsMap      *streamsMap
 	connIDManager   *connIDManager
@@ -986,6 +989,7 @@ func (c *Conn) handleHandshakeConfirmed(now monotime.Time) error {
 
 	c.handshakeConfirmed = true
 	c.cryptoStreamHandler.SetHandshakeConfirmed()
+	c.startPreferredAddressMigration()
 
 	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
 		c.mtuDiscoverer.Start(now)
@@ -1250,7 +1254,7 @@ func (c *Conn) handleShortHeaderPacket(
 			})
 		}
 	}
-	isNonProbing, pathChallenge, err := c.handleUnpackedShortHeaderPacket(destConnID, pn, data, p.ecn, p.rcvTime, log)
+	isNonProbing, pathChallenge, err := c.handleUnpackedShortHeaderPacket(destConnID, pn, data, p.ecn, p.rcvTime, log, p.remoteAddr)
 	if err != nil {
 		return false, err
 	}
@@ -1379,7 +1383,7 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 		return false, nil
 	}
 
-	if err := c.handleUnpackedLongHeaderPacket(packet, p.ecn, p.rcvTime, datagramPayloadChecksum, p.Size()); err != nil {
+	if err := c.handleUnpackedLongHeaderPacket(packet, p.ecn, p.rcvTime, datagramPayloadChecksum, p.Size(), p.remoteAddr); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -1641,6 +1645,7 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 	rcvTime monotime.Time,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum, // only for logging
 	packetSize protocol.ByteCount, // only for logging
+	remoteAddr net.Addr,
 ) error {
 	if !c.receivedFirstPacket {
 		c.receivedFirstPacket = true
@@ -1729,7 +1734,7 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 			})
 		}
 	}
-	isAckEliciting, _, _, err := c.handleFrames(packet.data, packet.hdr.DestConnectionID, packet.encryptionLevel, log, rcvTime)
+	isAckEliciting, _, _, err := c.handleFrames(packet.data, packet.hdr.DestConnectionID, packet.encryptionLevel, log, rcvTime, remoteAddr)
 	if err != nil {
 		return err
 	}
@@ -1744,12 +1749,13 @@ func (c *Conn) handleUnpackedShortHeaderPacket(
 	ecn protocol.ECN,
 	rcvTime monotime.Time,
 	log func([]qlog.Frame),
+	remoteAddr net.Addr,
 ) (isNonProbing bool, pathChallenge *wire.PathChallengeFrame, _ error) {
 	c.lastPacketReceivedTime = rcvTime
 	c.firstAckElicitingPacketAfterIdleSentTime = 0
 	c.keepAlivePingSent = false
 
-	isAckEliciting, isNonProbing, pathChallenge, err := c.handleFrames(data, destConnID, protocol.Encryption1RTT, log, rcvTime)
+	isAckEliciting, isNonProbing, pathChallenge, err := c.handleFrames(data, destConnID, protocol.Encryption1RTT, log, rcvTime, remoteAddr)
 	if err != nil {
 		return false, nil, err
 	}
@@ -1757,6 +1763,10 @@ func (c *Conn) handleUnpackedShortHeaderPacket(
 	if err := c.receivedPacketHandler.ReceivedPacket(pn, ecn, protocol.Encryption1RTT, rcvTime, isAckEliciting); err != nil {
 		return false, nil, err
 	}
+	// Every frame of this packet has been processed; a response recorded during
+	// parsing may now move the connection, unless something later in the packet
+	// took the reserved connection ID away.
+	c.commitPreferredAddressMove(rcvTime)
 	return isNonProbing, pathChallenge, nil
 }
 
@@ -1768,6 +1778,7 @@ func (c *Conn) handleFrames(
 	encLevel protocol.EncryptionLevel,
 	log func([]qlog.Frame),
 	rcvTime monotime.Time,
+	remoteAddr net.Addr,
 ) (isAckEliciting, isNonProbing bool, pathChallenge *wire.PathChallengeFrame, _ error) {
 	// Only used for tracing.
 	// If we're not tracing, this slice will always remain empty.
@@ -1861,7 +1872,7 @@ func (c *Conn) handleFrames(
 			if skipHandling {
 				continue
 			}
-			pc, err := c.handleFrame(frame, encLevel, destConnID, rcvTime)
+			pc, err := c.handleFrame(frame, encLevel, destConnID, rcvTime, remoteAddr)
 			if pc != nil {
 				pathChallenge = pc
 			}
@@ -1901,6 +1912,7 @@ func (c *Conn) handleFrame(
 	encLevel protocol.EncryptionLevel,
 	destConnID protocol.ConnectionID,
 	rcvTime monotime.Time,
+	remoteAddr net.Addr,
 ) (pathChallenge *wire.PathChallengeFrame, _ error) {
 	var err error
 	wire.LogFrame(c.logger, f, false)
@@ -1928,7 +1940,7 @@ func (c *Conn) handleFrame(
 		c.handlePathChallengeFrame(frame)
 		pathChallenge = frame
 	case *wire.PathResponseFrame:
-		err = c.handlePathResponseFrame(frame)
+		err = c.handlePathResponseFrame(frame, remoteAddr)
 	case *wire.NewTokenFrame:
 		err = c.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
@@ -2052,10 +2064,10 @@ func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
 	}
 }
 
-func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame) error {
+func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame, remoteAddr net.Addr) error {
 	switch c.perspective {
 	case protocol.PerspectiveClient:
-		return c.handlePathResponseFrameClient(f)
+		return c.handlePathResponseFrameClient(f, remoteAddr)
 	case protocol.PerspectiveServer:
 		return c.handlePathResponseFrameServer(f)
 	default:
@@ -2063,7 +2075,10 @@ func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame) error {
 	}
 }
 
-func (c *Conn) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
+func (c *Conn) handlePathResponseFrameClient(f *wire.PathResponseFrame, remoteAddr net.Addr) error {
+	if c.handlePreferredAddressResponse(f, remoteAddr) {
+		return nil
+	}
 	pm := c.pathManagerOutgoing.Load()
 	if pm == nil {
 		return &qerr.TransportError{
@@ -2431,9 +2446,10 @@ func (c *Conn) applyTransportParameters() {
 	if params.StatelessResetToken != nil {
 		c.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
 	}
-	// We don't support connection migration yet, so we don't have any use for the preferred_address.
+	// The connection ID that arrives with the preferred address belongs to that
+	// path. It is set aside until the path has been validated, which cannot
+	// happen before the handshake is confirmed.
 	if params.PreferredAddress != nil {
-		// Retire the connection ID.
 		c.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, params.PreferredAddress.StatelessResetToken)
 	}
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
@@ -2452,6 +2468,28 @@ func (c *Conn) triggerSending(now monotime.Time) error {
 	c.pacingDeadline = 0
 
 	sendMode := c.sentPacketHandler.SendMode(now)
+
+	// An armed preferred-address probe goes out ahead of the send-mode switch.
+	// The mode reflects congestion on the path the connection is still using,
+	// and the probe is how it leaves that path: it is packed as a path probe,
+	// accounted outside bytes in flight, and written directly rather than
+	// through the send queue. Letting only SendAny through would leave a
+	// congestion window full of old-path data starving the probe indefinitely,
+	// so the probe is allowed under every mode EXCEPT SendNone: SendNone is the
+	// hard stop that caps the number of tracked sent packets, and a probe is a
+	// tracked packet like any other.
+	if sendMode != ackhandler.SendNone && c.perspective == protocol.PerspectiveClient && c.handshakeConfirmed {
+		sent, err := c.sendPreferredAddressProbe(now)
+		if err != nil {
+			return err
+		}
+		if sent {
+			// There's (likely) more data to send. Loop around again.
+			c.scheduleSending()
+			return nil
+		}
+	}
+
 	switch sendMode {
 	case ackhandler.SendAny:
 		return c.sendPackets(now)
