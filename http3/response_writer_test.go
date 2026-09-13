@@ -97,8 +97,8 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 
 func TestResponseWriterInvalidStatus(t *testing.T) {
 	rw := newTestResponseWriter(t)
-	require.Panics(t, func() { rw.WriteHeader(99) })
-	require.Panics(t, func() { rw.WriteHeader(1000) })
+	require.PanicsWithValue(t, "invalid WriteHeader code 99", func() { rw.WriteHeader(99) })
+	require.PanicsWithValue(t, "invalid WriteHeader code 1000", func() { rw.WriteHeader(1000) })
 }
 
 func TestResponseWriterHeader(t *testing.T) {
@@ -206,7 +206,7 @@ func TestResponseWriterEarlyHints(t *testing.T) {
 
 	// Early Hints must have been received
 	fields := rw.DecodeHeaders(t, 0)
-	require.Equal(t, 2, len(fields))
+	require.Len(t, fields, 2)
 	require.Equal(t, []string{"103"}, fields[":status"])
 	require.Equal(t,
 		[]string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"},
@@ -215,7 +215,7 @@ func TestResponseWriterEarlyHints(t *testing.T) {
 
 	// headers sent in the informational response must also be included in the final response
 	fields = rw.DecodeHeaders(t, 1)
-	require.Equal(t, 4, len(fields))
+	require.Len(t, fields, 4)
 	require.Equal(t, []string{"200"}, fields[":status"])
 	require.Contains(t, fields, "date")
 	require.Contains(t, fields, "content-type")

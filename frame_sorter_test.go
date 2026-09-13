@@ -101,7 +101,7 @@ func TestFrameSorterGapHandling(t *testing.T) {
 	}
 
 	checkQueue := func(t *testing.T, s *frameSorter, m map[protocol.ByteCount][]byte) {
-		require.Equal(t, len(m), len(s.queue))
+		require.Len(t, s.queue, len(m))
 		for offset, data := range m {
 			require.Contains(t, s.queue, offset)
 			require.Equal(t, data, s.queue[offset].Data)

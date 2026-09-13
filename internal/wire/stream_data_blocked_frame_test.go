@@ -42,5 +42,5 @@ func TestWriteStreamDataBlocked(t *testing.T) {
 	expected = append(expected, encodeVarInt(uint64(f.StreamID))...)
 	expected = append(expected, encodeVarInt(uint64(f.MaximumStreamData))...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }

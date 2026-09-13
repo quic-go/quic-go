@@ -246,16 +246,11 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 	require.Len(t, added, protocol.MaxIssuedConnectionIDs+1)
 
 	g.ReplaceWithClosed([]byte("foobar"), time.Second)
+	expected := append([]protocol.ConnectionID{protocol.ParseConnectionID([]byte{1, 1, 1, 1})}, added...)
 	if hasInitialClientDestConnID {
-		require.Len(t, replaced, protocol.MaxIssuedConnectionIDs+3)
-		require.Contains(t, replaced, *initialClientDestConnID)
-	} else {
-		require.Len(t, replaced, protocol.MaxIssuedConnectionIDs+2)
+		expected = append(expected, *initialClientDestConnID)
 	}
-	for _, id := range added {
-		require.Contains(t, replaced, id)
-	}
-	require.Contains(t, replaced, protocol.ParseConnectionID([]byte{1, 1, 1, 1}))
+	require.ElementsMatch(t, expected, replaced)
 	require.Equal(t, []byte("foobar"), replacedWith)
 }
 
@@ -309,11 +304,10 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	// add the second runner - it should get all existing connection IDs
 	g.AddConnRunner(&packetHandlerMap{}, runner2)
 	require.Len(t, tracker1.added, 2) // unchanged
-	require.Len(t, tracker2.added, 4)
-	require.Contains(t, tracker2.added, initialConnID)
-	require.Contains(t, tracker2.added, clientDestConnID)
-	require.Contains(t, tracker2.added, tracker1.added[0])
-	require.Contains(t, tracker2.added, tracker1.added[1])
+	require.ElementsMatch(t,
+		[]protocol.ConnectionID{initialConnID, clientDestConnID, tracker1.added[0], tracker1.added[1]},
+		tracker2.added,
+	)
 
 	// adding the same transport again doesn't do anything
 	trCopy := tr
@@ -339,7 +333,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	require.Equal(t, []protocol.ConnectionID{clientDestConnID}, tracker2.removed)
 
 	g.ReplaceWithClosed([]byte("connection closed"), time.Second)
-	require.True(t, len(tracker1.replaced) > 0)
+	require.NotEmpty(t, tracker1.replaced)
 	require.Equal(t, tracker1.replaced, tracker2.replaced)
 
 	tracker1.removed = nil
