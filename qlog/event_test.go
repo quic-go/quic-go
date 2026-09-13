@@ -3,6 +3,7 @@ package qlog
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"testing"
 	"testing/synctest"
@@ -17,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testEventEncoding(t *testing.T, ev qlogwriter.Event) (string, map[string]any) {
+func testEventEncoding(t *testing.T, ev qlogwriter.Event) (string, string) {
 	t.Helper()
 	var buf bytes.Buffer
 
@@ -41,19 +42,24 @@ func testEventEncoding(t *testing.T, ev qlogwriter.Event) (string, map[string]an
 	return decode(t, buf.String())
 }
 
-func decode(t *testing.T, data string) (string, map[string]any) {
+func decode(t *testing.T, data string) (string, string) {
 	t.Helper()
 
-	var result map[string]any
+	var result struct {
+		Time float64
+		Name string
+		Data json.RawMessage
+	}
 
 	lines := bytes.Split([]byte(data), []byte{'\n'})
 	require.Len(t, lines, 3) // the first line is the trace header, the second line is the event, the third line is empty
 	require.Empty(t, lines[2])
+	require.NotEmpty(t, lines[1])
 	require.Equal(t, qlogwriter.RecordSeparator, lines[1][0], "expected record separator at start of line")
 	require.NoError(t, json.Unmarshal(lines[1][1:], &result))
-	require.Equal(t, 42*time.Second, time.Duration(result["time"].(float64)*1e6)*time.Nanosecond)
+	require.Equal(t, 42*time.Second, time.Duration(result.Time*1e6)*time.Nanosecond)
 
-	return result["name"].(string), result["data"].(map[string]any)
+	return result.Name, string(result.Data)
 }
 
 func TestStartedConnection(t *testing.T) {
@@ -69,24 +75,17 @@ func TestStartedConnection(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:connection_started", name)
-
-	local, ok := ev["local"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "192.168.13.37", local["ip_v4"])
-	require.Equal(t, float64(42), local["port_v4"])
-
-	remote, ok := ev["remote"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "2001:db8::1", remote["ip_v6"])
-	require.Equal(t, float64(24), remote["port_v6"])
+	require.JSONEq(t, `{
+		"local": {"ip_v4": "192.168.13.37", "port_v4": 42},
+		"remote": {"ip_v6": "2001:db8::1", "port_v6": 24}
+	}`, ev)
 }
 
 func TestVersionInformation(t *testing.T) {
 	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: 0x1337})
 
 	require.Equal(t, "transport:version_information", name)
-	require.Len(t, ev, 1)
-	require.Equal(t, "1337", ev["chosen_version"])
+	require.JSONEq(t, `{"chosen_version": "1337"}`, ev)
 }
 
 func TestVersionInformationWithNegotiation(t *testing.T) {
@@ -97,10 +96,11 @@ func TestVersionInformationWithNegotiation(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:version_information", name)
-	require.Len(t, ev, 3)
-	require.Equal(t, "1337", ev["chosen_version"])
-	require.Equal(t, []any{"1", "2", "3"}, ev["client_versions"])
-	require.Equal(t, []any{"4", "5", "6"}, ev["server_versions"])
+	require.JSONEq(t, `{
+		"chosen_version": "1337",
+		"client_versions": ["1", "2", "3"],
+		"server_versions": ["4", "5", "6"]
+	}`, ev)
 }
 
 func TestStreamPriorityUpdated(t *testing.T) {
@@ -111,10 +111,10 @@ func TestStreamPriorityUpdated(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:priority_updated", name)
-	require.Equal(t, map[string]any{
-		"stream_id": float64(42),
-		"new":       "u=2, i",
-	}, ev)
+	require.JSONEq(t, `{
+		"stream_id": 42,
+		"new": "u=2, i"
+	}`, ev)
 }
 
 func TestIdleTimeouts(t *testing.T) {
@@ -124,9 +124,10 @@ func TestIdleTimeouts(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 2)
-	require.Equal(t, "local", ev["initiator"])
-	require.Equal(t, "idle_timeout", ev["trigger"])
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"trigger": "idle_timeout"
+	}`, ev)
 }
 
 func TestReceivedStatelessResetPacket(t *testing.T) {
@@ -136,9 +137,10 @@ func TestReceivedStatelessResetPacket(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 2)
-	require.Equal(t, "remote", ev["initiator"])
-	require.Equal(t, "stateless_reset", ev["trigger"])
+	require.JSONEq(t, `{
+		"initiator": "remote",
+		"trigger": "stateless_reset"
+	}`, ev)
 }
 
 func TestVersionNegotiationFailure(t *testing.T) {
@@ -148,25 +150,26 @@ func TestVersionNegotiationFailure(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 2)
-	require.Equal(t, "local", ev["initiator"])
-	require.Equal(t, "version_mismatch", ev["trigger"])
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"trigger": "version_mismatch"
+	}`, ev)
 }
 
 func TestApplicationErrors(t *testing.T) {
-	code := qerr.ApplicationErrorCode(1337)
 	name, ev := testEventEncoding(t, &ConnectionClosed{
 		Initiator:        InitiatorRemote,
-		ApplicationError: &code,
+		ApplicationError: new(qerr.ApplicationErrorCode(1337)),
 		Reason:           "foobar",
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Len(t, ev, 4)
-	require.Equal(t, "remote", ev["initiator"])
-	require.Equal(t, "unknown", ev["application_error"])
-	require.Equal(t, float64(1337), ev["error_code"])
-	require.Equal(t, "foobar", ev["reason"])
+	require.JSONEq(t, `{
+		"initiator": "remote",
+		"application_error": "unknown",
+		"error_code": 1337,
+		"reason": "foobar"
+	}`, ev)
 }
 
 func TestTransportErrors(t *testing.T) {
@@ -195,34 +198,35 @@ func TestTransportErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			code := tt.code
 			name, ev := testEventEncoding(t, &ConnectionClosed{
 				Initiator:       InitiatorLocal,
-				ConnectionError: &code,
+				ConnectionError: new(tt.code),
 				Reason:          "foobar",
 			})
 
 			require.Equal(t, "transport:connection_closed", name)
-			require.Equal(t, "local", ev["initiator"])
-			require.Equal(t, tt.want, ev["connection_error"])
-			require.Equal(t, "foobar", ev["reason"])
-			require.NotContains(t, ev, "error_code")
+			require.JSONEq(t, fmt.Sprintf(`{
+				"initiator": "local",
+				"connection_error": %q,
+				"reason": "foobar"
+			}`, tt.want), ev)
 		})
 	}
 }
 
 func TestTransportCryptoError(t *testing.T) {
-	code := qerr.TransportErrorCode(0x100 + 0x2a)
 	name, ev := testEventEncoding(t, &ConnectionClosed{
 		Initiator:       InitiatorLocal,
-		ConnectionError: &code,
+		ConnectionError: new(qerr.TransportErrorCode(0x100 + 0x2a)),
 		Reason:          "foobar",
 	})
 
 	require.Equal(t, "transport:connection_closed", name)
-	require.Equal(t, "local", ev["initiator"])
-	require.Equal(t, "crypto_error_0x12a", ev["connection_error"])
-	require.Equal(t, "foobar", ev["reason"])
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"connection_error": "crypto_error_0x12a",
+		"reason": "foobar"
+	}`, ev)
 }
 
 func TestSentTransportParameters(t *testing.T) {
@@ -251,24 +255,26 @@ func TestSentTransportParameters(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "local", ev["initiator"])
-	require.Equal(t, "deadc0de", ev["original_destination_connection_id"])
-	require.Equal(t, "deadbeef", ev["initial_source_connection_id"])
-	require.Equal(t, "decafbad", ev["retry_source_connection_id"])
-	require.Equal(t, "112233445566778899aabbccddeeff00", ev["stateless_reset_token"])
-	require.Equal(t, float64(321), ev["max_idle_timeout"])
-	require.Equal(t, float64(1234), ev["max_udp_payload_size"])
-	require.Equal(t, float64(12), ev["ack_delay_exponent"])
-	require.Equal(t, float64(7), ev["active_connection_id_limit"])
-	require.Equal(t, float64(4000), ev["initial_max_data"])
-	require.Equal(t, float64(1000), ev["initial_max_stream_data_bidi_local"])
-	require.Equal(t, float64(2000), ev["initial_max_stream_data_bidi_remote"])
-	require.Equal(t, float64(3000), ev["initial_max_stream_data_uni"])
-	require.Equal(t, float64(10), ev["initial_max_streams_bidi"])
-	require.Equal(t, float64(20), ev["initial_max_streams_uni"])
-	require.True(t, ev["reset_stream_at"].(bool))
-	require.NotContains(t, ev, "preferred_address")
-	require.NotContains(t, ev, "max_datagram_frame_size")
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"original_destination_connection_id": "deadc0de",
+		"initial_source_connection_id": "deadbeef",
+		"retry_source_connection_id": "decafbad",
+		"stateless_reset_token": "112233445566778899aabbccddeeff00",
+		"disable_active_migration": true,
+		"max_idle_timeout": 321,
+		"max_udp_payload_size": 1234,
+		"ack_delay_exponent": 12,
+		"max_ack_delay": 123,
+		"active_connection_id_limit": 7,
+		"initial_max_data": 4000,
+		"initial_max_stream_data_bidi_local": 1000,
+		"initial_max_stream_data_bidi_remote": 2000,
+		"initial_max_stream_data_uni": 3000,
+		"initial_max_streams_bidi": 10,
+		"initial_max_streams_uni": 20,
+		"reset_stream_at": true
+	}`, ev)
 }
 
 func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
@@ -280,7 +286,14 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.NotContains(t, ev, "stateless_reset_token")
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"original_destination_connection_id": "deadc0de",
+		"initial_source_connection_id": "(empty)",
+		"disable_active_migration": false,
+		"active_connection_id_limit": 7,
+		"max_datagram_frame_size": 0
+	}`, ev)
 }
 
 func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
@@ -291,8 +304,14 @@ func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "local", ev["initiator"])
-	require.NotContains(t, ev, "retry_source_connection_id")
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"original_destination_connection_id": "(empty)",
+		"initial_source_connection_id": "(empty)",
+		"stateless_reset_token": "112233445566778899aabbccddeeff00",
+		"disable_active_migration": false,
+		"max_datagram_frame_size": 0
+	}`, ev)
 }
 
 func TestTransportParametersWithPreferredAddress(t *testing.T) {
@@ -327,25 +346,25 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "local", ev["initiator"])
-	require.Contains(t, ev, "preferred_address")
-	pa := ev["preferred_address"].(map[string]any)
+	var addresses string
 	if hasIPv4 {
-		require.Equal(t, "12.34.56.78", pa["ip_v4"])
-		require.Equal(t, float64(123), pa["port_v4"])
-	} else {
-		require.NotContains(t, pa, "ip_v4")
-		require.NotContains(t, pa, "port_v4")
+		addresses += `"ip_v4": "12.34.56.78", "port_v4": 123,`
 	}
 	if hasIPv6 {
-		require.Equal(t, "102:304:506:708:90a:b0c:d0e:f10", pa["ip_v6"])
-		require.Equal(t, float64(456), pa["port_v6"])
-	} else {
-		require.NotContains(t, pa, "ip_v6")
-		require.NotContains(t, pa, "port_v6")
+		addresses += `"ip_v6": "102:304:506:708:90a:b0c:d0e:f10", "port_v6": 456,`
 	}
-	require.Equal(t, "0807060504030201", pa["connection_id"])
-	require.Equal(t, "0f0e0d0c0b0a09080706050403020100", pa["stateless_reset_token"])
+	require.JSONEq(t, fmt.Sprintf(`{
+		"initiator": "local",
+		"original_destination_connection_id": "(empty)",
+		"initial_source_connection_id": "(empty)",
+		"disable_active_migration": false,
+		"max_datagram_frame_size": 0,
+		"preferred_address": {
+			%s
+			"connection_id": "0807060504030201",
+			"stateless_reset_token": "0f0e0d0c0b0a09080706050403020100"
+		}
+	}`, addresses), ev)
 }
 
 func TestTransportParametersWithDatagramExtension(t *testing.T) {
@@ -356,7 +375,13 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, float64(1337), ev["max_datagram_frame_size"])
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"original_destination_connection_id": "(empty)",
+		"initial_source_connection_id": "(empty)",
+		"disable_active_migration": false,
+		"max_datagram_frame_size": 1337
+	}`, ev)
 }
 
 func TestReceivedTransportParameters(t *testing.T) {
@@ -366,8 +391,12 @@ func TestReceivedTransportParameters(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_set", name)
-	require.Equal(t, "remote", ev["initiator"])
-	require.NotContains(t, ev, "original_destination_connection_id")
+	require.JSONEq(t, `{
+		"initiator": "remote",
+		"initial_source_connection_id": "(empty)",
+		"disable_active_migration": false,
+		"max_datagram_frame_size": 0
+	}`, ev)
 }
 
 func TestRestoredTransportParameters(t *testing.T) {
@@ -381,16 +410,15 @@ func TestRestoredTransportParameters(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:parameters_restored", name)
-	require.NotContains(t, ev, "initiator")
-	require.NotContains(t, ev, "original_destination_connection_id")
-	require.NotContains(t, ev, "stateless_reset_token")
-	require.NotContains(t, ev, "retry_source_connection_id")
-	require.NotContains(t, ev, "initial_source_connection_id")
-	require.Equal(t, float64(123), ev["max_idle_timeout"])
-	require.Equal(t, float64(400), ev["initial_max_data"])
-	require.Equal(t, float64(100), ev["initial_max_stream_data_bidi_local"])
-	require.Equal(t, float64(200), ev["initial_max_stream_data_bidi_remote"])
-	require.Equal(t, float64(300), ev["initial_max_stream_data_uni"])
+	require.JSONEq(t, `{
+		"disable_active_migration": false,
+		"max_idle_timeout": 123,
+		"initial_max_data": 400,
+		"initial_max_stream_data_bidi_local": 100,
+		"initial_max_stream_data_bidi_remote": 200,
+		"initial_max_stream_data_uni": 300,
+		"max_datagram_frame_size": 0
+	}`, ev)
 }
 
 func TestPacketSent(t *testing.T) {
@@ -411,22 +439,23 @@ func TestPacketSent(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:packet_sent", name)
-	require.Contains(t, ev, "raw")
-	raw := ev["raw"].(map[string]any)
-	require.NotContains(t, ev, "datagram_payload_checksum")
-	require.Equal(t, float64(987), raw["length"])
-	require.Equal(t, float64(1337), raw["payload_length"])
-	require.Contains(t, ev, "header")
-	hdr := ev["header"].(map[string]any)
-	require.Equal(t, "handshake", hdr["packet_type"])
-	require.Equal(t, float64(1337), hdr["packet_number"])
-	require.Equal(t, "04030201", hdr["scid"])
-	require.Contains(t, ev, "frames")
-	require.Equal(t, "CE", ev["ecn"])
-	frames := ev["frames"].([]any)
-	require.Len(t, frames, 2)
-	require.Equal(t, "max_stream_data", frames[0].(map[string]any)["frame_type"])
-	require.Equal(t, "stream", frames[1].(map[string]any)["frame_type"])
+	require.JSONEq(t, `{
+		"header": {
+			"packet_type": "handshake",
+			"packet_number": 1337,
+			"version": "1",
+			"scil": 4,
+			"scid": "04030201",
+			"dcil": 8,
+			"dcid": "0102030405060708"
+		},
+		"raw": {"length": 987, "payload_length": 1337},
+		"frames": [
+			{"frame_type": "max_stream_data", "stream_id": 42, "maximum": 987},
+			{"frame_type": "stream", "stream_id": 123, "offset": 1234, "length": 6, "fin": true}
+		],
+		"ecn": "CE"
+	}`, ev)
 }
 
 func TestPacketSent1RTT(t *testing.T) {
@@ -457,25 +486,16 @@ func testPacketSent1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloadChe
 	})
 
 	require.Equal(t, "transport:packet_sent", name)
-	raw := ev["raw"].(map[string]any)
-	require.Equal(t, float64(123), raw["length"])
-	require.NotContains(t, raw, "payload_length")
-	require.Contains(t, ev, "header")
-	require.NotContains(t, ev, "ecn")
-	hdr := ev["header"].(map[string]any)
-	require.Equal(t, "1RTT", hdr["packet_type"])
-	require.Equal(t, float64(1337), hdr["packet_number"])
-	require.Contains(t, ev, "frames")
-	frames := ev["frames"].([]any)
-	require.Len(t, frames, 2)
-	require.Equal(t, "ack", frames[0].(map[string]any)["frame_type"])
-	require.Equal(t, "max_data", frames[1].(map[string]any)["frame_type"])
+	var checksum string
 	if datagramPayloadChecksum != 0 {
-		require.Contains(t, ev, "datagram_payload_checksum")
-		require.Equal(t, float64(datagramPayloadChecksum), ev["datagram_payload_checksum"])
-	} else {
-		require.NotContains(t, ev, "datagram_payload_checksum")
+		checksum = fmt.Sprintf(`"datagram_payload_checksum": %d,`, datagramPayloadChecksum)
 	}
+	require.JSONEq(t, fmt.Sprintf(`{
+		%s
+		"header": {"packet_type": "1RTT", "packet_number": 1337, "dcil": 4, "dcid": "01020304", "key_phase_bit": "0"},
+		"raw": {"length": 123},
+		"frames": [{"frame_type": "ack", "acked_ranges": [[1, 10]]}, {"frame_type": "max_data", "maximum": 987}]
+	}`, checksum), ev)
 }
 
 func TestPacketReceived(t *testing.T) {
@@ -501,23 +521,25 @@ func TestPacketReceived(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:packet_received", name)
-	require.Contains(t, ev, "raw")
-	raw := ev["raw"].(map[string]any)
-	require.Equal(t, float64(789), raw["length"])
-	require.Equal(t, float64(1234), raw["payload_length"])
-	require.Equal(t, "ECT(0)", ev["ecn"])
-	require.Contains(t, ev, "header")
-	hdr := ev["header"].(map[string]any)
-	require.Equal(t, "initial", hdr["packet_type"])
-	require.Equal(t, float64(1337), hdr["packet_number"])
-	require.Equal(t, "04030201", hdr["scid"])
-	require.Contains(t, hdr, "token")
-	token := hdr["token"].(map[string]any)
-	require.Equal(t, "deadbeef", token["data"])
-	require.Contains(t, ev, "frames")
-	require.Len(t, ev["frames"].([]any), 2)
-	require.Contains(t, ev, "datagram_payload_checksum")
-	require.Equal(t, float64(42), ev["datagram_payload_checksum"])
+	require.JSONEq(t, `{
+		"header": {
+			"packet_type": "initial",
+			"packet_number": 1337,
+			"version": "1",
+			"scil": 4,
+			"scid": "04030201",
+			"dcil": 8,
+			"dcid": "0102030405060708",
+			"token": {"data": "deadbeef"}
+		},
+		"raw": {"length": 789, "payload_length": 1234},
+		"frames": [
+			{"frame_type": "max_stream_data", "stream_id": 42, "maximum": 987},
+			{"frame_type": "stream", "stream_id": 123, "offset": 1234, "length": 6, "fin": true}
+		],
+		"ecn": "ECT(0)",
+		"datagram_payload_checksum": 42
+	}`, ev)
 }
 
 func TestPacketReceived1RTT(t *testing.T) {
@@ -548,23 +570,26 @@ func testPacketReceived1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloa
 	})
 
 	require.Equal(t, "transport:packet_received", name)
-	require.Contains(t, ev, "raw")
-	raw := ev["raw"].(map[string]any)
-	require.Equal(t, float64(789), raw["length"])
-	require.Equal(t, float64(1234), raw["payload_length"])
-	require.Equal(t, "ECT(1)", ev["ecn"])
-	require.Contains(t, ev, "header")
-	hdr := ev["header"].(map[string]any)
-	require.Equal(t, "1RTT", hdr["packet_type"])
-	require.Equal(t, float64(1337), hdr["packet_number"])
-	require.Contains(t, ev, "frames")
-	require.Len(t, ev["frames"].([]any), 2)
+	var checksum string
 	if datagramPayloadChecksum != 0 {
-		require.Contains(t, ev, "datagram_payload_checksum")
-		require.Equal(t, float64(datagramPayloadChecksum), ev["datagram_payload_checksum"])
-	} else {
-		require.NotContains(t, ev, "datagram_payload_checksum")
+		checksum = fmt.Sprintf(`"datagram_payload_checksum": %d,`, datagramPayloadChecksum)
 	}
+	require.JSONEq(t, fmt.Sprintf(`{
+		%s
+		"header": {
+			"packet_type": "1RTT",
+			"packet_number": 1337,
+			"dcil": 8,
+			"dcid": "0102030405060708",
+			"key_phase_bit": "0"
+		},
+		"raw": {"length": 789, "payload_length": 1234},
+		"frames": [
+			{"frame_type": "max_stream_data", "stream_id": 42, "maximum": 987},
+			{"frame_type": "stream", "stream_id": 123, "offset": 1234, "length": 6, "fin": true}
+		],
+		"ecn": "ECT(1)"
+	}`, checksum), ev)
 }
 
 func TestPacketReceivedRetry(t *testing.T) {
@@ -580,21 +605,18 @@ func TestPacketReceivedRetry(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:packet_received", name)
-	require.Contains(t, ev, "raw")
-	raw := ev["raw"].(map[string]any)
-	require.Len(t, raw, 1)
-	require.Equal(t, float64(123), raw["length"])
-	require.Contains(t, ev, "header")
-	header := ev["header"].(map[string]any)
-	require.Equal(t, "retry", header["packet_type"])
-	require.NotContains(t, header, "packet_number")
-	require.Contains(t, header, "version")
-	require.Contains(t, header, "dcid")
-	require.Contains(t, header, "scid")
-	require.Contains(t, header, "token")
-	token := header["token"].(map[string]any)
-	require.Equal(t, "deadbeef", token["data"])
-	require.NotContains(t, ev, "frames")
+	require.JSONEq(t, `{
+		"header": {
+			"packet_type": "retry",
+			"version": "1",
+			"scil": 4,
+			"scid": "04030201",
+			"dcil": 8,
+			"dcid": "0102030405060708",
+			"token": {"data": "deadbeef"}
+		},
+		"raw": {"length": 123}
+	}`, ev)
 }
 
 func TestVersionNegotiationReceived(t *testing.T) {
@@ -607,16 +629,16 @@ func TestVersionNegotiationReceived(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:packet_received", name)
-	require.Contains(t, ev, "header")
-	require.NotContains(t, ev, "frames")
-	require.Contains(t, ev, "supported_versions")
-	require.Equal(t, []any{"deadbeef", "decafbad"}, ev["supported_versions"])
-	header := ev["header"].(map[string]any)
-	require.Equal(t, "version_negotiation", header["packet_type"])
-	require.NotContains(t, header, "packet_number")
-	require.NotContains(t, header, "version")
-	require.Equal(t, "0102030405060708", header["dcid"])
-	require.Equal(t, "04030201", header["scid"])
+	require.JSONEq(t, `{
+		"header": {
+			"packet_type": "version_negotiation",
+			"scil": 4,
+			"scid": "04030201",
+			"dcil": 8,
+			"dcid": "0102030405060708"
+		},
+		"supported_versions": ["deadbeef", "decafbad"]
+	}`, ev)
 }
 
 func TestPacketBuffered(t *testing.T) {
@@ -632,12 +654,12 @@ func TestPacketBuffered(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:packet_buffered", name)
-	require.Contains(t, ev, "header")
-	require.Contains(t, ev, "raw")
-	require.Equal(t, float64(1337), ev["raw"].(map[string]any)["length"])
-	require.Equal(t, float64(42), ev["datagram_payload_checksum"])
-	require.Contains(t, ev, "trigger")
-	require.Equal(t, "keys_unavailable", ev["trigger"])
+	require.JSONEq(t, `{
+		"header": {"packet_type": "handshake", "scil": 4, "scid": "04030201", "dcil": 8, "dcid": "0102030405060708"},
+		"raw": {"length": 1337},
+		"datagram_payload_checksum": 42,
+		"trigger": "keys_unavailable"
+	}`, ev)
 }
 
 func TestPacketDropped(t *testing.T) {
@@ -649,11 +671,12 @@ func TestPacketDropped(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:packet_dropped", name)
-	require.Contains(t, ev, "raw")
-	require.Equal(t, float64(1337), ev["raw"].(map[string]any)["length"])
-	require.Equal(t, float64(42), ev["datagram_payload_checksum"])
-	require.Contains(t, ev, "header")
-	require.Equal(t, "payload_decrypt_error", ev["trigger"])
+	require.JSONEq(t, `{
+		"header": {"packet_type": "retry", "scil": 0, "dcil": 0},
+		"raw": {"length": 1337},
+		"datagram_payload_checksum": 42,
+		"trigger": "payload_decrypt_error"
+	}`, ev)
 }
 
 func TestMetricsUpdated(t *testing.T) {
@@ -661,7 +684,7 @@ func TestMetricsUpdated(t *testing.T) {
 	rttStats.UpdateRTT(15*time.Millisecond, 0)
 	rttStats.UpdateRTT(20*time.Millisecond, 0)
 	rttStats.UpdateRTT(25*time.Millisecond, 0)
-	name, ev := testEventEncoding(t, &MetricsUpdated{
+	name, data := testEventEncoding(t, &MetricsUpdated{
 		MinRTT:           rttStats.MinRTT(),
 		SmoothedRTT:      rttStats.SmoothedRTT(),
 		LatestRTT:        rttStats.LatestRTT(),
@@ -672,6 +695,8 @@ func TestMetricsUpdated(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:metrics_updated", name)
+	var ev map[string]any
+	require.NoError(t, json.Unmarshal([]byte(data), &ev))
 	require.Equal(t, float64(15), ev["min_rtt"])
 	require.Equal(t, float64(25), ev["latest_rtt"])
 	require.Contains(t, ev, "smoothed_rtt")
@@ -690,12 +715,14 @@ func TestPacketLost(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:packet_lost", name)
-	require.Contains(t, ev, "header")
-	require.Equal(t, "reordering_threshold", ev["trigger"])
+	require.JSONEq(t, `{
+		"header": {"packet_type": "handshake", "packet_number": 42, "scil": 0, "dcil": 0},
+		"trigger": "reordering_threshold"
+	}`, ev)
 }
 
 func TestSpuriousLoss(t *testing.T) {
-	name, ev := testEventEncoding(t, &SpuriousLoss{
+	name, data := testEventEncoding(t, &SpuriousLoss{
 		EncryptionLevel:  protocol.Encryption1RTT,
 		PacketNumber:     42,
 		PacketReordering: 1,
@@ -703,6 +730,8 @@ func TestSpuriousLoss(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:spurious_loss", name)
+	var ev map[string]any
+	require.NoError(t, json.Unmarshal([]byte(data), &ev))
 	require.Contains(t, ev, "packet_number")
 	require.Equal(t, float64(42), ev["packet_number"])
 	require.Contains(t, ev, "reordering_packets")
@@ -718,8 +747,10 @@ func TestMTUUpdated(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:mtu_updated", name)
-	require.Equal(t, float64(1337), ev["mtu"])
-	require.Equal(t, true, ev["done"])
+	require.JSONEq(t, `{
+		"mtu": 1337,
+		"done": true
+	}`, ev)
 }
 
 func TestCongestionStateUpdated(t *testing.T) {
@@ -728,14 +759,14 @@ func TestCongestionStateUpdated(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:congestion_state_updated", name)
-	require.Equal(t, "congestion_avoidance", ev["new"])
+	require.JSONEq(t, `{"new": "congestion_avoidance"}`, ev)
 }
 
 func TestPTOCountUpdated(t *testing.T) {
 	name, ev := testEventEncoding(t, &PTOCountUpdated{PTOCount: 42})
 
 	require.Equal(t, "recovery:metrics_updated", name)
-	require.Equal(t, float64(42), ev["pto_count"])
+	require.JSONEq(t, `{"pto_count": 42}`, ev)
 }
 
 func TestKeyUpdatedTLS(t *testing.T) {
@@ -746,11 +777,10 @@ func TestKeyUpdatedTLS(t *testing.T) {
 	})
 
 	require.Equal(t, "security:key_updated", name)
-	require.Equal(t, "client_handshake_secret", ev["key_type"])
-	require.Equal(t, "tls", ev["trigger"])
-	require.NotContains(t, ev, "key_phase")
-	require.NotContains(t, ev, "old")
-	require.NotContains(t, ev, "new")
+	require.JSONEq(t, `{
+		"key_type": "client_handshake_secret",
+		"trigger": "tls"
+	}`, ev)
 }
 
 func TestKeyUpdatedTLS1RTT(t *testing.T) {
@@ -761,11 +791,11 @@ func TestKeyUpdatedTLS1RTT(t *testing.T) {
 	})
 
 	require.Equal(t, "security:key_updated", name)
-	require.Equal(t, "server_1rtt_secret", ev["key_type"])
-	require.Equal(t, "tls", ev["trigger"])
-	require.Equal(t, float64(0), ev["key_phase"])
-	require.NotContains(t, ev, "old")
-	require.NotContains(t, ev, "new")
+	require.JSONEq(t, `{
+		"key_type": "server_1rtt_secret",
+		"trigger": "tls",
+		"key_phase": 0
+	}`, ev)
 }
 
 func TestKeyUpdated(t *testing.T) {
@@ -776,10 +806,11 @@ func TestKeyUpdated(t *testing.T) {
 	})
 
 	require.Equal(t, "security:key_updated", name)
-	require.Equal(t, float64(1337), ev["key_phase"])
-	require.Equal(t, "remote_update", ev["trigger"])
-	require.Contains(t, ev, "key_type")
-	require.Equal(t, "client_1rtt_secret", ev["key_type"])
+	require.JSONEq(t, `{
+		"key_type": "client_1rtt_secret",
+		"trigger": "remote_update",
+		"key_phase": 1337
+	}`, ev)
 }
 
 func TestKeyDiscarded0RTT(t *testing.T) {
@@ -789,8 +820,10 @@ func TestKeyDiscarded0RTT(t *testing.T) {
 	})
 
 	require.Equal(t, "security:key_discarded", name)
-	require.Equal(t, "tls", ev["trigger"])
-	require.Equal(t, "server_0rtt_secret", ev["key_type"])
+	require.JSONEq(t, `{
+		"key_type": "server_0rtt_secret",
+		"trigger": "tls"
+	}`, ev)
 }
 
 func TestKeyDiscarded(t *testing.T) {
@@ -800,10 +833,10 @@ func TestKeyDiscarded(t *testing.T) {
 	})
 
 	require.Equal(t, "security:key_discarded", name)
-	require.Equal(t, float64(42), ev["key_phase"])
-	require.NotContains(t, ev, "trigger")
-	require.Contains(t, ev, "key_type")
-	require.Equal(t, "client_1rtt_secret", ev["key_type"])
+	require.JSONEq(t, `{
+		"key_type": "client_1rtt_secret",
+		"key_phase": 42
+	}`, ev)
 }
 
 func TestLossTimerUpdated(t *testing.T) {
@@ -831,13 +864,12 @@ func TestLossTimerUpdated(t *testing.T) {
 
 		name, ev := decode(t, buf.String())
 		require.Equal(t, "recovery:loss_timer_updated", name)
-		require.Len(t, ev, 4)
-		require.Equal(t, "set", ev["event_type"])
-		require.Equal(t, "pto", ev["timer_type"])
-		require.Equal(t, "handshake", ev["packet_number_space"])
-		require.Contains(t, ev, "delta")
-		delta := time.Duration(ev["delta"].(float64)*1e6) * time.Nanosecond
-		require.Equal(t, 1337*time.Second, delta)
+		require.JSONEq(t, `{
+			"event_type": "set",
+			"timer_type": "pto",
+			"packet_number_space": "handshake",
+			"delta": 1337000
+		}`, ev)
 	})
 }
 
@@ -849,18 +881,18 @@ func TestLossTimerUpdatedExpired(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:loss_timer_updated", name)
-	require.Len(t, ev, 3)
-	require.Equal(t, "expired", ev["event_type"])
-	require.Equal(t, "ack", ev["timer_type"])
-	require.Equal(t, "application_data", ev["packet_number_space"])
+	require.JSONEq(t, `{
+		"event_type": "expired",
+		"timer_type": "ack",
+		"packet_number_space": "application_data"
+	}`, ev)
 }
 
 func TestLossTimerUpdatedCanceled(t *testing.T) {
 	name, ev := testEventEncoding(t, &eventLossTimerCanceled{})
 
 	require.Equal(t, "recovery:loss_timer_updated", name)
-	require.Len(t, ev, 1)
-	require.Equal(t, "cancelled", ev["event_type"])
+	require.JSONEq(t, `{"event_type": "cancelled"}`, ev)
 }
 
 func TestECNStateUpdated(t *testing.T) {
@@ -870,8 +902,7 @@ func TestECNStateUpdated(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:ecn_state_updated", name)
-	require.Len(t, ev, 1)
-	require.Equal(t, "unknown", ev["new"])
+	require.JSONEq(t, `{"new": "unknown"}`, ev)
 }
 
 func TestECNStateUpdatedWithTrigger(t *testing.T) {
@@ -881,9 +912,10 @@ func TestECNStateUpdatedWithTrigger(t *testing.T) {
 	})
 
 	require.Equal(t, "recovery:ecn_state_updated", name)
-	require.Len(t, ev, 2)
-	require.Equal(t, "failed", ev["new"])
-	require.Equal(t, "ACK doesn't contain ECN marks", ev["trigger"])
+	require.JSONEq(t, `{
+		"new": "failed",
+		"trigger": "ACK doesn't contain ECN marks"
+	}`, ev)
 }
 
 func TestALPNInformation(t *testing.T) {
@@ -892,22 +924,19 @@ func TestALPNInformation(t *testing.T) {
 	})
 
 	require.Equal(t, "transport:alpn_information", name)
-	require.Len(t, ev, 1)
-	require.Equal(t, "h3", ev["chosen_alpn"])
+	require.JSONEq(t, `{"chosen_alpn": "h3"}`, ev)
 }
 
 func TestDebugEvent(t *testing.T) {
 	t.Run("default name", func(t *testing.T) {
 		name, ev := testEventEncoding(t, &DebugEvent{Message: "hello world"})
 		require.Equal(t, "transport:debug", name)
-		require.Len(t, ev, 1)
-		require.Equal(t, "hello world", ev["message"])
+		require.JSONEq(t, `{"message": "hello world"}`, ev)
 	})
 
 	t.Run("custom name", func(t *testing.T) {
 		name, ev := testEventEncoding(t, &DebugEvent{EventName: "foo", Message: "bar"})
 		require.Equal(t, "transport:foo", name)
-		require.Len(t, ev, 1)
-		require.Equal(t, "bar", ev["message"])
+		require.JSONEq(t, `{"message": "bar"}`, ev)
 	})
 }

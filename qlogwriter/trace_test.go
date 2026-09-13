@@ -21,13 +21,6 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 	return &nopWriteCloserImpl{Writer: w}
 }
 
-func unmarshal(data []byte, v any) error {
-	if bytes.Equal(data[:1], recordSeparator) {
-		data = data[1:]
-	}
-	return json.Unmarshal(data, v)
-}
-
 func TestTraceMetadata(t *testing.T) {
 	t.Run("non-connection trace", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
@@ -75,41 +68,41 @@ func testTraceMetadata(t *testing.T,
 	expectedGroupID string,
 	expectedEventSchemas []string,
 ) {
-	var m map[string]any
-	require.NoError(t, unmarshal(buf.Bytes(), &m))
-	require.Equal(t, "0.3", m["qlog_version"])
-	require.Contains(t, m, "title")
-	require.Contains(t, m, "trace")
-	tr := m["trace"].(map[string]any)
-	require.Contains(t, tr, "common_fields")
-	commonFields := tr["common_fields"].(map[string]any)
+	t.Helper()
+
+	data := buf.Bytes()
+	require.NotEmpty(t, data)
+	require.Equal(t, RecordSeparator, data[0])
+	require.Equal(t, byte('\n'), data[len(data)-1])
+
+	commonFields := map[string]any{
+		"reference_time": map[string]any{
+			"clock_type":      "monotonic",
+			"epoch":           "unknown",
+			"wall_clock_time": time.Now().Format(time.RFC3339Nano),
+		},
+	}
 	if expectedGroupID != "" {
-		require.Contains(t, commonFields, "group_id")
-		require.Equal(t, expectedGroupID, commonFields["group_id"])
-	} else {
-		require.NotContains(t, commonFields, "group_id")
+		commonFields["group_id"] = expectedGroupID
 	}
-	require.Contains(t, commonFields, "reference_time")
-	referenceTimeMap := commonFields["reference_time"].(map[string]any)
-	require.Contains(t, referenceTimeMap, "clock_type")
-	require.Equal(t, "monotonic", referenceTimeMap["clock_type"])
-	require.Contains(t, referenceTimeMap, "epoch")
-	require.Equal(t, "unknown", referenceTimeMap["epoch"])
-	require.Contains(t, referenceTimeMap, "wall_clock_time")
-	wallClockTimeStr := referenceTimeMap["wall_clock_time"].(string)
-	wallClockTime, err := time.Parse(time.RFC3339Nano, wallClockTimeStr)
-	require.NoError(t, err)
-	require.Equal(t, time.Now().UTC(), wallClockTime.UTC())
-	require.Contains(t, tr, "vantage_point")
-	vantagePoint := tr["vantage_point"].(map[string]any)
-	require.Equal(t, expectedVantagePoint, vantagePoint["type"])
+	trace := map[string]any{
+		"common_fields": commonFields,
+		"vantage_point": map[string]any{
+			"type": expectedVantagePoint,
+		},
+	}
 	if len(expectedEventSchemas) > 0 {
-		require.Contains(t, tr, "event_schemas")
-		eventSchemas := tr["event_schemas"].([]any)
-		for i, schema := range eventSchemas {
-			require.Equal(t, expectedEventSchemas[i], schema)
-		}
-	} else {
-		require.NotContains(t, tr, "event_schemas")
+		trace["event_schemas"] = expectedEventSchemas
 	}
+	expected, err := json.Marshal(map[string]any{
+		"file_schema":          "urn:ietf:params:qlog:file:sequential",
+		"serialization_format": "application/qlog+json-seq",
+		"title":                "quic-go qlog",
+		"code_version":         quicGoVersion,
+		"qlog_format":          "JSON-SEQ",
+		"qlog_version":         "0.3",
+		"trace":                trace,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(data[1:]))
 }
