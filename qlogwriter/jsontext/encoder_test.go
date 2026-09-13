@@ -20,11 +20,7 @@ func TestEncoderSimpleObject(t *testing.T) {
 	enc.WriteToken(jsontext.String("foo2"))
 	enc.WriteToken(jsontext.String("bar2"))
 	enc.WriteToken(jsontext.EndObject)
-	output := buf.String()
-
-	var got map[string]string
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, map[string]string{"foo": "bar", "foo2": "bar2"}, got)
+	require.JSONEq(t, `{"foo": "bar", "foo2": "bar2"}`, buf.String())
 }
 
 func TestEncoderArrayInts(t *testing.T) {
@@ -35,11 +31,7 @@ func TestEncoderArrayInts(t *testing.T) {
 	enc.WriteToken(jsontext.Int(2))
 	enc.WriteToken(jsontext.Int(3))
 	enc.WriteToken(jsontext.EndArray)
-	output := buf.String()
-
-	var got []int
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, []int{1, 2, 3}, got)
+	require.JSONEq(t, `[1, 2, 3]`, buf.String())
 }
 
 func TestEncoderArrayStrings(t *testing.T) {
@@ -49,12 +41,7 @@ func TestEncoderArrayStrings(t *testing.T) {
 	enc.WriteToken(jsontext.String("one"))
 	enc.WriteToken(jsontext.String("two"))
 	enc.WriteToken(jsontext.EndArray)
-	output := buf.String()
-
-	var got []string
-	err := json.Unmarshal([]byte(output), &got)
-	require.NoError(t, err)
-	require.Equal(t, []string{"one", "two"}, got)
+	require.JSONEq(t, `["one", "two"]`, buf.String())
 }
 
 func TestEncoderNestedObject(t *testing.T) {
@@ -67,11 +54,7 @@ func TestEncoderNestedObject(t *testing.T) {
 	enc.WriteToken(jsontext.String("value"))
 	enc.WriteToken(jsontext.EndObject)
 	enc.WriteToken(jsontext.EndObject)
-	output := buf.String()
-
-	var got map[string]map[string]string
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, map[string]map[string]string{"outer": {"inner": "value"}}, got)
+	require.JSONEq(t, `{"outer": {"inner": "value"}}`, buf.String())
 }
 
 func TestEncoderNumbersAndBool(t *testing.T) {
@@ -91,18 +74,14 @@ func TestEncoderNumbersAndBool(t *testing.T) {
 	enc.WriteToken(jsontext.String("nullv"))
 	enc.WriteToken(jsontext.Null)
 	enc.WriteToken(jsontext.EndObject)
-	output := buf.String()
-
-	var got map[string]any
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, map[string]any{
-		"int":   float64(42), // json.Unmarshal decodes numbers as float64
-		"uint":  float64(100),
+	require.JSONEq(t, `{
+		"int": 42,
+		"uint": 100,
 		"float": 3.14,
-		"true":  true,
+		"true": true,
 		"false": false,
-		"nullv": nil,
-	}, got)
+		"nullv": null
+	}`, buf.String())
 }
 
 func TestEncoderEmptyObject(t *testing.T) {
@@ -110,11 +89,7 @@ func TestEncoderEmptyObject(t *testing.T) {
 	enc := jsontext.NewEncoder(buf)
 	enc.WriteToken(jsontext.BeginObject)
 	enc.WriteToken(jsontext.EndObject)
-	output := buf.String()
-
-	var got map[string]any
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, map[string]any{}, got)
+	require.JSONEq(t, `{}`, buf.String())
 }
 
 func TestEncoderEmptyArray(t *testing.T) {
@@ -122,11 +97,7 @@ func TestEncoderEmptyArray(t *testing.T) {
 	enc := jsontext.NewEncoder(buf)
 	enc.WriteToken(jsontext.BeginArray)
 	enc.WriteToken(jsontext.EndArray)
-	output := buf.String()
-
-	var got []any
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, []any{}, got)
+	require.JSONEq(t, `[]`, buf.String())
 }
 
 func TestEncoderArrayWithNulls(t *testing.T) {
@@ -137,11 +108,7 @@ func TestEncoderArrayWithNulls(t *testing.T) {
 	enc.WriteToken(jsontext.String("x"))
 	enc.WriteToken(jsontext.Null)
 	enc.WriteToken(jsontext.EndArray)
-	output := buf.String()
-
-	var got []any
-	require.NoError(t, json.Unmarshal([]byte(output), &got))
-	require.Equal(t, []any{nil, "x", nil}, got)
+	require.JSONEq(t, `[null, "x", null]`, buf.String())
 }
 
 func TestEncoderEscapedStrings(t *testing.T) {
@@ -181,13 +148,9 @@ func testEncoderEscapedStrings(t *testing.T, key, value string) {
 	enc.WriteToken(jsontext.String(key))
 	enc.WriteToken(jsontext.String(value))
 	enc.WriteToken(jsontext.EndObject)
-	output := buf.String()
-
-	var got map[string]string
-	err := json.Unmarshal([]byte(output), &got)
+	expected, err := json.Marshal(map[string]string{key: value})
 	require.NoError(t, err)
-	expected := map[string]string{key: value}
-	require.Equal(t, expected, got)
+	require.JSONEq(t, string(expected), buf.String())
 }
 
 func encodeValue(t testing.TB, enc *jsontext.Encoder, v any) (isSupported bool) {
@@ -395,11 +358,6 @@ func FuzzEncoder(f *testing.F) {
 			return
 		}
 
-		output := ourBuf.Bytes()
-		require.Truef(t, json.Valid(output), "produced invalid JSON: %s", output)
-
-		var got any
-		require.NoError(t, json.Unmarshal(output, &got))
-		require.JSONEq(t, ourBuf.String(), stdlibBuf.String())
+		require.JSONEq(t, stdlibBuf.String(), ourBuf.String())
 	})
 }
