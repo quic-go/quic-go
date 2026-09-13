@@ -192,6 +192,13 @@ func testMTUDiscovererWithRandomLoss(t *testing.T) {
 }
 
 func TestMTUDiscovererReset(t *testing.T) {
+	t.Run("not started", func(t *testing.T) {
+		d := newMTUDiscoverer(utils.NewRTTStats(), 1200, 1452, nil)
+		now := monotime.Now()
+		d.Reset(1200, 1400)
+		require.True(t, d.lastProbeTime.IsZero())
+		require.False(t, d.ShouldSendProbe(now.Add(time.Hour)))
+	})
 	t.Run("probe on old path acknowledged", func(t *testing.T) {
 		testMTUDiscovererReset(t, true)
 	})
@@ -217,14 +224,27 @@ func testMTUDiscovererReset(t *testing.T, ackLastProbe bool) {
 	require.Greater(t, d.CurrentSize(), startMTU)
 	now = now.Add(5 * rtt)
 
+	// Leave loss state from the old path to be cleared by Reset.
+	now = now.Add(5 * rtt)
+	ping, _ = d.GetPing(now)
+	ping.Handler.OnLost(ping.Frame)
+	require.True(t, d.lastProbeWasLost)
+
 	// send another probe packet, but neither acknowledge nor lose it before resetting
-	ping, _ = d.GetPing(now.Add(5 * rtt))
+	now = now.Add(5 * rtt)
+	ping, _ = d.GetPing(now)
 	now = now.Add(2 * rtt) // advance the timer by an arbitrary amount
 
 	const newStartMTU protocol.ByteCount = 900
 	const newMaxMTU = 1500
-	d.Reset(now, newStartMTU, newMaxMTU)
+	d.Reset(newStartMTU, newMaxMTU)
 	require.Equal(t, d.CurrentSize(), newStartMTU)
+	require.True(t, d.lastProbeTime.IsZero())
+	require.False(t, d.ShouldSendProbe(now.Add(time.Hour)))
+	require.Equal(t, uint8(1), d.generation)
+	require.Equal(t, protocol.InvalidByteCount, d.inFlight)
+	require.False(t, d.lastProbeWasLost)
+	require.Equal(t, [maxLostMTUProbes]protocol.ByteCount{newMaxMTU, protocol.InvalidByteCount, protocol.InvalidByteCount}, d.lost)
 
 	// Now acknowledge / lose the probe packet.
 	// This should be ignored, since it's on the old path.
@@ -236,6 +256,9 @@ func testMTUDiscovererReset(t *testing.T, ackLastProbe bool) {
 
 	// the MTU should not have changed
 	require.Equal(t, d.CurrentSize(), newStartMTU)
+	require.True(t, d.lastProbeTime.IsZero())
+	// Resetting path state doesn't start probing. Start must be called explicitly.
+	d.Start(now)
 	// the next probe should be sent after 5 RTTs
 	require.False(t, d.ShouldSendProbe(now.Add(5*rtt).Add(-time.Microsecond)))
 	require.True(t, d.ShouldSendProbe(now.Add(5*rtt)))

@@ -917,7 +917,10 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	if c.peerParams.MaxUDPPayloadSize > 0 && c.peerParams.MaxUDPPayloadSize < maxPacketSize {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
-	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
+	c.mtuDiscoverer.Reset(initialPacketSize, maxPacketSize)
+	if !c.config.DisablePathMTUDiscovery && tr.conn.capabilities().DF {
+		c.mtuDiscoverer.Start(now)
+	}
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
 	c.sendQueue = newSendQueue(c.conn)
@@ -1294,10 +1297,12 @@ func (c *Conn) handleShortHeaderPacket(
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
 	c.mtuDiscoverer.Reset(
-		p.rcvTime,
 		protocol.ByteCount(c.config.InitialPacketSize),
 		maxPacketSize,
 	)
+	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
+		c.mtuDiscoverer.Start(p.rcvTime)
+	}
 	c.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	return true, nil
 }

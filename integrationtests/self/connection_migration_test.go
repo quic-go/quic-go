@@ -18,7 +18,16 @@ import (
 )
 
 func TestConnectionMigration(t *testing.T) {
-	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	t.Run("MTU discovery enabled", func(t *testing.T) {
+		testConnectionMigration(t, false)
+	})
+	t.Run("MTU discovery disabled", func(t *testing.T) {
+		testConnectionMigration(t, true)
+	})
+}
+
+func testConnectionMigration(t *testing.T, disableMTUDiscovery bool) {
+	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(&quic.Config{DisablePathMTUDiscovery: disableMTUDiscovery}))
 	require.NoError(t, err)
 	defer ln.Close()
 
@@ -58,7 +67,7 @@ func TestConnectionMigration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := tr1.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+	conn, err := tr1.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(&quic.Config{DisablePathMTUDiscovery: disableMTUDiscovery}))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 

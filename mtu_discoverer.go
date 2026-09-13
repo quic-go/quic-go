@@ -168,9 +168,10 @@ func (f *mtuFinder) CurrentSize() protocol.ByteCount {
 	return f.min
 }
 
-func (f *mtuFinder) Reset(now monotime.Time, start, max protocol.ByteCount) {
+// Reset discards the previous path's MTU state. Call Start to resume probing.
+func (f *mtuFinder) Reset(start, max protocol.ByteCount) {
 	f.generation++
-	f.lastProbeTime = now
+	f.lastProbeTime = 0
 	f.lastProbeWasLost = false
 	f.inFlight = protocol.InvalidByteCount
 	f.init(start, max)
