@@ -895,7 +895,7 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	require.Contains(t, packets.Acked, pns[8])
 
 	// The loss detection timer should be cancelled since there are no more outstanding packets.
-	require.True(t, sph.GetLossDetectionTimeout().IsZero())
+	require.Zero(t, sph.GetLossDetectionTimeout())
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.LossTimerUpdated{Type: qlog.LossTimerUpdateTypeCancelled},

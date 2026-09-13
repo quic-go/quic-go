@@ -385,7 +385,7 @@ func TestCubicSenderMultipleLossesInOneWindow(t *testing.T) {
 	initialWindow := sender.sender.GetCongestionWindow()
 	sender.LosePacket(sender.ackedPacketNumber + 1)
 	postLossWindow := sender.sender.GetCongestionWindow()
-	require.True(t, initialWindow > postLossWindow)
+	require.Greater(t, initialWindow, postLossWindow)
 	sender.LosePacket(sender.ackedPacketNumber + 3)
 	require.Equal(t, postLossWindow, sender.sender.GetCongestionWindow())
 	sender.LosePacket(sender.packetNumber - 1)
@@ -393,7 +393,7 @@ func TestCubicSenderMultipleLossesInOneWindow(t *testing.T) {
 
 	// Lose a later packet and ensure the window decreases.
 	sender.LosePacket(sender.packetNumber)
-	require.True(t, postLossWindow > sender.sender.GetCongestionWindow())
+	require.Greater(t, postLossWindow, sender.sender.GetCongestionWindow())
 }
 
 func TestCubicSender1ConnectionCongestionAvoidanceAtEndOfRecovery(t *testing.T) {
@@ -535,8 +535,8 @@ func TestCubicSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 		sender.OnPacketAcked(protocol.PacketNumber(i), packetSize, sender.GetCongestionWindow(), clock.Now())
 	}
 	const maxCwnd = protocol.MaxCongestionWindowPackets * packetSize
-	require.True(t, sender.GetCongestionWindow() > maxCwnd)
-	require.True(t, sender.GetCongestionWindow() <= maxCwnd+packetSize)
+	require.Greater(t, sender.GetCongestionWindow(), maxCwnd)
+	require.LessOrEqual(t, sender.GetCongestionWindow(), maxCwnd+packetSize)
 }
 
 func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
@@ -570,7 +570,7 @@ func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
 	for i := 1; i < numSent; i++ {
 		testSender.AckNPackets(1)
 	}
-	require.Equal(t, protocol.ByteCount(0), testSender.bytesInFlight)
+	require.Zero(t, testSender.bytesInFlight)
 
 	savedCwnd = sender.GetCongestionWindow()
 	testSender.SendAvailableSendWindow()

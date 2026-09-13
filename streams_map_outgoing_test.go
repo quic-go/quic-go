@@ -44,7 +44,7 @@ func testStreamsMapOutgoingOpenAndDelete(t *testing.T, perspective protocol.Pers
 	require.Equal(t, firstStream, str1.id)
 	s, err := m.GetStream(firstStream)
 	require.NoError(t, err)
-	require.Equal(t, s, str1)
+	require.Same(t, str1, s)
 
 	str2, err := m.OpenStream()
 	require.NoError(t, err)

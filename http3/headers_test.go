@@ -56,7 +56,7 @@ func TestRequestHeaderParsing(t *testing.T) {
 			require.Equal(t, 3, req.ProtoMajor)
 			require.Zero(t, req.ProtoMinor)
 			require.Equal(t, int64(42), req.ContentLength)
-			require.Equal(t, 1, len(req.Header))
+			require.Len(t, req.Header, 1)
 			require.Equal(t, "42", req.Header.Get("Content-Length"))
 			require.Nil(t, req.Body)
 			require.Equal(t, "quic-go.net:443", req.Host)
@@ -551,7 +551,7 @@ func TestResponseHeaderParsing(t *testing.T) {
 	require.Equal(t, 3, rsp.ProtoMajor)
 	require.Zero(t, rsp.ProtoMinor)
 	require.Equal(t, int64(42), rsp.ContentLength)
-	require.Equal(t, 1, len(rsp.Header))
+	require.Len(t, rsp.Header, 1)
 	require.Equal(t, "42", rsp.Header.Get("Content-Length"))
 	require.Nil(t, rsp.Body)
 	require.Equal(t, 200, rsp.StatusCode)
@@ -635,7 +635,7 @@ func TestResponseTrailerFields(t *testing.T) {
 	}
 	var rsp http.Response
 	require.NoError(t, updateResponseFromHeaders(&rsp, decodeFromSlice(headers), math.MaxInt, nil))
-	require.Equal(t, 0, len(rsp.Header))
+	require.Empty(t, rsp.Header)
 	require.Equal(t, http.Header(map[string][]string{
 		"Trailer1": nil,
 		"Trailer2": nil,

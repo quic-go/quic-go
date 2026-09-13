@@ -137,7 +137,7 @@ func TestWriteStreamFrameWithoutOffset(t *testing.T) {
 	expected = append(expected, encodeVarInt(0x1337)...) // stream ID
 	expected = append(expected, []byte("foobar")...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }
 
 func TestWriteStreamFrameWithOffset(t *testing.T) {
@@ -153,7 +153,7 @@ func TestWriteStreamFrameWithOffset(t *testing.T) {
 	expected = append(expected, encodeVarInt(0x123456)...) // offset
 	expected = append(expected, []byte("foobar")...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }
 
 func TestWriteStreamFrameWithFIN(t *testing.T) {
@@ -168,7 +168,7 @@ func TestWriteStreamFrameWithFIN(t *testing.T) {
 	expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
 	expected = append(expected, encodeVarInt(0x123456)...) // offset
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }
 
 func TestWriteStreamFrameWithDataLength(t *testing.T) {
@@ -184,7 +184,7 @@ func TestWriteStreamFrameWithDataLength(t *testing.T) {
 	expected = append(expected, encodeVarInt(6)...)      // data length
 	expected = append(expected, []byte("foobar")...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }
 
 func TestWriteStreamFrameWithDataLengthAndOffset(t *testing.T) {
@@ -202,7 +202,7 @@ func TestWriteStreamFrameWithDataLengthAndOffset(t *testing.T) {
 	expected = append(expected, encodeVarInt(6)...)        // data length
 	expected = append(expected, []byte("foobar")...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }
 
 func TestWriteStreamFrameEmptyFrameWithoutFIN(t *testing.T) {
@@ -235,7 +235,7 @@ func TestStreamMaxDataLength(t *testing.T) {
 		f.Data = data[:int(maxDataLen)]
 		b, err := f.Append(nil, protocol.Version1)
 		require.NoError(t, err)
-		require.Equal(t, i, len(b))
+		require.Len(t, b, i)
 	}
 }
 
@@ -269,7 +269,7 @@ func TestStreamMaxDataLengthWithDataLenPresent(t *testing.T) {
 			frameOneByteTooSmallCounter++
 			continue
 		}
-		require.Equal(t, i, len(b))
+		require.Len(t, b, i)
 	}
 	require.Equal(t, 1, frameOneByteTooSmallCounter)
 }

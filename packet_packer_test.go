@@ -858,7 +858,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 	require.NoError(t, err)
 	payload := data[l:]
 	require.Equal(t, protocol.PacketNumberLen1, pnLen)
-	require.Equal(t, 4-1 /* packet number length */, len(payload))
+	require.Len(t, payload, 4-1 /* packet number length */)
 	// the first byte of the payload should be a PADDING frame...
 	require.Equal(t, byte(0), payload[0])
 

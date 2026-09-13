@@ -131,7 +131,7 @@ func shuffleClientHelloExtensions(t testing.TB, clientHello []byte) []byte {
 
 	// Extract the 3-byte length (24-bit integer) and validate total length
 	length := uint32(clientHello[1])<<16 | uint32(clientHello[2])<<8 | uint32(clientHello[3])
-	require.Equal(t, 4+int(length), len(clientHello))
+	require.Len(t, clientHello, 4+int(length))
 
 	// Body is everything after type and length
 	body := clientHello[4 : 4+length]
@@ -164,7 +164,7 @@ func shuffleClientHelloExtensions(t testing.TB, clientHello []byte) []byte {
 	}
 	extensionsLen := int(body[pos])<<8 | int(body[pos+1])
 	pos += 2
-	require.Equal(t, pos+extensionsLen, len(body)) // extensions length doesn't match remaining data
+	require.Len(t, body, pos+extensionsLen) // extensions length doesn't match remaining data
 	extensionsData := body[pos : pos+extensionsLen]
 
 	// parse extensions into a slice of byte slices

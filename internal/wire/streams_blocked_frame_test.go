@@ -100,7 +100,7 @@ func TestWriteStreamsBlockedFrameBidirectional(t *testing.T) {
 	expected := []byte{byte(FrameTypeBidiStreamBlocked)}
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }
 
 func TestWriteStreamsBlockedFrameUnidirectional(t *testing.T) {
@@ -113,5 +113,5 @@ func TestWriteStreamsBlockedFrameUnidirectional(t *testing.T) {
 	expected := []byte{byte(FrameTypeUniStreamBlocked)}
 	expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(f.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(f.Length(protocol.Version1)))
 }

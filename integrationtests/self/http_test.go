@@ -747,7 +747,7 @@ func TestHTTPDeadlines(t *testing.T) {
 
 		body, err := io.ReadAll(&readerWithTimeout{Reader: resp.Body, Timeout: 2 * deadlineDelay})
 		require.NoError(t, err)
-		require.True(t, time.Now().After(expectedEnd))
+		require.Greater(t, time.Now(), expectedEnd)
 		require.Equal(t, "ok", string(body))
 
 		select {
@@ -777,7 +777,7 @@ func TestHTTPDeadlines(t *testing.T) {
 
 		body, err := io.ReadAll(&readerWithTimeout{Reader: resp.Body, Timeout: 2 * deadlineDelay})
 		require.NoError(t, err)
-		require.True(t, time.Now().After(expectedEnd))
+		require.Greater(t, time.Now(), expectedEnd)
 		require.Contains(t, string(body), "aa")
 
 		select {
@@ -900,9 +900,7 @@ func TestHTTPConnContext(t *testing.T) {
 
 	select {
 	case ctx := <-connCtxChan:
-		serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
-		require.True(t, ok)
-		require.Equal(t, server, serv)
+		require.Same(t, server, ctx.Value(http3.ServerContextKey))
 	default:
 		t.Fatal("handler was not called")
 	}
@@ -913,9 +911,7 @@ func TestHTTPConnContext(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "bar", v)
 
-		serv, ok := ctx.Value(http3.ServerContextKey).(*http3.Server)
-		require.True(t, ok)
-		require.Equal(t, server, serv)
+		require.Same(t, server, ctx.Value(http3.ServerContextKey))
 	default:
 		t.Fatal("handler was not called")
 	}

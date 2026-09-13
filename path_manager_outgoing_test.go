@@ -44,7 +44,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		require.False(t, enabled)
 		connID, f, tr, ok := pm.NextPathToProbe()
 		require.True(t, ok)
-		require.Equal(t, tr1, tr)
+		require.Same(t, tr1, tr)
 		require.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), connID)
 		require.IsType(t, &wire.PathChallengeFrame{}, f.Frame)
 		pc := f.Frame.(*wire.PathChallengeFrame)
@@ -104,7 +104,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		require.EqualError(t, p.Close(), "cannot close active path")
 		switchToTransport, ok := pm.ShouldSwitchPath()
 		require.True(t, ok)
-		require.Equal(t, tr1, switchToTransport)
+		require.Same(t, tr1, switchToTransport)
 	})
 }
 
