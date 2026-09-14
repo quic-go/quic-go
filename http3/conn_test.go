@@ -63,12 +63,12 @@ func TestConnReceiveSettings(t *testing.T) {
 				StreamID: controlStr.StreamID(),
 				Raw:      qlog.RawInfo{Length: expectedLen, PayloadLength: expectedPayloadLen},
 				Frame: qlog.Frame{
-					Frame: qlog.SettingsFrame{
-						MaxFieldSectionSize: 1234,
-						Datagram:            new(true),
-						ExtendedConnect:     new(true),
-						Other:               map[uint64]uint64{1337: 42},
-					},
+					Frame: qlog.SettingsFrame{Settings: []qlog.Setting{
+						{ID: settingMaxFieldSectionSize, Value: 1234},
+						{ID: settingDatagram, Value: 1},
+						{ID: settingExtendedConnect, Value: 1},
+						{ID: 1337, Value: 42},
+					}},
 				},
 			},
 		},

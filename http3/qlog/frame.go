@@ -98,11 +98,23 @@ func (f *GoAwayFrame) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
+// A Setting is a single setting of a SETTINGS frame.
+type Setting struct {
+	ID    uint64
+	Value uint64
+}
+
+// Settings that have a name in the qlog HTTP/3 event schema and are interpreted by quic-go.
+const (
+	settingMaxFieldSectionSize = 0x6
+	settingExtendedConnect     = 0x8
+	settingDatagram            = 0x33
+)
+
+// A SettingsFrame is a SETTINGS frame.
+// Settings are listed in the order in which they appear on the wire.
 type SettingsFrame struct {
-	MaxFieldSectionSize int64
-	Datagram            *bool
-	ExtendedConnect     *bool
-	Other               map[uint64]uint64
+	Settings []Setting
 }
 
 func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
@@ -112,41 +124,30 @@ func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.String("settings"))
 	h.WriteToken(jsontext.String("settings"))
 	h.WriteToken(jsontext.BeginArray)
-	if f.MaxFieldSectionSize >= 0 {
+	for _, s := range f.Settings {
 		h.WriteToken(jsontext.BeginObject)
 		h.WriteToken(jsontext.String("name"))
-		h.WriteToken(jsontext.String("settings_max_field_section_size"))
-		h.WriteToken(jsontext.String("value"))
-		h.WriteToken(jsontext.Uint(uint64(f.MaxFieldSectionSize)))
-		h.WriteToken(jsontext.EndObject)
-	}
-	if f.Datagram != nil {
-		h.WriteToken(jsontext.BeginObject)
-		h.WriteToken(jsontext.String("name"))
-		h.WriteToken(jsontext.String("settings_h3_datagram"))
-		h.WriteToken(jsontext.String("value"))
-		h.WriteToken(jsontext.Bool(*f.Datagram))
-		h.WriteToken(jsontext.EndObject)
-	}
-	if f.ExtendedConnect != nil {
-		h.WriteToken(jsontext.BeginObject)
-		h.WriteToken(jsontext.String("name"))
-		h.WriteToken(jsontext.String("settings_enable_connect_protocol"))
-		h.WriteToken(jsontext.String("value"))
-		h.WriteToken(jsontext.Bool(*f.ExtendedConnect))
-		h.WriteToken(jsontext.EndObject)
-	}
-	if len(f.Other) > 0 {
-		for k, v := range f.Other {
-			h.WriteToken(jsontext.BeginObject)
-			h.WriteToken(jsontext.String("name"))
+		switch s.ID {
+		case settingMaxFieldSectionSize:
+			h.WriteToken(jsontext.String("settings_max_field_section_size"))
+			h.WriteToken(jsontext.String("value"))
+			h.WriteToken(jsontext.Uint(s.Value))
+		case settingDatagram:
+			h.WriteToken(jsontext.String("settings_h3_datagram"))
+			h.WriteToken(jsontext.String("value"))
+			h.WriteToken(jsontext.Bool(s.Value == 1))
+		case settingExtendedConnect:
+			h.WriteToken(jsontext.String("settings_enable_connect_protocol"))
+			h.WriteToken(jsontext.String("value"))
+			h.WriteToken(jsontext.Bool(s.Value == 1))
+		default:
 			h.WriteToken(jsontext.String("unknown"))
 			h.WriteToken(jsontext.String("name_bytes"))
-			h.WriteToken(jsontext.Uint(k))
+			h.WriteToken(jsontext.Uint(s.ID))
 			h.WriteToken(jsontext.String("value"))
-			h.WriteToken(jsontext.Uint(v))
-			h.WriteToken(jsontext.EndObject)
+			h.WriteToken(jsontext.Uint(s.Value))
 		}
+		h.WriteToken(jsontext.EndObject)
 	}
 	h.WriteToken(jsontext.EndArray)
 	h.WriteToken(jsontext.EndObject)

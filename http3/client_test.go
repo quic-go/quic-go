@@ -5,9 +5,11 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"maps"
 	mrand "math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,6 +30,9 @@ func TestClientSettings(t *testing.T) {
 	})
 	t.Run("additional settings", func(t *testing.T) {
 		testClientSettings(t, false, map[uint64]uint64{13: 37})
+	})
+	t.Run("several additional settings", func(t *testing.T) {
+		testClientSettings(t, true, map[uint64]uint64{13: 37, 5: 1, 0x21: 7, 1: 2})
 	})
 }
 
@@ -58,21 +63,22 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	require.Equal(t, settingsFrame.Datagram, enableDatagrams)
 	require.Equal(t, settingsFrame.Other, other)
 
-	var datagramValue *bool
+	// The settings are logged in the order in which they are sent:
+	// known settings first, followed by additional settings sorted by ID.
+	expected := []qlog.Setting{{ID: settingMaxFieldSectionSize, Value: defaultMaxResponseHeaderBytes}}
 	if enableDatagrams {
-		datagramValue = new(true)
+		expected = append(expected, qlog.Setting{ID: settingDatagram, Value: 1})
+	}
+	for _, id := range slices.Sorted(maps.Keys(other)) {
+		expected = append(expected, qlog.Setting{ID: id, Value: other[id]})
 	}
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.FrameCreated{
 				StreamID: str.StreamID(),
-				Raw:      qlog.RawInfo{Length: 10},
+				Raw:      qlog.RawInfo{Length: quicvarint.Len(streamTypeControlStream) + len(settingsFrame.Append(nil))},
 				Frame: qlog.Frame{
-					Frame: qlog.SettingsFrame{
-						MaxFieldSectionSize: defaultMaxResponseHeaderBytes,
-						Datagram:            datagramValue,
-						Other:               other,
-					},
+					Frame: qlog.SettingsFrame{Settings: expected},
 				},
 			},
 		},

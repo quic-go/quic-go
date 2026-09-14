@@ -516,3 +516,69 @@ func FuzzFrameParser(f *testing.F) {
 		}
 	})
 }
+
+func TestParserSettingsFrameQlogWireOrder(t *testing.T) {
+	// Use an order that differs from the one Append would produce.
+	settings := appendSetting(nil, 0xdead, 0xbeef)
+	settings = appendSetting(settings, settingDatagram, 1)
+	settings = appendSetting(settings, 13, 37)
+	settings = appendSetting(settings, settingMaxFieldSectionSize, 1337)
+	data := quicvarint.Append(nil, 4) // type byte
+	data = quicvarint.Append(data, uint64(len(settings)))
+	data = append(data, settings...)
+
+	var eventRecorder events.Recorder
+	fp := frameParser{r: bytes.NewReader(data)}
+	_, err := fp.ParseNext(&eventRecorder)
+	require.NoError(t, err)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.FrameParsed{
+				Raw: qlog.RawInfo{Length: len(data), PayloadLength: len(settings)},
+				Frame: qlog.Frame{Frame: qlog.SettingsFrame{Settings: []qlog.Setting{
+					{ID: 0xdead, Value: 0xbeef},
+					{ID: settingDatagram, Value: 1},
+					{ID: 13, Value: 37},
+					{ID: settingMaxFieldSectionSize, Value: 1337},
+				}}},
+			},
+		},
+		eventRecorder.Events(qlog.FrameParsed{}),
+	)
+}
+
+func TestSettingsFrameAppendIsDeterministic(t *testing.T) {
+	sf := &settingsFrame{
+		MaxFieldSectionSize: -1,
+		Datagram:            true,
+		Other:               map[uint64]uint64{3: 1, 1: 2, 0x21: 3, 2: 4, 100: 5},
+	}
+	payload := appendSetting(nil, settingDatagram, 1)
+	for _, s := range [][2]uint64{{1, 2}, {2, 4}, {3, 1}, {0x21, 3}, {100, 5}} {
+		payload = appendSetting(payload, s[0], s[1])
+	}
+	expected := quicvarint.Append(nil, 4) // type byte
+	expected = quicvarint.Append(expected, uint64(len(payload)))
+	expected = append(expected, payload...)
+	for range 10 {
+		require.Equal(t, expected, sf.Append(nil))
+	}
+}
+
+func TestSettingsFrameQlogMatchesWire(t *testing.T) {
+	sf := &settingsFrame{
+		MaxFieldSectionSize: 1234,
+		ExtendedConnect:     true,
+		Other:               map[uint64]uint64{0xdead: 0xbeef, 13: 37, 0x21: 7},
+	}
+	var eventRecorder events.Recorder
+	fp := frameParser{r: bytes.NewReader(sf.Append(nil))}
+	_, err := fp.ParseNext(&eventRecorder)
+	require.NoError(t, err)
+	evs := eventRecorder.Events(qlog.FrameParsed{})
+	require.Len(t, evs, 1)
+	require.Equal(t,
+		qlog.SettingsFrame{Settings: sf.qlogSettings()},
+		evs[0].(qlog.FrameParsed).Frame.Frame,
+	)
+}

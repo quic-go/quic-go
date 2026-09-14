@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
@@ -195,7 +196,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 	}
 	frame := &settingsFrame{MaxFieldSectionSize: -1}
 	b := bytes.NewReader(buf)
-	settingsFrame := qlog.SettingsFrame{MaxFieldSectionSize: -1}
+	var qlogSettings []qlog.Setting
 	var readMaxFieldSectionSize, readDatagram, readExtendedConnect bool
 	for b.Len() > 0 {
 		id, err := quicvarint.Read(b)
@@ -206,6 +207,9 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
+		if qlogger != nil {
+			qlogSettings = append(qlogSettings, qlog.Setting{ID: id, Value: val})
+		}
 
 		switch id {
 		case settingMaxFieldSectionSize:
@@ -214,7 +218,6 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 			}
 			readMaxFieldSectionSize = true
 			frame.MaxFieldSectionSize = int64(val)
-			settingsFrame.MaxFieldSectionSize = int64(val)
 		case settingExtendedConnect:
 			if readExtendedConnect {
 				return nil, fmt.Errorf("duplicate setting: %d", id)
@@ -224,9 +227,6 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 				return nil, fmt.Errorf("invalid value for SETTINGS_ENABLE_CONNECT_PROTOCOL: %d", val)
 			}
 			frame.ExtendedConnect = val == 1
-			if qlogger != nil {
-				settingsFrame.ExtendedConnect = new(frame.ExtendedConnect)
-			}
 		case settingDatagram:
 			if readDatagram {
 				return nil, fmt.Errorf("duplicate setting: %d", id)
@@ -236,9 +236,6 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 				return nil, fmt.Errorf("invalid value for SETTINGS_H3_DATAGRAM: %d", val)
 			}
 			frame.Datagram = val == 1
-			if qlogger != nil {
-				settingsFrame.Datagram = new(frame.Datagram)
-			}
 		default:
 			if _, ok := frame.Other[id]; ok {
 				return nil, fmt.Errorf("duplicate setting: %d", id)
@@ -250,53 +247,66 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 		}
 	}
 	if qlogger != nil {
-		settingsFrame.Other = maps.Clone(frame.Other)
-
 		qlogger.RecordEvent(qlog.FrameParsed{
 			StreamID: streamID,
 			Raw: qlog.RawInfo{
 				Length:        r.NumRead,
 				PayloadLength: int(l),
 			},
-			Frame: qlog.Frame{Frame: settingsFrame},
+			Frame: qlog.Frame{Frame: qlog.SettingsFrame{Settings: qlogSettings}},
 		})
 	}
 	return frame, nil
 }
 
+// setting is a single setting as written on the wire.
+type setting struct {
+	id, val uint64
+}
+
+// settings returns the frame's settings in the order Append writes them.
+// Settings not interpreted by this package are sorted by ID, so that the frame
+// sent on the wire, and the qlog event describing it, are deterministic.
+func (f *settingsFrame) settings() []setting {
+	s := make([]setting, 0, 3+len(f.Other))
+	if f.MaxFieldSectionSize >= 0 {
+		s = append(s, setting{id: settingMaxFieldSectionSize, val: uint64(f.MaxFieldSectionSize)})
+	}
+	if f.Datagram {
+		s = append(s, setting{id: settingDatagram, val: 1})
+	}
+	if f.ExtendedConnect {
+		s = append(s, setting{id: settingExtendedConnect, val: 1})
+	}
+	for _, id := range slices.Sorted(maps.Keys(f.Other)) {
+		s = append(s, setting{id: id, val: f.Other[id]})
+	}
+	return s
+}
+
 func (f *settingsFrame) Append(b []byte) []byte {
-	b = quicvarint.Append(b, 0x4)
+	settings := f.settings()
 	var l int
-	if f.MaxFieldSectionSize >= 0 {
-		l += quicvarint.Len(settingMaxFieldSectionSize) + quicvarint.Len(uint64(f.MaxFieldSectionSize))
+	for _, s := range settings {
+		l += quicvarint.Len(s.id) + quicvarint.Len(s.val)
 	}
-	for id, val := range f.Other {
-		l += quicvarint.Len(id) + quicvarint.Len(val)
-	}
-	if f.Datagram {
-		l += quicvarint.Len(settingDatagram) + quicvarint.Len(1)
-	}
-	if f.ExtendedConnect {
-		l += quicvarint.Len(settingExtendedConnect) + quicvarint.Len(1)
-	}
+	b = quicvarint.Append(b, 0x4)
 	b = quicvarint.Append(b, uint64(l))
-	if f.MaxFieldSectionSize >= 0 {
-		b = quicvarint.Append(b, settingMaxFieldSectionSize)
-		b = quicvarint.Append(b, uint64(f.MaxFieldSectionSize))
-	}
-	if f.Datagram {
-		b = quicvarint.Append(b, settingDatagram)
-		b = quicvarint.Append(b, 1)
-	}
-	if f.ExtendedConnect {
-		b = quicvarint.Append(b, settingExtendedConnect)
-		b = quicvarint.Append(b, 1)
-	}
-	for id, val := range f.Other {
-		b = quicvarint.Append(b, id)
-		b = quicvarint.Append(b, val)
+	for _, s := range settings {
+		b = quicvarint.Append(b, s.id)
+		b = quicvarint.Append(b, s.val)
 	}
 	return b
+}
+
+// qlogSettings returns the frame's settings in the order Append writes them.
+func (f *settingsFrame) qlogSettings() []qlog.Setting {
+	settings := f.settings()
+	s := make([]qlog.Setting, len(settings))
+	for i, st := range settings {
+		s[i] = qlog.Setting{ID: st.id, Value: st.val}
+	}
+	return s
 }
 
 type goAwayFrame struct {

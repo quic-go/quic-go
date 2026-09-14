@@ -53,11 +53,8 @@ func TestSettingsFrame(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "datagram: true",
-			frame: SettingsFrame{
-				MaxFieldSectionSize: -1,
-				Datagram:            new(true),
-			},
+			name:  "datagram: true",
+			frame: SettingsFrame{Settings: []Setting{{ID: settingDatagram, Value: 1}}},
 			expected: `{
 				"frame_type": "settings",
 				"settings": [{
@@ -67,11 +64,8 @@ func TestSettingsFrame(t *testing.T) {
 			}`,
 		},
 		{
-			name: "extended_connect: false",
-			frame: SettingsFrame{
-				MaxFieldSectionSize: -1,
-				ExtendedConnect:     new(false),
-			},
+			name:  "extended_connect: false",
+			frame: SettingsFrame{Settings: []Setting{{ID: settingExtendedConnect, Value: 0}}},
 			expected: `{
 				"frame_type": "settings",
 				"settings": [{
@@ -82,7 +76,7 @@ func TestSettingsFrame(t *testing.T) {
 		},
 		{
 			name:  "max_field_section_size",
-			frame: SettingsFrame{MaxFieldSectionSize: 1337},
+			frame: SettingsFrame{Settings: []Setting{{ID: settingMaxFieldSectionSize, Value: 1337}}},
 			expected: `{
 				"frame_type": "settings",
 				"settings": [{
@@ -93,11 +87,10 @@ func TestSettingsFrame(t *testing.T) {
 		},
 		{
 			name: "datagram: false, extended_connect: false",
-			frame: SettingsFrame{
-				MaxFieldSectionSize: -1,
-				Datagram:            new(false),
-				ExtendedConnect:     new(false),
-			},
+			frame: SettingsFrame{Settings: []Setting{
+				{ID: settingDatagram, Value: 0},
+				{ID: settingExtendedConnect, Value: 0},
+			}},
 			expected: `{
 				"frame_type": "settings",
 				"settings": [
@@ -107,14 +100,8 @@ func TestSettingsFrame(t *testing.T) {
 			}`,
 		},
 		{
-			name: "unknowns",
-			// Only test a single unknown setting.
-			// Testing multiple unknown settings doesn't add a lot of value,
-			// and would require us to deal with non-deterministic map iteration order.
-			frame: SettingsFrame{
-				MaxFieldSectionSize: -1,
-				Other:               map[uint64]uint64{0xdead: 0xbeef},
-			},
+			name:  "unknown",
+			frame: SettingsFrame{Settings: []Setting{{ID: 0xdead, Value: 0xbeef}}},
 			expected: `{
 				"frame_type": "settings",
 				"settings": [{
@@ -122,6 +109,24 @@ func TestSettingsFrame(t *testing.T) {
 					"name_bytes": 57005,
 					"value": 48879
 				}]
+			}`,
+		},
+		{
+			name: "settings are logged in order",
+			frame: SettingsFrame{Settings: []Setting{
+				{ID: 0xdead, Value: 0xbeef},
+				{ID: settingDatagram, Value: 1},
+				{ID: 0x21, Value: 7},
+				{ID: settingMaxFieldSectionSize, Value: 1337},
+			}},
+			expected: `{
+				"frame_type": "settings",
+				"settings": [
+					{"name": "unknown", "name_bytes": 57005, "value": 48879},
+					{"name": "settings_h3_datagram", "value": true},
+					{"name": "unknown", "name_bytes": 33, "value": 7},
+					{"name": "settings_max_field_section_size", "value": 1337}
+				]
 			}`,
 		},
 	}

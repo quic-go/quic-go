@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -91,16 +90,7 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 	b = quicvarint.Append(b, streamTypeControlStream)
 	b = settings.Append(b)
 	if c.qlogger != nil {
-		sf := qlog.SettingsFrame{
-			MaxFieldSectionSize: settings.MaxFieldSectionSize,
-			Other:               maps.Clone(settings.Other),
-		}
-		if settings.Datagram {
-			sf.Datagram = new(true)
-		}
-		if settings.ExtendedConnect {
-			sf.ExtendedConnect = new(true)
-		}
+		sf := qlog.SettingsFrame{Settings: settings.qlogSettings()}
 		c.qlogger.RecordEvent(qlog.FrameCreated{
 			StreamID: str.StreamID(),
 			Raw:      qlog.RawInfo{Length: len(b)},
