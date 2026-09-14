@@ -490,6 +490,28 @@ func testPackConnectionCloseCoalesced(t *testing.T, pers protocol.Perspective) {
 	}
 }
 
+// Regression test for https://github.com/quic-go/quic-go/issues/5857
+func TestPackConnectionCloseCoalescedClient1RTT(t *testing.T) {
+	const maxPacketSize protocol.ByteCount = protocol.MaxPacketBufferSize
+	mockCtrl := gomock.NewController(t)
+	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
+	tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+	tp.sealingManager.EXPECT().GetHandshakeSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+	tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysDropped)
+	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+	for i, encLevel := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption1RTT} {
+		pn := protocol.PacketNumber(i + 1)
+		tp.pnManager.EXPECT().PeekPacketNumber(encLevel).Return(pn, protocol.PacketNumberLen2)
+		tp.pnManager.EXPECT().PopPacketNumber(encLevel).Return(pn)
+	}
+	p, err := tp.packer.PackApplicationClose(&qerr.ApplicationError{ErrorMessage: "connection closed"}, maxPacketSize, protocol.Version1)
+	require.NoError(t, err)
+	defer p.buffer.Release()
+	require.Len(t, p.longHdrPackets, 2)
+	require.NotNil(t, p.shortHdrPacket)
+	require.Equal(t, maxPacketSize, p.buffer.Len())
+}
+
 func TestPackConnectionCloseCryptoError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveServer)
