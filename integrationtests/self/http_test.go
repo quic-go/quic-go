@@ -823,7 +823,7 @@ func TestHTTPServeQUICConn(t *testing.T) {
 	require.NoError(t, cl.Transport.(io.Closer).Close())
 	select {
 	case err := <-errChan:
-		require.Error(t, err)
+		require.ErrorIs(t, err, &http3.Error{ErrorCode: 0, Remote: true})
 		require.ErrorContains(t, err, "accepting stream failed")
 	case <-time.After(time.Second):
 		t.Fatal("server didn't shut down")
