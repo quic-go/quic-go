@@ -14,7 +14,7 @@ func TestGetAndPutStreamFrames(t *testing.T) {
 func TestPanicOnPuttingStreamFrameWithWrongCapacity(t *testing.T) {
 	f := GetStreamFrame()
 	f.Data = []byte("foobar")
-	require.Panics(t, func() { putStreamFrame(f) })
+	require.PanicsWithValue(t, "wire.PutStreamFrame called with packet of wrong size!", func() { putStreamFrame(f) })
 }
 
 func TestAcceptStreamFramesNotFromBuffer(t *testing.T) {

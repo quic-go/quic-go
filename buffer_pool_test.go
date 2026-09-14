@@ -24,12 +24,12 @@ func TestBufferPoolRelease(t *testing.T) {
 	buf1 := getPacketBuffer()
 	buf1.Release()
 	// panics if released twice
-	require.Panics(t, func() { buf1.Release() })
+	require.PanicsWithValue(t, "negative packetBuffer refCount", func() { buf1.Release() })
 
 	// panics if wrong-sized buffers are passed
 	buf2 := getLargePacketBuffer()
 	buf2.Data = make([]byte, 10) // replace the underlying slice
-	require.Panics(t, func() { buf2.Release() })
+	require.PanicsWithValue(t, "putPacketBuffer called with packet of wrong size!", func() { buf2.Release() })
 }
 
 func TestBufferPoolSplitting(t *testing.T) {
@@ -40,5 +40,5 @@ func TestBufferPoolSplitting(t *testing.T) {
 	buf.Decrement()
 	buf.Decrement()
 	buf.Decrement()
-	require.Panics(t, func() { buf.Decrement() })
+	require.PanicsWithValue(t, "negative packetBuffer refCount", func() { buf.Decrement() })
 }

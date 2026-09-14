@@ -165,19 +165,20 @@ func TestAppendWithLen(t *testing.T) {
 
 func TestAppendWithLenFailures(t *testing.T) {
 	tests := []struct {
-		name   string
-		value  uint64
-		length int
+		name          string
+		value         uint64
+		length        int
+		expectedPanic string
 	}{
-		{"invalid length", 25, 3},
-		{"too short for 2 bytes", maxVarInt1 + 1, 1},
-		{"too short for 4 bytes", maxVarInt2 + 1, 2},
-		{"too short for 8 bytes", maxVarInt4 + 1, 4},
+		{"invalid length", 25, 3, "invalid varint length"},
+		{"too short for 2 bytes", maxVarInt1 + 1, 1, "cannot encode 64 in 1 bytes"},
+		{"too short for 4 bytes", maxVarInt2 + 1, 2, "cannot encode 16384 in 2 bytes"},
+		{"too short for 8 bytes", maxVarInt4 + 1, 4, "cannot encode 1073741824 in 4 bytes"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Panics(t, func() {
+			require.PanicsWithValue(t, tt.expectedPanic, func() {
 				AppendWithLen(nil, tt.value, tt.length)
 			})
 		})

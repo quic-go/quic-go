@@ -8,7 +8,7 @@ import (
 
 func TestPushPeekPop(t *testing.T) {
 	r := RingBuffer[int]{}
-	require.Equal(t, 0, len(r.ring))
+	require.Empty(t, r.ring)
 	require.Panics(t, func() { r.PopFront() })
 	r.PushBack(1)
 	r.PushBack(2)

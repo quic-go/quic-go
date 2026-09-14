@@ -285,8 +285,8 @@ func TestPacketReordering(t *testing.T) {
 	expectDelay := func(startTime time.Time, numRTTs int) {
 		expectedReceiveTime := startTime.Add(time.Duration(numRTTs) * delay)
 		now := time.Now()
-		require.True(t, now.After(expectedReceiveTime) || now.Equal(expectedReceiveTime))
-		require.True(t, now.Before(expectedReceiveTime.Add(delay/2)))
+		require.GreaterOrEqual(t, now, expectedReceiveTime)
+		require.Less(t, now, expectedReceiveTime.Add(delay/2))
 	}
 
 	serverAddr, serverReceivedPackets := runServer(t)

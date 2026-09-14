@@ -336,7 +336,7 @@ func TestMultiplexingNonQUICPackets(t *testing.T) {
 		select {
 		case p := <-rcvdPackets:
 			require.Equal(t, tr1.Conn.LocalAddr(), p.addr, "non-QUIC packet received from wrong address")
-			require.Equal(t, packetLen, len(p.b), "non-QUIC packet incorrect length")
+			require.Len(t, p.b, packetLen, "non-QUIC packet incorrect length")
 			require.NoError(t, p.err, "error receiving non-QUIC packet")
 			counter++
 		case <-timeout:

@@ -55,7 +55,7 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 		false,
 	)
 	require.Zero(t, connID)
-	require.Len(t, frames, 0)
+	require.Empty(t, frames)
 	require.False(t, shouldSwitch)
 
 	// receiving a packet for a different path triggers another PATH_CHALLENGE
