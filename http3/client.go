@@ -51,7 +51,8 @@ type ClientConn struct {
 	conn    *quic.Conn
 	rawConn *rawConn
 
-	decoder *qpack.Decoder
+	decoder      *qpack.Decoder
+	sessionCache *clientSessionCache
 
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
@@ -88,6 +89,7 @@ func newClientConn(
 	maxResponseHeaderBytes int,
 	disableCompression bool,
 	logger *slog.Logger,
+	sessionCache *clientSessionCache,
 ) *ClientConn {
 	var qlogger qlogwriter.Recorder
 	if qlogTrace := conn.QlogTrace(); qlogTrace != nil && qlogTrace.SupportsSchemas(qlog.EventSchema) {
@@ -101,6 +103,7 @@ func newClientConn(
 		logger:             logger,
 		qlogger:            qlogger,
 		decoder:            qpack.NewDecoder(),
+		sessionCache:       sessionCache,
 	}
 	c.goAwayCtx, c.goAwayCancel = context.WithCancel(context.Background())
 	if maxResponseHeaderBytes <= 0 {
@@ -198,7 +201,13 @@ func (c *ClientConn) handleUnidirectionalStream(str *quic.ReceiveStream) {
 	c.rawConn.handleUnidirectionalStream(str, false)
 }
 
-func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParser) {
+func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParser, settings *settingsFrame) {
+	if c.sessionCache != nil {
+		if err := c.sessionCache.HandleSettings(settings, c.conn.ConnectionState().Used0RTT); err != nil {
+			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), err.Error())
+			return
+		}
+	}
 	for {
 		f, err := fp.ParseNext(c.qlogger)
 		if err != nil {
