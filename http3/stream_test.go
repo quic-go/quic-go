@@ -3,6 +3,7 @@ package http3
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"math"
 	"net/http"
@@ -263,4 +264,132 @@ func TestRequestStream(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 6, n)
 	require.Equal(t, []byte("foobar"), b[:n])
+}
+
+func TestStreamReadErrorConversion(t *testing.T) {
+	// Verify that a *quic.StreamError returned from the underlying datagram stream Read
+	// is converted to a *http3.Error, and that a plain error is passed through unchanged.
+	// We bypass frame parsing by pre-setting bytesRemainingInFrame so Read goes directly
+	// to the underlying Read.
+	t.Run("stream error is converted", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		qstr := NewMockDatagramStream(mockCtrl)
+		qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+		streamErr := &quic.StreamError{ErrorCode: 0x10c, Remote: true} // H3_REQUEST_CANCELLED
+		qstr.EXPECT().Read(gomock.Any()).Return(0, streamErr)
+
+		clientConn, _ := newConnPair(t)
+		str := newStream(
+			qstr,
+			newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
+			nil,
+			func(io.Reader, *headersFrame) error { return nil },
+			nil,
+		)
+		// Pre-set bytesRemainingInFrame to skip the frame parsing branch in Read.
+		str.bytesRemainingInFrame = 6
+
+		_, err := str.Read(make([]byte, 3))
+		require.Error(t, err)
+		var http3Err *Error
+		require.ErrorAs(t, err, &http3Err)
+		require.Equal(t, ErrCode(streamErr.ErrorCode), http3Err.ErrorCode)
+		require.Equal(t, streamErr.Remote, http3Err.Remote)
+	})
+
+	t.Run("plain error is passed through", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		qstr := NewMockDatagramStream(mockCtrl)
+		qstr.EXPECT().StreamID().Return(quic.StreamID(7)).AnyTimes()
+		plainErr := errors.New("plain failure")
+		qstr.EXPECT().Read(gomock.Any()).Return(0, plainErr)
+
+		clientConn, _ := newConnPair(t)
+		str := newStream(
+			qstr,
+			newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
+			nil,
+			func(io.Reader, *headersFrame) error { return nil },
+			nil,
+		)
+		str.bytesRemainingInFrame = 6
+
+		_, err := str.Read(make([]byte, 3))
+		require.ErrorIs(t, err, plainErr)
+	})
+}
+
+func TestStreamWriteErrorConversion(t *testing.T) {
+	// Verify that a *quic.StreamError returned from the underlying datagram stream Write
+	// is converted to a *http3.Error in both the partial-write path and the final-write path.
+	t.Run("partial write", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		qstr := NewMockDatagramStream(mockCtrl)
+		qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+		streamErr := &quic.StreamError{ErrorCode: 0x10c, Remote: true}
+		// First Write call (writing the frame header) fails.
+		qstr.EXPECT().Write(gomock.Any()).Return(0, streamErr)
+
+		str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil)
+		_, err := str.Write([]byte("foo"))
+		require.Error(t, err)
+		var http3Err *Error
+		require.ErrorAs(t, err, &http3Err)
+		require.Equal(t, ErrCode(streamErr.ErrorCode), http3Err.ErrorCode)
+		require.Equal(t, streamErr.Remote, http3Err.Remote)
+	})
+
+	t.Run("final write", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		qstr := NewMockDatagramStream(mockCtrl)
+		qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+		var headerBuf bytes.Buffer
+		// First Write (header) succeeds; second Write (payload) fails.
+		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(headerBuf.Write).Times(1)
+		streamErr := &quic.StreamError{ErrorCode: 0x10c, Remote: false}
+		qstr.EXPECT().Write(gomock.Any()).Return(0, streamErr).Times(1)
+
+		str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil)
+		_, err := str.Write([]byte("foo"))
+		require.Error(t, err)
+		var http3Err *Error
+		require.ErrorAs(t, err, &http3Err)
+		require.Equal(t, ErrCode(streamErr.ErrorCode), http3Err.ErrorCode)
+		require.Equal(t, streamErr.Remote, http3Err.Remote)
+	})
+}
+
+func TestStreamSendDatagramErrorConversion(t *testing.T) {
+	// Verify that *quic.ApplicationError from the underlying SendDatagram is converted to *http3.Error.
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	appErr := &quic.ApplicationError{ErrorCode: 0x10e, Remote: true, ErrorMessage: "no can do"}
+	qstr.EXPECT().SendDatagram(gomock.Any()).Return(appErr)
+
+	str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil)
+	err := str.SendDatagram([]byte("hello"))
+	require.Error(t, err)
+	var http3Err *Error
+	require.ErrorAs(t, err, &http3Err)
+	require.Equal(t, ErrCode(appErr.ErrorCode), http3Err.ErrorCode)
+	require.Equal(t, appErr.Remote, http3Err.Remote)
+	require.Equal(t, appErr.ErrorMessage, http3Err.ErrorMessage)
+}
+
+func TestStreamReceiveDatagramErrorConversion(t *testing.T) {
+	// Verify that a *quic.StreamError from the underlying ReceiveDatagram is converted to *http3.Error.
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	streamErr := &quic.StreamError{ErrorCode: 0x10c, Remote: true}
+	qstr.EXPECT().ReceiveDatagram(gomock.Any()).Return(nil, streamErr)
+
+	str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil)
+	_, err := str.ReceiveDatagram(context.Background())
+	require.Error(t, err)
+	var http3Err *Error
+	require.ErrorAs(t, err, &http3Err)
+	require.Equal(t, ErrCode(streamErr.ErrorCode), http3Err.ErrorCode)
+	require.Equal(t, streamErr.Remote, http3Err.Remote)
 }

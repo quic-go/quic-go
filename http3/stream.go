@@ -114,7 +114,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 		n, err = s.datagramStream.Read(b)
 	}
 	s.bytesRemainingInFrame -= uint64(n)
-	return n, err
+	return n, maybeReplaceError(err)
 }
 
 func (s *Stream) hasMoreData() bool {
@@ -135,9 +135,10 @@ func (s *Stream) Write(b []byte) (int, error) {
 		})
 	}
 	if _, err := s.datagramStream.Write(s.buf); err != nil {
-		return 0, err
+		return 0, maybeReplaceError(err)
 	}
-	return s.datagramStream.Write(b)
+	n, err := s.datagramStream.Write(b)
+	return n, maybeReplaceError(err)
 }
 
 // TryWriteAll writes b in a DATA frame if the entire frame can be queued immediately.
@@ -172,12 +173,13 @@ func (s *Stream) StreamID() quic.StreamID {
 
 func (s *Stream) SendDatagram(b []byte) error {
 	// TODO: reject if datagrams are not negotiated (yet)
-	return s.datagramStream.SendDatagram(b)
+	return maybeReplaceError(s.datagramStream.SendDatagram(b))
 }
 
 func (s *Stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 	// TODO: reject if datagrams are not negotiated (yet)
-	return s.datagramStream.ReceiveDatagram(ctx)
+	data, err := s.datagramStream.ReceiveDatagram(ctx)
+	return data, maybeReplaceError(err)
 }
 
 // A RequestStream is a low-level abstraction representing an HTTP/3 request stream.
