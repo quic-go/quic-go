@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/quic-go/quic-go"
@@ -44,6 +45,24 @@ func TestErrorConversion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestErrorConversionPreservesQUICErrorType(t *testing.T) {
+	streamErr := &quic.StreamError{ErrorCode: 1337, Remote: true}
+	convertedStreamErr := maybeReplaceError(streamErr)
+	var gotStreamErr *quic.StreamError
+	require.True(t, errors.As(convertedStreamErr, &gotStreamErr))
+	require.Same(t, streamErr, gotStreamErr)
+	var appErrFromStream *quic.ApplicationError
+	require.False(t, errors.As(convertedStreamErr, &appErrFromStream))
+
+	appErr := &quic.ApplicationError{ErrorCode: 42, Remote: true, ErrorMessage: "foobar"}
+	convertedAppErr := maybeReplaceError(appErr)
+	var gotAppErr *quic.ApplicationError
+	require.True(t, errors.As(convertedAppErr, &gotAppErr))
+	require.Same(t, appErr, gotAppErr)
+	var streamErrFromApp *quic.StreamError
+	require.False(t, errors.As(convertedAppErr, &streamErrFromApp))
 }
 
 func TestErrorString(t *testing.T) {
