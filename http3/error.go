@@ -16,7 +16,6 @@ type Error struct {
 	Remote       bool
 	ErrorCode    ErrCode
 	ErrorMessage string
-	err          error
 }
 
 var _ error = &Error{}
@@ -35,10 +34,6 @@ func (e *Error) Error() string {
 	}
 	return s
 }
-
-// Unwrap returns the underlying QUIC error. It allows callers to distinguish
-// stream cancellation from connection closure using errors.As.
-func (e *Error) Unwrap() error { return e.err }
 
 func (e *Error) Is(target error) bool {
 	t, ok := target.(*Error)
@@ -59,14 +54,34 @@ func maybeReplaceError(err error) error {
 	default:
 		return err
 	case errors.As(err, &strErr):
-		e.err = strErr
 		e.Remote = strErr.Remote
 		e.ErrorCode = ErrCode(strErr.ErrorCode)
 	case errors.As(err, &appErr):
-		e.err = appErr
 		e.Remote = appErr.Remote
 		e.ErrorCode = ErrCode(appErr.ErrorCode)
 		e.ErrorMessage = appErr.ErrorMessage
 	}
-	return &e
+	var cause error
+	if strErr != nil {
+		cause = strErr
+	} else {
+		cause = appErr
+	}
+	return &errorWithCause{err: &e, cause: cause}
+}
+
+type errorWithCause struct {
+	err   *Error
+	cause error
+}
+
+func (e *errorWithCause) Error() string        { return e.err.Error() }
+func (e *errorWithCause) Unwrap() error        { return e.cause }
+func (e *errorWithCause) Is(target error) bool { return e.err.Is(target) }
+func (e *errorWithCause) As(target any) bool {
+	t, ok := target.(**Error)
+	if ok {
+		*t = e.err
+	}
+	return ok
 }

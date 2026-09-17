@@ -41,7 +41,7 @@ func TestErrorConversion(t *testing.T) {
 			if tt.expected == nil {
 				require.Nil(t, result)
 			} else {
-				require.ErrorIs(t, tt.expected, result)
+				require.ErrorIs(t, result, tt.expected)
 			}
 		})
 	}
@@ -50,6 +50,9 @@ func TestErrorConversion(t *testing.T) {
 func TestErrorConversionPreservesQUICErrorType(t *testing.T) {
 	streamErr := &quic.StreamError{ErrorCode: 1337, Remote: true}
 	convertedStreamErr := maybeReplaceError(streamErr)
+	var gotHTTP3Err *Error
+	require.True(t, errors.As(convertedStreamErr, &gotHTTP3Err))
+	require.Equal(t, &Error{Remote: true, ErrorCode: 1337}, gotHTTP3Err)
 	var gotStreamErr *quic.StreamError
 	require.True(t, errors.As(convertedStreamErr, &gotStreamErr))
 	require.Same(t, streamErr, gotStreamErr)
