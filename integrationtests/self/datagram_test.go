@@ -119,6 +119,7 @@ func TestDatagramSizeLimit(t *testing.T) {
 	var sizeErr *quic.DatagramTooLargeError
 	require.ErrorAs(t, err, &sizeErr)
 	require.InDelta(t, sizeErr.MaxDatagramPayloadSize, maxDatagramSize, 10)
+	require.Equal(t, sizeErr.MaxDatagramPayloadSize, clientConn.MaxDatagramPayloadSize())
 
 	require.NoError(t, clientConn.SendDatagram(bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize))))
 	require.Error(t, clientConn.SendDatagram(bytes.Repeat([]byte("c"), int(sizeErr.MaxDatagramPayloadSize+1))))
