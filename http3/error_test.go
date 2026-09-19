@@ -46,6 +46,20 @@ func TestErrorConversion(t *testing.T) {
 	}
 }
 
+func TestErrorConversionPreservesQUICErrorType(t *testing.T) {
+	streamErr := &quic.StreamError{ErrorCode: 1337, Remote: true}
+	err := maybeReplaceError(streamErr)
+	var gotStreamErr *quic.StreamError
+	require.ErrorAs(t, err, &gotStreamErr)
+	require.Same(t, streamErr, gotStreamErr)
+
+	appErr := &quic.ApplicationError{ErrorCode: 42, Remote: true, ErrorMessage: "foobar"}
+	err = maybeReplaceError(appErr)
+	var gotAppErr *quic.ApplicationError
+	require.ErrorAs(t, err, &gotAppErr)
+	require.Same(t, appErr, gotAppErr)
+}
+
 func TestErrorString(t *testing.T) {
 	tests := []struct {
 		name     string

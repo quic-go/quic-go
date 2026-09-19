@@ -15,6 +15,7 @@ type Error struct {
 	Remote       bool
 	ErrorCode    ErrCode
 	ErrorMessage string
+	err          error
 }
 
 var _ error = &Error{}
@@ -33,6 +34,8 @@ func (e *Error) Error() string {
 	}
 	return s
 }
+
+func (e *Error) Unwrap() error { return e.err }
 
 func (e *Error) Is(target error) bool {
 	t, ok := target.(*Error)
@@ -55,10 +58,12 @@ func maybeReplaceError(err error) error {
 	case errors.As(err, &strErr):
 		e.Remote = strErr.Remote
 		e.ErrorCode = ErrCode(strErr.ErrorCode)
+		e.err = strErr
 	case errors.As(err, &appErr):
 		e.Remote = appErr.Remote
 		e.ErrorCode = ErrCode(appErr.ErrorCode)
 		e.ErrorMessage = appErr.ErrorMessage
+		e.err = appErr
 	}
 	return &e
 }
