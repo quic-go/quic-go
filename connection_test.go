@@ -3479,6 +3479,30 @@ func TestConnectionMigrationResetsMaxPayloadSizeEstimate(t *testing.T) {
 	})
 }
 
+func TestClientPathMigrationResetsMaxPayloadSizeEstimate(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	tc := newClientTestConnection(t, mockCtrl, nil, false)
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+		MaxUDPPayloadSize:                1456,
+	}))
+	tc.conn.applyTransportParameters()
+
+	const inflatedEstimate = 1400
+	tc.conn.maxPayloadSizeEstimate.Store(inflatedEstimate)
+	initialEstimate := uint32(estimateMaxPayloadSize(protocol.ByteCount(tc.conn.config.InitialPacketSize)))
+	require.Less(t, initialEstimate, uint32(inflatedEstimate))
+
+	go tc.conn.sendQueue.Run()
+	rawConn := NewMockRawConn(mockCtrl)
+	rawConn.EXPECT().LocalAddr().Return(tc.sendConn.LocalAddr())
+	tc.conn.switchToNewPath(&Transport{conn: rawConn}, monotime.Now())
+	t.Cleanup(tc.conn.sendQueue.Close)
+
+	require.Equal(t, initialEstimate, tc.conn.maxPayloadSizeEstimate.Load())
+}
+
 func TestConnectionMigrationServer(t *testing.T) {
 	tc := newServerTestConnection(t, nil, nil, false)
 	_, err := tc.conn.AddPath(&Transport{})

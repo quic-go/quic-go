@@ -918,6 +918,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
 	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
+	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
 	c.sendQueue = newSendQueue(c.conn)
