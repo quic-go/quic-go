@@ -43,7 +43,6 @@ Issues and pull requests that show signs of unsophisticated AI use will be close
 
 quic-go is developed with AI assistance, and we welcome responsible use of AI tools. 
 
-**Our reason for the strict AI policy is not due to an anti-AI stance**, but instead due to the
-number of highly unqualified people using AI. It's the people, not the tools, that are the problem.
+**Our strict AI policy is a response to unsophisticated AI use, not an anti-AI stance.**
 
 Our rules protect maintainers' time: contributors must check their work before asking us to review it.
