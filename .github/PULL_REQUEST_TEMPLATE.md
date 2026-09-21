@@ -1,4 +1,3 @@
-<!--
 Please read our [AI usage policy](https://github.com/quic-go/quic-go/blob/master/AI-POLICY.md#issues-pull-requests-and-security-disclosures).
 Do not submit a wall of AI-generated text as your pull request description. We prefer a short description written by a human being. Imperfect English is fine.
 
@@ -8,4 +7,3 @@ Using AI tools to write code is fine. It is your responsibility to understand ev
 IF YOU DON'T UNDERSTAND THE CODE YOU'RE ASKING US TO MERGE, DO NOT SUBMIT THE PULL REQUEST.
 
 If you used AI, disclose which tool you used and how you used it.
--->
