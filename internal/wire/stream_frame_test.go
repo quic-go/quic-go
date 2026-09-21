@@ -73,7 +73,7 @@ func TestParseStreamFrameRejectsLongFrames(t *testing.T) {
 	data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
 	data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
 	_, _, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestParseStreamFrameRejectsFramesExceedingRemainingSize(t *testing.T) {
@@ -81,7 +81,7 @@ func TestParseStreamFrameRejectsFramesExceedingRemainingSize(t *testing.T) {
 	data = append(data, encodeVarInt(7)...) // data length
 	data = append(data, []byte("foobar")...)
 	_, _, err := ParseStreamFrame(data, 0x8^0x2, protocol.Version1)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestParseStreamFrameErrorsOnEOFs(t *testing.T) {

@@ -32,7 +32,7 @@ func TestParseDatagramFrameErrorsOnLengthLongerThanFrame(t *testing.T) {
 	data := encodeVarInt(0x6) // length
 	data = append(data, []byte("fooba")...)
 	_, _, err := parseDatagramFrame(data, 0x30^0x1, protocol.Version1)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestParseDatagramFrameErrorsOnEOFs(t *testing.T) {
@@ -44,7 +44,7 @@ func TestParseDatagramFrameErrorsOnEOFs(t *testing.T) {
 	require.Equal(t, len(data), l)
 	for i := range data {
 		_, _, err = parseDatagramFrame(data[0:i], typ, protocol.Version1)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 

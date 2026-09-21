@@ -252,7 +252,6 @@ func expectStreamWriteReset(t *testing.T, str quicSendStream, errCode quic.Strea
 		t.Fatal("timeout")
 	}
 	_, err := str.Write([]byte{0})
-	require.Error(t, err)
 	var strErr *quic.StreamError
 	require.ErrorAs(t, err, &strErr)
 	require.Equal(t, errCode, strErr.ErrorCode)

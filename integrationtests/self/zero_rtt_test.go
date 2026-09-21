@@ -624,7 +624,7 @@ func check0RTTRejected(t *testing.T,
 	require.False(t, serverConn.ConnectionState().Used0RTT)
 	if sendData {
 		_, err = serverConn.AcceptUniStream(ctx)
-		require.Equal(t, context.DeadlineExceeded, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)

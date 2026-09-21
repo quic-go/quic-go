@@ -53,8 +53,7 @@ func TestTokenProtectorInvalidTokens(t *testing.T) {
 	token, err := tp.NewToken([]byte("foobar"))
 	require.NoError(t, err)
 	_, err = tp.DecodeToken(token[1:])
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "message authentication failed")
+	require.ErrorContains(t, err, "message authentication failed")
 }
 
 func TestTokenProtectorTooShortTokens(t *testing.T) {

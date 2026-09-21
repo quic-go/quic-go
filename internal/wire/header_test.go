@@ -38,7 +38,6 @@ func TestParseConnIDTooLong(t *testing.T) {
 	b = append(b, 21) // dest conn id len
 	b = append(b, make([]byte, 21)...)
 	_, err := ParseConnectionID(b, 4)
-	require.Error(t, err)
 	require.ErrorIs(t, err, protocol.ErrInvalidConnectionIDLen)
 }
 
@@ -60,7 +59,6 @@ func TestParseConnIDEOFLongHeader(t *testing.T) {
 		b := make([]byte, i)
 		copy(b, data[:i])
 		_, err := ParseConnectionID(b, 8)
-		require.Error(t, err)
 		require.ErrorIs(t, err, io.EOF)
 	}
 }
@@ -205,7 +203,7 @@ func TestStopParsingWhenEncounteringUnsupportedVersion(t *testing.T) {
 		'f', 'o', 'o', 'b', 'a', 'r', // unspecified bytes
 	}
 	hdr, _, rest, err := ParsePacket(data)
-	require.EqualError(t, err, ErrUnsupportedVersion.Error())
+	require.ErrorIs(t, err, ErrUnsupportedVersion)
 	require.Equal(t, protocol.Version(0xdeadbeef), hdr.Version)
 	require.Equal(t, protocol.ParseConnectionID([]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}), hdr.DestConnectionID)
 	require.Equal(t, protocol.ParseConnectionID([]byte{0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1}), hdr.SrcConnectionID)
@@ -250,7 +248,7 @@ func TestErrorOnTooLongDestinationConnectionID(t *testing.T) {
 	data = append(data, encodeVarInt(0)...)                                                                   // length
 	data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 	_, _, _, err := ParsePacket(data)
-	require.EqualError(t, err, protocol.ErrInvalidConnectionIDLen.Error())
+	require.ErrorIs(t, err, protocol.ErrInvalidConnectionIDLen)
 }
 
 func TestParseLongHeaderWith2BytePacketNumber(t *testing.T) {
@@ -308,7 +306,7 @@ func TestRetryPacketTooShortForIntegrityTag(t *testing.T) {
 	data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...)
 	// this results in a token length of 0
 	_, _, _, err := ParsePacket(data)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestTokenLengthTooLarge(t *testing.T) {
@@ -320,7 +318,7 @@ func TestTokenLengthTooLarge(t *testing.T) {
 	data = append(data, []byte{0x12, 0x34}...) // packet number
 
 	_, _, _, err := ParsePacket(data)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestErrorOn5thOr6thBitSet(t *testing.T) {
@@ -333,7 +331,7 @@ func TestErrorOn5thOr6thBitSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, protocol.PacketTypeHandshake, hdr.Type)
 	extHdr, err := hdr.ParseExtended(data)
-	require.EqualError(t, err, ErrInvalidReservedBits.Error())
+	require.ErrorIs(t, err, ErrInvalidReservedBits)
 	require.NotNil(t, extHdr)
 	require.Equal(t, protocol.PacketNumber(0x1234), extHdr.PacketNumber)
 }
@@ -347,7 +345,7 @@ func TestHeaderEOF(t *testing.T) {
 	data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // src conn ID
 	for i := 1; i < len(data); i++ {
 		_, _, _, err := ParsePacket(data[:i])
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 
@@ -363,7 +361,7 @@ func TestParseExtendedHeaderEOF(t *testing.T) {
 		hdr, _, _, err := ParsePacket(b)
 		require.NoError(t, err)
 		_, err = hdr.ParseExtended(b)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 
@@ -379,7 +377,7 @@ func TestParseRetryEOF(t *testing.T) {
 		hdr, _, _, err := ParsePacket(data)
 		require.NoError(t, err)
 		_, err = hdr.ParseExtended(data)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 
@@ -420,8 +418,7 @@ func TestCoalescedPacketErrorOnTooSmallPacketNumber(t *testing.T) {
 	}).Append(nil, protocol.Version1)
 	require.NoError(t, err)
 	_, _, _, err = ParsePacket(b)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "packet length (2 bytes) is smaller than the expected length (3 bytes)")
+	require.ErrorContains(t, err, "packet length (2 bytes) is smaller than the expected length (3 bytes)")
 }
 
 func TestCoalescedPacketErrorOnTooSmallPayload(t *testing.T) {

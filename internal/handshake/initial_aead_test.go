@@ -207,7 +207,7 @@ func TestInitialAEADFailsWithDifferentConnectionIDs(t *testing.T) {
 
 			clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
 			_, err := serverOpener.Open(nil, clientMessage, 42, []byte("aad"))
-			require.Equal(t, ErrDecryptionFailed, err)
+			require.ErrorIs(t, err, ErrDecryptionFailed)
 		})
 	}
 }

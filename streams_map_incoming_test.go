@@ -123,7 +123,7 @@ func TestStreamsMapIncomingAcceptingStreams(t *testing.T) {
 		synctest.Wait()
 		select {
 		case err := <-errChan:
-			require.Equal(t, context.Canceled, err)
+			require.ErrorIs(t, err, context.Canceled)
 		default:
 			t.Fatal("timeout")
 		}

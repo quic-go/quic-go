@@ -520,9 +520,8 @@ func TestHTTPErrAbortHandler(t *testing.T) {
 	close(respChan)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
-	require.Error(t, err)
-	h3Err, ok := errors.AsType[*http3.Error](err)
-	require.True(t, ok)
+	var h3Err *http3.Error
+	require.ErrorAs(t, err, &h3Err)
 	require.Equal(t, http3.ErrCodeInternalError, h3Err.ErrorCode)
 	// the body will be a prefix of what's written
 	require.True(t, bytes.HasPrefix([]byte("foobar"), body))
@@ -671,7 +670,6 @@ func TestHTTPClientRequestContextCancellation(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/cancel-before", port), nil)
 		require.NoError(t, err)
 		_, err = cl.Do(req)
-		require.Error(t, err)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
@@ -697,9 +695,8 @@ func TestHTTPClientRequestContextCancellation(t *testing.T) {
 
 		select {
 		case err := <-errChan:
-			require.Error(t, err)
-			http3Err, ok := errors.AsType[*http3.Error](err)
-			require.True(t, ok)
+			var http3Err *http3.Error
+			require.ErrorAs(t, err, &http3Err)
 			require.Equal(t, http3.ErrCodeRequestCanceled, http3Err.ErrorCode)
 			require.True(t, http3Err.Remote)
 		case <-time.After(time.Second):
@@ -707,8 +704,8 @@ func TestHTTPClientRequestContextCancellation(t *testing.T) {
 		}
 
 		_, err = resp.Body.Read([]byte{0})
-		http3Err, ok := errors.AsType[*http3.Error](err)
-		require.True(t, ok)
+		var http3Err *http3.Error
+		require.ErrorAs(t, err, &http3Err)
 		require.Equal(t, http3.ErrCodeRequestCanceled, http3Err.ErrorCode)
 		require.False(t, http3Err.Remote)
 	})

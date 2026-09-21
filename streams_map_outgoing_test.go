@@ -61,7 +61,6 @@ func testStreamsMapOutgoingOpenAndDelete(t *testing.T, perspective protocol.Pers
 	require.True(t, str2.supportsResetStreamAt)
 
 	err = m.DeleteStream(firstStream + 1337*4)
-	require.Error(t, err)
 	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
 	require.ErrorContains(t, err, "tried to delete unknown outgoing stream")
 
@@ -285,9 +284,9 @@ func TestStreamsMapOutgoingClosing(t *testing.T) {
 
 		// both stream should be closed
 		assert.True(t, str1.closed)
-		assert.Equal(t, assert.AnError, str1.closeErr)
+		assert.ErrorIs(t, str1.closeErr, assert.AnError)
 		assert.True(t, str2.closed)
-		assert.Equal(t, assert.AnError, str2.closeErr)
+		assert.ErrorIs(t, str2.closeErr, assert.AnError)
 
 		select {
 		case err := <-errChan:

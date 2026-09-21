@@ -21,7 +21,7 @@ import (
 func TestFrameTypeParsingReturnsNilWhenNothingToRead(t *testing.T) {
 	parser := NewFrameParser(true, true, true)
 	frameType, l, err := parser.ParseType(nil, protocol.Encryption1RTT)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 	require.Zero(t, frameType)
 	require.Zero(t, l)
 }
@@ -56,7 +56,7 @@ func TestFrameParsingHandlesPaddingAtEnd(t *testing.T) {
 	b := []byte{0, 0, 0}
 
 	_, l, err := parser.ParseType(b, protocol.Encryption1RTT)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, 3, l)
 }
 
@@ -187,7 +187,7 @@ func TestParseStreamFrameWrapsError(t *testing.T) {
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
 	require.Equal(t, uint64(frameType), transportErr.FrameType)
-	require.Contains(t, transportErr.Error(), "EOF")
+	require.ErrorContains(t, transportErr, "EOF")
 }
 
 func TestParseStreamFrameSuccess(t *testing.T) {
@@ -489,7 +489,6 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 					require.NoError(t, err)
 					require.Equal(t, tc.frameType, frameType)
 				} else {
-					require.Error(t, err)
 					var transportErr *qerr.TransportError
 					require.ErrorAs(t, err, &transportErr)
 					require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
@@ -575,7 +574,6 @@ func TestFrameParserInvalidFrameType(t *testing.T) {
 
 	require.Equal(t, 2, l)
 
-	require.Error(t, err)
 	var transportErr *qerr.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
@@ -596,7 +594,6 @@ func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	require.Equal(t, 1, l)
 
 	_, _, err = parser.ParseLessCommonFrame(frameType, b[1:len(b)-2], protocol.Version1)
-	require.Error(t, err)
 	var transportErr *qerr.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)

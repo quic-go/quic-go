@@ -486,7 +486,7 @@ func TestServerRequestContext(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
-	require.Equal(t, context.Canceled, requestContext.Err())
+	require.ErrorIs(t, requestContext.Err(), context.Canceled)
 	close(block)
 }
 

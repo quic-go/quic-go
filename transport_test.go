@@ -144,7 +144,6 @@ func TestTransportAndDialConcurrentClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	_, err := tr.Dial(ctx, server.LocalAddr(), &tls.Config{}, nil)
-	require.Error(t, err)
 	require.ErrorIs(t, err, ErrTransportClosed)
 	require.NotErrorIs(t, err, context.DeadlineExceeded)
 
@@ -365,7 +364,6 @@ func TestTransportListening(t *testing.T) {
 
 		// only a single listener can be set
 		_, err = tr.Listen(&tls.Config{}, nil)
-		require.Error(t, err)
 		require.ErrorIs(t, err, errListenerAlreadySet)
 
 		require.NoError(t, ln.Close())
@@ -388,7 +386,6 @@ func TestTransportNonQUICPackets(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 		defer cancel()
 		_, _, err := tr.ReadNonQUICPacket(ctx, make([]byte, 1024))
-		require.Error(t, err)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 
 		data := []byte{0 /* don't set the QUIC bit */, 1, 2, 3}
@@ -438,7 +435,6 @@ func TestTransportFaultySyscallConn(t *testing.T) {
 
 	tr := &Transport{Conn: syscallconn}
 	_, err := tr.Listen(&tls.Config{}, nil)
-	require.Error(t, err)
 	require.ErrorIs(t, err, assert.AnError)
 }
 

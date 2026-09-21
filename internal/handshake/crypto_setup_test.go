@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"errors"
 	"math/big"
 	"net"
 	"testing"
@@ -77,10 +76,10 @@ func TestErrorBeforeClientHelloGeneration(t *testing.T) {
 	)
 
 	err := cl.StartHandshake(context.Background())
-	terr, ok := errors.AsType[*qerr.TransportError](err)
-	require.True(t, ok)
+	var terr *qerr.TransportError
+	require.ErrorAs(t, err, &terr)
 	require.Equal(t, uint64(0x100+0x50), uint64(terr.ErrorCode))
-	require.Contains(t, err.Error(), "tls: invalid NextProtos value")
+	require.ErrorContains(t, err, "tls: invalid NextProtos value")
 }
 
 func TestMessageReceivedAtWrongEncryptionLevel(t *testing.T) {
@@ -103,8 +102,7 @@ func TestMessageReceivedAtWrongEncryptionLevel(t *testing.T) {
 	fakeCH := append([]byte{typeClientHello, 0, 0, 6}, []byte("foobar")...)
 	// wrong encryption level
 	err := server.HandleMessage(fakeCH, protocol.EncryptionHandshake)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "tls: handshake data received at wrong level")
+	require.ErrorContains(t, err, "tls: handshake data received at wrong level")
 }
 
 // The clientEvents and serverEvents contain all events that were not processed by the function,
@@ -351,8 +349,7 @@ func TestNewSessionTicketAtWrongEncryptionLevel(t *testing.T) {
 	// inject an invalid session ticket
 	b := append([]byte{uint8(typeNewSessionTicket), 0, 0, 6}, []byte("foobar")...)
 	err := client.HandleMessage(b, protocol.EncryptionHandshake)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "tls: handshake data received at wrong level")
+	require.ErrorContains(t, err, "tls: handshake data received at wrong level")
 }
 
 func TestHandlingNewSessionTicketFails(t *testing.T) {

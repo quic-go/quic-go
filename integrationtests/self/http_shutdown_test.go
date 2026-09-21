@@ -33,7 +33,6 @@ func TestHTTPShutdown(t *testing.T) {
 	})
 
 	_, err := client.Get(fmt.Sprintf("https://localhost:%d/shutdown", port))
-	require.Error(t, err)
 	var appErr *http3.Error
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, http3.ErrCodeNoError, appErr.ErrorCode)
@@ -228,7 +227,6 @@ func TestGracefulShutdownLongLivedRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	_, err = io.Copy(io.Discard, resp.Body)
-	require.Error(t, err)
 	var h3Err *http3.Error
 	require.ErrorAs(t, err, &h3Err)
 	require.Equal(t, http3.ErrCodeNoError, h3Err.ErrorCode)
@@ -415,12 +413,13 @@ func testHTTP3ListenerClosing(t *testing.T, graceful, useApplicationListener boo
 		// The server is listening on a random port, and the only way to get the port
 		// is to parse the Alt-Svc header.
 		var port int
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			hdr := make(http.Header)
 			server.SetQUICHeaders(hdr)
 			altSvc := hdr.Get("Alt-Svc")
 			n, err := fmt.Sscanf(altSvc, `h3=":%d"`, &port)
-			return err == nil && n == 1
+			require.NoError(c, err)
+			require.Equal(c, 1, n)
 		}, time.Second, 10*time.Millisecond)
 		host = fmt.Sprintf("127.0.0.1:%d", port)
 	}

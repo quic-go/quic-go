@@ -41,6 +41,5 @@ func TestUnmarshal0RTTRefusesInvalidTransportParameters(t *testing.T) {
 	b := quicvarint.Append(nil, sessionTicketRevision)
 	b = append(b, []byte("foobar")...)
 	err := (&sessionTicket{}).Unmarshal(b)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unmarshaling transport parameters from session ticket failed")
+	require.ErrorContains(t, err, "unmarshaling transport parameters from session ticket failed")
 }

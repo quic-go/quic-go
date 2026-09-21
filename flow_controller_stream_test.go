@@ -74,7 +74,6 @@ func TestStreamFlowControllerFinalOffset(t *testing.T) {
 		fc := newFC()
 		require.NoError(t, fc.UpdateHighestReceived(50, true, monotime.Now()))
 		err := fc.UpdateHighestReceived(51, true, monotime.Now())
-		require.Error(t, err)
 		var terr *qerr.TransportError
 		require.ErrorAs(t, err, &terr)
 		require.Equal(t, qerr.FinalSizeError, terr.ErrorCode)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,13 +80,10 @@ func testDial(t *testing.T,
 	if shouldCloseConn {
 		// The socket that the client used for dialing should be closed now.
 		// Binding to the same address would error if the address was still in use.
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			conn, err := net.ListenUDP("udp", addr.(*net.UDPAddr))
-			if err != nil {
-				return false
-			}
+			require.NoError(c, err)
 			conn.Close()
-			return true
 		}, scaleDuration(200*time.Millisecond), scaleDuration(10*time.Millisecond))
 		require.False(t, areTransportsRunning())
 		return

@@ -38,9 +38,9 @@ func TestErrorConversion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := maybeReplaceError(tt.input)
 			if tt.expected == nil {
-				require.Nil(t, result)
+				require.NoError(t, result)
 			} else {
-				require.ErrorIs(t, tt.expected, result)
+				require.ErrorIs(t, result, tt.expected)
 			}
 		})
 	}

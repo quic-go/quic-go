@@ -905,7 +905,7 @@ func TestReceiveStreamReset(t *testing.T) {
 
 		// further calls to Read return the error
 		_, err = strWithTimeout.Read([]byte{0})
-		require.Equal(t, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true}, err)
+		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
 
 		// further RESET_STREAM frames have no effect
 		require.NoError(t, str.handleResetStreamFrame(

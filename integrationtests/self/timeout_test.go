@@ -26,7 +26,6 @@ import (
 func requireIdleTimeoutError(t *testing.T, err error) {
 	t.Helper()
 
-	require.Error(t, err)
 	var idleTimeoutErr *quic.IdleTimeoutError
 	require.ErrorAs(t, err, &idleTimeoutErr)
 	require.True(t, idleTimeoutErr.Timeout())
@@ -475,7 +474,7 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 		}
 		require.Error(t, clientErr)
 		if pers == protocol.PerspectiveClient {
-			require.Contains(t, clientErr.Error(), io.ErrClosedPipe.Error())
+			require.ErrorContains(t, clientErr, io.ErrClosedPipe.Error())
 		} else {
 			nerr, ok := errors.AsType[net.Error](clientErr)
 			require.True(t, ok)
@@ -486,7 +485,7 @@ func testFaultyPacketConn(t *testing.T, pers protocol.Perspective) {
 		case serverErr := <-serverErrChan: // The handshake completed on the server side.
 			require.Error(t, serverErr)
 			if pers == protocol.PerspectiveServer {
-				require.Contains(t, serverErr.Error(), io.ErrClosedPipe.Error())
+				require.ErrorContains(t, serverErr, io.ErrClosedPipe.Error())
 			} else {
 				nerr, ok := errors.AsType[net.Error](serverErr)
 				require.True(t, ok)

@@ -41,7 +41,7 @@ func TestParseShortHeaderReservedBitsSet(t *testing.T) {
 		0x13, 0x37,
 	}
 	_, pn, _, _, err := ParseShortHeader(data, 4)
-	require.EqualError(t, err, ErrInvalidReservedBits.Error())
+	require.ErrorIs(t, err, ErrInvalidReservedBits)
 	require.Equal(t, protocol.PacketNumber(0x1337), pn)
 }
 
@@ -60,7 +60,7 @@ func TestParseShortHeaderErrorsOnEOF(t *testing.T) {
 	require.NoError(t, err)
 	for i := range data {
 		_, _, _, _, err := ParseShortHeader(data[:i], 4)
-		require.EqualError(t, err, io.EOF.Error())
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 

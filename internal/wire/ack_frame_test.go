@@ -152,7 +152,7 @@ func TestParseACKErrorOnEOF(t *testing.T) {
 	for i := range data {
 		var frame AckFrame
 		_, err := parseAckFrame(&frame, data[:i], FrameTypeAck, protocol.AckDelayExponent, protocol.Version1)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestParseACKECNErrorOnEOF(t *testing.T) {
 	for i := range data {
 		var frame AckFrame
 		_, err := parseAckFrame(&frame, data[:i], FrameTypeAckECN, protocol.AckDelayExponent, protocol.Version1)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 

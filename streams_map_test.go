@@ -609,7 +609,6 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 	// now switch to using the new streams map
 	m.UseResetMaps()
 	_, err = m.OpenStream()
-	require.Error(t, err)
 	require.ErrorIs(t, err, &StreamLimitReachedError{})
 }
 

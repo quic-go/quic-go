@@ -200,9 +200,7 @@ func shuffleClientHelloExtensions(t testing.TB, clientHello []byte) []byte {
 	newClientHello = append(newClientHello, lengthBytes...)
 	newClientHello = append(newClientHello, newBody...)
 	// check that it's actually valid
-	if err := checkClientHello(newClientHello); err != nil {
-		t.Fatalf("invalid ClientHello: %v", err)
-	}
+	require.NoError(t, checkClientHello(newClientHello), "invalid ClientHello")
 	return newClientHello
 }
 
