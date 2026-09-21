@@ -163,7 +163,7 @@ func (c *ClientConn) openRequestStream(
 		if context.Cause(openCtx) == errGoAway {
 			return nil, errGoAway
 		}
-		return nil, err
+		return nil, maybeReplaceError(err)
 	}
 
 	// Check again in case GOAWAY raced with OpenStreamSync.
@@ -333,9 +333,9 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil { // if any error occurred
 		close(reqDone)
 		<-done
-		return nil, maybeReplaceError(err)
+		return nil, err
 	}
-	return rsp, maybeReplaceError(err)
+	return rsp, nil
 }
 
 // ReceivedSettings returns a channel that is closed once the server's HTTP/3 settings were received.
