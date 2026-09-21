@@ -47,8 +47,7 @@ func TestTokenGeneratorRejectsInvalidTokens(t *testing.T) {
 	tokenGen := newTokenGenerator(t)
 
 	_, err := tokenGen.DecodeToken([]byte("invalid token"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "too short")
+	require.ErrorContains(t, err, "too short")
 }
 
 func TestTokenGeneratorDecodingFailed(t *testing.T) {
@@ -57,8 +56,7 @@ func TestTokenGeneratorDecodingFailed(t *testing.T) {
 	invalidToken, err := tokenGen.tokenProtector.NewToken([]byte("foobar"))
 	require.NoError(t, err)
 	_, err = tokenGen.DecodeToken(invalidToken)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "asn1")
+	require.ErrorContains(t, err, "asn1")
 }
 
 func TestTokenGeneratorAdditionalPayload(t *testing.T) {

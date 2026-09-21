@@ -57,7 +57,7 @@ func TestParse(t *testing.T) {
 			value, l, err := Parse(tt.input)
 			require.Equal(t, tt.expectedValue, value)
 			require.Equal(t, tt.expectedLen, l)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -95,7 +95,7 @@ func TestParsingFailures(t *testing.T) {
 			value, l, err := Parse(tt.input)
 			require.Equal(t, uint64(0), value)
 			require.Equal(t, 0, l)
-			require.Equal(t, tt.expectedErr, err)
+			require.ErrorIs(t, err, tt.expectedErr)
 		})
 	}
 }

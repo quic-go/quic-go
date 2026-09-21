@@ -36,7 +36,7 @@ func TestParseStreamsBlockedFrameErrorsOnEOFs(t *testing.T) {
 	require.Equal(t, len(data), l)
 	for i := range data {
 		_, _, err := parseStreamsBlockedFrame(data[:i], FrameTypeBidiStreamBlocked, protocol.Version1)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 

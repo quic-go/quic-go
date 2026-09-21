@@ -120,7 +120,6 @@ func TestSentPacketHistoryRemovePackets(t *testing.T) {
 
 	// try to remove non-existent packet
 	err := hist.Remove(9)
-	require.Error(t, err)
 	require.EqualError(t, err, "packet 9 not found in sent packet history")
 
 	// only the last 4 skipped packets should be preserved

@@ -201,7 +201,6 @@ func testTransportClose(t *testing.T, conn net.PacketConn, closeFn func(), expec
 
 	select {
 	case err := <-errChan:
-		require.Error(t, err)
 		require.ErrorIs(t, err, quic.ErrTransportClosed)
 		if expectedErr != nil {
 			require.ErrorIs(t, err, expectedErr)
@@ -214,7 +213,6 @@ func testTransportClose(t *testing.T, conn net.PacketConn, closeFn func(), expec
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
 	defer cancel()
 	_, err := tr.Dial(ctx, server.LocalAddr(), &tls.Config{}, getQuicConfig(nil))
-	require.Error(t, err)
 	require.ErrorIs(t, err, quic.ErrTransportClosed)
 	if expectedErr != nil {
 		require.ErrorIs(t, err, expectedErr)
@@ -222,7 +220,6 @@ func testTransportClose(t *testing.T, conn net.PacketConn, closeFn func(), expec
 
 	// it's not possible to create new listeners
 	_, err = tr.Listen(&tls.Config{}, nil)
-	require.Error(t, err)
 	require.ErrorIs(t, err, quic.ErrTransportClosed)
 	if expectedErr != nil {
 		require.ErrorIs(t, err, expectedErr)

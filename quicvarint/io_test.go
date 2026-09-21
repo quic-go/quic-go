@@ -55,7 +55,7 @@ func TestReaderWrapsIOReader(t *testing.T) {
 func TestReaderFailure(t *testing.T) {
 	r := NewReader(&nopReader{})
 	val, err := r.ReadByte()
-	require.Equal(t, io.ErrUnexpectedEOF, err)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	require.Equal(t, byte(0), val)
 }
 
@@ -69,10 +69,10 @@ func TestReaderHandlesEOF(t *testing.T) {
 	require.Equal(t, "foo", string(b))
 	n, err = r.Read(b)
 	require.Equal(t, 3, n)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, "bar", string(b))
 	n, err = r.Read(b)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 	require.Zero(t, n)
 
 	// now test using it to read varints
@@ -113,7 +113,7 @@ func TestWriterWrapsIOWriter(t *testing.T) {
 func TestWriterFailure(t *testing.T) {
 	w := NewWriter(&nopWriter{})
 	err := w.WriteByte(0)
-	require.Equal(t, io.ErrShortBuffer, err)
+	require.ErrorIs(t, err, io.ErrShortBuffer)
 }
 
 type bufPeeker []byte

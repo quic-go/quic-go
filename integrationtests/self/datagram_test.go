@@ -115,7 +115,6 @@ func TestDatagramSizeLimit(t *testing.T) {
 	defer clientConn.CloseWithError(0, "")
 
 	err = clientConn.SendDatagram(bytes.Repeat([]byte("a"), maxDatagramSize+100)) // definitely too large
-	require.Error(t, err)
 	var sizeErr *quic.DatagramTooLargeError
 	require.ErrorAs(t, err, &sizeErr)
 	require.InDelta(t, sizeErr.MaxDatagramPayloadSize, maxDatagramSize, 10)

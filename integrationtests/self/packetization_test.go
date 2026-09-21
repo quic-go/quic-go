@@ -205,7 +205,6 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 	for i := range numBatches {
 		str.SetWriteDeadline(time.Now().Add(rtt))
 		n, err := str.Write(make([]byte, 10000))
-		require.Error(t, err)
 		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 		require.Equal(t, int(windowSizes[i]), n)
 
@@ -215,7 +214,6 @@ func testConnAndStreamDataBlocked(t *testing.T, limitStream, limitConn bool) {
 		}
 		serverStr.SetReadDeadline(time.Now().Add(rtt))
 		n2, err := io.ReadFull(serverStr, make([]byte, 10000))
-		require.Error(t, err)
 		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 		require.Equal(t, n, n2)
 	}

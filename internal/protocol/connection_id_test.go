@@ -48,7 +48,7 @@ func TestConnectionID(t *testing.T) {
 
 	// too few bytes
 	_, err = ReadConnectionID(buf, 10)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 
 	// zero length
 	c2, err := ReadConnectionID(buf, 0)
@@ -58,7 +58,7 @@ func TestConnectionID(t *testing.T) {
 	// connection ID can have a length of a maximum of 20 bytes
 	buf2 := bytes.NewBuffer(make([]byte, 21))
 	_, err = ReadConnectionID(buf2, 21)
-	require.Equal(t, ErrInvalidConnectionIDLen, err)
+	require.ErrorIs(t, err, ErrInvalidConnectionIDLen)
 }
 
 func TestConnectionIDZeroValue(t *testing.T) {

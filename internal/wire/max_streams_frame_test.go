@@ -37,7 +37,7 @@ func TestParseMaxStreamsErrorsOnEOF(t *testing.T) {
 	require.Equal(t, len(data), l)
 	for i := range data {
 		_, _, err := parseMaxStreamsFrame(data[:i], typ, protocol.Version1)
-		require.Equal(t, io.EOF, err)
+		require.ErrorIs(t, err, io.EOF)
 	}
 }
 

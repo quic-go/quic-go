@@ -26,7 +26,6 @@ func testFrameParserEOF(t *testing.T, data []byte) {
 		copy(b, data[:i])
 		fp := frameParser{r: bytes.NewReader(b)}
 		_, err := fp.ParseNext(nil)
-		require.Error(t, err)
 		require.ErrorIs(t, err, io.EOF)
 	}
 }
@@ -47,7 +46,6 @@ func TestParserReservedFrameType(t *testing.T) {
 				closeConn: client.CloseWithError,
 			}
 			_, err := fp.ParseNext(&eventRecorder)
-			require.Error(t, err)
 			require.ErrorContains(t, err, "http3: reserved frame type")
 
 			select {
@@ -264,7 +262,6 @@ func TestParserSettingsFrameDuplicateSettings(t *testing.T) {
 			data = append(data, settings...)
 			fp := frameParser{r: bytes.NewReader(data)}
 			_, err := fp.ParseNext(nil)
-			require.Error(t, err)
 			require.EqualError(t, err, fmt.Sprintf("duplicate setting: %d", tc.num))
 		})
 	}

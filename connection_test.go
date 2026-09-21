@@ -3206,7 +3206,6 @@ func TestConnectionEarlyClose(t *testing.T) {
 
 		select {
 		case err := <-errChan:
-			require.Error(t, err)
 			require.ErrorContains(t, err, "early error")
 			code := qerr.InternalError
 			require.Equal(t,
@@ -3391,7 +3390,6 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding bool) {
 func TestConnectionMigrationServer(t *testing.T) {
 	tc := newServerTestConnection(t, nil, nil, false)
 	_, err := tc.conn.AddPath(&Transport{})
-	require.Error(t, err)
 	require.ErrorContains(t, err, "server cannot initiate connection migration")
 }
 
@@ -3420,7 +3418,6 @@ func testConnectionMigration(t *testing.T, enabled bool) {
 	defer tr.Close()
 	path, err := tc.conn.AddPath(tr)
 	if !enabled {
-		require.Error(t, err)
 		require.ErrorContains(t, err, "server disabled connection migration")
 		return
 	}

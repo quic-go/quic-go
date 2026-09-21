@@ -1019,7 +1019,6 @@ func TestSendStreamCancellation(t *testing.T) {
 		frame, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.Nil(t, frame.Frame)
 		_, err = strWithTimeout.Write([]byte("foobar"))
-		require.Error(t, err)
 		require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1234, Remote: false})
 
 		// shutting down has no effect
@@ -1057,7 +1056,6 @@ func TestSendStreamCancellationAfterClose(t *testing.T) {
 	require.False(t, hasMore)
 
 	_, err = strWithTimeout.Write([]byte("foobar"))
-	require.Error(t, err)
 	require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: false})
 }
 
@@ -1277,7 +1275,6 @@ func TestSendStreamStopSendingDuringWrite(t *testing.T) {
 		frame, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.Nil(t, frame.Frame)
 		_, err = (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
-		require.Error(t, err)
 		require.ErrorIs(t, err, &StreamError{StreamID: streamID, ErrorCode: 1337, Remote: true})
 	})
 }

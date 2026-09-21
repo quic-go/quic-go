@@ -122,8 +122,7 @@ func TestRequestValidation(t *testing.T) {
 				require.EqualError(t, err, tt.expectedErr)
 			}
 			if tt.expectedErrContains != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.expectedErrContains)
+				require.ErrorContains(t, err, tt.expectedErrContains)
 			}
 			require.True(t, tt.req.Body.(*mockBody).closed)
 		})

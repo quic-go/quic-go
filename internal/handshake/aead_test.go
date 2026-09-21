@@ -38,11 +38,11 @@ func TestEncryptAndDecryptMessage(t *testing.T) {
 
 				// incorrect associated data
 				_, err = opener.Open(nil, encrypted, 0x1337, []byte("wrong ad"))
-				require.Equal(t, ErrDecryptionFailed, err)
+				require.ErrorIs(t, err, ErrDecryptionFailed)
 
 				// incorrect packet number
 				_, err = opener.Open(nil, encrypted, 0x42, ad)
-				require.Equal(t, ErrDecryptionFailed, err)
+				require.ErrorIs(t, err, ErrDecryptionFailed)
 			})
 		}
 	}

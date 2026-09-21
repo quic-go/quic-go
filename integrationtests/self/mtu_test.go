@@ -124,7 +124,6 @@ func TestPathMTUDiscovery(t *testing.T) {
 	defer conn.CloseWithError(0, "")
 
 	err = conn.SendDatagram(make([]byte, 2000))
-	require.Error(t, err)
 	var datagramErr *quic.DatagramTooLargeError
 	require.ErrorAs(t, err, &datagramErr)
 	initialMaxDatagramSize := datagramErr.MaxDatagramPayloadSize

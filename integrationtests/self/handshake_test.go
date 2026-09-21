@@ -110,7 +110,7 @@ func TestHandshakeServerMismatch(t *testing.T) {
 	transportErr, ok := errors.AsType[*quic.TransportError](err)
 	require.True(t, ok)
 	require.True(t, transportErr.ErrorCode.IsCryptoError())
-	require.Contains(t, transportErr.Error(), "x509: certificate is valid for localhost, not foo.bar")
+	require.ErrorContains(t, transportErr, "x509: certificate is valid for localhost, not foo.bar")
 	_, ok = errors.AsType[*tls.CertificateVerificationError](transportErr)
 	require.True(t, ok)
 }
@@ -251,7 +251,6 @@ func TestHandshakeFailsWithoutClientCert(t *testing.T) {
 		err = <-errChan
 	}
 
-	require.Error(t, err)
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.True(t, transportErr.ErrorCode.IsCryptoError())
@@ -504,11 +503,10 @@ func TestALPN(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err = quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), tlsConf, nil)
-	require.Error(t, err)
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.True(t, transportErr.ErrorCode.IsCryptoError())
-	require.Contains(t, transportErr.Error(), "no application protocol")
+	require.ErrorContains(t, transportErr, "no application protocol")
 }
 
 func TestTokensFromNewTokenFrames(t *testing.T) {
@@ -640,7 +638,6 @@ func TestInvalidToken(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err = quic.Dial(ctx, newUDPConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), nil)
-	require.Error(t, err)
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.Equal(t, quic.InvalidToken, transportErr.ErrorCode)
@@ -741,7 +738,7 @@ func TestNoPacketsSentWhenClientHelloFails(t *testing.T) {
 	var transportErr *quic.TransportError
 	require.ErrorAs(t, err, &transportErr)
 	require.True(t, transportErr.ErrorCode.IsCryptoError())
-	require.Contains(t, err.Error(), "tls: invalid NextProtos value")
+	require.ErrorContains(t, err, "tls: invalid NextProtos value")
 
 	// verify no packets were sent
 	select {
