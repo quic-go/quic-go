@@ -380,9 +380,9 @@ func testACKTruncate(t *testing.T, origACK AckFrame) {
 	ack := cloneACK()
 	l := ack.Length(protocol.Version1)
 	ack.Truncate(1000, protocol.Version1)
-	require.Equal(t, expectedRanges, len(ack.AckRanges))
+	require.Len(t, ack.AckRanges, expectedRanges)
 	ack.Truncate(l, protocol.Version1)
-	require.Equal(t, expectedRanges, len(ack.AckRanges))
+	require.Len(t, ack.AckRanges, expectedRanges)
 
 	maxLen := l
 	for {
@@ -608,5 +608,5 @@ func benchmarkACKSerialization(b *testing.B, f *AckFrame) {
 	}
 
 	// the frame should not have been truncated
-	require.Equal(b, numRanges, len(f.AckRanges))
+	require.Len(b, f.AckRanges, numRanges)
 }

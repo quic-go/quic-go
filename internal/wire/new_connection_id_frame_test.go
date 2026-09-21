@@ -84,5 +84,5 @@ func TestWriteNewConnectionIDFrame(t *testing.T) {
 	expected = append(expected, []byte{1, 2, 3, 4, 5, 6}...)
 	expected = append(expected, token[:]...)
 	require.Equal(t, expected, b)
-	require.Equal(t, int(frame.Length(protocol.Version1)), len(b))
+	require.Len(t, b, int(frame.Length(protocol.Version1)))
 }

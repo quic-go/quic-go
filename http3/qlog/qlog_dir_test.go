@@ -25,9 +25,7 @@ func TestQLOGDIRSet(t *testing.T) {
 	recorder := tracer.AddProducer()
 	recorder.Close()
 
-	_, err := os.Stat(qlogDir)
-	qlogDirCreated := !os.IsNotExist(err)
-	require.True(t, qlogDirCreated)
+	require.DirExists(t, qlogDir)
 
 	entries, err := os.ReadDir(qlogDir)
 	require.NoError(t, err)

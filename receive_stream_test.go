@@ -533,7 +533,7 @@ func TestReceiveStreamImmediateFINs(t *testing.T) {
 	// peeking returns the EOF
 	n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Second}).Peek(make([]byte, 4))
 	require.ErrorIs(t, err, io.EOF)
-	require.Equal(t, 0, n)
+	require.Zero(t, n)
 
 	// and so does reading
 	n, err = (&readerWithTimeout{Reader: str, Timeout: time.Second}).Read(make([]byte, 4))

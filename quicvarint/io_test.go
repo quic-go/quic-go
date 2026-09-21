@@ -43,13 +43,13 @@ var _ io.Writer = &nopWriter{}
 func TestReaderPassesThroughUnchanged(t *testing.T) {
 	b := bytes.NewReader([]byte{0})
 	r := NewReader(b)
-	require.Equal(t, b, r)
+	require.Same(t, b, r)
 }
 
 func TestReaderWrapsIOReader(t *testing.T) {
 	n := &nopReader{}
 	r := NewReader(n)
-	require.NotEqual(t, n, r)
+	require.NotSame(t, n, r)
 }
 
 func TestReaderFailure(t *testing.T) {
@@ -101,13 +101,13 @@ func TestReaderHandlesEmptyRead(t *testing.T) {
 func TestWriterPassesThroughUnchanged(t *testing.T) {
 	b := &bytes.Buffer{}
 	w := NewWriter(b)
-	require.Equal(t, b, w)
+	require.Same(t, b, w)
 }
 
 func TestWriterWrapsIOWriter(t *testing.T) {
 	n := &nopWriter{}
 	w := NewWriter(n)
-	require.NotEqual(t, n, w)
+	require.NotSame(t, n, w)
 }
 
 func TestWriterFailure(t *testing.T) {

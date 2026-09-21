@@ -238,7 +238,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 	rsp, err := tr.RoundTrip(req1)
 	require.NoError(t, err)
-	require.Equal(t, req1, rsp.Request)
+	require.Same(t, req1, rsp.Request)
 	require.Equal(t, 1, dialCount)
 
 	// ... which is then used for the second request
@@ -246,7 +246,7 @@ func TestTransportConnectionReuse(t *testing.T) {
 	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 	rsp, err = tr.RoundTrip(req2)
 	require.NoError(t, err)
-	require.Equal(t, req2, rsp.Request)
+	require.Same(t, req2, rsp.Request)
 	require.Equal(t, 1, dialCount)
 }
 
@@ -366,7 +366,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
 	rsp, err := tr.RoundTrip(req1)
 	require.NoError(t, err)
-	require.Equal(t, req1, rsp.Request)
+	require.Same(t, req1, rsp.Request)
 	require.Equal(t, 1, dialCount)
 
 	// the second request reuses the QUIC connection, and runs into the cancelled context
@@ -388,7 +388,7 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	cl.EXPECT().RoundTrip(req3).Return(&http.Response{Request: req3}, nil)
 	rsp, err = tr.RoundTrip(req3)
 	require.NoError(t, err)
-	require.Equal(t, req3, rsp.Request)
+	require.Same(t, req3, rsp.Request)
 	require.Equal(t, 1, dialCount)
 }
 
@@ -417,7 +417,7 @@ func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 	rsp, err := tr.RoundTrip(req2)
 	require.NoError(t, err)
-	require.Equal(t, req2, rsp.Request)
+	require.Same(t, req2, rsp.Request)
 	require.Equal(t, 2, dialCount)
 }
 
