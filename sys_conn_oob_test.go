@@ -184,7 +184,9 @@ func TestSysConnPacketInfoIPv4(t *testing.T) {
 	// need to listen on 0.0.0.0, otherwise we won't get the packet info
 	addr, packetChan := runSysConnServer(t, "udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 
-	conn, err := net.DialUDP("udp4", nil, addr)
+	// Dial the loopback address explicitly. On macOS, connecting a UDP socket
+	// to 0.0.0.0 doesn't assign a local port, making conn.LocalAddr() useless.
+	conn, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: addr.Port})
 	require.NoError(t, err)
 	defer conn.Close()
 	_, err = conn.Write([]byte("foobar"))
@@ -207,7 +209,8 @@ func TestSysConnPacketInfoIPv6(t *testing.T) {
 	// need to listen on ::, otherwise we won't get the packet info
 	addr, packetChan := runSysConnServer(t, "udp6", &net.UDPAddr{IP: net.IPv6zero, Port: 0})
 
-	conn, err := net.DialUDP("udp6", nil, addr)
+	// See the comment in TestSysConnPacketInfoIPv4.
+	conn, err := net.DialUDP("udp6", nil, &net.UDPAddr{IP: net.IPv6loopback, Port: addr.Port})
 	require.NoError(t, err)
 	defer conn.Close()
 	_, err = conn.Write([]byte("foobar"))
