@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
@@ -359,6 +360,16 @@ func (c *ClientConn) CloseWithError(code quic.ApplicationErrorCode, msg string) 
 // Context returns a context that is cancelled when the connection is closed.
 func (c *ClientConn) Context() context.Context {
 	return c.conn.Context()
+}
+
+// LocalAddr returns the local address of the underlying QUIC connection.
+func (c *ClientConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+// RemoteAddr returns the remote address of the underlying QUIC connection.
+func (c *ClientConn) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
 }
 
 // cancelingReader reads from the io.Reader.

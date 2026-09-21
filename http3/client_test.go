@@ -39,7 +39,9 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 
 	var eventRecorder events.Recorder
 	clientConn, serverConn := newConnPair(t, withClientRecorder(&eventRecorder))
-	tr.NewClientConn(clientConn)
+	cc := tr.NewClientConn(clientConn)
+	require.Equal(t, clientConn.LocalAddr(), cc.LocalAddr())
+	require.Equal(t, clientConn.RemoteAddr(), cc.RemoteAddr())
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
