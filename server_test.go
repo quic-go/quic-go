@@ -82,7 +82,10 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 		serverOpts.acceptEarly,
 	)
 	s.newConn = serverOpts.newConn
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() {
+		s.Close()
+		tr.Close()
+	})
 	return &testServer{s}
 }
 
