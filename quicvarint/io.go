@@ -15,6 +15,7 @@ var _ Reader = &bytes.Reader{}
 
 // A Peeker can peek bytes without consuming them.
 type Peeker interface {
+	// Peek must return a non-nil error if it copies fewer than len(b) bytes
 	Peek(b []byte) (int, error)
 }
 
