@@ -1,6 +1,9 @@
 package http3
 
 import (
+	"errors"
+	"fmt"
+	"net"
 	"testing"
 
 	"github.com/quic-go/quic-go"
@@ -10,6 +13,7 @@ import (
 )
 
 func TestErrorConversion(t *testing.T) {
+	resetErr := &quic.StatelessResetError{}
 	tests := []struct {
 		name     string
 		input    error
@@ -17,6 +21,7 @@ func TestErrorConversion(t *testing.T) {
 	}{
 		{name: "nil error", input: nil, expected: nil},
 		{name: "regular error", input: assert.AnError, expected: assert.AnError},
+		{name: "stateless reset", input: resetErr, expected: resetErr},
 		{
 			name:     "stream error",
 			input:    &quic.StreamError{ErrorCode: 1337, Remote: true},
@@ -36,11 +41,23 @@ func TestErrorConversion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := maybeReplaceError(tt.input)
-			if tt.expected == nil {
-				require.NoError(t, result)
-			} else {
+			if tt.input == nil {
+				require.NoError(t, maybeReplaceError(nil))
+				return
+			}
+			for _, input := range []error{tt.input, fmt.Errorf("wrapped: %w", tt.input)} {
+				result := maybeReplaceError(input)
 				require.ErrorIs(t, result, tt.expected)
+				// Converted errors must wrap the original input, including any wrappers.
+				// Other errors must be returned unchanged.
+				if _, ok := errors.AsType[*Error](tt.expected); ok {
+					require.Same(t, input, errors.Unwrap(result))
+				} else {
+					require.Same(t, input, result)
+				}
+				require.Equal(t, errors.Is(input, net.ErrClosed), errors.Is(result, net.ErrClosed))
+				wrapped := fmt.Errorf("wrapped: %w", result)
+				require.Same(t, wrapped, maybeReplaceError(wrapped))
 			}
 		})
 	}

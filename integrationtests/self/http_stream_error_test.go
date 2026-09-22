@@ -49,32 +49,46 @@ func TestHTTPStreamErrors(t *testing.T) {
 			serverStr := <-serverStreams
 			require.NoError(t, serverStr.SetDeadline(time.Now().Add(time.Second)))
 
+			local := &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: false}
+			remote := &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: true}
+			var expectedQUICErr error
+			var expectedServerWriteErr, expectedClientReadErr *http3.Error
 			switch errorType {
 			case "stream cancellation":
 				clientStr.CancelWrite(quic.StreamErrorCode(http3.ErrCodeExcessiveLoad))
-
-				_, err = clientStr.Write([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: false}, "RequestStream.Write")
-				_, err = serverStr.Read([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: true}, "Stream.Read")
-
 				serverStr.CancelWrite(quic.StreamErrorCode(http3.ErrCodeExcessiveLoad))
-				_, err = serverStr.Write([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: false}, "Stream.Write")
-				_, err = clientStr.Read([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: true}, "RequestStream.Read")
+				expectedQUICErr = &quic.StreamError{
+					StreamID:  serverStr.StreamID(),
+					ErrorCode: quic.StreamErrorCode(http3.ErrCodeExcessiveLoad),
+					Remote:    true,
+				}
+				expectedServerWriteErr, expectedClientReadErr = local, remote
 			case "application close":
-				require.NoError(t, conn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeExcessiveLoad), ""))
-
-				_, err = clientStr.Write([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: false}, "RequestStream.Write")
-				_, err = serverStr.Read([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: true}, "Stream.Read")
-				_, err = serverStr.Write([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: true}, "Stream.Write")
-				_, err = clientStr.Read([]byte{0})
-				require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeExcessiveLoad, Remote: false}, "RequestStream.Read")
+				require.NoError(t, conn.CloseWithError(
+					quic.ApplicationErrorCode(http3.ErrCodeExcessiveLoad),
+					"",
+				))
+				expectedQUICErr = &quic.ApplicationError{
+					ErrorCode: quic.ApplicationErrorCode(http3.ErrCodeExcessiveLoad),
+					Remote:    true,
+				}
+				expectedServerWriteErr, expectedClientReadErr = remote, local
 			}
+
+			_, err = clientStr.Write([]byte{0})
+			require.ErrorIs(t, err, local, "RequestStream.Write")
+			_, err = serverStr.Read([]byte{0})
+			require.ErrorIs(t, err, remote, "Stream.Read")
+			require.ErrorIs(t, err, expectedQUICErr)
+			if errorType == "application close" {
+				require.ErrorIs(t, err, net.ErrClosed)
+			} else {
+				require.NotErrorIs(t, err, net.ErrClosed)
+			}
+			_, err = serverStr.Write([]byte{0})
+			require.ErrorIs(t, err, expectedServerWriteErr, "Stream.Write")
+			_, err = clientStr.Read([]byte{0})
+			require.ErrorIs(t, err, expectedClientReadErr, "RequestStream.Read")
 		})
 	}
 }
