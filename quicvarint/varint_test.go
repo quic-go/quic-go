@@ -2,6 +2,7 @@ package quicvarint
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -35,6 +36,38 @@ func TestRead(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, val)
 			require.Zero(t, b.Len())
+		})
+	}
+}
+
+func TestReadAndPeekWithError(t *testing.T) {
+	for _, readErr := range []error{io.EOF, errors.New("test error")} {
+		t.Run(readErr.Error(), func(t *testing.T) {
+			for _, expected := range []uint64{0, 37, 1337} {
+				r := &errorReader{Data: Append(nil, expected), Err: readErr}
+				val, err := Peek(r)
+				require.NoError(t, err)
+				require.Equal(t, expected, val)
+				val, err = Read(NewReader(r))
+				require.NoError(t, err)
+				require.Equal(t, expected, val)
+				val, err = Peek(r)
+				require.ErrorIs(t, err, readErr)
+				require.Zero(t, val)
+				val, err = Read(NewReader(r))
+				require.ErrorIs(t, err, readErr)
+				require.Zero(t, val)
+			}
+		})
+
+		t.Run("truncated/"+readErr.Error(), func(t *testing.T) {
+			r := &errorReader{Data: []byte{0x40}, Err: readErr}
+			val, err := Peek(r)
+			require.ErrorIs(t, err, readErr)
+			require.Zero(t, val)
+			val, err = Read(NewReader(r))
+			require.ErrorIs(t, err, readErr)
+			require.Zero(t, val)
 		})
 	}
 }
