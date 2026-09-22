@@ -13,6 +13,7 @@ type sender interface {
 	WouldBlock() bool
 	Available() <-chan struct{}
 	Close()
+	CloseAndDiscard()
 }
 
 type queueEntry struct {
@@ -23,10 +24,11 @@ type queueEntry struct {
 
 type sendQueue struct {
 	queue       chan queueEntry
-	closeCalled chan struct{} // runStopped when Close() is called
+	closeCalled chan struct{} // closed when Close or CloseAndDiscard is called
 	runStopped  chan struct{} // runStopped when the run loop returns
 	available   chan struct{}
 	conn        sendConn
+	discard     bool // written before closeCalled is closed, which publishes it to Run
 }
 
 var _ sender = &sendQueue{}
@@ -78,13 +80,38 @@ func (h *sendQueue) Run() error {
 	defer close(h.runStopped)
 	var shouldClose bool
 	for {
-		if shouldClose && len(h.queue) == 0 {
-			return nil
+		if shouldClose {
+			if h.discard {
+				for {
+					select {
+					case e := <-h.queue:
+						e.buf.Release()
+					default:
+						return nil
+					}
+				}
+			}
+			if len(h.queue) == 0 {
+				return nil
+			}
+		}
+		// Handle a pending close before picking up another packet: once a
+		// discarding close is seen, nothing further is written. At most one
+		// packet the blocking select below has already picked up can still go
+		// out, and both closes wait for the run loop, so nothing is written
+		// after they return.
+		select {
+		case <-h.closeCalled:
+			h.closeCalled = nil
+			shouldClose = true
+			continue
+		default:
 		}
 		select {
 		case <-h.closeCalled:
 			h.closeCalled = nil // prevent this case from being selected again
-			// make sure that all queued packets are actually sent out
+			// for a plain Close, all queued packets are still sent out; a
+			// discarding close is handled at the top of the loop
 			shouldClose = true
 		case e := <-h.queue:
 			if err := h.conn.Write(e.buf.Data, e.gsoSize, e.ecn); err != nil {
@@ -106,6 +133,17 @@ func (h *sendQueue) Run() error {
 }
 
 func (h *sendQueue) Close() {
+	close(h.closeCalled)
+	// wait until the run loop returned
+	<-h.runStopped
+}
+
+// CloseAndDiscard stops the run loop, dropping any packets still queued.
+// It is for leaving a path behind: what is queued was packed for a path the
+// connection is no longer using, so to the peer a dropped packet is ordinary
+// loss, and loss recovery repacks its frames for the path in use now.
+func (h *sendQueue) CloseAndDiscard() {
+	h.discard = true
 	close(h.closeCalled)
 	// wait until the run loop returned
 	<-h.runStopped

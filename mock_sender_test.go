@@ -115,6 +115,42 @@ func (c *MockSenderCloseCall) DoAndReturn(f func()) *MockSenderCloseCall {
 	return c
 }
 
+// CloseAndDiscard mocks base method.
+func (m *MockSender) CloseAndDiscard() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "CloseAndDiscard")
+}
+
+// CloseAndDiscard indicates an expected call of CloseAndDiscard.
+func (mr *MockSenderMockRecorder) CloseAndDiscard() *MockSenderCloseAndDiscardCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseAndDiscard", reflect.TypeOf((*MockSender)(nil).CloseAndDiscard))
+	return &MockSenderCloseAndDiscardCall{Call: call}
+}
+
+// MockSenderCloseAndDiscardCall wrap *gomock.Call
+type MockSenderCloseAndDiscardCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSenderCloseAndDiscardCall) Return() *MockSenderCloseAndDiscardCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSenderCloseAndDiscardCall) Do(f func()) *MockSenderCloseAndDiscardCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSenderCloseAndDiscardCall) DoAndReturn(f func()) *MockSenderCloseAndDiscardCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Run mocks base method.
 func (m *MockSender) Run() error {
 	m.ctrl.T.Helper()
