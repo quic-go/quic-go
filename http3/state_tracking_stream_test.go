@@ -3,7 +3,6 @@ package http3
 import (
 	"context"
 	"io"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -137,16 +136,21 @@ func TestStateTrackingStreamRemoteCancelation(t *testing.T) {
 
 	server.CancelRead(123)
 
-	var writeErr error
-	require.Eventually(t, func() bool {
-		_, writeErr = str.Write([]byte("bar"))
-		return writeErr != nil
-	}, time.Second, scaleDuration(time.Millisecond))
+	select {
+	case <-client.Context().Done():
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 	expectedErr := &quic.StreamError{Remote: true, StreamID: server.StreamID(), ErrorCode: 123}
-	require.ErrorIs(t, writeErr, expectedErr)
+	// SendDatagram fails as soon as the context is canceled, even if Write wasn't called
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
+	// closing the stream doesn't replace the peer's error
+	str.Close()
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
+	_, err = str.Write([]byte("bar"))
+	require.ErrorIs(t, err, expectedErr)
 	require.Nil(t, clearer.cleared)
 	checkDatagramReceive(t, str)
-	require.ErrorIs(t, str.SendDatagram([]byte("test")), expectedErr)
 }
 
 func TestStateTrackingStreamLocalCancelation(t *testing.T) {
@@ -178,15 +182,7 @@ func TestStateTrackingStreamClose(t *testing.T) {
 	checkDatagramSend(t, str)
 
 	require.NoError(t, client.Close())
-	require.Eventually(t, func() bool {
-		err := str.SendDatagram([]byte("test"))
-		if err == nil {
-			return false
-		}
-		require.ErrorIs(t, err, context.Canceled)
-		return true
-	}, time.Second, scaleDuration(5*time.Millisecond))
-
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), errWriteOnClosedStream)
 	checkDatagramReceive(t, str)
 	require.Nil(t, clearer.cleared)
 }
@@ -313,7 +309,4 @@ func TestDatagramSending(t *testing.T) {
 	require.NoError(t, str.SendDatagram([]byte("bar")))
 	require.ErrorIs(t, str.SendDatagram([]byte("baz")), assert.AnError)
 	require.Equal(t, [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}, sendQueue)
-
-	str.closeSend(net.ErrClosed)
-	require.ErrorIs(t, str.SendDatagram([]byte("foobar")), net.ErrClosed)
 }
