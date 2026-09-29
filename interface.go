@@ -64,6 +64,10 @@ var ErrWouldBlock = errors.New("operation would block")
 // ErrWriteLimitReached is returned by [SendStream.WriteWithLimit] when its limiter prevents accepting the entire slice.
 var ErrWriteLimitReached = errors.New("write limit reached")
 
+// ErrStreamClosed is returned when writing to a stream after [SendStream.Close] was called.
+// Closing a stream also cancels its context with this error as the cause.
+var ErrStreamClosed = errors.New("stream closed")
+
 // QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the
 // context returned by [tls.ClientHelloInfo.Context].
 var QUICVersionContextKey = handshake.QUICVersionContextKey

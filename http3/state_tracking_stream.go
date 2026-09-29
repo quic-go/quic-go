@@ -11,8 +11,6 @@ import (
 
 const streamDatagramQueueLen = 32
 
-var errWriteOnClosedStream = errors.New("write on closed stream")
-
 // stateTrackingStream is an implementation of quic.Stream that delegates
 // to an underlying stream
 // it takes care of proxying send and receive errors onto an implementation of
@@ -123,10 +121,6 @@ func (s *stateTrackingStream) Read(b []byte) (int, error) {
 
 func (s *stateTrackingStream) SendDatagram(b []byte) error {
 	if err := context.Cause(s.Context()); err != nil {
-		// the cause is context.Canceled if Close closed the send side
-		if errors.Is(err, context.Canceled) {
-			return errWriteOnClosedStream
-		}
 		return err
 	}
 	return s.sendDatagram(b)

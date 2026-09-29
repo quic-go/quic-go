@@ -115,6 +115,7 @@ func (s *SendStream) StreamID() StreamID {
 // Write writes data to the stream.
 // Write can be made to time out using [SendStream.SetWriteDeadline].
 // If the stream was canceled, the error is a [StreamError].
+// If the stream was closed, the error is [ErrStreamClosed].
 func (s *SendStream) Write(p []byte) (int, error) {
 	return s.WriteWithLimit(p, nil)
 }
@@ -177,7 +178,7 @@ func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool 
 		return false, false, s.shutdownErr
 	}
 	if s.finishedWriting {
-		return false, false, fmt.Errorf("write on closed stream %d", s.streamID)
+		return false, false, ErrStreamClosed
 	}
 	if len(p) == 0 {
 		return false, false, nil
@@ -237,7 +238,7 @@ func (s *SendStream) write(p []byte, limiter func(int) int) (bool /* is newly co
 		return false, 0, s.shutdownErr
 	}
 	if s.finishedWriting {
-		return false, 0, fmt.Errorf("write on closed stream %d", s.streamID)
+		return false, 0, ErrStreamClosed
 	}
 	if !s.deadline.IsZero() && !monotime.Now().Before(s.deadline) {
 		return false, 0, errDeadline
@@ -601,7 +602,7 @@ func (s *SendStream) Close() error {
 	}
 	s.sender.onHasStreamData(s.streamID, s) // need to send the FIN, must be called without holding the mutex
 
-	s.ctxCancel(nil)
+	s.ctxCancel(ErrStreamClosed)
 	return nil
 }
 
@@ -824,7 +825,7 @@ func (s *SendStream) SetPriority(urgency int8, incremental bool) {
 // This happens when [SendStream.Close] or [SendStream.CancelWrite] is called, or when the peer
 // cancels the read-side of their stream.
 // The cancellation cause is set to the error that caused the stream to
-// close, or [context.Canceled] in case the stream is closed without error.
+// close, which is [ErrStreamClosed] if [SendStream.Close] was called.
 func (s *SendStream) Context() context.Context {
 	return s.ctx
 }
