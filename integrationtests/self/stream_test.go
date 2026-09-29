@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"testing"
 	"time"
 
@@ -71,6 +72,39 @@ func testWriteWithLimitFlowControl(t *testing.T, config *quic.Config) {
 	rest, err := io.ReadAll(receiveStr)
 	require.NoError(t, err)
 	require.Equal(t, data, append(received, rest...))
+}
+
+func TestStreamWriteAfterClose(t *testing.T) {
+	ln, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	client, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer client.CloseWithError(0, "")
+
+	server, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	str, err := client.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	_, err = str.Write([]byte("foobar"))
+	require.NoError(t, err)
+	require.NoError(t, str.Close())
+
+	require.ErrorIs(t, context.Cause(str.Context()), quic.ErrStreamClosed)
+	_, err = str.Write([]byte("foo"))
+	require.ErrorIs(t, err, quic.ErrStreamClosed)
+	// closing a stream doesn't close the connection
+	require.NotErrorIs(t, err, net.ErrClosed)
+	require.ErrorIs(t, str.TryWriteAll([]byte("foo")), quic.ErrStreamClosed)
+
+	serverStr, err := server.AcceptStream(ctx)
+	require.NoError(t, err)
+	data, err := io.ReadAll(serverStr)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foobar"), data)
 }
 
 func TestBidirectionalStreamMultiplexing(t *testing.T) {

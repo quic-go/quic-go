@@ -256,7 +256,10 @@ func TestHTTPDatagramClose(t *testing.T) {
 	require.ErrorIs(t, resetErr, io.EOF)
 
 	// make sure we can't send anymore
-	require.Error(t, str.SendDatagram([]byte("foo")))
+	require.ErrorIs(t, context.Cause(str.Context()), quic.ErrStreamClosed)
+	_, err := str.Write([]byte("foo"))
+	require.ErrorIs(t, err, quic.ErrStreamClosed)
+	require.ErrorIs(t, str.SendDatagram([]byte("foo")), quic.ErrStreamClosed)
 }
 
 func TestHTTPDatagramStreamReset(t *testing.T) {
