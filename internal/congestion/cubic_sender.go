@@ -285,6 +285,10 @@ func (c *cubicSender) BandwidthEstimate() Bandwidth {
 }
 
 func (c *cubicSender) pacingRate() Bandwidth {
+	if c.InSlowStart() {
+		// Allow slow start to double the sending rate every RTT.
+		return 2 * c.BandwidthEstimate()
+	}
 	// Allow for RTT variations when filling the congestion window.
 	return c.BandwidthEstimate() * 5 / 4
 }
