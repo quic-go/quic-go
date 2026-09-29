@@ -108,7 +108,7 @@ func newCubicSender(
 		congestionWindow:           initialCongestionWindow,
 		slowStartThreshold:         protocol.MaxByteCount,
 		cubic:                      NewCubic(clock),
-		pacer:                      newPacer(protocol.InitialPacketSize),
+		pacer:                      newPacer(),
 		clock:                      clock,
 		reno:                       reno,
 		qlogger:                    qlogger,
