@@ -178,3 +178,10 @@ func TestDatagramQueueClose(t *testing.T) {
 		}
 	})
 }
+
+func TestDatagramQueueAddAfterClose(t *testing.T) {
+	queue := newDatagramQueue(func() {}, utils.DefaultLogger)
+	queue.CloseWithError(assert.AnError)
+	require.ErrorIs(t, queue.Add(&wire.DatagramFrame{Data: []byte("foo")}), assert.AnError)
+	require.Nil(t, queue.Peek())
+}

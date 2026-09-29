@@ -48,6 +48,14 @@ func (h *datagramQueue) Add(f *wire.DatagramFrame) error {
 	h.sendMx.Lock()
 
 	for {
+		// don't queue frames after the connection is closed
+		select {
+		case <-h.closed:
+			h.sendMx.Unlock()
+			return h.closeErr
+		default:
+		}
+
 		if h.sendQueue.Len() < maxDatagramSendQueueLen {
 			h.sendQueue.PushBack(f)
 			h.sendMx.Unlock()
@@ -55,10 +63,11 @@ func (h *datagramQueue) Add(f *wire.DatagramFrame) error {
 			return nil
 		}
 		select {
-		case <-h.sent: // drain the queue so we don't loop immediately
+		case <-h.sent: // drain any stale notification, so we don't wake up immediately below
 		default:
 		}
 		h.sendMx.Unlock()
+		// The queue is full. Wait until a frame is dequeued.
 		select {
 		case <-h.closed:
 			return h.closeErr
