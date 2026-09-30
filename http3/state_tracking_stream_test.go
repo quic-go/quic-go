@@ -182,7 +182,7 @@ func TestStateTrackingStreamClose(t *testing.T) {
 	checkDatagramSend(t, str)
 
 	require.NoError(t, client.Close())
-	require.ErrorIs(t, str.SendDatagram([]byte("test")), errWriteOnClosedStream)
+	require.ErrorIs(t, str.SendDatagram([]byte("test")), quic.ErrStreamClosed)
 	checkDatagramReceive(t, str)
 	require.Nil(t, clearer.cleared)
 }

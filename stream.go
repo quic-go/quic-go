@@ -137,6 +137,7 @@ func (s *Stream) Peek(b []byte) (int, error) {
 // Write writes data to the stream.
 // Write can be made to time out using [Stream.SetWriteDeadline] or [Stream.SetDeadline].
 // If the stream was canceled, the error is a [StreamError].
+// If the stream was closed, the error is [ErrStreamClosed].
 func (s *Stream) Write(p []byte) (int, error) {
 	return s.sendStr.Write(p)
 }
