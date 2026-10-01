@@ -136,6 +136,26 @@ func TestCubicSenderPacing(t *testing.T) {
 	require.Less(t, delay.Sub(monotime.Time(*sender.clock)), time.Hour)
 }
 
+func TestCubicSenderPacingRate(t *testing.T) {
+	const rtt = 100 * time.Millisecond
+	var clock mockClock
+	clock.Advance(time.Second)
+	rttStats := utils.NewRTTStats()
+	rttStats.UpdateRTT(rtt, 0)
+	sender := NewCubicSender(&clock, rttStats, &utils.ConnectionStats{}, maxDatagramSize, true, nil)
+
+	// Exhaust the burst allowance before checking the pacing rate.
+	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(clock.Now()); pn++ {
+		sender.OnPacketSent(clock.Now(), 0, pn, maxDatagramSize, true)
+	}
+	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend(0).Sub(clock.Now()))
+
+	sender.OnCongestionEvent(0, maxDatagramSize, sender.GetCongestionWindow())
+	require.False(t, sender.InSlowStart())
+	wantDelay := float64(rtt) * float64(maxDatagramSize) / (1.25 * float64(sender.GetCongestionWindow()))
+	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend(0).Sub(clock.Now())), float64(time.Microsecond))
+}
+
 func TestCubicSenderApplicationLimitedSlowStart(t *testing.T) {
 	sender := newTestCubicSender(false)
 
