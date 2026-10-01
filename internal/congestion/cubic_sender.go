@@ -108,12 +108,12 @@ func newCubicSender(
 		congestionWindow:           initialCongestionWindow,
 		slowStartThreshold:         protocol.MaxByteCount,
 		cubic:                      NewCubic(clock),
+		pacer:                      newPacer(),
 		clock:                      clock,
 		reno:                       reno,
 		qlogger:                    qlogger,
 		maxDatagramSize:            initialMaxDatagramSize,
 	}
-	c.pacer = newPacer(c.BandwidthEstimate)
 	if c.qlogger != nil {
 		c.lastState = qlog.CongestionStateSlowStart
 		c.qlogger.RecordEvent(qlog.CongestionStateUpdated{
@@ -125,11 +125,11 @@ func newCubicSender(
 
 // TimeUntilSend returns when the next packet should be sent.
 func (c *cubicSender) TimeUntilSend(_ protocol.ByteCount) monotime.Time {
-	return c.pacer.TimeUntilSend()
+	return c.pacer.TimeUntilSend(c.pacingRate())
 }
 
 func (c *cubicSender) HasPacingBudget(now monotime.Time) bool {
-	return c.pacer.Budget(now) >= c.maxDatagramSize
+	return c.pacer.Budget(now, c.pacingRate()) >= c.maxDatagramSize
 }
 
 func (c *cubicSender) maxCongestionWindow() protocol.ByteCount {
@@ -147,7 +147,7 @@ func (c *cubicSender) OnPacketSent(
 	bytes protocol.ByteCount,
 	isRetransmittable bool,
 ) {
-	c.pacer.SentPacket(sentTime, bytes)
+	c.pacer.SentPacket(sentTime, bytes, c.pacingRate())
 	if !isRetransmittable {
 		return
 	}
@@ -282,6 +282,11 @@ func (c *cubicSender) BandwidthEstimate() Bandwidth {
 		srtt = protocol.TimerGranularity
 	}
 	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
+}
+
+func (c *cubicSender) pacingRate() Bandwidth {
+	// Allow for RTT variations when filling the congestion window.
+	return c.BandwidthEstimate() * 5 / 4
 }
 
 // OnRetransmissionTimeout is called on an retransmission timeout
