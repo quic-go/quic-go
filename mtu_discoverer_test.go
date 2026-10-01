@@ -223,7 +223,7 @@ func testMTUDiscovererReset(t *testing.T, ackLastProbe bool) {
 
 	const newStartMTU protocol.ByteCount = 900
 	const newMaxMTU = 1500
-	d.Reset(now, newStartMTU, newMaxMTU)
+	d.Reset(newStartMTU, newMaxMTU)
 	require.Equal(t, d.CurrentSize(), newStartMTU)
 
 	// Now acknowledge / lose the probe packet.
@@ -236,6 +236,9 @@ func testMTUDiscovererReset(t *testing.T, ackLastProbe bool) {
 
 	// the MTU should not have changed
 	require.Equal(t, d.CurrentSize(), newStartMTU)
+	// resetting stops probing until discovery is explicitly started again
+	require.False(t, d.ShouldSendProbe(now.Add(time.Hour)))
+	d.Start(now)
 	// the next probe should be sent after 5 RTTs
 	require.False(t, d.ShouldSendProbe(now.Add(5*rtt).Add(-time.Microsecond)))
 	require.True(t, d.ShouldSendProbe(now.Add(5*rtt)))
