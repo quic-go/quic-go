@@ -27,6 +27,24 @@ func (e *qpackError) Unwrap() error { return e.err }
 
 var errHeaderTooLarge = errors.New("http3: headers too large")
 
+// readHeaderBlock preallocates up to 8 KiB, growing larger buffers as data arrives.
+// The caller must check length against the configured header size limit first.
+func readHeaderBlock(r io.Reader, length uint64) ([]byte, error) {
+	const maxInitialBufferSize = 8 << 10
+
+	b := make([]byte, min(length, maxInitialBufferSize))
+	if length <= maxInitialBufferSize {
+		_, err := io.ReadFull(r, b)
+		return b, err
+	}
+	buf := bytes.NewBuffer(b[:0])
+	n, err := io.CopyN(buf, r, int64(length))
+	if errors.Is(err, io.EOF) && n > 0 {
+		err = io.ErrUnexpectedEOF
+	}
+	return buf.Bytes(), err
+}
+
 type header struct {
 	// Pseudo header fields defined in RFC 9114
 	Path      string
@@ -450,8 +468,8 @@ func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
 
-	b := make([]byte, hf.Length)
-	if _, err := io.ReadFull(r, b); err != nil {
+	b, err := readHeaderBlock(r, hf.Length)
+	if err != nil {
 		return nil, err
 	}
 	decodeFn := decoder.Decode(b)

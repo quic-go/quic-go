@@ -378,8 +378,8 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
 	}
-	headerBlock := make([]byte, hf.Length)
-	if _, err := io.ReadFull(s.str.datagramStream, headerBlock); err != nil {
+	headerBlock, err := readHeaderBlock(s.str.datagramStream, hf.Length)
+	if err != nil {
 		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))

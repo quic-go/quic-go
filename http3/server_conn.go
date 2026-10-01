@@ -134,8 +134,8 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		c.rejectWithHeaderFieldsTooLarge(str)
 		return
 	}
-	headerBlock := make([]byte, hf.Length)
-	if _, err := io.ReadFull(str, headerBlock); err != nil {
+	headerBlock, err := readHeaderBlock(str, hf.Length)
+	if err != nil {
 		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
