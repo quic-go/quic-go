@@ -8,19 +8,19 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
+const maxTrackedLostPackets = 64
+
 type lostPacket struct {
 	PacketNumber protocol.PacketNumber
 	SendTime     monotime.Time
 }
 
 type lostPacketTracker struct {
-	maxLength   int
 	lostPackets []lostPacket
 }
 
-func newLostPacketTracker(maxLength int) *lostPacketTracker {
+func newLostPacketTracker() *lostPacketTracker {
 	return &lostPacketTracker{
-		maxLength: maxLength,
 		// Preallocate a small slice only.
 		// Hopefully we won't lose many packets.
 		lostPackets: make([]lostPacket, 0, 4),
@@ -28,7 +28,7 @@ func newLostPacketTracker(maxLength int) *lostPacketTracker {
 }
 
 func (t *lostPacketTracker) Add(p protocol.PacketNumber, sendTime monotime.Time) {
-	if len(t.lostPackets) == t.maxLength {
+	if len(t.lostPackets) == maxTrackedLostPackets {
 		t.lostPackets = t.lostPackets[1:]
 	}
 	t.lostPackets = append(t.lostPackets, lostPacket{
