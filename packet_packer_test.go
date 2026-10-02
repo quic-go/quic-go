@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -510,6 +512,51 @@ func TestPackConnectionCloseCoalescedClient1RTT(t *testing.T) {
 	require.Len(t, p.longHdrPackets, 2)
 	require.NotNil(t, p.shortHdrPacket)
 	require.Equal(t, maxPacketSize, p.buffer.Len())
+}
+
+func testPackConnectionCloseTooLargeLongHeader(t *testing.T, reasonLen int) {
+	mockCtrl := gomock.NewController(t)
+	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
+	tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+	tp.sealingManager.EXPECT().GetHandshakeSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+	tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+	tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+	tp.pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(1), protocol.PacketNumberLen2)
+	_, err := tp.packer.PackConnectionClose(&qerr.TransportError{
+		ErrorCode:    qerr.ProtocolViolation,
+		ErrorMessage: strings.Repeat("a", reasonLen),
+	}, protocol.InitialPacketSize, protocol.Version1)
+	require.ErrorContains(t, err, "packet too large for the packet buffer")
+}
+
+func TestPackConnectionCloseTooLarge(t *testing.T) {
+	for _, reasonLen := range []int{protocol.MaxPacketBufferSize, 1 << 14} {
+		t.Run(fmt.Sprintf("long header packet, reason phrase of %d bytes", reasonLen), func(t *testing.T) {
+			testPackConnectionCloseTooLargeLongHeader(t, reasonLen)
+		})
+	}
+
+	t.Run("coalesced short header packet", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
+		tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+		tp.sealingManager.EXPECT().GetHandshakeSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+		tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysDropped)
+		tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+		for i, encLevel := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption1RTT} {
+			pn := protocol.PacketNumber(i + 1)
+			tp.pnManager.EXPECT().PeekPacketNumber(encLevel).Return(pn, protocol.PacketNumberLen2)
+			if encLevel != protocol.Encryption1RTT {
+				tp.pnManager.EXPECT().PopPacketNumber(encLevel).Return(pn)
+			}
+		}
+		// 50 bytes are enough for the header and the AEAD overhead of the 1-RTT packet,
+		// but not for the Initial and the Handshake packet that precede it in the buffer
+		_, err := tp.packer.PackApplicationClose(&qerr.ApplicationError{
+			ErrorMessage: strings.Repeat("a", protocol.MaxPacketBufferSize-50),
+		}, protocol.MaxPacketBufferSize, protocol.Version1)
+		require.ErrorContains(t, err, "packet too large for the packet buffer")
+	})
 }
 
 func TestPackConnectionCloseCryptoError(t *testing.T) {

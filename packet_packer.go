@@ -868,6 +868,9 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + pl.length + paddingLen
 
 	startLen := len(buffer.Data)
+	if size := startLen + int(header.GetLength(v)+pl.length+paddingLen) + sealer.Overhead(); size > cap(buffer.Data) {
+		return nil, fmt.Errorf("PacketPacker BUG: packet too large for the packet buffer (%d bytes, buffer size %d bytes)", size, cap(buffer.Data))
+	}
 	raw := buffer.Data[startLen:]
 	raw, err := header.Append(raw, v)
 	if err != nil {
@@ -928,6 +931,9 @@ func (p *packetPacker) appendShortHeaderPacket(
 		if size := protocol.ByteCount(len(raw) + sealer.Overhead()); size > maxPacketSize {
 			return shortHeaderPacket{}, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, maxPacketSize)
 		}
+	}
+	if size := startLen + len(raw) + sealer.Overhead(); size > cap(buffer.Data) {
+		return shortHeaderPacket{}, fmt.Errorf("PacketPacker BUG: packet too large for the packet buffer (%d bytes, buffer size %d bytes)", size, cap(buffer.Data))
 	}
 	raw = p.encryptPacket(raw, sealer, pn, payloadOffset, protocol.ByteCount(pnLen))
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]

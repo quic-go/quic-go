@@ -24,6 +24,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/quicvarint"
 )
 
 type unpacker interface {
@@ -500,7 +501,7 @@ var newClientConnection = func(
 		s.tokenStoreKey = conn.RemoteAddr().String()
 	}
 	if s.config.TokenStore != nil {
-		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil {
+		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil && s.tokenFitsInitialPacket(token.data) {
 			s.packer.SetToken(token.data)
 			s.rttStats.SetInitialRTT(token.rtt)
 		}
@@ -1529,6 +1530,22 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 		c.logger.Debugf("Ignoring spoofed Retry. Integrity Tag doesn't match.")
 		return false
 	}
+	if !c.tokenFitsInitialPacket(hdr.Token) {
+		if c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketTypeRetry,
+					SrcConnectionID:  hdr.SrcConnectionID,
+					DestConnectionID: hdr.DestConnectionID,
+					Version:          hdr.Version,
+				},
+				Raw:     qlog.RawInfo{Length: len(data)},
+				Trigger: qlog.PacketDropUnexpectedPacket,
+			})
+		}
+		c.logger.Debugf("Ignoring Retry, since the token is too long (%d bytes).", len(hdr.Token))
+		return false
+	}
 
 	newDestConnID := hdr.SrcConnectionID
 	c.receivedRetry = true
@@ -1559,6 +1576,32 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 
 	c.scheduleSending()
 	return true
+}
+
+// tokenFitsInitialPacket determines if an Initial packet that carries the token has room for a CRYPTO frame.
+// The token is sent in every Initial packet; we assume the longest header that an Initial packet can have.
+func (c *Conn) tokenFitsInitialPacket(token []byte) bool {
+	// the server can change the connection ID during the handshake, so assume the maximum length
+	hdrLen := 1 /* type byte */ +
+		4 /* version */ +
+		1 /* dest conn ID len */ +
+		protocol.MaxConnIDLen +
+		1 /* src conn ID len */ +
+		c.srcConnIDLen +
+		quicvarint.Len(uint64(len(token))) +
+		len(token) +
+		2 /* length */ +
+		4 /* packet number */
+
+	const aeadTagSize = 16
+	remainingLen := c.maxPacketSize() - protocol.ByteCount(hdrLen) - aeadTagSize
+
+	const minCryptoFrameLen = 1 /* type */ +
+		4 /* offset */ +
+		1 /* length */ +
+		1 /* min data */
+
+	return remainingLen >= minCryptoFrameLen
 }
 
 func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {

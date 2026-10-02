@@ -2954,6 +2954,28 @@ func TestConnectionRetryDrops(t *testing.T) {
 		},
 		eventRecorder.Events(qlog.PacketDropped{}),
 	)
+	eventRecorder.Clear()
+
+	// receive a retry with a token that doesn't fit into an Initial packet
+	retry = getRetryPacket(t, newConnID, tc.srcConnID, tc.destConnID, make([]byte, protocol.InitialPacketSize))
+	wasProcessed, err = tc.conn.handleOnePacket(retry, 0)
+	require.NoError(t, err)
+	require.False(t, wasProcessed)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketTypeRetry,
+					SrcConnectionID:  newConnID,
+					DestConnectionID: tc.srcConnID,
+					Version:          protocol.Version1,
+				},
+				Raw:     qlog.RawInfo{Length: int(retry.Size())},
+				Trigger: qlog.PacketDropUnexpectedPacket,
+			},
+		},
+		eventRecorder.Events(qlog.PacketDropped{}),
+	)
 }
 
 func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
@@ -3019,6 +3041,69 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 		eventRecorder.Events(qlog.PacketDropped{}),
 	)
 	eventRecorder.Clear()
+}
+
+func TestConnectionTokenFitsInitialPacket(t *testing.T) {
+	for _, maxPacketSize := range []protocol.ByteCount{protocol.MinInitialPacketSize, protocol.MaxPacketBufferSize} {
+		tc := newClientTestConnection(t, nil, &Config{InitialPacketSize: uint16(maxPacketSize)}, false)
+
+		for tokenLen := range maxPacketSize {
+			token := make([]byte, tokenLen)
+			if initialPacketLen(t, tc.srcConnID, token) <= maxPacketSize {
+				require.Truef(t, tc.conn.tokenFitsInitialPacket(token), "token length %d must fit in an initial packet", tokenLen)
+			} else {
+				require.Falsef(t, tc.conn.tokenFitsInitialPacket(token), "token length %d must not fit in an initial packet", tokenLen)
+			}
+		}
+	}
+}
+
+// initialPacketLen derives the length of an Initial packet containing the provided token using the
+// real representation structures, while assuming the server chooses the maximum conn ID length
+func initialPacketLen(t *testing.T, srcConnID protocol.ConnectionID, token []byte) protocol.ByteCount {
+	t.Helper()
+
+	destConnID := protocol.ParseConnectionID(make([]byte, protocol.MaxConnIDLen))
+	sealer, _ := handshake.NewInitialAEAD(destConnID, protocol.PerspectiveClient, protocol.Version1)
+
+	frame := &wire.CryptoFrame{Offset: protocol.MaxCryptoStreamOffset, Data: []byte{0}}
+	hdr := &wire.ExtendedHeader{
+		Header: wire.Header{
+			Type:             protocol.PacketTypeInitial,
+			DestConnectionID: destConnID,
+			SrcConnectionID:  srcConnID,
+			Token:            token,
+			Length:           protocol.ByteCount(protocol.PacketNumberLen4) + frame.Length(protocol.Version1) + protocol.ByteCount(sealer.Overhead()),
+			Version:          protocol.Version1,
+		},
+		PacketNumberLen: protocol.PacketNumberLen4,
+	}
+	b, err := hdr.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	b, err = frame.Append(b, protocol.Version1)
+	require.NoError(t, err)
+	return protocol.ByteCount(len(b) + sealer.Overhead())
+}
+
+func TestConnectionTokenFromTokenStore(t *testing.T) {
+	const rtt = 1337 * time.Millisecond
+
+	for _, test := range []struct {
+		Name     string
+		TokenLen int
+		Used     bool
+	}{
+		{Name: "fits into an Initial packet", TokenLen: 100, Used: true},
+		{Name: "too long for an Initial packet", TokenLen: protocol.InitialPacketSize, Used: false},
+	} {
+		t.Run(test.Name, func(t *testing.T) {
+			store := NewLRUTokenStore(1, 1)
+			store.Put("quic-go.net", &ClientToken{data: make([]byte, test.TokenLen), rtt: rtt})
+			tc := newClientTestConnection(t, nil, &Config{TokenStore: store}, false)
+			// the packer of the test connection is a mock, but the RTT is taken from the token together with the token
+			require.Equal(t, test.Used, tc.conn.rttStats.SmoothedRTT() == rtt)
+		})
+	}
 }
 
 func TestConnectionConnectionIDChanges(t *testing.T) {
