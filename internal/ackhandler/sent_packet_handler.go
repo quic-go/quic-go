@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	// Maximum reordering in time space before time based loss detection considers a packet lost.
-	// Specified as an RTT multiplier.
-	timeThreshold = 9.0 / 8
+	// Maximum reordering in time space before time based loss detection considers a packet lost,
+	// in multiples of the current RTT estimate.
+	// To avoid floating point math, the value here is in units of 1/8.
+	timeThresholdEighths = 1
 	// Maximum reordering in packets before packet threshold loss detection considers a packet lost.
 	packetThreshold = 3
 	// Before validating the client's address, the server won't send more than 3x bytes than it received.
@@ -792,11 +793,10 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = 0
 
-	maxRTT := float64(max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
-	lossDelay := time.Duration(timeThreshold * maxRTT)
-
-	// Minimum time of granularity before packets are deemed lost.
-	lossDelay = max(lossDelay, protocol.TimerGranularity)
+	lossDelay := max(
+		max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT())*(8+timeThresholdEighths)/8,
+		protocol.TimerGranularity,
+	)
 
 	// Packets sent before this time are deemed lost.
 	lostSendTime := now.Add(-lossDelay)
