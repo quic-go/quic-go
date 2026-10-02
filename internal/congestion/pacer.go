@@ -10,6 +10,11 @@ import (
 
 const maxBurstSizePackets = 10
 
+// minPacingDelay is the minimum duration that is used for packet pacing
+// If the packet packing frequency is higher, multiple packets might be sent at once.
+// Example: For a packet pacing delay of 200μs, we would send 5 packets at once, wait for 1ms, and so forth.
+const minPacingDelay = time.Millisecond
+
 // The pacer implements a token bucket pacing algorithm.
 type pacer struct {
 	budgetAtLastSent protocol.ByteCount
@@ -51,7 +56,7 @@ func (p *pacer) Budget(now monotime.Time, rate Bandwidth) protocol.ByteCount {
 
 func (p *pacer) maxBurstSize(rate Bandwidth) protocol.ByteCount {
 	return max(
-		p.timeScaledBandwidth(protocol.MinPacingDelay+protocol.TimerGranularity, rate),
+		p.timeScaledBandwidth(minPacingDelay+protocol.TimerGranularity, rate),
 		maxBurstSizePackets*p.maxDatagramSize,
 	)
 }
@@ -91,7 +96,7 @@ func (p *pacer) TimeUntilSend(rate Bandwidth) monotime.Time {
 	if diff%bw > 0 {
 		d++
 	}
-	return p.lastSentTime.Add(max(protocol.MinPacingDelay, time.Duration(d)*time.Nanosecond))
+	return p.lastSentTime.Add(max(minPacingDelay, time.Duration(d)*time.Nanosecond))
 }
 
 func (p *pacer) SetMaxDatagramSize(s protocol.ByteCount) {

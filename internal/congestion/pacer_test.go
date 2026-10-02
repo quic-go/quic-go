@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/monotime"
-	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )
@@ -129,7 +128,7 @@ func TestPacerNoOverflows(t *testing.T) {
 	require.Zero(t, p.Budget(now, bandwidth))
 
 	next := p.TimeUntilSend(bandwidth)
-	require.Equal(t, next.Sub(now), protocol.MinPacingDelay)
+	require.Equal(t, next.Sub(now), minPacingDelay)
 	require.Greater(t, p.Budget(next, bandwidth), initialMaxDatagramSize)
 }
 
