@@ -75,6 +75,9 @@ func (h *receivedPacketTracker) IsPotentiallyDuplicate(pn protocol.PacketNumber)
 	return h.packetHistory.IsPotentiallyDuplicate(pn)
 }
 
+// MaxAckDelay is the maximum time by which we delay sending ACKs.
+const MaxAckDelay = 25 * time.Millisecond
+
 // number of ack-eliciting packets received before sending an ACK
 const packetsBeforeAck = 2
 
@@ -100,7 +103,7 @@ type appDataReceivedPacketTracker struct {
 func newAppDataReceivedPacketTracker(logger utils.Logger) *appDataReceivedPacketTracker {
 	h := &appDataReceivedPacketTracker{
 		receivedPacketTracker: *newReceivedPacketTracker(),
-		maxAckDelay:           protocol.MaxAckDelay,
+		maxAckDelay:           MaxAckDelay,
 		logger:                logger,
 	}
 	return h

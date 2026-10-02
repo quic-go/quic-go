@@ -140,13 +140,6 @@ const AckDelayExponent = 3
 // The loss detection timer will not be set to a value smaller than granularity.
 const TimerGranularity = time.Millisecond
 
-// MaxAckDelay is the maximum time by which we delay sending ACKs.
-const MaxAckDelay = 25 * time.Millisecond
-
-// MaxAckDelayInclGranularity is the max_ack_delay including the timer granularity.
-// This is the value that should be advertised to the peer.
-const MaxAckDelayInclGranularity = MaxAckDelay + TimerGranularity
-
 // KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
 const KeyUpdateInterval = 100 * 1000
 

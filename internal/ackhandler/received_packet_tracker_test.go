@@ -94,7 +94,7 @@ func TestAppDataReceivedPacketTrackerAlarmTimeout(t *testing.T) {
 
 	rcvTime := now.Add(10 * time.Millisecond)
 	require.NoError(t, tr.ReceivedPacket(2, protocol.ECNNon, rcvTime, true))
-	require.Equal(t, rcvTime.Add(protocol.MaxAckDelay), tr.GetAlarmTimeout())
+	require.Equal(t, rcvTime.Add(MaxAckDelay), tr.GetAlarmTimeout())
 	require.Nil(t, tr.GetAckFrame(monotime.Now(), true))
 
 	// no timeout after the ACK has been dequeued
