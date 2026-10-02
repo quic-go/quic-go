@@ -397,7 +397,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	priorInFlight := h.bytesInFlight
 	ackedPackets, hasAckEliciting, err := h.detectAndRemoveAckedPackets(ack, encLevel)
-	if err != nil || len(ackedPackets) == 0 {
+	if err != nil {
 		return false, err
 	}
 	// update the RTT, if:
@@ -419,6 +419,20 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			}
 			h.congestion.MaybeExitSlowStart()
 		}
+	}
+
+	// Detect spurious losses even if no outstanding packets were newly acknowledged.
+	// Reordered ACKs are ignored.
+	if encLevel == protocol.Encryption1RTT && largestAcked >= pnSpace.largestAcked {
+		h.detectSpuriousLosses(
+			ack,
+			rcvTime.Add(-min(ack.DelayTime, h.rttStats.MaxAckDelay())),
+		)
+		// clean up lost packet history
+		h.lostPackets.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
+	}
+	if len(ackedPackets) == 0 {
+		return false, nil
 	}
 
 	// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
@@ -447,16 +461,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		if !p.isPathProbePacket {
 			putPacket(p.packet)
 		}
-	}
-
-	// detect spurious losses for application data packets, if the ACK was not reordered
-	if encLevel == protocol.Encryption1RTT && largestAcked == pnSpace.largestAcked {
-		h.detectSpuriousLosses(
-			ack,
-			rcvTime.Add(-min(ack.DelayTime, h.rttStats.MaxAckDelay())),
-		)
-		// clean up lost packet history
-		h.lostPackets.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
 	}
 
 	// After this point, we must not use ackedPackets any longer!
@@ -490,7 +494,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	for pn, sendTime := range h.lostPackets.All() {
 		ackRange := ack.AckRanges[ackRangeIdx]
 		for pn > ackRange.Largest {
-			// this should never happen, since detectSpuriousLosses is only called for ACKs that increase the largest acked
+			// this should never happen, since detectSpuriousLosses is only called for ACKs that don't decrease the largest acked
 			if ackRangeIdx == 0 {
 				break
 			}
