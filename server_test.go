@@ -1114,7 +1114,7 @@ func TestServerAcceptQueue(t *testing.T) {
 
 func TestServer0RTTReordering(t *testing.T) {
 	var eventRecorder events.Recorder
-	packets := make(chan receivedPacket, protocol.Max0RTTQueueLen+1)
+	packets := make(chan receivedPacket, max0RTTQueueLen+1)
 	done := make(chan struct{})
 	recorder := newConnConstructorRecorder(&connTestHooks{
 		handlePacket:   func(p receivedPacket) { packets <- p },
@@ -1131,7 +1131,7 @@ func TestServer0RTTReordering(t *testing.T) {
 
 	var zeroRTTPackets []receivedPacket
 
-	for range protocol.Max0RTTQueueLen {
+	for range max0RTTQueueLen {
 		p := getLongHeaderPacket(t,
 			&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42},
 			&wire.ExtendedHeader{
@@ -1191,7 +1191,7 @@ func TestServer0RTTReordering(t *testing.T) {
 	initial := getValidInitialPacket(t, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}, randConnID(5), connID)
 	server.handlePacket(initial)
 
-	for i := range protocol.Max0RTTQueueLen + 1 {
+	for i := range max0RTTQueueLen + 1 {
 		select {
 		case p := <-packets:
 			if i == 0 {
@@ -1211,6 +1211,12 @@ func TestServer0RTTReordering(t *testing.T) {
 	}
 }
 
+func TestServer0RTTPacketQueueCapacities(t *testing.T) {
+	// Ensure that the session can queue more packets than the 0-RTT queue
+	require.Greater(t, protocol.MaxConnUnprocessedPackets, max0RTTQueueLen)
+	require.Greater(t, protocol.MaxUndecryptablePackets, max0RTTQueueLen)
+}
+
 func TestServer0RTTQueueing(t *testing.T) {
 	var eventRecorder events.Recorder
 	server := newTestServer(t, &serverOpts{
@@ -1219,9 +1225,9 @@ func TestServer0RTTQueueing(t *testing.T) {
 	})
 
 	firstRcvTime := monotime.Now()
-	otherRcvTime := firstRcvTime.Add(protocol.Max0RTTQueueingDuration / 2)
+	otherRcvTime := firstRcvTime.Add(max0RTTQueueingDuration / 2)
 	var sizes []protocol.ByteCount
-	for i := range protocol.Max0RTTQueues {
+	for i := range max0RTTQueues {
 		b := make([]byte, 16)
 		rand.Read(b)
 		connID := protocol.ParseConnectionID(b)
@@ -1303,7 +1309,7 @@ func TestServer0RTTQueueing(t *testing.T) {
 		},
 		make([]byte, 123),
 	)
-	triggerPacket.rcvTime = firstRcvTime.Add(protocol.Max0RTTQueueingDuration + time.Nanosecond)
+	triggerPacket.rcvTime = firstRcvTime.Add(max0RTTQueueingDuration + time.Nanosecond)
 	server.handlePacket(triggerPacket)
 	require.Eventually(t,
 		func() bool { return len(eventRecorder.Events(qlog.PacketDropped{})) == 2 },
@@ -1350,7 +1356,7 @@ func TestServer0RTTQueueing(t *testing.T) {
 		},
 		make([]byte, 124),
 	)
-	triggerPacket.rcvTime = otherRcvTime.Add(protocol.Max0RTTQueueingDuration + time.Nanosecond)
+	triggerPacket.rcvTime = otherRcvTime.Add(max0RTTQueueingDuration + time.Nanosecond)
 	server.handlePacket(triggerPacket)
 
 	expectedEvents := []qlogwriter.Event{
@@ -1364,7 +1370,7 @@ func TestServer0RTTQueueing(t *testing.T) {
 			Trigger: qlog.PacketDropUnexpectedPacket,
 		},
 	}
-	for i := range protocol.Max0RTTQueues - 1 {
+	for i := range max0RTTQueues - 1 {
 		expectedEvents = append(expectedEvents, qlog.PacketDropped{
 			Header: qlog.PacketHeader{
 				PacketType:   qlog.PacketType0RTT,
