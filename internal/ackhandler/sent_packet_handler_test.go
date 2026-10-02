@@ -1702,6 +1702,12 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		},
 		eventRecorder.Events(qlog.SpuriousLoss{}),
 	)
+
+	// the only newly acknowledged packet has already been declared lost
+	eventRecorder.Clear()
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[11], pns[18])}, protocol.Encryption1RTT, now.Add(secondAckDelay))
+	require.NoError(t, err)
+	require.Len(t, eventRecorder.Events(qlog.SpuriousLoss{}), 1)
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {
