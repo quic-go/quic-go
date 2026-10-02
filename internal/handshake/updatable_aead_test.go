@@ -439,7 +439,7 @@ func TestInitiateKeyUpdateAfterSendingMaxPackets(t *testing.T) {
 
 func TestKeyUpdateEnforceACKKeyPhase(t *testing.T) {
 	const firstKeyUpdateInterval = 5
-	setKeyUpdateIntervals(t, firstKeyUpdateInterval, protocol.KeyUpdateInterval)
+	setKeyUpdateIntervals(t, firstKeyUpdateInterval, defaultKeyUpdateInterval)
 
 	_, server, eventRecorder := setupEndpoints(t, utils.NewRTTStats())
 	server.SetHandshakeConfirmed()

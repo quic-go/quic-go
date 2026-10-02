@@ -135,9 +135,6 @@ const AckDelayExponent = 3
 // The loss detection timer will not be set to a value smaller than granularity.
 const TimerGranularity = time.Millisecond
 
-// KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
-const KeyUpdateInterval = 100 * 1000
-
 // Max0RTTQueueingDuration is the maximum time that we store 0-RTT packets in order to wait for the corresponding Initial to be received.
 const Max0RTTQueueingDuration = 100 * time.Millisecond
 
