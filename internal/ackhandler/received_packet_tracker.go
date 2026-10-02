@@ -91,8 +91,7 @@ type appDataReceivedPacketTracker struct {
 	largestObserved protocol.PacketNumber
 	ignoreBelow     protocol.PacketNumber
 
-	maxAckDelay time.Duration
-	ackQueued   bool // true if we need send a new ACK
+	ackQueued bool // true if we need send a new ACK
 
 	ackElicitingPacketsReceivedSinceLastAck int
 	ackAlarm                                monotime.Time
@@ -103,7 +102,6 @@ type appDataReceivedPacketTracker struct {
 func newAppDataReceivedPacketTracker(logger utils.Logger) *appDataReceivedPacketTracker {
 	h := &appDataReceivedPacketTracker{
 		receivedPacketTracker: *newReceivedPacketTracker(),
-		maxAckDelay:           MaxAckDelay,
 		logger:                logger,
 	}
 	return h
@@ -128,9 +126,9 @@ func (h *appDataReceivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, 
 	}
 	if !h.ackQueued {
 		// No ACK queued, but we'll need to acknowledge the packet after max_ack_delay.
-		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
+		h.ackAlarm = rcvTime.Add(MaxAckDelay)
 		if h.logger.Debug() {
-			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
+			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", MaxAckDelay)
 		}
 	}
 	return nil
