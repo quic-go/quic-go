@@ -144,7 +144,7 @@ func NewSentPacketHandler(
 		initialPackets:                 newPacketNumberSpace(initialPN, false),
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
-		lostPackets:                    *newLostPacketTracker(64),
+		lostPackets:                    *newLostPacketTracker(),
 		rttStats:                       rttStats,
 		connStats:                      connStats,
 		congestion:                     congestion,
