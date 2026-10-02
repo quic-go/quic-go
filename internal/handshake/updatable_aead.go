@@ -16,10 +16,13 @@ import (
 	"github.com/quic-go/quic-go/qlogwriter"
 )
 
+// defaultKeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
+const defaultKeyUpdateInterval = 100 * 1000
+
 var keyUpdateInterval atomic.Uint64
 
 func init() {
-	keyUpdateInterval.Store(protocol.KeyUpdateInterval)
+	keyUpdateInterval.Store(defaultKeyUpdateInterval)
 }
 
 func SetKeyUpdateInterval(v uint64) (reset func()) {
