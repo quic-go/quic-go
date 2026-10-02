@@ -331,7 +331,7 @@ var newConnection = func(
 		MaxIdleTimeout:                  s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:                protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
-		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
+		MaxAckDelay:                     ackhandler.MaxAckDelay + protocol.TimerGranularity,
 		AckDelayExponent:                protocol.AckDelayExponent,
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
 		StatelessResetToken:             &statelessResetToken,
@@ -460,7 +460,7 @@ var newClientConnection = func(
 		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
-		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
+		MaxAckDelay:                    ackhandler.MaxAckDelay + protocol.TimerGranularity,
 		MaxUDPPayloadSize:              protocol.MaxPacketBufferSize,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		// For interoperability with quic-go versions before May 2023, this value must be set to a value

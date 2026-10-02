@@ -2165,7 +2165,7 @@ func TestConnectionACKTimer(t *testing.T) {
 						// After first packet is sent, set alarm timeout for the next iteration
 						// Get the ACK frame to reset state, then receive a new packet to set alarm
 						_ = rph.GetAckFrame(protocol.Encryption1RTT, monotime.Now(), false)
-						alarmRcvTime := monotime.Now().Add(alarmTimeout - protocol.MaxAckDelay)
+						alarmRcvTime := monotime.Now().Add(alarmTimeout - ackhandler.MaxAckDelay)
 						_ = rph.ReceivedPacket(2, protocol.ECNNon, protocol.Encryption1RTT, alarmRcvTime, true)
 					} else {
 						// After second packet is sent, set alarm timeout far in the future
