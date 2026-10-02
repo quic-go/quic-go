@@ -545,8 +545,10 @@ func (e PacketLost) Encode(enc *jsontext.Encoder, _ time.Time) error {
 }
 
 type SpuriousLoss struct {
-	EncryptionLevel  protocol.EncryptionLevel
-	PacketNumber     protocol.PacketNumber
+	EncryptionLevel protocol.EncryptionLevel
+	PacketNumber    protocol.PacketNumber
+	// PacketReordering is the distance to the ACK's largest acknowledged packet,
+	// adjusted for known skipped packet numbers. Reordered ACKs can yield zero.
 	PacketReordering uint64
 	TimeReordering   time.Duration
 }
