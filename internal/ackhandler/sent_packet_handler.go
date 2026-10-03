@@ -73,6 +73,10 @@ type sentPacketHandler struct {
 	// send time of the largest acknowledged packet, across all packet number spaces
 	largestAckedTime monotime.Time
 
+	// In the application-data packet number space, packet threshold loss detection is
+	// disabled when spurious losses are detected.
+	packetThresholdDisabled bool
+
 	// Do we know that the peer completed address validation yet?
 	// Always true for the server.
 	peerCompletedAddressValidation bool
@@ -501,6 +505,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 			continue
 		}
 		if pn <= ackRange.Largest {
+			h.packetThresholdDisabled = true
 			packetReordering := h.appDataPackets.history.Difference(ack.LargestAcked(), pn)
 			timeReordering := ackTime.Sub(sendTime)
 			maxPacketReordering = max(maxPacketReordering, packetReordering)
@@ -787,6 +792,7 @@ func (h *sentPacketHandler) detectLostPathProbes(now monotime.Time) {
 func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protocol.EncryptionLevel) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = 0
+	usePacketThreshold := pnSpace != h.appDataPackets || !h.packetThresholdDisabled
 
 	lossDelay := max(
 		max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT())*(8+timeThresholdEighths)/8,
@@ -819,7 +825,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 					})
 				}
 			}
-		} else if pnSpace.history.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
+		} else if usePacketThreshold && pnSpace.history.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
 			packetLost = true
 			if !p.isPathProbePacket && p.IsAckEliciting() {
 				if h.logger.Debug() {
@@ -1118,6 +1124,7 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 
 func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSize protocol.ByteCount) {
 	h.rttStats.ResetForPathMigration()
+	h.packetThresholdDisabled = false
 	h.lostPackets.Reset()
 	for pn, p := range h.appDataPackets.history.Packets() {
 		h.appDataPackets.history.DeclareLost(pn)
