@@ -30,7 +30,7 @@ func TestSettingsCompatibleFor0RTT(t *testing.T) {
 		{
 			name:    "malformed settings",
 			current: &settings{},
-			extra:   [][]byte{append([]byte(serverSettingsSessionTicketPrefix), 0xff)},
+			extra:   [][]byte{append([]byte(settingsSessionTicketPrefix), 0xff)},
 		},
 		{
 			name:    "max field section size reduced",

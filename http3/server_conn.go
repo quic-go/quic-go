@@ -266,7 +266,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	str.Close()
 }
 
-func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *frameParser) {
+func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *frameParser, _ *settingsFrame) {
 	for {
 		f, err := fp.ParseNext(c.qlogger)
 		if err != nil {
