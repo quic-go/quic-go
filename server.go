@@ -35,6 +35,20 @@ type packetHandler interface {
 	closeWithTransportError(qerr.TransportErrorCode)
 }
 
+const (
+	// max0RTTQueueingDuration is the maximum time that we store 0-RTT packets in order to wait for the corresponding Initial to be received.
+	max0RTTQueueingDuration = 100 * time.Millisecond
+
+	// max0RTTQueues is the maximum number of connections that we buffer 0-RTT packets for.
+	max0RTTQueues = 32
+
+	// max0RTTQueueLen is the maximum number of 0-RTT packets that we buffer for each connection.
+	// When a new connection is created, all buffered packets are passed to the connection immediately.
+	// To avoid blocking, this value has to be smaller than MaxConnUnprocessedPackets.
+	// To avoid packets being dropped as undecryptable by the connection, this value has to be smaller than MaxUndecryptablePackets.
+	max0RTTQueueLen = 31
+)
+
 type zeroRTTQueue struct {
 	packets    []receivedPacket
 	expiration monotime.Time
@@ -578,7 +592,7 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 	}
 
 	if q, ok := s.zeroRTTQueues[connID]; ok {
-		if len(q.packets) >= protocol.Max0RTTQueueLen {
+		if len(q.packets) >= max0RTTQueueLen {
 			if s.qlogger != nil {
 				v, _ := wire.ParseVersion(p.data)
 				s.qlogger.RecordEvent(qlog.PacketDropped{
@@ -597,7 +611,7 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 		return true
 	}
 
-	if len(s.zeroRTTQueues) >= protocol.Max0RTTQueues {
+	if len(s.zeroRTTQueues) >= max0RTTQueues {
 		if s.qlogger != nil {
 			v, _ := wire.ParseVersion(p.data)
 			s.qlogger.RecordEvent(qlog.PacketDropped{
@@ -614,7 +628,7 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 	}
 	queue := &zeroRTTQueue{packets: make([]receivedPacket, 1, 8)}
 	queue.packets[0] = p
-	expiration := p.rcvTime.Add(protocol.Max0RTTQueueingDuration)
+	expiration := p.rcvTime.Add(max0RTTQueueingDuration)
 	queue.expiration = expiration
 	if s.nextZeroRTTCleanup.IsZero() || s.nextZeroRTTCleanup.After(expiration) {
 		s.nextZeroRTTCleanup = expiration
