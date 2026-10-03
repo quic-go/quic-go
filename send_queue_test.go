@@ -205,3 +205,67 @@ func TestSendQueueSendProbe(t *testing.T) {
 		addr: localAddr,
 	})
 }
+
+func TestSendQueueCloseAndDiscard(t *testing.T) {
+	t.Run("with packets queued", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			c := NewMockSendConn(mockCtrl)
+			q := newSendQueue(c)
+
+			// Two packets are queued, and the queue is told to discard before
+			// its run loop gets to them. Nothing may reach the connection.
+			q.Send(getPacketWithContents([]byte("foo")), 3, protocol.ECNNon)
+			q.Send(getPacketWithContents([]byte("bar")), 3, protocol.ECNNon)
+
+			closed := make(chan struct{})
+			go func() {
+				q.CloseAndDiscard()
+				close(closed)
+			}()
+			synctest.Wait()
+
+			done := make(chan struct{})
+			go func() {
+				q.Run()
+				close(done)
+			}()
+			synctest.Wait()
+
+			select {
+			case <-done:
+			default:
+				t.Fatal("Run should have returned")
+			}
+			select {
+			case <-closed:
+			default:
+				t.Fatal("CloseAndDiscard should have returned")
+			}
+		})
+	})
+
+	// The production ordering: the run loop is already parked when the
+	// discarding close arrives.
+	t.Run("while the run loop is parked", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			c := NewMockSendConn(mockCtrl)
+			q := newSendQueue(c)
+
+			done := make(chan struct{})
+			go func() {
+				q.Run()
+				close(done)
+			}()
+			synctest.Wait()
+
+			q.CloseAndDiscard()
+			select {
+			case <-done:
+			default:
+				t.Fatal("Run should have returned")
+			}
+		})
+	})
+}
