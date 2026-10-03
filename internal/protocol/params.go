@@ -42,13 +42,6 @@ const MaxServerUnprocessedPackets = 1024
 // MaxConnUnprocessedPackets is the max number of packets stored in each connection that are not yet processed.
 const MaxConnUnprocessedPackets = 256
 
-// SkipPacketInitialPeriod is the initial period length used for packet number skipping to prevent an Optimistic ACK attack.
-// Every time a packet number is skipped, the period is doubled, up to SkipPacketMaxPeriod.
-const SkipPacketInitialPeriod PacketNumber = 256
-
-// SkipPacketMaxPeriod is the maximum period length used for packet number skipping.
-const SkipPacketMaxPeriod PacketNumber = 128 * 1024
-
 // MaxAcceptQueueSize is the maximum number of connections that the server queues for accepting.
 // If the queue is full, new connection attempts will be rejected.
 const MaxAcceptQueueSize = 32

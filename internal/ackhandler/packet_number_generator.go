@@ -33,6 +33,16 @@ func (p *sequentialPacketNumberGenerator) Pop() (bool, protocol.PacketNumber) {
 	return false, next
 }
 
+const (
+	// skipPacketInitialPeriod is the initial period length used for packet number skipping
+	// to prevent an Optimistic ACK attack.
+	// Every time a packet number is skipped, the period is doubled, up to skipPacketMaxPeriod.
+	skipPacketInitialPeriod = 256
+
+	// skipPacketMaxPeriod is the maximum period length used for packet number skipping.
+	skipPacketMaxPeriod = 128 * 1024
+)
+
 // The skippingPacketNumberGenerator generates the packet number for the next packet
 // it randomly skips a packet number every averagePeriod packets (on average).
 // It is guaranteed to never skip two consecutive packet numbers.
