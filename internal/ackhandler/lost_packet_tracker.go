@@ -71,3 +71,7 @@ func (t *lostPacketTracker) DeleteBefore(ti monotime.Time) {
 	}
 	t.lostPackets = slices.Delete(t.lostPackets, 0, idx)
 }
+
+func (t *lostPacketTracker) Reset() {
+	t.lostPackets = t.lostPackets[:0]
+}
