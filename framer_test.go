@@ -15,6 +15,28 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestFramerCryptoFrames(t *testing.T) {
+	data := bytes.Repeat([]byte("crypto"), 300)
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
+	framer.QueueControlFrame(&wire.CryptoFrame{Data: data})
+	framer.QueueControlFrame(&wire.HandshakeDoneFrame{})
+
+	const maxSize protocol.ByteCount = 1200
+	frames, _, length := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	require.Len(t, frames, 2)
+	require.IsType(t, &wire.HandshakeDoneFrame{}, frames[0].Frame)
+	require.Equal(t, maxSize, length)
+	cf := frames[1].Frame.(*wire.CryptoFrame)
+	require.Zero(t, cf.Offset)
+	require.Equal(t, data[:len(cf.Data)], cf.Data)
+	require.True(t, framer.HasData())
+
+	frames, _, _ = framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	require.Len(t, frames, 1)
+	require.Equal(t, &wire.CryptoFrame{Offset: protocol.ByteCount(len(cf.Data)), Data: data[len(cf.Data):]}, frames[0].Frame)
+	require.False(t, framer.HasData())
+}
+
 func TestFramerControlFrames(t *testing.T) {
 	pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 6, 7, 8}}
 	msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
