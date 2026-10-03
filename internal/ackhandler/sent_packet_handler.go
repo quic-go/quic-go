@@ -423,8 +423,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	// Detect spurious losses even if no outstanding packets were newly acknowledged.
-	// Reordered ACKs are ignored.
-	if encLevel == protocol.Encryption1RTT && largestAcked >= pnSpace.largestAcked {
+	if encLevel == protocol.Encryption1RTT {
 		h.detectSpuriousLosses(
 			ack,
 			rcvTime.Add(-min(ack.DelayTime, h.rttStats.MaxAckDelay())),
@@ -494,11 +493,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	var spuriousLosses []protocol.PacketNumber
 	for pn, sendTime := range h.lostPackets.All() {
 		ackRange := ack.AckRanges[ackRangeIdx]
-		for pn > ackRange.Largest {
-			// this should never happen, since detectSpuriousLosses is only called for ACKs that don't decrease the largest acked
-			if ackRangeIdx == 0 {
-				break
-			}
+		for pn > ackRange.Largest && ackRangeIdx > 0 {
 			ackRangeIdx--
 			ackRange = ack.AckRanges[ackRangeIdx]
 		}

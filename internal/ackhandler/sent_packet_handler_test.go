@@ -1708,6 +1708,17 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[11], pns[18])}, protocol.Encryption1RTT, now.Add(secondAckDelay))
 	require.NoError(t, err)
 	require.Len(t, eventRecorder.Events(qlog.SpuriousLoss{}), 1)
+
+	// A reordered ACK can also newly acknowledge a previously lost packet.
+	eventRecorder.Clear()
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[13])}, protocol.Encryption1RTT, now.Add(2*secondAckDelay))
+	require.NoError(t, err)
+	require.Equal(t, []qlogwriter.Event{qlog.SpuriousLoss{
+		EncryptionLevel:  protocol.Encryption1RTT,
+		PacketNumber:     pns[13],
+		PacketReordering: 0,
+		TimeReordering:   rtt + 4*secondAckDelay - 130*time.Millisecond,
+	}}, eventRecorder.Events(qlog.SpuriousLoss{}))
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {
