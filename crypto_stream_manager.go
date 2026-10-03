@@ -53,13 +53,6 @@ func (m *cryptoStreamManager) GetCryptoData(encLevel protocol.EncryptionLevel) [
 	}
 }
 
-func (m *cryptoStreamManager) GetPostHandshakeData(maxSize protocol.ByteCount) *wire.CryptoFrame {
-	if !m.oneRTTStream.HasData() {
-		return nil
-	}
-	return m.oneRTTStream.PopCryptoFrame(maxSize)
-}
-
 func (m *cryptoStreamManager) Finish(encLevel protocol.EncryptionLevel) error {
 	//nolint:exhaustive // The 1-RTT CRYPTO stream is never finished.
 	switch encLevel {

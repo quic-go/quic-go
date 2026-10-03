@@ -69,19 +69,3 @@ func testCryptoStreamManagerFinishEncryptionLevel(t *testing.T, encLevel protoco
 	require.Equal(t, []byte("foo"), csm.GetCryptoData(encLevel))
 	require.NoError(t, csm.Finish(encLevel))
 }
-
-func TestCryptoStreamManagerPostHandshake(t *testing.T) {
-	initialStream := newInitialCryptoStream(true)
-	handshakeStream := newCryptoStream()
-	oneRTTStream := newCryptoStream()
-	csm := newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
-
-	_, err := oneRTTStream.Write([]byte("foo"))
-	require.NoError(t, err)
-	_, err = oneRTTStream.Write([]byte("bar"))
-	require.NoError(t, err)
-	require.Equal(t,
-		&wire.CryptoFrame{Data: []byte("foobar")},
-		csm.GetPostHandshakeData(protocol.ByteCount(10)),
-	)
-}

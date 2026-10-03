@@ -102,10 +102,6 @@ const DefaultHandshakeIdleTimeout = 5 * time.Second
 // 2. it reduces the head-of-line blocking, when a packet is lost
 const MinStreamFrameSize ByteCount = 128
 
-// MaxPostHandshakeCryptoFrameSize is the maximum size of CRYPTO frames
-// we send after the handshake completes.
-const MaxPostHandshakeCryptoFrameSize = 1000
-
 // MaxNumAckRanges is the maximum number of ACK ranges that we send in an ACK frame.
 // It also serves as a limit for the packet history.
 // If at any point we keep track of more ranges, old ranges are discarded.

@@ -961,10 +961,8 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 	}
 	if ticket != nil { // may be nil if session tickets are disabled via tls.Config.SessionTicketsDisabled
 		c.oneRTTStream.Write(ticket)
-		for c.oneRTTStream.HasData() {
-			if cf := c.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
-				c.queueControlFrame(cf)
-			}
+		if cf := c.oneRTTStream.PopCryptoFrame(protocol.MaxByteCount); cf != nil {
+			c.queueControlFrame(cf)
 		}
 	}
 	token, err := c.tokenGenerator.NewToken(c.conn.RemoteAddr(), c.rttStats.SmoothedRTT())
@@ -2530,10 +2528,6 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 	if offset := c.connFlowController.GetWindowUpdate(now); offset > 0 {
 		c.framer.QueueControlFrame(&wire.MaxDataFrame{MaximumData: offset})
 	}
-	if cf := c.cryptoStreamManager.GetPostHandshakeData(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
-		c.queueControlFrame(cf)
-	}
-
 	if !c.handshakeConfirmed {
 		packet, err := c.packer.PackCoalescedPacket(false, c.maxPacketSize(), now, c.version)
 		if err != nil || packet == nil {

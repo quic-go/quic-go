@@ -50,6 +50,15 @@ func TestTLSSessionResumption(t *testing.T) {
 		handshakeWithSessionResumption(t, getTLSConfig(), true)
 	})
 
+	t.Run("large session ticket", func(t *testing.T) {
+		sConf := getTLSConfig()
+		sConf.WrapSession = func(cs tls.ConnectionState, ss *tls.SessionState) ([]byte, error) {
+			ss.Extra = append(ss.Extra, make([]byte, 5000))
+			return sConf.EncryptTicket(cs, ss)
+		}
+		handshakeWithSessionResumption(t, sConf, true)
+	})
+
 	t.Run("disabled in tls.Config", func(t *testing.T) {
 		sConf := getTLSConfig()
 		sConf.SessionTicketsDisabled = true
