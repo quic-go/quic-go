@@ -114,6 +114,7 @@ func newCubicSender(
 		qlogger:                    qlogger,
 		maxDatagramSize:            initialMaxDatagramSize,
 	}
+	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	if c.qlogger != nil {
 		c.lastState = qlog.CongestionStateSlowStart
 		c.qlogger.RecordEvent(qlog.CongestionStateUpdated{
@@ -191,6 +192,7 @@ func (c *cubicSender) OnPacketAcked(
 		return
 	}
 	c.maybeIncreaseCwnd(ackedPacketNumber, ackedBytes, priorInFlight, eventTime)
+	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	if c.InSlowStart() {
 		c.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
 	}
@@ -216,6 +218,7 @@ func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lost
 	if minCwnd := c.minCongestionWindow(); c.congestionWindow < minCwnd {
 		c.congestionWindow = minCwnd
 	}
+	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	c.slowStartThreshold = c.congestionWindow
 	c.largestSentAtLastCutback = c.largestSentPacketNumber
 	// reset packet count from congestion avoidance mode. We start
@@ -303,6 +306,7 @@ func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 	c.cubic.Reset()
 	c.slowStartThreshold = c.congestionWindow / 2
 	c.congestionWindow = c.minCongestionWindow()
+	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 }
 
 // OnConnectionMigration is called when the connection is migrated (?)
@@ -315,6 +319,7 @@ func (c *cubicSender) OnConnectionMigration() {
 	c.cubic.Reset()
 	c.numAckedPackets = 0
 	c.congestionWindow = c.initialCongestionWindow
+	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	c.slowStartThreshold = c.initialMaxCongestionWindow
 }
 
@@ -334,6 +339,7 @@ func (c *cubicSender) SetMaxDatagramSize(s protocol.ByteCount) {
 	c.maxDatagramSize = s
 	if cwndIsMinCwnd {
 		c.congestionWindow = c.minCongestionWindow()
+		c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	}
 	c.pacer.SetMaxDatagramSize(s)
 }
