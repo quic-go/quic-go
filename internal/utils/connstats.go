@@ -5,6 +5,8 @@ import "sync/atomic"
 // ConnectionStats stores stats for the connection. See the public
 // ConnectionStats struct in connection.go for more information
 type ConnectionStats struct {
+	CongestionWindow atomic.Uint64
+
 	BytesSent       atomic.Uint64
 	PacketsSent     atomic.Uint64
 	BytesReceived   atomic.Uint64

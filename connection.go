@@ -801,6 +801,11 @@ type ConnectionStats struct {
 	// variation. See https://www.rfc-editor.org/rfc/rfc9002#section-5.3
 	MeanDeviation time.Duration
 
+	// CongestionWindow is the local sender's congestion window on the active
+	// network path, in bytes. It limits bytes in flight and includes QUIC
+	// packet overhead, excluding UDP and IP headers.
+	CongestionWindow uint64
+
 	// BytesSent is the number of bytes sent on the underlying connection,
 	// including retransmissions. Does not include UDP or any other outer
 	// framing.
@@ -826,12 +831,16 @@ type ConnectionStats struct {
 	PacketsLost uint64
 }
 
+// ConnectionStats returns statistics about the connection.
+// It can be called concurrently with other connection operations.
 func (c *Conn) ConnectionStats() ConnectionStats {
 	return ConnectionStats{
 		MinRTT:        c.rttStats.MinRTT(),
 		LatestRTT:     c.rttStats.LatestRTT(),
 		SmoothedRTT:   c.rttStats.SmoothedRTT(),
 		MeanDeviation: c.rttStats.MeanDeviation(),
+
+		CongestionWindow: c.connStats.CongestionWindow.Load(),
 
 		BytesSent:       c.connStats.BytesSent.Load(),
 		PacketsSent:     c.connStats.PacketsSent.Load(),

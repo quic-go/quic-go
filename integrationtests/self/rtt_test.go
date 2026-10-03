@@ -89,6 +89,7 @@ func TestDownloadWithFixedRTT(t *testing.T) {
 
 				checkRTTs := func(stats quic.ConnectionStats) {
 					t.Helper()
+					require.NotZero(t, stats.CongestionWindow)
 					require.GreaterOrEqual(t, stats.SmoothedRTT, rtt)
 					require.GreaterOrEqual(t, stats.MinRTT, rtt)
 					require.LessOrEqual(t, stats.SmoothedRTT, rtt+time.Millisecond)
