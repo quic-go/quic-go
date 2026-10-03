@@ -1118,6 +1118,7 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 
 func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSize protocol.ByteCount) {
 	h.rttStats.ResetForPathMigration()
+	h.lostPackets.Reset()
 	for pn, p := range h.appDataPackets.history.Packets() {
 		h.appDataPackets.history.DeclareLost(pn)
 		if !p.isPathProbePacket {
