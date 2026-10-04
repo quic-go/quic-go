@@ -679,6 +679,21 @@ func TestPacketDropped(t *testing.T) {
 	}`, ev)
 }
 
+func TestDatagramDropped(t *testing.T) {
+	name, ev := testEventEncoding(t, &DatagramDropped{
+		Direction: DirectionReceiving,
+		Raw:       RawInfo{Length: 1337},
+		Trigger:   "buffer_full",
+	})
+
+	require.Equal(t, "quic:datagram_dropped", name)
+	require.JSONEq(t, `{
+		"direction": "receiving",
+		"raw": {"length": 1337},
+		"trigger": "buffer_full"
+	}`, ev)
+}
+
 func TestMetricsUpdated(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(15*time.Millisecond, 0)

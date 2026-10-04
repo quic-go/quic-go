@@ -7,6 +7,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 )
 
@@ -410,6 +411,36 @@ func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	}
 	h.WriteToken(jsontext.String("trigger"))
 	h.WriteToken(jsontext.String(string(e.Trigger)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// DatagramDropped is the quic:datagram_dropped event.
+type DatagramDropped struct {
+	Direction Direction
+	Raw       RawInfo
+	Trigger   string
+}
+
+var _ qlogwriter.Event = DatagramDropped{}
+
+func (e DatagramDropped) Name() string { return "quic:datagram_dropped" }
+
+func (e DatagramDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	if e.Direction != "" {
+		h.WriteToken(jsontext.String("direction"))
+		h.WriteToken(jsontext.String(string(e.Direction)))
+	}
+	h.WriteToken(jsontext.String("raw"))
+	if err := e.Raw.encode(enc); err != nil {
+		return err
+	}
+	if e.Trigger != "" {
+		h.WriteToken(jsontext.String("trigger"))
+		h.WriteToken(jsontext.String(e.Trigger))
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
