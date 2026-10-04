@@ -70,6 +70,8 @@ type sentPacketHandler struct {
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
 	lostPackets      lostPacketTracker // only for application-data packet number space
+	// All application-data packets sent before the first 1-RTT packet are 0-RTT packets.
+	first1RTTPacketNumber protocol.PacketNumber
 	// send time of the largest acknowledged packet, across all packet number spaces
 	largestAckedTime monotime.Time
 
@@ -150,6 +152,7 @@ func NewSentPacketHandler(
 		handshakePackets:               newPacketNumberSpace(0, false),
 		appDataPackets:                 newPacketNumberSpace(0, true),
 		lostPackets:                    *newLostPacketTracker(),
+		first1RTTPacketNumber:          protocol.InvalidPacketNumber,
 		rttStats:                       rttStats,
 		connStats:                      connStats,
 		congestion:                     congestion,
@@ -208,7 +211,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now m
 		// When 0-RTT is rejected, all application data sent so far becomes invalid.
 		// Delete the packets from the history and remove them from bytes_in_flight.
 		for pn, p := range h.appDataPackets.history.Packets() {
-			if p.EncryptionLevel != protocol.Encryption0RTT {
+			if h.first1RTTPacketNumber != protocol.InvalidPacketNumber && pn >= h.first1RTTPacketNumber {
 				break
 			}
 			h.removeFromBytesInFlight(p)
@@ -277,10 +280,12 @@ func (h *sentPacketHandler) SentPacket(
 	}
 
 	pnSpace.largestSent = pn
+	if encLevel == protocol.Encryption1RTT && h.first1RTTPacketNumber == protocol.InvalidPacketNumber {
+		h.first1RTTPacketNumber = pn
+	}
 
 	p := getPacket()
 	p.SendTime = t
-	p.EncryptionLevel = encLevel
 	p.Length = size
 	p.Frames = frames
 	p.LargestAcked = largestAcked
@@ -458,7 +463,8 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		if p.includedInBytesInFlight {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
-		if p.EncryptionLevel == protocol.Encryption1RTT {
+		if encLevel == protocol.Encryption1RTT &&
+			h.first1RTTPacketNumber != protocol.InvalidPacketNumber && p.PacketNumber >= h.first1RTTPacketNumber {
 			acked1RTTPacket = true
 		}
 		h.removeFromBytesInFlight(p.packet)
@@ -808,6 +814,17 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 			break
 		}
 
+		var packetType qlog.PacketType
+		if h.qlogger != nil {
+			packetType = qlog.EncryptionLevelToPacketType(encLevel)
+			if pnSpace == h.appDataPackets {
+				packetType = qlog.PacketType0RTT
+				if h.first1RTTPacketNumber != protocol.InvalidPacketNumber && pn >= h.first1RTTPacketNumber {
+					packetType = qlog.PacketType1RTT
+				}
+			}
+		}
+
 		var packetLost bool
 		if !p.SendTime.After(lostSendTime) {
 			packetLost = true
@@ -818,7 +835,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 				if h.qlogger != nil {
 					h.qlogger.RecordEvent(qlog.PacketLost{
 						Header: qlog.PacketHeader{
-							PacketType:   qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
+							PacketType:   packetType,
 							PacketNumber: pn,
 						},
 						Trigger: qlog.PacketLossTimeThreshold,
@@ -834,7 +851,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 				if h.qlogger != nil {
 					h.qlogger.RecordEvent(qlog.PacketLost{
 						Header: qlog.PacketHeader{
-							PacketType:   qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
+							PacketType:   packetType,
 							PacketNumber: pn,
 						},
 						Trigger: qlog.PacketLossReorderingThreshold,

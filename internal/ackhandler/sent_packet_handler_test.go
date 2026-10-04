@@ -102,6 +102,9 @@ func TestSentPacketHandlerSendAndAcknowledge(t *testing.T) {
 	t.Run("Handshake", func(t *testing.T) {
 		testSentPacketHandlerSendAndAcknowledge(t, protocol.EncryptionHandshake)
 	})
+	t.Run("0-RTT", func(t *testing.T) {
+		testSentPacketHandlerSendAndAcknowledge(t, protocol.Encryption0RTT)
+	})
 	t.Run("1-RTT", func(t *testing.T) {
 		testSentPacketHandlerSendAndAcknowledge(t, protocol.Encryption1RTT)
 	})
@@ -135,18 +138,31 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 		pns = append(pns, pn)
 	}
 
-	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[7], pns[8], pns[9])},
-		encLevel,
+	ackEncLevel := encLevel
+	if encLevel == protocol.Encryption0RTT {
+		ackEncLevel = protocol.Encryption1RTT
+	}
+	acked1RTT, err := sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4])},
+		ackEncLevel,
 		monotime.Now(),
 	)
 	require.NoError(t, err)
+	require.False(t, acked1RTT)
+
+	acked1RTT, err = sph.ReceivedAck(
+		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[7], pns[8], pns[9])},
+		ackEncLevel,
+		monotime.Now(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, encLevel == protocol.Encryption1RTT, acked1RTT)
 	require.Equal(t, []protocol.PacketNumber{pns[0], pns[1], pns[2], pns[3], pns[4], pns[7], pns[8], pns[9]}, packets.Acked)
 
 	// ACKs that don't acknowledge new packets are ok
 	_, err = sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[1], pns[2], pns[3])},
-		encLevel,
+		ackEncLevel,
 		monotime.Now(),
 	)
 	require.NoError(t, err)
@@ -155,7 +171,7 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 	// ACKs that don't acknowledge packets that we didn't send are not ok
 	_, err = sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[7], pns[8], pns[9], pns[9]+1)},
-		encLevel,
+		ackEncLevel,
 		monotime.Now(),
 	)
 	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
