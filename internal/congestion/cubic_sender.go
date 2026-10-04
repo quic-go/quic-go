@@ -30,14 +30,14 @@ type cubicSender struct {
 
 	reno bool
 
-	// Track the largest packet that has been sent.
-	largestSentPacketNumber protocol.PacketNumber
+	// Send time of the last packet sent.
+	lastSentTime monotime.Time
 
-	// Track the largest packet that has been acked.
-	largestAckedPacketNumber protocol.PacketNumber
+	// Largest send time of an acknowledged packet.
+	largestAckedTime monotime.Time
 
-	// Track the largest packet number outstanding when a CWND cutback occurs.
-	largestSentAtLastCutback protocol.PacketNumber
+	// Send time of the last packet sent when a CWND cutback occurs.
+	lastSentTimeAtLastCutback monotime.Time
 
 	// Whether the last loss event caused us to exit slowstart.
 	// Used for stats collection of slowstartPacketsLost
@@ -100,9 +100,6 @@ func newCubicSender(
 	c := &cubicSender{
 		rttStats:                   rttStats,
 		connStats:                  connStats,
-		largestSentPacketNumber:    protocol.InvalidPacketNumber,
-		largestAckedPacketNumber:   protocol.InvalidPacketNumber,
-		largestSentAtLastCutback:   protocol.InvalidPacketNumber,
 		initialCongestionWindow:    initialCongestionWindow,
 		initialMaxCongestionWindow: initialMaxCongestionWindow,
 		congestionWindow:           initialCongestionWindow,
@@ -144,7 +141,6 @@ func (c *cubicSender) minCongestionWindow() protocol.ByteCount {
 func (c *cubicSender) OnPacketSent(
 	sentTime monotime.Time,
 	_ protocol.ByteCount,
-	packetNumber protocol.PacketNumber,
 	bytes protocol.ByteCount,
 	isRetransmittable bool,
 ) {
@@ -152,8 +148,8 @@ func (c *cubicSender) OnPacketSent(
 	if !isRetransmittable {
 		return
 	}
-	c.largestSentPacketNumber = packetNumber
-	c.hybridSlowStart.OnPacketSent(packetNumber)
+	c.lastSentTime = sentTime
+	c.hybridSlowStart.OnPacketSent(sentTime)
 }
 
 func (c *cubicSender) CanSend(bytesInFlight protocol.ByteCount) bool {
@@ -161,7 +157,7 @@ func (c *cubicSender) CanSend(bytesInFlight protocol.ByteCount) bool {
 }
 
 func (c *cubicSender) InRecovery() bool {
-	return c.largestAckedPacketNumber != protocol.InvalidPacketNumber && c.largestAckedPacketNumber <= c.largestSentAtLastCutback
+	return !c.largestAckedTime.IsZero() && c.largestAckedTime <= c.lastSentTimeAtLastCutback
 }
 
 func (c *cubicSender) InSlowStart() bool {
@@ -182,29 +178,29 @@ func (c *cubicSender) MaybeExitSlowStart() {
 }
 
 func (c *cubicSender) OnPacketAcked(
-	ackedPacketNumber protocol.PacketNumber,
+	sentTime monotime.Time,
 	ackedBytes protocol.ByteCount,
 	priorInFlight protocol.ByteCount,
 	eventTime monotime.Time,
 ) {
-	c.largestAckedPacketNumber = max(ackedPacketNumber, c.largestAckedPacketNumber)
+	c.largestAckedTime = max(sentTime, c.largestAckedTime)
 	if c.InRecovery() {
 		return
 	}
-	c.maybeIncreaseCwnd(ackedPacketNumber, ackedBytes, priorInFlight, eventTime)
+	c.maybeIncreaseCwnd(ackedBytes, priorInFlight, eventTime)
 	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	if c.InSlowStart() {
-		c.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
+		c.hybridSlowStart.OnPacketAcked(sentTime)
 	}
 }
 
-func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lostBytes, priorInFlight protocol.ByteCount) {
+func (c *cubicSender) OnCongestionEvent(sentTime monotime.Time, lostBytes, priorInFlight protocol.ByteCount) {
 	c.connStats.PacketsLost.Add(1)
 	c.connStats.BytesLost.Add(uint64(lostBytes))
 
 	// TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
 	// already sent should be treated as a single loss event, since it's expected.
-	if packetNumber <= c.largestSentAtLastCutback {
+	if sentTime <= c.lastSentTimeAtLastCutback {
 		return
 	}
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
@@ -220,7 +216,7 @@ func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lost
 	}
 	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
 	c.slowStartThreshold = c.congestionWindow
-	c.largestSentAtLastCutback = c.largestSentPacketNumber
+	c.lastSentTimeAtLastCutback = c.lastSentTime
 	// reset packet count from congestion avoidance mode. We start
 	// counting again when we're out of recovery.
 	c.numAckedPackets = 0
@@ -229,7 +225,6 @@ func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lost
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
 // represents, but quic has a separate ack for each packet.
 func (c *cubicSender) maybeIncreaseCwnd(
-	_ protocol.PacketNumber,
 	ackedBytes protocol.ByteCount,
 	priorInFlight protocol.ByteCount,
 	eventTime monotime.Time,
@@ -298,7 +293,7 @@ func (c *cubicSender) pacingRate() Bandwidth {
 
 // OnRetransmissionTimeout is called on an retransmission timeout
 func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
+	c.lastSentTimeAtLastCutback = 0
 	if !packetsRetransmitted {
 		return
 	}
@@ -312,9 +307,9 @@ func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 // OnConnectionMigration is called when the connection is migrated (?)
 func (c *cubicSender) OnConnectionMigration() {
 	c.hybridSlowStart.Restart()
-	c.largestSentPacketNumber = protocol.InvalidPacketNumber
-	c.largestAckedPacketNumber = protocol.InvalidPacketNumber
-	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
+	c.lastSentTime = 0
+	c.largestAckedTime = 0
+	c.lastSentTimeAtLastCutback = 0
 	c.lastCutbackExitedSlowstart = false
 	c.cubic.Reset()
 	c.numAckedPackets = 0

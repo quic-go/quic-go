@@ -36,6 +36,7 @@ type testCubicSender struct {
 	bytesInFlight     protocol.ByteCount
 	packetNumber      protocol.PacketNumber
 	ackedPacketNumber protocol.PacketNumber
+	sentTimes         map[protocol.PacketNumber]monotime.Time
 }
 
 func newTestCubicSender(cubic bool) *testCubicSender {
@@ -45,6 +46,7 @@ func newTestCubicSender(cubic bool) *testCubicSender {
 		clock:        &clock,
 		rttStats:     &rttStats,
 		packetNumber: 1,
+		sentTimes:    make(map[protocol.PacketNumber]monotime.Time),
 		sender: newCubicSender(
 			&clock,
 			&rttStats,
@@ -59,9 +61,11 @@ func newTestCubicSender(cubic bool) *testCubicSender {
 }
 
 func (s *testCubicSender) SendAvailableSendWindowLen(packetLength protocol.ByteCount) int {
+	s.clock.Advance(time.Nanosecond)
 	var packetsSent int
 	for s.sender.CanSend(s.bytesInFlight) {
-		s.sender.OnPacketSent(s.clock.Now(), s.bytesInFlight, s.packetNumber, packetLength, true)
+		s.sentTimes[s.packetNumber] = s.clock.Now()
+		s.sender.OnPacketSent(s.clock.Now(), s.bytesInFlight, packetLength, true)
 		s.packetNumber++
 		packetsSent++
 		s.bytesInFlight += packetLength
@@ -74,7 +78,7 @@ func (s *testCubicSender) AckNPackets(n int) {
 	s.sender.MaybeExitSlowStart()
 	for range n {
 		s.ackedPacketNumber++
-		s.sender.OnPacketAcked(s.ackedPacketNumber, maxDatagramSize, s.bytesInFlight, s.clock.Now())
+		s.sender.OnPacketAcked(s.sentTimes[s.ackedPacketNumber], maxDatagramSize, s.bytesInFlight, s.clock.Now())
 	}
 	s.bytesInFlight -= protocol.ByteCount(n) * maxDatagramSize
 	s.clock.Advance(time.Millisecond)
@@ -83,13 +87,13 @@ func (s *testCubicSender) AckNPackets(n int) {
 func (s *testCubicSender) LoseNPacketsLen(n int, packetLength protocol.ByteCount) {
 	for range n {
 		s.ackedPacketNumber++
-		s.sender.OnCongestionEvent(s.ackedPacketNumber, packetLength, s.bytesInFlight)
+		s.sender.OnCongestionEvent(s.sentTimes[s.ackedPacketNumber], packetLength, s.bytesInFlight)
 	}
 	s.bytesInFlight -= protocol.ByteCount(n) * packetLength
 }
 
 func (s *testCubicSender) LosePacket(number protocol.PacketNumber) {
-	s.sender.OnCongestionEvent(number, maxDatagramSize, s.bytesInFlight)
+	s.sender.OnCongestionEvent(s.sentTimes[number], maxDatagramSize, s.bytesInFlight)
 	s.bytesInFlight -= maxDatagramSize
 }
 
@@ -145,12 +149,12 @@ func TestCubicSenderPacingRate(t *testing.T) {
 	sender := NewCubicSender(&clock, rttStats, &utils.ConnectionStats{}, maxDatagramSize, true, nil)
 
 	// Exhaust the burst allowance before checking the pacing rate.
-	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(clock.Now()); pn++ {
-		sender.OnPacketSent(clock.Now(), 0, pn, maxDatagramSize, true)
+	for sender.HasPacingBudget(clock.Now()) {
+		sender.OnPacketSent(clock.Now(), 0, maxDatagramSize, true)
 	}
 	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend(0).Sub(clock.Now()))
 
-	sender.OnCongestionEvent(0, maxDatagramSize, sender.GetCongestionWindow())
+	sender.OnCongestionEvent(clock.Now(), maxDatagramSize, sender.GetCongestionWindow())
 	require.False(t, sender.InSlowStart())
 	wantDelay := float64(rtt) * float64(maxDatagramSize) / (1.25 * float64(sender.GetCongestionWindow()))
 	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend(0).Sub(clock.Now())), float64(time.Microsecond))
@@ -216,16 +220,15 @@ func TestCubicSenderSlowStartPacketLoss(t *testing.T) {
 	expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * renoBeta)
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 
-	// Recovery phase. We need to ack every packet in the recovery window before
-	// we exit recovery.
+	// ACK the remaining packets sent before the cutback.
 	numberOfPacketsInWindow := expectedSendWindow / maxDatagramSize
-	sender.AckNPackets(int(packetsInRecoveryWindow))
+	sender.AckNPackets(int(packetsInRecoveryWindow) - 1)
 	sender.SendAvailableSendWindow()
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 
 	// We need to ack an entire window before we increase CWND by 1.
 	fmt.Println(numberOfPacketsInWindow)
-	sender.AckNPackets(int(numberOfPacketsInWindow) - 2)
+	sender.AckNPackets(int(numberOfPacketsInWindow) - 1)
 	sender.SendAvailableSendWindow()
 	fmt.Println(sender.clock.Now())
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
@@ -412,7 +415,7 @@ func TestCubicSenderMultipleLossesInOneWindow(t *testing.T) {
 	require.Equal(t, postLossWindow, sender.sender.GetCongestionWindow())
 
 	// Lose a later packet and ensure the window decreases.
-	sender.LosePacket(sender.packetNumber)
+	sender.sender.OnCongestionEvent(sender.clock.Now().Add(time.Nanosecond), maxDatagramSize, sender.bytesInFlight)
 	require.Greater(t, postLossWindow, sender.sender.GetCongestionWindow())
 }
 
@@ -525,7 +528,7 @@ func TestCubicSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 
 	for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
 		sender.MaybeExitSlowStart()
-		sender.OnPacketAcked(protocol.PacketNumber(i), 1350, sender.GetCongestionWindow(), clock.Now())
+		sender.OnPacketAcked(monotime.Time(i), 1350, sender.GetCongestionWindow(), clock.Now())
 	}
 	require.Equal(t, initialMaxCongestionWindow, sender.GetCongestionWindow())
 }
@@ -552,7 +555,7 @@ func TestCubicSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 	const packetSize = initialMaxDatagramSize + 100
 	sender.SetMaxDatagramSize(packetSize)
 	for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
-		sender.OnPacketAcked(protocol.PacketNumber(i), packetSize, sender.GetCongestionWindow(), clock.Now())
+		sender.OnPacketAcked(monotime.Time(i), packetSize, sender.GetCongestionWindow(), clock.Now())
 	}
 	const maxCwnd = protocol.MaxCongestionWindowPackets * packetSize
 	require.Greater(t, sender.GetCongestionWindow(), maxCwnd)
@@ -574,9 +577,11 @@ func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
 		nil,
 	)
 	testSender := &testCubicSender{
-		sender:   sender,
-		clock:    &clock,
-		rttStats: &rttStats,
+		sender:       sender,
+		clock:        &clock,
+		rttStats:     &rttStats,
+		packetNumber: 1,
+		sentTimes:    make(map[protocol.PacketNumber]monotime.Time),
 	}
 
 	numSent := testSender.SendAvailableSendWindow()
