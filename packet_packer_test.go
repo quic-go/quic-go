@@ -16,6 +16,9 @@ import (
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -33,6 +36,7 @@ type testPacketPacker struct {
 	framer              *MockFrameSource
 	ackFramer           *MockAckFrameSource
 	retransmissionQueue *retransmissionQueue
+	Recorder            *events.Recorder
 }
 
 func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protocol.Perspective) *testPacketPacker {
@@ -44,7 +48,8 @@ func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protoco
 	framer := NewMockFrameSource(mockCtrl)
 	ackFramer := NewMockAckFrameSource(mockCtrl)
 	sealingManager := NewMockSealingManager(mockCtrl)
-	datagramQueue := newDatagramQueue(func() {}, utils.DefaultLogger)
+	qlogger := &events.Recorder{}
+	datagramQueue := newDatagramQueue(func() {}, utils.DefaultLogger, qlogger)
 	retransmissionQueue := newRetransmissionQueue()
 	return &testPacketPacker{
 		pnManager:           pnManager,
@@ -55,6 +60,7 @@ func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protoco
 		ackFramer:           ackFramer,
 		datagramQueue:       datagramQueue,
 		retransmissionQueue: retransmissionQueue,
+		Recorder:            qlogger,
 		packer: newPacketPacker(
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 			func() protocol.ConnectionID { return destConnID },
@@ -67,6 +73,7 @@ func newTestPacketPacker(t *testing.T, mockCtrl *gomock.Controller, pers protoco
 			ackFramer,
 			datagramQueue,
 			pers,
+			qlogger,
 		),
 	}
 }
@@ -689,6 +696,7 @@ func TestPackDatagramFrames(t *testing.T) {
 	require.IsType(t, &wire.DatagramFrame{}, p.Frames[0].Frame)
 	require.Equal(t, []byte("foobar"), p.Frames[0].Frame.(*wire.DatagramFrame).Data)
 	require.NotEmpty(t, buffer.Data)
+	require.Empty(t, tp.Recorder.Events(qlog.DatagramDropped{}))
 }
 
 func TestPackLargeDatagramFrame(t *testing.T) {
@@ -711,6 +719,7 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 	require.Empty(t, p.Frames)
 	require.NotEmpty(t, buffer.Data)
 	require.Equal(t, f, tp.datagramQueue.Peek()) // make sure the frame is still there
+	require.Empty(t, tp.Recorder.Events(qlog.DatagramDropped{}))
 
 	// Now try packing again, but with a smaller packet size.
 	// The DATAGRAM frame should now be dropped, as we can't expect to ever be able tosend it out.
@@ -723,6 +732,11 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 	p, err = tp.packer.AppendPacket(buffer, newMaxPacketSize, monotime.Now(), protocol.Version1)
 	require.ErrorIs(t, err, errNothingToPack)
 	require.Nil(t, tp.datagramQueue.Peek()) // make sure the frame is gone
+	require.Equal(t, []qlogwriter.Event{qlog.DatagramDropped{
+		Direction: qlog.DirectionSending,
+		Raw:       qlog.RawInfo{Length: len(f.Data)},
+		Trigger:   "too_large",
+	}}, tp.Recorder.Events(qlog.DatagramDropped{}))
 }
 
 func TestPackRetransmissions(t *testing.T) {

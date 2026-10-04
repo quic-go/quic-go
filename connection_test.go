@@ -3480,6 +3480,25 @@ func TestConnectionDatagrams(t *testing.T) {
 	})
 }
 
+func TestConnectionDatagramDroppedStillAcknowledged(t *testing.T) {
+	tc := newServerTestConnection(t, nil, &Config{EnableDatagrams: true}, false)
+	for range maxDatagramRcvQueueLen {
+		require.NoError(t, tc.conn.handleDatagramFrame(&wire.DatagramFrame{Data: []byte("queued")}))
+	}
+
+	f := &wire.DatagramFrame{Data: []byte("dropped"), DataLenPresent: true}
+	data, err := f.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	now := monotime.Now()
+	_, _, err = tc.conn.handleUnpackedShortHeaderPacket(protocol.ConnectionID{}, 42, data, protocol.ECNNon, now, nil)
+	require.NoError(t, err)
+
+	// Dropping the DATAGRAM payload doesn't prevent acknowledging its packet.
+	ack := tc.receivedPacketHandler().GetAckFrame(protocol.Encryption1RTT, now, false)
+	require.NotNil(t, ack)
+	require.Equal(t, []wire.AckRange{{Smallest: 42, Largest: 42}}, ack.AckRanges)
+}
+
 func testConnectionDatagrams(t *testing.T, enabled bool) {
 	tc := newServerTestConnection(t, nil, &Config{EnableDatagrams: enabled}, false)
 
