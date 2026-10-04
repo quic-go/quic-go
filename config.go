@@ -22,6 +22,13 @@ func (c *Config) maxRetryTokenAge() time.Duration {
 	return c.handshakeTimeout()
 }
 
+func (c *Config) initialPacketSize() protocol.ByteCount {
+	if c.InitialPacketSize == 0 {
+		return protocol.InitialPacketSize
+	}
+	return protocol.ByteCount(c.InitialPacketSize)
+}
+
 func validateConfig(config *Config) error {
 	if config == nil {
 		return nil
@@ -56,6 +63,7 @@ func validateConfig(config *Config) error {
 
 // populateConfig populates fields in the quic.Config with their default values, if none are set
 // it may be called with nil
+// InitialPacketSize keeps zero to distinguish the default from an explicit packet-size floor.
 func populateConfig(config *Config) *Config {
 	if config == nil {
 		config = &Config{}
@@ -100,11 +108,6 @@ func populateConfig(config *Config) *Config {
 	} else if maxIncomingUniStreams < 0 {
 		maxIncomingUniStreams = 0
 	}
-	initialPacketSize := config.InitialPacketSize
-	if initialPacketSize == 0 {
-		initialPacketSize = protocol.InitialPacketSize
-	}
-
 	return &Config{
 		GetConfigForClient:               config.GetConfigForClient,
 		Versions:                         versions,
@@ -120,7 +123,7 @@ func populateConfig(config *Config) *Config {
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
 		TokenStore:                       config.TokenStore,
 		EnableDatagrams:                  config.EnableDatagrams,
-		InitialPacketSize:                initialPacketSize,
+		InitialPacketSize:                config.InitialPacketSize,
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,
 		EnableStreamResetPartialDelivery: config.EnableStreamResetPartialDelivery,
 		Allow0RTT:                        config.Allow0RTT,

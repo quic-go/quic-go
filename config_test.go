@@ -186,6 +186,9 @@ func TestConfigDefaultValues(t *testing.T) {
 	require.EqualValues(t, protocol.DefaultMaxIncomingUniStreams, c.MaxIncomingUniStreams)
 	require.False(t, c.DisablePathMTUDiscovery)
 	require.Nil(t, c.GetConfigForClient)
+	// Keep zero to distinguish the default from an explicitly configured floor.
+	require.Zero(t, c.InitialPacketSize)
+	require.Equal(t, protocol.ByteCount(protocol.InitialPacketSize), c.initialPacketSize())
 }
 
 func TestConfigZeroLimits(t *testing.T) {

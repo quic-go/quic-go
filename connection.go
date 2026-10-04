@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -162,7 +163,7 @@ type Conn struct {
 	unpacker      unpacker
 	frameParser   wire.FrameParser
 	packer        packer
-	mtuDiscoverer *mtuFinder // initialized when the transport parameters are received
+	mtuDiscoverer *mtuFinder // initialized after the first write at the configured Initial size
 
 	maxPayloadSizeEstimate atomic.Uint32
 
@@ -311,7 +312,7 @@ var newConnection = func(
 	s.rttStats.SetInitialRTT(rtt)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		0,
-		protocol.ByteCount(s.config.InitialPacketSize),
+		s.config.initialPacketSize(),
 		s.rttStats,
 		&s.connStats,
 		clientAddressValidated,
@@ -321,7 +322,7 @@ var newConnection = func(
 		s.qlogger,
 		s.logger,
 	)
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(s.config.initialPacketSize())))
 	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -440,7 +441,7 @@ var newClientConnection = func(
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		initialPacketNumber,
-		protocol.ByteCount(s.config.InitialPacketSize),
+		s.config.initialPacketSize(),
 		s.rttStats,
 		&s.connStats,
 		false, // has no effect
@@ -450,7 +451,7 @@ var newClientConnection = func(
 		s.qlogger,
 		s.logger,
 	)
-	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(s.config.initialPacketSize())))
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -920,8 +921,9 @@ func (c *Conn) idleTimeoutStartTime() monotime.Time {
 }
 
 func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
-	initialPacketSize := protocol.ByteCount(c.config.InitialPacketSize)
+	initialPacketSize := protocol.ByteCount(cmp.Or(c.config.InitialPacketSize, protocol.MinInitialPacketSize))
 	c.sentPacketHandler.MigratedPath(now, initialPacketSize)
+	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
 	if c.peerParams.MaxUDPPayloadSize > 0 && c.peerParams.MaxUDPPayloadSize < maxPacketSize {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
@@ -1298,12 +1300,14 @@ func (c *Conn) handleShortHeaderPacket(
 		return true, nil
 	}
 	c.pathManager.SwitchToPath(p.remoteAddr)
-	c.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(c.config.InitialPacketSize))
+	initialPacketSize := protocol.ByteCount(cmp.Or(c.config.InitialPacketSize, protocol.MinInitialPacketSize))
+	c.sentPacketHandler.MigratedPath(p.rcvTime, initialPacketSize)
+	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
 	if c.peerParams.MaxUDPPayloadSize > 0 && c.peerParams.MaxUDPPayloadSize < maxPacketSize {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
-	c.mtuDiscoverer.Reset(protocol.ByteCount(c.config.InitialPacketSize), maxPacketSize)
+	c.mtuDiscoverer.Reset(initialPacketSize, maxPacketSize)
 	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
 		c.mtuDiscoverer.Start(p.rcvTime)
 	}
@@ -2445,13 +2449,19 @@ func (c *Conn) applyTransportParameters() {
 		// Retire the connection ID.
 		c.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, params.PreferredAddress.StatelessResetToken)
 	}
+	if c.mtuDiscoverer != nil {
+		c.initMTUDiscoverer(c.mtuDiscoverer.CurrentSize())
+	}
+}
+
+func (c *Conn) initMTUDiscoverer(initialPacketSize protocol.ByteCount) {
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
-	if params.MaxUDPPayloadSize > 0 && params.MaxUDPPayloadSize < maxPacketSize {
-		maxPacketSize = params.MaxUDPPayloadSize
+	if c.peerParams != nil && c.peerParams.MaxUDPPayloadSize > 0 {
+		maxPacketSize = min(maxPacketSize, c.peerParams.MaxUDPPayloadSize)
 	}
 	c.mtuDiscoverer = newMTUDiscoverer(
 		c.rttStats,
-		protocol.ByteCount(c.config.InitialPacketSize),
+		initialPacketSize,
 		maxPacketSize,
 		c.qlogger,
 	)
@@ -2842,7 +2852,31 @@ func (c *Conn) sendPackedCoalescedPacket(packet *coalescedPacket, ecn protocol.E
 		)
 	}
 	c.connIDManager.SentPacket()
-	c.sendQueue.Send(packet.buffer, 0, ecn)
+	if c.mtuDiscoverer != nil || c.handshakeConfirmed {
+		c.sendQueue.Send(packet.buffer, 0, ecn)
+		return nil
+	}
+
+	// Write directly until we've tried the configured Initial size. The server
+	// can send smaller ACKs before receiving the full ClientHello. Keep those
+	// writes here too, so the send queue can't write concurrently with us.
+	packetSize := packet.buffer.Len()
+	err := c.conn.Write(packet.buffer.Data, 0, ecn)
+	packet.buffer.Release()
+	if err != nil {
+		if !isSendMsgSizeErr(err) || c.config.InitialPacketSize != 0 {
+			return err
+		}
+	}
+	initialPacketSize := c.config.initialPacketSize()
+	if packetSize >= initialPacketSize {
+		if err != nil {
+			initialPacketSize = protocol.MinInitialPacketSize
+			c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.MinInitialPacketSize)))
+			c.sentPacketHandler.SetMaxDatagramSize(protocol.MinInitialPacketSize)
+		}
+		c.initMTUDiscoverer(initialPacketSize)
+	}
 	return nil
 }
 
@@ -2868,19 +2902,12 @@ func (c *Conn) sendConnectionClose(e error) ([]byte, error) {
 }
 
 func (c *Conn) maxPacketSize() protocol.ByteCount {
-	if c.mtuDiscoverer == nil {
-		// Use the configured packet size on the client side.
-		// If the server sends a max_udp_payload_size that's smaller than this size, we can ignore this:
-		// Apparently the server still processed the (fully padded) Initial packet anyway.
-		if c.perspective == protocol.PerspectiveClient {
-			return protocol.ByteCount(c.config.InitialPacketSize)
-		}
-		// On the server side, there's no downside to using 1200 bytes until we received the client's transport
-		// parameters:
-		// * If the first packet didn't contain the entire ClientHello, all we can do is ACK that packet. We don't
-		//   need a lot of bytes for that.
-		// * If it did, we will have processed the transport parameters and initialized the MTU discoverer.
+	if c.perspective == protocol.PerspectiveServer && c.peerParams == nil {
+		// Use 1200-byte server packets until we've received the client's transport parameters.
 		return protocol.MinInitialPacketSize
+	}
+	if c.mtuDiscoverer == nil {
+		return c.config.initialPacketSize()
 	}
 	return c.mtuDiscoverer.CurrentSize()
 }
