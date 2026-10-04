@@ -1757,6 +1757,25 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		PacketReordering: 0,
 		TimeReordering:   now.Sub(start) - 130*time.Millisecond,
 	}}, eventRecorder.Events(qlog.SpuriousLoss{}))
+
+	// MTU probes, path probes and ACK-only packets aren't tracked as spurious losses.
+	now = now.Add(3 * secondAckDelay)
+	mtuProbe := sph.PopPacketNumber(protocol.Encryption1RTT)
+	sph.SentPacket(now, mtuProbe, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(mtuProbe)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, true, false)
+	pathProbe := sph.PopPacketNumber(protocol.Encryption1RTT)
+	sph.SentPacket(now, pathProbe, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pathProbe)}, protocol.Encryption1RTT, protocol.ECNNon, 1200, false, true)
+	ackOnly := sph.PopPacketNumber(protocol.Encryption1RTT)
+	sph.SentPacket(now, ackOnly, protocol.InvalidPacketNumber, nil, nil, protocol.Encryption1RTT, protocol.ECNNon, 100, false, false)
+	var pn protocol.PacketNumber
+	for range 3 {
+		pn = sendPacket(t, now)
+	}
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pn)}, protocol.Encryption1RTT, now.Add(rtt))
+	require.NoError(t, err)
+	eventRecorder.Clear()
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(mtuProbe, pathProbe, ackOnly)}, protocol.Encryption1RTT, now.Add(rtt+secondAckDelay))
+	require.NoError(t, err)
+	require.Empty(t, eventRecorder.Events(qlog.SpuriousLoss{}))
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {
