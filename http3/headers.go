@@ -418,7 +418,8 @@ func extractAnnouncedTrailers(header http.Header) http.Header {
 func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, qlogger qlogwriter.Recorder) (bool, error) {
 	var hasValues bool
 	for k, vals := range trailers {
-		if httpguts.ValidTrailerHeader(k) && len(vals) > 0 {
+		if httpguts.ValidHeaderFieldName(k) && httpguts.ValidTrailerHeader(k) &&
+			slices.ContainsFunc(vals, httpguts.ValidHeaderFieldValue) {
 			hasValues = true
 			break
 		}
@@ -438,11 +439,15 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 		if len(vals) == 0 {
 			continue
 		}
-		if !httpguts.ValidTrailerHeader(k) {
+		// invalid trailer fields are dropped, see the comment in responseWriter.writeHeader
+		if !httpguts.ValidHeaderFieldName(k) || !httpguts.ValidTrailerHeader(k) {
 			continue
 		}
 		lowercaseKey := strings.ToLower(k)
 		for _, v := range vals {
+			if !httpguts.ValidHeaderFieldValue(v) {
+				continue
+			}
 			if err := enc.WriteField(qpack.HeaderField{Name: lowercaseKey, Value: v}); err != nil {
 				return false, err
 			}

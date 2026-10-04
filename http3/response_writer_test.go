@@ -256,3 +256,59 @@ func TestResponseWriterTrailers(t *testing.T) {
 	// invalid trailers are ignored
 	require.NotContains(t, trailers, "content-length")
 }
+
+func TestResponseWriterInvalidHeaderFields(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Header().Set("Foo", "bar")
+	rw.Header().Set("Location", "/foo\r\nset-cookie: injected=1") // CR / LF in the value
+	rw.Header().Set("Connection", "close")                        // connection-specific header field
+	rw.Header().Set("TE", "gzip")                                 // TE with a value other than trailers
+	rw.Header()["Bad Key"] = []string{"value"}                    // invalid field name
+	rw.Header()["X-Ünicode"] = []string{"value"}                  // non-ASCII field name
+	rw.Header().Add("Multi", "valid")
+	rw.Header().Add("Multi", "in\x00valid")
+	rw.WriteHeader(http.StatusFound)
+
+	fields := rw.DecodeHeaders(t, 0)
+	require.Equal(t, []string{"302"}, fields[":status"])
+	require.Equal(t, []string{"bar"}, fields["foo"])
+	// only the invalid value is dropped
+	require.Equal(t, []string{"valid"}, fields["multi"])
+	require.NotContains(t, fields, "location")
+	require.NotContains(t, fields, "connection")
+	require.NotContains(t, fields, "te")
+	require.NotContains(t, fields, "bad key")
+	require.NotContains(t, fields, "x-ünicode")
+}
+
+func TestResponseWriterInvalidTrailerFields(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Header().Add("Trailer", "key, Bad Key")
+	rw.Write([]byte("foobar"))
+	rw.DecodeHeaders(t, 0)
+	rw.DecodeBody(t)
+
+	rw.Header().Set("key", "value")
+	rw.Header().Add("key", "in\x00valid")                    // invalid value
+	rw.Header()["Bad Key"] = []string{"value"}               // invalid field name
+	rw.Header().Set(http.TrailerPrefix+"lorem", "ip\x00sum") // invalid value
+	require.NoError(t, rw.writeTrailers())
+
+	trailers := rw.DecodeHeaders(t, 2)
+	require.Equal(t, []string{"value"}, trailers["key"])
+	require.NotContains(t, trailers, "bad key")
+	require.NotContains(t, trailers, "lorem")
+}
+
+func TestResponseWriterTrailersAllInvalid(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	rw.Header().Add("Trailer", "key")
+	rw.Write([]byte("foobar"))
+	rw.DecodeHeaders(t, 0)
+	rw.DecodeBody(t)
+
+	rw.Header().Set("key", "in\x00valid")
+	require.NoError(t, rw.writeTrailers())
+	// no HEADERS frame is written if no valid trailer field remains
+	require.Zero(t, rw.buf.Len())
+}
