@@ -844,7 +844,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 			pnSpace.lossTime = lossTime
 		}
 		if packetLost {
-			if encLevel == protocol.Encryption0RTT || encLevel == protocol.Encryption1RTT {
+			if p.Outstanding() && (encLevel == protocol.Encryption0RTT || encLevel == protocol.Encryption1RTT) {
 				h.lostPackets.Add(pn, p.SendTime)
 			}
 			pnSpace.history.DeclareLost(pn)
