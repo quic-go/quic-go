@@ -627,46 +627,78 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 }
 
 func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
-	rttStats := utils.NewRTTStats()
-	sph := NewSentPacketHandler(
-		0,
-		1200,
-		rttStats,
-		&utils.ConnectionStats{},
-		true,
-		false,
-		nil,
-		protocol.PerspectiveServer,
-		nil,
-		utils.DefaultLogger,
-	)
+	for _, encLevel := range []protocol.EncryptionLevel{
+		protocol.EncryptionInitial,
+		protocol.EncryptionHandshake,
+		protocol.Encryption1RTT,
+	} {
+		t.Run(encLevel.String(), func(t *testing.T) {
+			sph := NewSentPacketHandler(
+				0,
+				1200,
+				utils.NewRTTStats(),
+				&utils.ConnectionStats{},
+				true,
+				false,
+				nil,
+				protocol.PerspectiveServer,
+				nil,
+				utils.DefaultLogger,
+			)
 
-	var packets packetTracker
-	now := monotime.Now()
-	var pns []protocol.PacketNumber
-	for range 5 {
-		pn := sph.PopPacketNumber(protocol.EncryptionInitial)
-		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.EncryptionInitial, protocol.ECNNon, 1000, false, false)
-		pns = append(pns, pn)
+			var packets packetTracker
+			now := monotime.Now()
+			var pns [5]protocol.PacketNumber
+			for i := range pns {
+				pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+				pns[i] = pn
+			}
+			now = now.Add(time.Second)
+			_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3], pns[4])}, protocol.Encryption1RTT, now)
+			require.NoError(t, err)
+			require.Equal(t, []protocol.PacketNumber{pns[0], pns[1]}, packets.Lost)
+
+			// A reordered ACK of only a lost packet disables the packet threshold.
+			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0])}, protocol.Encryption1RTT, now)
+			require.NoError(t, err)
+			packets.Reset()
+
+			var nextPNs [4]protocol.PacketNumber
+			for i := range nextPNs {
+				pn := sph.PopPacketNumber(encLevel)
+				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
+				nextPNs[i] = pn
+			}
+			now = now.Add(time.Second)
+			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(nextPNs[3])}, encLevel, now)
+			require.NoError(t, err)
+			// The reordered ACK above only disables the packet threshold in the
+			// 1-RTT packet number space. Initial and Handshake still declare
+			// nextPNs[0] lost: it is packetThreshold (3) below the largest acked.
+			if encLevel == protocol.Encryption1RTT {
+				require.Empty(t, packets.Lost)
+			} else {
+				require.Equal(t, []protocol.PacketNumber{nextPNs[0]}, packets.Lost)
+			}
+
+			if encLevel == protocol.Encryption1RTT {
+				// Migration resets the threshold and ignores late ACKs of old losses.
+				sph.MigratedPath(now, 1200)
+				packets.Reset()
+				_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[1])}, protocol.Encryption1RTT, now)
+				require.NoError(t, err)
+				for i := range nextPNs {
+					pn := sph.PopPacketNumber(protocol.Encryption1RTT)
+					sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+					nextPNs[i] = pn
+				}
+				_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(nextPNs[3])}, protocol.Encryption1RTT, now.Add(time.Second))
+				require.NoError(t, err)
+				require.Equal(t, []protocol.PacketNumber{nextPNs[0]}, packets.Lost)
+			}
+		})
 	}
-
-	_, err := sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: ackRanges(pns[3])},
-		protocol.EncryptionInitial,
-		now.Add(time.Second),
-	)
-	require.NoError(t, err)
-	require.Equal(t, []protocol.PacketNumber{pns[3]}, packets.Acked)
-	require.Equal(t, []protocol.PacketNumber{pns[0]}, packets.Lost)
-
-	_, err = sph.ReceivedAck(
-		&wire.AckFrame{AckRanges: ackRanges(pns[4])},
-		protocol.EncryptionInitial,
-		now.Add(time.Second),
-	)
-	require.NoError(t, err)
-	require.Equal(t, []protocol.PacketNumber{pns[3], pns[4]}, packets.Acked)
-	require.Equal(t, []protocol.PacketNumber{pns[0], pns[1]}, packets.Lost)
 }
 
 func TestSentPacketHandlerPTO(t *testing.T) {
@@ -1637,30 +1669,35 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16]}, packets.Acked)
-	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13]}, packets.Lost)
+	require.Empty(t, packets.Lost)
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.SpuriousLoss{
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[1],
 				PacketReordering: 16 - 1,
-				TimeReordering:   rtt + secondAckDelay - 10*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 10*time.Millisecond,
 			},
 			qlog.SpuriousLoss{
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[2],
 				PacketReordering: 16 - 2,
-				TimeReordering:   rtt + secondAckDelay - 20*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 20*time.Millisecond,
 			},
 			qlog.SpuriousLoss{
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[3],
 				PacketReordering: 16 - 3,
-				TimeReordering:   rtt + secondAckDelay - 30*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 30*time.Millisecond,
 			},
 		},
 		eventRecorder.Events(qlog.SpuriousLoss{}),
 	)
+
+	// Packet-threshold detection is disabled; fire once at pns[15]'s loss deadline.
+	now = sph.GetLossDetectionTimeout().Add((15 - 7) * 10 * time.Millisecond)
+	require.NoError(t, sph.OnLossDetectionTimeout(now))
+	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13], pns[14], pns[15]}, packets.Lost)
 	eventRecorder.Clear()
 
 	now = now.Add(secondAckDelay)
@@ -1671,7 +1708,6 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16], pns[17], pns[18]}, packets.Acked)
-	require.Equal(t, []protocol.PacketNumber{pns[7], pns[8], pns[9], pns[10], pns[11], pns[13], pns[14], pns[15]}, packets.Lost)
 
 	require.Equal(t,
 		[]qlogwriter.Event{
@@ -1679,25 +1715,25 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[7],
 				PacketReordering: 18 - 7,
-				TimeReordering:   rtt + 2*secondAckDelay - 70*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 70*time.Millisecond,
 			},
 			qlog.SpuriousLoss{
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[8],
 				PacketReordering: 18 - 8,
-				TimeReordering:   rtt + 2*secondAckDelay - 80*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 80*time.Millisecond,
 			},
 			qlog.SpuriousLoss{
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[9],
 				PacketReordering: 18 - 9,
-				TimeReordering:   rtt + 2*secondAckDelay - 90*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 90*time.Millisecond,
 			},
 			qlog.SpuriousLoss{
 				EncryptionLevel:  protocol.Encryption1RTT,
 				PacketNumber:     pns[10],
 				PacketReordering: 18 - 10,
-				TimeReordering:   rtt + 2*secondAckDelay - 100*time.Millisecond,
+				TimeReordering:   now.Sub(start) - 100*time.Millisecond,
 			},
 		},
 		eventRecorder.Events(qlog.SpuriousLoss{}),
@@ -1705,19 +1741,21 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 
 	// the only newly acknowledged packet has already been declared lost
 	eventRecorder.Clear()
-	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[11], pns[18])}, protocol.Encryption1RTT, now.Add(secondAckDelay))
+	now = now.Add(secondAckDelay)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[11], pns[18])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 	require.Len(t, eventRecorder.Events(qlog.SpuriousLoss{}), 1)
 
 	// A reordered ACK can also newly acknowledge a previously lost packet.
 	eventRecorder.Clear()
-	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[13])}, protocol.Encryption1RTT, now.Add(2*secondAckDelay))
+	now = now.Add(secondAckDelay)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[13])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 	require.Equal(t, []qlogwriter.Event{qlog.SpuriousLoss{
 		EncryptionLevel:  protocol.Encryption1RTT,
 		PacketNumber:     pns[13],
 		PacketReordering: 0,
-		TimeReordering:   rtt + 4*secondAckDelay - 130*time.Millisecond,
+		TimeReordering:   now.Sub(start) - 130*time.Millisecond,
 	}}, eventRecorder.Events(qlog.SpuriousLoss{}))
 }
 
