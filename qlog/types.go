@@ -51,6 +51,14 @@ const (
 	InitiatorRemote Initiator = "remote"
 )
 
+// Direction identifies the sending or receiving side of an endpoint.
+type Direction string
+
+const (
+	DirectionSending   Direction = "sending"
+	DirectionReceiving Direction = "receiving"
+)
+
 type streamType protocol.StreamType
 
 func (s streamType) String() string {

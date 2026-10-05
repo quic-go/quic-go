@@ -13,6 +13,8 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 var errNothingToPack = errors.New("nothing to pack")
@@ -135,6 +137,7 @@ type packetPacker struct {
 	rand                rand.Rand
 
 	numNonAckElicitingAcks int
+	qlogger                qlogwriter.Recorder
 }
 
 var _ packer = &packetPacker{}
@@ -151,6 +154,7 @@ func newPacketPacker(
 	acks ackFrameSource,
 	datagramQueue *datagramQueue,
 	perspective protocol.Perspective,
+	qlogger qlogwriter.Recorder,
 ) *packetPacker {
 	var b [16]byte
 	_, _ = crand.Read(b[:])
@@ -168,6 +172,7 @@ func newPacketPacker(
 		acks:                acks,
 		rand:                *rand.New(rand.NewPCG(binary.BigEndian.Uint64(b[:8]), binary.BigEndian.Uint64(b[8:]))),
 		pnManager:           packetNumberManager,
+		qlogger:             qlogger,
 	}
 }
 
@@ -662,6 +667,13 @@ func (p *packetPacker) composeNextPacket(
 				// Discard this frame. There's no point in retrying this in the next packet,
 				// as it's unlikely that the available packet size will increase.
 				p.datagramQueue.Pop()
+				if p.qlogger != nil {
+					p.qlogger.RecordEvent(qlog.DatagramDropped{
+						Direction: qlog.DirectionSending,
+						Raw:       qlog.RawInfo{Length: len(f.Data)},
+						Trigger:   "too_large",
+					})
+				}
 			}
 			// If the DATAGRAM frame was too large and the packet contained an ACK, we'll try to send it out later.
 		}

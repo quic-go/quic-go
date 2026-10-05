@@ -7,6 +7,8 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 const (
@@ -28,16 +30,18 @@ type datagramQueue struct {
 
 	hasData func()
 
-	logger utils.Logger
+	logger  utils.Logger
+	qlogger qlogwriter.Recorder
 }
 
-func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
+func newDatagramQueue(hasData func(), logger utils.Logger, qlogger qlogwriter.Recorder) *datagramQueue {
 	return &datagramQueue{
 		hasData: hasData,
 		rcvd:    make(chan struct{}, 1),
 		sent:    make(chan struct{}, 1),
 		closed:  make(chan struct{}),
 		logger:  logger,
+		qlogger: qlogger,
 	}
 }
 
@@ -113,8 +117,18 @@ func (h *datagramQueue) HandleDatagramFrame(f *wire.DatagramFrame) {
 		}
 	}
 	h.rcvMx.Unlock()
-	if !queued && h.logger.Debug() {
-		h.logger.Debugf("Discarding received DATAGRAM frame (%d bytes payload)", len(f.Data))
+
+	if !queued {
+		if h.logger.Debug() {
+			h.logger.Debugf("Discarding received DATAGRAM frame (%d bytes payload)", len(f.Data))
+		}
+		if h.qlogger != nil {
+			h.qlogger.RecordEvent(qlog.DatagramDropped{
+				Direction: qlog.DirectionReceiving,
+				Raw:       qlog.RawInfo{Length: len(f.Data)},
+				Trigger:   "buffer_full",
+			})
+		}
 	}
 }
 

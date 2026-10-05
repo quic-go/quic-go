@@ -4,9 +4,13 @@ import (
 	"context"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +18,7 @@ import (
 
 func TestDatagramQueuePeekAndPop(t *testing.T) {
 	var queued []struct{}
-	queue := newDatagramQueue(func() { queued = append(queued, struct{}{}) }, utils.DefaultLogger)
+	queue := newDatagramQueue(func() { queued = append(queued, struct{}{}) }, utils.DefaultLogger, nil)
 	require.Nil(t, queue.Peek())
 	require.Empty(t, queued)
 	require.NoError(t, queue.Add(&wire.DatagramFrame{Data: []byte("foo")}))
@@ -28,7 +32,7 @@ func TestDatagramQueuePeekAndPop(t *testing.T) {
 
 func TestDatagramQueueSendQueueLength(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		queue := newDatagramQueue(func() {}, utils.DefaultLogger)
+		queue := newDatagramQueue(func() {}, utils.DefaultLogger, nil)
 
 		for range maxDatagramSendQueueLen {
 			require.NoError(t, queue.Add(&wire.DatagramFrame{Data: []byte{0}}))
@@ -73,7 +77,7 @@ func TestDatagramQueueSendQueueLength(t *testing.T) {
 }
 
 func TestDatagramQueueReceive(t *testing.T) {
-	queue := newDatagramQueue(func() {}, utils.DefaultLogger)
+	queue := newDatagramQueue(func() {}, utils.DefaultLogger, nil)
 
 	// receive frames that were received earlier
 	queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("foo")})
@@ -86,9 +90,39 @@ func TestDatagramQueueReceive(t *testing.T) {
 	require.Equal(t, []byte("bar"), data)
 }
 
+func TestDatagramQueueReceiveOverflow(t *testing.T) {
+	qlogger := &events.Recorder{}
+	queue := newDatagramQueue(func() {}, utils.DefaultLogger, qlogger)
+	for range maxDatagramRcvQueueLen {
+		queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("queued")})
+	}
+	require.Empty(t, qlogger.Events())
+
+	f := &wire.DatagramFrame{Data: []byte("dropped"), DataLenPresent: true}
+	queue.HandleDatagramFrame(f)
+	require.Equal(t, []qlogwriter.Event{qlog.DatagramDropped{
+		Direction: qlog.DirectionReceiving,
+		Raw:       qlog.RawInfo{Length: len(f.Data)},
+		Trigger:   "buffer_full",
+	}}, qlogger.Events())
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for range maxDatagramRcvQueueLen {
+		data, err := queue.Receive(ctx)
+		require.NoError(t, err)
+		require.Equal(t, []byte("queued"), data)
+	}
+	queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("next")})
+	data, err := queue.Receive(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []byte("next"), data)
+	require.Len(t, qlogger.Events(), 1)
+}
+
 func TestDatagramQueueReceiveBlocking(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		queue := newDatagramQueue(func() {}, utils.DefaultLogger)
+		queue := newDatagramQueue(func() {}, utils.DefaultLogger, nil)
 
 		// block until a new frame is received
 		type result struct {
@@ -147,7 +181,7 @@ func TestDatagramQueueReceiveBlocking(t *testing.T) {
 
 func TestDatagramQueueClose(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		queue := newDatagramQueue(func() {}, utils.DefaultLogger)
+		queue := newDatagramQueue(func() {}, utils.DefaultLogger, nil)
 
 		for range maxDatagramSendQueueLen {
 			require.NoError(t, queue.Add(&wire.DatagramFrame{Data: []byte{0}}))
@@ -180,7 +214,7 @@ func TestDatagramQueueClose(t *testing.T) {
 }
 
 func TestDatagramQueueAddAfterClose(t *testing.T) {
-	queue := newDatagramQueue(func() {}, utils.DefaultLogger)
+	queue := newDatagramQueue(func() {}, utils.DefaultLogger, nil)
 	queue.CloseWithError(assert.AnError)
 	require.ErrorIs(t, queue.Add(&wire.DatagramFrame{Data: []byte("foo")}), assert.AnError)
 	require.Nil(t, queue.Peek())
