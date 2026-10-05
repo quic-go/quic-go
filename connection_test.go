@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -62,6 +63,7 @@ func connectionOptHandshakeConfirmed() testConnectionOpt {
 	return func(conn *Conn) {
 		conn.handshakeComplete = true
 		conn.handshakeConfirmed = true
+		conn.initMTUDiscoverer(conn.config.initialPacketSize())
 	}
 }
 
@@ -1807,6 +1809,51 @@ func TestConnectionPacketBuffering(t *testing.T) {
 	})
 }
 
+func TestConnectionInitialPacketSizeFallback(t *testing.T) {
+	if !isSendMsgSizeErr(syscall.EMSGSIZE) {
+		t.Skip("message too long errors aren't recognized on this platform")
+	}
+	for _, initialSize := range []uint16{0, protocol.MinInitialPacketSize} {
+		t.Run(strconv.Itoa(int(initialSize)), func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			sender := NewMockSender(mockCtrl)
+			tc := newClientTestConnection(t, mockCtrl, &Config{InitialPacketSize: initialSize}, false, connectionOptSender(sender))
+
+			buf := getPacketBuffer()
+			buf.Data = buf.Data[:tc.conn.config.initialPacketSize()]
+			require.Nil(t, tc.conn.mtuDiscoverer)
+			packet := &coalescedPacket{buffer: buf, longHdrPackets: []*longHeaderPacket{{
+				header: &wire.ExtendedHeader{Header: wire.Header{Type: protocol.PacketTypeInitial}},
+				length: buf.Len(),
+			}}}
+			tc.sendConn.EXPECT().Write(buf.Data, uint16(0), protocol.ECT0).Return(fmt.Errorf("sendmsg: %w", syscall.EMSGSIZE))
+			err := tc.conn.sendPackedCoalescedPacket(packet, protocol.ECT0, monotime.Now())
+			if initialSize != 0 {
+				require.ErrorIs(t, err, syscall.EMSGSIZE)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), tc.conn.maxPacketSize())
+			require.Equal(t, uint32(estimateMaxPayloadSize(protocol.MinInitialPacketSize)), tc.conn.maxPayloadSizeEstimate.Load())
+			require.Zero(t, tc.conn.config.InitialPacketSize)
+
+			tc.conn.peerParams = &wire.TransportParameters{MaxUDPPayloadSize: 1300, ActiveConnectionIDLimit: 2}
+			tc.conn.applyTransportParameters()
+			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), tc.conn.maxPacketSize())
+
+			// The next packet goes through the send queue before handshake confirmation.
+			buf = getPacketBuffer()
+			buf.Data = buf.Data[:protocol.MinInitialPacketSize]
+			defer buf.Release()
+			packet.buffer = buf
+			packet.longHdrPackets[0].header.PacketNumber++
+			packet.longHdrPackets[0].length = buf.Len()
+			sender.EXPECT().Send(buf, uint16(0), protocol.ECT0)
+			require.NoError(t, tc.conn.sendPackedCoalescedPacket(packet, protocol.ECT0, monotime.Now()))
+		})
+	}
+}
+
 func TestConnectionPacketPacing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
@@ -3252,16 +3299,17 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 		tc := newServerTestConnection(
 			t,
 			mockCtrl,
-			&Config{DisablePathMTUDiscovery: disableMTU, InitialPacketSize: 1234},
+			&Config{DisablePathMTUDiscovery: disableMTU, InitialPacketSize: 1234, EnableDatagrams: true},
 			false,
 			connectionOptUnpacker(unpacker),
 			connectionOptHandshakeConfirmed(),
 			connectionOptRTT(time.Second),
 		)
 		tc.sendConn.EXPECT().capabilities().Return(connCapabilities{DF: df}).AnyTimes()
-		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{MaxUDPPayloadSize: 1456}))
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{MaxUDPPayloadSize: 1456, MaxDatagramFrameSize: 1456}))
 		ping, _ := tc.conn.mtuDiscoverer.GetPing(monotime.Now())
 		ping.Handler.OnAcked(ping.Frame)
+		tc.conn.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(tc.conn.mtuDiscoverer.CurrentSize())))
 
 		newRemoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 1), Port: 1234}
 		require.NotEqual(t, tc.remoteAddr, newRemoteAddr)
@@ -3386,6 +3434,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 			t.Fatal("should have migrated")
 		}
 		assert.Equal(t, protocol.ByteCount(1234), tc.conn.mtuDiscoverer.CurrentSize())
+		maxPayloadSize := estimateMaxPayloadSize(1234)
+		require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxPayloadSize)}, tc.conn.SendDatagram(make([]byte, 1234)))
 		assert.False(t, tc.conn.mtuDiscoverer.ShouldSendProbe(monotime.Now()))
 		assert.Equal(t, !disableMTU && df, tc.conn.mtuDiscoverer.ShouldSendProbe(monotime.Now().Add(time.Hour)))
 
@@ -3424,13 +3474,14 @@ func TestConnectionMigrationMTUDiscovery(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
 			sender := NewMockSender(mockCtrl)
 			tc := newClientTestConnection(t, mockCtrl,
-				&Config{DisablePathMTUDiscovery: test.disableMTU, InitialPacketSize: 1234},
-				false, connectionOptSender(sender),
+				&Config{DisablePathMTUDiscovery: test.disableMTU, EnableDatagrams: true},
+				false, connectionOptSender(sender), connectionOptHandshakeConfirmed(),
 			)
 			require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
 				InitialSourceConnectionID:       tc.destConnID,
 				OriginalDestinationConnectionID: tc.destConnID,
 				MaxUDPPayloadSize:               1456,
+				MaxDatagramFrameSize:            1456,
 			}))
 			tc.conn.applyTransportParameters()
 			now := monotime.Now()
@@ -3444,7 +3495,9 @@ func TestConnectionMigrationMTUDiscovery(t *testing.T) {
 			tc.conn.switchToNewPath(&Transport{conn: conn}, now)
 			defer tc.conn.sendQueue.Close()
 
-			require.Equal(t, protocol.ByteCount(1234), tc.conn.mtuDiscoverer.CurrentSize())
+			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), tc.conn.mtuDiscoverer.CurrentSize())
+			maxPayloadSize := estimateMaxPayloadSize(protocol.MinInitialPacketSize)
+			require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxPayloadSize)}, tc.conn.SendDatagram(make([]byte, protocol.MinInitialPacketSize)))
 			require.False(t, tc.conn.mtuDiscoverer.ShouldSendProbe(now))
 			require.Equal(t, !test.disableMTU && test.df, tc.conn.mtuDiscoverer.ShouldSendProbe(now.Add(time.Hour)))
 		})
