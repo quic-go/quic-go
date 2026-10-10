@@ -9,11 +9,11 @@ import (
 type SendAlgorithm interface {
 	TimeUntilSend(bytesInFlight protocol.ByteCount) monotime.Time
 	HasPacingBudget(now monotime.Time) bool
-	OnPacketSent(sentTime monotime.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool)
+	OnPacketSent(sentTime monotime.Time, bytesInFlight protocol.ByteCount, bytes protocol.ByteCount, isRetransmittable bool)
 	CanSend(bytesInFlight protocol.ByteCount) bool
 	MaybeExitSlowStart()
-	OnPacketAcked(number protocol.PacketNumber, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime monotime.Time)
-	OnCongestionEvent(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
+	OnPacketAcked(sentTime monotime.Time, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime monotime.Time)
+	OnCongestionEvent(sentTime monotime.Time, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
 	SetMaxDatagramSize(protocol.ByteCount)
 }

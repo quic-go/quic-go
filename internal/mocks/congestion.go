@@ -268,15 +268,15 @@ func (c *MockSendAlgorithmWithDebugInfosMaybeExitSlowStartCall) DoAndReturn(f fu
 }
 
 // OnCongestionEvent mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnCongestionEvent(number protocol.PacketNumber, lostBytes, priorInFlight protocol.ByteCount) {
+func (m *MockSendAlgorithmWithDebugInfos) OnCongestionEvent(sentTime monotime.Time, lostBytes, priorInFlight protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnCongestionEvent", number, lostBytes, priorInFlight)
+	m.ctrl.Call(m, "OnCongestionEvent", sentTime, lostBytes, priorInFlight)
 }
 
 // OnCongestionEvent indicates an expected call of OnCongestionEvent.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnCongestionEvent(number, lostBytes, priorInFlight any) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnCongestionEvent(sentTime, lostBytes, priorInFlight any) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnCongestionEvent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnCongestionEvent), number, lostBytes, priorInFlight)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnCongestionEvent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnCongestionEvent), sentTime, lostBytes, priorInFlight)
 	return &MockSendAlgorithmWithDebugInfosOnCongestionEventCall{Call: call}
 }
 
@@ -292,27 +292,27 @@ func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) Return() *MockSen
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) Do(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount)) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
+func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) Do(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount)) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount)) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
+func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) DoAndReturn(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount)) *MockSendAlgorithmWithDebugInfosOnCongestionEventCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // OnPacketAcked mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnPacketAcked(number protocol.PacketNumber, ackedBytes, priorInFlight protocol.ByteCount, eventTime monotime.Time) {
+func (m *MockSendAlgorithmWithDebugInfos) OnPacketAcked(sentTime monotime.Time, ackedBytes, priorInFlight protocol.ByteCount, eventTime monotime.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnPacketAcked", number, ackedBytes, priorInFlight, eventTime)
+	m.ctrl.Call(m, "OnPacketAcked", sentTime, ackedBytes, priorInFlight, eventTime)
 }
 
 // OnPacketAcked indicates an expected call of OnPacketAcked.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketAcked(number, ackedBytes, priorInFlight, eventTime any) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketAcked(sentTime, ackedBytes, priorInFlight, eventTime any) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketAcked), number, ackedBytes, priorInFlight, eventTime)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketAcked), sentTime, ackedBytes, priorInFlight, eventTime)
 	return &MockSendAlgorithmWithDebugInfosOnPacketAckedCall{Call: call}
 }
 
@@ -328,27 +328,27 @@ func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) Return() *MockSendAlg
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) Do(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount, monotime.Time)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) Do(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount, monotime.Time)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount, monotime.Time)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) DoAndReturn(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount, monotime.Time)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // OnPacketSent mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnPacketSent(sentTime monotime.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) {
+func (m *MockSendAlgorithmWithDebugInfos) OnPacketSent(sentTime monotime.Time, bytesInFlight, bytes protocol.ByteCount, isRetransmittable bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnPacketSent", sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable)
+	m.ctrl.Call(m, "OnPacketSent", sentTime, bytesInFlight, bytes, isRetransmittable)
 }
 
 // OnPacketSent indicates an expected call of OnPacketSent.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketSent(sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable any) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketSent(sentTime, bytesInFlight, bytes, isRetransmittable any) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketSent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketSent), sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketSent", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketSent), sentTime, bytesInFlight, bytes, isRetransmittable)
 	return &MockSendAlgorithmWithDebugInfosOnPacketSentCall{Call: call}
 }
 
@@ -364,13 +364,13 @@ func (c *MockSendAlgorithmWithDebugInfosOnPacketSentCall) Return() *MockSendAlgo
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendAlgorithmWithDebugInfosOnPacketSentCall) Do(f func(monotime.Time, protocol.ByteCount, protocol.PacketNumber, protocol.ByteCount, bool)) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
+func (c *MockSendAlgorithmWithDebugInfosOnPacketSentCall) Do(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount, bool)) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendAlgorithmWithDebugInfosOnPacketSentCall) DoAndReturn(f func(monotime.Time, protocol.ByteCount, protocol.PacketNumber, protocol.ByteCount, bool)) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
+func (c *MockSendAlgorithmWithDebugInfosOnPacketSentCall) DoAndReturn(f func(monotime.Time, protocol.ByteCount, protocol.ByteCount, bool)) *MockSendAlgorithmWithDebugInfosOnPacketSentCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
