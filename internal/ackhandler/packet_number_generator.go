@@ -47,18 +47,18 @@ const (
 // it randomly skips a packet number every averagePeriod packets (on average).
 // It is guaranteed to never skip two consecutive packet numbers.
 type skippingPacketNumberGenerator struct {
-	period    protocol.PacketNumber
-	maxPeriod protocol.PacketNumber
+	next protocol.PacketNumber
 
-	next       protocol.PacketNumber
-	nextToSkip protocol.PacketNumber
+	period           uint32
+	maxPeriod        uint32
+	packetsUntilSkip uint32
 
 	rng utils.Rand
 }
 
 var _ packetNumberGenerator = &skippingPacketNumberGenerator{}
 
-func newSkippingPacketNumberGenerator(initial, initialPeriod, maxPeriod protocol.PacketNumber) packetNumberGenerator {
+func newSkippingPacketNumberGenerator(initial protocol.PacketNumber, initialPeriod, maxPeriod uint32) packetNumberGenerator {
 	g := &skippingPacketNumberGenerator{
 		next:      initial,
 		period:    initialPeriod,
@@ -69,7 +69,7 @@ func newSkippingPacketNumberGenerator(initial, initialPeriod, maxPeriod protocol
 }
 
 func (p *skippingPacketNumberGenerator) Peek() protocol.PacketNumber {
-	if p.next == p.nextToSkip {
+	if p.packetsUntilSkip == 0 {
 		return p.next + 1
 	}
 	return p.next
@@ -77,18 +77,19 @@ func (p *skippingPacketNumberGenerator) Peek() protocol.PacketNumber {
 
 func (p *skippingPacketNumberGenerator) Pop() (bool, protocol.PacketNumber) {
 	next := p.next
-	if p.next == p.nextToSkip {
+	if p.packetsUntilSkip == 0 {
 		next++
 		p.next += 2
 		p.generateNewSkip()
 		return true, next
 	}
+	p.packetsUntilSkip--
 	p.next++ // generate a new packet number for the next packet
 	return false, next
 }
 
 func (p *skippingPacketNumberGenerator) generateNewSkip() {
 	// make sure that there are never two consecutive packet numbers that are skipped
-	p.nextToSkip = p.next + 3 + protocol.PacketNumber(p.rng.Uint32N(uint32(2*p.period)))
+	p.packetsUntilSkip = 3 + p.rng.Uint32N(2*p.period)
 	p.period = min(2*p.period, p.maxPeriod)
 }
