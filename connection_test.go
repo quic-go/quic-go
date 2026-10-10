@@ -2492,7 +2492,7 @@ func testConnectionPTOProbePackets(t *testing.T, encLevel protocol.EncryptionLev
 		sph.EXPECT().SendMode(gomock.Any()).Return(sendMode)
 		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
 		sph.EXPECT().ECNMode(gomock.Any())
-		sph.EXPECT().QueueProbePacket(encLevel).Return(false)
+		sph.EXPECT().QueueProbePacket(encLevel.PacketNumberSpace()).Return(false)
 		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 		tc.packer.EXPECT().PackPTOProbePacket(encLevel, gomock.Any(), true, gomock.Any(), protocol.Version1).DoAndReturn(

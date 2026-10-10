@@ -11,6 +11,14 @@ func TestEncryptionLevelNonZeroValue(t *testing.T) {
 	require.NotZero(t, EncryptionInitial*EncryptionHandshake*Encryption0RTT*Encryption1RTT)
 }
 
+func TestEncryptionLevelPacketNumberSpace(t *testing.T) {
+	require.Equal(t, PacketNumberSpaceInitial, EncryptionInitial.PacketNumberSpace())
+	require.Equal(t, PacketNumberSpaceHandshake, EncryptionHandshake.PacketNumberSpace())
+	require.Equal(t, PacketNumberSpaceAppData, Encryption0RTT.PacketNumberSpace())
+	require.Equal(t, PacketNumberSpaceAppData, Encryption1RTT.PacketNumberSpace())
+	require.Panics(t, func() { EncryptionLevel(0).PacketNumberSpace() })
+}
+
 func TestEncryptionLevelConversion(t *testing.T) {
 	testCases := []struct {
 		quicLevel EncryptionLevel

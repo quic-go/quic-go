@@ -97,8 +97,8 @@ func (p *longHeaderPacket) EncryptionLevel() protocol.EncryptionLevel {
 func (p *longHeaderPacket) IsAckEliciting() bool { return ackhandler.HasAckElicitingFrames(p.frames) }
 
 type packetNumberManager interface {
-	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
-	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
+	PeekPacketNumber(protocol.PacketNumberSpace) (protocol.PacketNumber, protocol.PacketNumberLen)
+	PopPacketNumber(protocol.PacketNumberSpace) protocol.PacketNumber
 }
 
 type sealingManager interface {
@@ -257,7 +257,7 @@ func (p *packetPacker) packConnectionClose(
 		var hdr *wire.ExtendedHeader
 		if encLevel == protocol.Encryption1RTT {
 			connID = p.getDestConnID()
-			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 			size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, pl) + protocol.ByteCount(sealer.Overhead())
 		} else {
 			hdr = p.getLongHeader(encLevel, v)
@@ -400,7 +400,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 		if err == nil { // 1-RTT
 			kp = oneRTTSealer.KeyPhase()
 			connID = p.getDestConnID()
-			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+			oneRTTPacketNumber, oneRTTPacketNumberLen = p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 			hdrLen := wire.ShortHeaderLen(connID, oneRTTPacketNumberLen)
 			oneRTTPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, hdrLen, maxSize-size, onlyAck, now, v)
 			if oneRTTPayload.length > 0 {
@@ -486,7 +486,7 @@ func (p *packetPacker) appendPacket(
 	if err != nil {
 		return shortHeaderPacket{}, err
 	}
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 	connID := p.getDestConnID()
 	hdrLen := wire.ShortHeaderLen(connID, pnLen)
 	pl := p.maybeGetShortHeaderPacket(sealer, hdrLen, maxPacketSize, onlyAck, now, v)
@@ -784,7 +784,7 @@ func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, 
 	}
 	kp := s.KeyPhase()
 	connID := p.getDestConnID()
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 	hdrLen := wire.ShortHeaderLen(connID, pnLen)
 	pl := p.maybeGetAppDataPacket(maxPacketSize-protocol.ByteCount(s.Overhead())-hdrLen, false, true, now, v)
 	if pl.length == 0 {
@@ -816,7 +816,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 		return shortHeaderPacket{}, nil, err
 	}
 	connID := p.getDestConnID()
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 	padding := size - p.shortHeaderPacketLength(connID, pnLen, pl) - protocol.ByteCount(s.Overhead())
 	kp := s.KeyPhase()
 	packet, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, padding, size, s, true, v)
@@ -824,7 +824,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 }
 
 func (p *packetPacker) PackPathProbePacket(connID protocol.ConnectionID, frames []ackhandler.Frame, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
-	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
+	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 	buf := getPacketBuffer()
 	s, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
@@ -848,7 +848,7 @@ func (p *packetPacker) PackPathProbePacket(connID protocol.ConnectionID, frames 
 }
 
 func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protocol.Version) *wire.ExtendedHeader {
-	pn, pnLen := p.pnManager.PeekPacketNumber(encLevel)
+	pn, pnLen := p.pnManager.PeekPacketNumber(encLevel.PacketNumberSpace())
 	hdr := &wire.ExtendedHeader{
 		PacketNumber:    pn,
 		PacketNumberLen: pnLen,
@@ -894,7 +894,7 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	raw = p.encryptPacket(raw, sealer, header.PacketNumber, payloadOffset, pnLen)
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
-	if pn := p.pnManager.PopPacketNumber(encLevel); pn != header.PacketNumber {
+	if pn := p.pnManager.PopPacketNumber(encLevel.PacketNumberSpace()); pn != header.PacketNumber {
 		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, header.PacketNumber)
 	}
 	return &longHeaderPacket{
@@ -944,7 +944,7 @@ func (p *packetPacker) appendShortHeaderPacket(
 	raw = p.encryptPacket(raw, sealer, pn, payloadOffset, protocol.ByteCount(pnLen))
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
-	if newPN := p.pnManager.PopPacketNumber(protocol.Encryption1RTT); newPN != pn {
+	if newPN := p.pnManager.PopPacketNumber(protocol.PacketNumberSpaceAppData); newPN != pn {
 		return shortHeaderPacket{}, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, newPN)
 	}
 	return shortHeaderPacket{
