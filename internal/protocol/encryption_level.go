@@ -5,6 +5,15 @@ import (
 	"fmt"
 )
 
+// PacketNumberSpace is a QUIC packet number space.
+type PacketNumberSpace uint8
+
+const (
+	PacketNumberSpaceInitial PacketNumberSpace = iota
+	PacketNumberSpaceHandshake
+	PacketNumberSpaceAppData
+)
+
 // EncryptionLevel is the encryption level
 // Default value is Unencrypted
 type EncryptionLevel uint8
@@ -32,6 +41,19 @@ func (e EncryptionLevel) String() string {
 		return "1-RTT"
 	}
 	return "unknown"
+}
+
+func (e EncryptionLevel) PacketNumberSpace() PacketNumberSpace {
+	switch e {
+	case EncryptionInitial:
+		return PacketNumberSpaceInitial
+	case EncryptionHandshake:
+		return PacketNumberSpaceHandshake
+	case Encryption0RTT, Encryption1RTT:
+		return PacketNumberSpaceAppData
+	default:
+		panic("invalid encryption level")
+	}
 }
 
 func (e EncryptionLevel) ToTLSEncryptionLevel() tls.QUICEncryptionLevel {

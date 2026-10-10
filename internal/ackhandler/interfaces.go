@@ -26,11 +26,11 @@ type SentPacketHandler interface {
 	SetMaxDatagramSize(count protocol.ByteCount)
 
 	// only to be called once the handshake is complete
-	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */
+	QueueProbePacket(protocol.PacketNumberSpace) bool /* was a packet queued */
 
 	ECNMode(isShortHeaderPacket bool) protocol.ECN // isShortHeaderPacket should only be true for non-coalesced 1-RTT packets
-	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
-	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
+	PeekPacketNumber(protocol.PacketNumberSpace) (protocol.PacketNumber, protocol.PacketNumberLen)
+	PopPacketNumber(protocol.PacketNumberSpace) protocol.PacketNumber
 
 	GetLossDetectionTimeout() monotime.Time
 	OnLossDetectionTimeout(now monotime.Time) error

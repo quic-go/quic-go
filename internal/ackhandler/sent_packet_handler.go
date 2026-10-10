@@ -183,7 +183,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now m
 	}
 	// remove outstanding packets from bytes_in_flight
 	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
-		pnSpace := h.getPacketNumberSpace(encLevel)
+		pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 		// We might already have dropped this packet number space.
 		if pnSpace == nil {
 			return
@@ -269,7 +269,7 @@ func (h *sentPacketHandler) SentPacket(
 	h.connStats.BytesSent.Add(uint64(size))
 	h.connStats.PacketsSent.Add(1)
 
-	pnSpace := h.getPacketNumberSpace(encLevel)
+	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 	if h.logger.Debug() && (pnSpace.history.HasOutstandingPackets() || pnSpace.history.HasOutstandingPathProbes()) {
 		for p := max(0, pnSpace.largestSent+1); p < pn; p++ {
 			h.logger.Debugf("Skipping packet number %d", p)
@@ -367,13 +367,13 @@ func (h *sentPacketHandler) qlogMetricsUpdated() {
 	}
 }
 
-func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLevel) *packetNumberSpace {
-	switch encLevel {
-	case protocol.EncryptionInitial:
+func (h *sentPacketHandler) getPacketNumberSpace(space protocol.PacketNumberSpace) *packetNumberSpace {
+	switch space {
+	case protocol.PacketNumberSpaceInitial:
 		return h.initialPackets
-	case protocol.EncryptionHandshake:
+	case protocol.PacketNumberSpaceHandshake:
 		return h.handshakePackets
-	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+	case protocol.PacketNumberSpaceAppData:
 		return h.appDataPackets
 	default:
 		panic("invalid packet number space")
@@ -381,7 +381,7 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 }
 
 func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool /* contained 1-RTT packet */, error) {
-	pnSpace := h.getPacketNumberSpace(encLevel)
+	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 
 	largestAcked := ack.LargestAcked()
 	if largestAcked > pnSpace.largestSent {
@@ -536,7 +536,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(
 		return nil, false, errors.New("ackhandler BUG: ackedPackets slice not empty")
 	}
 
-	pnSpace := h.getPacketNumberSpace(encLevel)
+	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 
 	if encLevel == protocol.Encryption1RTT {
 		for p := range pnSpace.history.SkippedPackets() {
@@ -790,7 +790,7 @@ func (h *sentPacketHandler) detectLostPathProbes(now monotime.Time) {
 }
 
 func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protocol.EncryptionLevel) {
-	pnSpace := h.getPacketNumberSpace(encLevel)
+	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 	pnSpace.lossTime = 0
 	usePacketThreshold := pnSpace != h.appDataPackets || !h.packetThresholdDisabled
 
@@ -915,7 +915,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 	if ptoTime.IsZero() {
 		return nil
 	}
-	ps := h.getPacketNumberSpace(encLevel)
+	ps := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 	if !ps.history.HasOutstandingPackets() && !ps.history.HasOutstandingPathProbes() && !h.peerCompletedAddressValidation {
 		return nil
 	}
@@ -940,8 +940,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		h.ptoMode = SendPTOHandshake
 	case protocol.Encryption1RTT:
 		// skip a packet number in order to elicit an immediate ACK
-		pn := h.PopPacketNumber(protocol.Encryption1RTT)
-		h.getPacketNumberSpace(protocol.Encryption1RTT).history.SkippedPacket(pn)
+		pn := h.PopPacketNumber(protocol.PacketNumberSpaceAppData)
+		h.getPacketNumberSpace(protocol.PacketNumberSpaceAppData).history.SkippedPacket(pn)
 		h.ptoMode = SendPTOAppData
 	default:
 		return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
@@ -963,15 +963,15 @@ func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
 	return h.ecnTracker.Mode()
 }
 
-func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
-	pnSpace := h.getPacketNumberSpace(encLevel)
+func (h *sentPacketHandler) PeekPacketNumber(space protocol.PacketNumberSpace) (protocol.PacketNumber, protocol.PacketNumberLen) {
+	pnSpace := h.getPacketNumberSpace(space)
 	pn := pnSpace.pns.Peek()
 	// See section 17.1 of RFC 9000.
 	return pn, protocol.PacketNumberLengthForHeader(pn, pnSpace.largestAcked)
 }
 
-func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) protocol.PacketNumber {
-	pnSpace := h.getPacketNumberSpace(encLevel)
+func (h *sentPacketHandler) PopPacketNumber(space protocol.PacketNumberSpace) protocol.PacketNumber {
+	pnSpace := h.getPacketNumberSpace(space)
 	skipped, pn := pnSpace.pns.Pop()
 	if skipped {
 		skippedPN := pn - 1
@@ -1043,8 +1043,8 @@ func (h *sentPacketHandler) isAmplificationLimited() bool {
 	return h.bytesSent >= amplificationFactor*h.bytesReceived
 }
 
-func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) bool {
-	pnSpace := h.getPacketNumberSpace(encLevel)
+func (h *sentPacketHandler) QueueProbePacket(space protocol.PacketNumberSpace) bool {
+	pnSpace := h.getPacketNumberSpace(space)
 	pn, p := pnSpace.history.FirstOutstanding()
 	if p == nil {
 		return false

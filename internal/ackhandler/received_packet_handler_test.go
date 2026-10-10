@@ -130,15 +130,15 @@ func TestPacketDuplicateDetection(t *testing.T) {
 
 	for _, encLevel := range encLevels {
 		// first, packet 3 is not a duplicate
-		require.False(t, handler.IsPotentiallyDuplicate(3, encLevel))
+		require.False(t, handler.IsPotentiallyDuplicate(3, encLevel.PacketNumberSpace()))
 		require.NoError(t, handler.ReceivedPacket(3, protocol.ECNNon, encLevel, sendTime, true))
 		// now packet 3 is considered a duplicate
-		require.True(t, handler.IsPotentiallyDuplicate(3, encLevel))
+		require.True(t, handler.IsPotentiallyDuplicate(3, encLevel.PacketNumberSpace()))
 	}
 
 	// 1-RTT
-	require.True(t, handler.IsPotentiallyDuplicate(3, protocol.Encryption1RTT))
-	require.False(t, handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT))
+	require.True(t, handler.IsPotentiallyDuplicate(3, protocol.PacketNumberSpaceAppData))
+	require.False(t, handler.IsPotentiallyDuplicate(4, protocol.PacketNumberSpaceAppData))
 	require.NoError(t, handler.ReceivedPacket(4, protocol.ECNNon, protocol.Encryption1RTT, sendTime, true))
-	require.True(t, handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT))
+	require.True(t, handler.IsPotentiallyDuplicate(4, protocol.PacketNumberSpaceAppData))
 }
