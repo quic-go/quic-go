@@ -26,8 +26,8 @@ func TestSkippingPacketNumberGenerator(t *testing.T) {
 	// the maximum period must be sufficiently small such that using a 32-bit random number is ok
 	require.Less(t, uint64(2*skipPacketMaxPeriod), uint64(math.MaxUint32))
 
-	const initialPeriod protocol.PacketNumber = 25
-	const maxPeriod protocol.PacketNumber = 300
+	const initialPeriod = 25
+	const maxPeriod = 300
 
 	png := newSkippingPacketNumberGenerator(100, initialPeriod, maxPeriod)
 	require.Equal(t, protocol.PacketNumber(100), png.Peek())
@@ -56,8 +56,8 @@ func TestSkippingPacketNumberGenerator(t *testing.T) {
 
 func TestSkippingPacketNumberGeneratorPeriods(t *testing.T) {
 	const initialPN protocol.PacketNumber = 8
-	const initialPeriod protocol.PacketNumber = 25
-	const maxPeriod protocol.PacketNumber = 300
+	const initialPeriod = 25
+	const maxPeriod = 300
 
 	const rep = 2500
 	periods := make([][]protocol.PacketNumber, rep)
