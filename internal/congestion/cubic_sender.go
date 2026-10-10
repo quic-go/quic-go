@@ -20,6 +20,25 @@ const (
 	initialCongestionWindow    = 32
 )
 
+// renoUndoState saves Reno's state before the latest cutback.
+type renoUndoState struct {
+	congestionWindow   protocol.ByteCount
+	slowStartThreshold protocol.ByteCount
+	numAckedPackets    uint64
+	// Previous cutback's boundary; cubicSender holds the current boundary.
+	largestSentAtLastCutback protocol.PacketNumber
+	// Includes ECN events, which cannot be undone by spurious-loss reports.
+	numCongestionEvents uint64
+}
+
+func (s *renoUndoState) IsActive() bool {
+	return s.numCongestionEvents > 0
+}
+
+func (s *renoUndoState) Reset() {
+	*s = renoUndoState{}
+}
+
 type cubicSender struct {
 	hybridSlowStart HybridSlowStart
 	rttStats        *utils.RTTStats
@@ -36,7 +55,7 @@ type cubicSender struct {
 	// Track the largest packet that has been acked.
 	largestAckedPacketNumber protocol.PacketNumber
 
-	// Track the largest packet number outstanding when a CWND cutback occurs.
+	// Largest packet number sent when the latest CWND cutback occurred.
 	largestSentAtLastCutback protocol.PacketNumber
 
 	// Whether the last loss event caused us to exit slowstart.
@@ -51,6 +70,9 @@ type cubicSender struct {
 
 	// ACK counter for the Reno implementation.
 	numAckedPackets uint64
+
+	// Retained after recovery, since spurious losses can be reported later.
+	undoState renoUndoState
 
 	initialCongestionWindow    protocol.ByteCount
 	initialMaxCongestionWindow protocol.ByteCount
@@ -205,8 +227,22 @@ func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lost
 	// TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
 	// already sent should be treated as a single loss event, since it's expected.
 	if packetNumber <= c.largestSentAtLastCutback {
+		// Older events are already accounted for in the saved congestion window.
+		if c.undoState.IsActive() && packetNumber > c.undoState.largestSentAtLastCutback {
+			c.undoState.numCongestionEvents++
+		}
 		return
 	}
+	if c.reno {
+		c.undoState = renoUndoState{
+			congestionWindow:         c.congestionWindow,
+			slowStartThreshold:       c.slowStartThreshold,
+			numAckedPackets:          c.numAckedPackets,
+			largestSentAtLastCutback: c.largestSentAtLastCutback,
+			numCongestionEvents:      1,
+		}
+	}
+
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
 	c.maybeQlogStateChange(qlog.CongestionStateRecovery)
 
@@ -224,6 +260,40 @@ func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lost
 	// reset packet count from congestion avoidance mode. We start
 	// counting again when we're out of recovery.
 	c.numAckedPackets = 0
+}
+
+func (c *cubicSender) OnSpuriousLoss(packetNumber protocol.PacketNumber) {
+	if !c.undoState.IsActive() {
+		return
+	}
+	// only losses counted for this cutback can undo it
+	if packetNumber <= c.undoState.largestSentAtLastCutback || packetNumber > c.largestSentAtLastCutback {
+		return
+	}
+	c.undoState.numCongestionEvents--
+	if c.undoState.numCongestionEvents > 0 {
+		return
+	}
+
+	state := c.undoState
+	c.undoState.Reset()
+	// Regaining the old window usually takes multiple RTTs, making a spurious-loss report this late unlikely.
+	if c.congestionWindow > state.congestionWindow {
+		return
+	}
+	c.congestionWindow = state.congestionWindow
+	c.slowStartThreshold = state.slowStartThreshold
+	c.numAckedPackets = state.numAckedPackets
+	c.largestSentAtLastCutback = state.largestSentAtLastCutback
+	c.connStats.CongestionWindow.Store(uint64(c.congestionWindow))
+	switch {
+	case c.InRecovery():
+		c.maybeQlogStateChange(qlog.CongestionStateRecovery)
+	case c.InSlowStart():
+		c.maybeQlogStateChange(qlog.CongestionStateSlowStart)
+	default:
+		c.maybeQlogStateChange(qlog.CongestionStateCongestionAvoidance)
+	}
 }
 
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
@@ -299,6 +369,7 @@ func (c *cubicSender) pacingRate() Bandwidth {
 // OnRetransmissionTimeout is called on an retransmission timeout
 func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
+	c.undoState.Reset()
 	if !packetsRetransmitted {
 		return
 	}
@@ -315,6 +386,7 @@ func (c *cubicSender) OnConnectionMigration() {
 	c.largestSentPacketNumber = protocol.InvalidPacketNumber
 	c.largestAckedPacketNumber = protocol.InvalidPacketNumber
 	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
+	c.undoState.Reset()
 	c.lastCutbackExitedSlowstart = false
 	c.cubic.Reset()
 	c.numAckedPackets = 0

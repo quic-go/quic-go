@@ -415,32 +415,42 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	// Detect spurious losses even if no outstanding packets were newly acknowledged.
+	var spuriousLosses []protocol.PacketNumber
 	if encLevel == protocol.Encryption1RTT {
-		h.detectSpuriousLosses(
+		spuriousLosses = h.detectSpuriousLosses(
 			ack,
 			rcvTime.Add(-min(ack.DelayTime, h.rttStats.MaxAckDelay())),
 		)
 		// clean up lost packet history
 		h.lostPackets.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
 	}
+	if len(ackedPackets) > 0 {
+		// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
+		if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil && largestAcked > pnSpace.largestAcked {
+			congested := h.ecnTracker.HandleNewlyAcked(ackedPackets, int64(ack.ECT0), int64(ack.ECT1), int64(ack.ECNCE))
+			if congested {
+				h.congestion.OnCongestionEvent(largestAcked, 0, priorInFlight)
+			}
+		}
+
+		pnSpace.largestAcked = max(pnSpace.largestAcked, largestAcked)
+
+		h.detectLostPackets(rcvTime, encLevel)
+		if encLevel == protocol.Encryption1RTT {
+			h.detectLostPathProbes(rcvTime)
+		}
+	}
+	// report spurious losses after any new congestion events from this ACK
+	for _, pn := range spuriousLosses {
+		h.congestion.OnSpuriousLoss(pn)
+	}
 	if len(ackedPackets) == 0 {
+		if len(spuriousLosses) > 0 && h.qlogger != nil {
+			h.qlogMetricsUpdated()
+		}
 		return false, nil
 	}
 
-	// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
-	if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil && largestAcked > pnSpace.largestAcked {
-		congested := h.ecnTracker.HandleNewlyAcked(ackedPackets, int64(ack.ECT0), int64(ack.ECT1), int64(ack.ECNCE))
-		if congested {
-			h.congestion.OnCongestionEvent(largestAcked, 0, priorInFlight)
-		}
-	}
-
-	pnSpace.largestAcked = max(pnSpace.largestAcked, largestAcked)
-
-	h.detectLostPackets(rcvTime, encLevel)
-	if encLevel == protocol.Encryption1RTT {
-		h.detectLostPathProbes(rcvTime)
-	}
 	var acked1RTTPacket bool
 	for _, p := range ackedPackets {
 		if p.includedInBytesInFlight {
@@ -478,7 +488,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	return acked1RTTPacket, nil
 }
 
-func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime monotime.Time) {
+func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime monotime.Time) []protocol.PacketNumber {
 	var maxPacketReordering protocol.PacketNumber
 	var maxTimeReordering time.Duration
 	ackRangeIdx := len(ack.AckRanges) - 1
@@ -513,6 +523,7 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	for _, pn := range spuriousLosses {
 		h.lostPackets.Delete(pn)
 	}
+	return spuriousLosses
 }
 
 // Packets are returned in ascending packet number order.

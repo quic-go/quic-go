@@ -1389,10 +1389,23 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[0]}, packets.Lost)
 
-	// The second packet is still outstanding.
-	// Receive a (delayed) ACK for it.
-	// Since the new ECN counts were already reported, ECN marks on this ACK frame are ignored.
+	// New ECN and loss events from an ACK must precede its spurious-loss reports.
 	now = now.Add(100 * time.Millisecond)
+	pn := sendPacket(t, now, protocol.ECT0)
+	gomock.InOrder(
+		ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true),
+		cong.EXPECT().OnCongestionEvent(pn, protocol.ByteCount(0), gomock.Any()),
+		cong.EXPECT().OnCongestionEvent(pns[1], protocol.ByteCount(1200), gomock.Any()),
+		ecnHandler.EXPECT().LostPacket(pns[1]),
+		cong.EXPECT().OnSpuriousLoss(pns[0]),
+	)
+	now = now.Add(100 * time.Millisecond)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0], pn)}, protocol.Encryption1RTT, now)
+	require.NoError(t, err)
+
+	// The second packet was also declared lost. Its ACK only reports a spurious loss.
+	now = now.Add(100 * time.Millisecond)
+	cong.EXPECT().OnSpuriousLoss(pns[1])
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[1])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 
@@ -1662,12 +1675,13 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	const rtt = time.Second
 
 	var eventRecorder events.Recorder
+	connStats := &utils.ConnectionStats{}
 
 	sph := NewSentPacketHandler(
 		0,
 		1200,
 		utils.NewRTTStats(),
-		&utils.ConnectionStats{},
+		connStats,
 		true,
 		false,
 		nil,
@@ -1692,6 +1706,7 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		now = now.Add(10 * time.Millisecond)
 	}
 
+	window := connStats.CongestionWindow.Load()
 	now = start.Add(rtt)
 	_, err := sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[6])},
@@ -1702,6 +1717,7 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{pns[0], pns[6]}, packets.Acked)
 	// pns[4] and pns[5] are not yet declared lost
 	require.Equal(t, []protocol.PacketNumber{pns[1], pns[2], pns[3]}, packets.Lost)
+	require.Less(t, connStats.CongestionWindow.Load(), window)
 
 	packets.Reset()
 	eventRecorder.Clear()
@@ -1717,6 +1733,7 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16]}, packets.Acked)
 	require.Empty(t, packets.Lost)
+	require.Equal(t, window, connStats.CongestionWindow.Load())
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.SpuriousLoss{
@@ -1804,6 +1821,13 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		PacketReordering: 0,
 		TimeReordering:   now.Sub(start) - 130*time.Millisecond,
 	}}, eventRecorder.Events(qlog.SpuriousLoss{}))
+
+	// An ACK containing only the remaining lost packets can also undo the cutback.
+	require.Less(t, connStats.CongestionWindow.Load(), window)
+	now = now.Add(secondAckDelay)
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[14], pns[15])}, protocol.Encryption1RTT, now)
+	require.NoError(t, err)
+	require.Equal(t, window, connStats.CongestionWindow.Load())
 
 	// MTU probes, path probes and ACK-only packets aren't tracked as spurious losses.
 	now = now.Add(3 * secondAckDelay)
