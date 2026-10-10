@@ -11,7 +11,7 @@ import (
 )
 
 func ackElicitingPacket() *packet {
-	return &packet{StreamFrames: []StreamFrame{{Frame: &wire.StreamFrame{StreamID: 1}}}}
+	return &packet{EncryptionLevel: protocol.Encryption1RTT, StreamFrames: []StreamFrame{{Frame: &wire.StreamFrame{StreamID: 1}}}}
 }
 
 func (h *sentPacketHistory) getPacketNumbers() []protocol.PacketNumber {
@@ -32,7 +32,7 @@ func TestSentPacketHistoryPacketTracking(t *testing.T) {
 }
 
 func testSentPacketHistoryPacketTracking(t *testing.T, firstPacketAckEliciting bool) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 
 	require.False(t, hist.HasOutstandingPackets())
 	if firstPacketAckEliciting {
@@ -82,15 +82,19 @@ func testSentPacketHistoryPacketTracking(t *testing.T, firstPacketAckEliciting b
 }
 
 func TestSentPacketHistoryNonSequentialPacketNumberUse(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
+	hist.SkippedPacket(101)
 	hist.SentPacket(100, ackElicitingPacket())
+	hist.SentPacket(102, ackElicitingPacket())
+	require.Equal(t, []protocol.PacketNumber{101}, slices.Collect(hist.SkippedPackets()))
+	require.Equal(t, []protocol.PacketNumber{100, 102}, hist.getPacketNumbers())
 	require.Panics(t, func() {
 		hist.SentPacket(102, ackElicitingPacket())
 	})
 }
 
 func TestSentPacketHistoryRemovePackets(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 
 	hist.SentPacket(0, ackElicitingPacket())
 	hist.SentPacket(1, ackElicitingPacket())
@@ -140,38 +144,43 @@ func TestSentPacketHistoryRemovePackets(t *testing.T) {
 }
 
 func TestSentPacketHistoryFirstOutstandingPacket(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 
-	pn, p := hist.FirstOutstanding()
+	pn, p := hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.Equal(t, protocol.InvalidPacketNumber, pn)
 	require.Nil(t, p)
 
-	hist.SentPacket(2, ackElicitingPacket())
+	p = ackElicitingPacket()
+	p.EncryptionLevel = protocol.EncryptionHandshake
+	hist.SentPacket(1, p)
+	p = ackElicitingPacket()
+	p.EncryptionLevel = protocol.Encryption0RTT
+	hist.SentPacket(2, p)
 	hist.SentPacket(3, ackElicitingPacket())
-	pn, p = hist.FirstOutstanding()
+	pn, p = hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.Equal(t, protocol.PacketNumber(2), pn)
 	require.NotNil(t, p)
 
-	// remove the first packet
+	// remove the first application data packet
 	hist.Remove(2)
-	pn, p = hist.FirstOutstanding()
+	pn, p = hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.Equal(t, protocol.PacketNumber(3), pn)
 	require.NotNil(t, p)
 
 	// Path MTU packets are not regarded as outstanding
-	hist = newSentPacketHistory(true)
+	hist = newSentPacketHistory()
 	hist.SentPacket(2, ackElicitingPacket())
 	hist.SkippedPacket(3)
 	p = ackElicitingPacket()
 	p.IsPathMTUProbePacket = true
 	hist.SentPacket(4, p)
-	pn, p = hist.FirstOutstanding()
+	pn, p = hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.NotNil(t, p)
 	require.Equal(t, protocol.PacketNumber(2), pn)
 }
 
 func TestSentPacketHistoryIterating(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 	hist.SkippedPacket(0)
 	hist.SentPacket(1, ackElicitingPacket())
 	hist.SentPacket(2, ackElicitingPacket())
@@ -193,7 +202,7 @@ func TestSentPacketHistoryIterating(t *testing.T) {
 }
 
 func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 	hist.SentPacket(0, ackElicitingPacket())
 	hist.SentPacket(1, ackElicitingPacket())
 	hist.SkippedPacket(2)
@@ -218,7 +227,7 @@ func TestSentPacketHistoryDeleteWhileIterating(t *testing.T) {
 }
 
 func TestSentPacketHistoryPathProbes(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 	hist.SentPacket(0, ackElicitingPacket())
 	hist.SentPacket(1, ackElicitingPacket())
 	hist.SentPathProbePacket(2, ackElicitingPacket())
@@ -264,7 +273,7 @@ func TestSentPacketHistoryPathProbes(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{2, 5}, getPacketsInPathProbeHistory(t))
 	require.True(t, hist.HasOutstandingPackets())
 	require.True(t, hist.HasOutstandingPathProbes())
-	pn, p := hist.FirstOutstanding()
+	pn, p := hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.Equal(t, protocol.PacketNumber(4), pn)
 	require.NotNil(t, p)
 	pn, p = hist.FirstOutstandingPathProbe()
@@ -292,7 +301,7 @@ func TestSentPacketHistoryPathProbes(t *testing.T) {
 	require.NoError(t, hist.Remove(5))
 	require.Empty(t, getPacketsInHistory(t))
 	require.False(t, hist.HasOutstandingPackets())
-	pn, p = hist.FirstOutstanding()
+	pn, p = hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.Equal(t, protocol.InvalidPacketNumber, pn)
 	require.Nil(t, p)
 
@@ -306,7 +315,7 @@ func TestSentPacketHistoryPathProbes(t *testing.T) {
 
 	hist.RemovePathProbe(6)
 	require.False(t, hist.HasOutstandingPackets())
-	pn, p = hist.FirstOutstanding()
+	pn, p = hist.FirstOutstanding(protocol.PacketNumberSpaceAppData)
 	require.Equal(t, protocol.InvalidPacketNumber, pn)
 	require.Nil(t, p)
 	require.False(t, hist.HasOutstandingPathProbes())
@@ -316,7 +325,7 @@ func TestSentPacketHistoryPathProbes(t *testing.T) {
 }
 
 func TestSentPacketHistoryDifference(t *testing.T) {
-	hist := newSentPacketHistory(true)
+	hist := newSentPacketHistory()
 	hist.SentPacket(0, &packet{})
 	hist.SentPacket(1, ackElicitingPacket())
 	hist.SentPacket(2, ackElicitingPacket())
