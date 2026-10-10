@@ -24,7 +24,7 @@ func TestSequentialPacketNumberGenerator(t *testing.T) {
 
 func TestSkippingPacketNumberGenerator(t *testing.T) {
 	// the maximum period must be sufficiently small such that using a 32-bit random number is ok
-	require.Less(t, 2*skipPacketMaxPeriod, math.MaxInt32)
+	require.Less(t, uint64(2*skipPacketMaxPeriod), uint64(math.MaxUint32))
 
 	const initialPeriod protocol.PacketNumber = 25
 	const maxPeriod protocol.PacketNumber = 300
