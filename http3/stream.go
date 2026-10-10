@@ -205,6 +205,7 @@ type RequestStream struct {
 	sentRequest   bool
 	requestedGzip bool
 	isConnect     bool
+	isHead        bool
 }
 
 func newRequestStream(
@@ -338,6 +339,7 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 		s.requestedGzip = true
 	}
 	s.isConnect = req.Method == http.MethodConnect
+	s.isHead = req.Method == http.MethodHead
 	s.sentRequest = true
 	return maybeReplaceError(s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip, s.str.StreamID(), s.str.qlogger))
 }
@@ -405,14 +407,25 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		return nil, fmt.Errorf("http3: invalid response: %w", err)
 	}
 
-	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
-	// See section 4.1.2 of RFC 9114.
-	respBody := newResponseBody(s.str, res.ContentLength, s.reqDone)
-
-	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
 	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := s.isConnect && res.StatusCode >= 200 && res.StatusCode < 300
+
+	// Check that the server doesn't send more or less data in DATA frames than indicated by the
+	// Content-Length header (if set). See section 4.1.2 of RFC 9114.
+	// Responses that are defined as having no content may carry a non-zero Content-Length without
+	// sending any DATA frame. The content of a successful CONNECT response is the tunnel, and any
+	// Content-Length is ignored (RFC 9110, section 9.3.6).
+	contentLength := res.ContentLength
+	switch {
+	case isSuccessfulConnect:
+		contentLength = -1
+	case isInformational || isNoContent || res.StatusCode == http.StatusNotModified || s.isHead:
+		contentLength = 0
+	}
+	respBody := newResponseBody(s.str, contentLength, s.reqDone)
+
+	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	if (isInformational || isNoContent || isSuccessfulConnect) && res.ContentLength == -1 {
 		res.ContentLength = 0
 	}

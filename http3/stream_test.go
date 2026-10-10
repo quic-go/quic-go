@@ -200,6 +200,52 @@ func TestStreamTryWriteAll(t *testing.T) {
 	)
 }
 
+// A response that is defined as having no content may carry a non-zero Content-Length
+// header field without sending any DATA frame, see section 4.1.2 of RFC 9114.
+func TestRequestStreamNoContentResponse(t *testing.T) {
+	t.Run("HEAD request", func(t *testing.T) {
+		testRequestStreamNoContentResponse(t, http.MethodHead, http.StatusOK)
+	})
+
+	t.Run("304 response", func(t *testing.T) {
+		testRequestStreamNoContentResponse(t, http.MethodGet, http.StatusNotModified)
+	})
+}
+
+func testRequestStreamNoContentResponse(t *testing.T, method string, status int) {
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+	clientConn, _ := newConnPair(t)
+	str := newRequestStream(
+		newStream(
+			qstr,
+			newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
+			nil,
+			func(io.Reader, *headersFrame) error { return nil },
+			nil,
+		),
+		newRequestWriter(),
+		make(chan struct{}),
+		qpack.NewDecoder(),
+		true,
+		math.MaxInt,
+		&http.Response{},
+	)
+	require.NoError(t, str.SendRequestHeader(httptest.NewRequest(method, "https://quic-go.net", nil)))
+
+	buf := bytes.NewBuffer(encodeResponseWithHeader(t, status, http.Header{"Content-Length": []string{"6"}}))
+	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	rsp, err := str.ReadResponse()
+	require.NoError(t, err)
+	require.Equal(t, int64(6), rsp.ContentLength)
+
+	data, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Empty(t, data)
+}
+
 func TestRequestStream(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)

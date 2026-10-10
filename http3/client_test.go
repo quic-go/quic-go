@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"maps"
 	mrand "math/rand/v2"
 	"net/http"
 	"net/http/httptest"
@@ -85,12 +86,19 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 func encodeResponse(t *testing.T, status int) []byte {
 	t.Helper()
 
+	return encodeResponseWithHeader(t, status, nil)
+}
+
+func encodeResponseWithHeader(t *testing.T, status int, hdr http.Header) []byte {
+	t.Helper()
+
 	mockCtrl := gomock.NewController(t)
 	buf := &bytes.Buffer{}
 	rstr := NewMockDatagramStream(mockCtrl)
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
+	maps.Copy(rw.Header(), hdr)
 	rw.WriteHeader(status)
 	rw.Flush()
 	return buf.Bytes()
