@@ -9,17 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSequentialPacketNumberGenerator(t *testing.T) {
+func TestPacketNumberGeneratorWithoutSkipping(t *testing.T) {
 	const initialPN protocol.PacketNumber = 123
-	png := newSequentialPacketNumberGenerator(initialPN)
+	png := newPacketNumberGenerator(initialPN, 1, 1)
 
 	for i := initialPN; i < initialPN+1000; i++ {
-		require.Equal(t, i, png.Peek())
-		require.Equal(t, i, png.Peek())
-		skipNext, pn := png.Pop()
+		require.Equal(t, i, png.Peek(false))
+		require.Equal(t, i, png.Peek(false))
+		skipNext, pn := png.Pop(false)
 		require.False(t, skipNext)
 		require.Equal(t, i, pn)
 	}
+	// Sending crypto packets doesn't consume the application-data skipping period.
+	var skipped bool
+	for range 6 {
+		didSkip, _ := png.Pop(true)
+		skipped = skipped || didSkip
+	}
+	require.True(t, skipped)
 }
 
 func TestSkippingPacketNumberGenerator(t *testing.T) {
@@ -29,25 +36,31 @@ func TestSkippingPacketNumberGenerator(t *testing.T) {
 	const initialPeriod = 25
 	const maxPeriod = 300
 
-	png := newSkippingPacketNumberGenerator(100, initialPeriod, maxPeriod)
-	require.Equal(t, protocol.PacketNumber(100), png.Peek())
-	require.Equal(t, protocol.PacketNumber(100), png.Peek())
-	require.Equal(t, protocol.PacketNumber(100), png.Peek())
-	_, pn := png.Pop()
+	png := newPacketNumberGenerator(100, initialPeriod, maxPeriod)
+	require.Equal(t, protocol.PacketNumber(100), png.Peek(true))
+	require.Equal(t, protocol.PacketNumber(100), png.Peek(true))
+	require.Equal(t, protocol.PacketNumber(100), png.Peek(true))
+	_, pn := png.Pop(true)
 	require.Equal(t, protocol.PacketNumber(100), pn)
 
 	var last protocol.PacketNumber
 	var skipped bool
 	for i := range maxPeriod {
-		didSkip, num := png.Pop()
+		next := png.Peek(false)
+		didSkip, num := png.Pop(false)
+		require.False(t, didSkip)
+		require.Equal(t, next, num)
+		next = png.Peek(true)
+		didSkip, num = png.Pop(true)
+		require.Equal(t, next, num)
 		if didSkip {
 			skipped = true
-			_, nextNum := png.Pop()
+			_, nextNum := png.Pop(true)
 			require.Equal(t, num+1, nextNum)
 			break
 		}
 		if i != 0 {
-			require.Equal(t, num, last+1)
+			require.Equal(t, num, last+2)
 		}
 		last = num
 	}
@@ -64,10 +77,10 @@ func TestSkippingPacketNumberGeneratorPeriods(t *testing.T) {
 	expectedPeriods := []protocol.PacketNumber{25, 50, 100, 200, 300, 300, 300}
 
 	for i := range rep {
-		png := newSkippingPacketNumberGenerator(initialPN, initialPeriod, maxPeriod)
+		png := newPacketNumberGenerator(initialPN, initialPeriod, maxPeriod)
 		lastSkip := initialPN
 		for len(periods[i]) < len(expectedPeriods) {
-			skipNext, next := png.Pop()
+			skipNext, next := png.Pop(true)
 			if skipNext {
 				skipped := next + 1
 				require.Greater(t, skipped, lastSkip+1)

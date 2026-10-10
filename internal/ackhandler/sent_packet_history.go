@@ -21,25 +21,23 @@ type sentPacketHistory struct {
 	highestPacketNumber protocol.PacketNumber
 }
 
-func newSentPacketHistory(isAppData bool) *sentPacketHistory {
-	h := &sentPacketHistory{
+func newSentPacketHistory() *sentPacketHistory {
+	return &sentPacketHistory{
+		packets:             make([]*packet, 0, 32),
+		skippedPackets:      make([]protocol.PacketNumber, 0, maxSkippedPackets),
 		highestPacketNumber: protocol.InvalidPacketNumber,
 		firstPacketNumber:   protocol.InvalidPacketNumber,
 	}
-	if isAppData {
-		h.packets = make([]*packet, 0, 32)
-		h.skippedPackets = make([]protocol.PacketNumber, 0, maxSkippedPackets)
-	} else {
-		h.packets = make([]*packet, 0, 6)
-	}
-	return h
 }
 
-func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNumber) {
+func (h *sentPacketHistory) checkPacketNumberUse(pn protocol.PacketNumber) {
 	if h.highestPacketNumber != protocol.InvalidPacketNumber {
-		if pn != h.highestPacketNumber+1 {
-			panic("non-sequential packet number use")
+		if pn <= h.highestPacketNumber {
+			panic("non-increasing packet number use")
 		}
+	}
+	if len(h.packets) > 0 {
+		h.packets = append(h.packets, make([]*packet, pn-h.highestPacketNumber-1)...)
 	}
 	h.highestPacketNumber = pn
 	if len(h.packets) == 0 {
@@ -48,10 +46,6 @@ func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNum
 }
 
 func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
-	h.checkSequentialPacketNumberUse(pn)
-	if len(h.packets) > 0 {
-		h.packets = append(h.packets, nil)
-	}
 	if len(h.skippedPackets) == maxSkippedPackets {
 		h.skippedPackets = slices.Delete(h.skippedPackets, 0, 1)
 	}
@@ -59,7 +53,7 @@ func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
 }
 
 func (h *sentPacketHistory) SentPacket(pn protocol.PacketNumber, p *packet) {
-	h.checkSequentialPacketNumberUse(pn)
+	h.checkPacketNumberUse(pn)
 	h.packets = append(h.packets, p)
 	if p.Outstanding() {
 		h.numOutstanding++
@@ -67,8 +61,8 @@ func (h *sentPacketHistory) SentPacket(pn protocol.PacketNumber, p *packet) {
 }
 
 func (h *sentPacketHistory) SentPathProbePacket(pn protocol.PacketNumber, p *packet) {
-	h.checkSequentialPacketNumberUse(pn)
-	h.packets = append(h.packets, &packet{isPathProbePacket: true})
+	h.checkPacketNumberUse(pn)
+	h.packets = append(h.packets, &packet{EncryptionLevel: p.EncryptionLevel, isPathProbePacket: true})
 	h.pathProbePackets = append(h.pathProbePackets, packetWithPacketNumber{PacketNumber: pn, packet: p})
 }
 
@@ -98,13 +92,13 @@ func (h *sentPacketHistory) PathProbes() iter.Seq2[protocol.PacketNumber, *packe
 	}
 }
 
-// FirstOutstanding returns the first outstanding packet.
-func (h *sentPacketHistory) FirstOutstanding() (protocol.PacketNumber, *packet) {
+// FirstOutstanding returns the first outstanding packet in the given packet number space.
+func (h *sentPacketHistory) FirstOutstanding(space protocol.PacketNumberSpace) (protocol.PacketNumber, *packet) {
 	if !h.HasOutstandingPackets() {
 		return protocol.InvalidPacketNumber, nil
 	}
 	for i, p := range h.packets {
-		if p != nil && p.Outstanding() {
+		if p != nil && p.Outstanding() && p.EncryptionLevel.PacketNumberSpace() == space {
 			return h.firstPacketNumber + protocol.PacketNumber(i), p
 		}
 	}

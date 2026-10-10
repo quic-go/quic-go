@@ -261,6 +261,9 @@ func (p *packetPacker) packConnectionClose(
 			size += p.shortHeaderPacketLength(connID, oneRTTPacketNumberLen, pl) + protocol.ByteCount(sealer.Overhead())
 		} else {
 			hdr = p.getLongHeader(encLevel, v)
+			if pn := p.pnManager.PopPacketNumber(encLevel.PacketNumberSpace()); pn != hdr.PacketNumber {
+				return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", hdr.PacketNumber, pn)
+			}
 			hdrs[i] = hdr
 			size += p.longHeaderPacketLength(hdr, pl, v) + protocol.ByteCount(sealer.Overhead())
 			numLongHdrPackets++
@@ -287,7 +290,7 @@ func (p *packetPacker) packConnectionClose(
 			if encLevel == protocol.EncryptionInitial {
 				paddingLen = p.initialPaddingLen(payloads[i].frames, size, maxPacketSize)
 			}
-			longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdrs[i], payloads[i], paddingLen, encLevel, sealers[i], v)
+			longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdrs[i], payloads[i], paddingLen, sealers[i], v)
 			if err != nil {
 				return nil, err
 			}
@@ -358,6 +361,10 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 			v,
 		)
 		if initialPayload.length > 0 {
+			// reserve the number before preparing the next coalesced packet
+			if pn := p.pnManager.PopPacketNumber(protocol.PacketNumberSpaceInitial); pn != initialHdr.PacketNumber {
+				return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", initialHdr.PacketNumber, pn)
+			}
 			size += p.longHeaderPacketLength(initialHdr, initialPayload, v) + protocol.ByteCount(initialSealer.Overhead())
 		}
 	}
@@ -380,6 +387,9 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 				v,
 			)
 			if handshakePayload.length > 0 {
+				if pn := p.pnManager.PopPacketNumber(protocol.PacketNumberSpaceHandshake); pn != handshakeHdr.PacketNumber {
+					return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", handshakeHdr.PacketNumber, pn)
+				}
 				s := p.longHeaderPacketLength(handshakeHdr, handshakePayload, v) + protocol.ByteCount(handshakeSealer.Overhead())
 				size += s
 			}
@@ -415,6 +425,9 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 			if zeroRTTSealer != nil {
 				zeroRTTHdr, zeroRTTPayload = p.maybeGetAppDataPacketFor0RTT(zeroRTTSealer, maxSize-size, now, v)
 				if zeroRTTPayload.length > 0 {
+					if pn := p.pnManager.PopPacketNumber(protocol.PacketNumberSpaceAppData); pn != zeroRTTHdr.PacketNumber {
+						return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", zeroRTTHdr.PacketNumber, pn)
+					}
 					size += p.longHeaderPacketLength(zeroRTTHdr, zeroRTTPayload, v) + protocol.ByteCount(zeroRTTSealer.Overhead())
 				}
 			}
@@ -432,21 +445,21 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 	}
 	if initialPayload.length > 0 {
 		padding := p.initialPaddingLen(initialPayload.frames, size, maxSize)
-		cont, err := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, protocol.EncryptionInitial, initialSealer, v)
+		cont, err := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, initialSealer, v)
 		if err != nil {
 			return nil, err
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, cont)
 	}
 	if handshakePayload.length > 0 {
-		cont, err := p.appendLongHeaderPacket(buffer, handshakeHdr, handshakePayload, 0, protocol.EncryptionHandshake, handshakeSealer, v)
+		cont, err := p.appendLongHeaderPacket(buffer, handshakeHdr, handshakePayload, 0, handshakeSealer, v)
 		if err != nil {
 			return nil, err
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, cont)
 	}
 	if zeroRTTPayload.length > 0 {
-		longHdrPacket, err := p.appendLongHeaderPacket(buffer, zeroRTTHdr, zeroRTTPayload, 0, protocol.Encryption0RTT, zeroRTTSealer, v)
+		longHdrPacket, err := p.appendLongHeaderPacket(buffer, zeroRTTHdr, zeroRTTPayload, 0, zeroRTTSealer, v)
 		if err != nil {
 			return nil, err
 		}
@@ -761,6 +774,9 @@ func (p *packetPacker) PackPTOProbePacket(
 	if pl.length == 0 {
 		return nil, nil
 	}
+	if pn := p.pnManager.PopPacketNumber(encLevel.PacketNumberSpace()); pn != hdr.PacketNumber {
+		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", hdr.PacketNumber, pn)
+	}
 	buffer := getPacketBuffer()
 	packet := &coalescedPacket{buffer: buffer}
 	size := p.longHeaderPacketLength(hdr, pl, v) + protocol.ByteCount(sealer.Overhead())
@@ -769,7 +785,7 @@ func (p *packetPacker) PackPTOProbePacket(
 		padding = p.initialPaddingLen(pl.frames, size, maxPacketSize)
 	}
 
-	longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdr, pl, padding, encLevel, sealer, v)
+	longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdr, pl, padding, sealer, v)
 	if err != nil {
 		return nil, err
 	}
@@ -870,7 +886,7 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protoc
 	return hdr
 }
 
-func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire.ExtendedHeader, pl payload, padding protocol.ByteCount, encLevel protocol.EncryptionLevel, sealer sealer, v protocol.Version) (*longHeaderPacket, error) {
+func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire.ExtendedHeader, pl payload, padding protocol.ByteCount, sealer sealer, v protocol.Version) (*longHeaderPacket, error) {
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(header.PacketNumberLen)
 	if pl.length < 4-pnLen {
@@ -894,9 +910,6 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	raw = p.encryptPacket(raw, sealer, header.PacketNumber, payloadOffset, pnLen)
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
-	if pn := p.pnManager.PopPacketNumber(encLevel.PacketNumberSpace()); pn != header.PacketNumber {
-		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, header.PacketNumber)
-	}
 	return &longHeaderPacket{
 		header:       header,
 		ack:          pl.ack,
