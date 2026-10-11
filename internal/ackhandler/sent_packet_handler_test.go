@@ -740,6 +740,7 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 			// nextPNs[0] lost: it is packetThreshold (3) below the largest acked.
 			if encLevel == protocol.Encryption1RTT {
 				require.Empty(t, packets.Lost)
+				require.Equal(t, now.Add(time.Second/8), sph.GetLossDetectionTimeout())
 			} else {
 				require.Equal(t, []protocol.PacketNumber{nextPNs[0]}, packets.Lost)
 			}
@@ -760,6 +761,132 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 				require.Equal(t, []protocol.PacketNumber{nextPNs[0]}, packets.Lost)
 			}
 		})
+	}
+}
+
+func TestSentPacketHandlerAdaptiveTimeThreshold(t *testing.T) {
+	const rtt = time.Second
+	rttStats := utils.NewRTTStats()
+	rttStats.SetMaxAckDelay(rtt / 2)
+	sph := NewSentPacketHandler(
+		0,
+		1200,
+		rttStats,
+		&utils.ConnectionStats{},
+		true,
+		false,
+		nil,
+		protocol.PerspectiveServer,
+		nil,
+		utils.DefaultLogger,
+	)
+
+	var packets packetTracker
+	now := monotime.Now()
+	latePN := protocol.InvalidPacketNumber
+	lateTimePN := protocol.InvalidPacketNumber
+	lossDelay := rtt * 9 / 8
+	for _, nextLossDelay := range []time.Duration{rtt * 5 / 4, rtt * 3 / 2, 2 * rtt, 2 * rtt} {
+		packets.Reset()
+		sentAt := now
+		var pns [6]protocol.PacketNumber
+		// Keep later packets outstanding to check that their loss deadline moves.
+		for i := range pns {
+			sendTime := sentAt
+			if i >= 3 {
+				sendTime = sendTime.Add(rtt / 2)
+			}
+			pn := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
+			sph.SentPacket(sendTime, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
+			pns[i] = pn
+		}
+
+		// ACKing an old loss alongside a new packet must not increase the threshold.
+		ackPNs := []protocol.PacketNumber{pns[5]}
+		if latePN != protocol.InvalidPacketNumber {
+			ackPNs = append(ackPNs, latePN)
+		}
+		now = sentAt.Add(3 * rtt / 2)
+		_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(ackPNs...)}, protocol.Encryption1RTT, now)
+		require.NoError(t, err)
+		if lossTime := sentAt.Add(lossDelay); lossTime.After(now) {
+			require.Equal(t, lossTime, sph.GetLossDetectionTimeout())
+			now = lossTime
+			require.NoError(t, sph.OnLossDetectionTimeout(now))
+		}
+		require.Equal(t, []protocol.PacketNumber{pns[0], pns[1], pns[2]}, packets.Lost)
+		oldLossTime := sentAt.Add(rtt/2 + lossDelay)
+		require.Equal(t, oldLossTime, sph.GetLossDetectionTimeout())
+
+		now = now.Add(rtt / 16)
+		if lateTimePN != protocol.InvalidPacketNumber {
+			// An older loss must not make a newer loss at the time threshold trigger an increase.
+			_, err = sph.ReceivedAck(&wire.AckFrame{
+				AckRanges: ackRanges(lateTimePN, pns[2]),
+				DelayTime: now.Sub(sentAt) - lossDelay,
+			}, protocol.Encryption1RTT, now)
+			require.NoError(t, err)
+			require.Equal(t, oldLossTime, sph.GetLossDetectionTimeout())
+		}
+		// Several lost packets in one ACK only trigger one adjustment.
+		acked1RTT, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1])}, protocol.Encryption1RTT, now)
+		require.NoError(t, err)
+		require.False(t, acked1RTT)
+		lossTime := sentAt.Add(rtt/2 + nextLossDelay)
+		require.Equal(t, lossTime, sph.GetLossDetectionTimeout())
+		// Another late ACK before sending a new packet must not increase the threshold.
+		_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2])}, protocol.Encryption1RTT, now)
+		require.NoError(t, err)
+		require.Equal(t, lossTime, sph.GetLossDetectionTimeout())
+		packets.Reset()
+		// The old timer must not declare packets lost after the threshold increases.
+		if nextLossDelay > lossDelay {
+			require.NoError(t, sph.OnLossDetectionTimeout(oldLossTime))
+			require.Empty(t, packets.Lost)
+		}
+		now = lossTime
+		require.NoError(t, sph.OnLossDetectionTimeout(now))
+		require.Equal(t, []protocol.PacketNumber{pns[3], pns[4]}, packets.Lost)
+		latePN = pns[3]
+		lateTimePN = pns[4]
+		lossDelay = nextLossDelay
+	}
+
+	// Only application-data time thresholds grow, and migration restores the default.
+	for _, migrated := range []bool{false, true} {
+		if migrated {
+			sph.MigratedPath(now, 1200)
+		}
+		for _, encLevel := range []protocol.EncryptionLevel{
+			protocol.EncryptionInitial,
+			protocol.EncryptionHandshake,
+			protocol.Encryption0RTT,
+			protocol.Encryption1RTT,
+		} {
+			packets.Reset()
+			var pns [2]protocol.PacketNumber
+			for i := range pns {
+				pn := sph.PopPacketNumber(encLevel.PacketNumberSpace())
+				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
+				pns[i] = pn
+			}
+			now = now.Add(rtt)
+			ackLevel := encLevel
+			if encLevel == protocol.Encryption0RTT {
+				ackLevel = protocol.Encryption1RTT
+			}
+			_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[1])}, ackLevel, now)
+			require.NoError(t, err)
+			require.Empty(t, packets.Lost)
+			lossTime := now.Add(rtt / 8)
+			if !migrated && encLevel.PacketNumberSpace() == protocol.PacketNumberSpaceAppData {
+				lossTime = now.Add(rtt)
+			}
+			require.Equal(t, lossTime, sph.GetLossDetectionTimeout())
+			now = lossTime
+			require.NoError(t, sph.OnLossDetectionTimeout(now))
+			require.Equal(t, []protocol.PacketNumber{pns[0]}, packets.Lost)
+		}
 	}
 }
 
