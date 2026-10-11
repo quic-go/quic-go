@@ -211,7 +211,7 @@ func Test0RTTTransfer(t *testing.T) {
 		zeroRTTPackets := counter.getRcvd0RTTPacketNumbers()
 		t.Logf("received %d 0-RTT packets", len(zeroRTTPackets))
 		require.Greater(t, num0RTT, 20)
-		require.Contains(t, zeroRTTPackets, protocol.PacketNumber(0))
+		require.Len(t, zeroRTTPackets, num0RTT)
 	})
 }
 
@@ -1090,7 +1090,7 @@ func Test0RTTPacketQueueing(t *testing.T) {
 			}
 		}
 		require.Less(t, int(dataSent), 6000)
-		require.Equal(t, protocol.PacketNumber(0), zeroRTTPackets[0])
+		require.Greater(t, zeroRTTPackets[0], counter.getRcvdLongHeaderPackets()[0].hdr.PacketNumber)
 	})
 }
 

@@ -134,6 +134,12 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, e, protocol.ECNNon, 1200, false, false)
 		pns = append(pns, pn)
 	}
+	highest := protocol.InvalidPacketNumber
+	if encLevel != protocol.Encryption1RTT {
+		highest = pns[len(pns)-1]
+	}
+	require.Equal(t, highest, sph.(*sentPacketHandler).handshakePNs.Highest())
+	require.Equal(t, pns[0], sph.(*sentPacketHandler).hist.FirstPacketNumber())
 
 	_, err := sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[7], pns[8], pns[9])},
@@ -336,6 +342,48 @@ func TestSentPacketHandlerRTTAcrossPacketNumberSpaces(t *testing.T) {
 	// This causes an RTT measurement, since the second handshake packet was sent last.
 	ackPackets(t, now.Add(5*time.Second), protocol.EncryptionHandshake, handshake1, handshake2)
 	require.Equal(t, 3*time.Second, rttStats.LatestRTT())
+}
+
+func TestSentPacketHandlerCongestionAcrossPacketNumberSpaces(t *testing.T) {
+	var eventRecorder events.Recorder
+	sph := NewSentPacketHandler(
+		0, 1200, utils.NewRTTStats(), &utils.ConnectionStats{}, true, false,
+		nil, protocol.PerspectiveServer, &eventRecorder, utils.DefaultLogger,
+	)
+	var packets packetTracker
+	now := monotime.Now()
+	sendPacket := func(encLevel protocol.EncryptionLevel) protocol.PacketNumber {
+		pn := sph.PopPacketNumber(encLevel.PacketNumberSpace())
+		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1200, false, false)
+		return pn
+	}
+	ackPacket := func(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) {
+		_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pn)}, encLevel, now.Add(time.Millisecond))
+		require.NoError(t, err)
+	}
+
+	for i := range 5 {
+		require.Equal(t, protocol.PacketNumber(i), sendPacket(protocol.EncryptionInitial))
+	}
+	handshakePN := sendPacket(protocol.EncryptionHandshake)
+	appDataPN := sendPacket(protocol.Encryption1RTT)
+	require.Equal(t, protocol.PacketNumber(5), handshakePN)
+	require.Equal(t, protocol.PacketNumber(6), appDataPN)
+
+	ackPacket(4, protocol.EncryptionInitial)
+	require.Contains(t, eventRecorder.Events(qlog.CongestionStateUpdated{}), qlog.CongestionStateUpdated{State: qlog.CongestionStateRecovery})
+	eventRecorder.Clear()
+	// ACKs for packets sent before the loss was detected don't end recovery,
+	// even when they belong to another packet number space.
+	ackPacket(handshakePN, protocol.EncryptionHandshake)
+	ackPacket(appDataPN, protocol.Encryption1RTT)
+	require.Empty(t, eventRecorder.Events(qlog.CongestionStateUpdated{}))
+
+	now = now.Add(2 * time.Millisecond)
+	ackPacket(sendPacket(protocol.Encryption1RTT), protocol.Encryption1RTT)
+	require.Contains(t, eventRecorder.Events(qlog.CongestionStateUpdated{}), qlog.CongestionStateUpdated{State: qlog.CongestionStateApplicationLimited})
+	// The other ACKs must not declare the remaining Initial packets lost.
+	require.Equal(t, []protocol.PacketNumber{0, 1}, packets.Lost)
 }
 
 func TestSentPacketHandlerRTTAckDelays(t *testing.T) {
@@ -653,9 +701,15 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 				pn := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
 				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
 				pns[i] = pn
+				for _, level := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake} {
+					sph.SentPacket(now, sph.PopPacketNumber(level.PacketNumberSpace()), protocol.InvalidPacketNumber, nil, nil, level, protocol.ECNNon, 1000, false, false)
+				}
 			}
 			now = now.Add(time.Second)
-			_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3], pns[4])}, protocol.Encryption1RTT, now)
+			_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2])}, protocol.Encryption1RTT, now)
+			require.NoError(t, err)
+			require.Empty(t, packets.Lost)
+			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3], pns[4])}, protocol.Encryption1RTT, now)
 			require.NoError(t, err)
 			require.Equal(t, []protocol.PacketNumber{pns[0], pns[1]}, packets.Lost)
 
@@ -669,8 +723,16 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 				pn := sph.PopPacketNumber(encLevel.PacketNumberSpace())
 				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
 				nextPNs[i] = pn
+				for _, level := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption1RTT} {
+					if level != encLevel {
+						sph.SentPacket(now, sph.PopPacketNumber(level.PacketNumberSpace()), protocol.InvalidPacketNumber, nil, nil, level, protocol.ECNNon, 1000, false, false)
+					}
+				}
 			}
 			now = now.Add(time.Second)
+			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(nextPNs[2])}, encLevel, now)
+			require.NoError(t, err)
+			require.Empty(t, packets.Lost)
 			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(nextPNs[3])}, encLevel, now)
 			require.NoError(t, err)
 			// The reordered ACK above only disables the packet threshold in the
@@ -965,6 +1027,8 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	now := monotime.Now()
 	initialPNs[0] = sendPacket(t, now, protocol.EncryptionInitial)
 	initialTimes[0] = now
+	oldAppPN := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
+	sph.SentPacket(now, oldAppPN, protocol.InvalidPacketNumber, nil, nil, protocol.Encryption1RTT, protocol.ECNNon, 100, false, false)
 	now = now.Add(100 * time.Millisecond)
 	handshakePNs[0] = sendPacket(t, now, protocol.EncryptionHandshake)
 	handshakeTimes[0] = now
@@ -1028,8 +1092,14 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 
 	// Drop Handshake packet number space.
 	// This confirms the handshake, and the PTO timer is now based on the 1-RTT packet number space.
+	require.NotNil(t, sph.(*sentPacketHandler).handshakePNs)
 	sph.DropPackets(protocol.EncryptionHandshake, now)
 	require.Equal(t, sendTime.Add(rttStats.PTO(false)), sph.GetLossDetectionTimeout())
+	require.NotNil(t, sph.(*sentPacketHandler).handshakePNs)
+	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(oldAppPN)}, protocol.Encryption1RTT, now)
+	require.NoError(t, err)
+	require.NotZero(t, sph.(*sentPacketHandler).hist.Len())
+	require.Nil(t, sph.(*sentPacketHandler).handshakePNs)
 }
 
 func TestSentPacketHandler0RTT(t *testing.T) {
@@ -1061,11 +1131,11 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	}
 
 	now := monotime.Now()
-	sendPacket(t, now, protocol.Encryption0RTT)
+	zeroRTT1 := sendPacket(t, now, protocol.Encryption0RTT)
 	sendPacket(t, now.Add(100*time.Millisecond), protocol.EncryptionHandshake)
-	sendPacket(t, now.Add(200*time.Millisecond), protocol.Encryption0RTT)
-	sendPacket(t, now.Add(300*time.Millisecond), protocol.Encryption1RTT)
-	sendPacket(t, now.Add(400*time.Millisecond), protocol.Encryption1RTT)
+	zeroRTT2 := sendPacket(t, now.Add(200*time.Millisecond), protocol.Encryption0RTT)
+	oneRTT1 := sendPacket(t, now.Add(300*time.Millisecond), protocol.Encryption1RTT)
+	oneRTT2 := sendPacket(t, now.Add(400*time.Millisecond), protocol.Encryption1RTT)
 	require.Equal(t, protocol.ByteCount(5000), sph.(*sentPacketHandler).getBytesInFlight())
 
 	// The PTO timer is based on the Handshake packet number space, not the 0-RTT packets
@@ -1079,6 +1149,10 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	require.Equal(t, protocol.ByteCount(3000), sph.(*sentPacketHandler).getBytesInFlight())
 	// 0-RTT are discarded, not lost
 	require.Empty(t, appDataPackets.Lost)
+	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(zeroRTT1, zeroRTT2, oneRTT1, oneRTT2)}, protocol.Encryption1RTT, now)
+	require.NoError(t, err)
+	require.Equal(t, []protocol.PacketNumber{oneRTT1, oneRTT2}, appDataPackets.Acked)
+	require.Equal(t, protocol.ByteCount(1000), sph.(*sentPacketHandler).getBytesInFlight())
 }
 
 func TestSentPacketHandlerCongestion(t *testing.T) {
@@ -1234,6 +1308,7 @@ func testSentPacketHandlerRetry(t *testing.T, rtt, expectedRTT time.Duration) {
 	require.Greater(t, initialPN, initialPNs[1])
 	appDataPN, _ := sph.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
 	require.Greater(t, appDataPN, appDataPNs[1])
+	require.Equal(t, initialPN, appDataPN)
 }
 
 func TestSentPacketHandlerRetryAfterPTO(t *testing.T) {
