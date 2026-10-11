@@ -411,6 +411,42 @@ func (c *MockSendAlgorithmWithDebugInfosOnRetransmissionTimeoutCall) DoAndReturn
 	return c
 }
 
+// OnSpuriousLoss mocks base method.
+func (m *MockSendAlgorithmWithDebugInfos) OnSpuriousLoss(number protocol.PacketNumber) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnSpuriousLoss", number)
+}
+
+// OnSpuriousLoss indicates an expected call of OnSpuriousLoss.
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnSpuriousLoss(number any) *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnSpuriousLoss", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnSpuriousLoss), number)
+	return &MockSendAlgorithmWithDebugInfosOnSpuriousLossCall{Call: call}
+}
+
+// MockSendAlgorithmWithDebugInfosOnSpuriousLossCall wrap *gomock.Call
+type MockSendAlgorithmWithDebugInfosOnSpuriousLossCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall) Return() *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall) Do(f func(protocol.PacketNumber)) *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall) DoAndReturn(f func(protocol.PacketNumber)) *MockSendAlgorithmWithDebugInfosOnSpuriousLossCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // SetMaxDatagramSize mocks base method.
 func (m *MockSendAlgorithmWithDebugInfos) SetMaxDatagramSize(arg0 protocol.ByteCount) {
 	m.ctrl.T.Helper()
