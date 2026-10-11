@@ -204,6 +204,10 @@ func (h *sentPacketHistory) HasOutstandingPackets() bool {
 	return h.numOutstanding > 0
 }
 
+func (h *sentPacketHistory) FirstPacketNumber() protocol.PacketNumber {
+	return h.firstPacketNumber
+}
+
 func (h *sentPacketHistory) HasOutstandingPathProbes() bool {
 	return len(h.pathProbePackets) > 0
 }

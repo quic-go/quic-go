@@ -56,11 +56,31 @@ type alarmTimer struct {
 	EncryptionLevel protocol.EncryptionLevel
 }
 
+type handshakePacketNumbers struct {
+	Initial   []protocol.PacketNumber
+	Handshake []protocol.PacketNumber
+}
+
+func (p *handshakePacketNumbers) Highest() protocol.PacketNumber {
+	switch {
+	case len(p.Initial) == 0 && len(p.Handshake) == 0:
+		return protocol.InvalidPacketNumber
+	case len(p.Initial) == 0:
+		return p.Handshake[len(p.Handshake)-1]
+	case len(p.Handshake) == 0:
+		return p.Initial[len(p.Initial)-1]
+	default:
+		return max(p.Initial[len(p.Initial)-1], p.Handshake[len(p.Handshake)-1])
+	}
+}
+
 type sentPacketHandler struct {
 	// Packet numbers and their history are shared across encryption levels.
 	// ACK processing and loss detection still use the state for each space.
 	pns  *packetNumberGenerator
 	hist sentPacketHistory
+
+	handshakePNs *handshakePacketNumbers
 
 	initialPackets   *packetNumberSpace
 	handshakePackets *packetNumberSpace
@@ -144,17 +164,21 @@ func NewSentPacketHandler(
 		peerAddressValidated:           pers == protocol.PerspectiveClient || clientAddressValidated,
 		pns:                            newPacketNumberGenerator(initialPN, skipPacketInitialPeriod, skipPacketMaxPeriod),
 		hist:                           *newSentPacketHistory(),
-		initialPackets:                 newPacketNumberSpace(),
-		handshakePackets:               newPacketNumberSpace(),
-		appDataPackets:                 newPacketNumberSpace(),
-		lostPackets:                    *newLostPacketTracker(),
-		rttStats:                       rttStats,
-		connStats:                      connStats,
-		congestion:                     congestion,
-		ignorePacketsBelow:             ignorePacketsBelow,
-		perspective:                    pers,
-		qlogger:                        qlogger,
-		logger:                         logger,
+		handshakePNs: &handshakePacketNumbers{
+			Initial:   make([]protocol.PacketNumber, 0, 4),
+			Handshake: make([]protocol.PacketNumber, 0, 8),
+		},
+		initialPackets:     newPacketNumberSpace(),
+		handshakePackets:   newPacketNumberSpace(),
+		appDataPackets:     newPacketNumberSpace(),
+		lostPackets:        *newLostPacketTracker(),
+		rttStats:           rttStats,
+		connStats:          connStats,
+		congestion:         congestion,
+		ignorePacketsBelow: ignorePacketsBelow,
+		perspective:        pers,
+		qlogger:            qlogger,
+		logger:             logger,
 	}
 	if enableECN {
 		h.enableECN = true
@@ -262,6 +286,13 @@ func (h *sentPacketHandler) SentPacket(
 
 	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 	pnSpace.largestSent = pn
+	//nolint:exhaustive // Only Initial and Handshake packet numbers are stored separately.
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		h.handshakePNs.Initial = append(h.handshakePNs.Initial, pn)
+	case protocol.EncryptionHandshake:
+		h.handshakePNs.Handshake = append(h.handshakePNs.Handshake, pn)
+	}
 
 	p := getPacket()
 	p.SendTime = t
@@ -777,6 +808,19 @@ func (h *sentPacketHandler) detectLostPathProbes(now monotime.Time) {
 	}
 }
 
+func countPacketNumbers(pns []protocol.PacketNumber, lower, upper protocol.PacketNumber) protocol.PacketNumber {
+	if len(pns) == 0 || pns[len(pns)-1] <= lower {
+		return 0
+	}
+	var count protocol.PacketNumber
+	for _, pn := range pns {
+		if pn > lower && pn <= upper {
+			count++
+		}
+	}
+	return count
+}
+
 func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protocol.EncryptionLevel) {
 	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 	pnSpace.lossTime = 0
@@ -800,6 +844,19 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 			continue
 		}
 
+		var distance protocol.PacketNumber
+		switch space {
+		case protocol.PacketNumberSpaceInitial:
+			distance = countPacketNumbers(h.handshakePNs.Initial, pn, pnSpace.largestAcked)
+		case protocol.PacketNumberSpaceHandshake:
+			distance = countPacketNumbers(h.handshakePNs.Handshake, pn, pnSpace.largestAcked)
+		case protocol.PacketNumberSpaceAppData:
+			distance = h.hist.Difference(pnSpace.largestAcked, pn)
+			if h.handshakePNs != nil {
+				distance -= countPacketNumbers(h.handshakePNs.Initial, pn, pnSpace.largestAcked)
+				distance -= countPacketNumbers(h.handshakePNs.Handshake, pn, pnSpace.largestAcked)
+			}
+		}
 		var packetLost bool
 		if !p.SendTime.After(lostSendTime) {
 			packetLost = true
@@ -817,7 +874,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 					})
 				}
 			}
-		} else if usePacketThreshold && h.hist.Difference(pnSpace.largestAcked, pn) >= packetThreshold {
+		} else if usePacketThreshold && distance >= packetThreshold {
 			packetLost = true
 			if !p.isPathProbePacket && p.IsAckEliciting() {
 				if h.logger.Debug() {
@@ -857,6 +914,13 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 					h.ecnTracker.LostPacket(pn)
 				}
 			}
+		}
+	}
+	if h.handshakeConfirmed && h.handshakePNs != nil {
+		firstPN := h.hist.FirstPacketNumber()
+		highestPN := h.handshakePNs.Highest()
+		if firstPN == protocol.InvalidPacketNumber || highestPN == protocol.InvalidPacketNumber || firstPN > highestPN {
+			h.handshakePNs = nil
 		}
 	}
 }
@@ -1086,6 +1150,8 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 		}
 	}
 	h.hist = *newSentPacketHistory()
+	h.handshakePNs.Initial = h.handshakePNs.Initial[:0]
+	h.handshakePNs.Handshake = h.handshakePNs.Handshake[:0]
 	h.initialPackets = newPacketNumberSpace()
 	h.appDataPackets = newPacketNumberSpace()
 	oldAlarm := h.alarm

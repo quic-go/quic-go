@@ -134,6 +134,12 @@ func testSentPacketHandlerSendAndAcknowledge(t *testing.T, encLevel protocol.Enc
 		sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, e, protocol.ECNNon, 1200, false, false)
 		pns = append(pns, pn)
 	}
+	highest := protocol.InvalidPacketNumber
+	if encLevel != protocol.Encryption1RTT {
+		highest = pns[len(pns)-1]
+	}
+	require.Equal(t, highest, sph.(*sentPacketHandler).handshakePNs.Highest())
+	require.Equal(t, pns[0], sph.(*sentPacketHandler).hist.FirstPacketNumber())
 
 	_, err := sph.ReceivedAck(
 		&wire.AckFrame{AckRanges: ackRanges(pns[0], pns[1], pns[2], pns[3], pns[4], pns[7], pns[8], pns[9])},
@@ -695,9 +701,15 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 				pn := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
 				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, protocol.ECNNon, 1000, false, false)
 				pns[i] = pn
+				for _, level := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake} {
+					sph.SentPacket(now, sph.PopPacketNumber(level.PacketNumberSpace()), protocol.InvalidPacketNumber, nil, nil, level, protocol.ECNNon, 1000, false, false)
+				}
 			}
 			now = now.Add(time.Second)
-			_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3], pns[4])}, protocol.Encryption1RTT, now)
+			_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2])}, protocol.Encryption1RTT, now)
+			require.NoError(t, err)
+			require.Empty(t, packets.Lost)
+			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3], pns[4])}, protocol.Encryption1RTT, now)
 			require.NoError(t, err)
 			require.Equal(t, []protocol.PacketNumber{pns[0], pns[1]}, packets.Lost)
 
@@ -711,8 +723,16 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 				pn := sph.PopPacketNumber(encLevel.PacketNumberSpace())
 				sph.SentPacket(now, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
 				nextPNs[i] = pn
+				for _, level := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption1RTT} {
+					if level != encLevel {
+						sph.SentPacket(now, sph.PopPacketNumber(level.PacketNumberSpace()), protocol.InvalidPacketNumber, nil, nil, level, protocol.ECNNon, 1000, false, false)
+					}
+				}
 			}
 			now = now.Add(time.Second)
+			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(nextPNs[2])}, encLevel, now)
+			require.NoError(t, err)
+			require.Empty(t, packets.Lost)
 			_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(nextPNs[3])}, encLevel, now)
 			require.NoError(t, err)
 			// The reordered ACK above only disables the packet threshold in the
@@ -1007,6 +1027,8 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 	now := monotime.Now()
 	initialPNs[0] = sendPacket(t, now, protocol.EncryptionInitial)
 	initialTimes[0] = now
+	oldAppPN := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
+	sph.SentPacket(now, oldAppPN, protocol.InvalidPacketNumber, nil, nil, protocol.Encryption1RTT, protocol.ECNNon, 100, false, false)
 	now = now.Add(100 * time.Millisecond)
 	handshakePNs[0] = sendPacket(t, now, protocol.EncryptionHandshake)
 	handshakeTimes[0] = now
@@ -1070,8 +1092,14 @@ func TestSentPacketHandlerPacketNumberSpacesPTO(t *testing.T) {
 
 	// Drop Handshake packet number space.
 	// This confirms the handshake, and the PTO timer is now based on the 1-RTT packet number space.
+	require.NotNil(t, sph.(*sentPacketHandler).handshakePNs)
 	sph.DropPackets(protocol.EncryptionHandshake, now)
 	require.Equal(t, sendTime.Add(rttStats.PTO(false)), sph.GetLossDetectionTimeout())
+	require.NotNil(t, sph.(*sentPacketHandler).handshakePNs)
+	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(oldAppPN)}, protocol.Encryption1RTT, now)
+	require.NoError(t, err)
+	require.NotZero(t, sph.(*sentPacketHandler).hist.Len())
+	require.Nil(t, sph.(*sentPacketHandler).handshakePNs)
 }
 
 func TestSentPacketHandler0RTT(t *testing.T) {
