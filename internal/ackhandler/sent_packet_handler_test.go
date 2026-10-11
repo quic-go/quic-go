@@ -766,8 +766,10 @@ func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {
 
 func TestSentPacketHandlerAdaptiveTimeThreshold(t *testing.T) {
 	const rtt = time.Second
+	var eventRecorder events.Recorder
 	rttStats := utils.NewRTTStats()
 	rttStats.SetMaxAckDelay(rtt / 2)
+	rttStats.SetInitialRTT(200 * time.Millisecond)
 	sph := NewSentPacketHandler(
 		0,
 		1200,
@@ -777,9 +779,18 @@ func TestSentPacketHandlerAdaptiveTimeThreshold(t *testing.T) {
 		false,
 		nil,
 		protocol.PerspectiveServer,
-		nil,
+		&eventRecorder,
 		utils.DefaultLogger,
 	)
+	parameters := qlog.RecoveryParametersSet{
+		EncryptionLevel:         protocol.Encryption1RTT,
+		ReorderingThreshold:     packetThreshold,
+		TimeThreshold:           1.125,
+		TimerGranularity:        protocol.TimerGranularity,
+		InitialCongestionWindow: 32 * 1200,
+		InitialRTT:              200 * time.Millisecond,
+	}
+	require.Equal(t, []qlogwriter.Event{parameters}, eventRecorder.Events(qlog.RecoveryParametersSet{}))
 
 	var packets packetTracker
 	now := monotime.Now()
@@ -855,7 +866,10 @@ func TestSentPacketHandlerAdaptiveTimeThreshold(t *testing.T) {
 	// Only application-data time thresholds grow, and migration restores the default.
 	for _, migrated := range []bool{false, true} {
 		if migrated {
+			eventRecorder.Clear()
 			sph.MigratedPath(now, 1200)
+			parameters.InitialRTT = utils.DefaultInitialRTT
+			require.Equal(t, []qlogwriter.Event{parameters}, eventRecorder.Events(qlog.RecoveryParametersSet{}))
 		}
 		for _, encLevel := range []protocol.EncryptionLevel{
 			protocol.EncryptionInitial,
@@ -1912,6 +1926,14 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		},
 		eventRecorder.Events(qlog.SpuriousLoss{}),
 	)
+	parameters := qlog.RecoveryParametersSet{
+		EncryptionLevel:         protocol.Encryption1RTT,
+		ReorderingThreshold:     packetThreshold,
+		PacketThresholdDisabled: true,
+		TimeThreshold:           1.125,
+		TimerGranularity:        protocol.TimerGranularity,
+	}
+	require.Equal(t, []qlogwriter.Event{parameters}, eventRecorder.Events(qlog.RecoveryParametersSet{}))
 
 	// Packet-threshold detection is disabled; fire once at pns[15]'s loss deadline.
 	now = sph.GetLossDetectionTimeout().Add((15 - 7) * 10 * time.Millisecond)
@@ -1976,13 +1998,17 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		PacketReordering: 0,
 		TimeReordering:   now.Sub(start) - 130*time.Millisecond,
 	}}, eventRecorder.Events(qlog.SpuriousLoss{}))
+	parameters.TimeThreshold = 1.25
+	require.Equal(t, []qlogwriter.Event{parameters}, eventRecorder.Events(qlog.RecoveryParametersSet{}))
 
 	// An ACK containing only the remaining lost packets can also undo the cutback.
+	eventRecorder.Clear()
 	require.Less(t, connStats.CongestionWindow.Load(), window)
 	now = now.Add(secondAckDelay)
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[14], pns[15])}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 	require.Equal(t, window, connStats.CongestionWindow.Load())
+	require.Empty(t, eventRecorder.Events(qlog.RecoveryParametersSet{}))
 
 	// MTU probes, path probes and ACK-only packets aren't tracked as spurious losses.
 	now = now.Add(3 * secondAckDelay)
@@ -2002,6 +2028,7 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(mtuProbe, pathProbe, ackOnly)}, protocol.Encryption1RTT, now.Add(rtt+secondAckDelay))
 	require.NoError(t, err)
 	require.Empty(t, eventRecorder.Events(qlog.SpuriousLoss{}))
+	require.Empty(t, eventRecorder.Events(qlog.RecoveryParametersSet{}))
 }
 
 func BenchmarkSendAndAcknowledge(b *testing.B) {

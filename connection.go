@@ -439,6 +439,18 @@ var newClientConnection = func(
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	s.preSetup()
+	if len(tlsConf.ServerName) > 0 {
+		s.tokenStoreKey = tlsConf.ServerName
+	} else {
+		s.tokenStoreKey = conn.RemoteAddr().String()
+	}
+	var token *ClientToken
+	if s.config.TokenStore != nil {
+		token = s.config.TokenStore.Pop(s.tokenStoreKey)
+		if token != nil {
+			s.rttStats.SetInitialRTT(token.rtt)
+		}
+	}
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		initialPacketNumber,
 		s.config.initialPacketSize(),
@@ -495,16 +507,8 @@ var newClientConnection = func(
 	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
-	if len(tlsConf.ServerName) > 0 {
-		s.tokenStoreKey = tlsConf.ServerName
-	} else {
-		s.tokenStoreKey = conn.RemoteAddr().String()
-	}
-	if s.config.TokenStore != nil {
-		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil {
-			s.packer.SetToken(token.data)
-			s.rttStats.SetInitialRTT(token.rtt)
-		}
+	if token != nil {
+		s.packer.SetToken(token.data)
 	}
 	return &wrappedConn{Conn: s}
 }

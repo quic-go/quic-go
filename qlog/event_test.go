@@ -694,6 +694,40 @@ func TestDatagramDropped(t *testing.T) {
 	}`, ev)
 }
 
+func TestRecoveryParametersSet(t *testing.T) {
+	parameters := RecoveryParametersSet{
+		EncryptionLevel:         protocol.Encryption1RTT,
+		ReorderingThreshold:     3,
+		TimeThreshold:           1.125,
+		TimerGranularity:        time.Millisecond,
+		InitialCongestionWindow: 38400,
+		InitialRTT:              150 * time.Millisecond,
+	}
+	name, ev := testEventEncoding(t, &parameters)
+	require.Equal(t, "quic:recovery_parameters_set", name)
+	require.JSONEq(t, `{
+		"packet_number_space": "application_data",
+		"reordering_threshold": 3,
+		"time_threshold": 1.125,
+		"timer_granularity": 1,
+		"initial_congestion_window": 38400,
+		"initial_rtt": 150
+	}`, ev)
+
+	parameters.PacketThresholdDisabled = true
+	parameters.TimeThreshold = 1.25
+	parameters.InitialCongestionWindow = 0
+	parameters.InitialRTT = 0
+	name, ev = testEventEncoding(t, &parameters)
+	require.Equal(t, "quic:recovery_parameters_set", name)
+	require.JSONEq(t, `{
+		"packet_number_space": "application_data",
+		"reordering_threshold": "disabled",
+		"time_threshold": 1.25,
+		"timer_granularity": 1
+	}`, ev)
+}
+
 func TestMetricsUpdated(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(15*time.Millisecond, 0)
