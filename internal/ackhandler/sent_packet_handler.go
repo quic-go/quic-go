@@ -188,7 +188,26 @@ func NewSentPacketHandler(
 		h.enableECN = true
 		h.ecnTracker = newECNTracker(logger, qlogger)
 	}
+	h.qlogRecoveryParametersSet(true)
 	return h
+}
+
+func (h *sentPacketHandler) qlogRecoveryParametersSet(initial bool) {
+	if h.qlogger == nil {
+		return
+	}
+	ev := qlog.RecoveryParametersSet{
+		EncryptionLevel:         protocol.Encryption1RTT,
+		ReorderingThreshold:     packetThreshold,
+		PacketThresholdDisabled: h.packetThresholdDisabled,
+		TimeThreshold:           float64(8+h.timeThresholdEighths) / 8,
+		TimerGranularity:        protocol.TimerGranularity,
+	}
+	if initial {
+		ev.InitialCongestionWindow = h.congestion.GetCongestionWindow()
+		ev.InitialRTT = h.rttStats.SmoothedRTT()
+	}
+	h.qlogger.RecordEvent(ev)
 }
 
 func (h *sentPacketHandler) removeFromBytesInFlight(p *packet) {
@@ -290,7 +309,8 @@ func (h *sentPacketHandler) SentPacket(
 
 	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 	pnSpace.largestSent = pn
-	if encLevel.PacketNumberSpace() == protocol.PacketNumberSpaceAppData && h.minPNToRelaxReordering == protocol.InvalidPacketNumber {
+	if encLevel.PacketNumberSpace() == protocol.PacketNumberSpaceAppData &&
+		h.minPNToRelaxReordering == protocol.InvalidPacketNumber {
 		h.minPNToRelaxReordering = pn
 	}
 	//nolint:exhaustive // Only Initial and Handshake packet numbers are stored separately.
@@ -536,6 +556,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime monotime.Time) (_ []protocol.PacketNumber, timeThresholdIncreased bool) {
 	var maxPacketReordering protocol.PacketNumber
 	var maxTimeReordering time.Duration
+	var packetThresholdChanged bool
 	ackRangeIdx := len(ack.AckRanges) - 1
 	var spuriousLosses []protocol.PacketNumber
 	for pn, sendTime := range h.lostPackets.All() {
@@ -548,7 +569,10 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 			continue
 		}
 		if pn <= ackRange.Largest {
-			h.packetThresholdDisabled = true
+			if !h.packetThresholdDisabled {
+				h.packetThresholdDisabled = true
+				packetThresholdChanged = true
+			}
 			packetReordering := h.hist.Difference(ack.LargestAcked(), pn)
 			timeReordering := ackTime.Sub(sendTime)
 			maxPacketReordering = max(maxPacketReordering, packetReordering)
@@ -577,9 +601,12 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	if maxTimeReordering > lossDelay && h.timeThresholdEighths < maxTimeThresholdEighths {
 		h.timeThresholdEighths = min(2*h.timeThresholdEighths, maxTimeThresholdEighths)
 		h.minPNToRelaxReordering = protocol.InvalidPacketNumber
-		return spuriousLosses, true
+		timeThresholdIncreased = true
 	}
-	return spuriousLosses, false
+	if packetThresholdChanged || timeThresholdIncreased {
+		h.qlogRecoveryParametersSet(false)
+	}
+	return spuriousLosses, timeThresholdIncreased
 }
 
 // Packets are returned in ascending packet number order.
@@ -1236,5 +1263,6 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 		true, // use Reno
 		h.qlogger,
 	)
+	h.qlogRecoveryParametersSet(true)
 	h.setLossDetectionTimer(now)
 }
