@@ -98,18 +98,16 @@ func TestNATRebinding(t *testing.T) {
 	conn.CloseWithError(0, "")
 
 	// check that a PATH_CHALLENGE was sent
-	var pathChallenge [8]byte
-	var foundPathChallenge bool
+	var pathChallenges [][8]byte
 	for _, p := range tr.getSentShortHeaderPackets() {
 		for _, f := range p.frames {
 			switch fr := f.Frame.(type) {
 			case *qlog.PathChallengeFrame:
-				pathChallenge = fr.Data
-				foundPathChallenge = true
+				pathChallenges = append(pathChallenges, fr.Data)
 			}
 		}
 	}
-	require.True(t, foundPathChallenge)
+	require.NotEmpty(t, pathChallenges)
 
 	// check that a PATH_RESPONSE with the correct data was received
 	var foundPathResponse bool
@@ -117,7 +115,7 @@ func TestNATRebinding(t *testing.T) {
 		for _, f := range p.frames {
 			switch fr := f.Frame.(type) {
 			case *qlog.PathResponseFrame:
-				require.Equal(t, pathChallenge, fr.Data)
+				require.Contains(t, pathChallenges, fr.Data)
 				foundPathResponse = true
 			}
 		}
