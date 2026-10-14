@@ -108,14 +108,10 @@ func TestHTTP3QlogHeaderRedaction(t *testing.T) {
 		w.Header().Set("X-Secret", "response trailer secret")
 	})
 	port := startHTTPServer(t, mux, func(s *http3.Server) {
-		s.QUICConfig.Tracer = func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace {
-			return h3qlog.NewHeaderRedactor(&events.Trace{Recorder: &serverEvents}, redact)
-		}
+		s.QUICConfig.Tracer = h3qlog.RedactHeaders(newTracer(&serverEvents), redact)
 	})
 	cl := newHTTP3Client(t, func(tr *http3.Transport) {
-		tr.QUICConfig.Tracer = func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace {
-			return h3qlog.NewHeaderRedactor(&events.Trace{Recorder: &clientEvents}, redact)
-		}
+		tr.QUICConfig.Tracer = h3qlog.RedactHeaders(newTracer(&clientEvents), redact)
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

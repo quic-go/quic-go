@@ -1,8 +1,10 @@
 package qlog
 
 import (
+	"context"
 	"testing"
 
+	"github.com/quic-go/quic-go"
 	quicqlog "github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/testutils/events"
@@ -10,14 +12,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHeaderRedactor(t *testing.T) {
+func TestRedactHeaders(t *testing.T) {
 	var recorder events.Recorder
-	trace := NewHeaderRedactor(&events.Trace{Recorder: &recorder}, func(name, value string) string {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	id := quic.ConnectionIDFromBytes([]byte{1, 2, 3})
+	tracer := RedactHeaders(func(gotCtx context.Context, client bool, gotID quic.ConnectionID) qlogwriter.Trace {
+		require.Same(t, ctx, gotCtx)
+		require.True(t, client)
+		require.Equal(t, id, gotID)
+		return &events.Trace{Recorder: &recorder}
+	}, func(name, value string) string {
 		require.Equal(t, "Authorization", name)
 		require.Equal(t, "secret", value)
 		return "***"
 	})
-	producer := trace.AddProducer()
+	producer := tracer(ctx, true, id).AddProducer()
 	producer.RecordEvent(FrameCreated{Frame: Frame{Frame: HeadersFrame{
 		HeaderFields: []HeaderField{{Name: "authorization", Value: "secret"}},
 	}}})
@@ -32,10 +42,13 @@ func TestHeaderRedactor(t *testing.T) {
 	require.NoError(t, producer.Close())
 }
 
-func TestHeaderRedactorNil(t *testing.T) {
+func TestRedactHeadersNil(t *testing.T) {
 	redact := func(string, string) string { return "***" }
-	require.Nil(t, NewHeaderRedactor(nil, redact))
+	require.Nil(t, RedactHeaders(nil, redact))
 	trace := &events.Trace{}
-	require.Same(t, trace, NewHeaderRedactor(trace, nil))
-	require.Nil(t, NewHeaderRedactor(trace, redact).AddProducer())
+	tracer := func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return trace }
+	require.Same(t, trace, RedactHeaders(tracer, nil)(context.Background(), true, quic.ConnectionID{}))
+	require.Nil(t, RedactHeaders(tracer, redact)(context.Background(), true, quic.ConnectionID{}).AddProducer())
+	nilTracer := func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace { return nil }
+	require.Nil(t, RedactHeaders(nilTracer, redact)(context.Background(), true, quic.ConnectionID{}))
 }

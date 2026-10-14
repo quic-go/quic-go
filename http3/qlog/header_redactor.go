@@ -1,20 +1,31 @@
 package qlog
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlogwriter"
 )
 
-// NewHeaderRedactor returns a trace that redacts HTTP/3 header and trailer values.
+// RedactHeaders wraps a QUIC connection tracer to redact HTTP/3 header and trailer field values.
 // redact receives names canonicalized by [http.CanonicalHeaderKey].
 // Pseudoheaders are left unchanged.
-func NewHeaderRedactor(trace qlogwriter.Trace, redact func(name, value string) string) qlogwriter.Trace {
-	if trace == nil || redact == nil {
-		return trace
+func RedactHeaders(
+	tracer func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace,
+	redact func(name, value string) string,
+) func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace {
+	if tracer == nil || redact == nil {
+		return tracer
 	}
-	return &headerRedactingTrace{Trace: trace, redact: redact}
+	return func(ctx context.Context, client bool, id quic.ConnectionID) qlogwriter.Trace {
+		trace := tracer(ctx, client, id)
+		if trace == nil {
+			return nil
+		}
+		return &headerRedactingTrace{Trace: trace, redact: redact}
+	}
 }
 
 type headerRedactingTrace struct {
