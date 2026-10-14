@@ -15,11 +15,8 @@ import (
 func TestRedactHeaders(t *testing.T) {
 	var recorder events.Recorder
 	var names []string
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	id := quic.ConnectionIDFromBytes([]byte{1, 2, 3})
-	tracer := RedactHeaders(func(gotCtx context.Context, client bool, gotID quic.ConnectionID) qlogwriter.Trace {
-		require.Same(t, ctx, gotCtx)
+	tracer := RedactHeaders(func(_ context.Context, client bool, gotID quic.ConnectionID) qlogwriter.Trace {
 		require.True(t, client)
 		require.Equal(t, id, gotID)
 		return &events.Trace{Recorder: &recorder}
@@ -28,7 +25,7 @@ func TestRedactHeaders(t *testing.T) {
 		require.Equal(t, "secret", value)
 		return "***"
 	})
-	producer := tracer(ctx, true, id).AddProducer()
+	producer := tracer(context.Background(), true, id).AddProducer()
 	producer.RecordEvent(FrameCreated{Frame: Frame{Frame: HeadersFrame{
 		HeaderFields: []HeaderField{
 			{Name: "authorization", Value: "secret"},
