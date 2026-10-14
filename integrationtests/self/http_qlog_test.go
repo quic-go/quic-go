@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -87,8 +88,14 @@ func TestHTTP3Qlog(t *testing.T) {
 func TestHTTP3QlogHeaderRedaction(t *testing.T) {
 	var serverEvents, clientEvents events.Recorder
 	redact := func(name, value string) string {
-		assert.False(t, strings.HasPrefix(name, ":"), "pseudoheaders must not be passed to the redactor")
 		switch name {
+		case ":path":
+			u, err := url.ParseRequestURI(value)
+			require.NoError(t, err)
+			query := u.Query()
+			query.Set("token", "***")
+			u.RawQuery = query.Encode()
+			return u.RequestURI()
 		case "Authorization", "Set-Cookie", "X-Secret":
 			return "***"
 		default:
@@ -99,6 +106,7 @@ func TestHTTP3QlogHeaderRedaction(t *testing.T) {
 	mux.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.Copy(io.Discard, r.Body)
 		assert.NoError(t, err)
+		assert.Equal(t, "secret", r.URL.Query().Get("token"))
 		assert.Equal(t, "request secret", r.Header.Get("Authorization"))
 		assert.Equal(t, "request trailer secret", r.Trailer.Get("X-Secret"))
 		w.Header().Set("Set-Cookie", "response secret")
@@ -115,7 +123,7 @@ func TestHTTP3QlogHeaderRedaction(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("https://localhost:%d/headers", port), strings.NewReader("request body"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("https://localhost:%d/headers?format=json&token=secret", port), strings.NewReader("request body"))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "request secret")
 	req.Header.Set("X-Public", "public")
@@ -149,7 +157,7 @@ func TestHTTP3QlogHeaderRedaction(t *testing.T) {
 		require.Equal(t, []string{"***"}, fields["set-cookie"])
 		require.Equal(t, []string{"***", "***"}, fields["x-secret"])
 		require.Equal(t, []string{"public", "public"}, fields["x-public"])
-		require.Equal(t, []string{"/headers"}, fields[":path"])
+		require.Equal(t, []string{"/headers?format=json&token=%2A%2A%2A"}, fields[":path"])
 		require.Equal(t, []string{"200"}, fields[":status"])
 	}
 }

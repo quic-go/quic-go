@@ -14,6 +14,7 @@ import (
 
 func TestRedactHeaders(t *testing.T) {
 	var recorder events.Recorder
+	var names []string
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	id := quic.ConnectionIDFromBytes([]byte{1, 2, 3})
@@ -23,20 +24,27 @@ func TestRedactHeaders(t *testing.T) {
 		require.Equal(t, id, gotID)
 		return &events.Trace{Recorder: &recorder}
 	}, func(name, value string) string {
-		require.Equal(t, "Authorization", name)
+		names = append(names, name)
 		require.Equal(t, "secret", value)
 		return "***"
 	})
 	producer := tracer(ctx, true, id).AddProducer()
 	producer.RecordEvent(FrameCreated{Frame: Frame{Frame: HeadersFrame{
-		HeaderFields: []HeaderField{{Name: "authorization", Value: "secret"}},
+		HeaderFields: []HeaderField{
+			{Name: "authorization", Value: "secret"},
+			{Name: ":path", Value: "secret"},
+		},
 	}}})
 	data := FrameParsed{Frame: Frame{Frame: DataFrame{}}}
 	mtu := quicqlog.MTUUpdated{Value: 1400}
 	producer.RecordEvent(data)
 	producer.RecordEvent(mtu)
+	require.Equal(t, []string{"Authorization", ":path"}, names)
 	require.Equal(t, []qlogwriter.Event{
-		FrameCreated{Frame: Frame{Frame: HeadersFrame{HeaderFields: []HeaderField{{Name: "authorization", Value: "***"}}}}},
+		FrameCreated{Frame: Frame{Frame: HeadersFrame{HeaderFields: []HeaderField{
+			{Name: "authorization", Value: "***"},
+			{Name: ":path", Value: "***"},
+		}}}},
 		data, mtu,
 	}, recorder.Events())
 	require.NoError(t, producer.Close())

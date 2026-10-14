@@ -10,8 +10,8 @@ import (
 )
 
 // RedactHeaders wraps a QUIC connection tracer to redact HTTP/3 header and trailer field values.
-// redact receives names canonicalized by [http.CanonicalHeaderKey].
-// Pseudoheaders are left unchanged.
+// redact receives names canonicalized by [http.CanonicalHeaderKey], except pseudoheader
+// names, which are passed unchanged in lowercase (e.g. ":path").
 func RedactHeaders(
 	tracer func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace,
 	redact func(name, value string) string,
@@ -66,9 +66,10 @@ func (r *headerRedactingRecorder) redactFrame(frame Frame) {
 		return
 	}
 	for i, f := range hf.HeaderFields {
-		// pseudoheaders are left unchanged
-		if !strings.HasPrefix(f.Name, ":") {
-			hf.HeaderFields[i].Value = r.redact(http.CanonicalHeaderKey(f.Name), f.Value)
+		name := f.Name
+		if !strings.HasPrefix(name, ":") {
+			name = http.CanonicalHeaderKey(name)
 		}
+		hf.HeaderFields[i].Value = r.redact(name, f.Value)
 	}
 }
