@@ -2580,6 +2580,51 @@ func testConnectionPTOProbePackets(t *testing.T, encLevel protocol.EncryptionLev
 	})
 }
 
+func TestConnectionHandshakeProbePacketSizeFallback(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		mode              ackhandler.SendMode
+		level             protocol.EncryptionLevel
+		initialSize       uint16
+		alreadyReduced    bool
+		handshakeComplete bool
+		reduce            bool
+	}{
+		{name: "Initial", mode: ackhandler.SendPTOInitial, level: protocol.EncryptionInitial, reduce: true},
+		{name: "Handshake", mode: ackhandler.SendPTOHandshake, level: protocol.EncryptionHandshake, reduce: true},
+		{name: "explicit minimum", mode: ackhandler.SendPTOInitial, level: protocol.EncryptionInitial, initialSize: protocol.MinInitialPacketSize},
+		{name: "explicit larger floor", mode: ackhandler.SendPTOHandshake, level: protocol.EncryptionHandshake, initialSize: protocol.InitialPacketSize},
+		{name: "handshake complete", mode: ackhandler.SendPTOHandshake, level: protocol.EncryptionHandshake, handshakeComplete: true},
+		{name: "1-RTT", mode: ackhandler.SendPTOAppData, level: protocol.Encryption1RTT},
+		{name: "already reduced", mode: ackhandler.SendPTOInitial, level: protocol.EncryptionInitial, alreadyReduced: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			sph := mockackhandler.NewMockSentPacketHandler(ctrl)
+			tc := newClientTestConnection(t, ctrl, &Config{InitialPacketSize: test.initialSize}, false, connectionOptSentPacketHandler(sph))
+			size := tc.conn.config.initialPacketSize()
+			if test.alreadyReduced {
+				size = protocol.MinInitialPacketSize
+			}
+			tc.conn.mtuDiscoverer = newMTUDiscoverer(tc.conn.rttStats, size, tc.conn.maxMTU(), nil)
+			tc.conn.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(size)))
+			tc.conn.handshakeComplete = test.handshakeComplete
+			if test.reduce {
+				size = protocol.MinInitialPacketSize
+				sph.EXPECT().SetMaxDatagramSize(size).Times(1)
+			}
+			sph.EXPECT().QueueProbePacket(test.level.PacketNumberSpace()).Return(false).Times(2)
+			packErr := errors.New("stop before sending the probe")
+			tc.packer.EXPECT().PackPTOProbePacket(test.level, size, true, gomock.Any(), protocol.Version1).Return(nil, packErr).Times(2)
+			for range 2 {
+				require.ErrorIs(t, tc.conn.sendProbePacket(test.mode, monotime.Now()), packErr)
+				require.Equal(t, size, tc.conn.maxPacketSize())
+				require.Equal(t, uint32(estimateMaxPayloadSize(size)), tc.conn.maxPayloadSizeEstimate.Load())
+			}
+		})
+	}
+}
+
 func TestConnectionCongestionControl(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)

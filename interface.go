@@ -172,7 +172,8 @@ type Config struct {
 	// since path MTU discovery quickly finds the path's MTU.
 	// If set too high, the path might not support packets of that size, leading to a timeout of the QUIC handshake.
 	// If set to 0, it defaults to 1280 bytes and falls back to 1200 bytes if the first write at that size
-	// returns a "message too long" error. An explicitly set value is kept as the lower limit;
+	// returns a "message too long" error or a probe timeout occurs before the handshake completes.
+	// An explicitly set value is kept as the lower limit;
 	// a "message too long" error at that size fails the handshake instead.
 	// Values below 1200 are invalid.
 	InitialPacketSize uint16

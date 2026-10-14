@@ -2712,6 +2712,12 @@ func (c *Conn) sendProbePacket(sendMode ackhandler.SendMode, now monotime.Time) 
 	default:
 		return fmt.Errorf("connection BUG: unexpected send mode: %d", sendMode)
 	}
+	// A successful write doesn't prove the path carries the default Initial size.
+	if encLevel != protocol.Encryption1RTT && !c.handshakeComplete && c.config.InitialPacketSize == 0 && c.maxPacketSize() > protocol.MinInitialPacketSize {
+		c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.MinInitialPacketSize)))
+		c.sentPacketHandler.SetMaxDatagramSize(protocol.MinInitialPacketSize)
+		c.mtuDiscoverer = newMTUDiscoverer(c.rttStats, protocol.MinInitialPacketSize, c.maxMTU(), c.qlogger)
+	}
 	// Queue probe packets until we actually send out a packet,
 	// or until there are no more packets to queue.
 	var packet *coalescedPacket
