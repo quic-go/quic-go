@@ -45,6 +45,7 @@ func TestStreamReadDataFrames(t *testing.T) {
 		func(io.Reader, *headersFrame) error { return nil },
 		&eventRecorder,
 	)
+	require.Same(t, clientConn.QlogTrace(), str.QlogTrace())
 
 	buf.Write(getDataFrame([]byte("foobar")))
 	b := make([]byte, 3)
@@ -221,6 +222,7 @@ func TestRequestStream(t *testing.T) {
 		math.MaxInt,
 		&http.Response{},
 	)
+	require.Same(t, clientConn.QlogTrace(), str.QlogTrace())
 
 	_, err := str.Read([]byte{0})
 	require.EqualError(t, err, "http3: invalid use of RequestStream.Read before ReadResponse")

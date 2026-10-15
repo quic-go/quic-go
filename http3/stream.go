@@ -171,6 +171,12 @@ func (s *Stream) StreamID() quic.StreamID {
 	return s.datagramStream.StreamID()
 }
 
+// QlogTrace returns the qlog trace of the underlying QUIC connection.
+// It is nil if qlog is not enabled.
+func (s *Stream) QlogTrace() qlogwriter.Trace {
+	return s.conn.conn.QlogTrace()
+}
+
 func (s *Stream) SendDatagram(b []byte) error {
 	// TODO: reject if datagrams are not negotiated (yet)
 	return maybeReplaceError(s.datagramStream.SendDatagram(b))
@@ -241,6 +247,12 @@ func (s *RequestStream) Read(b []byte) (int, error) {
 // StreamID returns the QUIC stream ID of the underlying QUIC stream.
 func (s *RequestStream) StreamID() quic.StreamID {
 	return s.str.StreamID()
+}
+
+// QlogTrace returns the qlog trace of the underlying QUIC connection.
+// It is nil if qlog is not enabled.
+func (s *RequestStream) QlogTrace() qlogwriter.Trace {
+	return s.str.QlogTrace()
 }
 
 // Write writes data to the stream.
