@@ -32,7 +32,8 @@ type path struct {
 	id             pathID
 	addr           net.Addr
 	lastPacketTime monotime.Time
-	pathChallenge  [8]byte
+	pathChallenges [][8]byte // length is implicitly limited by exponential backoff
+	nextProbeTime  monotime.Time
 	validated      bool
 	rcvdNonProbing bool
 }
@@ -74,7 +75,6 @@ func (pm *pathManager) HandlePacket(
 		if addrsEqual(path.addr, remoteAddr) {
 			p = path
 			p.lastPacketTime = t
-			// already sent a PATH_CHALLENGE for this path
 			if isNonProbing {
 				path.rcvdNonProbing = true
 			}
@@ -87,9 +87,13 @@ func (pm *pathManager) HandlePacket(
 				pm.paths = slices.Delete(pm.paths, i, i+1)
 				pm.paths = append(pm.paths, p)
 			}
-			if pathChallenge == nil {
+			// Nothing to send:
+			// * the packet didn't contain a PATH_CHALLENGE, and
+			// * the path does not need a probe (already validated, or still inside the backoff).
+			if pathChallenge == nil && (path.validated || t.Before(path.nextProbeTime)) {
 				return protocol.ConnectionID{}, nil, shouldSwitch
 			}
+			break
 		}
 	}
 
@@ -114,36 +118,45 @@ func (pm *pathManager) HandlePacket(
 		pathID = pm.nextPathID
 	}
 
-	// previously unseen path, initiate path validation by sending a PATH_CHALLENGE
 	connID, ok := pm.getConnID(pathID)
 	if !ok {
 		pm.logger.Debugf("skipping validation of new path %s since no connection ID is available", remoteAddr)
 		return protocol.ConnectionID{}, nil, shouldSwitch
 	}
 
-	frames := make([]ackhandler.Frame, 0, 2)
 	if p == nil {
-		var pathChallengeData [8]byte
-		rand.Read(pathChallengeData[:])
 		p = &path{
 			id:             pm.nextPathID,
 			addr:           remoteAddr,
 			lastPacketTime: t,
 			rcvdNonProbing: isNonProbing,
-			pathChallenge:  pathChallengeData,
+			nextProbeTime:  t,
+			pathChallenges: make([][8]byte, 0, 2),
 		}
 		pm.nextPathID++
 		pm.paths = append(pm.paths, p)
+	}
+
+	frames := make([]ackhandler.Frame, 0, 2)
+	// Probe an unvalidated path with a new PATH_CHALLENGE:
+	// * sent on the next packet once nextProbeTime has passed, and
+	// * repeated until a PATH_RESPONSE arrives, ignoring ACKs and loss.
+	if !p.validated && !t.Before(p.nextProbeTime) {
+		backoffFactor := 1 << len(p.pathChallenges)
+		p.nextProbeTime = t.Add(utils.DefaultInitialRTT * time.Duration(backoffFactor))
+		var b [8]byte
+		rand.Read(b[:])
+		p.pathChallenges = append(p.pathChallenges, b)
 		frames = append(frames, ackhandler.Frame{
-			Frame:   &wire.PathChallengeFrame{Data: p.pathChallenge},
-			Handler: (*pathManagerAckHandler)(pm),
+			Frame:   &wire.PathChallengeFrame{Data: b},
+			Handler: emptyHandler{},
 		})
 		pm.logger.Debugf("enqueueing PATH_CHALLENGE for new path %s", remoteAddr)
 	}
 	if pathChallenge != nil {
 		frames = append(frames, ackhandler.Frame{
 			Frame:   &wire.PathResponseFrame{Data: pathChallenge.Data},
-			Handler: (*pathManagerAckHandler)(pm),
+			Handler: emptyHandler{},
 		})
 	}
 	return connID, frames, shouldSwitch
@@ -151,9 +164,10 @@ func (pm *pathManager) HandlePacket(
 
 func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame) {
 	for _, p := range pm.paths {
-		if f.Data == p.pathChallenge {
+		if slices.Contains(p.pathChallenges, f.Data) {
 			// path validated
 			p.validated = true
+			p.pathChallenges = nil
 			pm.logger.Debugf("path %s validated", p.addr)
 			break
 		}
@@ -172,27 +186,6 @@ func (pm *pathManager) SwitchToPath(addr net.Addr) {
 	}
 	clear(pm.paths)
 	pm.paths = pm.paths[:0]
-}
-
-type pathManagerAckHandler pathManager
-
-var _ ackhandler.FrameHandler = &pathManagerAckHandler{}
-
-// Acknowledging the frame doesn't validate the path, only receiving the PATH_RESPONSE does.
-func (pm *pathManagerAckHandler) OnAcked(f wire.Frame) {}
-
-func (pm *pathManagerAckHandler) OnLost(f wire.Frame) {
-	pc, ok := f.(*wire.PathChallengeFrame)
-	if !ok {
-		return
-	}
-	for i, path := range pm.paths {
-		if path.pathChallenge == pc.Data {
-			pm.paths = slices.Delete(pm.paths, i, i+1)
-			pm.retireConnID(path.id)
-			break
-		}
-	}
 }
 
 func addrsEqual(addr1, addr2 net.Addr) bool {

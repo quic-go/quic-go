@@ -206,6 +206,85 @@ func TestPathManagerNATRebinding(t *testing.T) {
 	require.True(t, shouldSwitch)
 }
 
+func TestPathManagerRetransmissions(t *testing.T) {
+	for _, response := range []struct {
+		name          string
+		respondToLast bool
+	}{
+		{name: "response to first challenge"},
+		{name: "response to last challenge", respondToLast: true},
+	} {
+		t.Run(response.name, func(t *testing.T) {
+			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+			pm := newPathManager(
+				func(id pathID) (protocol.ConnectionID, bool) {
+					require.Zero(t, id)
+					return connID, true
+				},
+				func(pathID) { t.Fatal("didn't expect a connection ID to be retired") },
+				utils.DefaultLogger,
+			)
+			addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}
+			now := monotime.Now()
+			rtt := utils.DefaultInitialRTT
+			var challenges [][8]byte
+			for _, packet := range []struct {
+				at            time.Duration
+				wantChallenge bool
+			}{
+				{0, true}, // initial challenge
+				{rtt / 2, false},
+				{rtt, true}, // first retry after one RTT
+				{2 * rtt, false},
+				{3 * rtt, true}, // second retry after two more RTTs
+				{5 * rtt, false},
+				{15 * rtt, true}, // third retry was due at 7 RTTs, but this packet arrives late
+				{19 * rtt, false},
+				{23 * rtt, true}, // fourth retry after eight RTTs from the late packet
+			} {
+				id, frames, shouldSwitch := pm.HandlePacket(addr, now.Add(packet.at), nil, true)
+				require.False(t, shouldSwitch, "packet at %s", packet.at)
+				if !packet.wantChallenge {
+					require.Zero(t, id)
+					require.Empty(t, frames, "packet at %s", packet.at)
+					continue
+				}
+				require.Equal(t, connID, id)
+				require.Len(t, frames, 1, "packet at %s", packet.at)
+				challenge := frames[0].Frame.(*wire.PathChallengeFrame).Data
+				require.NotContains(t, challenges, challenge)
+				challenges = append(challenges, challenge)
+				if packet.at == 0 {
+					// An ACK doesn't replace the missing PATH_RESPONSE.
+					frames[0].Handler.OnAcked(frames[0].Frame)
+				} else {
+					// Loss doesn't remove the path or reset its backoff.
+					frames[0].Handler.OnLost(frames[0].Frame)
+				}
+			}
+			challenge := challenges[0]
+			if response.respondToLast {
+				challenge = challenges[len(challenges)-1]
+			}
+			pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: challenge})
+			// Once validated, even a packet at the next retry deadline needs no new challenge.
+			now = now.Add((23 + 16) * rtt)
+			id, frames, shouldSwitch := pm.HandlePacket(addr, now, nil, false)
+			require.Zero(t, id)
+			require.Empty(t, frames)
+			require.True(t, shouldSwitch)
+
+			// A validated path still answers the peer's challenges without probing again.
+			pc := &wire.PathChallengeFrame{Data: [8]byte{8, 7, 6, 5, 4, 3, 2, 1}}
+			id, frames, shouldSwitch = pm.HandlePacket(addr, now, pc, false)
+			require.Equal(t, connID, id)
+			require.Len(t, frames, 1)
+			require.Equal(t, &wire.PathResponseFrame{Data: pc.Data}, frames[0].Frame)
+			require.True(t, shouldSwitch)
+		})
+	}
+}
+
 func TestPathManagerLimits(t *testing.T) {
 	var connIDs []protocol.ConnectionID
 	for range 2*maxPaths + 2 {
@@ -248,8 +327,9 @@ func TestPathManagerLimits(t *testing.T) {
 			&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths - 1}, rcvTime, pc, false,
 		)
 		require.Equal(t, connIDs[maxPaths-1], connID)
-		require.Len(t, frames, 1)
-		require.Equal(t, &wire.PathResponseFrame{Data: pc.Data}, frames[0].Frame)
+		require.Len(t, frames, 2)
+		require.IsType(t, &wire.PathChallengeFrame{}, frames[0].Frame)
+		require.Equal(t, &wire.PathResponseFrame{Data: pc.Data}, frames[1].Frame)
 		require.False(t, shouldSwitch)
 		require.Empty(t, retiredConnIDs)
 	}
@@ -280,14 +360,9 @@ func TestPathManagerLimits(t *testing.T) {
 	require.Zero(t, connID)
 	require.Empty(t, frames)
 
-	// losing the frame removes this path
+	// losing the frame doesn't free up a path
 	f1[0].Handler.OnLost(f1[0].Frame)
-
-	// we can open exactly one more path
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4000}, now, nil, true)
-	require.NotEmpty(t, frames)
-	require.Equal(t, connIDs[connIDIndex], connID)
-	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4001}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
 }
