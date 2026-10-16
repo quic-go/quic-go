@@ -234,13 +234,28 @@ func TestPathManagerLimits(t *testing.T) {
 		now = now.Add(time.Second)
 	}
 	// the maximum number of paths is already being probed
-	now = firstPathTime.Add(pathTimeout).Add(-time.Nanosecond)
+	now = firstPathTime.Add(pathTimeout - time.Second)
 	connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
 
+	// challenge the newest path so the oldest path can be evicted below
+	pc := &wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
+	// 1. Before the oldest path expires, respond even though all path slots are occupied.
+	// 2. After it expires, respond without evicting it, since this is an existing path.
+	for _, rcvTime := range []monotime.Time{now, firstPathTime.Add(pathTimeout + time.Second)} {
+		connID, frames, shouldSwitch := pm.HandlePacket(
+			&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths - 1}, rcvTime, pc, false,
+		)
+		require.Equal(t, connIDs[maxPaths-1], connID)
+		require.Len(t, frames, 1)
+		require.Equal(t, &wire.PathResponseFrame{Data: pc.Data}, frames[0].Frame)
+		require.False(t, shouldSwitch)
+		require.Empty(t, retiredConnIDs)
+	}
+
 	// receiving another packet after the pathTimeout of the first path evicts the first path
-	now = firstPathTime.Add(pathTimeout)
+	now = firstPathTime.Add(pathTimeout + time.Second)
 	connIDIndex := maxPaths
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths}, now, nil, true)
 	require.NotEmpty(t, frames)
