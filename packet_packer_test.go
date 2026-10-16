@@ -258,6 +258,38 @@ func TestPackInitialAckOnlyPacket(t *testing.T) {
 	t.Run("server", func(t *testing.T) { testPackInitialAckOnlyPacket(t, protocol.PerspectiveServer) })
 }
 
+func TestPackOversizedInitialPacket(t *testing.T) {
+	for _, kind := range []string{"coalesced", "connection close", "PTO probe"} {
+		t.Run(kind, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveClient)
+			tp.packer.SetToken(make([]byte, protocol.MaxPacketBufferSize))
+			tp.sealingManager.EXPECT().GetInitialSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+			tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceInitial).Return(protocol.PacketNumber(1), protocol.PacketNumberLen1)
+			tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceInitial).Return(protocol.PacketNumber(1))
+
+			var p *coalescedPacket
+			var err error
+			switch kind {
+			case "coalesced":
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}}
+				tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, gomock.Any(), true).Return(ack)
+				p, err = tp.packer.PackCoalescedPacket(true, protocol.MinInitialPacketSize, monotime.Now(), protocol.Version1)
+			case "connection close":
+				tp.sealingManager.EXPECT().GetHandshakeSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				tp.sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				tp.sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				p, err = tp.packer.PackConnectionClose(&qerr.TransportError{ErrorCode: qerr.ProtocolViolation}, protocol.MinInitialPacketSize, protocol.Version1)
+			case "PTO probe":
+				tp.ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, gomock.Any(), true)
+				p, err = tp.packer.PackPTOProbePacket(protocol.EncryptionInitial, protocol.MinInitialPacketSize, true, monotime.Now(), protocol.Version1)
+			}
+			require.ErrorContains(t, err, "packet too large")
+			require.Nil(t, p)
+		})
+	}
+}
+
 func testPackInitialAckOnlyPacket(t *testing.T, pers protocol.Perspective) {
 	const maxPacketSize protocol.ByteCount = 1234
 	mockCtrl := gomock.NewController(t)
