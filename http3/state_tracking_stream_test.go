@@ -277,7 +277,7 @@ func TestDatagramReceiving(t *testing.T) {
 		t.Fatal("should have received a datagram")
 	}
 
-	// up to 32 datagrams can be queued
+	// Datagrams beyond the queue capacity are discarded.
 	for i := range streamDatagramQueueLen + 1 {
 		str.enqueueDatagram([]byte{uint8(i)})
 	}
