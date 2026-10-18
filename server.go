@@ -13,6 +13,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
@@ -68,7 +69,7 @@ type baseServer struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	conn rawConn
+	conn udp.Conn
 
 	tokenGenerator *handshake.TokenGenerator
 	maxTokenAge    time.Duration
@@ -252,7 +253,7 @@ func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Ear
 }
 
 func newServer(
-	conn rawConn,
+	conn udp.Conn,
 	tr *packetHandlerMap,
 	connIDGenerator ConnectionIDGenerator,
 	statelessResetter *statelessResetter,
@@ -944,7 +945,7 @@ func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
 		replyHdr.Log(s.logger)
 	}
 
-	buf := getPacketBuffer()
+	buf := udp.GetPacketBuffer()
 	defer buf.Release()
 	buf.Data, err = replyHdr.Append(buf.Data, hdr.Version)
 	if err != nil {
@@ -1028,8 +1029,8 @@ func (s *baseServer) sendConnectionRefused(p rejectedPacket) {
 }
 
 // sendError sends the error as a response to the packet received with header hdr
-func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info packetInfo) error {
-	b := getPacketBuffer()
+func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info udp.PacketInfo) error {
+	b := udp.GetPacketBuffer()
 	defer b.Release()
 
 	ccf := &wire.ConnectionCloseFrame{ErrorCode: uint64(errorCode)}

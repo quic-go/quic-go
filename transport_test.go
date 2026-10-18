@@ -101,6 +101,8 @@ func TestTransportPacketHandling(t *testing.T) {
 	select {
 	case p := <-connChan1:
 		require.Equal(t, conn.LocalAddr(), p.remoteAddr)
+		require.NotNil(t, p.buffer)
+		require.Same(t, &p.buffer.Data[0], &p.data[0])
 		connID, err := wire.ParseConnectionID(p.data, 0)
 		require.NoError(t, err)
 		require.Equal(t, connID1, connID)

@@ -8,14 +8,15 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/udp"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-func getPacketWithContents(b []byte) *packetBuffer {
-	buf := getPacketBuffer()
+func getPacketWithContents(b []byte) *udp.PacketBuffer {
+	buf := udp.GetPacketBuffer()
 	buf.Data = buf.Data[:len(b)]
 	copy(buf.Data, b)
 	return buf
@@ -198,10 +199,10 @@ func TestSendQueueSendProbe(t *testing.T) {
 
 	addr := &net.UDPAddr{IP: net.IPv4(42, 42, 42, 42), Port: 42}
 	localAddr := netip.MustParseAddr("43.43.43.43")
-	c.EXPECT().WriteTo([]byte("foobar"), addr, packetInfo{
-		addr: localAddr,
+	c.EXPECT().WriteTo([]byte("foobar"), addr, udp.PacketInfo{
+		Addr: localAddr,
 	})
-	q.SendProbe(getPacketWithContents([]byte("foobar")), addr, packetInfo{
-		addr: localAddr,
+	q.SendProbe(getPacketWithContents([]byte("foobar")), addr, udp.PacketInfo{
+		Addr: localAddr,
 	})
 }

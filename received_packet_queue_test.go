@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/udp"
 
 	"github.com/stretchr/testify/require"
 )
@@ -83,8 +84,8 @@ func TestReceivedPacketQueueClear(t *testing.T) {
 	var q receivedPacketQueue
 	q.Init(h1)
 
-	require.True(t, q.Push(receivedPacket{data: []byte("foo"), buffer: getPacketBuffer()}, h1))
-	require.True(t, q.Push(receivedPacket{data: []byte("bar"), buffer: getPacketBuffer()}, h2))
+	require.True(t, q.Push(receivedPacket{data: []byte("foo"), buffer: udp.GetPacketBuffer()}, h1))
+	require.True(t, q.Push(receivedPacket{data: []byte("bar"), buffer: udp.GetPacketBuffer()}, h2))
 	q.Clear()
 	require.True(t, q.Empty())
 }

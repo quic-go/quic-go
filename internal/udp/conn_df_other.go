@@ -1,6 +1,6 @@
 //go:build !linux && !windows && !darwin
 
-package quic
+package udp
 
 import (
 	"syscall"
@@ -11,12 +11,12 @@ func setDF(syscall.RawConn) (bool, error) {
 	return false, nil
 }
 
-func isSendMsgSizeErr(err error) bool {
+func IsSendMsgSizeErr(err error) bool {
 	// to be implemented for more specific platforms
 	return false
 }
 
-func isRecvMsgSizeErr(err error) bool {
+func IsRecvMsgSizeErr(err error) bool {
 	// to be implemented for more specific platforms
 	return false
 }

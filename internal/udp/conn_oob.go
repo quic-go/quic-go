@@ -1,6 +1,6 @@
 //go:build darwin || linux || freebsd
 
-package quic
+package udp
 
 import (
 	"encoding/binary"
@@ -49,12 +49,12 @@ type oobConn struct {
 	readPos uint8
 	// Packets received from the kernel, but not yet returned by ReadPacket().
 	messages []ipv4.Message
-	buffers  [batchSize]*packetBuffer
+	buffers  [batchSize]*PacketBuffer
 
-	cap connCapabilities
+	cap Capabilities
 }
 
-var _ rawConn = &oobConn{}
+var _ Conn = &oobConn{}
 
 func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	rawConn, err := c.SyscallConn()
@@ -126,7 +126,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
-		cap: connCapabilities{
+		cap: Capabilities{
 			DF:  supportsDF,
 			GSO: isGSOEnabled(rawConn),
 			ECN: isECNEnabled(),
@@ -140,12 +140,12 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 
 var invalidCmsgOnceV4, invalidCmsgOnceV6 sync.Once
 
-func (c *oobConn) ReadPacket() (receivedPacket, error) {
+func (c *oobConn) ReadPacket() (Packet, error) {
 	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
 		c.messages = c.messages[:batchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
 		for i := uint8(0); i < c.readPos; i++ {
-			buffer := getPacketBuffer()
+			buffer := GetPacketBuffer()
 			buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 			c.buffers[i] = buffer
 			c.messages[i].Buffers[0] = c.buffers[i].Data
@@ -154,7 +154,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 
 		n, err := c.batchConn.ReadBatch(c.messages, 0)
 		if n == 0 || err != nil {
-			return receivedPacket{}, err
+			return Packet{}, err
 		}
 		c.messages = c.messages[:n]
 	}
@@ -164,29 +164,29 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 	c.readPos++
 
 	data := msg.OOB[:msg.NN]
-	p := receivedPacket{
-		remoteAddr: msg.Addr,
-		rcvTime:    monotime.Now(),
-		data:       msg.Buffers[0][:msg.N],
-		buffer:     buffer,
+	p := Packet{
+		RemoteAddr: msg.Addr,
+		RcvTime:    monotime.Now(),
+		Data:       msg.Buffers[0][:msg.N],
+		Buffer:     buffer,
 	}
 	for len(data) > 0 {
 		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
 		if err != nil {
-			return receivedPacket{}, err
+			return Packet{}, err
 		}
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
 			case msgTypeIPTOS:
 				if len(body) != 1 {
-					return receivedPacket{}, errors.New("invalid IPTOS size")
+					return Packet{}, errors.New("invalid IPTOS size")
 				}
-				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
+				p.ECN = protocol.ParseECNHeaderBits(body[0] & ecnMask)
 			case ipv4PKTINFO:
 				ip, ifIndex, ok := parseIPv4PktInfo(body)
 				if ok {
-					p.info.addr = ip
-					p.info.ifIndex = ifIndex
+					p.Info.Addr = ip
+					p.Info.IfIndex = ifIndex
 				} else {
 					invalidCmsgOnceV4.Do(func() {
 						log.Printf("Received invalid IPv4 packet info control message: %+x. "+
@@ -199,18 +199,18 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 			switch hdr.Type {
 			case unix.IPV6_TCLASS:
 				if len(body) != 4 {
-					return receivedPacket{}, errors.New("invalid IPV6_TCLASS size")
+					return Packet{}, errors.New("invalid IPV6_TCLASS size")
 				}
 				bits := uint8(binary.NativeEndian.Uint32(body)) & ecnMask
-				p.ecn = protocol.ParseECNHeaderBits(bits)
+				p.ECN = protocol.ParseECNHeaderBits(bits)
 			case unix.IPV6_PKTINFO:
 				// struct in6_pktinfo {
 				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 				// };
 				if len(body) == 20 {
-					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
-					p.info.ifIndex = binary.NativeEndian.Uint32(body[16:])
+					p.Info.Addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
+					p.Info.IfIndex = binary.NativeEndian.Uint32(body[16:])
 				} else {
 					invalidCmsgOnceV6.Do(func() {
 						log.Printf("Received invalid IPv6 packet info control message: %+x. "+
@@ -228,13 +228,13 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error) {
 	oob := packetInfoOOB
 	if gsoSize > 0 {
-		if !c.capabilities().GSO {
+		if !c.Capabilities().GSO {
 			panic("GSO disabled")
 		}
 		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
 	}
 	if ecn != protocol.ECNUnsupported {
-		if !c.capabilities().ECN {
+		if !c.Capabilities().ECN {
 			panic("tried to send an ECN-marked packet although ECN is disabled")
 		}
 		if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
@@ -249,21 +249,21 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 	return n, err
 }
 
-func (c *oobConn) capabilities() connCapabilities {
+func (c *oobConn) Capabilities() Capabilities {
 	return c.cap
 }
 
-type packetInfo struct {
-	addr    netip.Addr
-	ifIndex uint32
+type PacketInfo struct {
+	Addr    netip.Addr
+	IfIndex uint32
 }
 
-func (info *packetInfo) OOB() []byte {
+func (info *PacketInfo) OOB() []byte {
 	if info == nil {
 		return nil
 	}
-	if info.addr.Is4() {
-		ip := info.addr.As4()
+	if info.Addr.Is4() {
+		ip := info.Addr.As4()
 		// struct in_pktinfo {
 		// 	unsigned int   ipi_ifindex;  /* Interface index */
 		// 	struct in_addr ipi_spec_dst; /* Local address */
@@ -271,18 +271,18 @@ func (info *packetInfo) OOB() []byte {
 		// };
 		cm := ipv4.ControlMessage{
 			Src:     ip[:],
-			IfIndex: int(info.ifIndex),
+			IfIndex: int(info.IfIndex),
 		}
 		return cm.Marshal()
-	} else if info.addr.Is6() {
-		ip := info.addr.As16()
+	} else if info.Addr.Is6() {
+		ip := info.Addr.As16()
 		// struct in6_pktinfo {
 		// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 		// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 		// };
 		cm := ipv6.ControlMessage{
 			Src:     ip[:],
-			IfIndex: int(info.ifIndex),
+			IfIndex: int(info.IfIndex),
 		}
 		return cm.Marshal()
 	}

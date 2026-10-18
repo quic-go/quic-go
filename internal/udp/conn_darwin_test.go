@@ -1,6 +1,6 @@
 //go:build darwin
 
-package quic
+package udp
 
 import (
 	"net"
