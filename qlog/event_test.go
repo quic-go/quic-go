@@ -75,8 +75,8 @@ func TestStartedConnection(t *testing.T) {
 
 	require.Equal(t, "transport:connection_started", name)
 	require.JSONEq(t, `{
-		"local": {"ip_v4": "192.168.13.37", "port_v4": 42},
-		"remote": {"ip_v6": "2001:db8::1", "port_v6": 24}
+		"local": {"ip_v4": {"ip": "192.168.13.37", "port": 42}},
+		"remote": {"ip_v6": {"ip": "2001:db8::1", "port": 24}}
 	}`, ev)
 }
 
@@ -347,10 +347,10 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 	require.Equal(t, "transport:parameters_set", name)
 	var addresses string
 	if hasIPv4 {
-		addresses += `"ip_v4": "12.34.56.78", "port_v4": 123,`
+		addresses += `"ip_v4": {"ip": "12.34.56.78", "port": 123},`
 	}
 	if hasIPv6 {
-		addresses += `"ip_v6": "102:304:506:708:90a:b0c:d0e:f10", "port_v6": 456,`
+		addresses += `"ip_v6": {"ip": "102:304:506:708:90a:b0c:d0e:f10", "port": 456},`
 	}
 	require.JSONEq(t, fmt.Sprintf(`{
 		"initiator": "local",
