@@ -1,6 +1,6 @@
 //go:build darwin || freebsd || linux || openbsd
 
-package quic
+package udp
 
 import (
 	"syscall"

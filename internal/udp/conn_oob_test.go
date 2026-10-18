@@ -1,10 +1,11 @@
 //go:build darwin || linux || freebsd
 
-package quic
+package udp
 
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 
 func isIPv4(ip net.IP) bool { return ip.To4() != nil }
 
-func runSysConnServer(t *testing.T, network string, addr *net.UDPAddr) (*net.UDPAddr, <-chan receivedPacket) {
+func runSysConnServer(t *testing.T, network string, addr *net.UDPAddr) (*net.UDPAddr, <-chan Packet) {
 	t.Helper()
 	udpConn, err := net.ListenUDP(network, addr)
 	require.NoError(t, err)
@@ -26,9 +27,9 @@ func runSysConnServer(t *testing.T, network string, addr *net.UDPAddr) (*net.UDP
 
 	oobConn, err := newConn(udpConn, true)
 	require.NoError(t, err)
-	require.True(t, oobConn.capabilities().DF)
+	require.True(t, oobConn.Capabilities().DF)
 
-	packetChan := make(chan receivedPacket, 1)
+	packetChan := make(chan Packet, 1)
 	go func() {
 		for {
 			p, err := oobConn.ReadPacket()
@@ -69,10 +70,10 @@ func TestReadECNFlagsIPv4(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(20*time.Millisecond))
-		require.Equal(t, []byte("foobar"), p.data)
-		require.Equal(t, sentFrom, p.remoteAddr)
-		require.Equal(t, protocol.ECT0, p.ecn)
+		require.WithinDuration(t, time.Now(), p.RcvTime.ToTime(), scaleDuration(20*time.Millisecond))
+		require.Equal(t, []byte("foobar"), p.Data)
+		require.Equal(t, sentFrom, p.RemoteAddr)
+		require.Equal(t, protocol.ECT0, p.ECN)
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for packet")
 	}
@@ -91,10 +92,10 @@ func TestReadECNFlagsIPv6(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(20*time.Millisecond))
-		require.Equal(t, []byte("foobar"), p.data)
-		require.Equal(t, sentFrom, p.remoteAddr)
-		require.Equal(t, protocol.ECNCE, p.ecn)
+		require.WithinDuration(t, time.Now(), p.RcvTime.ToTime(), scaleDuration(20*time.Millisecond))
+		require.Equal(t, []byte("foobar"), p.Data)
+		require.Equal(t, sentFrom, p.RemoteAddr)
+		require.Equal(t, protocol.ECNCE, p.ECN)
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for packet")
 	}
@@ -114,9 +115,9 @@ func TestReadECNFlagsDualStack(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.True(t, isIPv4(p.remoteAddr.(*net.UDPAddr).IP))
-		require.Equal(t, sentFrom.String(), p.remoteAddr.String())
-		require.Equal(t, protocol.ECNCE, p.ecn)
+		require.True(t, isIPv4(p.RemoteAddr.(*net.UDPAddr).IP))
+		require.Equal(t, sentFrom.String(), p.RemoteAddr.String())
+		require.Equal(t, protocol.ECNCE, p.ECN)
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for packet")
 	}
@@ -132,9 +133,9 @@ func TestReadECNFlagsDualStack(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.Equal(t, sentFrom, p.remoteAddr)
-		require.False(t, isIPv4(p.remoteAddr.(*net.UDPAddr).IP))
-		require.Equal(t, protocol.ECT1, p.ecn)
+		require.Equal(t, sentFrom, p.RemoteAddr)
+		require.False(t, isIPv4(p.RemoteAddr.(*net.UDPAddr).IP))
+		require.Equal(t, protocol.ECT1, p.ECN)
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for packet")
 	}
@@ -152,8 +153,8 @@ func TestSendPacketsWithECNOnIPv4(t *testing.T) {
 		require.NoError(t, err)
 		select {
 		case p := <-packetChan:
-			require.Equal(t, []byte("foobar"), p.data)
-			require.Equal(t, val, p.ecn)
+			require.Equal(t, []byte("foobar"), p.Data)
+			require.Equal(t, val, p.ECN)
 		case <-time.After(time.Second):
 			t.Fatal("timeout waiting for packet")
 		}
@@ -172,8 +173,8 @@ func TestSendPacketsWithECNOnIPv6(t *testing.T) {
 		require.NoError(t, err)
 		select {
 		case p := <-packetChan:
-			require.Equal(t, []byte("foobar"), p.data)
-			require.Equal(t, val, p.ecn)
+			require.Equal(t, []byte("foobar"), p.Data)
+			require.Equal(t, val, p.ECN)
 		case <-time.After(time.Second):
 			t.Fatal("timeout waiting for packet")
 		}
@@ -192,12 +193,12 @@ func TestSysConnPacketInfoIPv4(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(50*time.Millisecond))
-		require.Equal(t, []byte("foobar"), p.data)
-		require.Equal(t, conn.LocalAddr(), p.remoteAddr)
-		require.True(t, p.info.addr.IsValid())
-		require.True(t, isIPv4(p.info.addr.AsSlice()))
-		require.Equal(t, net.IPv4(127, 0, 0, 1).String(), p.info.addr.String())
+		require.WithinDuration(t, time.Now(), p.RcvTime.ToTime(), scaleDuration(50*time.Millisecond))
+		require.Equal(t, []byte("foobar"), p.Data)
+		require.Equal(t, conn.LocalAddr(), p.RemoteAddr)
+		require.True(t, p.Info.Addr.IsValid())
+		require.True(t, isIPv4(p.Info.Addr.AsSlice()))
+		require.Equal(t, net.IPv4(127, 0, 0, 1).String(), p.Info.Addr.String())
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for packet")
 	}
@@ -215,11 +216,11 @@ func TestSysConnPacketInfoIPv6(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(20*time.Millisecond))
-		require.Equal(t, []byte("foobar"), p.data)
-		require.Equal(t, conn.LocalAddr(), p.remoteAddr)
-		require.NotNil(t, p.info)
-		require.Equal(t, net.IPv6loopback, net.IP(p.info.addr.AsSlice()))
+		require.WithinDuration(t, time.Now(), p.RcvTime.ToTime(), scaleDuration(20*time.Millisecond))
+		require.Equal(t, []byte("foobar"), p.Data)
+		require.Equal(t, conn.LocalAddr(), p.RemoteAddr)
+		require.NotNil(t, p.Info)
+		require.Equal(t, net.IPv6loopback, net.IP(p.Info.Addr.AsSlice()))
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for packet")
 	}
@@ -237,10 +238,10 @@ func TestSysConnPacketInfoDualStack(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.True(t, isIPv4(p.remoteAddr.(*net.UDPAddr).IP))
-		require.NotNil(t, p.info)
-		require.True(t, p.info.addr.Is4())
-		require.Equal(t, net.IPv4(127, 0, 0, 1).String(), p.info.addr.String())
+		require.True(t, isIPv4(p.RemoteAddr.(*net.UDPAddr).IP))
+		require.NotNil(t, p.Info)
+		require.True(t, p.Info.Addr.Is4())
+		require.Equal(t, net.IPv4(127, 0, 0, 1).String(), p.Info.Addr.String())
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for IPv4 packet")
 	}
@@ -254,9 +255,9 @@ func TestSysConnPacketInfoDualStack(t *testing.T) {
 
 	select {
 	case p := <-packetChan:
-		require.False(t, isIPv4(p.remoteAddr.(*net.UDPAddr).IP))
-		require.NotNil(t, p.info)
-		require.Equal(t, net.IPv6loopback.String(), p.info.addr.String())
+		require.False(t, isIPv4(p.RemoteAddr.(*net.UDPAddr).IP))
+		require.NotNil(t, p.Info)
+		require.Equal(t, net.IPv6loopback.String(), p.Info.Addr.String())
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for IPv6 packet")
 	}
@@ -273,6 +274,7 @@ func (c *oobRecordingConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oob
 }
 
 type mockBatchConn struct {
+	*net.UDPConn
 	t          *testing.T
 	numMsgRead int
 
@@ -283,29 +285,28 @@ var _ batchConn = &mockBatchConn{}
 
 func (c *mockBatchConn) ReadBatch(ms []ipv4.Message, _ int) (int, error) {
 	require.Len(c.t, ms, batchSize)
-	for i := 0; i < c.numMsgRead; i++ {
+	for i := range c.numMsgRead {
 		require.Len(c.t, ms[i].Buffers, 1)
 		require.Len(c.t, ms[i].Buffers[0], protocol.MaxPacketBufferSize)
 		data := fmt.Appendf(nil, "message %d", c.callCounter*c.numMsgRead+i)
-		ms[i].Buffers[0] = data
-		ms[i].N = len(data)
+		ms[i].N = copy(ms[i].Buffers[0], data)
 	}
 	c.callCounter++
 	return c.numMsgRead, nil
 }
 
 func TestReadsMultipleMessagesInOneBatch(t *testing.T) {
-	bc := &mockBatchConn{t: t, numMsgRead: batchSize/2 + 1}
+	bc := &mockBatchConn{UDPConn: newUDPConnLocalhost(t), t: t, numMsgRead: batchSize/2 + 1}
 
-	udpConn := newUDPConnLocalhost(t)
-	oobConn, err := newConn(udpConn, true)
+	oobConn, err := newConn(bc, true)
 	require.NoError(t, err)
-	oobConn.batchConn = bc
 
 	for i := range batchSize + 1 {
 		p, err := oobConn.ReadPacket()
 		require.NoError(t, err)
-		require.Equal(t, fmt.Sprintf("message %d", i), string(p.data))
+		require.Equal(t, fmt.Sprintf("message %d", i), string(p.Data))
+		require.Same(t, &p.Buffer.Data[0], &p.Data[0])
+		p.Buffer.Release()
 	}
 	require.Equal(t, 2, bc.callCounter)
 }
@@ -328,7 +329,7 @@ func TestSysConnSendGSO(t *testing.T) {
 	c := &oobRecordingConn{UDPConn: udpConn}
 	oobConn, err := newConn(c, true)
 	require.NoError(t, err)
-	require.True(t, oobConn.capabilities().GSO)
+	require.True(t, oobConn.Capabilities().GSO)
 
 	oob := make([]byte, 0, 123)
 	oobConn.WritePacket([]byte("foobar"), udpConn.LocalAddr(), oob, 3, protocol.ECNCE)
@@ -340,3 +341,5 @@ func TestSysConnSendGSO(t *testing.T) {
 	// Check that the first control message is the OOB control message.
 	require.Equal(t, expected, oobMsg[:len(expected)])
 }
+
+var platformSupportsGSO = runtime.GOOS == "linux"

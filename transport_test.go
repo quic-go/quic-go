@@ -15,6 +15,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
@@ -101,6 +102,8 @@ func TestTransportPacketHandling(t *testing.T) {
 	select {
 	case p := <-connChan1:
 		require.Equal(t, conn.LocalAddr(), p.remoteAddr)
+		require.NotNil(t, p.buffer)
+		require.Same(t, &p.buffer.Data[0], &p.data[0])
 		connID, err := wire.ParseConnectionID(p.data, 0)
 		require.NoError(t, err)
 		require.Equal(t, connID1, connID)
@@ -116,6 +119,15 @@ func TestTransportPacketHandling(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestTransportUsesUDPConn(t *testing.T) {
+	conn, err := udp.Wrap(newUDPConnLocalhost(t))
+	require.NoError(t, err)
+	tr := &Transport{Conn: conn.(net.PacketConn)}
+	require.NoError(t, tr.init(true))
+	defer tr.Close()
+	require.Same(t, conn, tr.conn)
 }
 
 func TestTransportAndListenerConcurrentClose(t *testing.T) {

@@ -1,6 +1,6 @@
 //go:build freebsd
 
-package quic
+package udp
 
 import (
 	"net/netip"
@@ -31,3 +31,5 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, _ uint32, ok bool) {
 func isGSOEnabled(syscall.RawConn) bool { return false }
 
 func isECNEnabled() bool { return !isECNDisabledUsingEnv() }
+
+const desiredBufferSize = 7 << 20 // 7 MiB

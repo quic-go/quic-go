@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/udp"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -22,11 +23,13 @@ func TestBasicConn(t *testing.T) {
 		return copy(b, data), addr, nil
 	})
 
-	conn, err := wrapConn(c)
+	conn, err := udp.Wrap(c)
 	require.NoError(t, err)
 	p, err := conn.ReadPacket()
 	require.NoError(t, err)
-	require.Equal(t, []byte("foobar"), p.data)
-	require.WithinDuration(t, time.Now(), p.rcvTime.ToTime(), scaleDuration(100*time.Millisecond))
-	require.Equal(t, addr, p.remoteAddr)
+	require.Equal(t, []byte("foobar"), p.Data)
+	require.Same(t, &p.Buffer.Data[0], &p.Data[0])
+	p.Buffer.Release()
+	require.WithinDuration(t, time.Now(), p.RcvTime.ToTime(), scaleDuration(100*time.Millisecond))
+	require.Equal(t, addr, p.RemoteAddr)
 }

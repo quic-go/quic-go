@@ -12,6 +12,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -21,13 +22,13 @@ var errNothingToPack = errors.New("nothing to pack")
 
 type packer interface {
 	PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (*coalescedPacket, error)
-	PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, *packetBuffer, error)
-	AppendPacket(_ *packetBuffer, maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error)
+	PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)
+	AppendPacket(_ *udp.PacketBuffer, maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error)
 	PackPTOProbePacket(_ protocol.EncryptionLevel, _ protocol.ByteCount, addPingIfEmpty bool, now monotime.Time, v protocol.Version) (*coalescedPacket, error)
 	PackConnectionClose(*qerr.TransportError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
 	PackApplicationClose(*qerr.ApplicationError, protocol.ByteCount, protocol.Version) (*coalescedPacket, error)
-	PackPathProbePacket(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error)
-	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *packetBuffer, error)
+	PackPathProbePacket(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)
+	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)
 
 	SetToken([]byte)
 }
@@ -70,7 +71,7 @@ type shortHeaderPacket struct {
 func (p *shortHeaderPacket) IsAckEliciting() bool { return ackhandler.HasAckElicitingFrames(p.Frames) }
 
 type coalescedPacket struct {
-	buffer         *packetBuffer
+	buffer         *udp.PacketBuffer
 	longHdrPackets []*longHeaderPacket
 	shortHdrPacket *shortHeaderPacket
 }
@@ -273,7 +274,7 @@ func (p *packetPacker) packConnectionClose(
 	if size > maxPacketSize {
 		return nil, fmt.Errorf("packet too large (%d bytes, allowed %d bytes)", size, maxPacketSize)
 	}
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	packet := &coalescedPacket{
 		buffer:         buffer,
 		longHdrPackets: make([]*longHeaderPacket, 0, numLongHdrPackets),
@@ -444,7 +445,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 	if size > maxSize {
 		return nil, fmt.Errorf("packet too large (%d bytes, allowed %d bytes)", size, maxSize)
 	}
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	packet := &coalescedPacket{
 		buffer:         buffer,
 		longHdrPackets: make([]*longHeaderPacket, 0, 3),
@@ -482,20 +483,20 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 
 // PackAckOnlyPacket packs a packet containing only an ACK in the application data packet number space.
 // It should be called after the handshake is confirmed.
-func (p *packetPacker) PackAckOnlyPacket(maxSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
-	buf := getPacketBuffer()
+func (p *packetPacker) PackAckOnlyPacket(maxSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error) {
+	buf := udp.GetPacketBuffer()
 	packet, err := p.appendPacket(buf, true, maxSize, now, v)
 	return packet, buf, err
 }
 
 // AppendPacket packs a packet in the application data packet number space.
 // It should be called after the handshake is confirmed.
-func (p *packetPacker) AppendPacket(buf *packetBuffer, maxSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error) {
+func (p *packetPacker) AppendPacket(buf *udp.PacketBuffer, maxSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error) {
 	return p.appendPacket(buf, false, maxSize, now, v)
 }
 
 func (p *packetPacker) appendPacket(
-	buf *packetBuffer,
+	buf *udp.PacketBuffer,
 	onlyAck bool,
 	maxPacketSize protocol.ByteCount,
 	now monotime.Time,
@@ -787,7 +788,7 @@ func (p *packetPacker) PackPTOProbePacket(
 	if size > maxPacketSize {
 		return nil, fmt.Errorf("packet too large (%d bytes, allowed %d bytes)", size, maxPacketSize)
 	}
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	packet := &coalescedPacket{buffer: buffer}
 	var padding protocol.ByteCount
 	if encLevel == protocol.EncryptionInitial {
@@ -820,7 +821,7 @@ func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, 
 		pl.frames = append(pl.frames, ackhandler.Frame{Frame: ping, Handler: emptyHandler{}})
 		pl.length += ping.Length(v)
 	}
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	packet := &coalescedPacket{buffer: buffer}
 	shp, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, 0, maxPacketSize, s, false, v)
 	if err != nil {
@@ -830,12 +831,12 @@ func (p *packetPacker) packPTOProbePacket1RTT(maxPacketSize protocol.ByteCount, 
 	return packet, nil
 }
 
-func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error) {
 	pl := payload{
 		frames: []ackhandler.Frame{ping},
 		length: ping.Frame.Length(v),
 	}
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	s, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
 		return shortHeaderPacket{}, nil, err
@@ -848,9 +849,9 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 	return packet, buffer, err
 }
 
-func (p *packetPacker) PackPathProbePacket(connID protocol.ConnectionID, frames []ackhandler.Frame, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (p *packetPacker) PackPathProbePacket(connID protocol.ConnectionID, frames []ackhandler.Frame, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error) {
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.PacketNumberSpaceAppData)
-	buf := getPacketBuffer()
+	buf := udp.GetPacketBuffer()
 	s, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
 		return shortHeaderPacket{}, nil, err
@@ -895,7 +896,7 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel, v protoc
 	return hdr
 }
 
-func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire.ExtendedHeader, pl payload, padding protocol.ByteCount, sealer sealer, v protocol.Version) (*longHeaderPacket, error) {
+func (p *packetPacker) appendLongHeaderPacket(buffer *udp.PacketBuffer, header *wire.ExtendedHeader, pl payload, padding protocol.ByteCount, sealer sealer, v protocol.Version) (*longHeaderPacket, error) {
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(header.PacketNumberLen)
 	if pl.length < 4-pnLen {
@@ -929,7 +930,7 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 }
 
 func (p *packetPacker) appendShortHeaderPacket(
-	buffer *packetBuffer,
+	buffer *udp.PacketBuffer,
 	connID protocol.ConnectionID,
 	pn protocol.PacketNumber,
 	pnLen protocol.PacketNumberLen,

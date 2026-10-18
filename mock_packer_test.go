@@ -16,6 +16,7 @@ import (
 	monotime "github.com/quic-go/quic-go/internal/monotime"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 	qerr "github.com/quic-go/quic-go/internal/qerr"
+	udp "github.com/quic-go/quic-go/internal/udp"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -44,7 +45,7 @@ func (m *MockPacker) EXPECT() *MockPackerMockRecorder {
 }
 
 // AppendPacket mocks base method.
-func (m *MockPacker) AppendPacket(arg0 *packetBuffer, maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error) {
+func (m *MockPacker) AppendPacket(arg0 *udp.PacketBuffer, maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendPacket", arg0, maxPacketSize, now, v)
 	ret0, _ := ret[0].(shortHeaderPacket)
@@ -71,23 +72,23 @@ func (c *MockPackerAppendPacketCall) Return(arg0 shortHeaderPacket, arg1 error) 
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockPackerAppendPacketCall) Do(f func(*packetBuffer, protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, error)) *MockPackerAppendPacketCall {
+func (c *MockPackerAppendPacketCall) Do(f func(*udp.PacketBuffer, protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, error)) *MockPackerAppendPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPackerAppendPacketCall) DoAndReturn(f func(*packetBuffer, protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, error)) *MockPackerAppendPacketCall {
+func (c *MockPackerAppendPacketCall) DoAndReturn(f func(*udp.PacketBuffer, protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, error)) *MockPackerAppendPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // PackAckOnlyPacket mocks base method.
-func (m *MockPacker) PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (m *MockPacker) PackAckOnlyPacket(maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackAckOnlyPacket", maxPacketSize, now, v)
 	ret0, _ := ret[0].(shortHeaderPacket)
-	ret1, _ := ret[1].(*packetBuffer)
+	ret1, _ := ret[1].(*udp.PacketBuffer)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -105,19 +106,19 @@ type MockPackerPackAckOnlyPacketCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockPackerPackAckOnlyPacketCall) Return(arg0 shortHeaderPacket, arg1 *packetBuffer, arg2 error) *MockPackerPackAckOnlyPacketCall {
+func (c *MockPackerPackAckOnlyPacketCall) Return(arg0 shortHeaderPacket, arg1 *udp.PacketBuffer, arg2 error) *MockPackerPackAckOnlyPacketCall {
 	c.Call = c.Call.Return(arg0, arg1, arg2)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockPackerPackAckOnlyPacketCall) Do(f func(protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, *packetBuffer, error)) *MockPackerPackAckOnlyPacketCall {
+func (c *MockPackerPackAckOnlyPacketCall) Do(f func(protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)) *MockPackerPackAckOnlyPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPackerPackAckOnlyPacketCall) DoAndReturn(f func(protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, *packetBuffer, error)) *MockPackerPackAckOnlyPacketCall {
+func (c *MockPackerPackAckOnlyPacketCall) DoAndReturn(f func(protocol.ByteCount, monotime.Time, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)) *MockPackerPackAckOnlyPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -240,11 +241,11 @@ func (c *MockPackerPackConnectionCloseCall) DoAndReturn(f func(*qerr.TransportEr
 }
 
 // PackMTUProbePacket mocks base method.
-func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackMTUProbePacket", ping, size, v)
 	ret0, _ := ret[0].(shortHeaderPacket)
-	ret1, _ := ret[1].(*packetBuffer)
+	ret1, _ := ret[1].(*udp.PacketBuffer)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -262,19 +263,19 @@ type MockPackerPackMTUProbePacketCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockPackerPackMTUProbePacketCall) Return(arg0 shortHeaderPacket, arg1 *packetBuffer, arg2 error) *MockPackerPackMTUProbePacketCall {
+func (c *MockPackerPackMTUProbePacketCall) Return(arg0 shortHeaderPacket, arg1 *udp.PacketBuffer, arg2 error) *MockPackerPackMTUProbePacketCall {
 	c.Call = c.Call.Return(arg0, arg1, arg2)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockPackerPackMTUProbePacketCall) Do(f func(ackhandler.Frame, protocol.ByteCount, protocol.Version) (shortHeaderPacket, *packetBuffer, error)) *MockPackerPackMTUProbePacketCall {
+func (c *MockPackerPackMTUProbePacketCall) Do(f func(ackhandler.Frame, protocol.ByteCount, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)) *MockPackerPackMTUProbePacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPackerPackMTUProbePacketCall) DoAndReturn(f func(ackhandler.Frame, protocol.ByteCount, protocol.Version) (shortHeaderPacket, *packetBuffer, error)) *MockPackerPackMTUProbePacketCall {
+func (c *MockPackerPackMTUProbePacketCall) DoAndReturn(f func(ackhandler.Frame, protocol.ByteCount, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)) *MockPackerPackMTUProbePacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -319,11 +320,11 @@ func (c *MockPackerPackPTOProbePacketCall) DoAndReturn(f func(protocol.Encryptio
 }
 
 // PackPathProbePacket mocks base method.
-func (m *MockPacker) PackPathProbePacket(arg0 protocol.ConnectionID, arg1 []ackhandler.Frame, arg2 protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+func (m *MockPacker) PackPathProbePacket(arg0 protocol.ConnectionID, arg1 []ackhandler.Frame, arg2 protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackPathProbePacket", arg0, arg1, arg2)
 	ret0, _ := ret[0].(shortHeaderPacket)
-	ret1, _ := ret[1].(*packetBuffer)
+	ret1, _ := ret[1].(*udp.PacketBuffer)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -341,19 +342,19 @@ type MockPackerPackPathProbePacketCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockPackerPackPathProbePacketCall) Return(arg0 shortHeaderPacket, arg1 *packetBuffer, arg2 error) *MockPackerPackPathProbePacketCall {
+func (c *MockPackerPackPathProbePacketCall) Return(arg0 shortHeaderPacket, arg1 *udp.PacketBuffer, arg2 error) *MockPackerPackPathProbePacketCall {
 	c.Call = c.Call.Return(arg0, arg1, arg2)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockPackerPackPathProbePacketCall) Do(f func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error)) *MockPackerPackPathProbePacketCall {
+func (c *MockPackerPackPathProbePacketCall) Do(f func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)) *MockPackerPackPathProbePacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockPackerPackPathProbePacketCall) DoAndReturn(f func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *packetBuffer, error)) *MockPackerPackPathProbePacketCall {
+func (c *MockPackerPackPathProbePacketCall) DoAndReturn(f func(protocol.ConnectionID, []ackhandler.Frame, protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)) *MockPackerPackPathProbePacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

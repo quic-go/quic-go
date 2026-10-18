@@ -14,6 +14,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
@@ -610,7 +611,7 @@ func TestPack1RTTPacketNothingToSend(t *testing.T) {
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), true)
 	tp.framer.EXPECT().HasData()
-	_, err := tp.packer.AppendPacket(getPacketBuffer(), protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, err := tp.packer.AppendPacket(udp.GetPacketBuffer(), protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.ErrorIs(t, err, errNothingToPack)
 }
 
@@ -634,7 +635,7 @@ func TestPack1RTTPacketWithData(t *testing.T) {
 		},
 		[]ackhandler.StreamFrame{{Frame: f}},
 	)
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	buffer.Data = append(buffer.Data, []byte("foobar")...)
 	p, err := tp.packer.AppendPacket(buffer, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
@@ -669,7 +670,7 @@ func TestPack1RTTPacketWithACK(t *testing.T) {
 	tp.framer.EXPECT().HasData()
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), true).Return(ack)
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
-	p, err := tp.packer.AppendPacket(getPacketBuffer(), protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	p, err := tp.packer.AppendPacket(udp.GetPacketBuffer(), protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Equal(t, ack, p.Ack)
 }
@@ -688,7 +689,7 @@ func TestPackPathChallengeAndPathResponse(t *testing.T) {
 		{Frame: &wire.DataBlockedFrame{}},
 	}
 	expectAppendFrames(tp.framer, frames, nil)
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	p, err := tp.packer.AppendPacket(buffer, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Len(t, p.Frames, 3)
@@ -725,7 +726,7 @@ func TestPackDatagramFrames(t *testing.T) {
 		Data:           []byte("foobar"),
 	})
 	tp.framer.EXPECT().HasData()
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	p, err := tp.packer.AppendPacket(buffer, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Len(t, p.Frames, 1)
@@ -748,7 +749,7 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 	f := &wire.DatagramFrame{DataLenPresent: true, Data: make([]byte, maxPacketSize-10)}
 	tp.datagramQueue.Add(f)
 	tp.framer.EXPECT().HasData()
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	p, err := tp.packer.AppendPacket(buffer, maxPacketSize, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, p.Ack)
@@ -764,7 +765,7 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x43), protocol.PacketNumberLen2)
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
 	tp.framer.EXPECT().HasData()
-	buffer = getPacketBuffer()
+	buffer = udp.GetPacketBuffer()
 	p, err = tp.packer.AppendPacket(buffer, newMaxPacketSize, monotime.Now(), protocol.Version1)
 	require.ErrorIs(t, err, errNothingToPack)
 	require.Nil(t, tp.datagramQueue.Peek()) // make sure the frame is gone
@@ -807,7 +808,7 @@ func packMaxNumNonAckElicitingAcks(t *testing.T, tp *testPacketPacker, mockCtrl 
 			&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
 		)
 		expectAppendFrames(tp.framer, nil, nil)
-		p, err := tp.packer.AppendPacket(getPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
+		p, err := tp.packer.AppendPacket(udp.GetPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
 		require.NoError(t, err)
 		require.NotNil(t, p.Ack)
 		require.Empty(t, p.Frames)
@@ -828,7 +829,7 @@ func TestPackEvery20thPacketAckEliciting(t *testing.T) {
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), false)
 	tp.framer.EXPECT().HasData().Return(true)
 	expectAppendFrames(tp.framer, nil, nil)
-	_, err := tp.packer.AppendPacket(getPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
+	_, err := tp.packer.AppendPacket(udp.GetPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
 	require.ErrorIs(t, err, errNothingToPack)
 
 	// Now we have an ACK to send. We should bundle a PING to make the packet ack-eliciting.
@@ -840,7 +841,7 @@ func TestPackEvery20thPacketAckEliciting(t *testing.T) {
 		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
 	)
 	expectAppendFrames(tp.framer, nil, nil)
-	p, err := tp.packer.AppendPacket(getPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
+	p, err := tp.packer.AppendPacket(udp.GetPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Len(t, p.Frames, 1)
 	require.Equal(t, &wire.PingFrame{}, p.Frames[0].Frame)
@@ -855,7 +856,7 @@ func TestPackEvery20thPacketAckEliciting(t *testing.T) {
 		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
 	)
 	expectAppendFrames(tp.framer, nil, nil)
-	p, err = tp.packer.AppendPacket(getPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
+	p, err = tp.packer.AppendPacket(udp.GetPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, p.Ack)
 	require.Empty(t, p.Frames)
@@ -919,7 +920,7 @@ func TestPackShortHeaderPadToAtLeast4Bytes(t *testing.T) {
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), false)
 	expectAppendFrames(tp.framer, nil, []ackhandler.StreamFrame{{Frame: f}})
 
-	buffer := getPacketBuffer()
+	buffer := udp.GetPacketBuffer()
 	_, err := tp.packer.AppendPacket(buffer, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	// cut off the tag that the mock sealer added

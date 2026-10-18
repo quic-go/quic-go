@@ -1,6 +1,6 @@
 //go:build windows
 
-package quic
+package udp
 
 import (
 	"errors"
@@ -10,6 +10,32 @@ import (
 
 	"github.com/quic-go/quic-go/internal/utils"
 )
+
+func newConn(c OOBCapablePacketConn, supportsDF bool) (*basicConn, error) {
+	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
+}
+
+func inspectReadBuffer(c syscall.RawConn) (int, error) {
+	var size int
+	var serr error
+	if err := c.Control(func(fd uintptr) {
+		size, serr = windows.GetsockoptInt(windows.Handle(fd), windows.SOL_SOCKET, windows.SO_RCVBUF)
+	}); err != nil {
+		return 0, err
+	}
+	return size, serr
+}
+
+func inspectWriteBuffer(c syscall.RawConn) (int, error) {
+	var size int
+	var serr error
+	if err := c.Control(func(fd uintptr) {
+		size, serr = windows.GetsockoptInt(windows.Handle(fd), windows.SOL_SOCKET, windows.SO_SNDBUF)
+	}); err != nil {
+		return 0, err
+	}
+	return size, serr
+}
 
 const (
 	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_DONTFRAGMENT.html
@@ -41,12 +67,14 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 	return true, nil
 }
 
-func isSendMsgSizeErr(err error) bool {
+func IsSendMsgSizeErr(err error) bool {
 	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 	return errors.Is(err, windows.WSAEMSGSIZE)
 }
 
-func isRecvMsgSizeErr(err error) bool {
+func IsRecvMsgSizeErr(err error) bool {
 	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 	return errors.Is(err, windows.WSAEMSGSIZE)
 }
+
+const desiredBufferSize = 7 << 20 // 7 MiB

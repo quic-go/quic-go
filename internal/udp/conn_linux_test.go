@@ -1,9 +1,10 @@
 //go:build linux
 
-package quic
+package udp
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"testing"
@@ -73,7 +74,12 @@ func TestForcingSendBufferSize(t *testing.T) {
 }
 
 func TestGSOError(t *testing.T) {
-	require.True(t, isGSOError(errGSO))
-	require.False(t, isGSOError(nil))
-	require.False(t, isGSOError(errors.New("test")))
+	require.True(t, IsGSOError(errGSO))
+	require.False(t, IsGSOError(nil))
+	require.False(t, IsGSOError(errors.New("test")))
+}
+
+func init() {
+	major, minor := kernelVersion()
+	fmt.Printf("Kernel Version: %d.%d\n\n", major, minor)
 }
