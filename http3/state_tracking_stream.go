@@ -148,6 +148,9 @@ func (s *stateTrackingStream) enqueueDatagram(data []byte) {
 }
 
 func (s *stateTrackingStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+	if err := context.Cause(ctx); err != nil {
+		return nil, err
+	}
 start:
 	s.mx.Lock()
 	if len(s.queue) > 0 {
