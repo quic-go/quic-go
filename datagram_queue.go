@@ -134,6 +134,9 @@ func (h *datagramQueue) HandleDatagramFrame(f *wire.DatagramFrame) {
 
 // Receive gets a received DATAGRAM frame.
 func (h *datagramQueue) Receive(ctx context.Context) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	for {
 		h.rcvMx.Lock()
 		if len(h.rcvQueue) > 0 {

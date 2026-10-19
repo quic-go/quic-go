@@ -90,6 +90,22 @@ func TestDatagramQueueReceive(t *testing.T) {
 	require.Equal(t, []byte("bar"), data)
 }
 
+func TestDatagramQueueReceiveCanceledContext(t *testing.T) {
+	queue := newDatagramQueue(func() {}, utils.DefaultLogger, nil)
+	queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("foo")})
+
+	// a canceled context takes precedence over queued datagrams
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := queue.Receive(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+
+	// the datagram is still queued
+	data, err := queue.Receive(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), data)
+}
+
 func TestDatagramQueueReceiveOverflow(t *testing.T) {
 	qlogger := &events.Recorder{}
 	queue := newDatagramQueue(func() {}, utils.DefaultLogger, qlogger)
