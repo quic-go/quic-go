@@ -614,6 +614,10 @@ func (s *SendStream) SetReliableBoundary() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	if s.resetErr != nil {
+		return
+	}
+
 	if s.nextFrame != nil {
 		s.reliableSize = max(s.reliableSize, s.writeOffset+s.nextFrame.DataLen())
 	} else {

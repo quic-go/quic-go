@@ -1725,6 +1725,11 @@ func TestSendStreamResetStreamAtStopSendingBeforeCancelation(t *testing.T) {
 
 	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
 	str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: 1337, ErrorCode: 42})
+
+	// setting the reliable boundary after the STOP_SENDING is a no-op
+	str.SetReliableBoundary()
+	f.Handler.OnAcked(f.Frame)
+
 	cf, ok, hasMore := str.getControlFrame(monotime.Now())
 	require.True(t, ok)
 	// Since the peer reset the stream, the resulting RESET_STREAM frame has a reliable size of 0
