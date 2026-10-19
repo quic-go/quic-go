@@ -38,7 +38,7 @@ type rawConn struct {
 	rcvdControlStr      atomic.Bool
 	rcvdQPACKEncoderStr atomic.Bool
 	rcvdQPACKDecoderStr atomic.Bool
-	controlStrHandler   func(*quic.ReceiveStream, *frameParser) // is called *after* the SETTINGS frame was parsed
+	controlStrHandler   func(*quic.ReceiveStream, *frameParser, *settingsFrame) // is called *after* the SETTINGS frame was parsed
 
 	onStreamsEmpty func()
 
@@ -53,7 +53,7 @@ func newRawConn(
 	quicConn *quic.Conn,
 	enableDatagrams bool,
 	onStreamsEmpty func(),
-	controlStrHandler func(*quic.ReceiveStream, *frameParser),
+	controlStrHandler func(*quic.ReceiveStream, *frameParser, *settingsFrame),
 	qlogger qlogwriter.Recorder,
 	logger *slog.Logger,
 ) *rawConn {
@@ -254,8 +254,7 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			}
 		})
 	}
-
-	c.controlStrHandler(str, fp)
+	c.controlStrHandler(str, fp, sf)
 }
 
 func (c *rawConn) sendDatagram(streamID quic.StreamID, b []byte) error {
