@@ -20,6 +20,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -46,7 +47,7 @@ type cryptoStreamHandler interface {
 }
 
 type receivedPacket struct {
-	buffer *packetBuffer
+	buffer *udp.PacketBuffer
 
 	remoteAddr net.Addr
 	rcvTime    monotime.Time
@@ -54,7 +55,7 @@ type receivedPacket struct {
 
 	ecn protocol.ECN
 
-	info packetInfo // only valid if the contained IP address is valid
+	info udp.PacketInfo // only valid if the contained IP address is valid
 }
 
 type receivedPacketWithChecksum struct {
@@ -929,7 +930,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	c.sentPacketHandler.MigratedPath(now, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	c.mtuDiscoverer.Reset(initialPacketSize, c.maxMTU())
-	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
+	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), udp.PacketInfo{}, utils.DefaultLogger) // TODO: find a better way
 	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
 		c.mtuDiscoverer.Start(now)
 	}
@@ -2566,7 +2567,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 
 func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 	for {
-		buf := getPacketBuffer()
+		buf := udp.GetPacketBuffer()
 		ecn := c.sentPacketHandler.ECNMode(true)
 		if _, err := c.appendOneShortHeaderPacket(buf, c.maxPacketSize(), ecn, now); err != nil {
 			if err == errNothingToPack {
@@ -2601,7 +2602,7 @@ func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 }
 
 func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
-	buf := getLargePacketBuffer()
+	buf := udp.GetLargePacketBuffer()
 	maxSize := c.maxPacketSize()
 
 	ecn := c.sentPacketHandler.ECNMode(true)
@@ -2660,7 +2661,7 @@ func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
 		}
 
 		ecn = nextECN
-		buf = getLargePacketBuffer()
+		buf = udp.GetLargePacketBuffer()
 	}
 }
 
@@ -2740,7 +2741,7 @@ func (c *Conn) sendProbePacket(sendMode ackhandler.SendMode, now monotime.Time) 
 
 // appendOneShortHeaderPacket appends a new packet to the given packetBuffer.
 // If there was nothing to pack, the returned size is 0.
-func (c *Conn) appendOneShortHeaderPacket(buf *packetBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now monotime.Time) (protocol.ByteCount, error) {
+func (c *Conn) appendOneShortHeaderPacket(buf *udp.PacketBuffer, maxSize protocol.ByteCount, ecn protocol.ECN, now monotime.Time) (protocol.ByteCount, error) {
 	startLen := buf.Len()
 	p, err := c.packer.AppendPacket(buf, maxSize, now, c.version)
 	if err != nil {
@@ -2854,7 +2855,7 @@ func (c *Conn) sendPackedCoalescedPacket(packet *coalescedPacket, ecn protocol.E
 	err := c.conn.Write(packet.buffer.Data, 0, ecn)
 	packet.buffer.Release()
 	if err != nil {
-		if !isSendMsgSizeErr(err) || c.config.InitialPacketSize != 0 {
+		if !udp.IsSendMsgSizeErr(err) || c.config.InitialPacketSize != 0 {
 			return err
 		}
 	}

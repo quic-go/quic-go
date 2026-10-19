@@ -1,6 +1,14 @@
 //go:build openbsd
 
-package quic
+package udp
+
+import (
+	"net"
+)
+
+func newConn(c net.PacketConn, supportsDF bool) (*basicConn, error) {
+	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
+}
 
 // The OpenBSD kernel rejects socket buffer sizes larger than SB_MAX (2 MB, see sys/sys/socketvar.h)
 // instead of clamping them. This limit is not queryable at runtime; changing it requires a custom
