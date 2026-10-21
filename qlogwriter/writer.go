@@ -139,16 +139,14 @@ func (t *FileSeq) AddProducer() Recorder {
 	return &Writer{t: t}
 }
 
-func (t *FileSeq) record(eventTime time.Time, details Event) {
+func (t *FileSeq) record(details Event) {
 	t.mx.Lock()
+	defer t.mx.Unlock()
 
 	if t.closed {
-		t.mx.Unlock()
 		return
 	}
-	t.mx.Unlock()
-
-	t.events <- event{Time: eventTime, Event: details}
+	t.events <- event{Time: time.Now(), Event: details}
 }
 
 func (t *FileSeq) Run() {
@@ -225,5 +223,5 @@ func (w *Writer) Close() error {
 }
 
 func (w *Writer) RecordEvent(ev Event) {
-	w.t.record(time.Now(), ev)
+	w.t.record(ev)
 }
