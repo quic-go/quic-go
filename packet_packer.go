@@ -39,11 +39,11 @@ type sealer interface {
 type payload struct {
 	streamFrames []ackhandler.StreamFrame
 	frames       []ackhandler.Frame
-	// If set, the last frame in frames is a DATAGRAM frame.
-	// It is serialized after all other frames in frames.
-	hasDatagramFrame bool
-	ack              *wire.AckFrame
-	length           protocol.ByteCount
+	// The number of DATAGRAM frames in frames.
+	// The last DATAGRAM frame is the last frame in frames, all others are at the start of frames.
+	numDatagramFrames int
+	ack               *wire.AckFrame
+	length            protocol.ByteCount
 }
 
 type longHeaderPacket struct {
@@ -677,10 +677,13 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 
-	// The DATAGRAM frame is added to the payload last, after all other frames.
-	var datagram *wire.DatagramFrame
+	var lastDatagram *wire.DatagramFrame
 	if p.datagramQueue != nil {
-		if f := p.datagramQueue.Peek(); f != nil {
+		for {
+			f := p.datagramQueue.Peek()
+			if f == nil {
+				break
+			}
 			size := f.Length(v)
 			if size > maxPayloadSize-pl.length {
 				// The DATAGRAM frame might still fit without the length field.
@@ -690,11 +693,17 @@ func (p *packetPacker) composeNextPacket(
 				size = f.Length(v)
 			}
 			if size <= maxPayloadSize-pl.length { // DATAGRAM frame fits
-				datagram = f
-				pl.length += size
 				p.datagramQueue.Pop()
-			} else if pl.ack == nil {
-				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK.
+				pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
+				pl.numDatagramFrames++
+				pl.length += size
+				lastDatagram = f
+				if !f.DataLenPresent {
+					// This DATAGRAM frame only fit without the length field, so it has to be the last frame in the packet.
+					break
+				}
+			} else if pl.ack == nil && pl.numDatagramFrames == 0 {
+				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK or other DATAGRAM frames.
 				// Discard this frame. There's no point in retrying this in the next packet,
 				// as it's unlikely that the available packet size will increase.
 				p.datagramQueue.Pop()
@@ -709,6 +718,7 @@ func (p *packetPacker) composeNextPacket(
 				// The DATAGRAM frame will be sent in a later packet.
 				// It might not be the last frame in that packet, so it needs the length field.
 				f.DataLenPresent = true
+				break
 			}
 		}
 	}
@@ -749,16 +759,17 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 
-	if datagram != nil {
-		pl.hasDatagramFrame = true
+	if lastDatagram != nil {
+		// Move the last DATAGRAM frame to the end, and put the frame that was there in its place.
+		pl.frames[pl.numDatagramFrames-1] = pl.frames[len(pl.frames)-1]
+		pl.frames[len(pl.frames)-1] = ackhandler.Frame{Frame: lastDatagram}
 		// STREAM frames are serialized after all other frames.
-		// If there are none, the DATAGRAM frame is the last frame in the packet, and doesn't need a length field.
+		// If there are none, the last DATAGRAM frame is the last frame in the packet, and doesn't need a length field.
 		if len(pl.streamFrames) == 0 {
-			pl.length -= datagram.Length(v)
-			datagram.DataLenPresent = false
-			pl.length += datagram.Length(v)
+			pl.length -= lastDatagram.Length(v)
+			lastDatagram.DataLenPresent = false
+			pl.length += lastDatagram.Length(v)
 		}
-		pl.frames = append(pl.frames, ackhandler.Frame{Frame: datagram})
 	}
 	return pl
 }
@@ -1021,13 +1032,17 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	}
 	// Randomize the order of the control frames.
 	// This makes sure that the receiver doesn't rely on the order in which frames are packed.
-	// The DATAGRAM frame is not shuffled: it needs to stay at the end, since it might omit its length field.
-	n := len(pl.frames)
-	if pl.hasDatagramFrame {
-		n--
+	toShuffle := pl.frames
+	if pl.numDatagramFrames > 0 {
+		// DATAGRAM frames are not shuffled, as this would reorder the datagrams delivered to the application.
+		// The last DATAGRAM frame also needs to stay at the end, since it might omit its length field.
+		toShuffle = pl.frames[pl.numDatagramFrames-1 : len(pl.frames)-1]
 	}
-	if n > 1 {
-		p.rand.Shuffle(n, func(i, j int) { pl.frames[i], pl.frames[j] = pl.frames[j], pl.frames[i] })
+	if len(toShuffle) > 1 {
+		p.rand.Shuffle(
+			len(toShuffle),
+			func(i, j int) { toShuffle[i], toShuffle[j] = toShuffle[j], toShuffle[i] },
+		)
 	}
 	for _, f := range pl.frames {
 		var err error

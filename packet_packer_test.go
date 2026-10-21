@@ -720,18 +720,19 @@ func TestPackDatagramFrames(t *testing.T) {
 	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42))
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
-	tp.datagramQueue.Add(&wire.DatagramFrame{
-		DataLenPresent: true,
-		Data:           []byte("foobar"),
-	})
+	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("foo")})
+	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("bar")})
+	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("baz")})
 	tp.framer.EXPECT().HasData().Return(true)
 	expectAppendFrames(tp.framer, []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.DataBlockedFrame{}}}, nil)
 	buffer := getPacketBuffer()
 	p, err := tp.packer.AppendPacket(buffer, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
-	require.Len(t, p.Frames, 3)
-	// the DATAGRAM frame is the last frame in the packet, so it doesn't need a length field
-	require.Equal(t, &wire.DatagramFrame{Data: []byte("foobar")}, p.Frames[2].Frame)
+	require.Len(t, p.Frames, 5)
+	require.Equal(t, &wire.DatagramFrame{DataLenPresent: true, Data: []byte("foo")}, p.Frames[0].Frame)
+	require.Equal(t, &wire.DatagramFrame{DataLenPresent: true, Data: []byte("bar")}, p.Frames[1].Frame)
+	// the last DATAGRAM frame is the last frame in the packet, so it doesn't need a length field
+	require.Equal(t, &wire.DatagramFrame{Data: []byte("baz")}, p.Frames[4].Frame)
 	require.NotEmpty(t, buffer.Data)
 	require.Empty(t, tp.Recorder.Events(qlog.DatagramDropped{}))
 }
