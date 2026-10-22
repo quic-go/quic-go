@@ -20,15 +20,8 @@ func TestQLOGDIRSet(t *testing.T) {
 	qlogDir := filepath.Join(tmpDir, "qlogs")
 	t.Setenv("QLOGDIR", qlogDir)
 
-	t.Run("default connection tracer", func(t *testing.T) {
-		tracer := DefaultConnectionTracer(context.Background(), true, connID)
-		testQLOGDIRSet(t, qlogDir, tracer, []string{EventSchema})
-	})
-
-	t.Run("default connection tracer with schemas", func(t *testing.T) {
-		tracer := DefaultConnectionTracerWithSchemas(context.Background(), true, connID, []string{"urn:ietf:params:qlog:events:foobar"})
-		testQLOGDIRSet(t, qlogDir, tracer, []string{EventSchema, "urn:ietf:params:qlog:events:foobar"})
-	})
+	tracer := DefaultConnectionTracer(context.Background(), true, connID)
+	testQLOGDIRSet(t, qlogDir, tracer, []string{EventSchema})
 }
 
 func testQLOGDIRSet(t *testing.T, qlogDir string, tracer qlogwriter.Trace, expectedEventSchemas []string) {

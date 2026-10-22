@@ -137,10 +137,6 @@ func (t *multiplexedTrace) AddProducer() qlogwriter.Recorder {
 	return &multiplexedRecorder{Recorders: recorders}
 }
 
-func (t *multiplexedTrace) SupportsSchemas(schema string) bool {
-	return true
-}
-
 func getQuicConfig(conf *quic.Config) *quic.Config {
 	if conf == nil {
 		conf = &quic.Config{}

@@ -16,8 +16,6 @@ import (
 
 type mockTrace struct {
 	openRecorders atomic.Int32
-
-	SchemasChecked []string
 }
 
 var _ qlogwriter.Trace = &mockTrace{}
@@ -29,11 +27,6 @@ func newMockTrace() *mockTrace {
 func (t *mockTrace) AddProducer() qlogwriter.Recorder {
 	t.openRecorders.Add(1)
 	return &mockRecorder{onClose: func() { t.openRecorders.Add(-1) }}
-}
-
-func (t *mockTrace) SupportsSchemas(schema string) bool {
-	t.SchemasChecked = append(t.SchemasChecked, schema)
-	return true
 }
 
 func (t *mockTrace) OpenRecorders() int {
@@ -96,8 +89,6 @@ func TestQlogHandshake(t *testing.T) {
 
 	assert.Zero(t, clientTrace.OpenRecorders(), "client recorders should be closed")
 	assert.Zero(t, serverTrace.OpenRecorders(), "server recorders should be closed")
-	assert.Empty(t, clientTrace.SchemasChecked)
-	assert.Empty(t, serverTrace.SchemasChecked)
 }
 
 func TestQlogHandshakeFailed(t *testing.T) {

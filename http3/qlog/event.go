@@ -4,8 +4,16 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 )
+
+// EventSchema is the qlog event schema for HTTP/3
+const EventSchema = "urn:ietf:params:qlog:events:http3-12"
+
+func init() {
+	qlogwriter.RegisterEventSchema(EventSchema)
+}
 
 type encoderHelper struct {
 	enc *jsontext.Encoder
