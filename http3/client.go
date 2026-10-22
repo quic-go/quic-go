@@ -15,7 +15,6 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 )
 
@@ -91,7 +90,7 @@ func newClientConn(
 	logger *slog.Logger,
 ) *ClientConn {
 	var qlogger qlogwriter.Recorder
-	if qlogTrace := conn.QlogTrace(); qlogTrace != nil && qlogTrace.SupportsSchemas(qlog.EventSchema) {
+	if qlogTrace := conn.QlogTrace(); qlogTrace != nil {
 		qlogger = qlogTrace.AddProducer()
 	}
 	c := &ClientConn{

@@ -31,7 +31,6 @@ func testEventEncoding(t *testing.T, ev qlogwriter.Event) (string, string) {
 			nopWriteCloser(&buf),
 			true,
 			quic.ConnectionIDFromBytes([]byte{1, 2, 3, 4}),
-			[]string{"http3"},
 		)
 		go tr.Run()
 		producer := tr.AddProducer()
@@ -57,6 +56,7 @@ func decode(t *testing.T, data string) (string, string) {
 
 	lines := bytes.Split([]byte(data), []byte{'\n'})
 	require.Len(t, lines, 3) // the first line is the trace header, the second line is the event, the third line is empty
+	require.Contains(t, string(lines[0]), EventSchema)
 	require.Empty(t, lines[2])
 	require.NotEmpty(t, lines[1])
 	require.Equal(t, qlogwriter.RecordSeparator, lines[1][0], "expected record separator at start of line")

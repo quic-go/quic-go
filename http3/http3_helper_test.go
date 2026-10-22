@@ -137,8 +137,6 @@ type qlogTrace struct {
 	recorder qlogwriter.Recorder
 }
 
-func (t *qlogTrace) SupportsSchemas(schema string) bool { return true }
-
 func (t *qlogTrace) AddProducer() qlogwriter.Recorder {
 	return t.recorder
 }

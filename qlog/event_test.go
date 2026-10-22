@@ -27,7 +27,6 @@ func testEventEncoding(t *testing.T, ev qlogwriter.Event) (string, string) {
 			nopWriteCloser(&buf),
 			true,
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-			[]string{EventSchema},
 		)
 		go tr.Run()
 		producer := tr.AddProducer()
@@ -895,7 +894,6 @@ func TestLossTimerUpdated(t *testing.T) {
 			nopWriteCloser(&buf),
 			true,
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-			[]string{EventSchema},
 		)
 		go tr.Run()
 		producer := tr.AddProducer()
