@@ -20,9 +20,11 @@ type newConnID struct {
 type connIDManager struct {
 	queue []newConnID
 
-	highestProbingID uint64
-	pathMx           sync.Mutex
-	pathProbing      map[pathID]newConnID // initialized lazily
+	// highestUsed is the highest sequence number taken from the queue,
+	// either as the active connection ID or for a path.
+	highestUsed uint64
+	pathMx      sync.Mutex
+	pathProbing map[pathID]newConnID // initialized lazily
 
 	handshakeComplete         bool
 	activeSequenceNumber      uint64
@@ -83,9 +85,16 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 			ErrorMessage: "received NEW_CONNECTION_ID frame but zero-length connection IDs are in use",
 		}
 	}
-	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number is smaller than the currently active
-	// connection ID or if it was already retired, send the RETIRE_CONNECTION_ID frame immediately.
-	if f.SequenceNumber < max(h.activeSequenceNumber, h.highestProbingID) || f.SequenceNumber < h.highestRetired {
+	// A retransmission of a connection ID that is in use, as the active connection ID or on a path, is a duplicate.
+	// After a migration (see SwitchToPath), the active connection ID can have a lower sequence number than
+	// connection IDs that were already retired, so this check has to come first.
+	if f.SequenceNumber == h.activeSequenceNumber || h.isPathProbingSequenceNumber(f.SequenceNumber) {
+		return nil
+	}
+	// Connection IDs are taken from the queue in order of their sequence number. A connection ID with a sequence
+	// number up to highestUsed that is not in use was retired, and so was one below highestRetired. This also
+	// covers a reordered NEW_CONNECTION_ID frame. Retire the connection ID (again).
+	if f.SequenceNumber <= h.highestUsed || f.SequenceNumber < h.highestRetired {
 		h.queueControlFrame(&wire.RetireConnectionIDFrame{
 			SequenceNumber: f.SequenceNumber,
 		})
@@ -132,6 +141,17 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		h.updateConnectionID()
 	}
 	return nil
+}
+
+// isPathProbingSequenceNumber reports whether the connection ID with this sequence number is allocated to a path.
+// The caller must hold pathMx.
+func (h *connIDManager) isPathProbingSequenceNumber(seq uint64) bool {
+	for _, entry := range h.pathProbing {
+		if entry.SequenceNumber == seq {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken protocol.StatelessResetToken) error {
@@ -182,6 +202,7 @@ func (h *connIDManager) updateConnectionID() {
 
 	front := h.queue[0]
 	h.queue = h.queue[1:]
+	h.highestUsed = max(h.highestUsed, front.SequenceNumber)
 	h.activeSequenceNumber = front.SequenceNumber
 	h.activeConnectionID = front.ConnectionID
 	h.activeStatelessResetToken = &front.StatelessResetToken
@@ -281,7 +302,7 @@ func (h *connIDManager) GetConnIDForPath(id pathID) (protocol.ConnectionID, bool
 	front := h.queue[0]
 	h.queue = h.queue[1:]
 	h.pathProbing[id] = front
-	h.highestProbingID = front.SequenceNumber
+	h.highestUsed = max(h.highestUsed, front.SequenceNumber)
 	h.addStatelessResetToken(front.StatelessResetToken)
 	return front.ConnectionID, true
 }
@@ -316,7 +337,6 @@ func (h *connIDManager) SwitchToPath(id pathID) {
 	}
 	delete(h.pathProbing, id)
 	h.queueControlFrame(&wire.RetireConnectionIDFrame{SequenceNumber: h.activeSequenceNumber})
-	h.highestRetired = max(h.highestRetired, h.activeSequenceNumber)
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}

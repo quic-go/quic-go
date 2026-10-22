@@ -402,6 +402,81 @@ func TestConnIDManagerSwitchToPath(t *testing.T) {
 	}, frameQueue)
 }
 
+// After a migration, the active connection ID can have a lower sequence number than connection IDs
+// that were already retired. A retransmitted NEW_CONNECTION_ID frame for it must not retire it: the
+// peer may close the connection when told to retire the connection ID that the packet is sent to
+// (RFC 9000, Section 19.16). A retransmission for a retired connection ID is retired again.
+func TestConnIDManagerSwitchToPathDuplicateNewConnectionID(t *testing.T) {
+	newConnIDFrame := func(seq uint64) *wire.NewConnectionIDFrame {
+		return &wire.NewConnectionIDFrame{
+			SequenceNumber:      seq,
+			ConnectionID:        protocol.ParseConnectionID([]byte{byte(seq), 0, 0, 0}),
+			StatelessResetToken: protocol.StatelessResetToken{byte(seq)},
+		}
+	}
+
+	t.Run("another path was probed with a higher sequence number", func(t *testing.T) {
+		var frameQueue []wire.Frame
+		m := newConnIDManager(
+			protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+			func(protocol.StatelessResetToken) {},
+			func(protocol.StatelessResetToken) {},
+			func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+		)
+		for seq := uint64(1); seq <= 3; seq++ {
+			require.NoError(t, m.Add(newConnIDFrame(seq)))
+		}
+		_, ok := m.GetConnIDForPath(1) // sequence number 1
+		require.True(t, ok)
+		_, ok = m.GetConnIDForPath(2) // sequence number 2
+		require.True(t, ok)
+		m.SwitchToPath(1)
+		m.RetireConnIDForPath(2)
+		frameQueue = nil
+
+		require.NoError(t, m.Add(newConnIDFrame(1)))
+		require.Empty(t, frameQueue)
+		require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
+		// A retransmission for the retired connection ID of the other path is retired again.
+		require.NoError(t, m.Add(newConnIDFrame(2)))
+		require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 2}}, frameQueue)
+	})
+
+	t.Run("the previously active connection ID was newer", func(t *testing.T) {
+		var frameQueue []wire.Frame
+		m := newConnIDManager(
+			protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+			func(protocol.StatelessResetToken) {},
+			func(protocol.StatelessResetToken) {},
+			func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+		)
+		m.SetHandshakeComplete()
+		for seq := uint64(1); seq <= 3; seq++ {
+			require.NoError(t, m.Add(newConnIDFrame(seq)))
+		}
+		_, ok := m.GetConnIDForPath(1) // sequence number 1
+		require.True(t, ok)
+		// The connection rotates its active connection ID to sequence number 2.
+		for range 5 * protocol.PacketsPerConnectionID {
+			if m.Get() == protocol.ParseConnectionID([]byte{2, 0, 0, 0}) {
+				break
+			}
+			m.SentPacket()
+		}
+		require.Equal(t, protocol.ParseConnectionID([]byte{2, 0, 0, 0}), m.Get())
+		m.SwitchToPath(1)
+		require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
+		frameQueue = nil
+
+		require.NoError(t, m.Add(newConnIDFrame(1)))
+		require.Empty(t, frameQueue)
+		require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
+		// A retransmission for a connection ID that was retired is retired again.
+		require.NoError(t, m.Add(newConnIDFrame(2)))
+		require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 2}}, frameQueue)
+	})
+}
+
 func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 	m := newConnIDManager(
 		protocol.ConnectionID{},
