@@ -45,6 +45,7 @@ type pathManager struct {
 
 	getConnID    func(pathID) (_ protocol.ConnectionID, ok bool)
 	retireConnID func(pathID)
+	switchConnID func(pathID)
 
 	logger utils.Logger
 }
@@ -52,12 +53,14 @@ type pathManager struct {
 func newPathManager(
 	getConnID func(pathID) (_ protocol.ConnectionID, ok bool),
 	retireConnID func(pathID),
+	switchConnID func(pathID),
 	logger utils.Logger,
 ) *pathManager {
 	return &pathManager{
 		paths:        make([]*path, 0, maxPaths+1),
 		getConnID:    getConnID,
 		retireConnID: retireConnID,
+		switchConnID: switchConnID,
 		logger:       logger,
 	}
 }
@@ -174,12 +177,16 @@ func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame) {
 	}
 }
 
-// SwitchToPath is called when the connection switches to a new path
+// SwitchToPath is called when the connection switches to a new path.
+// The connection continues with the connection ID that the new path was probed with,
+// and the connection IDs of all other paths are retired.
+// Otherwise, every migration would permanently use up one of the peer's connection IDs,
+// and once they run out, no new path could be validated.
 func (pm *pathManager) SwitchToPath(addr net.Addr) {
-	// retire all other paths
 	for _, path := range pm.paths {
 		if addrsEqual(path.addr, addr) {
 			pm.logger.Debugf("switching to path %d (%s)", path.id, addr)
+			pm.switchConnID(path.id)
 			continue
 		}
 		pm.retireConnID(path.id)

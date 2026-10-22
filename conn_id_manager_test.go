@@ -339,6 +339,69 @@ func TestConnIDManagerPathMigration(t *testing.T) {
 	require.Empty(t, frameQueue)
 }
 
+func TestConnIDManagerSwitchToPath(t *testing.T) {
+	var frameQueue []wire.Frame
+	var addedTokens, removedTokens []protocol.StatelessResetToken
+	m := newConnIDManager(
+		protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+		func(token protocol.StatelessResetToken) { addedTokens = append(addedTokens, token) },
+		func(token protocol.StatelessResetToken) { removedTokens = append(removedTokens, token) },
+		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+	)
+	m.SetStatelessResetToken(protocol.StatelessResetToken{1, 2, 3, 4})
+	for seq := uint64(1); seq <= 2; seq++ {
+		require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber:      seq,
+			ConnectionID:        protocol.ParseConnectionID([]byte{byte(seq), 0, 0, 0}),
+			StatelessResetToken: protocol.StatelessResetToken{byte(seq)},
+		}))
+	}
+	connID, ok := m.GetConnIDForPath(1)
+	require.True(t, ok)
+	require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), connID)
+	frameQueue = nil
+	addedTokens = addedTokens[:0]
+
+	// Switching to the path makes its connection ID the active one, and retires the old one.
+	// RFC 9000, Section 9.5: an endpoint must not use a connection ID on more than one path.
+	m.SwitchToPath(1)
+	require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
+	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 0}}, frameQueue)
+	require.Equal(t, []protocol.StatelessResetToken{{1, 2, 3, 4}}, removedTokens)
+	require.Empty(t, addedTokens) // the path's token was added when the path got the connection ID
+	require.True(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{1}))
+	require.False(t, m.IsActiveStatelessResetToken(protocol.StatelessResetToken{1, 2, 3, 4}))
+	frameQueue = nil
+	removedTokens = removedTokens[:0]
+
+	// The path no longer holds a connection ID of its own.
+	m.RetireConnIDForPath(1)
+	require.Empty(t, frameQueue)
+	require.Empty(t, removedTokens)
+
+	// Switching to a path without a connection ID changes nothing.
+	m.SwitchToPath(7)
+	require.Empty(t, frameQueue)
+	require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
+
+	// The peer replaces the retired connection ID, so the connection can keep migrating.
+	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
+		SequenceNumber:      3,
+		ConnectionID:        protocol.ParseConnectionID([]byte{3, 0, 0, 0}),
+		StatelessResetToken: protocol.StatelessResetToken{3},
+	}))
+	for _, id := range []pathID{2, 3} {
+		connID, ok := m.GetConnIDForPath(id)
+		require.True(t, ok)
+		m.SwitchToPath(id)
+		require.Equal(t, connID, m.Get())
+	}
+	require.Equal(t, []wire.Frame{
+		&wire.RetireConnectionIDFrame{SequenceNumber: 1},
+		&wire.RetireConnectionIDFrame{SequenceNumber: 2},
+	}, frameQueue)
+}
+
 func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 	m := newConnIDManager(
 		protocol.ConnectionID{},
@@ -361,6 +424,11 @@ func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 	// retiring a connection ID for a path is also a no-op
 	for id := pathID(1); id < 20; id++ {
 		m.RetireConnIDForPath(id)
+	}
+	// switching to a path is also a no-op
+	for id := pathID(1); id < 20; id++ {
+		m.SwitchToPath(id)
+		require.Equal(t, protocol.ConnectionID{}, m.Get())
 	}
 
 	require.ErrorIs(t, m.Add(&wire.NewConnectionIDFrame{

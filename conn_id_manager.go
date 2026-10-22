@@ -301,6 +301,33 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	delete(h.pathProbing, pathID)
 }
 
+// SwitchToPath is called when the connection migrates to the path with the given ID.
+// The connection ID allocated to that path becomes the active connection ID,
+// and the previously active connection ID is retired.
+// RFC 9000, Section 9.5: an endpoint must not use the same connection ID on more than one path.
+// Retiring the old connection ID also prompts the peer to issue a new one.
+func (h *connIDManager) SwitchToPath(id pathID) {
+	h.pathMx.Lock()
+	defer h.pathMx.Unlock()
+
+	entry, ok := h.pathProbing[id]
+	if !ok {
+		return
+	}
+	delete(h.pathProbing, id)
+	h.queueControlFrame(&wire.RetireConnectionIDFrame{SequenceNumber: h.activeSequenceNumber})
+	h.highestRetired = max(h.highestRetired, h.activeSequenceNumber)
+	if h.activeStatelessResetToken != nil {
+		h.removeStatelessResetToken(*h.activeStatelessResetToken)
+	}
+	// The stateless reset token was registered when the connection ID was allocated to the path.
+	h.activeSequenceNumber = entry.SequenceNumber
+	h.activeConnectionID = entry.ConnectionID
+	h.activeStatelessResetToken = &entry.StatelessResetToken
+	h.packetsSinceLastChange = 0
+	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + h.rand.Uint32N(protocol.PacketsPerConnectionID)
+}
+
 func (h *connIDManager) IsActiveStatelessResetToken(token protocol.StatelessResetToken) bool {
 	h.pathMx.Lock()
 	defer h.pathMx.Unlock()

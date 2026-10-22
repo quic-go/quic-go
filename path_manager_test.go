@@ -24,10 +24,11 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 		protocol.ParseConnectionID([]byte{2, 3, 4, 5, 6, 7, 8, 9}),
 		protocol.ParseConnectionID([]byte{3, 4, 5, 6, 7, 8, 9, 0}),
 	}
-	var retiredConnIDs []protocol.ConnectionID
+	var retiredConnIDs, switchedConnIDs []protocol.ConnectionID
 	pm := newPathManager(
 		func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
 		func(id pathID) { retiredConnIDs = append(retiredConnIDs, connIDs[id]) },
+		func(id pathID) { switchedConnIDs = append(switchedConnIDs, connIDs[id]) },
 		utils.DefaultLogger,
 	)
 	now := monotime.Now()
@@ -114,6 +115,8 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 
 	// now switch to the new path
 	pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000})
+	// the connection now sends on the new path with the connection ID it was probed with
+	require.Equal(t, []protocol.ConnectionID{connIDs[1]}, switchedConnIDs)
 
 	// switching to the path removes other paths
 	connID, frames, shouldSwitch = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, false)
@@ -131,6 +134,7 @@ func TestPathManagerMultipleProbes(t *testing.T) {
 	pm := newPathManager(
 		func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
 		func(id pathID) {},
+		func(pathID) {},
 		utils.DefaultLogger,
 	)
 	now := monotime.Now()
@@ -185,6 +189,7 @@ func TestPathManagerNATRebinding(t *testing.T) {
 	pm := newPathManager(
 		func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
 		func(id pathID) { retiredConnIDs = append(retiredConnIDs, connIDs[id]) },
+		func(pathID) {},
 		utils.DefaultLogger,
 	)
 
@@ -222,6 +227,7 @@ func TestPathManagerRetransmissions(t *testing.T) {
 					return connID, true
 				},
 				func(pathID) { t.Fatal("didn't expect a connection ID to be retired") },
+				func(pathID) {},
 				utils.DefaultLogger,
 			)
 			addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}
@@ -296,6 +302,7 @@ func TestPathManagerLimits(t *testing.T) {
 	pm := newPathManager(
 		func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
 		func(id pathID) { retiredConnIDs = append(retiredConnIDs, connIDs[id]) },
+		func(pathID) {},
 		utils.DefaultLogger,
 	)
 

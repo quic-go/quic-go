@@ -1280,6 +1280,7 @@ func (c *Conn) handleShortHeaderPacket(
 		c.pathManager = newPathManager(
 			c.connIDManager.GetConnIDForPath,
 			c.connIDManager.RetireConnIDForPath,
+			c.connIDManager.SwitchToPath,
 			c.logger,
 		)
 	}

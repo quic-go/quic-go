@@ -122,3 +122,57 @@ func TestNATRebinding(t *testing.T) {
 	}
 	require.True(t, foundPathResponse)
 }
+
+// TestNATRebindingRepeatedly rebinds the client many times on one connection. The client uses
+// non-zero-length connection IDs, so the server needs one of the client's connection IDs for every
+// new path. It must retire the connection IDs it no longer uses, so that the client issues new ones.
+func TestNATRebindingRepeatedly(t *testing.T) {
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	proxy := quicproxy.Proxy{ServerAddr: server.Addr().(*net.UDPAddr), Conn: newUDPConnLocalhost(t)}
+	require.NoError(t, proxy.Start())
+	defer proxy.Close()
+
+	clientUDPConn := newUDPConnLocalhost(t)
+	tr := &quic.Transport{Conn: clientUDPConn, ConnectionIDLength: 8}
+	defer tr.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(10*time.Second))
+	defer cancel()
+	conn, err := tr.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+	go func() {
+		for {
+			str, err := serverConn.AcceptStream(context.Background())
+			if err != nil {
+				return
+			}
+			go func() {
+				defer str.Close()
+				io.Copy(str, str)
+			}()
+		}
+	}()
+
+	for i := range 10 {
+		if i > 0 {
+			require.NoError(t, proxy.SwitchConn(clientUDPConn.LocalAddr().(*net.UDPAddr), newUDPConnLocalhost(t)))
+		}
+		str, err := conn.OpenStreamSync(ctx)
+		require.NoError(t, err)
+		msg := fmt.Appendf(nil, "after rebinding %d", i)
+		_, err = str.Write(msg)
+		require.NoError(t, err)
+		require.NoError(t, str.Close())
+		str.SetReadDeadline(time.Now().Add(scaleDuration(2 * time.Second)))
+		data, err := io.ReadAll(str)
+		require.NoError(t, err, "no response on the new path after rebinding %d", i)
+		require.Equal(t, msg, data)
+	}
+}
