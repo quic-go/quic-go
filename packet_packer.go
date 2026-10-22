@@ -39,8 +39,11 @@ type sealer interface {
 type payload struct {
 	streamFrames []ackhandler.StreamFrame
 	frames       []ackhandler.Frame
-	ack          *wire.AckFrame
-	length       protocol.ByteCount
+	// If set, the last frame in frames is a DATAGRAM frame.
+	// It is serialized after all other frames in frames.
+	hasDatagramFrame bool
+	ack              *wire.AckFrame
+	length           protocol.ByteCount
 }
 
 type longHeaderPacket struct {
@@ -674,11 +677,20 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 
+	// The DATAGRAM frame is added to the payload last, after all other frames.
+	var datagram *wire.DatagramFrame
 	if p.datagramQueue != nil {
 		if f := p.datagramQueue.Peek(); f != nil {
 			size := f.Length(v)
+			if size > maxPayloadSize-pl.length {
+				// The DATAGRAM frame might still fit without the length field.
+				// In that case, less than MinStreamFrameSize bytes would then remain, so no STREAM frames
+				// will be packed, and the DATAGRAM frame will be the last frame in the packet.
+				f.DataLenPresent = false
+				size = f.Length(v)
+			}
 			if size <= maxPayloadSize-pl.length { // DATAGRAM frame fits
-				pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
+				datagram = f
 				pl.length += size
 				p.datagramQueue.Pop()
 			} else if pl.ack == nil {
@@ -693,13 +705,12 @@ func (p *packetPacker) composeNextPacket(
 						Trigger:   "too_large",
 					})
 				}
+			} else {
+				// The DATAGRAM frame will be sent in a later packet.
+				// It might not be the last frame in that packet, so it needs the length field.
+				f.DataLenPresent = true
 			}
-			// If the DATAGRAM frame was too large and the packet contained an ACK, we'll try to send it out later.
 		}
-	}
-
-	if pl.ack != nil && !hasData && !hasRetransmission {
-		return pl
 	}
 
 	if hasRetransmission {
@@ -736,6 +747,18 @@ func (p *packetPacker) composeNextPacket(
 				pl.frames[i].Handler = p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)
 			}
 		}
+	}
+
+	if datagram != nil {
+		pl.hasDatagramFrame = true
+		// STREAM frames are serialized after all other frames.
+		// If there are none, the DATAGRAM frame is the last frame in the packet, and doesn't need a length field.
+		if len(pl.streamFrames) == 0 {
+			pl.length -= datagram.Length(v)
+			datagram.DataLenPresent = false
+			pl.length += datagram.Length(v)
+		}
+		pl.frames = append(pl.frames, ackhandler.Frame{Frame: datagram})
 	}
 	return pl
 }
@@ -998,8 +1021,13 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	}
 	// Randomize the order of the control frames.
 	// This makes sure that the receiver doesn't rely on the order in which frames are packed.
-	if len(pl.frames) > 1 {
-		p.rand.Shuffle(len(pl.frames), func(i, j int) { pl.frames[i], pl.frames[j] = pl.frames[j], pl.frames[i] })
+	// The DATAGRAM frame is not shuffled: it needs to stay at the end, since it might omit its length field.
+	n := len(pl.frames)
+	if pl.hasDatagramFrame {
+		n--
+	}
+	if n > 1 {
+		p.rand.Shuffle(n, func(i, j int) { pl.frames[i], pl.frames[j] = pl.frames[j], pl.frames[i] })
 	}
 	for _, f := range pl.frames {
 		var err error
