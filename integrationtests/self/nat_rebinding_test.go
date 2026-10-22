@@ -123,9 +123,6 @@ func TestNATRebinding(t *testing.T) {
 	require.True(t, foundPathResponse)
 }
 
-// TestNATRebindingRepeatedly rebinds the client many times on one connection. The client uses
-// non-zero-length connection IDs, so the server needs one of the client's connection IDs for every
-// new path. It must retire the connection IDs it no longer uses, so that the client issues new ones.
 func TestNATRebindingRepeatedly(t *testing.T) {
 	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
@@ -136,6 +133,7 @@ func TestNATRebindingRepeatedly(t *testing.T) {
 	defer proxy.Close()
 
 	clientUDPConn := newUDPConnLocalhost(t)
+	// use non-zero-length connection IDs, so that every new path needs a connection ID
 	tr := &quic.Transport{Conn: clientUDPConn, ConnectionIDLength: 8}
 	defer tr.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(10*time.Second))

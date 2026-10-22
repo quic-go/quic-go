@@ -20,9 +20,7 @@ type newConnID struct {
 type connIDManager struct {
 	queue []newConnID
 
-	// highestUsed is the highest sequence number taken from the queue,
-	// either as the active connection ID or for a path.
-	highestUsed uint64
+	highestUsed uint64 // highest sequence number taken from the queue
 	pathMx      sync.Mutex
 	pathProbing map[pathID]newConnID // initialized lazily
 
@@ -85,15 +83,12 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 			ErrorMessage: "received NEW_CONNECTION_ID frame but zero-length connection IDs are in use",
 		}
 	}
-	// A retransmission of a connection ID that is in use, as the active connection ID or on a path, is a duplicate.
-	// After a migration (see SwitchToPath), the active connection ID can have a lower sequence number than
-	// connection IDs that were already retired, so this check has to come first.
+	// ignore retransmissions of connection IDs that are in use
 	if f.SequenceNumber == h.activeSequenceNumber || h.isPathProbingSequenceNumber(f.SequenceNumber) {
 		return nil
 	}
-	// Connection IDs are taken from the queue in order of their sequence number. A connection ID with a sequence
-	// number up to highestUsed that is not in use was retired, and so was one below highestRetired. This also
-	// covers a reordered NEW_CONNECTION_ID frame. Retire the connection ID (again).
+	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number is smaller than a connection ID
+	// that was already used, or if it was already retired, send the RETIRE_CONNECTION_ID frame immediately.
 	if f.SequenceNumber <= h.highestUsed || f.SequenceNumber < h.highestRetired {
 		h.queueControlFrame(&wire.RetireConnectionIDFrame{
 			SequenceNumber: f.SequenceNumber,
@@ -143,8 +138,6 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 	return nil
 }
 
-// isPathProbingSequenceNumber reports whether the connection ID with this sequence number is allocated to a path.
-// The caller must hold pathMx.
 func (h *connIDManager) isPathProbingSequenceNumber(seq uint64) bool {
 	for _, entry := range h.pathProbing {
 		if entry.SequenceNumber == seq {
@@ -322,11 +315,8 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	delete(h.pathProbing, pathID)
 }
 
-// SwitchToPath is called when the connection migrates to the path with the given ID.
-// The connection ID allocated to that path becomes the active connection ID,
-// and the previously active connection ID is retired.
-// RFC 9000, Section 9.5: an endpoint must not use the same connection ID on more than one path.
-// Retiring the old connection ID also prompts the peer to issue a new one.
+// SwitchToPath makes the connection ID used for the path the active connection ID,
+// and retires the previously active connection ID.
 func (h *connIDManager) SwitchToPath(id pathID) {
 	h.pathMx.Lock()
 	defer h.pathMx.Unlock()
@@ -340,7 +330,6 @@ func (h *connIDManager) SwitchToPath(id pathID) {
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}
-	// The stateless reset token was registered when the connection ID was allocated to the path.
 	h.activeSequenceNumber = entry.SequenceNumber
 	h.activeConnectionID = entry.ConnectionID
 	h.activeStatelessResetToken = &entry.StatelessResetToken

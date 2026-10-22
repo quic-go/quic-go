@@ -362,8 +362,7 @@ func TestConnIDManagerSwitchToPath(t *testing.T) {
 	frameQueue = nil
 	addedTokens = addedTokens[:0]
 
-	// Switching to the path makes its connection ID the active one, and retires the old one.
-	// RFC 9000, Section 9.5: an endpoint must not use a connection ID on more than one path.
+	// switching to the path makes its connection ID the active one, and retires the old one
 	m.SwitchToPath(1)
 	require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
 	require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 0}}, frameQueue)
@@ -374,17 +373,16 @@ func TestConnIDManagerSwitchToPath(t *testing.T) {
 	frameQueue = nil
 	removedTokens = removedTokens[:0]
 
-	// The path no longer holds a connection ID of its own.
 	m.RetireConnIDForPath(1)
 	require.Empty(t, frameQueue)
 	require.Empty(t, removedTokens)
 
-	// Switching to a path without a connection ID changes nothing.
+	// switching to an unknown path is a no-op
 	m.SwitchToPath(7)
 	require.Empty(t, frameQueue)
 	require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
 
-	// The peer replaces the retired connection ID, so the connection can keep migrating.
+	// the peer replaces the retired connection ID, so the connection can keep migrating
 	require.NoError(t, m.Add(&wire.NewConnectionIDFrame{
 		SequenceNumber:      3,
 		ConnectionID:        protocol.ParseConnectionID([]byte{3, 0, 0, 0}),
@@ -402,10 +400,6 @@ func TestConnIDManagerSwitchToPath(t *testing.T) {
 	}, frameQueue)
 }
 
-// After a migration, the active connection ID can have a lower sequence number than connection IDs
-// that were already retired. A retransmitted NEW_CONNECTION_ID frame for it must not retire it: the
-// peer may close the connection when told to retire the connection ID that the packet is sent to
-// (RFC 9000, Section 19.16). A retransmission for a retired connection ID is retired again.
 func TestConnIDManagerSwitchToPathDuplicateNewConnectionID(t *testing.T) {
 	newConnIDFrame := func(seq uint64) *wire.NewConnectionIDFrame {
 		return &wire.NewConnectionIDFrame{
@@ -437,7 +431,6 @@ func TestConnIDManagerSwitchToPathDuplicateNewConnectionID(t *testing.T) {
 		require.NoError(t, m.Add(newConnIDFrame(1)))
 		require.Empty(t, frameQueue)
 		require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
-		// A retransmission for the retired connection ID of the other path is retired again.
 		require.NoError(t, m.Add(newConnIDFrame(2)))
 		require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 2}}, frameQueue)
 	})
@@ -456,7 +449,6 @@ func TestConnIDManagerSwitchToPathDuplicateNewConnectionID(t *testing.T) {
 		}
 		_, ok := m.GetConnIDForPath(1) // sequence number 1
 		require.True(t, ok)
-		// The connection rotates its active connection ID to sequence number 2.
 		for range 5 * protocol.PacketsPerConnectionID {
 			if m.Get() == protocol.ParseConnectionID([]byte{2, 0, 0, 0}) {
 				break
@@ -471,7 +463,6 @@ func TestConnIDManagerSwitchToPathDuplicateNewConnectionID(t *testing.T) {
 		require.NoError(t, m.Add(newConnIDFrame(1)))
 		require.Empty(t, frameQueue)
 		require.Equal(t, protocol.ParseConnectionID([]byte{1, 0, 0, 0}), m.Get())
-		// A retransmission for a connection ID that was retired is retired again.
 		require.NoError(t, m.Add(newConnIDFrame(2)))
 		require.Equal(t, []wire.Frame{&wire.RetireConnectionIDFrame{SequenceNumber: 2}}, frameQueue)
 	})
