@@ -25,6 +25,15 @@ func (h *encoderHelper) WriteToken(t jsontext.Token) {
 	h.err = h.enc.WriteToken(t)
 }
 
+func (h *encoderHelper) WriteIPAddressPort(addr netip.AddrPort) {
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("ip"))
+	h.WriteToken(jsontext.String(addr.Addr().String()))
+	h.WriteToken(jsontext.String("port"))
+	h.WriteToken(jsontext.Uint(uint64(addr.Port())))
+	h.WriteToken(jsontext.EndObject)
+}
+
 type versions []Version
 
 func (v versions) encode(enc *jsontext.Encoder) error {
@@ -60,20 +69,26 @@ type PathEndpointInfo struct {
 	IPv6 netip.AddrPort
 }
 
-func (p PathEndpointInfo) encode(enc *jsontext.Encoder) error {
+func (p PathEndpointInfo) encode(enc *jsontext.Encoder, redacted *string) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
+	if redacted != nil {
+		if p.IPv4.IsValid() {
+			h.WriteToken(jsontext.String("ip_v4"))
+		} else {
+			h.WriteToken(jsontext.String("ip_v6"))
+		}
+		h.WriteToken(jsontext.String(*redacted))
+		h.WriteToken(jsontext.EndObject)
+		return h.err
+	}
 	if p.IPv4.IsValid() {
 		h.WriteToken(jsontext.String("ip_v4"))
-		h.WriteToken(jsontext.String(p.IPv4.Addr().String()))
-		h.WriteToken(jsontext.String("port_v4"))
-		h.WriteToken(jsontext.Int(int64(p.IPv4.Port())))
+		h.WriteIPAddressPort(p.IPv4)
 	}
 	if p.IPv6.IsValid() {
 		h.WriteToken(jsontext.String("ip_v6"))
-		h.WriteToken(jsontext.String(p.IPv6.Addr().String()))
-		h.WriteToken(jsontext.String("port_v6"))
-		h.WriteToken(jsontext.Int(int64(p.IPv6.Port())))
+		h.WriteIPAddressPort(p.IPv6)
 	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
@@ -82,6 +97,9 @@ func (p PathEndpointInfo) encode(enc *jsontext.Encoder) error {
 type StartedConnection struct {
 	Local  PathEndpointInfo
 	Remote PathEndpointInfo
+
+	// Non-nil redacted values replace the corresponding IP and port in qlog output.
+	RedactedLocal, RedactedRemote *string
 }
 
 func (e StartedConnection) Name() string { return "transport:connection_started" }
@@ -90,11 +108,11 @@ func (e StartedConnection) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("local"))
-	if err := e.Local.encode(enc); err != nil {
+	if err := e.Local.encode(enc, e.RedactedLocal); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.String("remote"))
-	if err := e.Remote.encode(enc); err != nil {
+	if err := e.Remote.encode(enc, e.RedactedRemote); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
@@ -812,22 +830,27 @@ type PreferredAddress struct {
 	IPv4, IPv6          netip.AddrPort
 	ConnectionID        protocol.ConnectionID
 	StatelessResetToken protocol.StatelessResetToken
+
+	// Non-nil redacted values replace the corresponding IP and port in qlog output.
+	RedactedIPv4, RedactedIPv6 *string
 }
 
 func (a PreferredAddress) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	if a.IPv4.IsValid() {
+	if a.RedactedIPv4 != nil {
 		h.WriteToken(jsontext.String("ip_v4"))
-		h.WriteToken(jsontext.String(a.IPv4.Addr().String()))
-		h.WriteToken(jsontext.String("port_v4"))
-		h.WriteToken(jsontext.Uint(uint64(a.IPv4.Port())))
+		h.WriteToken(jsontext.String(*a.RedactedIPv4))
+	} else if a.IPv4.IsValid() {
+		h.WriteToken(jsontext.String("ip_v4"))
+		h.WriteIPAddressPort(a.IPv4)
 	}
-	if a.IPv6.IsValid() {
+	if a.RedactedIPv6 != nil {
 		h.WriteToken(jsontext.String("ip_v6"))
-		h.WriteToken(jsontext.String(a.IPv6.Addr().String()))
-		h.WriteToken(jsontext.String("port_v6"))
-		h.WriteToken(jsontext.Uint(uint64(a.IPv6.Port())))
+		h.WriteToken(jsontext.String(*a.RedactedIPv6))
+	} else if a.IPv6.IsValid() {
+		h.WriteToken(jsontext.String("ip_v6"))
+		h.WriteIPAddressPort(a.IPv6)
 	}
 	h.WriteToken(jsontext.String("connection_id"))
 	h.WriteToken(jsontext.String(a.ConnectionID.String()))
