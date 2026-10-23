@@ -22,7 +22,7 @@ func TestFramerCryptoFrames(t *testing.T) {
 	framer.QueueControlFrame(&wire.HandshakeDoneFrame{})
 
 	const maxSize protocol.ByteCount = 1200
-	frames, _, length := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	frames, length := framer.AppendControlFrames(nil, maxSize, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, 2)
 	require.IsType(t, &wire.HandshakeDoneFrame{}, frames[0].Frame)
 	require.Equal(t, maxSize, length)
@@ -31,7 +31,7 @@ func TestFramerCryptoFrames(t *testing.T) {
 	require.Equal(t, data[:len(cf.Data)], cf.Data)
 	require.True(t, framer.HasData())
 
-	frames, _, _ = framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	frames, _ = framer.AppendControlFrames(nil, maxSize, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, 1)
 	require.Equal(t, &wire.CryptoFrame{Offset: protocol.ByteCount(len(cf.Data)), Data: data[len(cf.Data):]}, frames[0].Frame)
 	require.False(t, framer.HasData())
@@ -46,15 +46,13 @@ func TestFramerControlFrames(t *testing.T) {
 	framer.QueueControlFrame(pc)
 	require.True(t, framer.HasData())
 	framer.QueueControlFrame(msf)
-	frames, streamFrames, length := framer.Append(
+	frames, length := framer.AppendControlFrames(
 		[]ackhandler.Frame{{Frame: &wire.PingFrame{}}},
-		nil,
 		protocol.MaxByteCount,
 		monotime.Now(),
 		protocol.Version1,
 	)
 	require.Len(t, frames, 3)
-	require.Empty(t, streamFrames)
 	require.Contains(t, frames, ackhandler.Frame{Frame: &wire.PingFrame{}})
 	require.Contains(t, frames, ackhandler.Frame{Frame: pc})
 	require.Contains(t, frames, ackhandler.Frame{Frame: msf})
@@ -72,11 +70,11 @@ func TestFramerControlFrameSizing(t *testing.T) {
 	for i := 0; i < numFrames+1; i++ {
 		framer.QueueControlFrame(bf)
 	}
-	frames, _, length := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	frames, length := framer.AppendControlFrames(nil, maxSize, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, numFrames)
 	require.Greater(t, length, maxSize-bfLen)
 	// now make sure that the last frame is also added
-	frames, _, length = framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	frames, length = framer.AppendControlFrames(nil, maxSize, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, 1)
 	require.Equal(t, length, bfLen)
 }
@@ -94,9 +92,8 @@ func TestFramerStreamControlFrames(t *testing.T) {
 	now := monotime.Now()
 	str.EXPECT().getControlFrame(now).Return(ackhandler.Frame{Frame: mdf1}, true, true)
 	str.EXPECT().getControlFrame(now).Return(ackhandler.Frame{Frame: mdf2}, true, false)
-	frames, streamFrames, l := framer.Append(nil, nil, protocol.MaxByteCount, now, protocol.Version1)
+	frames, l := framer.AppendControlFrames(nil, protocol.MaxByteCount, now, protocol.Version1)
 	require.Len(t, frames, 3)
-	require.Empty(t, streamFrames)
 	require.Equal(t, mdf1, frames[0].Frame)
 	require.Equal(t, mdf2, frames[1].Frame)
 	require.Equal(t, ping, frames[2].Frame)
@@ -112,7 +109,7 @@ func TestFramerStreamControlFramesSizing(t *testing.T) {
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.AddStreamWithControlFrames(10, str)
 	str.EXPECT().getControlFrame(gomock.Any()).Return(ackhandler.Frame{Frame: mdf1}, true, true).AnyTimes()
-	frames, _, l := framer.Append(nil, nil, 100, monotime.Now(), protocol.Version1)
+	frames, l := framer.AppendControlFrames(nil, 100, monotime.Now(), protocol.Version1)
 	require.Equal(t, protocol.ByteCount(len(frames))*mdf1.Length(protocol.Version1), l)
 	require.Greater(t, l, protocol.ByteCount(100-maxStreamControlFrameSize))
 	require.LessOrEqual(t, l, protocol.ByteCount(100))
@@ -157,7 +154,7 @@ func testFramerStreamDataBlocked(t *testing.T, fits bool) {
 	)
 
 	const maxSize protocol.ByteCount = 1000
-	frames, streamFrames, l := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	frames, streamFrames, l := framer.AppendStreamFrames(nil, nil, maxSize, protocol.Version1)
 	require.Len(t, streamFrames, 1)
 	dataLen := streamFrames[0].Frame.DataLen()
 	if fits {
@@ -166,9 +163,8 @@ func testFramerStreamDataBlocked(t *testing.T, fits bool) {
 	} else {
 		require.Equal(t, streamFrames[0].Frame.Length(protocol.Version1), l)
 		require.Empty(t, frames)
-		frames, streamFrames, l2 := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+		frames, l2 := framer.AppendControlFrames(nil, maxSize, monotime.Now(), protocol.Version1)
 		require.Greater(t, l+l2, maxSize)
-		require.Empty(t, streamFrames)
 		require.Len(t, frames, 1)
 		require.Equal(t, &wire.StreamDataBlockedFrame{StreamID: streamID, MaximumStreamData: dataLen}, frames[0].Frame)
 	}
@@ -216,7 +212,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 	)
 
 	const maxSize protocol.ByteCount = 1000
-	frames, streamFrames, l := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+	frames, streamFrames, l := framer.AppendStreamFrames(nil, nil, maxSize, protocol.Version1)
 	require.Len(t, streamFrames, 1)
 	if fits {
 		require.Len(t, frames, 1)
@@ -224,9 +220,8 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 	} else {
 		require.Equal(t, streamFrames[0].Frame.Length(protocol.Version1), l)
 		require.Empty(t, frames)
-		frames, streamFrames, l2 := framer.Append(nil, nil, maxSize, monotime.Now(), protocol.Version1)
+		frames, l2 := framer.AppendControlFrames(nil, maxSize, monotime.Now(), protocol.Version1)
 		require.Greater(t, l+l2, maxSize)
-		require.Empty(t, streamFrames)
 		require.Len(t, frames, 1)
 		require.Equal(t, &wire.DataBlockedFrame{MaximumData: offset}, frames[0].Frame)
 	}
@@ -238,7 +233,7 @@ func TestFramerDetectsFrameDoS(t *testing.T) {
 		framer.QueueControlFrame(&wire.PingFrame{})
 		framer.QueueControlFrame(&wire.PingFrame{})
 		require.False(t, framer.QueuedTooManyControlFrames())
-		frames, _, _ := framer.Append([]ackhandler.Frame{}, nil, 1, monotime.Now(), protocol.Version1)
+		frames, _ := framer.AppendControlFrames([]ackhandler.Frame{}, 1, monotime.Now(), protocol.Version1)
 		require.Len(t, frames, 1)
 		require.Len(t, framer.controlFrames, i+1)
 	}
@@ -261,13 +256,13 @@ func TestFramerDetectsFramePathResponseDoS(t *testing.T) {
 	}
 	for i := range maxPathResponses {
 		require.True(t, framer.HasData())
-		frames, _, length := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+		frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 		require.Len(t, frames, 1)
 		require.Equal(t, pathResponses[i], frames[0].Frame)
 		require.Equal(t, pathResponses[i].Length(protocol.Version1), length)
 	}
 	require.False(t, framer.HasData())
-	frames, _, length := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	frames, length := framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.Empty(t, frames)
 	require.Zero(t, length)
 }
@@ -283,14 +278,14 @@ func TestFramerPacksSinglePathResponsePerPacket(t *testing.T) {
 	framer.QueueControlFrame(cf1)
 	framer.QueueControlFrame(cf2)
 	// the first packet should contain a single PATH_RESPONSE frame, but all the other control frames
-	frames, _, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	frames, _ := framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, 3)
 	require.Equal(t, f1, frames[0].Frame)
 	require.Contains(t, []wire.Frame{frames[1].Frame, frames[2].Frame}, cf1)
 	require.Contains(t, []wire.Frame{frames[1].Frame, frames[2].Frame}, cf2)
 	// the second packet should contain the other PATH_RESPONSE frame
 	require.True(t, framer.HasData())
-	frames, _, _ = framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	frames, _ = framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.Len(t, frames, 1)
 	require.Equal(t, f2, frames[0].Frame)
 	require.False(t, framer.HasData())
@@ -308,7 +303,7 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
 	// no frames added yet
-	controlFrames, fs, length := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	controlFrames, fs, length := framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, controlFrames)
 	require.Empty(t, fs)
 	require.Zero(t, length)
@@ -329,7 +324,7 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 	// Even though the first stream claimed to have more data,
 	// we only dequeue a single STREAM frame per call of AppendStreamFrames.
 	f0 := ackhandler.StreamFrame{Frame: &wire.StreamFrame{StreamID: 9999}}
-	controlFrames, fs, length = framer.Append([]ackhandler.Frame{}, []ackhandler.StreamFrame{f0}, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	controlFrames, fs, length = framer.AppendStreamFrames([]ackhandler.Frame{}, []ackhandler.StreamFrame{f0}, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, controlFrames)
 	require.Len(t, fs, 3)
 	require.Equal(t, f0, fs[0])
@@ -347,7 +342,7 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 
 	// ... but it actually doesn't
 	str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{}, nil, false)
-	_, fs, length = framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, fs, length = framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, fs)
 	require.Zero(t, length)
 	require.False(t, framer.HasData())
@@ -383,7 +378,7 @@ func TestFramerPrioritizesStreamRetransmissions(t *testing.T) {
 	framer.AddActiveStream(newDataStreamID, newDataStr)
 	framer.AddStreamWithRetransmission(firstRetransStreamID, str1)
 
-	_, fs, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, fs, _ := framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Len(t, fs, 4)
 	require.Equal(t,
 		[]protocol.StreamID{secondRetransStreamID, secondRetransStreamID, firstRetransStreamID, newDataStreamID},
@@ -419,7 +414,7 @@ func TestFramerSplitsStreamRetransmissions(t *testing.T) {
 	framer.AddStreamWithRetransmission(firstStreamID, str1)
 	framer.AddStreamWithRetransmission(secondStreamID, str2)
 
-	_, fs, length := framer.Append(nil, nil, maxLen, monotime.Now(), protocol.Version1)
+	_, fs, length := framer.AppendStreamFrames(nil, nil, maxLen, protocol.Version1)
 	require.Equal(t, maxLen, length)
 	require.Len(t, fs, 2)
 	require.Equal(t, firstStreamID, fs[0].Frame.StreamID)
@@ -430,7 +425,7 @@ func TestFramerSplitsStreamRetransmissions(t *testing.T) {
 	require.Less(t, firstPartLen, len(data2))
 	require.True(t, framer.HasData())
 
-	_, fs, _ = framer.Append(nil, nil, maxLen, monotime.Now(), protocol.Version1)
+	_, fs, _ = framer.AppendStreamFrames(nil, nil, maxLen, protocol.Version1)
 	require.Len(t, fs, 1)
 	require.Equal(t, secondStreamID, fs[0].Frame.StreamID)
 	require.Equal(t, protocol.ByteCount(firstPartLen), fs[0].Frame.Offset)
@@ -462,7 +457,7 @@ func appendPriorityPackets(t *testing.T, framer *framer, numPackets int) []proto
 
 	ids := make([]protocol.StreamID, 0, numPackets)
 	for range numPackets {
-		_, frames, _ := framer.Append(nil, nil, protocol.MinStreamFrameSize, monotime.Now(), protocol.Version1)
+		_, frames, _ := framer.AppendStreamFrames(nil, nil, protocol.MinStreamFrameSize, protocol.Version1)
 		require.Len(t, frames, 1)
 		ids = append(ids, frames[0].Frame.StreamID)
 	}
@@ -558,11 +553,11 @@ func TestFramerRequeuesRetransmissionAfterPriorityChange(t *testing.T) {
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.AddStreamWithRetransmission(streamID, str)
 	urgency = 2
-	_, frames, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, frames, _ := framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, frames)
 	require.True(t, framer.HasData())
 
-	_, frames, _ = framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, frames, _ = framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Len(t, frames, 1)
 	require.Equal(t, streamID, frames[0].Frame.StreamID)
 	require.False(t, framer.HasData())
@@ -591,7 +586,7 @@ func TestFramerUpdatesStreamRetransmissionPriority(t *testing.T) {
 	framer.AddStreamWithRetransmission(updatedStreamID, updatedStr)
 	framer.AddStreamWithRetransmission(otherStreamID, otherStr)
 	urgency = 2
-	_, frames, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, frames, _ := framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Len(t, frames, 2)
 	require.Equal(t, otherStreamID, frames[0].Frame.StreamID)
 	require.Equal(t, updatedStreamID, frames[1].Frame.StreamID)
@@ -618,7 +613,7 @@ func testFramerRemoveActiveStream(t *testing.T, incremental bool) {
 	require.True(t, framer.HasData())
 	framer.RemoveActiveStream(id) // no calls will be issued to the mock stream
 	// we can't assert on framer.HasData here, since it's not removed from the scheduling queue
-	_, frames, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, frames, _ := framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, frames)
 	require.False(t, framer.HasData())
 }
@@ -632,7 +627,7 @@ func TestFramerMinStreamFrameSize(t *testing.T) {
 
 	require.True(t, framer.HasData())
 	// don't pop frames smaller than the minimum STREAM frame size
-	_, frames, _ := framer.Append(nil, nil, protocol.MinStreamFrameSize-1, monotime.Now(), protocol.Version1)
+	_, frames, _ := framer.AppendStreamFrames(nil, nil, protocol.MinStreamFrameSize-1, protocol.Version1)
 	require.Empty(t, frames)
 
 	// pop frames of the minimum size
@@ -643,7 +638,7 @@ func TestFramerMinStreamFrameSize(t *testing.T) {
 			return ackhandler.StreamFrame{Frame: f}, nil, false
 		},
 	)
-	_, frames, _ = framer.Append(nil, nil, protocol.MinStreamFrameSize, monotime.Now(), protocol.Version1)
+	_, frames, _ = framer.AppendStreamFrames(nil, nil, protocol.MinStreamFrameSize, protocol.Version1)
 	require.Len(t, frames, 1)
 	// unsetting DataLenPresent on the last frame reduced the size slightly beyond the minimum size
 	require.Equal(t, protocol.MinStreamFrameSize-2, frames[0].Frame.Length(protocol.Version1))
@@ -664,7 +659,7 @@ func TestFramerMinStreamFrameSizeMultipleStreamFrames(t *testing.T) {
 	}
 	str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f}, nil, false)
 	framer.AddActiveStream(id, str)
-	_, fs, length := framer.Append(nil, nil, 500, monotime.Now(), protocol.Version1)
+	_, fs, length := framer.AppendStreamFrames(nil, nil, 500, protocol.Version1)
 	require.Len(t, fs, 1)
 	require.Equal(t, f, fs[0].Frame)
 	require.Equal(t, f.Length(protocol.Version1), length)
@@ -689,7 +684,7 @@ func TestFramerFillPacketOneStream(t *testing.T) {
 			},
 		)
 		framer.AddActiveStream(id, str)
-		_, frames, _ := framer.Append(nil, nil, i, monotime.Now(), protocol.Version1)
+		_, frames, _ := framer.AppendStreamFrames(nil, nil, i, protocol.Version1)
 		require.Len(t, frames, 1)
 		require.False(t, frames[0].Frame.DataLenPresent)
 		// make sure the entire space was filled up
@@ -727,7 +722,7 @@ func TestFramerFillPacketMultipleStreams(t *testing.T) {
 		)
 		framer.AddActiveStream(id1, str1)
 		framer.AddActiveStream(id2, str2)
-		_, frames, _ := framer.Append(nil, nil, i, monotime.Now(), protocol.Version1)
+		_, frames, _ := framer.AppendStreamFrames(nil, nil, i, protocol.Version1)
 		require.Len(t, frames, 2)
 		require.True(t, frames[0].Frame.DataLenPresent)
 		require.False(t, frames[1].Frame.DataLenPresent)
@@ -758,8 +753,9 @@ func TestFramer0RTTRejection(t *testing.T) {
 	framer.AddStreamWithControlFrames(10, NewMockStreamControlFrameGetter(gomock.NewController(t)))
 
 	framer.Handle0RTTRejection()
-	controlFrames, streamFrames, _ := framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	_, streamFrames, _ := framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, streamFrames)
+	controlFrames, _ := framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.Len(t, controlFrames, 3)
 	require.Contains(t, controlFrames, ackhandler.Frame{Frame: pc})
 	require.Contains(t, controlFrames, ackhandler.Frame{Frame: ping})

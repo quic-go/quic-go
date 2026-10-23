@@ -1282,7 +1282,7 @@ func TestConnectionHandshakeServer(t *testing.T) {
 	}
 
 	var foundSessionTicket, foundHandshakeDone, foundNewToken bool
-	frames, _, _ := tc.conn.framer.Append(nil, nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+	frames, _ := tc.conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	for _, frame := range frames {
 		switch f := frame.Frame.(type) {
 		case *wire.CryptoFrame:
