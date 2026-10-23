@@ -115,8 +115,8 @@ func parseShortHeaderPacket(t *testing.T, data []byte, connIDLen int) {
 }
 
 func expectAppendFrames(framer *MockFrameSource, controlFrames []ackhandler.Frame, streamFrames []ackhandler.StreamFrame) {
-	framer.EXPECT().Append(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(cf []ackhandler.Frame, sf []ackhandler.StreamFrame, maxSize protocol.ByteCount, _ monotime.Time, v protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+	framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(cf []ackhandler.Frame, maxSize protocol.ByteCount, _ monotime.Time, v protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
 			var length protocol.ByteCount
 			for _, f := range controlFrames {
 				if length+f.Frame.Length(v) > maxSize {
@@ -125,6 +125,12 @@ func expectAppendFrames(framer *MockFrameSource, controlFrames []ackhandler.Fram
 				length += f.Frame.Length(v)
 				cf = append(cf, f)
 			}
+			return cf, length
+		},
+	)
+	framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(cf []ackhandler.Frame, sf []ackhandler.StreamFrame, maxSize protocol.ByteCount, v protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+			var length protocol.ByteCount
 			for _, f := range streamFrames {
 				if length+f.Frame.Length(v) > maxSize {
 					break
@@ -347,12 +353,7 @@ func TestPack0RTTPacket(t *testing.T) {
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42))
 	cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
 	tp.framer.EXPECT().HasData().Return(true)
-	// TODO: check sizes
-	tp.framer.EXPECT().Append(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(fs []ackhandler.Frame, sf []ackhandler.StreamFrame, _ protocol.ByteCount, _ monotime.Time, _ protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
-			return append(fs, cf), sf, cf.Frame.Length(protocol.Version1)
-		},
-	)
+	expectAppendFrames(tp.framer, []ackhandler.Frame{cf}, nil)
 	p, err := tp.packer.PackCoalescedPacket(false, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.NotNil(t, p)
@@ -729,8 +730,8 @@ func TestPackDatagramFrames(t *testing.T) {
 	p, err := tp.packer.AppendPacket(buffer, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
 	require.NoError(t, err)
 	require.Len(t, p.Frames, 5)
-	require.Equal(t, &wire.DatagramFrame{DataLenPresent: true, Data: []byte("foo")}, p.Frames[0].Frame)
-	require.Equal(t, &wire.DatagramFrame{DataLenPresent: true, Data: []byte("bar")}, p.Frames[1].Frame)
+	require.Equal(t, &wire.DatagramFrame{DataLenPresent: true, Data: []byte("foo")}, p.Frames[2].Frame)
+	require.Equal(t, &wire.DatagramFrame{DataLenPresent: true, Data: []byte("bar")}, p.Frames[3].Frame)
 	// the last DATAGRAM frame is the last frame in the packet, so it doesn't need a length field
 	require.Equal(t, &wire.DatagramFrame{Data: []byte("baz")}, p.Frames[4].Frame)
 	require.NotEmpty(t, buffer.Data)
@@ -797,6 +798,35 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 		Raw:       qlog.RawInfo{Length: len(f.Data)},
 		Trigger:   "too_large",
 	}}, tp.Recorder.Events(qlog.DatagramDropped{}))
+}
+
+// Control frames and retransmissions are packed before DATAGRAM frames,
+// such that application data can't starve the connection.
+func TestPackDatagramFramesAfterControlFramesAndRetransmissions(t *testing.T) {
+	const maxPacketSize = 1000
+	mockCtrl := gomock.NewController(t)
+	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveServer)
+	sealer := newMockShortHeaderSealer(mockCtrl)
+	hdrLen := wire.ShortHeaderLen(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PacketNumberLen2)
+	// this DATAGRAM frame fills an entire packet
+	f := &wire.DatagramFrame{DataLenPresent: true}
+	f.Data = make([]byte, f.MaxDataLen(maxPacketSize-hdrLen-protocol.ByteCount(sealer.Overhead()), protocol.Version1))
+	tp.datagramQueue.Add(f)
+	retransmission := &wire.MaxStreamDataFrame{StreamID: 4, MaximumStreamData: 1337}
+	tp.retransmissionQueue.addAppData(retransmission)
+	controlFrame := &wire.MaxDataFrame{MaximumData: 0x1337}
+
+	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), false)
+	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+	tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42))
+	tp.sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+	tp.framer.EXPECT().HasData().Return(true)
+	expectAppendFrames(tp.framer, []ackhandler.Frame{{Frame: controlFrame}}, nil)
+	p, err := tp.packer.AppendPacket(getPacketBuffer(), maxPacketSize, monotime.Now(), protocol.Version1)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []wire.Frame{retransmission, controlFrame}, []wire.Frame{p.Frames[0].Frame, p.Frames[1].Frame})
+	// the DATAGRAM frame doesn't fit anymore, and is sent in the next packet
+	require.Equal(t, f, tp.datagramQueue.Peek())
 }
 
 func TestPackRetransmissions(t *testing.T) {
@@ -1045,8 +1075,9 @@ func TestPack1RTTProbePacket(t *testing.T) {
 	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42))
 	tp.framer.EXPECT().HasData().Return(true)
-	tp.framer.EXPECT().Append(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(
-		func(cf []ackhandler.Frame, sf []ackhandler.StreamFrame, size protocol.ByteCount, _ monotime.Time, v protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
+	tp.framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any(), gomock.Any(), protocol.Version1)
+	tp.framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any(), gomock.Any(), protocol.Version1).DoAndReturn(
+		func(cf []ackhandler.Frame, sf []ackhandler.StreamFrame, size protocol.ByteCount, v protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
 			f, split := (&wire.StreamFrame{Data: make([]byte, 2*maxPacketSize)}).MaybeSplitOffFrame(size, v)
 			require.True(t, split)
 			return cf, append(sf, ackhandler.StreamFrame{Frame: f}), f.Length(v)

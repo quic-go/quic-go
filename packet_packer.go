@@ -40,7 +40,7 @@ type payload struct {
 	streamFrames []ackhandler.StreamFrame
 	frames       []ackhandler.Frame
 	// The number of DATAGRAM frames in frames.
-	// The last DATAGRAM frame is the last frame in frames, all others are at the start of frames.
+	// DATAGRAM frames are the last frames in frames.
 	numDatagramFrames int
 	ack               *wire.AckFrame
 	length            protocol.ByteCount
@@ -113,7 +113,8 @@ type sealingManager interface {
 
 type frameSource interface {
 	HasData() bool
-	Append([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, monotime.Time, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)
+	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount, monotime.Time, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)
+	AppendStreamFrames([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount, protocol.Version) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount)
 }
 
 type ackFrameSource interface {
@@ -677,6 +678,27 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 
+	if hasData {
+		var lengthAdded protocol.ByteCount
+		pl.frames, lengthAdded = p.framer.AppendControlFrames(pl.frames, maxPayloadSize-pl.length, now, v)
+		pl.length += lengthAdded
+	}
+
+	if hasRetransmission {
+		for {
+			remainingLen := maxPayloadSize - pl.length
+			if remainingLen < protocol.MinStreamFrameSize {
+				break
+			}
+			f := p.retransmissionQueue.GetFrame(protocol.Encryption1RTT, remainingLen, v)
+			if f == nil {
+				break
+			}
+			pl.frames = append(pl.frames, ackhandler.Frame{Frame: f, Handler: p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)})
+			pl.length += f.Length(v)
+		}
+	}
+
 	var lastDatagram *wire.DatagramFrame
 	if p.datagramQueue != nil {
 		for {
@@ -702,8 +724,8 @@ func (p *packetPacker) composeNextPacket(
 					// This DATAGRAM frame only fit without the length field, so it has to be the last frame in the packet.
 					break
 				}
-			} else if pl.ack == nil && pl.numDatagramFrames == 0 {
-				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK or other DATAGRAM frames.
+			} else if pl.ack == nil && len(pl.frames) == 0 {
+				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK or any other frames.
 				// Discard this frame. There's no point in retrying this in the next packet,
 				// as it's unlikely that the available packet size will increase.
 				p.datagramQueue.Pop()
@@ -723,53 +745,44 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 
-	if hasRetransmission {
-		for {
-			remainingLen := maxPayloadSize - pl.length
-			if remainingLen < protocol.MinStreamFrameSize {
-				break
-			}
-			f := p.retransmissionQueue.GetFrame(protocol.Encryption1RTT, remainingLen, v)
-			if f == nil {
-				break
-			}
-			pl.frames = append(pl.frames, ackhandler.Frame{Frame: f, Handler: p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)})
-			pl.length += f.Length(v)
-		}
-	}
-
 	if hasData {
 		var lengthAdded protocol.ByteCount
 		startLen := len(pl.frames)
-		pl.frames, pl.streamFrames, lengthAdded = p.framer.Append(pl.frames, pl.streamFrames, maxPayloadSize-pl.length, now, v)
+		pl.frames, pl.streamFrames, lengthAdded = p.framer.AppendStreamFrames(pl.frames, pl.streamFrames, maxPayloadSize-pl.length, v)
 		pl.length += lengthAdded
-		// add handlers for the control frames that were added
-		for i := startLen; i < len(pl.frames); i++ {
-			if pl.frames[i].Handler != nil {
-				continue
-			}
-			switch pl.frames[i].Frame.(type) {
-			case *wire.PathChallengeFrame, *wire.PathResponseFrame:
-				// Path probing is currently not supported, therefore we don't need to set the OnAcked callback yet.
-				// PATH_CHALLENGE and PATH_RESPONSE are never retransmitted.
-			default:
-				// we might be packing a 0-RTT packet, but we need to use the 1-RTT ack handler anyway
-				pl.frames[i].Handler = p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)
+		// Move STREAM_DATA_BLOCKED and DATA_BLOCKED frames in front of the DATAGRAM frames,
+		// such that the DATAGRAM frames remain the last frames.
+		if n := pl.numDatagramFrames; n > 0 {
+			for i := startLen; i < len(pl.frames); i++ {
+				f := pl.frames[i]
+				copy(pl.frames[i-n+1:i+1], pl.frames[i-n:i])
+				pl.frames[i-n] = f
 			}
 		}
 	}
 
-	if lastDatagram != nil {
-		// Move the last DATAGRAM frame to the end, and put the frame that was there in its place.
-		pl.frames[pl.numDatagramFrames-1] = pl.frames[len(pl.frames)-1]
-		pl.frames[len(pl.frames)-1] = ackhandler.Frame{Frame: lastDatagram}
-		// STREAM frames are serialized after all other frames.
-		// If there are none, the last DATAGRAM frame is the last frame in the packet, and doesn't need a length field.
-		if len(pl.streamFrames) == 0 {
-			pl.length -= lastDatagram.Length(v)
-			lastDatagram.DataLenPresent = false
-			pl.length += lastDatagram.Length(v)
+	// add handlers for the control frames that were added
+	for i := range pl.frames {
+		if pl.frames[i].Handler != nil {
+			continue
 		}
+		switch pl.frames[i].Frame.(type) {
+		case *wire.DatagramFrame:
+			// DATAGRAM frames are never retransmitted.
+		case *wire.PathChallengeFrame, *wire.PathResponseFrame:
+			// PATH_CHALLENGE and PATH_RESPONSE are never retransmitted.
+		default:
+			// we might be packing a 0-RTT packet, but we need to use the 1-RTT ack handler anyway
+			pl.frames[i].Handler = p.retransmissionQueue.AckHandler(protocol.Encryption1RTT)
+		}
+	}
+
+	// STREAM frames are serialized after all other frames.
+	// If there are none, the last DATAGRAM frame is the last frame in the packet, and doesn't need a length field.
+	if lastDatagram != nil && len(pl.streamFrames) == 0 {
+		pl.length -= lastDatagram.Length(v)
+		lastDatagram.DataLenPresent = false
+		pl.length += lastDatagram.Length(v)
 	}
 	return pl
 }
@@ -1032,12 +1045,9 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	}
 	// Randomize the order of the control frames.
 	// This makes sure that the receiver doesn't rely on the order in which frames are packed.
-	toShuffle := pl.frames
-	if pl.numDatagramFrames > 0 {
-		// DATAGRAM frames are not shuffled, as this would reorder the datagrams delivered to the application.
-		// The last DATAGRAM frame also needs to stay at the end, since it might omit its length field.
-		toShuffle = pl.frames[pl.numDatagramFrames-1 : len(pl.frames)-1]
-	}
+	// DATAGRAM frames are not shuffled, as this would reorder the datagrams delivered to the application.
+	// The last DATAGRAM frame also needs to stay at the end, since it might omit its length field.
+	toShuffle := pl.frames[:len(pl.frames)-pl.numDatagramFrames]
 	if len(toShuffle) > 1 {
 		p.rand.Shuffle(
 			len(toShuffle),
