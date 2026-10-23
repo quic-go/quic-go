@@ -48,7 +48,7 @@ func BenchmarkConnectionTracing(b *testing.B) {
 				KeyPhaseBit:      KeyPhaseZero,
 				DestConnectionID: srcConnID,
 			},
-			Raw: RawInfo{Length: 1337},
+			Raw: RawInfo{Length: 1337, PayloadLength: OmitLength},
 			ECN: ECT0,
 			Frames: []Frame{
 				{Frame: &AckFrame{AckRanges: []wire.AckRange{{Largest: 12345 + protocol.PacketNumber(2*i), Smallest: 1234 + protocol.PacketNumber(i)}}}},
@@ -74,7 +74,7 @@ func BenchmarkConnectionTracing(b *testing.B) {
 					KeyPhaseBit:      KeyPhaseOne,
 					DestConnectionID: srcConnID,
 				},
-				Raw: RawInfo{Length: 1337},
+				Raw: RawInfo{Length: 1337, PayloadLength: OmitLength},
 				ECN: ECT0,
 				Frames: []Frame{
 					{Frame: &StreamFrame{StreamID: 123, Offset: int64(1234 + protocol.ByteCount(100*i)), Length: 100, Fin: true}},

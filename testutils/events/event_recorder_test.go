@@ -55,6 +55,7 @@ func TestRecorderFilterEventsSameName(t *testing.T) {
 
 	recorder.RecordEvent(qlog.PacketReceived{
 		Header: qlog.PacketHeader{PacketType: qlog.PacketTypeHandshake},
+		Raw:    qlog.RawInfo{Length: qlog.OmitLength, PayloadLength: qlog.OmitLength},
 	})
 	recorder.RecordEvent(qlog.VersionNegotiationReceived{
 		Header:            qlog.PacketHeaderVersionNegotiation{},
@@ -65,6 +66,7 @@ func TestRecorderFilterEventsSameName(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketReceived{
 				Header: qlog.PacketHeader{PacketType: qlog.PacketTypeHandshake},
+				Raw:    qlog.RawInfo{Length: qlog.OmitLength, PayloadLength: qlog.OmitLength},
 			},
 		},
 		recorder.Events(qlog.PacketReceived{}),

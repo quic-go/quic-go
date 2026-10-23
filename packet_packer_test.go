@@ -794,7 +794,7 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 	require.Nil(t, tp.datagramQueue.Peek()) // make sure the frame is gone
 	require.Equal(t, []qlogwriter.Event{qlog.DatagramDropped{
 		Direction: qlog.DirectionSending,
-		Raw:       qlog.RawInfo{Length: len(f.Data)},
+		Raw:       qlog.RawInfo{Length: len(f.Data), PayloadLength: qlog.OmitLength},
 		Trigger:   "too_large",
 	}}, tp.Recorder.Events(qlog.DatagramDropped{}))
 }

@@ -259,7 +259,7 @@ func TestTransportStatelessResetSending(t *testing.T) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header:  qlog.PacketHeader{PacketType: qlog.PacketType1RTT},
-					Raw:     qlog.RawInfo{Length: len(smallPacket)},
+					Raw:     qlog.RawInfo{Length: len(smallPacket), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnknownConnectionID,
 				},
 			},
@@ -302,7 +302,7 @@ func TestTransportUnparseableQUICPackets(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Raw:     qlog.RawInfo{Length: 4},
+					Raw:     qlog.RawInfo{Length: 4, PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropHeaderParseError,
 				},
 			},
@@ -336,7 +336,7 @@ func TestTransportListening(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Raw:     qlog.RawInfo{Length: len(data)},
+					Raw:     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnknownConnectionID,
 				},
 			},
@@ -355,7 +355,7 @@ func TestTransportListening(t *testing.T) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
-					Raw:     qlog.RawInfo{Length: len(data)},
+					Raw:     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				},
 			},
