@@ -262,7 +262,7 @@ func TestResponseWriterInvalidHeaderFields(t *testing.T) {
 	rw.Header().Set("Foo", "bar")
 	rw.Header().Set("Location", "/foo\r\nset-cookie: injected=1") // CR / LF in the value
 	rw.Header().Set("Connection", "close")                        // connection-specific header field
-	rw.Header().Set("TE", "gzip")                                 // TE with a value other than trailers
+	rw.Header().Set("TE", "trailers")                             // TE is only allowed in requests
 	rw.Header()["Bad Key"] = []string{"value"}                    // invalid field name
 	rw.Header()["X-Ünicode"] = []string{"value"}                  // non-ASCII field name
 	rw.Header().Add("Multi", "valid")

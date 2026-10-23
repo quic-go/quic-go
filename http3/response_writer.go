@@ -247,14 +247,15 @@ func (w *responseWriter) writeHeader(status int) error {
 			continue
 		}
 		name := strings.ToLower(k)
-		// connection-specific header fields are not allowed, see section 4.2 of RFC 9114
-		if slices.Contains(invalidHeaderFields[:], name) {
+		// connection-specific header fields are not allowed, see section 4.2 of RFC 9114.
+		// TE is only allowed in requests.
+		if name == "te" || slices.Contains(invalidHeaderFields[:], name) {
 			w.logInvalidHeaderField(k)
 			continue
 		}
 		for index := range v {
 			value := v[index]
-			if !httpguts.ValidHeaderFieldValue(value) || (name == "te" && value != "trailers") {
+			if !httpguts.ValidHeaderFieldValue(value) {
 				w.logInvalidHeaderField(k)
 				continue
 			}
