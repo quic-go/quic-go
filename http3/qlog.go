@@ -12,7 +12,7 @@ func maybeQlogInvalidHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.Str
 	if qlogger != nil {
 		qlogger.RecordEvent(qlog.FrameParsed{
 			StreamID: streamID,
-			Raw:      qlog.RawInfo{PayloadLength: int(l)},
+			Raw:      qlog.RawInfo{Length: qlog.OmitLength, PayloadLength: int(l)},
 			Frame:    qlog.Frame{Frame: qlog.HeadersFrame{}},
 		})
 	}

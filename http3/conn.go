@@ -103,7 +103,7 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 		}
 		c.qlogger.RecordEvent(qlog.FrameCreated{
 			StreamID: str.StreamID(),
-			Raw:      qlog.RawInfo{Length: len(b)},
+			Raw:      qlog.RawInfo{Length: len(b), PayloadLength: qlog.OmitLength},
 			Frame:    qlog.Frame{Frame: sf},
 		})
 	}

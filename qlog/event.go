@@ -37,6 +37,11 @@ func (v versions) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
+// OmitLength indicates that a length should not be logged.
+const OmitLength = -1
+
+// RawInfo contains packet or datagram lengths. Zero lengths are logged.
+// Set a field to OmitLength to omit it.
 type RawInfo struct {
 	Length        int // full packet length, including header and AEAD authentication tag
 	PayloadLength int // length of the packet payload, excluding AEAD tag
@@ -45,9 +50,11 @@ type RawInfo struct {
 func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("length"))
-	h.WriteToken(jsontext.Uint(uint64(i.Length)))
-	if i.PayloadLength != 0 {
+	if i.Length != OmitLength {
+		h.WriteToken(jsontext.String("length"))
+		h.WriteToken(jsontext.Uint(uint64(i.Length)))
+	}
+	if i.PayloadLength != OmitLength {
 		h.WriteToken(jsontext.String("payload_length"))
 		h.WriteToken(jsontext.Uint(uint64(i.PayloadLength)))
 	}

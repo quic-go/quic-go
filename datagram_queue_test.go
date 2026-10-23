@@ -118,7 +118,7 @@ func TestDatagramQueueReceiveOverflow(t *testing.T) {
 	queue.HandleDatagramFrame(f)
 	require.Equal(t, []qlogwriter.Event{qlog.DatagramDropped{
 		Direction: qlog.DirectionReceiving,
-		Raw:       qlog.RawInfo{Length: len(f.Data)},
+		Raw:       qlog.RawInfo{Length: len(f.Data), PayloadLength: qlog.OmitLength},
 		Trigger:   "buffer_full",
 	}}, qlogger.Events())
 

@@ -566,6 +566,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameCreated{
 					StreamID: ctrlStr.StreamID(),
+					Raw:      qlog.RawInfo{Length: qlog.OmitLength, PayloadLength: qlog.OmitLength},
 					Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: nextStreamID}},
 				})
 			}

@@ -574,7 +574,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
-				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropHeaderParseError,
 			})
 		}
@@ -602,7 +602,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 			if t.Tracer != nil {
 				t.Tracer.RecordEvent(qlog.PacketDropped{
 					Header:  qlog.PacketHeader{PacketType: qlog.PacketType1RTT},
-					Raw:     qlog.RawInfo{Length: int(p.Size())},
+					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnknownConnectionID,
 				})
 			}
@@ -617,7 +617,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		t.logger.Debugf("received a packet with an unexpected connection ID %s", connID)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
-				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnknownConnectionID,
 			})
 		}
@@ -699,7 +699,7 @@ func (t *Transport) handleNonQUICPacket(p receivedPacket) {
 	default:
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
-				Raw:     qlog.RawInfo{Length: int(p.Size())},
+				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
 			})
 		}

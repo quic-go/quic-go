@@ -710,7 +710,7 @@ func (p *packetPacker) composeNextPacket(
 				if p.qlogger != nil {
 					p.qlogger.RecordEvent(qlog.DatagramDropped{
 						Direction: qlog.DirectionSending,
-						Raw:       qlog.RawInfo{Length: len(f.Data)},
+						Raw:       qlog.RawInfo{Length: len(f.Data), PayloadLength: qlog.OmitLength},
 						Trigger:   "too_large",
 					})
 				}

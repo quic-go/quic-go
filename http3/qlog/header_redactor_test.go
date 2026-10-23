@@ -26,22 +26,31 @@ func TestRedactHeaders(t *testing.T) {
 		return "***"
 	})
 	producer := tracer(context.Background(), true, id).AddProducer()
-	producer.RecordEvent(FrameCreated{Frame: Frame{Frame: HeadersFrame{
-		HeaderFields: []HeaderField{
-			{Name: "authorization", Value: "secret"},
-			{Name: ":path", Value: "secret"},
-		},
-	}}})
-	data := FrameParsed{Frame: Frame{Frame: DataFrame{}}}
+	producer.RecordEvent(FrameCreated{
+		Raw: RawInfo{Length: OmitLength, PayloadLength: OmitLength},
+		Frame: Frame{Frame: HeadersFrame{
+			HeaderFields: []HeaderField{
+				{Name: "authorization", Value: "secret"},
+				{Name: ":path", Value: "secret"},
+			},
+		}},
+	})
+	data := FrameParsed{
+		Raw:   RawInfo{Length: OmitLength, PayloadLength: OmitLength},
+		Frame: Frame{Frame: DataFrame{}},
+	}
 	mtu := quicqlog.MTUUpdated{Value: 1400}
 	producer.RecordEvent(data)
 	producer.RecordEvent(mtu)
 	require.Equal(t, []string{"Authorization", ":path"}, names)
 	require.Equal(t, []qlogwriter.Event{
-		FrameCreated{Frame: Frame{Frame: HeadersFrame{HeaderFields: []HeaderField{
-			{Name: "authorization", Value: "***"},
-			{Name: ":path", Value: "***"},
-		}}}},
+		FrameCreated{
+			Raw: RawInfo{Length: OmitLength, PayloadLength: OmitLength},
+			Frame: Frame{Frame: HeadersFrame{HeaderFields: []HeaderField{
+				{Name: "authorization", Value: "***"},
+				{Name: ":path", Value: "***"},
+			}}},
+		},
 		data, mtu,
 	}, recorder.Events())
 	require.NoError(t, producer.Close())

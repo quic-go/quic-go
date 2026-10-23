@@ -422,7 +422,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 						DestConnectionID: tc.conn.origDestConnID,
 						Version:          tc.conn.version,
 					},
-					Raw:     qlog.RawInfo{Length: int(p.Size())},
+					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				},
 			},
@@ -447,7 +447,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
-					Raw:     qlog.RawInfo{Length: len(b)},
+					Raw:     qlog.RawInfo{Length: len(b), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				},
 			},
@@ -475,7 +475,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header:                  qlog.PacketHeader{Version: 1234},
-					Raw:                     qlog.RawInfo{Length: int(p.Size())},
+					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: 42,
 					Trigger:                 qlog.PacketDropUnsupportedVersion,
 				},
@@ -505,7 +505,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header:                  qlog.PacketHeader{},
-					Raw:                     qlog.RawInfo{Length: int(p.Size())},
+					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: 42,
 					Trigger:                 qlog.PacketDropHeaderParseError,
 				},
@@ -538,7 +538,7 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 					PacketType:   qlog.PacketType0RTT,
 					PacketNumber: protocol.InvalidPacketNumber,
 				},
-				Raw:                     qlog.RawInfo{Length: int(p.Size())},
+				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: 1234,
 				Trigger:                 qlog.PacketDropUnexpectedPacket,
 			},
@@ -650,7 +650,7 @@ func TestConnectionUnpacking(t *testing.T) {
 					PacketNumber:     protocol.PacketNumber(0x1337),
 					KeyPhaseBit:      protocol.KeyPhaseZero,
 				},
-				Raw:    qlog.RawInfo{Length: int(packet.Size())},
+				Raw:    qlog.RawInfo{Length: int(packet.Size()), PayloadLength: 0},
 				Frames: []qlog.Frame{},
 				ECN:    qlog.ECT1,
 			},
@@ -760,7 +760,7 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 			},
 			qlog.PacketDropped{
 				Header:                  qlog.PacketHeader{DestConnectionID: incorrectSrcConnID},
-				Raw:                     qlog.RawInfo{Length: int(packet3.Size())},
+				Raw:                     qlog.RawInfo{Length: int(packet3.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: 42,
 				Trigger:                 qlog.PacketDropUnknownConnectionID,
 			},
@@ -857,7 +857,7 @@ func testConnectionUnpackFailureDropped(t *testing.T, unpackErr error, packetDro
 						DestConnectionID: tc.srcConnID,
 						PacketNumber:     protocol.InvalidPacketNumber,
 					},
-					Raw:     qlog.RawInfo{Length: int(packet.Size())},
+					Raw:     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: packetDropReason,
 				},
 			},
@@ -895,7 +895,7 @@ func TestConnectionMaxUnprocessedPackets(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Raw:     qlog.RawInfo{Length: 6},
+					Raw:     qlog.RawInfo{Length: 6, PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropDOSPrevention,
 				},
 			},
@@ -1684,7 +1684,7 @@ func TestConnectionPacketBuffering(t *testing.T) {
 						PacketType:   qlog.PacketTypeHandshake,
 						PacketNumber: protocol.InvalidPacketNumber,
 					},
-					Raw:                     qlog.RawInfo{Length: int(packet1.Size())},
+					Raw:                     qlog.RawInfo{Length: int(packet1.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: datagramPayloadChecksum1,
 				},
 				qlog.PacketBuffered{
@@ -1692,7 +1692,7 @@ func TestConnectionPacketBuffering(t *testing.T) {
 						PacketType:   qlog.PacketTypeHandshake,
 						PacketNumber: protocol.InvalidPacketNumber,
 					},
-					Raw:                     qlog.RawInfo{Length: int(packet2.Size())},
+					Raw:                     qlog.RawInfo{Length: int(packet2.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: datagramPayloadChecksum2,
 				},
 			},
@@ -2899,7 +2899,7 @@ func TestConnectionVersionNegotiationInvalidPackets(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
-				Raw:     qlog.RawInfo{Length: int(vnp.Size())},
+				Raw:     qlog.RawInfo{Length: int(vnp.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedVersion,
 			},
 		},
@@ -2917,7 +2917,7 @@ func TestConnectionVersionNegotiationInvalidPackets(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
-				Raw:     qlog.RawInfo{Length: int(vnp.Size())},
+				Raw:     qlog.RawInfo{Length: int(vnp.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropHeaderParseError,
 			},
 		},
@@ -2973,7 +2973,7 @@ func TestConnectionRetryDrops(t *testing.T) {
 					DestConnectionID: tc.srcConnID,
 					Version:          protocol.Version1,
 				},
-				Raw:     qlog.RawInfo{Length: int(retry.Size())},
+				Raw:     qlog.RawInfo{Length: int(retry.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropPayloadDecryptError,
 			},
 		},
@@ -2995,7 +2995,7 @@ func TestConnectionRetryDrops(t *testing.T) {
 					DestConnectionID: tc.srcConnID,
 					Version:          protocol.Version1,
 				},
-				Raw:     qlog.RawInfo{Length: int(retry.Size())},
+				Raw:     qlog.RawInfo{Length: int(retry.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			},
 		},
@@ -3059,7 +3059,7 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 					DestConnectionID: tc.srcConnID,
 					Version:          tc.conn.version,
 				},
-				Raw:     qlog.RawInfo{Length: int(retry.Size())},
+				Raw:     qlog.RawInfo{Length: int(retry.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			},
 		},
@@ -3131,7 +3131,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 							Version:          protocol.Version1,
 							Token:            &qlog.Token{Raw: []byte("foobar")},
 						},
-						Raw: qlog.RawInfo{Length: int(retry.Size())},
+						Raw: qlog.RawInfo{Length: int(retry.Size()), PayloadLength: qlog.OmitLength},
 					},
 				},
 				eventRecorder.Events(qlog.PacketReceived{}, qlog.PacketDropped{}),
@@ -3195,7 +3195,7 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 						PacketType:   qlog.PacketTypeInitial,
 						PacketNumber: protocol.InvalidPacketNumber,
 					},
-					Raw:                     qlog.RawInfo{Length: int(packet2.Size())},
+					Raw:                     qlog.RawInfo{Length: int(packet2.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: qlog.CalculateDatagramPayloadChecksum(packet2.data),
 					Trigger:                 qlog.PacketDropUnknownConnectionID,
 				},
