@@ -82,29 +82,33 @@ func TestChaChaTestVector(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name            string
-		version         protocol.Version
-		expectedPayload []byte
-		expectedPacket  []byte
+		name              string
+		version           protocol.Version
+		expectedPayload   []byte
+		expectedPacket    []byte
+		nextTrafficSecret []byte
 	}{
 		{
-			version:         protocol.Version1,
-			expectedPayload: splitHexString(t, "655e5cd55c41f69080575d7999c25a5bfb"),
-			expectedPacket:  splitHexString(t, "4cfe4189655e5cd55c41f69080575d7999c25a5bfb"),
+			version:           protocol.Version1,
+			expectedPayload:   splitHexString(t, "655e5cd55c41f69080575d7999c25a5bfb"),
+			expectedPacket:    splitHexString(t, "4cfe4189655e5cd55c41f69080575d7999c25a5bfb"),
+			nextTrafficSecret: splitHexString(t, "1223504755036d556342ee9361d25342 1a826c9ecdf3c7148684b36b714881f9"),
 		},
 		{
-			version:         protocol.Version2,
-			expectedPayload: splitHexString(t, "0ae7b6b932bc27d786f4bc2bb20f2162ba"),
-			expectedPacket:  splitHexString(t, "5558b1c60ae7b6b932bc27d786f4bc2bb20f2162ba"),
+			version:           protocol.Version2,
+			expectedPayload:   splitHexString(t, "0ae7b6b932bc27d786f4bc2bb20f2162ba"),
+			expectedPacket:    splitHexString(t, "5558b1c60ae7b6b932bc27d786f4bc2bb20f2162ba"),
+			nextTrafficSecret: splitHexString(t, "c69374c49e3d2a9466fa689e49d476db 5d0dfbc87d32ceeaa6343fd0ae4c7d88"),
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("QUIC %s", tc.version), func(t *testing.T) {
 			secret := splitHexString(t, "9ac312a7f877468ebe69422748ad00a1 5443f18203a07d6060f688f30f21632b")
-			aead := newUpdatableAEAD(utils.NewRTTStats(), nil, nil, tc.version)
+			aead := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, tc.version)
 			chacha := getCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
 			require.Equal(t, tls.TLS_CHACHA20_POLY1305_SHA256, chacha.ID)
+			aead.SetReadKey(chacha, secret)
 			aead.SetWriteKey(chacha, secret)
 			const pnOffset = 1
 			header := splitHexString(t, "4200bff4")
@@ -115,6 +119,17 @@ func TestChaChaTestVector(t *testing.T) {
 			packet := append(header, payload...)
 			aead.EncryptHeader(packet[pnOffset+4:pnOffset+4+16], &packet[0], packet[pnOffset:payloadOffset])
 			require.Equal(t, tc.expectedPacket, packet)
+
+			aead.SetHandshakeConfirmed()
+			peer := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, tc.version)
+			peer.SetWriteKey(chacha, tc.nextTrafficSecret)
+			header = splitHexString(t, "4600bff5")
+			payload = peer.Seal(nil, plaintext, 654360565, header)
+			decrypted, err := aead.Open(nil, payload, monotime.Now(), 654360565, protocol.KeyPhaseOne, header)
+			require.NoError(t, err)
+			require.Equal(t, plaintext, decrypted)
+			require.Equal(t, protocol.KeyPhaseOne, aead.KeyPhase())
+			require.Equal(t, payload, aead.Seal(nil, plaintext, 654360565, header))
 		})
 	}
 }
