@@ -74,19 +74,16 @@ func (p *receivedPacket) Clone() *receivedPacket {
 	}
 }
 
-// A pathReceiver is the packetHandler that a client connection registers on a Transport added via AddPath.
+// A pathReceiver is the packetHandler that a connection registers on every Transport it uses:
+// the one it was dialed or accepted on, and the ones added via AddPath.
 // It allows the connection to tell which Transport a packet was received on.
 type pathReceiver struct {
-	conn *Conn
+	*Conn
 }
 
 var _ packetHandler = &pathReceiver{}
 
-func (r *pathReceiver) handlePacket(p receivedPacket) { r.conn.queuePacket(p, r) }
-func (r *pathReceiver) destroy(err error)             { r.conn.destroy(err) }
-func (r *pathReceiver) closeWithTransportError(code TransportErrorCode) {
-	r.conn.closeWithTransportError(code)
-}
+func (r *pathReceiver) handlePacket(p receivedPacket) { r.queuePacket(p, r) }
 
 type connRunner interface {
 	Add(protocol.ConnectionID, packetHandler) bool
@@ -254,8 +251,8 @@ type connTestHooks struct {
 }
 
 type wrappedConn struct {
-	testHooks *connTestHooks
-	*Conn
+	testHooks    *connTestHooks
+	pathReceiver // for the Transport that the connection was dialed or accepted on
 }
 
 var newConnection = func(
@@ -293,6 +290,7 @@ var newConnection = func(
 		logger:              logger,
 		version:             v,
 	}
+	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
 	}
@@ -303,7 +301,7 @@ var newConnection = func(
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
-		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
+		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, &w.pathReceiver) },
 		runner.RemoveResetToken,
 		s.queueControlFrame,
 	)
@@ -312,11 +310,11 @@ var newConnection = func(
 		srcConnID,
 		&clientDestConnID,
 		statelessResetter,
-		s,
+		&w.pathReceiver,
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.preSetup()
+	s.preSetup(&w.pathReceiver)
 	s.rttStats.SetInitialRTT(rtt)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		0,
@@ -379,7 +377,7 @@ var newConnection = func(
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, s.oneRTTStream)
-	return &wrappedConn{Conn: s}
+	return w
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -413,6 +411,7 @@ var newClientConnection = func(
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
 	}
+	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
 	}
@@ -428,7 +427,7 @@ var newClientConnection = func(
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
-		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
+		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, &w.pathReceiver) },
 		runner.RemoveResetToken,
 		s.queueControlFrame,
 	)
@@ -437,12 +436,12 @@ var newClientConnection = func(
 		srcConnID,
 		nil,
 		statelessResetter,
-		s,
+		&w.pathReceiver,
 		s.queueControlFrame,
 		connIDGenerator,
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
-	s.preSetup()
+	s.preSetup(&w.pathReceiver)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName
 	} else {
@@ -514,10 +513,11 @@ var newClientConnection = func(
 	if token != nil {
 		s.packer.SetToken(token.data)
 	}
-	return &wrappedConn{Conn: s}
+	return w
 }
 
-func (c *Conn) preSetup() {
+// r is the pathReceiver for the Transport that the connection was dialed or accepted on.
+func (c *Conn) preSetup(r *pathReceiver) {
 	c.largestRcvdAppData = protocol.InvalidPacketNumber
 	c.initialStream = newInitialCryptoStream(c.perspective == protocol.PerspectiveClient)
 	c.handshakeStream = newCryptoStream()
@@ -552,7 +552,7 @@ func (c *Conn) preSetup() {
 		c.perspective,
 	)
 	c.framer = newFramer(c.connFlowController)
-	c.receivedPackets.Init(c)
+	c.receivedPackets.Init(r)
 	c.notifyReceivedPacket = make(chan struct{}, 1)
 	c.closeChan = make(chan struct{}, 1)
 	c.sendingScheduled = make(chan struct{}, 1)
@@ -1940,15 +1940,9 @@ func (c *Conn) handleFrame(
 	return pathChallenge, err
 }
 
-// handlePacket is called with a new packet received on the Transport that the connection was dialed on
-// (for the client), or that the connection was accepted on (for the server).
-func (c *Conn) handlePacket(p receivedPacket) {
-	c.queuePacket(p, c)
-}
-
-// queuePacket queues a packet received by the packetHandler source,
+// queuePacket queues a packet received by the pathReceiver source,
 // i.e. on the Transport that source is registered with.
-func (c *Conn) queuePacket(p receivedPacket, source packetHandler) {
+func (c *Conn) queuePacket(p receivedPacket, source *pathReceiver) {
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxConnUnprocessedPackets
 	if !c.receivedPackets.Push(p, source) {
@@ -3120,7 +3114,7 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 		200*time.Millisecond, // initial RTT estimate
 		// Called on the run loop every time a PATH_CHALLENGE is sent on the Transport.
 		// The pathReceiver is ignored if the connection is already registered with the Transport.
-		func() { c.connIDGenerator.AddConnRunner((*packetHandlerMap)(t), &pathReceiver{conn: c}) },
+		func() { c.connIDGenerator.AddConnRunner((*packetHandlerMap)(t), &pathReceiver{Conn: c}) },
 	), nil
 }
 

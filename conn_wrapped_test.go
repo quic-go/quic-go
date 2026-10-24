@@ -64,7 +64,7 @@ func (c *wrappedConn) destroy(e error) {
 
 func (c *wrappedConn) handlePacket(p receivedPacket) {
 	if c.testHooks == nil {
-		c.Conn.handlePacket(p)
+		c.pathReceiver.handlePacket(p)
 		return
 	}
 	if c.testHooks.handlePacket != nil {

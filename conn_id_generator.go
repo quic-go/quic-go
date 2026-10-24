@@ -12,8 +12,8 @@ import (
 )
 
 // The memory address of the Transport is used as the key.
-// The value is the packetHandler that the connection's connection IDs are registered with on that Transport.
-type connRunners map[connRunner]packetHandler
+// The value is the pathReceiver that the connection's connection IDs are registered with on that Transport.
+type connRunners map[connRunner]*pathReceiver
 
 func (cr connRunners) AddConnectionID(id protocol.ConnectionID) {
 	for r, h := range cr {
@@ -57,7 +57,7 @@ func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID *protocol.ConnectionID, // nil for the client
 	statelessResetter *statelessResetter,
-	handler packetHandler,
+	handler *pathReceiver,
 	queueControlFrame func(wire.Frame),
 	generator ConnectionIDGenerator,
 ) *connIDGenerator {
@@ -191,14 +191,14 @@ func (m *connIDGenerator) ReplaceWithClosed(connClose []byte, expiry time.Durati
 	m.connRunners.ReplaceWithClosed(connIDs, connClose, expiry)
 }
 
-// Handler returns the packetHandler that the connection IDs are registered with on the transport.
-func (m *connIDGenerator) Handler(runner connRunner) (packetHandler, bool) {
+// Handler returns the pathReceiver that the connection IDs are registered with on the transport.
+func (m *connIDGenerator) Handler(runner connRunner) (*pathReceiver, bool) {
 	h, ok := m.connRunners[runner]
 	return h, ok
 }
 
-// AddConnRunner registers all connection IDs with the packetHandler on the transport.
-func (m *connIDGenerator) AddConnRunner(runner connRunner, h packetHandler) {
+// AddConnRunner registers all connection IDs with the pathReceiver on the transport.
+func (m *connIDGenerator) AddConnRunner(runner connRunner, h *pathReceiver) {
 	// The transport might have already been added earlier.
 	// This happens for every PATH_CHALLENGE sent on the transport after the first one (including retransmissions),
 	// and if the application migrates back to an old path.

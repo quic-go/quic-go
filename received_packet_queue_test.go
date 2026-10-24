@@ -14,11 +14,11 @@ func TestReceivedPacketQueue(t *testing.T) {
 	var q receivedPacketQueue
 	q.Init(h1)
 
-	push := func(data string, source packetHandler) {
+	push := func(data string, source *pathReceiver) {
 		t.Helper()
 		require.True(t, q.Push(receivedPacket{data: []byte(data)}, source))
 	}
-	requirePop := func(data string, source packetHandler) {
+	requirePop := func(data string, source *pathReceiver) {
 		t.Helper()
 		p, s, ok := q.Pop()
 		require.True(t, ok)
@@ -58,7 +58,7 @@ func TestReceivedPacketQueueLimits(t *testing.T) {
 	q.Init(h1)
 
 	// the main and the side queue have their own limit
-	for _, h := range []packetHandler{h1, h2} {
+	for _, h := range []*pathReceiver{h1, h2} {
 		for range protocol.MaxConnUnprocessedPackets {
 			require.True(t, q.Push(receivedPacket{}, h))
 		}
