@@ -33,6 +33,11 @@ func TestRedactIPs(t *testing.T) {
 		Local:  PathEndpointInfo{IPv4: addr4},
 		Remote: PathEndpointInfo{IPv6: addr6},
 	})
+	producer.RecordEvent(TupleAssigned{
+		TupleID: "1",
+		Local:   PathEndpointInfo{IPv6: addr6},
+		Remote:  PathEndpointInfo{IPv4: addr4},
+	})
 	producer.RecordEvent(ParametersSet{
 		Initiator:        InitiatorLocal,
 		PreferredAddress: preferred,
@@ -48,6 +53,12 @@ func TestRedactIPs(t *testing.T) {
 		StartedConnection{
 			Local:          PathEndpointInfo{IPv4: addr4},
 			Remote:         PathEndpointInfo{IPv6: addr6},
+			RedactedRemote: new("***"),
+		},
+		TupleAssigned{
+			TupleID:        "1",
+			Local:          PathEndpointInfo{IPv6: addr6},
+			Remote:         PathEndpointInfo{IPv4: addr4},
 			RedactedRemote: new("***"),
 		},
 		ParametersSet{

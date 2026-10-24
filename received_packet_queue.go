@@ -53,21 +53,25 @@ func (q *receivedPacketQueue) Push(p receivedPacket, source *pathReceiver) bool 
 	return true
 }
 
-// Pop returns the next packet, and the pathReceiver that received it.
+// Pop returns the next packet, and the qlog TupleID of the path it was received on.
+// The TupleID is empty for packets received on the active path.
 // Packets in the side queue are returned first:
 // When switching paths, the packets received on the old path are moved to the side queue.
-func (q *receivedPacketQueue) Pop() (_ receivedPacket, source *pathReceiver, ok bool) {
+func (q *receivedPacketQueue) Pop() (_ receivedPacket, tupleID string, ok bool) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	if !q.side.Empty() {
 		p := q.side.PopFront()
-		return p.receivedPacket, p.source, true
+		if p.source == q.active {
+			return p.receivedPacket, "", true
+		}
+		return p.receivedPacket, p.source.qlogTupleID(), true
 	}
 	if !q.main.Empty() {
-		return q.main.PopFront(), q.active, true
+		return q.main.PopFront(), "", true
 	}
-	return receivedPacket{}, nil, false
+	return receivedPacket{}, "", false
 }
 
 func (q *receivedPacketQueue) Empty() bool {
@@ -78,18 +82,20 @@ func (q *receivedPacketQueue) Empty() bool {
 }
 
 // SetActive is called when switching paths.
-// It moves packets queued for the old path to the side queue.
-func (q *receivedPacketQueue) SetActive(active *pathReceiver) {
+// It moves packets queued for the old path to the side queue, and returns the pathReceiver of the old path.
+func (q *receivedPacketQueue) SetActive(active *pathReceiver) (prev *pathReceiver) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
-	if active == q.active {
-		return
+	prev = q.active
+	if active == prev {
+		return prev
 	}
 	for !q.main.Empty() {
-		q.side.PushBack(sidePacket{receivedPacket: q.main.PopFront(), source: q.active})
+		q.side.PushBack(sidePacket{receivedPacket: q.main.PopFront(), source: prev})
 	}
 	q.active = active
+	return prev
 }
 
 // Clear drops all queued packets.

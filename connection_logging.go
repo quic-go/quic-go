@@ -109,10 +109,10 @@ func (c *Conn) logLongHeaderPacket(p *longHeaderPacket, ecn protocol.ECN, datagr
 }
 
 func (c *Conn) logShortHeaderPacket(p shortHeaderPacket, ecn protocol.ECN, size protocol.ByteCount) {
-	c.logShortHeaderPacketWithDatagramPayloadChecksum(p, ecn, size, false, 0)
+	c.logShortHeaderPacketWithDatagramPayloadChecksum(p, ecn, size, false, 0, "")
 }
 
-func (c *Conn) logShortHeaderPacketWithDatagramPayloadChecksum(p shortHeaderPacket, ecn protocol.ECN, size protocol.ByteCount, isCoalesced bool, datagramPayloadChecksum qlog.DatagramPayloadChecksum) {
+func (c *Conn) logShortHeaderPacketWithDatagramPayloadChecksum(p shortHeaderPacket, ecn protocol.ECN, size protocol.ByteCount, isCoalesced bool, datagramPayloadChecksum qlog.DatagramPayloadChecksum, tuple string) {
 	if c.logger.Debug() && !isCoalesced {
 		c.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, 1-RTT (ECN: %s)", p.PacketNumber, size, c.logID, ecn)
 	}
@@ -161,6 +161,7 @@ func (c *Conn) logShortHeaderPacketWithDatagramPayloadChecksum(p shortHeaderPack
 			DatagramPayloadChecksum: datagramPayloadChecksum,
 			Frames:                  fs,
 			ECN:                     toQlogECN(ecn),
+			Tuple:                   tuple,
 		})
 	}
 }
@@ -180,6 +181,7 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 				packet.shortHdrPacket.Length,
 				false,
 				datagramPayloadChecksum,
+				"",
 			)
 			return
 		}
@@ -193,7 +195,7 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 		c.logLongHeaderPacket(p, ecn, datagramPayloadChecksum)
 	}
 	if p := packet.shortHdrPacket; p != nil {
-		c.logShortHeaderPacketWithDatagramPayloadChecksum(*p, ecn, p.Length, true, datagramPayloadChecksum)
+		c.logShortHeaderPacketWithDatagramPayloadChecksum(*p, ecn, p.Length, true, datagramPayloadChecksum, "")
 	}
 }
 
@@ -284,12 +286,23 @@ func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
 	return info
 }
 
-// startedConnectionEvent builds a StartedConnection event using consistent logic
+func startedConnectionEvent(local, remote *net.UDPAddr) qlog.StartedConnection {
+	localInfo, remoteInfo := toPathEndpointInfos(local, remote)
+	return qlog.StartedConnection{Local: localInfo, Remote: remoteInfo}
+}
+
+func tupleAssignedEvent(tupleID string, local, remote net.Addr) qlog.TupleAssigned {
+	localAddr, _ := local.(*net.UDPAddr)
+	remoteAddr, _ := remote.(*net.UDPAddr)
+	localInfo, remoteInfo := toPathEndpointInfos(localAddr, remoteAddr)
+	return qlog.TupleAssigned{TupleID: tupleID, Local: localInfo, Remote: remoteInfo}
+}
+
+// toPathEndpointInfos converts the local and remote address using consistent logic
 // for both endpoints. If the local address is unspecified (e.g., dual-stack
 // listener), it selects the family based on the remote address and uses the
 // unspecified address of that family with the local port.
-func startedConnectionEvent(local, remote *net.UDPAddr) qlog.StartedConnection {
-	var localInfo, remoteInfo qlog.PathEndpointInfo
+func toPathEndpointInfos(local, remote *net.UDPAddr) (localInfo, remoteInfo qlog.PathEndpointInfo) {
 	if remote != nil {
 		remoteInfo = toPathEndpointInfo(remote)
 	}
@@ -311,5 +324,5 @@ func startedConnectionEvent(local, remote *net.UDPAddr) qlog.StartedConnection {
 			localInfo = toPathEndpointInfo(local)
 		}
 	}
-	return qlog.StartedConnection{Local: localInfo, Remote: remoteInfo}
+	return localInfo, remoteInfo
 }

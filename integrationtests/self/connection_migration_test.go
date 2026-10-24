@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 )
@@ -58,9 +61,47 @@ func TestConnectionMigration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := tr1.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
+	var clientEvents events.Recorder
+	conn, err := tr1.Dial(ctx, proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(&quic.Config{Tracer: newTracer(&clientEvents)}))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
+
+	// probeTuples returns the tuples of the packets sent with a PATH_CHALLENGE and received with a PATH_RESPONSE,
+	// starting at the given event index.
+	probeTuples := func(since int) []string {
+		var tuples []string
+		for _, ev := range clientEvents.Events()[since:] {
+			switch e := ev.(type) {
+			case qlog.PacketSent:
+				if hasFrame[*qlog.PathChallengeFrame](e.Frames) {
+					tuples = append(tuples, e.Tuple)
+				}
+			case qlog.PacketReceived:
+				if hasFrame[*qlog.PathResponseFrame](e.Frames) {
+					tuples = append(tuples, e.Tuple)
+				}
+			}
+		}
+		return slices.Compact(tuples)
+	}
+	// sentTuples returns the tuples of the packets sent, starting at the given event index.
+	sentTuples := func(since int) []string {
+		var tuples []string
+		for _, ev := range clientEvents.Events()[since:] {
+			if e, ok := ev.(qlog.PacketSent); ok {
+				tuples = append(tuples, e.Tuple)
+			}
+		}
+		return slices.Compact(tuples)
+	}
+	// assignedTuples returns the TupleIDs of all tuple_assigned events.
+	assignedTuples := func() []string {
+		var tuples []string
+		for _, ev := range clientEvents.Events(qlog.TupleAssigned{}) {
+			tuples = append(tuples, ev.(qlog.TupleAssigned).TupleID)
+		}
+		return tuples
+	}
 
 	sconn, err := ln.Accept(ctx)
 	require.NoError(t, err)
@@ -109,8 +150,13 @@ func TestConnectionMigration(t *testing.T) {
 	path, err := conn.AddPath(tr2)
 	require.NoError(t, err)
 	require.ErrorIs(t, path.Switch(), quic.ErrPathNotValidated)
+	n := len(clientEvents.Events())
 	require.NoError(t, path.Probe(ctx))
 	require.Less(t, int(packetsPath2.Load()), 5)
+
+	// the new path is assigned a new tuple, which is used for probing
+	require.Equal(t, []string{"1"}, assignedTuples())
+	require.Equal(t, []string{"1"}, probeTuples(n))
 
 	// make sure that no more packets are sent on path 2 before switching to the path
 	c2 := packetsPath2.Load()
@@ -120,8 +166,12 @@ func TestConnectionMigration(t *testing.T) {
 	time.Sleep(3 * rtt) // wait for ACKs
 
 	// now switch and make sure that no packets are sent on path 1
+	n = len(clientEvents.Events())
 	require.NoError(t, path.Switch())
 	sendAndReceiveFile(t) // stream 10
+	// the old path is assigned its own tuple, and the default tuple now refers to the new path
+	require.Equal(t, []string{"1", "0", ""}, assignedTuples())
+	require.Equal(t, []string{""}, sentTuples(n))
 	c1 := packetsPath1.Load()
 	require.Equal(t, c1, packetsPath1.Load())
 	require.Greater(t, packetsPath2.Load(), c2)
@@ -133,12 +183,26 @@ func TestConnectionMigration(t *testing.T) {
 	c2BeforeSwitch := packetsPath2.Load()
 	path2, err := conn.AddPath(tr1)
 	require.NoError(t, err)
+	n = len(clientEvents.Events())
 	require.NoError(t, path2.Probe(ctx))
+	// the handshake path was assigned its tuple when switching away from it
+	require.Equal(t, []string{"0"}, probeTuples(n))
+	require.Len(t, assignedTuples(), 3)
 	time.Sleep(3 * rtt) // wait for ACKs
+	n = len(clientEvents.Events())
 	require.NoError(t, path2.Switch())
 	sendAndReceiveFile(t) // stream 14
+	require.Equal(t, []string{"1", "0", "", "1", ""}, assignedTuples())
+	require.Equal(t, []string{""}, sentTuples(n))
 	require.Greater(t, packetsPath1.Load(), c1BeforeSwitch)
 	// some path probing might have happened
 	require.Less(t, int(packetsPath2.Load()-c2BeforeSwitch), 20)
 	require.Equal(t, tr1.Conn.LocalAddr(), conn.LocalAddr())
+}
+
+func hasFrame[T any](frames []qlog.Frame) bool {
+	return slices.ContainsFunc(frames, func(f qlog.Frame) bool {
+		_, ok := f.Frame.(T)
+		return ok
+	})
 }

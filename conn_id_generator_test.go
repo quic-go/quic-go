@@ -279,7 +279,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	h2 := &pathReceiver{}
 	_, ok = g.Handler(&tracker2)
 	require.False(t, ok)
-	g.AddConnRunner(&tracker2, h2)
+	require.True(t, g.AddConnRunner(&tracker2, h2))
 	h, ok = g.Handler(&tracker2)
 	require.True(t, ok)
 	require.Same(t, h2, h)
@@ -293,7 +293,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	}
 
 	// adding the same transport again doesn't do anything
-	g.AddConnRunner(&tracker1, &pathReceiver{})
+	require.False(t, g.AddConnRunner(&tracker1, &pathReceiver{}))
 	require.Len(t, tracker1.added, 2)
 	h, ok = g.Handler(&tracker1)
 	require.True(t, ok)
