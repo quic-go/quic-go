@@ -31,6 +31,11 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 		utils.DefaultLogger,
 	)
 	now := monotime.Now()
+	// the connection creates the path before handling the packet's frames
+	id, isNew, ok := pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now)
+	require.True(t, ok)
+	require.True(t, isNew)
+	require.Equal(t, pathID(0), id)
 	connID, frames, shouldSwitch := pm.HandlePacket(
 		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
 		now,
@@ -48,6 +53,10 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 	require.False(t, shouldSwitch)
 
 	// receiving another packet for the same path doesn't trigger another PATH_CHALLENGE
+	id, isNew, ok = pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now)
+	require.True(t, ok)
+	require.False(t, isNew)
+	require.Equal(t, pathID(0), id)
 	connID, frames, shouldSwitch = pm.HandlePacket(
 		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
 		now,
@@ -60,6 +69,10 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 
 	// receiving a packet for a different path triggers another PATH_CHALLENGE
 	addr2 := &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000}
+	id, isNew, ok = pm.GetOrCreatePath(addr2, now)
+	require.True(t, ok)
+	require.True(t, isNew)
+	require.Equal(t, pathID(1), id)
 	connID, frames, shouldSwitch = pm.HandlePacket(addr2, now, nil, false)
 	require.Equal(t, connIDs[1], connID)
 	require.Len(t, frames, 1)
@@ -116,6 +129,7 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 	pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 1000})
 
 	// switching to the path removes other paths
+	pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now)
 	connID, frames, shouldSwitch = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, false)
 	require.Equal(t, connIDs[2], connID)
 	require.NotEmpty(t, frames)
@@ -135,6 +149,7 @@ func TestPathManagerMultipleProbes(t *testing.T) {
 	)
 	now := monotime.Now()
 	// first receive a packet without a PATH_CHALLENGE
+	pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now)
 	connID, frames, shouldSwitch := pm.HandlePacket(
 		&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000},
 		now,
@@ -189,6 +204,7 @@ func TestPathManagerNATRebinding(t *testing.T) {
 	)
 
 	now := monotime.Now()
+	pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now)
 	connID, frames, shouldSwitch := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, true)
 	require.Equal(t, connIDs[0], connID)
 	require.Len(t, frames, 1)
@@ -228,6 +244,7 @@ func TestPathManagerRetransmissions(t *testing.T) {
 			now := monotime.Now()
 			rtt := utils.DefaultInitialRTT
 			var challenges [][8]byte
+			pm.GetOrCreatePath(addr, now)
 			for _, packet := range []struct {
 				at            time.Duration
 				wantChallenge bool
@@ -304,6 +321,7 @@ func TestPathManagerLimits(t *testing.T) {
 	var firstPathConnID protocol.ConnectionID
 	require.Greater(t, pathTimeout, maxPaths*time.Second)
 	for i := range maxPaths {
+		pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + i}, now)
 		connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + i}, now, nil, true)
 		require.NotEmpty(t, frames)
 		require.Equal(t, connIDs[i], connID)
@@ -314,6 +332,8 @@ func TestPathManagerLimits(t *testing.T) {
 	}
 	// the maximum number of paths is already being probed
 	now = firstPathTime.Add(pathTimeout - time.Second)
+	_, _, ok := pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now)
+	require.False(t, ok)
 	connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
@@ -337,6 +357,7 @@ func TestPathManagerLimits(t *testing.T) {
 	// receiving another packet after the pathTimeout of the first path evicts the first path
 	now = firstPathTime.Add(pathTimeout + time.Second)
 	connIDIndex := maxPaths
+	pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths}, now)
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000 + maxPaths}, now, nil, true)
 	require.NotEmpty(t, frames)
 	require.Equal(t, connIDs[connIDIndex], connID)
@@ -347,6 +368,7 @@ func TestPathManagerLimits(t *testing.T) {
 	var f1 []ackhandler.Frame
 	pm.SwitchToPath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000})
 	for i := range maxPaths {
+		pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3000 + i}, now)
 		connID, frames, _ := pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3000 + i}, now, nil, true)
 		if i == 0 {
 			f1 = frames
@@ -356,12 +378,14 @@ func TestPathManagerLimits(t *testing.T) {
 		connIDIndex++
 	}
 	// again, the maximum number of paths is already being probed
+	pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now)
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 2000}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
 
 	// losing the frame doesn't free up a path
 	f1[0].Handler.OnLost(f1[0].Frame)
+	pm.GetOrCreatePath(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4000}, now)
 	connID, frames, _ = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4000}, now, nil, true)
 	require.Zero(t, connID)
 	require.Empty(t, frames)

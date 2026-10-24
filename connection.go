@@ -1242,6 +1242,25 @@ func (c *Conn) handleShortHeaderPacket(
 		return false, nil
 	}
 
+	// Only the client can migrate between paths, so only the server receives packets from different addresses.
+	// The path is created before handling the frames, so that the packet can be logged with the path's tuple.
+	checkPath := c.perspective == protocol.PerspectiveServer && !addrsEqual(p.remoteAddr, c.RemoteAddr())
+	if checkPath {
+		if c.pathManager == nil {
+			c.pathManager = newPathManager(
+				c.connIDManager.GetConnIDForPath,
+				c.connIDManager.RetireConnIDForPath,
+				c.logger,
+			)
+		}
+		if id, isNew, ok := c.pathManager.GetOrCreatePath(p.remoteAddr, p.rcvTime); ok {
+			path = id
+			if isNew && c.qlogger != nil {
+				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), c.conn.LocalAddr(), p.remoteAddr))
+			}
+		}
+	}
+
 	var log func([]qlog.Frame)
 	if c.qlogger != nil {
 		var tuple string
@@ -1272,21 +1291,8 @@ func (c *Conn) handleShortHeaderPacket(
 		return false, err
 	}
 
-	// In RFC 9000, only the client can migrate between paths.
-	if c.perspective == protocol.PerspectiveClient {
+	if !checkPath {
 		return true, nil
-	}
-	if addrsEqual(p.remoteAddr, c.RemoteAddr()) {
-		return true, nil
-	}
-
-	var shouldSwitchPath bool
-	if c.pathManager == nil {
-		c.pathManager = newPathManager(
-			c.connIDManager.GetConnIDForPath,
-			c.connIDManager.RetireConnIDForPath,
-			c.logger,
-		)
 	}
 	destConnID, frames, shouldSwitchPath := c.pathManager.HandlePacket(p.remoteAddr, p.rcvTime, pathChallenge, isNonProbing)
 	if len(frames) > 0 {
@@ -1295,8 +1301,7 @@ func (c *Conn) handleShortHeaderPacket(
 			return true, err
 		}
 		c.logger.Debugf("sending path probe packet to %s", p.remoteAddr)
-		// the server doesn't log tuples (yet)
-		c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, datagramPayloadChecksum, "")
+		c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, datagramPayloadChecksum, strconv.FormatInt(int64(path), 10))
 		c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, p.rcvTime)
 		c.sendQueue.SendProbe(buf, p.remoteAddr, p.info)
 	}
@@ -1314,6 +1319,10 @@ func (c *Conn) handleShortHeaderPacket(
 		c.mtuDiscoverer.Start(p.rcvTime)
 	}
 	c.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
+	if c.qlogger != nil {
+		// the TupleID "" refers to the active path
+		c.qlogger.RecordEvent(tupleAssignedEvent("", c.conn.LocalAddr(), p.remoteAddr))
+	}
 	return true, nil
 }
 
