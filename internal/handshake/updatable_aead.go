@@ -133,7 +133,11 @@ func (a *updatableAEAD) startKeyDropTimer(now monotime.Time) {
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
-	return hkdfExpandLabel(hash, ts, []byte{}, "quic ku", hash.Size())
+	label := "quic ku"
+	if a.version == protocol.Version2 {
+		label = "quicv2 ku"
+	}
+	return hkdfExpandLabel(hash, ts, []byte{}, label, hash.Size())
 }
 
 // SetReadKey sets the read key.
