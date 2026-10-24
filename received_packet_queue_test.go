@@ -9,8 +9,8 @@ import (
 )
 
 func TestReceivedPacketQueue(t *testing.T) {
-	h1 := &pathReceiver{tupleID: "1"}
-	h2 := &pathReceiver{tupleID: "2"}
+	h1 := &pathReceiver{id: 1}
+	h2 := &pathReceiver{id: 2}
 	var q receivedPacketQueue
 	q.Init(h1)
 
@@ -18,19 +18,19 @@ func TestReceivedPacketQueue(t *testing.T) {
 		t.Helper()
 		require.True(t, q.Push(receivedPacket{data: []byte(data)}, source))
 	}
-	requirePop := func(data, tupleID string) {
+	requirePop := func(data string, path pathID) {
 		t.Helper()
-		p, tuple, ok := q.Pop()
+		p, id, ok := q.Pop()
 		require.True(t, ok)
 		require.Equal(t, data, string(p.data))
-		require.Equal(t, tupleID, tuple)
+		require.Equal(t, path, id)
 	}
 
-	// packets received on other paths are returned first, with their TupleID
+	// packets received on other paths are returned first, with their path ID
 	push("a", h1)
 	push("b", h2)
-	requirePop("b", "2")
-	requirePop("a", "")
+	requirePop("b", 2)
+	requirePop("a", activePathID)
 	require.True(t, q.Empty())
 
 	// switching paths moves the packets of the old path to the side queue
@@ -39,23 +39,23 @@ func TestReceivedPacketQueue(t *testing.T) {
 	require.Same(t, h1, q.SetActive(h2))
 	push("e", h2)
 	push("f", h1)
-	requirePop("d", "") // received on the new path before the switch
-	requirePop("c", "1")
-	requirePop("f", "1")
-	requirePop("e", "")
+	requirePop("d", activePathID) // received on the new path before the switch
+	requirePop("c", 1)
+	requirePop("f", 1)
+	requirePop("e", activePathID)
 
 	// switching to the active path doesn't move any packets
 	push("g", h2)
 	require.Same(t, h2, q.SetActive(h2))
 	push("h", h1)
-	requirePop("h", "1")
-	requirePop("g", "")
+	requirePop("h", 1)
+	requirePop("g", activePathID)
 	require.True(t, q.Empty())
 }
 
 func TestReceivedPacketQueueLimits(t *testing.T) {
-	h1 := &pathReceiver{tupleID: "1"}
-	h2 := &pathReceiver{tupleID: "2"}
+	h1 := &pathReceiver{id: 1}
+	h2 := &pathReceiver{id: 2}
 	var q receivedPacketQueue
 	q.Init(h1)
 
@@ -78,8 +78,8 @@ func TestReceivedPacketQueueLimits(t *testing.T) {
 }
 
 func TestReceivedPacketQueueClear(t *testing.T) {
-	h1 := &pathReceiver{tupleID: "1"}
-	h2 := &pathReceiver{tupleID: "2"}
+	h1 := &pathReceiver{id: 1}
+	h2 := &pathReceiver{id: 2}
 	var q receivedPacketQueue
 	q.Init(h1)
 

@@ -53,25 +53,29 @@ func (q *receivedPacketQueue) Push(p receivedPacket, source *pathReceiver) bool 
 	return true
 }
 
-// Pop returns the next packet, and the qlog TupleID of the path it was received on.
-// The TupleID is empty for packets received on the active path.
+// activePathID is returned by Pop for packets received on the active path.
+// Like the qlog TupleID "", it refers to whichever path is currently active.
+const activePathID pathID = -2
+
+// Pop returns the next packet, and the ID of the path it was received on.
+// The ID is activePathID for packets received on the active path.
 // Packets in the side queue are returned first:
 // When switching paths, the packets received on the old path are moved to the side queue.
-func (q *receivedPacketQueue) Pop() (_ receivedPacket, tupleID string, ok bool) {
+func (q *receivedPacketQueue) Pop() (_ receivedPacket, path pathID, ok bool) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	if !q.side.Empty() {
 		p := q.side.PopFront()
 		if p.source == q.active {
-			return p.receivedPacket, "", true
+			return p.receivedPacket, activePathID, true
 		}
-		return p.receivedPacket, p.source.qlogTupleID(), true
+		return p.receivedPacket, p.source.id, true
 	}
 	if !q.main.Empty() {
-		return q.main.PopFront(), "", true
+		return q.main.PopFront(), activePathID, true
 	}
-	return receivedPacket{}, "", false
+	return receivedPacket{}, activePathID, false
 }
 
 func (q *receivedPacketQueue) Empty() bool {

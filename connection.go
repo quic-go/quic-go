@@ -80,13 +80,12 @@ func (p *receivedPacket) Clone() *receivedPacket {
 // It allows the connection to tell which Transport a packet was received on.
 type pathReceiver struct {
 	*Conn
-	tupleID string // the qlog TupleID of the Transport
+	id pathID // the ID of the first path that used the Transport, also used as its qlog TupleID
 }
 
 var _ packetHandler = &pathReceiver{}
 
 func (r *pathReceiver) handlePacket(p receivedPacket) { r.queuePacket(p, r) }
-func (r *pathReceiver) qlogTupleID() string           { return r.tupleID }
 
 type connRunner interface {
 	Add(protocol.ConnectionID, packetHandler) bool
@@ -293,7 +292,7 @@ var newConnection = func(
 		logger:              logger,
 		version:             v,
 	}
-	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s, tupleID: "0"}}
+	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
 	}
@@ -414,7 +413,7 @@ var newClientConnection = func(
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
 	}
-	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s, tupleID: "0"}}
+	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
 	}
@@ -624,7 +623,7 @@ runLoop:
 			c.undecryptablePacketsToProcess = nil
 			for _, p := range queue {
 				// undecryptable packets are only queued during the handshake, i.e. on the active path
-				processed, err := c.handleOnePacket(p.receivedPacket, p.checksum, "")
+				processed, err := c.handleOnePacket(p.receivedPacket, p.checksum, activePathID)
 				if err != nil {
 					c.setCloseError(&closeError{err: err})
 					break runLoop
@@ -929,7 +928,7 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 		if prev := c.receivedPackets.SetActive(h); prev != h && c.qlogger != nil {
 			// The TupleID "" refers to the active path.
 			// From now on, the old path needs to be logged with its own TupleID.
-			c.qlogger.RecordEvent(tupleAssignedEvent(prev.qlogTupleID(), c.conn.LocalAddr(), c.conn.RemoteAddr()))
+			c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(prev.id), 10), c.conn.LocalAddr(), c.conn.RemoteAddr()))
 			c.qlogger.RecordEvent(tupleAssignedEvent("", tr.Conn.LocalAddr(), c.conn.RemoteAddr()))
 		}
 	}
@@ -1021,7 +1020,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 	// Limit the number of packets to process to maxPacketsToProcess,
 	// so we eventually get a chance to send out an ACK when receiving a lot of packets.
 	for range maxPacketsToProcess {
-		p, tupleID, ok := c.receivedPackets.Pop()
+		p, path, ok := c.receivedPackets.Pop()
 		if !ok {
 			return wasProcessed, nil
 		}
@@ -1030,7 +1029,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		if c.qlogger != nil && wire.IsLongHeaderPacket(p.data[0]) {
 			datagramPayloadChecksum = qlog.CalculateDatagramPayloadChecksum(p.data)
 		}
-		processed, err := c.handleOnePacket(p, datagramPayloadChecksum, tupleID)
+		processed, err := c.handleOnePacket(p, datagramPayloadChecksum, path)
 		if err != nil {
 			return false, err
 		}
@@ -1056,7 +1055,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 func (c *Conn) handleOnePacket(
 	rp receivedPacket,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum, // only for logging
-	tuple string, // only for logging
+	path pathID, // only for logging
 ) (wasProcessed bool, _ error) {
 	c.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
@@ -1159,7 +1158,7 @@ func (c *Conn) handleOnePacket(
 			if counter > 0 {
 				p.buffer.Split()
 			}
-			processed, err := c.handleShortHeaderPacket(p, counter > 0, datagramPayloadChecksum, tuple)
+			processed, err := c.handleShortHeaderPacket(p, counter > 0, datagramPayloadChecksum, path)
 			if err != nil {
 				return false, err
 			}
@@ -1179,7 +1178,7 @@ func (c *Conn) handleShortHeaderPacket(
 	p receivedPacket,
 	isCoalesced bool,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum, // only for logging
-	tuple string, // only for logging
+	path pathID, // only for logging
 ) (wasProcessed bool, _ error) {
 	var wasQueued bool
 
@@ -1246,6 +1245,10 @@ func (c *Conn) handleShortHeaderPacket(
 
 	var log func([]qlog.Frame)
 	if c.qlogger != nil {
+		var tuple string
+		if path != activePathID {
+			tuple = strconv.FormatInt(int64(path), 10)
+		}
 		log = func(frames []qlog.Frame) {
 			c.qlogger.RecordEvent(qlog.PacketReceived{
 				Header: qlog.PacketHeader{
@@ -2509,7 +2512,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 				}
 				c.logger.Debugf("sending path probe packet from %s", c.LocalAddr())
 				h, _ := c.connIDGenerator.Handler((*packetHandlerMap)(tr))
-				c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, 0, h.qlogTupleID())
+				c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, 0, strconv.FormatInt(int64(h.id), 10))
 				c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
 				tr.WriteTo(buf.Data, c.conn.RemoteAddr())
 				// There's (likely) more data to send. Loop around again.
@@ -3132,9 +3135,9 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 		// Called on the run loop every time a PATH_CHALLENGE is sent on the Transport.
 		// The pathReceiver is ignored if the connection is already registered with the Transport.
 		func(id pathID) {
-			r := &pathReceiver{Conn: c, tupleID: strconv.FormatInt(int64(id), 10)}
+			r := &pathReceiver{Conn: c, id: id}
 			if c.connIDGenerator.AddConnRunner((*packetHandlerMap)(t), r) && c.qlogger != nil {
-				c.qlogger.RecordEvent(tupleAssignedEvent(r.tupleID, t.Conn.LocalAddr(), c.conn.RemoteAddr()))
+				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), t.Conn.LocalAddr(), c.conn.RemoteAddr()))
 			}
 		},
 	), nil
