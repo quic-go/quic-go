@@ -42,6 +42,9 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		synctest.Wait()
 
 		require.Equal(t, invalidPathID, enabledID)
+		tr, ok := pm.Transport(p.id)
+		require.True(t, ok)
+		require.Same(t, tr1, tr)
 		connID, f, tr, ok := pm.NextPathToProbe()
 		require.True(t, ok)
 		require.Same(t, tr1, tr)
@@ -278,6 +281,8 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 
 		require.NoError(t, p2.Close())
 		require.Equal(t, []pathID{p1.id, p2.id}, retiredPaths)
+		_, ok = pm.Transport(p2.id)
+		require.False(t, ok)
 		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
 		_, _, _, ok = pm.NextPathToProbe()
 		require.False(t, ok)

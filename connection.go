@@ -1292,6 +1292,11 @@ func (c *Conn) handleShortHeaderPacket(
 	if err != nil {
 		return false, err
 	}
+	if pathChallenge != nil && c.perspective == protocol.PerspectiveClient {
+		if err := c.handlePathChallengeFrame(pathChallenge, path, p.rcvTime); err != nil {
+			return true, err
+		}
+	}
 
 	if !checkPath {
 		return true, nil
@@ -1951,7 +1956,6 @@ func (c *Conn) handleFrame(
 		err = c.streamsMap.HandleStopSendingFrame(frame)
 	case *wire.PingFrame:
 	case *wire.PathChallengeFrame:
-		c.handlePathChallengeFrame(frame)
 		pathChallenge = frame
 	case *wire.PathResponseFrame:
 		err = c.handlePathResponseFrame(frame)
@@ -2069,10 +2073,33 @@ func (c *Conn) handleHandshakeEvents(now monotime.Time) error {
 	}
 }
 
-func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame) {
-	if c.perspective == protocol.PerspectiveClient {
-		c.queueControlFrame(&wire.PathResponseFrame{Data: f.Data})
+// handlePathChallengeFrame sends the PATH_RESPONSE on the path that the PATH_CHALLENGE was received on.
+func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame, path pathID, now monotime.Time) error {
+	resp := &wire.PathResponseFrame{Data: f.Data}
+	if path == activePathID {
+		c.queueControlFrame(resp)
+		return nil
 	}
+	// The Transport is unknown for the path that the connection was dialed on, and for closed paths.
+	// The PATH_RESPONSE is then sent on the active path, which violates RFC 9000, Section 8.2.2.
+	// TODO: drop the PATH_CHALLENGE once closing a path unregisters its pathReceiver.
+	tr, ok := c.getPathManager().Transport(path)
+	if !ok {
+		c.queueControlFrame(resp)
+		return nil
+	}
+	connID, ok := c.connIDManager.GetConnIDForPath(path)
+	if !ok {
+		return nil
+	}
+	probe, buf, err := c.packer.PackPathProbePacket(connID, []ackhandler.Frame{{Frame: resp, Handler: emptyHandler{}}}, c.version)
+	if err != nil {
+		return err
+	}
+	c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, 0, strconv.FormatInt(int64(path), 10))
+	c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
+	tr.WriteTo(buf.Data, c.conn.RemoteAddr())
+	return nil
 }
 
 func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame) error {
