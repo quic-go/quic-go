@@ -232,6 +232,9 @@ func TestHTTPHeaders(t *testing.T) {
 		w.Header().Set("foo", "bar")
 		w.Header().Set("lorem", "ipsum")
 		w.Header().Set("echo", r.Header.Get("echo"))
+		// invalid and connection-specific header fields are dropped, and don't prevent the response from being sent
+		w.Header().Set("Location", "/foo\r\nset-cookie: injected=1")
+		w.Header().Set("Connection", "close")
 	})
 	port := startHTTPServer(t, mux)
 
@@ -246,6 +249,8 @@ func TestHTTPHeaders(t *testing.T) {
 	require.Equal(t, "bar", resp.Header.Get("foo"))
 	require.Equal(t, "ipsum", resp.Header.Get("lorem"))
 	require.Equal(t, echoHdr, resp.Header.Get("echo"))
+	require.NotContains(t, resp.Header, "Location")
+	require.NotContains(t, resp.Header, "Connection")
 }
 
 func TestHTTPHeaderSizeLimitServer(t *testing.T) {
