@@ -100,6 +100,28 @@ func TestResponseBodyConcurrentClose(t *testing.T) {
 	}
 }
 
+func TestResponseBodyShortContent(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write(getDataFrame([]byte("foo")))
+
+	mockCtrl := gomock.NewController(t)
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil),
+		6,
+		make(chan struct{}),
+	)
+	data, err := io.ReadAll(rb)
+	require.Equal(t, []byte("foo"), data)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	// check that repeated calls to Read also return the right error
+	n, err := rb.Read([]byte{0})
+	require.Zero(t, n)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+}
+
 func TestResponseBodyLengthLimiting(t *testing.T) {
 	t.Run("along frame boundary", func(t *testing.T) {
 		testResponseBodyLengthLimiting(t, true)
