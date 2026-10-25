@@ -126,6 +126,50 @@ func TestHTTPGet(t *testing.T) {
 	})
 }
 
+func TestHTTPStreamCreditRelease(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(PRData)
+	})
+	port := startHTTPServer(t, mux, func(s *http3.Server) {
+		s.QUICConfig = getQuicConfig(&quic.Config{
+			MaxIncomingStreams:         1,
+			RequireStreamCreditRelease: true,
+		})
+	})
+	// The response doesn't fit into the stream flow control window,
+	// so the request stream only completes once the response body is read.
+	cl := newHTTP3Client(t, func(tr *http3.Transport) {
+		tr.QUICConfig.InitialStreamReceiveWindow = 10 * 1024
+	})
+	url := fmt.Sprintf("https://localhost:%d/data", port)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	resp, err := cl.Do(req)
+	require.NoError(t, err)
+
+	// the server only allows a single request stream at a time
+	ctx2, cancel2 := context.WithTimeout(ctx, scaleDuration(20*time.Millisecond))
+	defer cancel2()
+	req2, err := http.NewRequestWithContext(ctx2, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	_, err = cl.Do(req2)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	// Once the first request stream completes, HTTP/3 releases its stream credit,
+	// allowing the client to send the next request.
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, PRData, body)
+	resp, err = cl.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}
+
 func TestHTTPPost(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
