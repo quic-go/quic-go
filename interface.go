@@ -225,6 +225,8 @@ type ConnectionState struct {
 		// Local is true if support was enabled via Config.EnableStreamResetPartialDelivery.
 		Remote, Local bool
 	}
+	// RequireStreamCreditRelease is true if Config.RequireStreamCreditRelease was set.
+	RequireStreamCreditRelease bool
 	// Used0RTT says if 0-RTT resumption was used.
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.

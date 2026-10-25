@@ -129,6 +129,8 @@ func TestStreamCreditRelease(t *testing.T) {
 	server, err := ln.Accept(ctx)
 	require.NoError(t, err)
 	defer server.CloseWithError(0, "")
+	require.True(t, server.ConnectionState().RequireStreamCreditRelease)
+	require.False(t, client.ConnectionState().RequireStreamCreditRelease)
 
 	t.Run("unidirectional", func(t *testing.T) {
 		str, err := client.OpenUniStream()
