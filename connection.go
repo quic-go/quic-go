@@ -545,6 +545,7 @@ func (c *Conn) preSetup() {
 		c.newFlowController,
 		uint64(c.config.MaxIncomingStreams),
 		uint64(c.config.MaxIncomingUniStreams),
+		c.config.RequireStreamCreditRelease,
 		c.perspective,
 	)
 	c.framer = newFramer(c.connFlowController)
@@ -3040,6 +3041,10 @@ func (c *Conn) onStreamCompleted(id protocol.StreamID) {
 		c.closeLocal(err)
 	}
 	c.framer.RemoveActiveStream(id)
+}
+
+func (c *Conn) onStreamCreditReleased(id protocol.StreamID) {
+	c.streamsMap.ReleaseStreamCredit(id)
 }
 
 func (c *Conn) updateStreamPriority(id protocol.StreamID) {

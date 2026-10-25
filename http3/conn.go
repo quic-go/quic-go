@@ -166,6 +166,8 @@ func (c *rawConn) CloseWithError(code quic.ApplicationErrorCode, msg string) err
 }
 
 func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer bool) {
+	// HTTP/3 handles this stream, so the peer can replace it as soon as it completes.
+	str.ReleaseStreamCredit()
 	c.qloggerWG.Add(1)
 	defer c.qloggerWG.Done()
 

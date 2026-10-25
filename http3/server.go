@@ -580,6 +580,7 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 			continue
 		}
 		if inGracefulShutdown {
+			str.ReleaseStreamCredit()
 			str.CancelRead(quic.StreamErrorCode(ErrCodeRequestRejected))
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
 			continue

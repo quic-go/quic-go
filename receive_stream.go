@@ -134,6 +134,15 @@ func (s *ReceiveStream) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// ReleaseStreamCredit allows the peer to open a new stream in place of this one.
+// It only has an effect if [Config.RequireStreamCreditRelease] is set.
+// The peer is granted the new stream credit once the stream has completed
+// and ReleaseStreamCredit has been called, in any order.
+// Calling it multiple times is a no-op.
+func (s *ReceiveStream) ReleaseStreamCredit() {
+	s.sender.onStreamCreditReleased(s.streamID)
+}
+
 func (s *ReceiveStream) isNewlyCompleted() bool {
 	if s.completed {
 		return false

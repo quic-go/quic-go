@@ -56,6 +56,7 @@ func testStreamsMapIncomingGettingStreams(t *testing.T, perspective protocol.Per
 			return &mockStream{id: id}
 		},
 		maxNumStreams,
+		false,
 		func(f wire.Frame) {},
 		perspective,
 	)
@@ -98,6 +99,7 @@ func TestStreamsMapIncomingAcceptingStreams(t *testing.T) {
 			protocol.StreamTypeUni,
 			func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
 			5,
+			false,
 			func(f wire.Frame) {},
 			protocol.PerspectiveClient,
 		)
@@ -171,6 +173,7 @@ func testStreamsMapIncomingDeletingStreams(t *testing.T, perspective protocol.Pe
 		protocol.StreamTypeUni,
 		func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
 		5,
+		false,
 		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
 		perspective,
 	)
@@ -226,6 +229,7 @@ func testStreamsMapIncomingDeletingStreamsWithHighLimits(t *testing.T, pers prot
 		protocol.StreamTypeUni,
 		func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
 		uint64(protocol.MaxStreamCount-2),
+		false,
 		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
 		pers,
 	)
@@ -257,12 +261,73 @@ func testStreamsMapIncomingDeletingStreamsWithHighLimits(t *testing.T, pers prot
 	require.Len(t, frameQueue, 2)
 }
 
+func TestStreamsMapIncomingStreamCreditRelease(t *testing.T) {
+	t.Run("client", func(t *testing.T) {
+		testStreamsMapIncomingStreamCreditRelease(t, protocol.PerspectiveClient, protocol.FirstIncomingUniStreamClient)
+	})
+	t.Run("server", func(t *testing.T) {
+		testStreamsMapIncomingStreamCreditRelease(t, protocol.PerspectiveServer, protocol.FirstIncomingUniStreamServer)
+	})
+}
+
+func testStreamsMapIncomingStreamCreditRelease(t *testing.T, perspective protocol.Perspective, firstStream protocol.StreamID) {
+	var frameQueue []wire.Frame
+	m := newIncomingStreamsMap(
+		protocol.StreamTypeUni,
+		func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
+		3,
+		true,
+		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+		perspective,
+	)
+
+	_, err := m.GetOrOpenStream(firstStream + 8)
+	require.NoError(t, err)
+	for range 2 {
+		_, err := m.AcceptStream(context.Background())
+		require.NoError(t, err)
+	}
+
+	// the stream credit is released after the stream completed
+	require.NoError(t, m.DeleteStream(firstStream))
+	require.Empty(t, frameQueue)
+	// it's not returned by GetOrOpenStream anymore
+	s, err := m.GetOrOpenStream(firstStream)
+	require.NoError(t, err)
+	require.Nil(t, s)
+	err = m.DeleteStream(firstStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamStateError})
+	require.ErrorContains(t, err, "tried to delete incoming stream")
+	m.ReleaseStreamCredit(firstStream)
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 4}}, frameQueue)
+	frameQueue = frameQueue[:0]
+	// releasing the stream credit multiple times has no effect
+	m.ReleaseStreamCredit(firstStream)
+	require.Empty(t, frameQueue)
+
+	// the stream credit is released before the stream completed
+	m.ReleaseStreamCredit(firstStream + 4)
+	require.Empty(t, frameQueue)
+	require.NoError(t, m.DeleteStream(firstStream+4))
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 5}}, frameQueue)
+	frameQueue = frameQueue[:0]
+
+	// the stream completed before it was accepted
+	require.NoError(t, m.DeleteStream(firstStream+8))
+	_, err = m.AcceptStream(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, frameQueue)
+	m.ReleaseStreamCredit(firstStream + 8)
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 6}}, frameQueue)
+}
+
 func TestStreamsMapIncomingClosing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := newIncomingStreamsMap(
 			protocol.StreamTypeUni,
 			func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
 			5,
+			false,
 			func(f wire.Frame) {},
 			protocol.PerspectiveServer,
 		)
@@ -314,6 +379,7 @@ func TestStreamsMapIncomingRandomized(t *testing.T) {
 			streamType,
 			func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
 			num,
+			false,
 			func(f wire.Frame) {},
 			protocol.PerspectiveServer,
 		)
