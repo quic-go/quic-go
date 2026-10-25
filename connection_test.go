@@ -78,7 +78,7 @@ func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
 }
 
 type testConnection struct {
-	conn       *Conn
+	conn       *wrappedConn
 	connRunner *MockConnRunner
 	sendConn   *MockSendConn
 	packer     *MockPacker
@@ -145,7 +145,7 @@ func newServerTestConnection(
 		opt(conn)
 	}
 	return &testConnection{
-		conn:       conn,
+		conn:       wc,
 		connRunner: connRunner,
 		sendConn:   sendConn,
 		packer:     packer,
@@ -203,7 +203,7 @@ func newClientTestConnection(
 		opt(conn.Conn)
 	}
 	return &testConnection{
-		conn:       conn.Conn,
+		conn:       conn,
 		connRunner: connRunner,
 		sendConn:   sendConn,
 		packer:     packer,

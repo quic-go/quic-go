@@ -11,30 +11,25 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-type connRunnerCallbacks struct {
-	AddConnectionID    func(protocol.ConnectionID)
-	RemoveConnectionID func(protocol.ConnectionID)
-	ReplaceWithClosed  func([]protocol.ConnectionID, []byte, time.Duration)
-}
-
 // The memory address of the Transport is used as the key.
-type connRunners map[connRunner]connRunnerCallbacks
+// The value is the pathReceiver that the connection's connection IDs are registered with on that Transport.
+type connRunners map[connRunner]*pathReceiver
 
 func (cr connRunners) AddConnectionID(id protocol.ConnectionID) {
-	for _, c := range cr {
-		c.AddConnectionID(id)
+	for r, h := range cr {
+		r.Add(id, h)
 	}
 }
 
 func (cr connRunners) RemoveConnectionID(id protocol.ConnectionID) {
-	for _, c := range cr {
-		c.RemoveConnectionID(id)
+	for r := range cr {
+		r.Remove(id)
 	}
 }
 
 func (cr connRunners) ReplaceWithClosed(ids []protocol.ConnectionID, b []byte, expiry time.Duration) {
-	for _, c := range cr {
-		c.ReplaceWithClosed(ids, b, expiry)
+	for r := range cr {
+		r.ReplaceWithClosed(ids, b, expiry)
 	}
 }
 
@@ -62,7 +57,7 @@ func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID *protocol.ConnectionID, // nil for the client
 	statelessResetter *statelessResetter,
-	callbacks connRunnerCallbacks,
+	handler *pathReceiver,
 	queueControlFrame func(wire.Frame),
 	generator ConnectionIDGenerator,
 ) *connIDGenerator {
@@ -70,7 +65,7 @@ func newConnIDGenerator(
 		generator:         generator,
 		activeSrcConnIDs:  make(map[uint64]protocol.ConnectionID),
 		statelessResetter: statelessResetter,
-		connRunners:       map[connRunner]connRunnerCallbacks{runner: callbacks},
+		connRunners:       connRunners{runner: handler},
 		queueControlFrame: queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
@@ -196,17 +191,25 @@ func (m *connIDGenerator) ReplaceWithClosed(connClose []byte, expiry time.Durati
 	m.connRunners.ReplaceWithClosed(connIDs, connClose, expiry)
 }
 
-func (m *connIDGenerator) AddConnRunner(runner connRunner, r connRunnerCallbacks) {
+// Handler returns the pathReceiver that the connection IDs are registered with on the transport.
+func (m *connIDGenerator) Handler(runner connRunner) (*pathReceiver, bool) {
+	h, ok := m.connRunners[runner]
+	return h, ok
+}
+
+// AddConnRunner registers all connection IDs with the pathReceiver on the transport.
+func (m *connIDGenerator) AddConnRunner(runner connRunner, h *pathReceiver) {
 	// The transport might have already been added earlier.
-	// This happens if the application migrates back to and old path.
+	// This happens for every PATH_CHALLENGE sent on the transport after the first one (including retransmissions),
+	// and if the application migrates back to an old path.
 	if _, ok := m.connRunners[runner]; ok {
 		return
 	}
-	m.connRunners[runner] = r
+	m.connRunners[runner] = h
 	if m.initialClientDestConnID != nil {
-		r.AddConnectionID(*m.initialClientDestConnID)
+		runner.Add(*m.initialClientDestConnID, h)
 	}
 	for _, connID := range m.activeSrcConnIDs {
-		r.AddConnectionID(connID)
+		runner.Add(connID, h)
 	}
 }

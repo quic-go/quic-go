@@ -21,7 +21,6 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -74,6 +73,17 @@ func (p *receivedPacket) Clone() *receivedPacket {
 		info:       p.info,
 	}
 }
+
+// A pathReceiver is the packetHandler that a connection registers on every Transport it uses:
+// the one it was dialed or accepted on, and the ones added via AddPath.
+// It allows the connection to tell which Transport a packet was received on.
+type pathReceiver struct {
+	*Conn
+}
+
+var _ packetHandler = &pathReceiver{}
+
+func (r *pathReceiver) handlePacket(p receivedPacket) { r.queuePacket(p, r) }
 
 type connRunner interface {
 	Add(protocol.ConnectionID, packetHandler) bool
@@ -174,8 +184,7 @@ type Conn struct {
 
 	notifyReceivedPacket chan struct{}
 	sendingScheduled     chan struct{}
-	receivedPacketMx     sync.Mutex
-	receivedPackets      ringbuffer.RingBuffer[receivedPacket]
+	receivedPackets      receivedPacketQueue
 
 	// closeChan is used to notify the run loop that it should terminate
 	closeChan chan struct{}
@@ -242,8 +251,8 @@ type connTestHooks struct {
 }
 
 type wrappedConn struct {
-	testHooks *connTestHooks
-	*Conn
+	testHooks    *connTestHooks
+	pathReceiver // for the Transport that the connection was dialed or accepted on
 }
 
 var newConnection = func(
@@ -281,6 +290,7 @@ var newConnection = func(
 		logger:              logger,
 		version:             v,
 	}
+	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
 	}
@@ -291,7 +301,7 @@ var newConnection = func(
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
-		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
+		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, &w.pathReceiver) },
 		runner.RemoveResetToken,
 		s.queueControlFrame,
 	)
@@ -300,15 +310,11 @@ var newConnection = func(
 		srcConnID,
 		&clientDestConnID,
 		statelessResetter,
-		connRunnerCallbacks{
-			AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
-			RemoveConnectionID: runner.Remove,
-			ReplaceWithClosed:  runner.ReplaceWithClosed,
-		},
+		&w.pathReceiver,
 		s.queueControlFrame,
 		connIDGenerator,
 	)
-	s.preSetup()
+	s.preSetup(&w.pathReceiver)
 	s.rttStats.SetInitialRTT(rtt)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(
 		0,
@@ -371,7 +377,7 @@ var newConnection = func(
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, s.oneRTTStream)
-	return &wrappedConn{Conn: s}
+	return w
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -405,6 +411,7 @@ var newClientConnection = func(
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
 	}
+	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
 	}
@@ -420,7 +427,7 @@ var newClientConnection = func(
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
-		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
+		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, &w.pathReceiver) },
 		runner.RemoveResetToken,
 		s.queueControlFrame,
 	)
@@ -429,16 +436,12 @@ var newClientConnection = func(
 		srcConnID,
 		nil,
 		statelessResetter,
-		connRunnerCallbacks{
-			AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, s) },
-			RemoveConnectionID: runner.Remove,
-			ReplaceWithClosed:  runner.ReplaceWithClosed,
-		},
+		&w.pathReceiver,
 		s.queueControlFrame,
 		connIDGenerator,
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
-	s.preSetup()
+	s.preSetup(&w.pathReceiver)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName
 	} else {
@@ -510,10 +513,11 @@ var newClientConnection = func(
 	if token != nil {
 		s.packer.SetToken(token.data)
 	}
-	return &wrappedConn{Conn: s}
+	return w
 }
 
-func (c *Conn) preSetup() {
+// r is the pathReceiver for the Transport that the connection was dialed or accepted on.
+func (c *Conn) preSetup(r *pathReceiver) {
 	c.largestRcvdAppData = protocol.InvalidPacketNumber
 	c.initialStream = newInitialCryptoStream(c.perspective == protocol.PerspectiveClient)
 	c.handshakeStream = newCryptoStream()
@@ -548,7 +552,7 @@ func (c *Conn) preSetup() {
 		c.perspective,
 	)
 	c.framer = newFramer(c.connFlowController)
-	c.receivedPackets.Init(8)
+	c.receivedPackets.Init(r)
 	c.notifyReceivedPacket = make(chan struct{}, 1)
 	c.closeChan = make(chan struct{}, 1)
 	c.sendingScheduled = make(chan struct{}, 1)
@@ -568,17 +572,8 @@ func (c *Conn) preSetup() {
 func (c *Conn) run() (err error) {
 	defer func() { c.ctxCancel(err) }()
 
-	defer func() {
-		// drain queued packets that will never be processed
-		c.receivedPacketMx.Lock()
-		defer c.receivedPacketMx.Unlock()
-
-		for !c.receivedPackets.Empty() {
-			p := c.receivedPackets.PopFront()
-			p.buffer.Decrement()
-			p.buffer.MaybeRelease()
-		}
-	}()
+	// drain queued packets that will never be processed
+	defer c.receivedPackets.Clear()
 
 	c.timer = time.NewTimer(monotime.Until(c.idleTimeoutStartTime().Add(c.config.HandshakeIdleTimeout)))
 
@@ -925,6 +920,11 @@ func (c *Conn) idleTimeoutStartTime() monotime.Time {
 }
 
 func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
+	// The connection is registered with the Transport, since it was probed before switching to it.
+	if h, ok := c.connIDGenerator.Handler((*packetHandlerMap)(tr)); ok {
+		c.receivedPackets.SetActive(h)
+	}
+
 	initialPacketSize := protocol.ByteCount(cmp.Or(c.config.InitialPacketSize, protocol.MinInitialPacketSize))
 	c.sentPacketHandler.MigratedPath(now, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
@@ -1011,17 +1011,11 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 	// Process packets from the receivedPackets queue.
 	// Limit the number of packets to process to maxPacketsToProcess,
 	// so we eventually get a chance to send out an ACK when receiving a lot of packets.
-	c.receivedPacketMx.Lock()
-
-	if c.receivedPackets.Empty() {
-		c.receivedPacketMx.Unlock()
-		return false, nil
-	}
-
-	var hasMorePackets bool
 	for range maxPacketsToProcess {
-		p := c.receivedPackets.PopFront()
-		c.receivedPacketMx.Unlock()
+		p, _, ok := c.receivedPackets.Pop()
+		if !ok {
+			return wasProcessed, nil
+		}
 
 		var datagramPayloadChecksum qlog.DatagramPayloadChecksum
 		if c.qlogger != nil && wire.IsLongHeaderPacket(p.data[0]) {
@@ -1034,20 +1028,14 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		if processed {
 			wasProcessed = true
 		}
-		c.receivedPacketMx.Lock()
-		hasMorePackets = !c.receivedPackets.Empty()
-		if !hasMorePackets {
-			break
-		}
 		// Prioritize sending of new CRYPTO data.
 		// This is especially relevant when processing 0-RTT packets.
 		if !c.handshakeComplete && (c.initialStream.HasData() || c.handshakeStream.HasData()) {
 			break
 		}
 	}
-	c.receivedPacketMx.Unlock()
 
-	if hasMorePackets {
+	if !c.receivedPackets.Empty() {
 		select {
 		case c.notifyReceivedPacket <- struct{}{}:
 		default:
@@ -1952,12 +1940,12 @@ func (c *Conn) handleFrame(
 	return pathChallenge, err
 }
 
-// handlePacket is called by the server with a new packet
-func (c *Conn) handlePacket(p receivedPacket) {
-	c.receivedPacketMx.Lock()
+// queuePacket queues a packet received by the pathReceiver source,
+// i.e. on the Transport that source is registered with.
+func (c *Conn) queuePacket(p receivedPacket, source *pathReceiver) {
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxConnUnprocessedPackets
-	if c.receivedPackets.Len() >= protocol.MaxConnUnprocessedPackets {
+	if !c.receivedPackets.Push(p, source) {
 		if c.qlogger != nil {
 			var datagramPayloadChecksum qlog.DatagramPayloadChecksum
 			if wire.IsLongHeaderPacket(p.data[0]) {
@@ -1969,11 +1957,8 @@ func (c *Conn) handlePacket(p receivedPacket) {
 				Trigger:                 qlog.PacketDropDOSPrevention,
 			})
 		}
-		c.receivedPacketMx.Unlock()
 		return
 	}
-	c.receivedPackets.PushBack(p)
-	c.receivedPacketMx.Unlock()
 
 	select {
 	case c.notifyReceivedPacket <- struct{}{}:
@@ -2590,10 +2575,7 @@ func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 			return nil
 		}
 		// Prioritize receiving of packets over sending out more packets.
-		c.receivedPacketMx.Lock()
-		hasPackets := !c.receivedPackets.Empty()
-		c.receivedPacketMx.Unlock()
-		if hasPackets {
+		if !c.receivedPackets.Empty() {
 			c.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
@@ -2651,10 +2633,7 @@ func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
 		}
 
 		// Prioritize receiving of packets over sending out more packets.
-		c.receivedPacketMx.Lock()
-		hasPackets := !c.receivedPackets.Empty()
-		c.receivedPacketMx.Unlock()
-		if hasPackets {
+		if !c.receivedPackets.Empty() {
 			c.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
@@ -3133,17 +3112,9 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 	return c.getPathManager().NewPath(
 		t,
 		200*time.Millisecond, // initial RTT estimate
-		func() {
-			runner := (*packetHandlerMap)(t)
-			c.connIDGenerator.AddConnRunner(
-				runner,
-				connRunnerCallbacks{
-					AddConnectionID:    func(connID protocol.ConnectionID) { runner.Add(connID, c) },
-					RemoveConnectionID: runner.Remove,
-					ReplaceWithClosed:  runner.ReplaceWithClosed,
-				},
-			)
-		},
+		// Called on the run loop every time a PATH_CHALLENGE is sent on the Transport.
+		// The pathReceiver is ignored if the connection is already registered with the Transport.
+		func() { c.connIDGenerator.AddConnRunner((*packetHandlerMap)(t), &pathReceiver{Conn: c}) },
 	), nil
 }
 
