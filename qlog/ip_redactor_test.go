@@ -32,6 +32,8 @@ func TestRedactIPs(t *testing.T) {
 	producer.RecordEvent(StartedConnection{
 		Local:  PathEndpointInfo{IPv4: addr4},
 		Remote: PathEndpointInfo{IPv6: addr6},
+		// already redacted by another redactor, must be preserved
+		RedactedLocal: new("upstream"),
 	})
 	producer.RecordEvent(TupleAssigned{
 		TupleID: "1",
@@ -53,6 +55,7 @@ func TestRedactIPs(t *testing.T) {
 		StartedConnection{
 			Local:          PathEndpointInfo{IPv4: addr4},
 			Remote:         PathEndpointInfo{IPv6: addr6},
+			RedactedLocal:  new("upstream"),
 			RedactedRemote: new("***"),
 		},
 		TupleAssigned{

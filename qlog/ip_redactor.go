@@ -50,12 +50,12 @@ var _ qlogwriter.Recorder = &ipRedactingRecorder{}
 func (r *ipRedactingRecorder) RecordEvent(event qlogwriter.Event) {
 	switch e := event.(type) {
 	case StartedConnection:
-		e.RedactedLocal = r.redactEndpoint(e.Local, true)
-		e.RedactedRemote = r.redactEndpoint(e.Remote, false)
+		r.redactEndpoint(e.Local, true, &e.RedactedLocal)
+		r.redactEndpoint(e.Remote, false, &e.RedactedRemote)
 		event = e
 	case TupleAssigned:
-		e.RedactedLocal = r.redactEndpoint(e.Local, true)
-		e.RedactedRemote = r.redactEndpoint(e.Remote, false)
+		r.redactEndpoint(e.Local, true, &e.RedactedLocal)
+		r.redactEndpoint(e.Remote, false, &e.RedactedRemote)
 		event = e
 	case ParametersSet:
 		if e.PreferredAddress != nil {
@@ -78,18 +78,17 @@ func (r *ipRedactingRecorder) RecordEvent(event qlogwriter.Event) {
 	r.Recorder.RecordEvent(event)
 }
 
-// redactEndpoint returns the replacement for the endpoint's address, or nil if it shouldn't be redacted.
-func (r *ipRedactingRecorder) redactEndpoint(info PathEndpointInfo, isLocal bool) *string {
+// redactEndpoint sets redacted to the replacement for the endpoint's address, if it should be redacted.
+// Otherwise, redacted is left unchanged.
+func (r *ipRedactingRecorder) redactEndpoint(info PathEndpointInfo, isLocal bool, redacted **string) {
 	addr := info.IPv4
 	if !addr.IsValid() {
 		addr = info.IPv6
 	}
 	if !addr.IsValid() {
-		return nil
+		return
 	}
-	v, ok := r.redact(addr, isLocal)
-	if !ok {
-		return nil
+	if v, ok := r.redact(addr, isLocal); ok {
+		*redacted = &v
 	}
-	return &v
 }
