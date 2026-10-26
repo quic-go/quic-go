@@ -49,6 +49,8 @@ type Stream struct {
 
 	parseTrailer  func(io.Reader, *headersFrame) error
 	parsedTrailer bool
+
+	missingHeader bool // set if the stream was taken over before the response header was sent
 }
 
 func newStream(
@@ -121,7 +123,13 @@ func (s *Stream) hasMoreData() bool {
 	return s.bytesRemainingInFrame > 0
 }
 
+// Write writes data to the stream.
+//
+// It can only be used after the response header has been sent.
 func (s *Stream) Write(b []byte) (int, error) {
+	if s.missingHeader {
+		return 0, errors.New("http3: invalid use of Stream.Write before sending the response header")
+	}
 	s.buf = s.buf[:0]
 	s.buf = (&dataFrame{Length: uint64(len(b))}).Append(s.buf)
 	if s.qlogger != nil {
@@ -142,7 +150,11 @@ func (s *Stream) Write(b []byte) (int, error) {
 
 // TryWriteAll writes b in a DATA frame if the entire frame can be queued immediately.
 // It returns [quic.ErrWouldBlock] without queueing anything otherwise.
+// It can only be used after the response header has been sent.
 func (s *Stream) TryWriteAll(b []byte) error {
+	if s.missingHeader {
+		return errors.New("http3: invalid use of Stream.TryWriteAll before sending the response header")
+	}
 	data := make([]byte, 0, frameHeaderLen+len(b))
 	data = (&dataFrame{Length: uint64(len(b))}).Append(data)
 	data = append(data, b...)

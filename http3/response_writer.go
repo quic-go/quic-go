@@ -345,6 +345,9 @@ func (w *responseWriter) HTTPStream() *Stream {
 	w.hijacked = true
 	if w.headerComplete {
 		w.Flush()
+	} else {
+		// WriteHeader can't be called after HTTPStream, so the response header will never be sent
+		w.str.missingHeader = true
 	}
 	return w.str
 }
