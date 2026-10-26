@@ -147,6 +147,28 @@ func TestResponseWriterDataStatusWithoutBody(t *testing.T) {
 	require.Empty(t, rw.DecodeBody(t))
 }
 
+func TestResponseWriterHTTPStream(t *testing.T) {
+	t.Run("with WriteHeader", func(t *testing.T) {
+		rw := newTestResponseWriter(t)
+		rw.Header().Set("Capsule-Protocol", "?1")
+		rw.WriteHeader(http.StatusOK)
+		rw.HTTPStream()
+		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
+
+		fields := rw.DecodeHeaders(t, 0)
+		require.Equal(t, []string{"200"}, fields[":status"])
+		require.Equal(t, []string{"?1"}, fields["capsule-protocol"])
+	})
+
+	t.Run("without WriteHeader", func(t *testing.T) {
+		rw := newTestResponseWriter(t)
+		rw.HTTPStream()
+		require.Zero(t, rw.buf.Len())
+		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
+		require.Zero(t, rw.buf.Len())
+	})
+}
+
 func TestResponseWriterContentLength(t *testing.T) {
 	rw := newTestResponseWriter(t)
 	rw.Header().Set("Content-Length", "6")

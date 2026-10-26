@@ -19,6 +19,10 @@ import (
 // HTTPStreamer allows an HTTP handler to take over an HTTP/3 stream.
 // It is implemented by the [http.ResponseWriter] passed to HTTP/3 handlers.
 // When a stream is taken over, it's the caller's responsibility to close the stream.
+//
+// If WriteHeader was called before HTTPStream, the response header is sent.
+// Otherwise, no response is sent, allowing the caller to e.g. reset the stream.
+// Calling WriteHeader after HTTPStream panics.
 type HTTPStreamer interface {
 	HTTPStream() *Stream
 }
@@ -80,6 +84,10 @@ func (w *responseWriter) Header() http.Header {
 }
 
 func (w *responseWriter) WriteHeader(status int) {
+	// HEADERS can't be sent after the caller started sending DATA on the stream
+	if w.hijacked {
+		panic("http3: WriteHeader called after HTTPStream")
+	}
 	if w.headerComplete {
 		return
 	}
@@ -335,7 +343,9 @@ func (w *responseWriter) writeTrailers() error {
 
 func (w *responseWriter) HTTPStream() *Stream {
 	w.hijacked = true
-	w.Flush()
+	if w.headerComplete {
+		w.Flush()
+	}
 	return w.str
 }
 

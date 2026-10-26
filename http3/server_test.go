@@ -491,6 +491,15 @@ func TestServerRequestContext(t *testing.T) {
 }
 
 func TestServerHTTPStreamHijacking(t *testing.T) {
+	t.Run("with WriteHeader", func(t *testing.T) {
+		testServerHTTPStreamHijacking(t, true)
+	})
+	t.Run("without WriteHeader", func(t *testing.T) {
+		testServerHTTPStreamHijacking(t, false)
+	})
+}
+
+func testServerHTTPStreamHijacking(t *testing.T, writeHeader bool) {
 	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
@@ -500,6 +509,9 @@ func TestServerHTTPStreamHijacking(t *testing.T) {
 
 	s := &Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if writeHeader {
+				w.WriteHeader(http.StatusOK)
+			}
 			str := w.(HTTPStreamer).HTTPStream()
 			str.Write([]byte("foobar"))
 			str.Close()
@@ -511,8 +523,10 @@ func TestServerHTTPStreamHijacking(t *testing.T) {
 	rsp, err := io.ReadAll(str)
 	require.NoError(t, err)
 	r := bytes.NewReader(rsp)
-	hfs := decodeHeader(t, r)
-	require.Equal(t, hfs[":status"], []string{"200"})
+	if writeHeader {
+		hfs := decodeHeader(t, r)
+		require.Equal(t, hfs[":status"], []string{"200"})
+	}
 	fp := frameParser{r: r}
 	frame, err := fp.ParseNext(nil)
 	require.NoError(t, err)
