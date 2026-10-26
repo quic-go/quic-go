@@ -220,6 +220,42 @@ func (c *MockStreamSenderonStreamCompletedCall) DoAndReturn(f func(protocol.Stre
 	return c
 }
 
+// onStreamCreditReleased mocks base method.
+func (m *MockStreamSender) onStreamCreditReleased(arg0 protocol.StreamID) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "onStreamCreditReleased", arg0)
+}
+
+// onStreamCreditReleased indicates an expected call of onStreamCreditReleased.
+func (mr *MockStreamSenderMockRecorder) onStreamCreditReleased(arg0 any) *MockStreamSenderonStreamCreditReleasedCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onStreamCreditReleased", reflect.TypeOf((*MockStreamSender)(nil).onStreamCreditReleased), arg0)
+	return &MockStreamSenderonStreamCreditReleasedCall{Call: call}
+}
+
+// MockStreamSenderonStreamCreditReleasedCall wrap *gomock.Call
+type MockStreamSenderonStreamCreditReleasedCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStreamSenderonStreamCreditReleasedCall) Return() *MockStreamSenderonStreamCreditReleasedCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStreamSenderonStreamCreditReleasedCall) Do(f func(protocol.StreamID)) *MockStreamSenderonStreamCreditReleasedCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStreamSenderonStreamCreditReleasedCall) DoAndReturn(f func(protocol.StreamID)) *MockStreamSenderonStreamCreditReleasedCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // recordStreamPriorityUpdated mocks base method.
 func (m *MockStreamSender) recordStreamPriorityUpdated(arg0 protocol.StreamID, arg1 int8, arg2 bool) {
 	m.ctrl.T.Helper()

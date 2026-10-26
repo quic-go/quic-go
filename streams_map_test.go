@@ -51,6 +51,7 @@ func testStreamsMapCreatingStreams(t *testing.T,
 		newTestStreamFlowController,
 		1,
 		1,
+		false,
 		perspective,
 	)
 
@@ -125,6 +126,7 @@ func testStreamsMapDeletingStreams(t *testing.T,
 		newTestStreamFlowController,
 		100,
 		100,
+		false,
 		perspective,
 	)
 
@@ -189,6 +191,65 @@ func testStreamsMapDeletingStreams(t *testing.T,
 	frameQueue = frameQueue[:0]
 }
 
+func TestStreamsMapStreamCreditRelease(t *testing.T) {
+	t.Run("client", func(t *testing.T) {
+		testStreamsMapStreamCreditRelease(t, protocol.PerspectiveClient,
+			protocol.FirstIncomingBidiStreamClient,
+			protocol.FirstOutgoingBidiStreamClient,
+			protocol.FirstIncomingUniStreamClient,
+		)
+	})
+	t.Run("server", func(t *testing.T) {
+		testStreamsMapStreamCreditRelease(t, protocol.PerspectiveServer,
+			protocol.FirstIncomingBidiStreamServer,
+			protocol.FirstOutgoingBidiStreamServer,
+			protocol.FirstIncomingUniStreamServer,
+		)
+	})
+}
+
+func testStreamsMapStreamCreditRelease(t *testing.T,
+	perspective protocol.Perspective,
+	firstIncomingBidiStream protocol.StreamID,
+	firstOutgoingBidiStream protocol.StreamID,
+	firstIncomingUniStream protocol.StreamID,
+) {
+	var frameQueue []wire.Frame
+	m := newStreamsMap(
+		context.Background(),
+		NewMockStreamSender(gomock.NewController(t)),
+		func(frame wire.Frame) { frameQueue = append(frameQueue, frame) },
+		newTestStreamFlowController,
+		100,
+		100,
+		true,
+		perspective,
+	)
+	m.HandleTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 10})
+
+	// releasing the stream credit of outgoing streams is a no-op
+	_, err := m.OpenStream()
+	require.NoError(t, err)
+	m.ReleaseStreamCredit(firstOutgoingBidiStream)
+	require.NoError(t, m.DeleteStream(firstOutgoingBidiStream))
+
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingBidiStream}, monotime.Now()))
+	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: firstIncomingUniStream}, monotime.Now()))
+	_, err = m.AcceptStream(context.Background())
+	require.NoError(t, err)
+	_, err = m.AcceptUniStream(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, m.DeleteStream(firstIncomingBidiStream))
+	require.NoError(t, m.DeleteStream(firstIncomingUniStream))
+	require.Empty(t, frameQueue)
+
+	m.ReleaseStreamCredit(firstIncomingBidiStream)
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 101}}, frameQueue)
+	frameQueue = frameQueue[:0]
+	m.ReleaseStreamCredit(firstIncomingUniStream)
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 101}}, frameQueue)
+}
+
 func TestStreamsMapStreamLimits(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
 		testStreamsMapStreamLimits(t, protocol.PerspectiveClient)
@@ -209,6 +270,7 @@ func testStreamsMapStreamLimits(t *testing.T, perspective protocol.Perspective) 
 		newTestStreamFlowController,
 		100,
 		100,
+		false,
 		perspective,
 	)
 
@@ -302,6 +364,7 @@ func testStreamsMapHandleReceiveStreamFrames(t *testing.T, pers protocol.Perspec
 		},
 		100,
 		100,
+		false,
 		pers,
 	)
 
@@ -414,6 +477,7 @@ func testStreamsMapHandleSendStreamFrames(t *testing.T, pers protocol.Perspectiv
 		},
 		100,
 		100,
+		false,
 		pers,
 	)
 
@@ -495,6 +559,7 @@ func TestStreamsMapClosing(t *testing.T) {
 		newTestStreamFlowController,
 		1,
 		1,
+		false,
 		protocol.PerspectiveClient,
 	)
 
@@ -524,6 +589,7 @@ func TestStreamsMap0RTT(t *testing.T) {
 		},
 		1,
 		1,
+		false,
 		protocol.PerspectiveClient,
 	)
 
@@ -564,6 +630,7 @@ func TestStreamsMap0RTTResetStreamAt(t *testing.T) {
 				},
 				1,
 				1,
+				false,
 				protocol.PerspectiveClient,
 			)
 
@@ -590,6 +657,7 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 		newTestStreamFlowController,
 		1,
 		1,
+		false,
 		protocol.PerspectiveClient,
 	)
 
@@ -633,6 +701,7 @@ func testStreamsMap0RTTRejectionResetStreamAt(t *testing.T, enabled bool) {
 		},
 		2,
 		1,
+		false,
 		protocol.PerspectiveClient,
 	)
 
