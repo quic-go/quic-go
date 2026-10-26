@@ -925,9 +925,8 @@ func (c *Conn) idleTimeoutStartTime() monotime.Time {
 func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	// The connection is registered with the Transport, since it was probed before switching to it.
 	if h, ok := c.connIDGenerator.Handler((*packetHandlerMap)(tr)); ok {
-		if prev := c.receivedPackets.SetActive(h); prev != h && c.qlogger != nil {
-			// The TupleID "" refers to the active path.
-			// From now on, the old path needs to be logged with its own TupleID.
+		if prev := c.receivedPackets.SwapActive(h); prev != h && c.qlogger != nil {
+			// from now on, the old path needs to be logged with its own TupleID
 			c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(prev.id), 10), c.conn.LocalAddr(), c.conn.RemoteAddr()))
 			c.qlogger.RecordEvent(tupleAssignedEvent("", tr.Conn.LocalAddr(), c.conn.RemoteAddr()))
 		}

@@ -85,9 +85,9 @@ func (q *receivedPacketQueue) Empty() bool {
 	return q.main.Empty() && q.side.Empty()
 }
 
-// SetActive is called when switching paths.
+// SwapActive is called when switching paths.
 // It moves packets queued for the old path to the side queue, and returns the pathReceiver of the old path.
-func (q *receivedPacketQueue) SetActive(active *pathReceiver) (prev *pathReceiver) {
+func (q *receivedPacketQueue) SwapActive(active *pathReceiver) (prev *pathReceiver) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 

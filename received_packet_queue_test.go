@@ -36,7 +36,7 @@ func TestReceivedPacketQueue(t *testing.T) {
 	// switching paths moves the packets of the old path to the side queue
 	push("c", h1)
 	push("d", h2)
-	require.Same(t, h1, q.SetActive(h2))
+	require.Same(t, h1, q.SwapActive(h2))
 	push("e", h2)
 	push("f", h1)
 	requirePop("d", activePathID) // received on the new path before the switch
@@ -46,7 +46,7 @@ func TestReceivedPacketQueue(t *testing.T) {
 
 	// switching to the active path doesn't move any packets
 	push("g", h2)
-	require.Same(t, h2, q.SetActive(h2))
+	require.Same(t, h2, q.SwapActive(h2))
 	push("h", h1)
 	requirePop("h", 1)
 	requirePop("g", activePathID)
@@ -68,7 +68,7 @@ func TestReceivedPacketQueueLimits(t *testing.T) {
 	}
 
 	// switching paths moves all packets, ignoring the limit of the side queue
-	q.SetActive(h2)
+	q.SwapActive(h2)
 	var n int
 	for !q.Empty() {
 		q.Pop()
