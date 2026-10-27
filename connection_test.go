@@ -3504,6 +3504,30 @@ func TestConnectionMigrationMTUDiscovery(t *testing.T) {
 	}
 }
 
+func TestConnectionPathChallengeTrackingLimit(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+	tc := newClientTestConnection(t, mockCtrl, nil, false,
+		connectionOptHandshakeConfirmed(),
+		connectionOptSentPacketHandler(sph),
+	)
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+	}))
+	tr := &Transport{Conn: newUDPConnLocalhost(t), StatelessResetKey: &StatelessResetKey{}}
+	defer tr.Close()
+	path, err := tc.conn.AddPath(tr)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, path.Probe(ctx), context.Canceled)
+
+	// no PATH_RESPONSE is packed if the maximum number of packets is already tracked
+	sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendNone)
+	require.NoError(t, tc.conn.handlePathChallengeFrame(&wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, path.id, monotime.Now()))
+}
+
 func TestConnectionMigration(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		testConnectionMigration(t, false)

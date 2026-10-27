@@ -2088,6 +2088,10 @@ func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame, path pathID,
 		c.queueControlFrame(resp)
 		return nil
 	}
+	// the response is sent directly, so enforce the send loop's limit on tracked packets
+	if c.sentPacketHandler.SendMode(now) == ackhandler.SendNone {
+		return nil
+	}
 	connID, ok := c.connIDManager.GetConnIDForPath(path)
 	if !ok {
 		return nil
