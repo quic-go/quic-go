@@ -1294,6 +1294,9 @@ func (c *Conn) handleShortHeaderPacket(
 	}
 
 	if !checkPath {
+		if c.perspective == protocol.PerspectiveServer && pathChallenge != nil {
+			c.queueControlFrame(&wire.PathResponseFrame{Data: pathChallenge.Data})
+		}
 		return true, nil
 	}
 	destConnID, frames, shouldSwitchPath := c.pathManager.HandlePacket(p.remoteAddr, p.rcvTime, pathChallenge, isNonProbing)

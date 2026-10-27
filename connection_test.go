@@ -3460,6 +3460,77 @@ func TestConnectionMigrationServer(t *testing.T) {
 	require.ErrorContains(t, err, "server cannot initiate connection migration")
 }
 
+func TestConnectionServerPathChallengeActivePath(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t, gomock.WithOverridableExpectations())
+		unpacker := NewMockUnpacker(mockCtrl)
+		tc := newServerTestConnection(
+			t,
+			mockCtrl,
+			nil,
+			false,
+			connectionOptUnpacker(unpacker),
+			connectionOptHandshakeConfirmed(),
+		)
+		tc.sendConn.EXPECT().capabilities().Return(connCapabilities{}).AnyTimes()
+
+		errChan := make(chan error, 1)
+		go func() { errChan <- tc.conn.run() }()
+
+		challengeData := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
+		data, err := (&wire.PathChallengeFrame{Data: challengeData}).Append(nil, protocol.Version1)
+		require.NoError(t, err)
+
+		responseSent := make(chan struct{})
+		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+			protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, data, nil,
+		)
+		tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func([]byte, uint16, protocol.ECN) error {
+				close(responseSent)
+				return nil
+			},
+		).MaxTimes(1)
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(buf *packetBuffer, maxPacketSize protocol.ByteCount, now monotime.Time, v protocol.Version) (shortHeaderPacket, error) {
+				frames, length := tc.conn.framer.AppendControlFrames(nil, maxPacketSize, now, v)
+				if len(frames) == 0 {
+					return shortHeaderPacket{}, errNothingToPack
+				}
+				require.Equal(t, &wire.PathResponseFrame{Data: challengeData}, frames[0].Frame)
+				buf.Data = append(buf.Data, []byte("response")...)
+				return shortHeaderPacket{Frames: frames, Length: length}, nil
+			},
+		).AnyTimes()
+
+		tc.conn.handlePacket(receivedPacket{
+			data:       make([]byte, 10),
+			buffer:     getPacketBuffer(),
+			remoteAddr: tc.remoteAddr,
+			rcvTime:    monotime.Now(),
+		})
+
+		synctest.Wait()
+
+		select {
+		case <-responseSent:
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for PATH_RESPONSE")
+		}
+
+		// test teardown
+		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+		tc.conn.destroy(nil)
+		synctest.Wait()
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("should have shut down")
+		}
+	})
+}
 func TestConnectionMigrationMTUDiscovery(t *testing.T) {
 	for _, test := range []struct {
 		name       string
