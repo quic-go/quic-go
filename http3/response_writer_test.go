@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/quic-go/quic-go"
@@ -277,6 +278,26 @@ func TestResponseWriterContentLength(t *testing.T) {
 	require.Equal(t, []string{"200"}, fields[":status"])
 	require.Equal(t, []string{"6"}, fields["content-length"])
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
+}
+
+func TestResponseWriterContentLengthRetry(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	gomock.InOrder(
+		// the write deadline expires before the HEADERS frame is written
+		qstr.EXPECT().Write(gomock.Any()).Return(0, os.ErrDeadlineExceeded),
+		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(io.Discard.Write).AnyTimes(),
+	)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+	rw.Header().Set("Content-Length", strconv.Itoa(maxSmallResponseSize))
+
+	data := make([]byte, maxSmallResponseSize)
+	_, err := rw.Write(data)
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	// retry, as an application would after extending the write deadline
+	_, err = rw.Write(data)
+	require.NoError(t, err)
 }
 
 func TestResponseWriterContentTypeSniffing(t *testing.T) {
