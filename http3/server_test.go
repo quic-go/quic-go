@@ -389,6 +389,39 @@ func testServerPanickingHandler(t *testing.T, handler http.HandlerFunc) (logOutp
 	return logBuf.String()
 }
 
+func TestServerHandlerReturnsMidFrame(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	str, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodGet, "https://www.example.com", nil)))
+	require.NoError(t, err)
+	require.NoError(t, str.Close())
+
+	done := make(chan struct{})
+	s := &Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer close(done)
+			rc := http.NewResponseController(w)
+			// the client doesn't read the response, so the write blocks once the flow control window is used up
+			rc.SetWriteDeadline(time.Now().Add(scaleDuration(10 * time.Millisecond)))
+			w.Write(make([]byte, 10<<20))
+			// flushing succeeds, but the DATA frame is still unfinished
+			rc.SetWriteDeadline(time.Time{})
+		}),
+	}
+	go s.ServeQUICConn(serverConn)
+	defer s.Close()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	str.SetReadDeadline(time.Now().Add(time.Second))
+	_, err = io.ReadAll(str)
+	require.ErrorIs(t, err, &quic.StreamError{StreamID: str.StreamID(), ErrorCode: quic.StreamErrorCode(ErrCodeRequestCanceled), Remote: true})
+}
+
 func TestServerRequestHeaderTooLarge(t *testing.T) {
 	t.Run("default value", func(t *testing.T) {
 		var eventRecorder events.Recorder

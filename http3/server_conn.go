@@ -260,7 +260,13 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 			r.header.Set("Content-Length", strconv.FormatInt(r.numWritten, 10))
 		}
 	}
-	r.Flush()
+	// Abort the stream if the response is incomplete: flushing failed, or the handler returned
+	// after a write failed partway through a DATA frame, which would leave the frame truncated.
+	if err := r.FlushError(); err != nil || hstr.hasUnfinishedFrame() {
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		return
+	}
 	r.flushTrailers()
 
 	// If the EOF was read by the handler, CancelRead() is a no-op.

@@ -124,6 +124,11 @@ func (s *Stream) hasMoreData() bool {
 	return s.bytesRemainingInFrame > 0
 }
 
+// hasUnfinishedFrame reports whether a Write failed partway through a DATA frame.
+func (s *Stream) hasUnfinishedFrame() bool {
+	return s.bytesUnwrittenInFrame > 0
+}
+
 // Write writes data to the stream.
 //
 // It can only be used after the response header has been sent.
