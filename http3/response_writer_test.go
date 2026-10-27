@@ -263,6 +263,32 @@ func TestResponseWriterHeaderRetry(t *testing.T) {
 	require.Equal(t, getDataFrame([]byte("foobar")), buf.Bytes())
 }
 
+func TestResponseWriterDataRetry(t *testing.T) {
+	var buf bytes.Buffer
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	// the write deadline expires while writing the buffered response body
+	qstr.EXPECT().Write([]byte("foo")).DoAndReturn(func(b []byte) (int, error) {
+		buf.Write(b[:1])
+		return 1, os.ErrDeadlineExceeded
+	})
+	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+	_, err := rw.Write([]byte("foo")) // buffered
+	require.NoError(t, err)
+
+	data := bytes.Repeat([]byte("a"), maxSmallResponseSize)
+	_, err = rw.Write(data)
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+	// retry, as an application would after extending the write deadline
+	_, err = rw.Write(data)
+	require.NoError(t, err)
+
+	decodeHeader(t, &buf)
+	require.Equal(t, append(getDataFrame([]byte("foo")), getDataFrame(data)...), buf.Bytes())
+}
+
 func TestResponseWriterContentLength(t *testing.T) {
 	rw := newTestResponseWriter(t)
 	rw.Header().Set("Content-Length", "6")
