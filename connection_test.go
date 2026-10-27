@@ -410,7 +410,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			}},
 			make([]byte, 16), /* Retry integrity tag */
 		)
-		wasProcessed, err := tc.conn.handleOnePacket(p, 0)
+		wasProcessed, err := tc.conn.handleOnePacket(p, 0, activePathID)
 		require.NoError(t, err)
 		require.False(t, wasProcessed)
 		require.Equal(t,
@@ -440,7 +440,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			protocol.ArbitraryLenConnectionID(tc.conn.origDestConnID.Bytes()),
 			[]Version{Version1},
 		)
-		wasProcessed, err := tc.conn.handleOnePacket(receivedPacket{data: b, buffer: getPacketBuffer()}, 0)
+		wasProcessed, err := tc.conn.handleOnePacket(receivedPacket{data: b, buffer: getPacketBuffer()}, 0, activePathID)
 		require.NoError(t, err)
 		require.False(t, wasProcessed)
 		require.Equal(t,
@@ -468,7 +468,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			},
 			nil,
 		)
-		wasProcessed, err := tc.conn.handleOnePacket(p, 42)
+		wasProcessed, err := tc.conn.handleOnePacket(p, 42, activePathID)
 		require.NoError(t, err)
 		require.False(t, wasProcessed)
 		require.Equal(t,
@@ -498,7 +498,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			nil,
 		)
 		p.data[0] ^= 0x40 // unset the QUIC bit
-		wasProcessed, err := tc.conn.handleOnePacket(p, 42)
+		wasProcessed, err := tc.conn.handleOnePacket(p, 42, activePathID)
 		require.NoError(t, err)
 		require.False(t, wasProcessed)
 		require.Equal(t,
@@ -528,7 +528,7 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 		},
 		nil,
 	)
-	wasProcessed, err := tc.conn.handleOnePacket(p, 1234)
+	wasProcessed, err := tc.conn.handleOnePacket(p, 1234, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 	require.Equal(t,
@@ -582,7 +582,7 @@ func TestConnectionUnpacking(t *testing.T) {
 		data:            []byte{0}, // one PADDING frame
 	}, nil)
 
-	wasProcessed, err := tc.conn.handleOnePacket(packet, 42)
+	wasProcessed, err := tc.conn.handleOnePacket(packet, 42, activePathID)
 	require.NoError(t, err)
 	require.True(t, wasProcessed)
 	require.Equal(t,
@@ -611,7 +611,7 @@ func TestConnectionUnpacking(t *testing.T) {
 		hdr:             &unpackedHdr,
 		data:            []byte{0}, // one PADDING frame
 	}, nil)
-	wasProcessed, err = tc.conn.handleOnePacket(packet, 43)
+	wasProcessed, err = tc.conn.handleOnePacket(packet, 43, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 	require.Equal(t,
@@ -639,7 +639,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
 		protocol.PacketNumber(0x1337), protocol.PacketNumberLen2, protocol.KeyPhaseZero, []byte{0} /* PADDING */, nil,
 	)
-	wasProcessed, err = tc.conn.handleOnePacket(packet, 0)
+	wasProcessed, err = tc.conn.handleOnePacket(packet, 0, activePathID)
 	require.NoError(t, err)
 	require.Equal(t,
 		[]qlogwriter.Event{
@@ -728,7 +728,7 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 		hdr:             &unpackedHdr2,
 		data:            []byte{1}, // one PING frame
 	}, nil)
-	wasProcessed, err := tc.conn.handleOnePacket(packet, 42)
+	wasProcessed, err := tc.conn.handleOnePacket(packet, 42, activePathID)
 	require.NoError(t, err)
 	require.True(t, wasProcessed)
 
@@ -2892,7 +2892,7 @@ func TestConnectionVersionNegotiationInvalidPackets(t *testing.T) {
 		tc.srcConnID,
 		[]protocol.Version{1234, protocol.Version1},
 	)
-	wasProcessed, err := tc.conn.handleOnePacket(vnp, 0)
+	wasProcessed, err := tc.conn.handleOnePacket(vnp, 0, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 	require.Equal(t,
@@ -2910,7 +2910,7 @@ func TestConnectionVersionNegotiationInvalidPackets(t *testing.T) {
 
 	// unparseable, since it's missing 2 bytes
 	vnp.data = vnp.data[:len(vnp.data)-2]
-	wasProcessed, err = tc.conn.handleOnePacket(vnp, 0)
+	wasProcessed, err = tc.conn.handleOnePacket(vnp, 0, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 	require.Equal(t,
@@ -2961,7 +2961,7 @@ func TestConnectionRetryDrops(t *testing.T) {
 	// invalid integrity tag
 	retry := getRetryPacket(t, newConnID, tc.srcConnID, tc.destConnID, []byte("foobar"))
 	retry.data[len(retry.data)-1]++
-	wasProcessed, err := tc.conn.handleOnePacket(retry, 0)
+	wasProcessed, err := tc.conn.handleOnePacket(retry, 0, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 	require.Equal(t,
@@ -2983,7 +2983,7 @@ func TestConnectionRetryDrops(t *testing.T) {
 
 	// receive a retry that doesn't change the connection ID
 	retry = getRetryPacket(t, tc.destConnID, tc.srcConnID, tc.destConnID, []byte("foobar"))
-	wasProcessed, err = tc.conn.handleOnePacket(retry, 0)
+	wasProcessed, err = tc.conn.handleOnePacket(retry, 0, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 	require.Equal(t,
@@ -3028,7 +3028,7 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 		buffer:     getPacketBuffer(),
 		rcvTime:    monotime.Now(),
 		remoteAddr: tc.remoteAddr,
-	}, 0)
+	}, 0, activePathID)
 	require.NoError(t, err)
 	require.True(t, wasProcessed)
 
@@ -3046,7 +3046,7 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 
 	// receive a retry
 	retry := getRetryPacket(t, tc.destConnID, tc.srcConnID, tc.destConnID, []byte("foobar"))
-	wasProcessed, err = tc.conn.handleOnePacket(retry, 0)
+	wasProcessed, err = tc.conn.handleOnePacket(retry, 0, activePathID)
 	require.NoError(t, err)
 	require.False(t, wasProcessed)
 

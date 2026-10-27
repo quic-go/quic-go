@@ -198,12 +198,13 @@ func (m *connIDGenerator) Handler(runner connRunner) (*pathReceiver, bool) {
 }
 
 // AddConnRunner registers all connection IDs with the pathReceiver on the transport.
-func (m *connIDGenerator) AddConnRunner(runner connRunner, h *pathReceiver) {
+// It returns false if the transport was already added.
+func (m *connIDGenerator) AddConnRunner(runner connRunner, h *pathReceiver) bool {
 	// The transport might have already been added earlier.
 	// This happens for every PATH_CHALLENGE sent on the transport after the first one (including retransmissions),
 	// and if the application migrates back to an old path.
 	if _, ok := m.connRunners[runner]; ok {
-		return
+		return false
 	}
 	m.connRunners[runner] = h
 	if m.initialClientDestConnID != nil {
@@ -212,4 +213,5 @@ func (m *connIDGenerator) AddConnRunner(runner connRunner, h *pathReceiver) {
 	for _, connID := range m.activeSrcConnIDs {
 		runner.Add(connID, h)
 	}
+	return true
 }

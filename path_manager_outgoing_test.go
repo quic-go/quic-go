@@ -31,8 +31,8 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		require.False(t, ok)
 
 		tr1 := &Transport{}
-		var enabled bool
-		p := pm.NewPath(tr1, time.Second, func() { enabled = true })
+		enabledID := invalidPathID
+		p := pm.NewPath(tr1, time.Second, func(id pathID) { enabledID = id })
 		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
 
 		errChan := make(chan error, 1)
@@ -41,14 +41,14 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		// wait for the path to be queued for probing
 		synctest.Wait()
 
-		require.False(t, enabled)
+		require.Equal(t, invalidPathID, enabledID)
 		connID, f, tr, ok := pm.NextPathToProbe()
 		require.True(t, ok)
 		require.Same(t, tr1, tr)
 		require.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), connID)
 		require.IsType(t, &wire.PathChallengeFrame{}, f.Frame)
 		pc := f.Frame.(*wire.PathChallengeFrame)
-		require.True(t, enabled)
+		require.Equal(t, p.id, enabledID)
 
 		_, _, _, ok = pm.NextPathToProbe()
 		require.False(t, ok)
@@ -127,7 +127,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 
 		tr1 := &Transport{}
 		const initialRTT = 5 * time.Millisecond
-		p := pm.NewPath(tr1, initialRTT, func() {})
+		p := pm.NewPath(tr1, initialRTT, func(pathID) {})
 
 		pathChallengeChan := make(chan [8]byte)
 		done := make(chan struct{})
@@ -242,7 +242,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		)
 
 		// path abandoned before the PATH_CHALLENGE is sent out
-		p1 := pm.NewPath(&Transport{}, time.Second, func() {})
+		p1 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
 		errChan := make(chan error, 1)
 		go func() { errChan <- p1.Probe(context.Background()) }()
 
@@ -266,7 +266,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		}
 		require.Equal(t, []pathID{p1.id}, retiredPaths)
 
-		p2 := pm.NewPath(&Transport{}, time.Second, func() {})
+		p2 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
 		go func() { errChan <- p2.Probe(context.Background()) }()
 
 		// wait for the path to be queued for probing
@@ -309,7 +309,7 @@ func TestPathManagerOutgoingAbandonValidatedPath(t *testing.T) {
 			func() {},
 		)
 
-		p := pm.NewPath(&Transport{}, time.Second, func() {})
+		p := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
 		errChan := make(chan error, 1)
 		go func() { errChan <- p.Probe(context.Background()) }()
 		synctest.Wait()

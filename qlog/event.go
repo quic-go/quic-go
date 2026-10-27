@@ -126,6 +126,35 @@ func (e StartedConnection) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	return h.err
 }
 
+// TupleAssigned associates a TupleID with the endpoints of a network tuple.
+type TupleAssigned struct {
+	TupleID string
+	Local   PathEndpointInfo
+	Remote  PathEndpointInfo
+
+	// non-nil redacted values replace the corresponding IP and port in qlog output
+	RedactedLocal, RedactedRemote *string
+}
+
+func (e TupleAssigned) Name() string { return "transport:tuple_assigned" }
+
+func (e TupleAssigned) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("tuple_id"))
+	h.WriteToken(jsontext.String(e.TupleID))
+	h.WriteToken(jsontext.String("tuple_local"))
+	if err := e.Local.encode(enc, e.RedactedLocal); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.String("tuple_remote"))
+	if err := e.Remote.encode(enc, e.RedactedRemote); err != nil {
+		return err
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
 type VersionInformation struct {
 	ClientVersions, ServerVersions []Version
 	ChosenVersion                  Version
@@ -246,6 +275,9 @@ type PacketSent struct {
 	IsCoalesced             bool
 	Trigger                 string
 	SupportedVersions       []Version
+	// Tuple is the TupleID of the network tuple that the packet was sent on.
+	// It is empty for the tuple that the TupleID "" is assigned to.
+	Tuple string
 }
 
 func (e PacketSent) Name() string { return "transport:packet_sent" }
@@ -283,6 +315,10 @@ func (e PacketSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.String("trigger"))
 		h.WriteToken(jsontext.String(e.Trigger))
 	}
+	if e.Tuple != "" {
+		h.WriteToken(jsontext.String("tuple"))
+		h.WriteToken(jsontext.String(e.Tuple))
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
@@ -295,6 +331,9 @@ type PacketReceived struct {
 	ECN                     ECN
 	IsCoalesced             bool
 	Trigger                 string
+	// Tuple is the TupleID of the network tuple that the packet was received on.
+	// It is empty for the tuple that the TupleID "" is assigned to.
+	Tuple string
 }
 
 func (e PacketReceived) Name() string { return "transport:packet_received" }
@@ -331,6 +370,10 @@ func (e PacketReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	if e.Trigger != "" {
 		h.WriteToken(jsontext.String("trigger"))
 		h.WriteToken(jsontext.String(e.Trigger))
+	}
+	if e.Tuple != "" {
+		h.WriteToken(jsontext.String("tuple"))
+		h.WriteToken(jsontext.String(e.Tuple))
 	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err

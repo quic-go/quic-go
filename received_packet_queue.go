@@ -53,21 +53,29 @@ func (q *receivedPacketQueue) Push(p receivedPacket, source *pathReceiver) bool 
 	return true
 }
 
-// Pop returns the next packet, and the pathReceiver that received it.
+// activePathID is returned by Pop for packets received on the active path.
+// Like the qlog TupleID "", it refers to whichever path is currently active.
+const activePathID pathID = -2
+
+// Pop returns the next packet, and the ID of the path it was received on.
+// The ID is activePathID for packets received on the active path.
 // Packets in the side queue are returned first:
 // When switching paths, the packets received on the old path are moved to the side queue.
-func (q *receivedPacketQueue) Pop() (_ receivedPacket, source *pathReceiver, ok bool) {
+func (q *receivedPacketQueue) Pop() (_ receivedPacket, path pathID, ok bool) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
 	if !q.side.Empty() {
 		p := q.side.PopFront()
-		return p.receivedPacket, p.source, true
+		if p.source == q.active {
+			return p.receivedPacket, activePathID, true
+		}
+		return p.receivedPacket, p.source.id, true
 	}
 	if !q.main.Empty() {
-		return q.main.PopFront(), q.active, true
+		return q.main.PopFront(), activePathID, true
 	}
-	return receivedPacket{}, nil, false
+	return receivedPacket{}, activePathID, false
 }
 
 func (q *receivedPacketQueue) Empty() bool {
@@ -77,19 +85,21 @@ func (q *receivedPacketQueue) Empty() bool {
 	return q.main.Empty() && q.side.Empty()
 }
 
-// SetActive is called when switching paths.
-// It moves packets queued for the old path to the side queue.
-func (q *receivedPacketQueue) SetActive(active *pathReceiver) {
+// SwapActive is called when switching paths.
+// It moves packets queued for the old path to the side queue, and returns the pathReceiver of the old path.
+func (q *receivedPacketQueue) SwapActive(active *pathReceiver) (prev *pathReceiver) {
 	q.mx.Lock()
 	defer q.mx.Unlock()
 
-	if active == q.active {
-		return
+	prev = q.active
+	if active == prev {
+		return prev
 	}
 	for !q.main.Empty() {
-		q.side.PushBack(sidePacket{receivedPacket: q.main.PopFront(), source: q.active})
+		q.side.PushBack(sidePacket{receivedPacket: q.main.PopFront(), source: prev})
 	}
 	q.active = active
+	return prev
 }
 
 // Clear drops all queued packets.

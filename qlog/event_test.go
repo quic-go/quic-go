@@ -101,6 +101,21 @@ func TestStartedConnection(t *testing.T) {
 	}`, ev)
 }
 
+func TestTupleAssigned(t *testing.T) {
+	name, ev := testEventEncoding(t, &TupleAssigned{
+		TupleID: "1",
+		Local:   PathEndpointInfo{IPv4: netip.MustParseAddrPort("192.168.13.37:42")},
+		Remote:  PathEndpointInfo{IPv6: netip.MustParseAddrPort("[2001:db8::1]:24")},
+	})
+
+	require.Equal(t, "transport:tuple_assigned", name)
+	require.JSONEq(t, `{
+		"tuple_id": "1",
+		"tuple_local": {"ip_v4": {"ip": "192.168.13.37", "port": 42}},
+		"tuple_remote": {"ip_v6": {"ip": "2001:db8::1", "port": 24}}
+	}`, ev)
+}
+
 func TestVersionInformation(t *testing.T) {
 	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: 0x1337})
 
@@ -788,6 +803,20 @@ func TestPacketLost(t *testing.T) {
 		"header": {"packet_type": "handshake", "packet_number": 42, "scil": 0, "dcil": 0},
 		"trigger": "reordering_threshold"
 	}`, ev)
+}
+
+func TestPacketEventsTuple(t *testing.T) {
+	for _, ev := range []qlogwriter.Event{
+		PacketSent{Tuple: "1"},
+		PacketReceived{Tuple: "1"},
+	} {
+		t.Run(ev.Name(), func(t *testing.T) {
+			_, data := testEventEncoding(t, ev)
+			var fields map[string]any
+			require.NoError(t, json.Unmarshal([]byte(data), &fields))
+			require.Equal(t, "1", fields["tuple"])
+		})
+	}
 }
 
 func TestSpuriousLoss(t *testing.T) {
