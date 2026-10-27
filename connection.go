@@ -2959,6 +2959,22 @@ func (c *Conn) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
 	return c.streamsMap.OpenUniStreamSync(ctx)
 }
 
+// SetMaxIncomingStreams changes the maximum number of concurrent bidirectional streams
+// that the peer is allowed to open (see [Config.MaxIncomingStreams]).
+// Increasing the limit takes effect immediately. Since stream credit can't be revoked,
+// decreasing it only takes effect once enough streams have completed.
+func (c *Conn) SetMaxIncomingStreams(n int64) {
+	c.streamsMap.SetMaxIncomingStreams(uint64(max(n, 0)))
+}
+
+// SetMaxIncomingUniStreams changes the maximum number of concurrent unidirectional streams
+// that the peer is allowed to open (see [Config.MaxIncomingUniStreams]).
+// Increasing the limit takes effect immediately. Since stream credit can't be revoked,
+// decreasing it only takes effect once enough streams have completed.
+func (c *Conn) SetMaxIncomingUniStreams(n int64) {
+	c.streamsMap.SetMaxIncomingUniStreams(uint64(max(n, 0)))
+}
+
 func (c *Conn) newFlowController(id protocol.StreamID) *streamFlowController {
 	initialSendWindow := c.peerParams.InitialMaxStreamDataUni
 	if protocol.StreamTypeOf(id) == protocol.StreamTypeBidi {
