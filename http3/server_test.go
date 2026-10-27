@@ -491,15 +491,6 @@ func TestServerRequestContext(t *testing.T) {
 }
 
 func TestServerHTTPStreamHijacking(t *testing.T) {
-	t.Run("with WriteHeader", func(t *testing.T) {
-		testServerHTTPStreamHijacking(t, true)
-	})
-	t.Run("without WriteHeader", func(t *testing.T) {
-		testServerHTTPStreamHijacking(t, false)
-	})
-}
-
-func testServerHTTPStreamHijacking(t *testing.T, writeHeader bool) {
 	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
@@ -509,9 +500,7 @@ func testServerHTTPStreamHijacking(t *testing.T, writeHeader bool) {
 
 	s := &Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if writeHeader {
-				w.WriteHeader(http.StatusOK)
-			}
+			w.WriteHeader(http.StatusOK)
 			str := w.(HTTPStreamer).HTTPStream()
 			str.Write([]byte("foobar"))
 			str.Close()
@@ -523,10 +512,8 @@ func testServerHTTPStreamHijacking(t *testing.T, writeHeader bool) {
 	rsp, err := io.ReadAll(str)
 	require.NoError(t, err)
 	r := bytes.NewReader(rsp)
-	if writeHeader {
-		hfs := decodeHeader(t, r)
-		require.Equal(t, hfs[":status"], []string{"200"})
-	}
+	hfs := decodeHeader(t, r)
+	require.Equal(t, hfs[":status"], []string{"200"})
 	fp := frameParser{r: r}
 	frame, err := fp.ParseNext(nil)
 	require.NoError(t, err)
@@ -536,6 +523,34 @@ func testServerHTTPStreamHijacking(t *testing.T, writeHeader bool) {
 	data, err := io.ReadAll(r)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foobar"), data)
+}
+
+func TestServerHTTPStreamHijackingWithoutResponse(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	str, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodGet, "https://www.example.com", nil)))
+	require.NoError(t, err)
+	require.NoError(t, str.Close())
+
+	errChan := make(chan error, 1)
+	s := &Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			str := w.(HTTPStreamer).HTTPStream()
+			_, err := str.Write([]byte("foobar"))
+			errChan <- err
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
+		}),
+	}
+	go s.ServeQUICConn(serverConn)
+
+	select {
+	case err := <-errChan:
+		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	expectStreamReadReset(t, str, quic.StreamErrorCode(ErrCodeRequestRejected))
 }
 
 func getAltSvc(s *Server) (string, bool) {

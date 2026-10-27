@@ -152,20 +152,40 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		rw := newTestResponseWriter(t)
 		rw.Header().Set("Capsule-Protocol", "?1")
 		rw.WriteHeader(http.StatusOK)
-		rw.HTTPStream()
+		str := rw.HTTPStream()
 		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
+		_, err := str.Write([]byte("foobar"))
+		require.NoError(t, err)
 
 		fields := rw.DecodeHeaders(t, 0)
 		require.Equal(t, []string{"200"}, fields[":status"])
 		require.Equal(t, []string{"?1"}, fields["capsule-protocol"])
+		require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 	})
 
 	t.Run("without WriteHeader", func(t *testing.T) {
 		rw := newTestResponseWriter(t)
-		rw.HTTPStream()
+		str := rw.HTTPStream()
 		require.Zero(t, rw.buf.Len())
 		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
+		_, err := str.Write([]byte("foobar"))
+		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
+		require.EqualError(t,
+			str.TryWriteAll([]byte("foobar")),
+			"http3: invalid use of Stream.TryWriteAll before sending the response header",
+		)
 		require.Zero(t, rw.buf.Len())
+	})
+
+	t.Run("after an informational response", func(t *testing.T) {
+		rw := newTestResponseWriter(t)
+		rw.WriteHeader(http.StatusEarlyHints)
+		l := rw.buf.Len()
+		require.NotZero(t, l)
+		str := rw.HTTPStream()
+		_, err := str.Write([]byte("foobar"))
+		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
+		require.Equal(t, l, rw.buf.Len())
 	})
 }
 
