@@ -153,9 +153,10 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		rw := newTestResponseWriter(t)
 		rw.Header().Set("Capsule-Protocol", "?1")
 		rw.WriteHeader(http.StatusOK)
-		str := rw.HTTPStream()
+		str, err := rw.HTTPStream()
+		require.NoError(t, err)
 		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
-		_, err := str.Write([]byte("foobar"))
+		_, err = str.Write([]byte("foobar"))
 		require.NoError(t, err)
 
 		fields := rw.DecodeHeaders(t, 0)
@@ -166,10 +167,11 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 
 	t.Run("without WriteHeader", func(t *testing.T) {
 		rw := newTestResponseWriter(t)
-		str := rw.HTTPStream()
+		str, err := rw.HTTPStream()
+		require.NoError(t, err)
 		require.Zero(t, rw.buf.Len())
 		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
-		_, err := str.Write([]byte("foobar"))
+		_, err = str.Write([]byte("foobar"))
 		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
 		require.EqualError(t,
 			str.TryWriteAll([]byte("foobar")),
@@ -183,10 +185,33 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		rw.WriteHeader(http.StatusEarlyHints)
 		l := rw.buf.Len()
 		require.NotZero(t, l)
-		str := rw.HTTPStream()
-		_, err := str.Write([]byte("foobar"))
+		str, err := rw.HTTPStream()
+		require.NoError(t, err)
+		_, err = str.Write([]byte("foobar"))
 		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
 		require.Equal(t, l, rw.buf.Len())
+	})
+
+	t.Run("retry after a failed write", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		qstr := NewMockDatagramStream(mockCtrl)
+		qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+		gomock.InOrder(
+			qstr.EXPECT().Write(gomock.Any()).Return(0, os.ErrDeadlineExceeded),
+			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) { return len(b), nil }),
+		)
+		rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+		rw.WriteHeader(http.StatusOK)
+
+		str, err := rw.HTTPStream()
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+		require.Nil(t, str)
+		require.False(t, rw.wasStreamHijacked())
+
+		str, err = rw.HTTPStream()
+		require.NoError(t, err)
+		require.NotNil(t, str)
+		require.True(t, rw.wasStreamHijacked())
 	})
 }
 

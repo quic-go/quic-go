@@ -157,7 +157,11 @@ func TestHTTPDatagrams(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 
-		str := w.(http3.HTTPStreamer).HTTPStream()
+		str, err := w.(http3.HTTPStreamer).HTTPStream()
+		if err != nil {
+			errChan <- err
+			return
+		}
 		go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
 
 		for {
@@ -220,7 +224,11 @@ func TestHTTPDatagramClose(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 
-		str := w.(http3.HTTPStreamer).HTTPStream()
+		str, err := w.(http3.HTTPStreamer).HTTPStream()
+		if err != nil {
+			errChan <- err
+			return
+		}
 		go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
 
 		for {
@@ -280,7 +288,11 @@ func TestHTTPDatagramStreamReset(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 
-		str := w.(http3.HTTPStreamer).HTTPStream()
+		str, err := w.(http3.HTTPStreamer).HTTPStream()
+		if err != nil {
+			errChan <- err
+			return
+		}
 		go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
 
 		for {
