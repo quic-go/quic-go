@@ -25,7 +25,7 @@ import (
 // Otherwise, no response is sent.
 // HTTPStream fails if any response body was written.
 // If sending the header fails, the stream is not taken over, and HTTPStream can be called again.
-// Calling WriteHeader after HTTPStream panics.
+// Calling WriteHeader after HTTPStream panics, and Write returns [http.ErrHijacked].
 type HTTPStreamer interface {
 	HTTPStream() (*Stream, error)
 }
@@ -147,6 +147,9 @@ func (w *responseWriter) sniffContentType(p []byte) {
 }
 
 func (w *responseWriter) Write(p []byte) (int, error) {
+	if w.hijacked {
+		return 0, http.ErrHijacked
+	}
 	bodyAllowed := bodyAllowedForStatus(w.status)
 	if !w.headerComplete {
 		w.sniffContentType(p)
