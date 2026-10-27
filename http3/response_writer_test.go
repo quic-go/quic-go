@@ -192,6 +192,19 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		require.Equal(t, l, rw.buf.Len())
 	})
 
+	t.Run("after writing the response body", func(t *testing.T) {
+		rw := newTestResponseWriter(t)
+		rw.Write([]byte("foobar"))
+		// the DATA frame is queued
+		_, err := rw.HTTPStream()
+		require.EqualError(t, err, "http3: invalid use of HTTPStream after writing the response body")
+		// the DATA frame was sent
+		rw.Flush()
+		_, err = rw.HTTPStream()
+		require.EqualError(t, err, "http3: invalid use of HTTPStream after writing the response body")
+		require.False(t, rw.wasStreamHijacked())
+	})
+
 	t.Run("retry after a failed write", func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		qstr := NewMockDatagramStream(mockCtrl)

@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 //
 // If WriteHeader was called before HTTPStream, the response header is sent.
 // Otherwise, no response is sent.
+// HTTPStream fails if any response body was written.
 // If sending the header fails, the stream is not taken over, and HTTPStream can be called again.
 // Calling WriteHeader after HTTPStream panics.
 type HTTPStreamer interface {
@@ -362,6 +364,9 @@ func (w *responseWriter) writeTrailers() error {
 }
 
 func (w *responseWriter) HTTPStream() (*Stream, error) {
+	if w.numWritten > 0 {
+		return nil, errors.New("http3: invalid use of HTTPStream after writing the response body")
+	}
 	if !w.headerComplete {
 		// WriteHeader can't be called after HTTPStream, so the response header will never be sent
 		w.str.missingHeader = true
