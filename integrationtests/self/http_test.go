@@ -816,17 +816,18 @@ func TestHTTPDeadlines(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
-		body, err := io.ReadAll(&readerWithTimeout{Reader: resp.Body, Timeout: 2 * deadlineDelay})
-		require.NoError(t, err)
-		require.Greater(t, time.Now(), expectedEnd)
-		require.Contains(t, string(body), "aa")
-
+		// the response body isn't read yet, so the handler's writes block on flow control
 		select {
 		case err := <-errChan:
 			require.ErrorIs(t, err, os.ErrDeadlineExceeded)
 		case <-time.After(2 * deadlineDelay):
 			t.Fatal("handler was not called")
 		}
+		require.Greater(t, time.Now(), expectedEnd)
+
+		// the handler returned in the middle of the response body, so the stream is reset
+		_, err = io.ReadAll(&readerWithTimeout{Reader: resp.Body, Timeout: 2 * deadlineDelay})
+		require.ErrorIs(t, err, &http3.Error{ErrorCode: http3.ErrCodeRequestCanceled, Remote: true})
 	})
 }
 
