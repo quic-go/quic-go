@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/quic-go/quic-go"
@@ -187,6 +188,35 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
 		require.Equal(t, l, rw.buf.Len())
 	})
+}
+
+func TestResponseWriterHeaderRetry(t *testing.T) {
+	var buf bytes.Buffer
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	gomock.InOrder(
+		// the write deadline expires after the first few bytes of the HEADERS frame
+		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+			buf.Write(b[:3])
+			return 3, os.ErrDeadlineExceeded
+		}),
+		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes(),
+	)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+	rw.Header().Set("Foo", "bar")
+	rw.WriteHeader(http.StatusOK)
+
+	require.ErrorIs(t, rw.FlushError(), os.ErrDeadlineExceeded)
+	// retry, as an application would after extending the write deadline
+	require.NoError(t, rw.FlushError())
+	_, err := rw.Write([]byte("foobar"))
+	require.NoError(t, err)
+
+	fields := decodeHeader(t, &buf)
+	require.Equal(t, []string{"200"}, fields[":status"])
+	require.Equal(t, []string{"bar"}, fields["foo"])
+	require.Equal(t, getDataFrame([]byte("foobar")), buf.Bytes())
 }
 
 func TestResponseWriterContentLength(t *testing.T) {
