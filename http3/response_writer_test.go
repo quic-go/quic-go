@@ -158,6 +158,9 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
 		_, err = str.Write([]byte("foobar"))
 		require.NoError(t, err)
+		n, err := rw.Write([]byte("raboof"))
+		require.ErrorIs(t, err, http.ErrHijacked)
+		require.Zero(t, n)
 
 		fields := rw.DecodeHeaders(t, 0)
 		require.Equal(t, []string{"200"}, fields[":status"])
@@ -177,6 +180,8 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 			str.TryWriteAll([]byte("foobar")),
 			"http3: invalid use of Stream.TryWriteAll before sending the response header",
 		)
+		_, err = rw.Write([]byte("foobar"))
+		require.ErrorIs(t, err, http.ErrHijacked)
 		require.Zero(t, rw.buf.Len())
 	})
 
