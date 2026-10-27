@@ -38,7 +38,7 @@ type responseWriter struct {
 	conn     *rawConn
 	header   http.Header
 	trailers map[string]struct{}
-	buf      []byte // the HEADERS frame until it's completely written, then the DATA frame header
+	buf      []byte // the unwritten part of the HEADERS frame
 	status   int    // status code passed to WriteHeader
 
 	// for responses smaller than maxSmallResponseSize, we buffer calls to Write,
@@ -192,38 +192,15 @@ func (w *responseWriter) doWrite(p []byte) (int, error) {
 		w.headerWritten = true
 	}
 
-	l := uint64(len(w.smallResponseBuf) + len(p))
-	if l == 0 {
-		return 0, nil
-	}
-	df := &dataFrame{Length: l}
-	w.buf = w.buf[:0]
-	w.buf = df.Append(w.buf)
-	if w.str.qlogger != nil {
-		w.str.qlogger.RecordEvent(qlog.FrameCreated{
-			StreamID: w.str.StreamID(),
-			Raw:      qlog.RawInfo{Length: len(w.buf) + int(l), PayloadLength: int(l)},
-			Frame:    qlog.Frame{Frame: qlog.DataFrame{}},
-		})
-	}
-	if _, err := w.str.writeUnframed(w.buf); err != nil {
-		return 0, err
-	}
 	if len(w.smallResponseBuf) > 0 {
-		if _, err := w.str.writeUnframed(w.smallResponseBuf); err != nil {
+		n, err := w.str.Write(w.smallResponseBuf)
+		if err != nil {
+			w.smallResponseBuf = w.smallResponseBuf[n:]
 			return 0, err
 		}
 		w.smallResponseBuf = nil
 	}
-	var n int
-	if len(p) > 0 {
-		var err error
-		n, err = w.str.writeUnframed(p)
-		if err != nil {
-			return n, err
-		}
-	}
-	return n, nil
+	return w.str.Write(p)
 }
 
 // writeHeader writes the HEADERS frame.

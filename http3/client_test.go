@@ -89,7 +89,7 @@ func encodeResponse(t *testing.T, status int) []byte {
 	buf := &bytes.Buffer{}
 	rstr := NewMockDatagramStream(mockCtrl)
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-	rstr.EXPECT().Write(gomock.Any()).Do(buf.Write).AnyTimes()
+	rstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
 	rw.WriteHeader(status)
 	rw.Flush()
@@ -404,7 +404,7 @@ func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, 
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
+	rstr.EXPECT().Write(gomock.Any()).DoAndReturn(rspBuf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
 	rw.header.Add("Link", "foo")
 	rw.header.Add("Link", "bar")
@@ -493,7 +493,7 @@ func testClientGzip(t *testing.T,
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-	rstr.EXPECT().Write(gomock.Any()).Do(rspBuf.Write).AnyTimes()
+	rstr.EXPECT().Write(gomock.Any()).DoAndReturn(rspBuf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(rstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, nil), nil, false, nil)
 	rw.WriteHeader(status)
 	if responseAddContentEncoding {
