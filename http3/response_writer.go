@@ -160,12 +160,12 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 		return 0, http.ErrBodyNotAllowed
 	}
 
-	w.numWritten += int64(len(p))
-	if w.contentLen != 0 && w.numWritten > w.contentLen {
+	if w.contentLen != 0 && w.numWritten+int64(len(p)) > w.contentLen {
 		return 0, http.ErrContentLength
 	}
 
 	if w.isHead {
+		w.numWritten += int64(len(p))
 		return len(p), nil
 	}
 
@@ -174,10 +174,13 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 		// This allows us to automatically set the Content-Length field.
 		if len(w.smallResponseBuf)+len(p) < maxSmallResponseSize {
 			w.smallResponseBuf = append(w.smallResponseBuf, p...)
+			w.numWritten += int64(len(p))
 			return len(p), nil
 		}
 	}
-	return w.doWrite(p)
+	n, err := w.doWrite(p)
+	w.numWritten += int64(n)
+	return n, err
 }
 
 func (w *responseWriter) doWrite(p []byte) (int, error) {
