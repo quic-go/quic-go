@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,10 +22,12 @@ import (
 // When a stream is taken over, it's the caller's responsibility to close the stream.
 //
 // If WriteHeader was called before HTTPStream, the response header is sent.
-// Otherwise, no response is sent, allowing the caller to e.g. reset the stream.
+// Otherwise, no response is sent.
+// HTTPStream fails if any response body was written.
+// If sending the header fails, the stream is not taken over, and HTTPStream can be called again.
 // Calling WriteHeader after HTTPStream panics.
 type HTTPStreamer interface {
-	HTTPStream() *Stream
+	HTTPStream() (*Stream, error)
 }
 
 const maxSmallResponseSize = 4096
@@ -360,15 +363,18 @@ func (w *responseWriter) writeTrailers() error {
 	return maybeReplaceError(err)
 }
 
-func (w *responseWriter) HTTPStream() *Stream {
-	w.hijacked = true
-	if w.headerComplete {
-		w.Flush()
-	} else {
+func (w *responseWriter) HTTPStream() (*Stream, error) {
+	if w.numWritten > 0 {
+		return nil, errors.New("http3: invalid use of HTTPStream after writing the response body")
+	}
+	if !w.headerComplete {
 		// WriteHeader can't be called after HTTPStream, so the response header will never be sent
 		w.str.missingHeader = true
+	} else if err := w.FlushError(); err != nil {
+		return nil, err
 	}
-	return w.str
+	w.hijacked = true
+	return w.str, nil
 }
 
 func (w *responseWriter) wasStreamHijacked() bool { return w.hijacked }

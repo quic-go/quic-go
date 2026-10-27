@@ -501,7 +501,10 @@ func TestServerHTTPStreamHijacking(t *testing.T) {
 	s := &Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			str := w.(HTTPStreamer).HTTPStream()
+			str, err := w.(HTTPStreamer).HTTPStream()
+			if err != nil {
+				return
+			}
 			str.Write([]byte("foobar"))
 			str.Close()
 		}),
@@ -536,7 +539,7 @@ func TestServerHTTPStreamHijackingWithoutResponse(t *testing.T) {
 	errChan := make(chan error, 1)
 	s := &Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			str := w.(HTTPStreamer).HTTPStream()
+			str, _ := w.(HTTPStreamer).HTTPStream()
 			_, err := str.Write([]byte("foobar"))
 			errChan <- err
 			str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestRejected))
