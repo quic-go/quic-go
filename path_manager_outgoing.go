@@ -270,6 +270,19 @@ func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ack
 	return connID, frame, p.tr, true
 }
 
+// Transport returns the Transport of the path.
+// It returns false if the path is not being probed or used, e.g. because it was closed.
+func (pm *pathManagerOutgoing) Transport(id pathID) (*Transport, bool) {
+	pm.mx.Lock()
+	defer pm.mx.Unlock()
+
+	p, ok := pm.paths[id]
+	if !ok {
+		return nil, false
+	}
+	return p.tr, true
+}
+
 func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()

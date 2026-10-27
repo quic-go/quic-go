@@ -161,6 +161,17 @@ func TestConnectionMigration(t *testing.T) {
 	require.Equal(t, []string{"0"}, assignedTuples(&serverEvents))
 	require.Equal(t, []string{"0"}, probeTuples(&serverEvents, ns))
 
+	time.Sleep(3 * rtt) // the client responds to the server's PATH_CHALLENGE after Probe returns
+
+	// the client responded to the server's PATH_CHALLENGE on the new path
+	var responseTuples []string
+	for _, ev := range clientEvents.Events()[n:] {
+		if e, ok := ev.(qlog.PacketSent); ok && hasFrame[*qlog.PathResponseFrame](e.Frames) {
+			responseTuples = append(responseTuples, e.Tuple)
+		}
+	}
+	require.Equal(t, []string{"1"}, slices.Compact(responseTuples))
+
 	// make sure that no more packets are sent on path 2 before switching to the path
 	c2 := packetsPath2.Load()
 	sendAndReceiveFile(t) // stream 6
