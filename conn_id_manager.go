@@ -26,7 +26,7 @@ type connIDManager struct {
 
 	handshakeComplete         bool
 	activeSequenceNumber      uint64
-	highestRetired            uint64
+	highestRetired            uint64 // the highest Retire Prior To value received
 	activeConnectionID        protocol.ConnectionID
 	activeStatelessResetToken *protocol.StatelessResetToken
 
@@ -83,15 +83,8 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 			ErrorMessage: "received NEW_CONNECTION_ID frame but zero-length connection IDs are in use",
 		}
 	}
-	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number is smaller than the currently active
-	// connection ID or if it was already retired, send the RETIRE_CONNECTION_ID frame immediately.
-	if f.SequenceNumber < max(h.activeSequenceNumber, h.highestProbingID) || f.SequenceNumber < h.highestRetired {
-		h.queueControlFrame(&wire.RetireConnectionIDFrame{
-			SequenceNumber: f.SequenceNumber,
-		})
-		return nil
-	}
-
+	// Retire Prior To is processed for reordered and retransmitted frames as well,
+	// since the peer might have increased it after sending the original frame.
 	if f.RetirePriorTo != 0 && h.pathProbing != nil {
 		for id, entry := range h.pathProbing {
 			if entry.SequenceNumber < f.RetirePriorTo {
@@ -118,17 +111,22 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		h.highestRetired = f.RetirePriorTo
 	}
 
-	if f.SequenceNumber == h.activeSequenceNumber {
-		return nil
-	}
-
-	if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, f.StatelessResetToken); err != nil {
-		return err
+	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number is smaller than the currently active
+	// connection ID or if it was already retired, send the RETIRE_CONNECTION_ID frame immediately.
+	if f.SequenceNumber < max(h.activeSequenceNumber, h.highestProbingID) || f.SequenceNumber < h.highestRetired {
+		h.queueControlFrame(&wire.RetireConnectionIDFrame{
+			SequenceNumber: f.SequenceNumber,
+		})
+	} else if f.SequenceNumber != h.activeSequenceNumber {
+		if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, f.StatelessResetToken); err != nil {
+			return err
+		}
 	}
 
 	// Retire the active connection ID, if necessary.
-	if h.activeSequenceNumber < f.RetirePriorTo {
-		// The queue is guaranteed to have at least one element at this point.
+	// If this frame's connection ID was retired, the peer might not have provided a new connection ID yet.
+	// The active connection ID is then retired once it does.
+	if h.activeSequenceNumber < h.highestRetired && len(h.queue) > 0 {
 		h.updateConnectionID()
 	}
 	return nil
@@ -175,7 +173,6 @@ func (h *connIDManager) updateConnectionID() {
 	h.queueControlFrame(&wire.RetireConnectionIDFrame{
 		SequenceNumber: h.activeSequenceNumber,
 	})
-	h.highestRetired = max(h.highestRetired, h.activeSequenceNumber)
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}
