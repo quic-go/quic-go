@@ -111,25 +111,40 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		h.highestRetired = f.RetirePriorTo
 	}
 
-	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number is smaller than the currently active
-	// connection ID or if it was already retired, send the RETIRE_CONNECTION_ID frame immediately.
-	if f.SequenceNumber < max(h.activeSequenceNumber, h.highestProbingID) || f.SequenceNumber < h.highestRetired {
-		h.queueControlFrame(&wire.RetireConnectionIDFrame{
-			SequenceNumber: f.SequenceNumber,
-		})
-	} else if f.SequenceNumber != h.activeSequenceNumber {
-		if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, f.StatelessResetToken); err != nil {
+	// ignore retransmissions of connection IDs that are in use, either as the active connection ID or for a path
+	if !h.isInUse(f.SequenceNumber) {
+		// Connection IDs are taken from the queue in order.
+		// Any other connection ID up to the highest one taken was either retired already,
+		// or skipped because the NEW_CONNECTION_ID frame was reordered.
+		// Send the RETIRE_CONNECTION_ID frame immediately.
+		if f.SequenceNumber <= max(h.activeSequenceNumber, h.highestProbingID) || f.SequenceNumber < h.highestRetired {
+			h.queueControlFrame(&wire.RetireConnectionIDFrame{
+				SequenceNumber: f.SequenceNumber,
+			})
+		} else if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, f.StatelessResetToken); err != nil {
 			return err
 		}
 	}
 
 	// Retire the active connection ID, if necessary.
-	// If this frame's connection ID was retired, the peer might not have provided a new connection ID yet.
+	// If this frame's connection ID is in use or was retired, the peer might not have provided a new connection ID yet.
 	// The active connection ID is then retired once it does.
 	if h.activeSequenceNumber < h.highestRetired && len(h.queue) > 0 {
 		h.updateConnectionID()
 	}
 	return nil
+}
+
+func (h *connIDManager) isInUse(seq uint64) bool {
+	if seq == h.activeSequenceNumber {
+		return true
+	}
+	for _, entry := range h.pathProbing {
+		if entry.SequenceNumber == seq {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken protocol.StatelessResetToken) error {
