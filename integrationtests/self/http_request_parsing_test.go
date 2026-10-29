@@ -73,7 +73,6 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 		body          string
 		contentLength int64
 		trailer       http.Header
-		skip          string
 	}{
 		{
 			name:      "origin form",
@@ -117,7 +116,6 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 			path:          "/post-short",
 			body:          "short body",
 			contentLength: 20,
-			skip:          "https://github.com/quic-go/quic-go/pull/5913",
 		},
 		{
 			name:      "POST request without body",
@@ -181,10 +179,6 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.skip != "" {
-				t.Skip(tc.skip)
-			}
-
 			requestURL := &url.URL{Scheme: "https", Host: h2Server.Listener.Addr().String()}
 			if tc.path != "" {
 				parsedURL, err := url.ParseRequestURI(tc.path)

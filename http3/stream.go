@@ -478,11 +478,8 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := s.isConnect && res.StatusCode >= 200 && res.StatusCode < 300
 
-	// Check that the server doesn't send more or less data in DATA frames than indicated by the
-	// Content-Length header (if set). See section 4.1.2 of RFC 9114.
-	// Responses that are defined as having no content may carry a non-zero Content-Length without
-	// sending any DATA frame. The content of a successful CONNECT response is the tunnel, and any
-	// Content-Length is ignored (RFC 9110, section 9.3.6).
+	// Enforce the Content-Length (section 4.1.2 of RFC 9114). Responses without content may declare
+	// a non-zero Content-Length, and successful CONNECT responses ignore it.
 	contentLength := res.ContentLength
 	switch {
 	case isSuccessfulConnect:
