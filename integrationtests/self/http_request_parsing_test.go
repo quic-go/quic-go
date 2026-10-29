@@ -124,7 +124,6 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 			method:    http.MethodPost,
 			authority: "quic-go.net",
 			path:      "/post-no-body",
-			skip:      "https://github.com/quic-go/quic-go/issues/6027",
 		},
 		{
 			name:      "origin form with escaped path",
