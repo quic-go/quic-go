@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
@@ -223,6 +224,47 @@ func TestConnectionMigration(t *testing.T) {
 	// some path probing might have happened
 	require.Less(t, int(packetsPath2.Load()-c2BeforeSwitch), 20)
 	require.Equal(t, tr1.Conn.LocalAddr(), conn.LocalAddr())
+
+	// switch to the first path again, which doesn't require probing it again
+	require.NoError(t, path.Switch())
+	sendAndReceiveFile(t) // stream 18
+	require.Equal(t, tr2.Conn.LocalAddr(), conn.LocalAddr())
+
+	requireConnIDsNotLinkable(t, clientEvents.Events())
+	requireConnIDsNotLinkable(t, serverEvents.Events())
+}
+
+// requireConnIDsNotLinkable checks that no connection ID is used on more than one tuple,
+// since this would allow an on-path observer to link the tuples, see section 9.5 of RFC 9000.
+func requireConnIDsNotLinkable(t *testing.T, evs []qlogwriter.Event) {
+	t.Helper()
+
+	type tuple struct {
+		local, remote qlog.PathEndpointInfo
+	}
+
+	tuples := make(map[string]tuple) // by TupleID
+	usedOn := make(map[qlog.ConnectionID]tuple)
+	for _, ev := range evs {
+		switch e := ev.(type) {
+		case qlog.StartedConnection:
+			tuples[""] = tuple{local: e.Local, remote: e.Remote}
+		case qlog.TupleAssigned:
+			tuples[e.TupleID] = tuple{local: e.Local, remote: e.Remote}
+		case qlog.PacketSent:
+			connID := e.Header.DestConnectionID
+			if connID.Len() == 0 {
+				continue
+			}
+			tup, ok := tuples[e.Tuple]
+			require.True(t, ok, "packet sent on unknown tuple %q", e.Tuple)
+			if prev, ok := usedOn[connID]; ok {
+				require.Equal(t, prev, tup, "connection ID %s used on multiple tuples", connID)
+			}
+			usedOn[connID] = tup
+		}
+	}
+	require.NotEmpty(t, usedOn)
 }
 
 func hasFrame[T any](frames []qlog.Frame) bool {

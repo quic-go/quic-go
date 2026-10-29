@@ -67,6 +67,7 @@ func (p *Path) Probe(ctx context.Context) error {
 
 // Switch switches the QUIC connection to this path.
 // It immediately stops sending on the old path, and sends on this new path.
+// It is possible to switch back to the old path without probing it again, until it is closed.
 func (p *Path) Switch() error {
 	if err := p.pathManager.switchToPath(p.id); err != nil {
 		switch {
@@ -301,16 +302,16 @@ func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame
 	}
 }
 
-func (pm *pathManagerOutgoing) ShouldSwitchPath() (*Transport, bool) {
+func (pm *pathManagerOutgoing) ShouldSwitchPath() (pathID, *Transport, bool) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
 	if pm.pathToSwitchTo == nil {
-		return nil, false
+		return invalidPathID, nil, false
 	}
 	p := pm.pathToSwitchTo
 	pm.pathToSwitchTo = nil
-	return p.tr, true
+	return pm.activePath, p.tr, true
 }
 
 type pathManagerOutgoingAckHandler pathManagerOutgoing

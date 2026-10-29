@@ -708,8 +708,9 @@ runLoop:
 		if c.perspective == protocol.PerspectiveClient {
 			pm := c.pathManagerOutgoing.Load()
 			if pm != nil {
-				tr, ok := pm.ShouldSwitchPath()
+				id, tr, ok := pm.ShouldSwitchPath()
 				if ok {
+					c.connIDManager.SwitchToPath(id)
 					c.switchToNewPath(tr, now)
 				}
 			}
@@ -1318,6 +1319,7 @@ func (c *Conn) handleShortHeaderPacket(
 		return true, nil
 	}
 	c.pathManager.SwitchToPath(p.remoteAddr)
+	c.connIDManager.SwitchToPath(path)
 	initialPacketSize := protocol.ByteCount(cmp.Or(c.config.InitialPacketSize, protocol.MinInitialPacketSize))
 	c.sentPacketHandler.MigratedPath(p.rcvTime, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))

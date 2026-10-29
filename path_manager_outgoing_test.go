@@ -71,7 +71,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		}
 
 		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
-		_, ok = pm.ShouldSwitchPath()
+		_, _, ok = pm.ShouldSwitchPath()
 		require.False(t, ok)
 
 		// ... neither does receiving a random PATH_RESPONSE...
@@ -100,13 +100,14 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
 
 		// now switch to the other path
-		_, ok = pm.ShouldSwitchPath()
+		_, _, ok = pm.ShouldSwitchPath()
 		require.False(t, ok)
 		require.NoError(t, p.Switch())
 		// the active path can't be closed
 		require.EqualError(t, p.Close(), "cannot close active path")
-		switchToTransport, ok := pm.ShouldSwitchPath()
+		id, switchToTransport, ok := pm.ShouldSwitchPath()
 		require.True(t, ok)
+		require.Equal(t, pathID(1), id)
 		require.Same(t, tr1, switchToTransport)
 	})
 }

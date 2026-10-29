@@ -20,9 +20,9 @@ type newConnID struct {
 type connIDManager struct {
 	queue []newConnID
 
-	highestProbingID uint64
-	pathMx           sync.Mutex
-	pathProbing      map[pathID]newConnID // initialized lazily
+	highestUsedSequenceNumber uint64 // the highest sequence number taken from the queue
+	pathMx                    sync.Mutex
+	pathProbing               map[pathID]newConnID // initialized lazily
 
 	handshakeComplete         bool
 	activeSequenceNumber      uint64
@@ -117,7 +117,7 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		// Any other connection ID up to the highest one taken was either retired already,
 		// or skipped because the NEW_CONNECTION_ID frame was reordered.
 		// Send the RETIRE_CONNECTION_ID frame immediately.
-		if f.SequenceNumber <= max(h.activeSequenceNumber, h.highestProbingID) || f.SequenceNumber < h.highestRetired {
+		if f.SequenceNumber <= h.highestUsedSequenceNumber || f.SequenceNumber < h.highestRetired {
 			h.queueControlFrame(&wire.RetireConnectionIDFrame{
 				SequenceNumber: f.SequenceNumber,
 			})
@@ -185,21 +185,27 @@ func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID
 
 func (h *connIDManager) updateConnectionID() {
 	h.assertNotClosed()
+	front := h.queue[0]
+	h.queue = h.queue[1:]
+	h.highestUsedSequenceNumber = front.SequenceNumber
+	h.replaceActiveConnectionID(front)
+	h.addStatelessResetToken(front.StatelessResetToken)
+}
+
+// replaceActiveConnectionID retires the active connection ID, and makes c the active connection ID.
+// It doesn't add the stateless reset token of c.
+func (h *connIDManager) replaceActiveConnectionID(c newConnID) {
 	h.queueControlFrame(&wire.RetireConnectionIDFrame{
 		SequenceNumber: h.activeSequenceNumber,
 	})
 	if h.activeStatelessResetToken != nil {
 		h.removeStatelessResetToken(*h.activeStatelessResetToken)
 	}
-
-	front := h.queue[0]
-	h.queue = h.queue[1:]
-	h.activeSequenceNumber = front.SequenceNumber
-	h.activeConnectionID = front.ConnectionID
-	h.activeStatelessResetToken = &front.StatelessResetToken
+	h.activeSequenceNumber = c.SequenceNumber
+	h.activeConnectionID = c.ConnectionID
+	h.activeStatelessResetToken = &c.StatelessResetToken
 	h.packetsSinceLastChange = 0
 	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + h.rand.Uint32N(protocol.PacketsPerConnectionID)
-	h.addStatelessResetToken(*h.activeStatelessResetToken)
 }
 
 func (h *connIDManager) Close() {
@@ -293,7 +299,7 @@ func (h *connIDManager) GetConnIDForPath(id pathID) (protocol.ConnectionID, bool
 	front := h.queue[0]
 	h.queue = h.queue[1:]
 	h.pathProbing[id] = front
-	h.highestProbingID = front.SequenceNumber
+	h.highestUsedSequenceNumber = front.SequenceNumber
 	h.addStatelessResetToken(front.StatelessResetToken)
 	return front.ConnectionID, true
 }
@@ -311,6 +317,28 @@ func (h *connIDManager) RetireConnIDForPath(pathID pathID) {
 	})
 	h.removeStatelessResetToken(entry.StatelessResetToken)
 	delete(h.pathProbing, pathID)
+}
+
+// SwitchToPath is called when the connection switches to a path.
+// The connection ID allocated to the path becomes the active connection ID,
+// and the previously active connection ID is retired.
+func (h *connIDManager) SwitchToPath(id pathID) {
+	h.pathMx.Lock()
+	defer h.pathMx.Unlock()
+
+	h.assertNotClosed()
+	next, ok := h.pathProbing[id]
+	if !ok {
+		// The path doesn't have a connection ID if the connection switched away from it before,
+		// or if the peer retired it (using Retire Prior To).
+		// If there's no unused connection ID, there's no choice but to keep using the active one.
+		if len(h.queue) > 0 {
+			h.updateConnectionID()
+		}
+		return
+	}
+	delete(h.pathProbing, id)
+	h.replaceActiveConnectionID(next)
 }
 
 func (h *connIDManager) IsActiveStatelessResetToken(token protocol.StatelessResetToken) bool {
