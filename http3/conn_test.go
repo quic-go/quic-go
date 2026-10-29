@@ -481,3 +481,41 @@ func testConnDatagramFailures(t *testing.T, datagram []byte) {
 		t.Fatal("timeout waiting for close")
 	}
 }
+
+type closeTrackingRecorder struct {
+	events.Recorder
+	closed chan struct{}
+}
+
+var _ qlogwriter.Recorder = &closeTrackingRecorder{}
+
+func (r *closeTrackingRecorder) RecordEvent(ev qlogwriter.Event) {
+	select {
+	case <-r.closed:
+		panic("RecordEvent called after Close")
+	default:
+	}
+	r.Recorder.RecordEvent(ev)
+}
+
+func (r *closeTrackingRecorder) Close() error {
+	close(r.closed)
+	return nil
+}
+
+func TestConnQlogProducerAfterClose(t *testing.T) {
+	_, serverConn := newConnPair(t)
+	rec := &closeTrackingRecorder{closed: make(chan struct{})}
+	conn := newRawConn(serverConn, false, nil, nopControlStrHandler, rec, nil)
+
+	serverConn.CloseWithError(0, "")
+	select {
+	case <-rec.closed:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// closeTrackingRecorder panics if closed twice
+	_, err := conn.openControlStream(&settingsFrame{})
+	require.Error(t, err)
+}
