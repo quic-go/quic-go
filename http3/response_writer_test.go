@@ -143,9 +143,11 @@ func TestResponseWriterDataStatusWithoutBody(t *testing.T) {
 	n, err := rw.Write([]byte("foobar"))
 	require.Zero(t, n)
 	require.ErrorIs(t, err, http.ErrBodyNotAllowed)
+	require.NoError(t, rw.Finish())
 
 	fields := rw.DecodeHeaders(t, 0)
 	require.Equal(t, []string{"304"}, fields[":status"])
+	require.NotContains(t, fields, "content-length")
 	require.Empty(t, rw.DecodeBody(t))
 }
 

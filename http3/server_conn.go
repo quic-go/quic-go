@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -254,15 +253,9 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		return
 	}
 
-	// response not written to the client yet, set Content-Length
-	if !r.headerWritten {
-		if _, haveCL := r.header["Content-Length"]; !haveCL {
-			r.header.Set("Content-Length", strconv.FormatInt(r.numWritten, 10))
-		}
-	}
 	// Abort the stream if the response is incomplete: flushing failed, or the handler returned
 	// after a write failed partway through a DATA frame, which would leave the frame truncated.
-	if err := r.FlushError(); err != nil || hstr.hasUnfinishedFrame() {
+	if err := r.Finish(); err != nil || hstr.hasUnfinishedFrame() {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
 		return
