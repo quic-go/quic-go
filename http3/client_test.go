@@ -388,6 +388,36 @@ func testClientExtendedConnect(t *testing.T, enabled bool) {
 	}
 }
 
+func TestClientExtendedConnectCancelBeforeSettings(t *testing.T) {
+	clientConn, _ := newConnPair(t)
+
+	cc := (&Transport{}).NewClientConn(clientConn)
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodConnect, "http://quic-go.net", nil)
+	require.NoError(t, err)
+	req.Proto = "connect"
+
+	errChan := make(chan error)
+	go func() {
+		_, err := cc.RoundTrip(req)
+		errChan <- err
+	}()
+
+	select {
+	case <-errChan:
+		t.Fatal("RoundTrip should have blocked until SETTINGS were received")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	cancel()
+	select {
+	case err := <-errChan:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func TestClient1xxHandling(t *testing.T) {
 	t.Run("a few early hints", func(t *testing.T) {
 		testClient1xxHandling(t, max1xxResponses, http.StatusOK, false)
