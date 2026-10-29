@@ -1138,3 +1138,34 @@ func TestReceiveStreamResetStreamAtAfterResetStream(t *testing.T) {
 	require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: true})
 	require.Zero(t, n)
 }
+
+func TestReceiveStreamCancelReadAfterResetStreamAt(t *testing.T) {
+	t.Run("Read", func(t *testing.T) {
+		testReceiveStreamCancelReadAfterResetStreamAt(t, (*ReceiveStream).Read)
+	})
+	t.Run("Peek", func(t *testing.T) {
+		testReceiveStreamCancelReadAfterResetStreamAt(t, (*ReceiveStream).Peek)
+	})
+}
+
+func testReceiveStreamCancelReadAfterResetStreamAt(t *testing.T, read func(*ReceiveStream, []byte) (int, error)) {
+	synctest.Test(t, func(t *testing.T) {
+		mockSender := NewMockStreamSender(gomock.NewController(t))
+		str := newReceiveStream(42, mockSender, newTestStreamFlowController(42))
+		require.NoError(t, str.handleResetStreamFrame(
+			&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 1337, FinalSize: 10, ReliableSize: 6},
+			monotime.Now(),
+		))
+
+		errChan := make(chan error, 1)
+		go func() {
+			_, err := read(str, make([]byte, 6))
+			errChan <- err
+		}()
+		synctest.Wait()
+
+		mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
+		str.CancelRead(1234)
+		require.ErrorIs(t, <-errChan, &StreamError{StreamID: 42, ErrorCode: 1337, Remote: true})
+	})
+}

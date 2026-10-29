@@ -430,6 +430,8 @@ func (s *ReceiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) (queuedNe
 	}
 	s.cancelledLocally = true
 	if s.errorRead || s.cancelledRemotely {
+		// Read or Peek might be waiting for data up to the reliable size
+		s.signalRead()
 		return false
 	}
 	s.queuedStopSending = true
