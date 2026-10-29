@@ -2759,8 +2759,8 @@ func testConnectionSendQueue(t *testing.T, enableGSO bool) {
 
 func getVersionNegotiationPacket(src, dest protocol.ConnectionID, versions []protocol.Version) receivedPacket {
 	b := wire.ComposeVersionNegotiation(
-		protocol.ArbitraryLenConnectionID(src.Bytes()),
 		protocol.ArbitraryLenConnectionID(dest.Bytes()),
+		protocol.ArbitraryLenConnectionID(src.Bytes()),
 		versions,
 	)
 	return receivedPacket{
