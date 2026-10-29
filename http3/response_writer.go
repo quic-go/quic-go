@@ -283,6 +283,18 @@ func (w *responseWriter) FlushError() error {
 	return err
 }
 
+// Finish flushes the response after the handler returned.
+// If the response header wasn't sent yet, it adds the Content-Length, unless the status doesn't allow a body.
+func (w *responseWriter) Finish() error {
+	_, haveCL := w.header["Content-Length"]
+	// without a final status, FlushError sends a 200
+	bodyAllowed := !w.headerComplete || bodyAllowedForStatus(w.status)
+	if !haveCL && !w.headerWritten && bodyAllowed {
+		w.header.Set("Content-Length", strconv.FormatInt(w.numWritten, 10))
+	}
+	return w.FlushError()
+}
+
 func (w *responseWriter) flushTrailers() {
 	if w.trailerWritten {
 		return

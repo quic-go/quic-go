@@ -56,7 +56,11 @@ func TestHTTPResponseContentLength(t *testing.T) {
 			name:    "204 response",
 			method:  http.MethodGet,
 			handler: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) },
-			skip:    "https://github.com/quic-go/quic-go/issues/6026",
+		},
+		{
+			name:    "empty response after 103",
+			method:  http.MethodGet,
+			handler: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusEarlyHints) },
 		},
 		{
 			name:   "response shorter than Content-Length",
