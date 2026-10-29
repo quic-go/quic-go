@@ -19,7 +19,7 @@ import (
 // RawServerConn is an HTTP/3 server connection.
 // It can be used for advanced use cases where the application wants to manage the QUIC connection lifecycle.
 type RawServerConn struct {
-	rawConn rawConn
+	rawConn *rawConn
 
 	idleTimeout time.Duration
 	idleTimer   *time.Timer
@@ -54,7 +54,7 @@ func newRawServerConn(
 		qlogger:        qlogger,
 		logger:         logger,
 	}
-	c.rawConn = *newRawConn(conn, enableDatagrams, c.onStreamsEmpty, c.handleControlStream, qlogger, logger)
+	c.rawConn = newRawConn(conn, enableDatagrams, c.onStreamsEmpty, c.handleControlStream, qlogger, logger)
 	if idleTimeout > 0 {
 		c.idleTimer = time.AfterFunc(idleTimeout, func() {
 			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "idle timeout")
@@ -108,7 +108,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		c.idleTimer.Stop()
 	}
 
-	conn := &c.rawConn
+	conn := c.rawConn
 	qlogger := c.qlogger
 	decoder := c.decoder
 	connCtx := c.serverContext
@@ -306,9 +306,9 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 }
 
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {
-	hstr := newStream(str, &c.rawConn, nil, nil, c.qlogger)
+	hstr := newStream(str, c.rawConn, nil, nil, c.qlogger)
 	defer hstr.Close()
-	r := newResponseWriter(hstr, &c.rawConn, false, c.logger)
+	r := newResponseWriter(hstr, c.rawConn, false, c.logger)
 	r.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
 	r.Flush()
 }
