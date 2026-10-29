@@ -1594,7 +1594,7 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 
 func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 	if c.perspective == protocol.PerspectiveServer || // servers never receive version negotiation packets
-		c.receivedFirstPacket || c.versionNegotiated { // ignore delayed / duplicated version negotiation packets
+		c.receivedFirstPacket || c.receivedRetry || c.versionNegotiated { // ignore version negotiation packets received after any other packet
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
@@ -1615,6 +1615,19 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 			})
 		}
 		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
+		return nil
+	}
+
+	// The Source Connection ID must echo the Destination Connection ID of our Initial.
+	if !bytes.Equal(src, c.origDestConnID.Bytes()) {
+		if c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.PacketDropped{
+				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+				Trigger: qlog.PacketDropUnexpectedSourceConnectionID,
+			})
+		}
+		c.logger.Debugf("Ignoring Version Negotiation packet with unexpected source connection ID: %s (expected %s)", src, c.origDestConnID)
 		return nil
 	}
 
