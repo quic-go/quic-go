@@ -1471,6 +1471,97 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 	}
 }
 
+func TestConnection0RTTConcurrentStreamCreation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	cs := mocks.NewMockCryptoSetup(ctrl)
+	cs.EXPECT().ConnectionState().Return(handshake.ConnectionState{Used0RTT: true}).AnyTimes()
+	tc := newClientTestConnection(t, ctrl, nil, true, connectionOptCryptoSetup(cs))
+	restored := &wire.TransportParameters{
+		InitialMaxStreamDataBidiRemote: 200,
+		InitialMaxStreamDataUni:        300,
+		MaxBidiStreamNum:               1000,
+		MaxUniStreamNum:                1000,
+	}
+	tc.conn.peerParams = restored
+	tc.conn.streamsMap.HandleTransportParameters(restored)
+	updated := *restored
+	updated.OriginalDestinationConnectionID = tc.destConnID
+	updated.InitialSourceConnectionID = tc.conn.handshakeDestConnID
+	updated.InitialMaxStreamDataBidiRemote *= 2
+	updated.InitialMaxStreamDataUni *= 2
+
+	start := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		<-start
+		for range 1000 {
+			if _, err := tc.conn.OpenStream(); err != nil {
+				done <- err
+				return
+			}
+			if _, err := tc.conn.OpenUniStream(); err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	close(start)
+	err := tc.conn.handleTransportParameters(&updated)
+	require.NoError(t, <-done)
+	require.NoError(t, err)
+	// All new streams must be included in the handshake-completion update.
+	tc.conn.streamsMap.HandleTransportParameters(&updated)
+	for _, str := range tc.conn.streamsMap.outgoingBidiStreams.streams {
+		require.Equal(t, updated.InitialMaxStreamDataBidiRemote, str.sendStr.flowController.sendWindow)
+	}
+	for _, str := range tc.conn.streamsMap.outgoingUniStreams.streams {
+		require.Equal(t, updated.InitialMaxStreamDataUni, str.flowController.sendWindow)
+	}
+}
+
+func TestConnection0RTTStreamSendWindows(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	cs := mocks.NewMockCryptoSetup(ctrl)
+	cs.EXPECT().ConnectionState().Return(handshake.ConnectionState{Used0RTT: true}).AnyTimes()
+	tc := newClientTestConnection(t, ctrl, nil, true, connectionOptCryptoSetup(cs))
+	restored := &wire.TransportParameters{
+		InitialMaxStreamDataBidiRemote: 200,
+		InitialMaxStreamDataUni:        300,
+		MaxBidiStreamNum:               10,
+		MaxUniStreamNum:                10,
+	}
+	tc.conn.peerParams = restored
+	tc.conn.streamsMap.HandleTransportParameters(restored)
+	updated := *restored
+	updated.OriginalDestinationConnectionID = tc.destConnID
+	updated.InitialSourceConnectionID = tc.conn.handshakeDestConnID
+	updated.InitialMaxStreamDataBidiRemote *= 2
+	updated.InitialMaxStreamDataUni *= 2
+	require.NoError(t, tc.conn.handleTransportParameters(&updated))
+
+	// Receiving new parameters must not make them usable in 0-RTT packets.
+	bidi, err := tc.conn.OpenStream()
+	require.NoError(t, err)
+	uni, err := tc.conn.OpenUniStream()
+	require.NoError(t, err)
+	require.Equal(t, restored.InitialMaxStreamDataBidiRemote, bidi.sendStr.flowController.sendWindow)
+	require.Equal(t, restored.InitialMaxStreamDataUni, uni.flowController.sendWindow)
+
+	// Applying parameters updates existing streams as well as subsequent openers.
+	// A larger window already received in MAX_STREAM_DATA must be preserved.
+	bidi.sendStr.updateSendWindow(1000)
+	tc.conn.streamsMap.HandleTransportParameters(&updated)
+	require.Equal(t, protocol.ByteCount(1000), bidi.sendStr.flowController.sendWindow)
+	require.Equal(t, updated.InitialMaxStreamDataUni, uni.flowController.sendWindow)
+	bidi, err = tc.conn.OpenStream()
+	require.NoError(t, err)
+	uni, err = tc.conn.OpenUniStream()
+	require.NoError(t, err)
+	require.Equal(t, updated.InitialMaxStreamDataBidiRemote, bidi.sendStr.flowController.sendWindow)
+	require.Equal(t, updated.InitialMaxStreamDataUni, uni.flowController.sendWindow)
+}
+
 func TestConnection0RTTTransportParameters(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cs := mocks.NewMockCryptoSetup(mockCtrl)
