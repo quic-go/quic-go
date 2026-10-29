@@ -478,14 +478,15 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := s.isConnect && res.StatusCode >= 200 && res.StatusCode < 300
 
-	// Enforce the Content-Length (section 4.1.2 of RFC 9114). Responses without content may declare
-	// a non-zero Content-Length, and successful CONNECT responses ignore it.
+	// Enforce the Content-Length (section 4.1.2 of RFC 9114).
 	contentLength := res.ContentLength
-	switch {
-	case isSuccessfulConnect:
-		contentLength = -1
-	case isInformational || isNoContent || res.StatusCode == http.StatusNotModified || s.isHead:
+	// Responses without content may declare a non-zero Content-Length.
+	if isInformational || isNoContent || res.StatusCode == http.StatusNotModified || s.isHead {
 		contentLength = 0
+	}
+	// A successful CONNECT response starts a tunnel, even if it's a 204.
+	if isSuccessfulConnect {
+		contentLength = res.ContentLength
 	}
 	respBody := newResponseBody(s.str, contentLength, s.reqDone)
 
