@@ -509,3 +509,20 @@ func TestConnQlogClosedWithUnfinishedStream(t *testing.T) {
 		t.Fatal("timeout")
 	}
 }
+
+func TestConnQlogProducerAfterClose(t *testing.T) {
+	_, serverConn := newConnPair(t)
+	rec := &closeTrackingRecorder{closed: make(chan struct{})}
+	conn := newRawConn(serverConn, false, nil, nopControlStrHandler, rec, nil)
+
+	serverConn.CloseWithError(0, "")
+	select {
+	case <-rec.closed:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	// closeTrackingRecorder panics if closed twice
+	_, err := conn.openControlStream(&settingsFrame{})
+	require.Error(t, err)
+}

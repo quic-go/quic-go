@@ -45,8 +45,9 @@ type rawConn struct {
 	settings         *Settings
 	receivedSettings chan struct{}
 
-	qlogger   qlogwriter.Recorder
-	qloggerWG sync.WaitGroup // tracks goroutines that may produce qlog events
+	qlogger          qlogwriter.Recorder
+	qloggerMx        sync.Mutex
+	qloggerProducers int // the open connection, and goroutines that may produce qlog events
 }
 
 func newRawConn(
@@ -64,11 +65,12 @@ func newRawConn(
 		receivedSettings:  make(chan struct{}),
 		streams:           make(map[quic.StreamID]*stateTrackingStream),
 		qlogger:           qlogger,
+		qloggerProducers:  1,
 		onStreamsEmpty:    onStreamsEmpty,
 		controlStrHandler: controlStrHandler,
 	}
 	if qlogger != nil {
-		context.AfterFunc(quicConn.Context(), c.closeQlogger)
+		context.AfterFunc(quicConn.Context(), c.RemoveQlogProducer)
 	}
 	return c
 }
@@ -320,17 +322,26 @@ func (c *rawConn) ReceivedSettings() <-chan struct{} { return c.receivedSettings
 func (c *rawConn) Settings() *Settings { return c.settings }
 
 // AddQlogProducer registers a goroutine that may produce qlog events.
-func (c *rawConn) AddQlogProducer() { c.qloggerWG.Add(1) }
+// It is a no-op once the qlogger has been closed.
+func (c *rawConn) AddQlogProducer() {
+	c.qloggerMx.Lock()
+	defer c.qloggerMx.Unlock()
 
-// RemoveQlogProducer unregisters a goroutine registered with AddQlogProducer.
-func (c *rawConn) RemoveQlogProducer() { c.qloggerWG.Done() }
+	if c.qloggerProducers > 0 {
+		c.qloggerProducers++
+	}
+}
 
-// closeQlogger waits for all goroutines that may produce qlog events to finish,
-// then closes the qlogger.
-func (c *rawConn) closeQlogger() {
-	if c.qlogger == nil {
+// RemoveQlogProducer closes the qlogger when the last producer is removed.
+func (c *rawConn) RemoveQlogProducer() {
+	c.qloggerMx.Lock()
+	defer c.qloggerMx.Unlock()
+
+	if c.qloggerProducers == 0 {
 		return
 	}
-	c.qloggerWG.Wait()
-	c.qlogger.Close()
+	c.qloggerProducers--
+	if c.qloggerProducers == 0 {
+		c.qlogger.Close()
+	}
 }
