@@ -152,6 +152,12 @@ func (m *connIDGenerator) SetHandshakeComplete(connIDExpiry monotime.Time) {
 	}
 }
 
+// IsInitialClientDestConnID reports whether the connection ID is the one the client used on its Initial packets.
+// It returns false on the client, and once the handshake is complete.
+func (m *connIDGenerator) IsInitialClientDestConnID(id protocol.ConnectionID) bool {
+	return m.initialClientDestConnID != nil && *m.initialClientDestConnID == id
+}
+
 func (m *connIDGenerator) RemoveRetiredConnIDs(now monotime.Time) {
 	if len(m.connIDsToRetire) == 0 {
 		return

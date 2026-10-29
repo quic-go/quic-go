@@ -1379,6 +1379,25 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 		}
 		return false, nil
 	}
+	// The client switches to the server's connection ID before it can send Handshake packets.
+	if hdr.Type == protocol.PacketTypeHandshake && c.connIDGenerator.IsInitialClientDestConnID(hdr.DestConnectionID) {
+		if c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketTypeHandshake,
+					DestConnectionID: hdr.DestConnectionID,
+					SrcConnectionID:  hdr.SrcConnectionID,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          hdr.Version,
+				},
+				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+				DatagramPayloadChecksum: datagramPayloadChecksum,
+				Trigger:                 qlog.PacketDropUnknownConnectionID,
+			})
+		}
+		c.logger.Debugf("Dropping Handshake packet (%d bytes) sent to the client's Initial destination connection ID: %s", p.Size(), hdr.DestConnectionID)
+		return false, nil
+	}
 
 	packet, err := c.unpacker.UnpackLongHeader(hdr, p.data)
 	if err != nil {
