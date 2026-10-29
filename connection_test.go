@@ -2877,51 +2877,50 @@ func TestConnectionVersionNegotiationNoMatch(t *testing.T) {
 }
 
 func TestConnectionVersionNegotiationInvalidPackets(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
 	var eventRecorder events.Recorder
-	tc := newClientTestConnection(t,
-		mockCtrl,
-		nil,
-		false,
-		connectionOptTracer(&eventRecorder),
-	)
+	tc := newClientTestConnection(t, nil, nil, false, connectionOptTracer(&eventRecorder))
+
+	requireDropped := func(vnp receivedPacket, trigger qlog.PacketDropReason) {
+		t.Helper()
+		wasProcessed, err := tc.conn.handleOnePacket(vnp, 0, activePathID)
+		require.NoError(t, err)
+		require.False(t, wasProcessed)
+		require.Equal(t,
+			[]qlogwriter.Event{
+				qlog.PacketDropped{
+					Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+					Raw:     qlog.RawInfo{Length: int(vnp.Size()), PayloadLength: qlog.OmitLength},
+					Trigger: trigger,
+				},
+			},
+			eventRecorder.Events(qlog.PacketDropped{}),
+		)
+		eventRecorder.Clear()
+	}
 
 	// offers the current version
-	vnp := getVersionNegotiationPacket(
-		tc.destConnID,
-		tc.srcConnID,
-		[]protocol.Version{1234, protocol.Version1},
-	)
-	wasProcessed, err := tc.conn.handleOnePacket(vnp, 0, activePathID)
-	require.NoError(t, err)
-	require.False(t, wasProcessed)
-	require.Equal(t,
-		[]qlogwriter.Event{
-			qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
-				Raw:     qlog.RawInfo{Length: int(vnp.Size()), PayloadLength: qlog.OmitLength},
-				Trigger: qlog.PacketDropUnexpectedVersion,
-			},
-		},
-		eventRecorder.Events(qlog.PacketDropped{}),
-	)
-	require.True(t, mockCtrl.Satisfied())
-	eventRecorder.Clear()
+	vnp := getVersionNegotiationPacket(tc.destConnID, tc.srcConnID, []protocol.Version{1234, protocol.Version1})
+	requireDropped(vnp, qlog.PacketDropUnexpectedVersion)
 
 	// unparseable, since it's missing 2 bytes
 	vnp.data = vnp.data[:len(vnp.data)-2]
-	wasProcessed, err = tc.conn.handleOnePacket(vnp, 0, activePathID)
+	requireDropped(vnp, qlog.PacketDropHeaderParseError)
+
+	// doesn't echo the Destination Connection ID of the Initial
+	requireDropped(
+		getVersionNegotiationPacket(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), tc.srcConnID, []protocol.Version{1234}),
+		qlog.PacketDropUnexpectedSourceConnectionID,
+	)
+
+	// received after a Retry
+	tc.packer.EXPECT().SetToken([]byte("foobar"))
+	retry := getRetryPacket(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4}), tc.srcConnID, tc.destConnID, []byte("foobar"))
+	wasProcessed, err := tc.conn.handleOnePacket(retry, 0, activePathID)
 	require.NoError(t, err)
-	require.False(t, wasProcessed)
-	require.Equal(t,
-		[]qlogwriter.Event{
-			qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
-				Raw:     qlog.RawInfo{Length: int(vnp.Size()), PayloadLength: qlog.OmitLength},
-				Trigger: qlog.PacketDropHeaderParseError,
-			},
-		},
-		eventRecorder.Events(qlog.PacketDropped{}),
+	require.True(t, wasProcessed)
+	requireDropped(
+		getVersionNegotiationPacket(tc.destConnID, tc.srcConnID, []protocol.Version{1234}),
+		qlog.PacketDropUnexpectedPacket,
 	)
 }
 
