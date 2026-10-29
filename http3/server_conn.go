@@ -173,8 +173,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	req.TLS = &connState
 	req.RemoteAddr = conn.RemoteAddr().String()
 
-	// Check that the client doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
-	// See section 4.1.2 of RFC 9114.
+	// Enforce the Content-Length, if set (section 4.1.2 of RFC 9114).
 	contentLength := int64(-1)
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength

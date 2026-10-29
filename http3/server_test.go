@@ -192,6 +192,22 @@ func TestServerRequestHandling(t *testing.T) {
 		require.Equal(t, hfs[":status"], []string{"418"})
 		require.Equal(t, []byte("foobar"), body)
 	})
+
+	t.Run("POST request with fewer body bytes than announced", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "https://www.example.com", bytes.NewBuffer([]byte("foo")))
+		req.ContentLength = 6
+		hfs, body := testServerRequestHandling(t,
+			func(w http.ResponseWriter, r *http.Request) {
+				_, err := io.ReadAll(r.Body)
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprint(w, err)
+			},
+			req,
+			nil,
+		)
+		require.Equal(t, hfs[":status"], []string{"400"})
+		require.Equal(t, []byte(io.ErrUnexpectedEOF.Error()), body)
+	})
 }
 
 func testServerRequestHandling(t *testing.T,

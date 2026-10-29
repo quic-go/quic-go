@@ -18,7 +18,6 @@ func TestHTTPResponseContentLength(t *testing.T) {
 		name    string
 		method  string
 		handler http.HandlerFunc
-		skip    string
 	}{
 		{
 			name:   "response with Content-Length",
@@ -69,7 +68,6 @@ func TestHTTPResponseContentLength(t *testing.T) {
 				w.Header().Set("Content-Length", "6")
 				io.WriteString(w, "foo")
 			},
-			skip: "https://github.com/quic-go/quic-go/pull/5913",
 		},
 		{
 			name:   "response longer than Content-Length",
@@ -80,16 +78,11 @@ func TestHTTPResponseContentLength(t *testing.T) {
 				w.(http.Flusher).Flush()
 				io.WriteString(w, "foobar")
 			},
-			skip: "https://github.com/quic-go/quic-go/pull/5913",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.skip != "" {
-				t.Skip(tc.skip)
-			}
-
 			do := func(cl *http.Client, url string) (*http.Response, []byte, error) {
 				req, err := http.NewRequest(tc.method, url, nil)
 				require.NoError(t, err)
