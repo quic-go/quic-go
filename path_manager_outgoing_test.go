@@ -14,14 +14,9 @@ import (
 
 func TestPathManagerOutgoingPathProbing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		connIDs := []protocol.ConnectionID{
-			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-		}
 		pm := newPathManagerOutgoing(
 			func(id pathID) (protocol.ConnectionID, bool) {
-				connID := connIDs[0]
-				connIDs = connIDs[1:]
-				return connID, true
+				return protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), true
 			},
 			func(id pathID) { t.Fatal("didn't expect any connection ID to be retired") },
 			func() {},
@@ -98,6 +93,28 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 
 		// receiving it multiple times is ok
 		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
+
+		// probing the path again requires a PATH_RESPONSE for the new PATH_CHALLENGE
+		go func() { errChan <- p.Probe(context.Background()) }()
+		synctest.Wait()
+		_, f, _, ok = pm.NextPathToProbe()
+		require.True(t, ok)
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
+		synctest.Wait()
+		select {
+		case <-errChan:
+			t.Fatal("should still be probing")
+		default:
+		}
+		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+		synctest.Wait()
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("timeout")
+		}
 
 		// now switch to the other path
 		_, ok = pm.ShouldSwitchPath()
