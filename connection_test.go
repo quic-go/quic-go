@@ -124,7 +124,7 @@ func newServerTestConnection(
 		connRunner,
 		origDestConnID,
 		nil,
-		protocol.ConnectionID{},
+		origDestConnID,
 		protocol.ConnectionID{},
 		srcConnID,
 		&protocol.DefaultConnectionIDGenerator{},
@@ -508,6 +508,51 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: 42,
 					Trigger:                 qlog.PacketDropHeaderParseError,
+				},
+			},
+			eventRecorder.Events(qlog.PacketDropped{}),
+		)
+	})
+
+	t.Run("Handshake packet sent to the client's Initial destination connection ID", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		var eventRecorder events.Recorder
+		tc := newServerTestConnection(t,
+			mockCtrl,
+			nil,
+			false,
+			connectionOptTracer(&eventRecorder),
+			connectionOptUnpacker(NewMockUnpacker(mockCtrl)), // the packet must not be unpacked
+		)
+
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{
+				Header: wire.Header{
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: tc.destConnID,
+					Version:          Version1,
+					Length:           1,
+				},
+				PacketNumberLen: protocol.PacketNumberLen1,
+			},
+			nil,
+		)
+		wasProcessed, err := tc.conn.handleOnePacket(p, 42, activePathID)
+		require.NoError(t, err)
+		require.False(t, wasProcessed)
+		require.Equal(t,
+			[]qlogwriter.Event{
+				qlog.PacketDropped{
+					Header: qlog.PacketHeader{
+						PacketType:       qlog.PacketTypeHandshake,
+						DestConnectionID: tc.destConnID,
+						PacketNumber:     protocol.InvalidPacketNumber,
+						Version:          Version1,
+					},
+					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+					DatagramPayloadChecksum: 42,
+					Trigger:                 qlog.PacketDropUnknownConnectionID,
 				},
 			},
 			eventRecorder.Events(qlog.PacketDropped{}),

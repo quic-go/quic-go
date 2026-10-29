@@ -165,6 +165,41 @@ func TestConnIDGeneratorRetiring(t *testing.T) {
 	}
 }
 
+func TestConnIDGeneratorIsInitialClientDestConnID(t *testing.T) {
+	srcConnID := protocol.ParseConnectionID([]byte{1, 1, 1, 1})
+	initialClientDestConnID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
+
+	t.Run("server", func(t *testing.T) {
+		g := newConnIDGenerator(
+			&connIDTracker{},
+			srcConnID,
+			&initialClientDestConnID,
+			newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
+			&pathReceiver{},
+			func(f wire.Frame) {},
+			&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
+		)
+		require.True(t, g.IsInitialClientDestConnID(initialClientDestConnID))
+		require.False(t, g.IsInitialClientDestConnID(srcConnID))
+
+		g.SetHandshakeComplete(monotime.Now())
+		require.False(t, g.IsInitialClientDestConnID(initialClientDestConnID))
+	})
+
+	t.Run("client", func(t *testing.T) {
+		g := newConnIDGenerator(
+			&connIDTracker{},
+			srcConnID,
+			nil,
+			newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
+			&pathReceiver{},
+			func(f wire.Frame) {},
+			&protocol.DefaultConnectionIDGenerator{ConnLen: 5},
+		)
+		require.False(t, g.IsInitialClientDestConnID(initialClientDestConnID))
+	})
+}
+
 func TestConnIDGeneratorRemoveAll(t *testing.T) {
 	t.Run("with initial client destination connection ID", func(t *testing.T) {
 		testConnIDGeneratorRemoveAll(t, true)
