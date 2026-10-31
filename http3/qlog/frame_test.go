@@ -30,14 +30,14 @@ func TestHeadersFrame(t *testing.T) {
 		HeaderFields: []HeaderField{
 			{Name: ":status", Value: "200"},
 			{Name: "content-type", Value: "application/json"},
-			{Name: "bad name", Value: "\xff"},
+			{Name: "x-opaque", Value: "\xff"},
 		},
 	}, `{
 		"frame_type": "headers",
 		"headers": [
 			{"name": ":status", "value": "200"},
 			{"name": "content-type", "value": "application/json"},
-            {"name_bytes":"626164206e616d65","value_bytes":"ff"}
+            {"name":"x-opaque","value_bytes":"ff"}
 		]
 	}`)
 }
