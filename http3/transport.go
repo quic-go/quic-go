@@ -105,7 +105,7 @@ type Transport struct {
 	initOnce sync.Once
 	initErr  error
 
-	newClientConn func(*quic.Conn) clientConn
+	newClientConn func(*quic.Conn, *clientSessionCache) clientConn
 
 	clients   map[string]*roundTripperWithCount
 	transport *quic.Transport
@@ -128,7 +128,7 @@ var (
 
 func (t *Transport) init() error {
 	if t.newClientConn == nil {
-		t.newClientConn = func(conn *quic.Conn) clientConn {
+		t.newClientConn = func(conn *quic.Conn, sessionCache *clientSessionCache) clientConn {
 			return newClientConn(
 				conn,
 				t.EnableDatagrams,
@@ -136,6 +136,7 @@ func (t *Transport) init() error {
 				t.MaxResponseHeaderBytes,
 				t.DisableCompression,
 				t.Logger,
+				sessionCache,
 			)
 		}
 	}
@@ -359,6 +360,11 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 	}
 	// Replace existing ALPNs by H3
 	tlsConf.NextProtos = []string{NextProtoH3}
+	var sessionCache *clientSessionCache
+	if tlsConf.ClientSessionCache != nil {
+		sessionCache = newClientSessionCache(tlsConf.ClientSessionCache)
+		tlsConf.ClientSessionCache = sessionCache
+	}
 
 	dial := t.Dial
 	if dial == nil {
@@ -385,7 +391,7 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 	if err != nil {
 		return nil, nil, err
 	}
-	clientConn := t.newClientConn(conn)
+	clientConn := t.newClientConn(conn, sessionCache)
 	go func() {
 		for {
 			str, err := conn.AcceptUniStream(context.Background())
@@ -440,6 +446,7 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 		t.MaxResponseHeaderBytes,
 		t.DisableCompression,
 		t.Logger,
+		nil,
 	)
 	go func() {
 		for {
@@ -466,6 +473,7 @@ func (t *Transport) NewRawClientConn(conn *quic.Conn) *RawClientConn {
 			t.MaxResponseHeaderBytes,
 			t.DisableCompression,
 			t.Logger,
+			nil,
 		),
 	}
 }
