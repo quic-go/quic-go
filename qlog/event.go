@@ -558,7 +558,6 @@ func (e MTUUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 
 // RecoveryParametersSet is the quic:recovery_parameters_set event.
 type RecoveryParametersSet struct {
-	EncryptionLevel         EncryptionLevel
 	ReorderingThreshold     uint16
 	PacketThresholdDisabled bool
 	TimeThreshold           float64 // RTT multiplier.
@@ -574,8 +573,6 @@ func (e RecoveryParametersSet) Name() string { return "quic:recovery_parameters_
 func (e RecoveryParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("packet_number_space"))
-	h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncryptionLevel)))
 	h.WriteToken(jsontext.String("reordering_threshold"))
 	if e.PacketThresholdDisabled {
 		h.WriteToken(jsontext.String("disabled"))
