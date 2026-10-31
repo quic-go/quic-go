@@ -6,6 +6,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 
@@ -27,7 +28,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 
 		tr1 := &Transport{}
 		enabledID := invalidPathID
-		p := pm.NewPath(tr1, time.Second, func(id pathID) { enabledID = id })
+		p := pm.NewPath(tr1, time.Second, func(id pathID) pathID { enabledID = id; return id })
 		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
 
 		errChan := make(chan error, 1)
@@ -70,7 +71,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		require.False(t, ok)
 
 		// ... neither does receiving a random PATH_RESPONSE...
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: [8]byte{'f', 'o', 'o', 'f', 'o', 'o'}})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: [8]byte{'f', 'o', 'o', 'f', 'o', 'o'}}, monotime.Now())
 		f.Handler.OnAcked(f.Frame) // doesn't do anything
 		f.Handler.OnLost(f.Frame)  // doesn't do anything
 		select {
@@ -80,7 +81,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		}
 
 		// ... only receiving the corresponding PATH_RESPONSE does
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data}, monotime.Now())
 
 		synctest.Wait()
 
@@ -92,14 +93,14 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		}
 
 		// receiving it multiple times is ok
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data}, monotime.Now())
 
 		// probing the path again requires a PATH_RESPONSE for the new PATH_CHALLENGE
 		go func() { errChan <- p.Probe(context.Background()) }()
 		synctest.Wait()
 		_, f, _, ok = pm.NextPathToProbe()
 		require.True(t, ok)
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc.Data}, monotime.Now())
 		synctest.Wait()
 		select {
 		case <-errChan:
@@ -107,7 +108,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		default:
 		}
 		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data}, monotime.Now())
 		synctest.Wait()
 		select {
 		case err := <-errChan:
@@ -148,7 +149,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 
 		tr1 := &Transport{}
 		const initialRTT = 5 * time.Millisecond
-		p := pm.NewPath(tr1, initialRTT, func(pathID) {})
+		p := pm.NewPath(tr1, initialRTT, func(id pathID) pathID { return id })
 
 		pathChallengeChan := make(chan [8]byte)
 		done := make(chan struct{})
@@ -206,7 +207,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 		}
 
 		// receiving a PATH_RESPONSE for any of the PATH_CHALLENGES completes path validation
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: *results[2].pc})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: *results[2].pc}, monotime.Now())
 
 		synctest.Wait()
 
@@ -263,7 +264,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		)
 
 		// path abandoned before the PATH_CHALLENGE is sent out
-		p1 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		p1 := pm.NewPath(&Transport{}, time.Second, func(id pathID) pathID { return id })
 		errChan := make(chan error, 1)
 		go func() { errChan <- p1.Probe(context.Background()) }()
 
@@ -287,7 +288,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		}
 		require.Equal(t, []pathID{p1.id}, retiredPaths)
 
-		p2 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		p2 := pm.NewPath(&Transport{}, time.Second, func(id pathID) pathID { return id })
 		go func() { errChan <- p2.Probe(context.Background()) }()
 
 		// wait for the path to be queued for probing
@@ -301,7 +302,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		require.Equal(t, []pathID{p1.id, p2.id}, retiredPaths)
 		_, ok = pm.Transport(p2.id)
 		require.False(t, ok)
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data}, monotime.Now())
 		_, _, _, ok = pm.NextPathToProbe()
 		require.False(t, ok)
 		// it's not possible to switch to an abandoned path
@@ -332,7 +333,7 @@ func TestPathManagerOutgoingAbandonValidatedPath(t *testing.T) {
 			func() {},
 		)
 
-		p := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		p := pm.NewPath(&Transport{}, time.Second, func(id pathID) pathID { return id })
 		errChan := make(chan error, 1)
 		go func() { errChan <- p.Probe(context.Background()) }()
 		synctest.Wait()
@@ -342,7 +343,7 @@ func TestPathManagerOutgoingAbandonValidatedPath(t *testing.T) {
 
 		// Validate the path before abandoning it. This is the ordering an
 		// application produces: probe, use the path, and abandon it later.
-		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data}, monotime.Now())
 		synctest.Wait()
 		require.NoError(t, <-errChan)
 
