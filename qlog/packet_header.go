@@ -40,6 +40,7 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 		packetType = PacketTypeUnknown
 	}
 	helper.WriteToken(jsontext.String(string(packetType)))
+	//nolint:exhaustive // Only these packet types carry packet numbers.
 	switch packetType {
 	case PacketTypeInitial, PacketTypeHandshake, PacketType0RTT, PacketType1RTT:
 		if h.PacketNumber != protocol.InvalidPacketNumber {
