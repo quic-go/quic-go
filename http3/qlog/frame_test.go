@@ -31,13 +31,19 @@ func TestHeadersFrame(t *testing.T) {
 			{Name: ":status", Value: "200"},
 			{Name: "content-type", Value: "application/json"},
 			{Name: "x-opaque", Value: "\xff"},
+			{Name: "bad name", Value: "ok", InvalidName: true},
+			{Name: "x-example", Value: "a\r\nb", InvalidValue: true},
+			{Name: "\xff", Value: "ok"},
 		},
 	}, `{
 		"frame_type": "headers",
 		"headers": [
 			{"name": ":status", "value": "200"},
 			{"name": "content-type", "value": "application/json"},
-            {"name": "x-opaque", "value_bytes": "ff"}
+			{"name": "x-opaque", "value_bytes": "ff"},
+			{"name_bytes": "626164206e616d65", "value": "ok"},
+			{"name": "x-example", "value_bytes": "610d0a62"},
+			{"name_bytes": "ff", "value": "ok"}
 		]
 	}`)
 }

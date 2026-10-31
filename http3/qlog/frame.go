@@ -56,6 +56,9 @@ func (f *DataFrame) encode(enc *jsontext.Encoder) error {
 type HeaderField struct {
 	Name  string
 	Value string
+	// InvalidName and InvalidValue report character validation failures in HTTP/3.
+	InvalidName  bool
+	InvalidValue bool
 }
 
 // A HeadersFrame is a HEADERS frame
@@ -72,7 +75,7 @@ func (f *HeadersFrame) encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.BeginArray)
 	for _, f := range f.HeaderFields {
 		h.WriteToken(jsontext.BeginObject)
-		if utf8.ValidString(f.Name) {
+		if !f.InvalidName && utf8.ValidString(f.Name) {
 			h.WriteToken(jsontext.String("name"))
 			h.WriteToken(jsontext.String(f.Name))
 		} else {
@@ -80,7 +83,7 @@ func (f *HeadersFrame) encode(enc *jsontext.Encoder) error {
 			h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.Name))))
 		}
 		// HTTP permits non-UTF-8 bytes in field values.
-		if utf8.ValidString(f.Value) {
+		if !f.InvalidValue && utf8.ValidString(f.Value) {
 			h.WriteToken(jsontext.String("value"))
 			h.WriteToken(jsontext.String(f.Value))
 		} else {
