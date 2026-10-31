@@ -1113,6 +1113,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.ParametersSet{
+				SentBy:                        protocol.PerspectiveClient,
 				Initiator:                     qlog.InitiatorRemote,
 				MaxIdleTimeout:                90 * time.Second,
 				InitialMaxStreamDataBidiLocal: 0x5000,
