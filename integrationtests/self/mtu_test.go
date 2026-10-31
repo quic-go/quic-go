@@ -172,6 +172,21 @@ func TestPathMTUDiscovery(t *testing.T) {
 		mtus = append(mtus, ev.(qlog.MTUUpdated).Value)
 	}
 
+	var numProbesSent, numProbesLost int
+	for _, ev := range eventRecorder.Events(qlog.PacketSent{}) {
+		if ev.(qlog.PacketSent).IsMTUProbePacket {
+			numProbesSent++
+		}
+	}
+	// The proxy drops probes that exceed the MTU.
+	for _, ev := range eventRecorder.Events(qlog.PacketLost{}) {
+		if ev.(qlog.PacketLost).IsMTUProbePacket {
+			numProbesLost++
+		}
+	}
+	require.NotZero(t, numProbesSent)
+	require.NotZero(t, numProbesLost)
+
 	maxPacketSizeClient := mtus[len(mtus)-1]
 	t.Logf("max client packet size: %d, MTU: %d", maxPacketSizeClient, mtu)
 	t.Logf("max datagram size: initial: %d, final: %d", initialMaxDatagramSize, finalMaxDatagramSize)

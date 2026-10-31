@@ -632,6 +632,7 @@ func testSentPacketHandlerAmplificationLimitClient(t *testing.T, dropHandshake b
 
 func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	rttStats := utils.NewRTTStats()
+	var eventRecorder events.Recorder
 	sph := NewSentPacketHandler(
 		0,
 		1200,
@@ -641,7 +642,7 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 		false,
 		nil,
 		protocol.PerspectiveServer,
-		nil,
+		&eventRecorder,
 		utils.DefaultLogger,
 	)
 
@@ -683,6 +684,12 @@ func TestSentPacketHandlerDelayBasedLossDetection(t *testing.T) {
 	require.Len(t, packets.Lost, 1)
 	sph.OnLossDetectionTimeout(sph.GetLossDetectionTimeout())
 	require.Equal(t, []protocol.PacketNumber{pn1, pn2, pn3}, packets.Lost)
+	lost := eventRecorder.Events(qlog.PacketLost{})
+	require.Len(t, lost, 3)
+	for _, ev := range lost {
+		pl := ev.(qlog.PacketLost)
+		require.Equal(t, pl.Header.PacketNumber == pn3, pl.IsMTUProbePacket)
+	}
 }
 
 func TestSentPacketHandlerPacketBasedLossDetection(t *testing.T) {

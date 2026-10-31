@@ -824,6 +824,21 @@ func TestPacketEventsTuple(t *testing.T) {
 	}
 }
 
+func TestMTUProbePacket(t *testing.T) {
+	header := PacketHeader{PacketType: PacketType1RTT, PacketNumber: 42}
+	for _, ev := range []qlogwriter.Event{
+		PacketSent{Header: header, IsMTUProbePacket: true},
+		PacketLost{Header: header, IsMTUProbePacket: true},
+	} {
+		t.Run(ev.Name(), func(t *testing.T) {
+			_, data := testEventEncoding(t, ev)
+			var fields map[string]any
+			require.NoError(t, json.Unmarshal([]byte(data), &fields))
+			require.Equal(t, true, fields["is_mtu_probe_packet"])
+		})
+	}
+}
+
 func TestSpuriousLoss(t *testing.T) {
 	name, data := testEventEncoding(t, &SpuriousLoss{
 		EncryptionLevel:  protocol.Encryption1RTT,
