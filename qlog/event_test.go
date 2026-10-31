@@ -791,7 +791,13 @@ func TestMetricsUpdated(t *testing.T) {
 	require.Equal(t, float64(1234), ev["bytes_in_flight"])
 	require.Equal(t, float64(42), ev["packets_in_flight"])
 	_, data = testEventEncoding(t, MetricsUpdated{CongestionWindow: 4321, SmoothedRTT: time.Millisecond})
-	require.JSONEq(t, `{"smoothed_rtt":1,"rtt_variance":0,"congestion_window":4321,"bytes_in_flight":0,"packets_in_flight":0}`, data)
+	require.JSONEq(t, `{
+		"smoothed_rtt": 1,
+		"rtt_variance": 0,
+		"congestion_window": 4321,
+		"bytes_in_flight": 0,
+		"packets_in_flight": 0
+	}`, data)
 }
 
 func TestPacketLost(t *testing.T) {
