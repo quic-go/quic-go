@@ -172,6 +172,14 @@ func TestPathMTUDiscovery(t *testing.T) {
 		mtus = append(mtus, ev.(qlog.MTUUpdated).Value)
 	}
 
+	var numProbes int
+	for _, ev := range eventRecorder.Events(qlog.PacketSent{}) {
+		if ev.(qlog.PacketSent).IsMTUProbePacket {
+			numProbes++
+		}
+	}
+	require.NotZero(t, numProbes)
+
 	maxPacketSizeClient := mtus[len(mtus)-1]
 	t.Logf("max client packet size: %d, MTU: %d", maxPacketSizeClient, mtu)
 	t.Logf("max datagram size: initial: %d, final: %d", initialMaxDatagramSize, finalMaxDatagramSize)

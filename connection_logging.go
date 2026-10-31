@@ -161,6 +161,7 @@ func (c *Conn) logShortHeaderPacketWithDatagramPayloadChecksum(p shortHeaderPack
 			DatagramPayloadChecksum: datagramPayloadChecksum,
 			Frames:                  fs,
 			ECN:                     toQlogECN(ecn),
+			IsMTUProbePacket:        p.IsPathMTUProbePacket,
 			Tuple:                   tuple,
 		})
 	}
