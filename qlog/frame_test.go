@@ -184,7 +184,7 @@ func TestNewTokenFrame(t *testing.T) {
 		&NewTokenFrame{Token: []byte{0xde, 0xad, 0xbe, 0xef}},
 		`{
 			"frame_type": "new_token",
-			"token": {"data": "deadbeef"}
+			"token": {"raw": {"data": "deadbeef"}}
 		}`,
 	)
 }

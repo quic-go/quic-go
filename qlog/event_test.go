@@ -565,7 +565,7 @@ func TestPacketReceived(t *testing.T) {
 			"scid": "04030201",
 			"dcil": 8,
 			"dcid": "0102030405060708",
-			"token": {"data": "deadbeef"}
+			"token": {"raw": {"data": "deadbeef"}}
 		},
 		"raw": {"length": 789, "payload_length": 1234},
 		"frames": [
@@ -648,7 +648,7 @@ func TestPacketReceivedRetry(t *testing.T) {
 			"scid": "04030201",
 			"dcil": 8,
 			"dcid": "0102030405060708",
-			"token": {"data": "deadbeef"}
+			"token": {"raw": {"data": "deadbeef"}}
 		},
 		"raw": {"length": 123}
 	}`, ev)
