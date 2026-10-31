@@ -186,13 +186,25 @@ func validateHeaderFieldNameAndValue(h qpack.HeaderField) error {
 	invalidName := !httpguts.ValidHeaderFieldName(strings.TrimPrefix(h.Name, ":")) || !lowercase
 	invalidValue := !httpguts.ValidHeaderFieldValue(h.Value)
 	if !lowercase {
-		return &headerFieldError{fmt.Errorf("header field is not lower-case: %s", h.Name), invalidName, invalidValue}
+		return &headerFieldError{
+			error:        fmt.Errorf("header field is not lower-case: %s", h.Name),
+			InvalidName:  invalidName,
+			InvalidValue: invalidValue,
+		}
 	}
 	if invalidValue {
-		return &headerFieldError{fmt.Errorf("invalid header field value for %s: %q", h.Name, h.Value), invalidName, invalidValue}
+		return &headerFieldError{
+			error:        fmt.Errorf("invalid header field value for %s: %q", h.Name, h.Value),
+			InvalidName:  invalidName,
+			InvalidValue: invalidValue,
+		}
 	}
 	if invalidName {
-		return &headerFieldError{fmt.Errorf("invalid header field name: %q", h.Name), invalidName, invalidValue}
+		return &headerFieldError{
+			error:        fmt.Errorf("invalid header field name: %q", h.Name),
+			InvalidName:  invalidName,
+			InvalidValue: invalidValue,
+		}
 	}
 	return nil
 }
