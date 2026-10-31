@@ -1054,6 +1054,7 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 	return wasProcessed, nil
 }
 
+// handleOnePacket processes a received datagram while retaining its receiving path.
 func (c *Conn) handleOnePacket(
 	rp receivedPacket,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum, // only for logging
@@ -1176,6 +1177,7 @@ func (c *Conn) handleOnePacket(
 	return wasProcessed, nil
 }
 
+// handleShortHeaderPacket updates path activity only for authenticated, non-duplicate 1-RTT packets.
 func (c *Conn) handleShortHeaderPacket(
 	p receivedPacket,
 	isCoalesced bool,
@@ -2150,6 +2152,7 @@ func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame, path pathID,
 	return nil
 }
 
+// handlePathResponseFrame validates the challenged path using the original packet receive time.
 func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame, rcvTime monotime.Time) error {
 	switch c.perspective {
 	case protocol.PerspectiveClient:
@@ -3208,6 +3211,8 @@ func (c *Conn) getPathManager() *pathManagerOutgoing {
 	return c.pathManagerOutgoing.Load()
 }
 
+// AddPath prepares a client path using t. Call [Path.Probe] before [Path.Switch].
+// A path whose validation has expired must be probed again before switching.
 func (c *Conn) AddPath(t *Transport) (*Path, error) {
 	if c.perspective == protocol.PerspectiveServer {
 		return nil, errors.New("server cannot initiate connection migration")

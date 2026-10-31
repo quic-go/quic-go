@@ -151,6 +151,7 @@ func newPathManagerOutgoing(
 	}
 }
 
+// addPath starts a new validation generation, including when reprobing an existing path.
 func (pm *pathManagerOutgoing) addPath(p *Path, enablePath func(pathID) pathID) *pathOutgoing {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
@@ -206,6 +207,7 @@ func (pm *pathManagerOutgoing) removePathImpl(id pathID) error {
 	return nil
 }
 
+// switchToPath checks freshness and commits the requested switch under the manager mutex.
 func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
@@ -214,8 +216,11 @@ func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	if !ok {
 		return errPathDoesNotExist
 	}
-	if !p.isValidated || monotime.Since(p.lastPacketTime) >= pathValidationTimeout {
+	if p.isValidated && monotime.Since(p.lastPacketTime) >= pathValidationTimeout {
 		p.isValidated = false
+		p.pathChallenges = nil
+	}
+	if !p.isValidated {
 		return ErrPathNotValidated
 	}
 	pm.pathToSwitchTo = p
@@ -239,6 +244,8 @@ func (pm *pathManagerOutgoing) NewPath(t *Transport, initialRTT time.Duration, e
 	}
 }
 
+// NextPathToProbe discards queued probes for abandoned paths and completed validation generations.
+// It leaves a pending probe queued when no connection ID is available.
 func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ackhandler.Frame, _ *Transport, hasPath bool) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
@@ -249,10 +256,17 @@ func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ack
 		var ok bool
 		p, ok = pm.paths[pID]
 		if ok {
-			id = pID
-			break
+			select {
+			case <-p.validated:
+				// Ignore retransmissions queued before completion, including after validation expires.
+			default:
+				id = pID
+			}
+			if id != invalidPathID {
+				break
+			}
 		}
-		// if the path doesn't exist in the map, it might have been abandoned
+		// The path was abandoned, or this validation generation already completed.
 		pm.pathsToProbe = pm.pathsToProbe[1:]
 	}
 	if id == invalidPathID {
@@ -313,6 +327,8 @@ func (pm *pathManagerOutgoing) HandlePacket(receivePath pathID, t monotime.Time)
 	}
 }
 
+// HandlePathResponseFrame completes the probe whose outstanding challenge matches f.
+// t is the packet receive time, including when the response arrives on another path.
 func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame, t monotime.Time) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()

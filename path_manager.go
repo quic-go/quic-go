@@ -41,6 +41,7 @@ type path struct {
 	rcvdNonProbing bool
 }
 
+// expireValidation discards stale validation and challenges without updating the receive time.
 func (p *path) expireValidation(t monotime.Time) {
 	if t.Sub(p.lastPacketTime) < pathValidationTimeout {
 		return
@@ -51,6 +52,7 @@ func (p *path) expireValidation(t monotime.Time) {
 	p.rcvdNonProbing = false
 }
 
+// receivedPacket expires old validation before recording a newer receive time.
 func (p *path) receivedPacket(t monotime.Time) {
 	p.expireValidation(t)
 	if t.After(p.lastPacketTime) {
@@ -190,6 +192,7 @@ func (pm *pathManager) GetOrCreatePath(remoteAddr net.Addr, t monotime.Time) (_ 
 	return p.id, true, true
 }
 
+// HandlePathResponseFrame expires stale paths before matching an outstanding challenge.
 func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame, t monotime.Time) {
 	for _, p := range pm.paths {
 		p.expireValidation(t)

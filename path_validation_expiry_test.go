@@ -258,3 +258,68 @@ func TestPathValidationClientReceiveBeforeSwitch(t *testing.T) {
 		require.False(t, state.isValidated)
 	})
 }
+
+func TestPathValidationQueuedProbeAfterCompletion(t *testing.T) {
+	for _, expiryBeforeDequeue := range []bool{false, true} {
+		name := "before expiry"
+		if expiryBeforeDequeue {
+			name = "after expiry"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				pm := newPathManagerOutgoing(func(pathID) (protocol.ConnectionID, bool) { return protocol.ParseConnectionID([]byte{1}), true },
+					func(pathID) { t.Fatal("unexpected CID retirement") }, func() {})
+				p := pm.NewPath(&Transport{}, time.Second, func(id pathID) pathID { return id })
+				done := make(chan error, 1)
+				go func() { done <- p.Probe(context.Background()) }()
+				synctest.Wait()
+				_, f, _, ok := pm.NextPathToProbe()
+				require.True(t, ok)
+				first := f.Frame.(*wire.PathChallengeFrame).Data
+				synctest.Wait()
+				// The retransmission timer queues another probe before the response arrives.
+				time.Sleep(time.Second)
+				synctest.Wait()
+				require.NotEmpty(t, pm.pathsToProbe)
+				pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: first}, monotime.Now())
+				synctest.Wait()
+				require.NoError(t, <-done)
+				if expiryBeforeDequeue {
+					time.Sleep(30 * time.Second)
+					require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+				}
+				_, queued, _, sent := pm.NextPathToProbe()
+				if sent {
+					if !expiryBeforeDequeue {
+						time.Sleep(30 * time.Second)
+					}
+					require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+					require.NotPanics(t, func() {
+						pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: queued.Frame.(*wire.PathChallengeFrame).Data}, monotime.Now())
+					})
+					require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+				}
+				require.False(t, sent, "a completed validation generation must not send queued probes")
+				// A timer racing with completion may enqueue after the response was handled.
+				pm.enqueueProbe(p)
+				_, _, _, sent = pm.NextPathToProbe()
+				require.False(t, sent)
+				require.Empty(t, pm.pathsToProbe)
+				// Explicit Probe creates the only new generation that may send a challenge.
+				go func() { done <- p.Probe(context.Background()) }()
+				synctest.Wait()
+				_, f, _, ok = pm.NextPathToProbe()
+				require.True(t, ok)
+				fresh := f.Frame.(*wire.PathChallengeFrame).Data
+				require.NotEqual(t, first, fresh)
+				require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+				pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: first}, monotime.Now())
+				require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+				pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: fresh}, monotime.Now())
+				synctest.Wait()
+				require.NoError(t, <-done)
+				require.NoError(t, p.Switch())
+			})
+		})
+	}
+}
