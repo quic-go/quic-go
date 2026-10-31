@@ -548,7 +548,7 @@ func (e MTUUpdated) Name() string { return "recovery:mtu_updated" }
 func (e MTUUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("mtu"))
+	h.WriteToken(jsontext.String("new"))
 	h.WriteToken(jsontext.Uint(uint64(e.Value)))
 	h.WriteToken(jsontext.String("done"))
 	h.WriteToken(jsontext.Bool(e.Done))

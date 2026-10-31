@@ -846,7 +846,7 @@ func TestMTUUpdated(t *testing.T) {
 
 	require.Equal(t, "recovery:mtu_updated", name)
 	require.JSONEq(t, `{
-		"mtu": 1337,
+		"new": 1337,
 		"done": true
 	}`, ev)
 }
