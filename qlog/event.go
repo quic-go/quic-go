@@ -1,9 +1,11 @@
 package qlog
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/netip"
 	"time"
+	"unicode/utf8"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -991,7 +993,15 @@ func (e ALPNInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("chosen_alpn"))
-	h.WriteToken(jsontext.String(e.ChosenALPN))
+	h.WriteToken(jsontext.BeginObject)
+	if utf8.ValidString(e.ChosenALPN) {
+		h.WriteToken(jsontext.String("string_value"))
+		h.WriteToken(jsontext.String(e.ChosenALPN))
+	} else {
+		h.WriteToken(jsontext.String("byte_value"))
+		h.WriteToken(jsontext.String(hex.EncodeToString([]byte(e.ChosenALPN))))
+	}
+	h.WriteToken(jsontext.EndObject)
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
