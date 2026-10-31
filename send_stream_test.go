@@ -416,9 +416,42 @@ func TestSendStreamLargeTryWriteAll(t *testing.T) {
 		require.NotNil(t, frame.Frame)
 		require.Equal(t, offset, frame.Frame.Offset)
 		require.Equal(t, data[offset:offset+40], frame.Frame.Data)
+		// sent frames must not keep the queued data alive
+		require.Equal(t, protocol.MaxPacketBufferSize, cap(frame.Frame.Data))
 		offset += 40
 		require.Equal(t, offset < protocol.ByteCount(len(data)), hasMore)
 	}
+}
+
+func TestSendStreamTryWriteAllWhileSending(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	mockCtrl := gomock.NewController(t)
+	mockFC := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
+	mockSender := NewMockStreamSender(mockCtrl)
+	str := newSendStream(context.Background(), streamID, mockSender, mockFC, false)
+	mockSender.EXPECT().onHasStreamData(streamID, str).AnyTimes()
+
+	data := make([]byte, 20*protocol.MaxPacketBufferSize)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	var sent []byte
+	pop := func() (hasMore bool) {
+		offset := protocol.ByteCount(len(sent))
+		frame, _, hasMore := str.popStreamFrame(expectedFrameHeaderLen(streamID, offset)+600, protocol.Version1)
+		require.Equal(t, offset, frame.Frame.Offset)
+		sent = append(sent, frame.Frame.Data...)
+		return hasMore
+	}
+	// queue data faster than it is sent, so the queue grows beyond a single packet
+	for b := range slices.Chunk(data, 1000) {
+		require.NoError(t, str.TryWriteAll(b))
+		pop()
+	}
+	for pop() {
+	}
+	require.Equal(t, data, sent)
 }
 
 func TestSendStreamResetFinalSizeIncludesReservedData(t *testing.T) {
