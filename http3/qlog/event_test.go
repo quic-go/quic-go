@@ -102,7 +102,7 @@ func TestFrameParsedEvent(t *testing.T) {
 	require.JSONEq(t, `{
 		"stream_id": 4,
 		"frame": {
-            "raw": {"length": 1500, "payload_length": 100},
+			"raw": {"length": 1500, "payload_length": 100},
 			"frame_type": "data"
 		}
 	}`, ev)
@@ -127,7 +127,7 @@ func TestFrameCreatedEvent(t *testing.T) {
 	require.JSONEq(t, `{
 		"stream_id": 8,
 		"frame": {
-            "raw": {"payload_length": 200},
+			"raw": {"payload_length": 200},
 			"frame_type": "headers",
 			"header_fields": [
 				{"name": ":status", "value": "200"},

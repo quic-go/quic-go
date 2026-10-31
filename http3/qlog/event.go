@@ -56,16 +56,6 @@ func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
-func (i RawInfo) encodeField(enc *jsontext.Encoder) error {
-	if !i.HasValues() {
-		return nil
-	}
-	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
-		return err
-	}
-	return i.encode(enc)
-}
-
 type FrameParsed struct {
 	StreamID quic.StreamID
 	Raw      RawInfo
