@@ -973,14 +973,14 @@ func TestLossTimerUpdated(t *testing.T) {
 func TestLossTimerUpdatedExpired(t *testing.T) {
 	name, ev := testEventEncoding(t, &LossTimerUpdated{
 		Type:      LossTimerUpdateTypeExpired,
-		TimerType: TimerTypeLossTimeout,
+		TimerType: TimerTypeACK,
 		EncLevel:  protocol.Encryption1RTT,
 	})
 
 	require.Equal(t, "recovery:loss_timer_updated", name)
 	require.JSONEq(t, `{
 		"event_type": "expired",
-		"timer_type": "loss_timeout",
+		"timer_type": "ack",
 		"packet_number_space": "application_data"
 	}`, ev)
 }

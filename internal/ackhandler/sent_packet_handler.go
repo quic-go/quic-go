@@ -829,7 +829,7 @@ func (h *sentPacketHandler) lossDetectionTime(now monotime.Time) alarmTimer {
 	if !lossTime.IsZero() && (pathProbeLossTime.IsZero() || lossTime.Before(pathProbeLossTime)) {
 		return alarmTimer{
 			Time:            lossTime,
-			TimerType:       qlog.TimerTypeLossTimeout,
+			TimerType:       qlog.TimerTypeACK,
 			EncryptionLevel: encLevel,
 		}
 	}
@@ -1007,7 +1007,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		if h.qlogger != nil {
 			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
 				Type:      qlog.LossTimerUpdateTypeExpired,
-				TimerType: qlog.TimerTypeLossTimeout,
+				TimerType: qlog.TimerTypeACK,
 				EncLevel:  encLevel,
 			})
 		}

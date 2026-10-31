@@ -253,8 +253,6 @@ type TimerType string
 const (
 	// TimerTypeACK represents an ACK timer
 	TimerTypeACK TimerType = "ack"
-	// TimerTypeLossTimeout represents time-threshold loss detection.
-	TimerTypeLossTimeout TimerType = "loss_timeout"
 	// TimerTypePTO represents a PTO (Probe Timeout) timer
 	TimerTypePTO TimerType = "pto"
 	// TimerTypePathProbe represents a path probe timer
