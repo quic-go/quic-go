@@ -363,7 +363,7 @@ func TestConnectionStatelessReset(t *testing.T) {
 		synctest.Wait()
 
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Initiator: qlog.InitiatorLocal, Trigger: qlog.ConnectionCloseTriggerStatelessReset}},
+			[]qlogwriter.Event{qlog.ConnectionClosed{Initiator: qlog.InitiatorRemote, Trigger: qlog.ConnectionCloseTriggerStatelessReset}},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 	})
