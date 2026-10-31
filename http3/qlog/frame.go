@@ -2,12 +2,10 @@ package qlog
 
 import (
 	"encoding/hex"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
-	"golang.org/x/net/http/httpguts"
 )
 
 // Frame represents an HTTP/3 frame.
@@ -75,14 +73,15 @@ func (f *HeadersFrame) encode(h *encoderHelper) {
 	h.WriteToken(jsontext.BeginArray)
 	for _, f := range f.HeaderFields {
 		h.WriteToken(jsontext.BeginObject)
-		if httpguts.ValidHeaderFieldName(strings.TrimPrefix(f.Name, ":")) {
+		if utf8.ValidString(f.Name) {
 			h.WriteToken(jsontext.String("name"))
 			h.WriteToken(jsontext.String(f.Name))
 		} else {
 			h.WriteToken(jsontext.String("name_bytes"))
 			h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.Name))))
 		}
-		if utf8.ValidString(f.Value) && httpguts.ValidHeaderFieldValue(f.Value) {
+		// HTTP permits non-UTF-8 bytes in field values.
+		if utf8.ValidString(f.Value) {
 			h.WriteToken(jsontext.String("value"))
 			h.WriteToken(jsontext.String(f.Value))
 		} else {
