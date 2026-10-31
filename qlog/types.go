@@ -78,6 +78,7 @@ type version protocol.Version
 func (v version) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
+	//nolint:exhaustive // VersionUnknown is encoded as raw bytes by the default case.
 	switch protocol.Version(v) {
 	case 0:
 		h.WriteToken(jsontext.String("version"))
