@@ -84,8 +84,10 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 	str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
 	str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
+	clientConn, _ := newConnPair(t)
+	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, &eventRecorder, nil)
 	rw := newResponseWriter(
-		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
+		newStream(str, conn, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
 		nil,
 		false,
 		slog.Default(),

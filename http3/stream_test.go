@@ -138,7 +138,8 @@ func TestStreamWrite(t *testing.T) {
 	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	var eventRecorder events.Recorder
-	str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder)
+	clientConn, _ := newConnPair(t)
+	str := newStream(qstr, newRawConn(clientConn, false, nil, nopControlStrHandler, &eventRecorder, nil), nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder)
 	str.Write([]byte("foo"))
 	str.Write([]byte("foobar"))
 
@@ -228,6 +229,52 @@ func TestStreamTryWriteAllAfterPartialWrite(t *testing.T) {
 	require.NoError(t, str.TryWriteAll([]byte("obarbaz")))
 }
 
+func TestStreamQlogConnectionClosedWhileReading(t *testing.T) {
+	clientConn, _ := newConnPair(t)
+	rec := &closeTrackingRecorder{closed: make(chan struct{})}
+	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, rec, nil)
+	r := bytes.NewReader(getDataFrame([]byte("foo")))
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		// the frame is read, but the connection is closed before it is logged
+		clientConn.CloseWithError(0, "")
+		time.Sleep(scaleDuration(10 * time.Millisecond))
+		return r.Read(b)
+	}).AnyTimes()
+	str := newStream(qstr, conn, nil, nil, rec)
+
+	// closeTrackingRecorder panics if an event is recorded after Close
+	_, err := str.Read(make([]byte, 3))
+	require.NoError(t, err)
+	require.Len(t, rec.Events(qlog.FrameParsed{}), 1)
+	select {
+	case <-rec.closed:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestStreamQlogWriteAfterConnectionClose(t *testing.T) {
+	clientConn, _ := newConnPair(t)
+	rec := &closeTrackingRecorder{closed: make(chan struct{})}
+	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, rec, nil)
+	qstr, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	str := newStream(conn.TrackStream(qstr), conn, nil, nil, rec)
+
+	clientConn.CloseWithError(0, "")
+	select {
+	case <-rec.closed:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+	// closeTrackingRecorder panics if an event is recorded after Close
+	_, err = str.Write([]byte("foo"))
+	require.Error(t, err)
+}
+
 func TestStreamTryWriteAll(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
@@ -236,7 +283,8 @@ func TestStreamTryWriteAll(t *testing.T) {
 	qstr.EXPECT().TryWriteAll(getDataFrame([]byte("blocked"))).Return(quic.ErrWouldBlock)
 
 	var eventRecorder events.Recorder
-	str := newStream(qstr, nil, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder)
+	clientConn, _ := newConnPair(t)
+	str := newStream(qstr, newRawConn(clientConn, false, nil, nopControlStrHandler, &eventRecorder, nil), nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder)
 	require.NoError(t, str.TryWriteAll([]byte("foobar")))
 	require.ErrorIs(t, str.TryWriteAll([]byte("blocked")), quic.ErrWouldBlock)
 

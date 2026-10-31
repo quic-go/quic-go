@@ -305,6 +305,9 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	c.rawConn.AddQlogProducer()
+	defer c.rawConn.RemoveQlogProducer()
+
 	reqDone := make(chan struct{})
 	str, err := c.openRequestStream(
 		req.Context(),
