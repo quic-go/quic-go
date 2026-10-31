@@ -792,6 +792,11 @@ func (e ParametersSet) Name() string {
 }
 
 func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	if e.Restore {
+		e.AckDelayExponent = 0
+		e.MaxAckDelay = 0
+		e.PreferredAddress = nil
+	}
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if !e.Restore {

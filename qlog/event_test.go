@@ -437,6 +437,9 @@ func TestReceivedTransportParameters(t *testing.T) {
 func TestRestoredTransportParameters(t *testing.T) {
 	name, ev := testEventEncoding(t, &ParametersSet{
 		Restore:                        true,
+		AckDelayExponent:               3,
+		MaxAckDelay:                    25 * time.Millisecond,
+		PreferredAddress:               &PreferredAddress{},
 		InitialMaxStreamDataBidiLocal:  100,
 		InitialMaxStreamDataBidiRemote: 200,
 		InitialMaxStreamDataUni:        300,
