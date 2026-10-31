@@ -129,7 +129,7 @@ func TestFrameCreatedEvent(t *testing.T) {
 		"frame": {
 			"raw": {"payload_length": 200},
 			"frame_type": "headers",
-			"header_fields": [
+			"headers": [
 				{"name": ":status", "value": "200"},
 				{"name": "content-type", "value": "text/html"}
 			]

@@ -1,8 +1,13 @@
 package qlog
 
 import (
+	"encoding/hex"
+	"strings"
+	"unicode/utf8"
+
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
+	"golang.org/x/net/http/httpguts"
 )
 
 // Frame represents an HTTP/3 frame.
@@ -66,19 +71,27 @@ type HeadersFrame struct {
 func (f *HeadersFrame) encode(h *encoderHelper) {
 	h.WriteToken(jsontext.String("frame_type"))
 	h.WriteToken(jsontext.String("headers"))
-	if len(f.HeaderFields) > 0 {
-		h.WriteToken(jsontext.String("header_fields"))
-		h.WriteToken(jsontext.BeginArray)
-		for _, f := range f.HeaderFields {
-			h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("headers"))
+	h.WriteToken(jsontext.BeginArray)
+	for _, f := range f.HeaderFields {
+		h.WriteToken(jsontext.BeginObject)
+		if httpguts.ValidHeaderFieldName(strings.TrimPrefix(f.Name, ":")) {
 			h.WriteToken(jsontext.String("name"))
 			h.WriteToken(jsontext.String(f.Name))
+		} else {
+			h.WriteToken(jsontext.String("name_bytes"))
+			h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.Name))))
+		}
+		if utf8.ValidString(f.Value) && httpguts.ValidHeaderFieldValue(f.Value) {
 			h.WriteToken(jsontext.String("value"))
 			h.WriteToken(jsontext.String(f.Value))
-			h.WriteToken(jsontext.EndObject)
+		} else {
+			h.WriteToken(jsontext.String("value_bytes"))
+			h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.Value))))
 		}
-		h.WriteToken(jsontext.EndArray)
+		h.WriteToken(jsontext.EndObject)
 	}
+	h.WriteToken(jsontext.EndArray)
 }
 
 // A GoAwayFrame is a GOAWAY frame
