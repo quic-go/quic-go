@@ -368,7 +368,7 @@ func (h *sentPacketHandler) SentPacket(
 }
 
 func (h *sentPacketHandler) qlogMetricsUpdated() {
-	var metricsUpdatedEvent qlog.MetricsUpdated
+	metricsUpdatedEvent := h.lastMetrics
 	var updated bool
 	if h.rttStats.HasMeasurement() {
 		if h.lastMetrics.MinRTT != h.rttStats.MinRTT() {
