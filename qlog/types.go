@@ -75,7 +75,7 @@ func (s streamType) String() string {
 type version protocol.Version
 
 func (v version) String() string {
-	return fmt.Sprintf("%x", uint32(v))
+	return fmt.Sprintf("%08x", uint32(v))
 }
 
 func encLevelToPacketNumberSpace(encLevel protocol.EncryptionLevel) string {

@@ -40,7 +40,7 @@ func (v versions) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginArray)
 	for _, e := range v {
-		h.WriteToken(jsontext.String(fmt.Sprintf("%x", uint32(e))))
+		h.WriteToken(jsontext.String(fmt.Sprintf("%08x", uint32(e))))
 	}
 	h.WriteToken(jsontext.EndArray)
 	return h.err
@@ -178,7 +178,7 @@ func (e VersionInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		}
 	}
 	h.WriteToken(jsontext.String("chosen_version"))
-	h.WriteToken(jsontext.String(fmt.Sprintf("%x", uint32(e.ChosenVersion))))
+	h.WriteToken(jsontext.String(fmt.Sprintf("%08x", uint32(e.ChosenVersion))))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

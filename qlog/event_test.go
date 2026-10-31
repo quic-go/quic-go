@@ -120,7 +120,7 @@ func TestVersionInformation(t *testing.T) {
 	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: 0x1337})
 
 	require.Equal(t, "transport:version_information", name)
-	require.JSONEq(t, `{"chosen_version": "1337"}`, ev)
+	require.JSONEq(t, `{"chosen_version": "00001337"}`, ev)
 }
 
 func TestVersionInformationWithNegotiation(t *testing.T) {
@@ -132,9 +132,9 @@ func TestVersionInformationWithNegotiation(t *testing.T) {
 
 	require.Equal(t, "transport:version_information", name)
 	require.JSONEq(t, `{
-		"chosen_version": "1337",
-		"client_versions": ["1", "2", "3"],
-		"server_versions": ["4", "5", "6"]
+		"chosen_version": "00001337",
+		"client_versions": ["00000001", "00000002", "00000003"],
+		"server_versions": ["00000004", "00000005", "00000006"]
 	}`, ev)
 }
 
@@ -478,7 +478,7 @@ func TestPacketSent(t *testing.T) {
 		"header": {
 			"packet_type": "handshake",
 			"packet_number": 1337,
-			"version": "1",
+			"version": "00000001",
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,
@@ -560,7 +560,7 @@ func TestPacketReceived(t *testing.T) {
 		"header": {
 			"packet_type": "initial",
 			"packet_number": 1337,
-			"version": "1",
+			"version": "00000001",
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,
@@ -643,7 +643,7 @@ func TestPacketReceivedRetry(t *testing.T) {
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "retry",
-			"version": "1",
+			"version": "00000001",
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,

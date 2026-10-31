@@ -68,7 +68,7 @@ func TestHeaderLongPacketNumbers(t *testing.T) {
 				"packet_number": 0,
 				"dcil": 0,
 				"scil": 0,
-				"version": "1"
+				"version": "00000001"
 			}`,
 		)
 	})
@@ -82,7 +82,7 @@ func TestHeaderLongPacketNumbers(t *testing.T) {
 				"packet_type": "handshake",
 				"dcil": 0,
 				"scil": 0,
-				"version": "1"
+				"version": "00000001"
 			}`,
 		)
 	})
