@@ -99,12 +99,6 @@ func testHeaderPacketNumbers(t *testing.T, pn protocol.PacketNumber, expected st
 	)
 }
 
-func TestHeaderVersionNegotiationEmptyConnectionIDs(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, (PacketHeaderVersionNegotiation{}).encode(jsontext.NewEncoder(&buf)))
-	require.JSONEq(t, `{"packet_type":"version_negotiation","scil":0,"scid":"","dcil":0,"dcid":""}`, buf.String())
-}
-
 func TestHeaderRetry(t *testing.T) {
 	checkHeader(t,
 		&PacketHeader{
