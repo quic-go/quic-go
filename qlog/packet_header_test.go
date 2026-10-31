@@ -36,7 +36,7 @@ func TestHeaderInitial(t *testing.T) {
 			"packet_number": 42,
 			"dcil": 0,
 			"scil": 0,
-			"version": "decafbad"
+			"version": {"version_bytes": "decafbad"}
 		}`,
 	)
 }
@@ -58,7 +58,7 @@ func TestHeaderInitialWithToken(t *testing.T) {
 			"dcid": "55667788",
 			"scil": 4,
 			"scid": "11223344",
-			"version": "decafbad",
+			"version": {"version_bytes": "decafbad"},
 			"token": {"raw": {"data": "deadbeef"}}
 		}`,
 	)
@@ -73,7 +73,7 @@ func TestHeaderLongPacketNumbers(t *testing.T) {
 				"packet_number": 0,
 				"dcil": 0,
 				"scil": 0,
-				"version": "1"
+				"version": {"version": 1}
 			}`,
 		)
 	})
@@ -87,7 +87,7 @@ func TestHeaderLongPacketNumbers(t *testing.T) {
 				"packet_type": "handshake",
 				"dcil": 0,
 				"scil": 0,
-				"version": "1"
+				"version": {"version": 1}
 			}`,
 		)
 	})
@@ -120,7 +120,7 @@ func TestHeaderRetry(t *testing.T) {
 			"scil": 4,
 			"scid": "11223344",
 			"token": {"raw": {"data": "deadbeef"}},
-			"version": "decafbad"
+			"version": {"version_bytes": "decafbad"}
 		}`,
 	)
 }

@@ -117,24 +117,24 @@ func TestTupleAssigned(t *testing.T) {
 }
 
 func TestVersionInformation(t *testing.T) {
-	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: 0x1337})
+	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: protocol.Version2})
 
 	require.Equal(t, "transport:version_information", name)
-	require.JSONEq(t, `{"chosen_version": "1337"}`, ev)
+	require.JSONEq(t, `{"chosen_version": {"version": 2}}`, ev)
 }
 
 func TestVersionInformationWithNegotiation(t *testing.T) {
 	name, ev := testEventEncoding(t, &VersionInformation{
 		ChosenVersion:  0x1337,
-		ClientVersions: []Version{1, 2, 3},
-		ServerVersions: []Version{4, 5, 6},
+		ClientVersions: []Version{protocol.Version1, protocol.Version2, 2},
+		ServerVersions: []Version{4, 0x0a1a2a3a, 6},
 	})
 
 	require.Equal(t, "transport:version_information", name)
 	require.JSONEq(t, `{
-		"chosen_version": "1337",
-		"client_versions": ["1", "2", "3"],
-		"server_versions": ["4", "5", "6"]
+		"chosen_version": {"version_bytes": "00001337"},
+		"client_versions": [{"version": 1}, {"version": 2}, {"version_bytes": "00000002"}],
+		"server_versions": [{"version_bytes": "00000004"}, {"version_bytes": "0a1a2a3a"}, {"version_bytes": "00000006"}]
 	}`, ev)
 }
 
@@ -478,7 +478,7 @@ func TestPacketSent(t *testing.T) {
 		"header": {
 			"packet_type": "handshake",
 			"packet_number": 1337,
-			"version": "1",
+			"version": {"version": 1},
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,
@@ -560,7 +560,7 @@ func TestPacketReceived(t *testing.T) {
 		"header": {
 			"packet_type": "initial",
 			"packet_number": 1337,
-			"version": "1",
+			"version": {"version": 1},
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,
@@ -643,7 +643,7 @@ func TestPacketReceivedRetry(t *testing.T) {
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "retry",
-			"version": "1",
+			"version": {"version": 1},
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,
@@ -667,12 +667,13 @@ func TestVersionNegotiationReceived(t *testing.T) {
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "version_negotiation",
+			"version": {"version": 0},
 			"scil": 4,
 			"scid": "04030201",
 			"dcil": 8,
 			"dcid": "0102030405060708"
 		},
-		"supported_versions": ["deadbeef", "decafbad"]
+		"supported_versions": [{"version_bytes": "deadbeef"}, {"version_bytes": "decafbad"}]
 	}`, ev)
 }
 
