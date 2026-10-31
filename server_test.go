@@ -358,7 +358,7 @@ func testServerDroppedPacket(t *testing.T,
 	}
 
 	var expectedPacketNumber protocol.PacketNumber
-	if expectedPacketType != qlog.PacketTypeVersionNegotiation && expectedPacketType != "" {
+	if expectedPacketType != "" || expectedVersion != 0 {
 		expectedPacketNumber = protocol.InvalidPacketNumber
 	}
 
@@ -452,7 +452,7 @@ func testServerVersionNegotiation(t *testing.T, enabled bool) {
 			require.Equal(t,
 				[]qlogwriter.Event{
 					qlog.PacketDropped{
-						Header:  qlog.PacketHeader{Version: 0x42},
+						Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: 0x42},
 						Raw:     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: qlog.OmitLength},
 						Trigger: qlog.PacketDropUnexpectedVersion,
 					},

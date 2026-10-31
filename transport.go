@@ -601,7 +601,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
 			if t.Tracer != nil {
 				t.Tracer.RecordEvent(qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketType: qlog.PacketType1RTT},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketType1RTT},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnknownConnectionID,
 				})

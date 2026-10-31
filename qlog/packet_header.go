@@ -38,11 +38,18 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 	helper := encoderHelper{enc: enc}
 	helper.WriteToken(jsontext.BeginObject)
 	helper.WriteToken(jsontext.String("packet_type"))
-	helper.WriteToken(jsontext.String(string(h.PacketType)))
-	if h.PacketType != PacketTypeRetry && h.PacketType != PacketTypeVersionNegotiation && h.PacketType != "" &&
-		h.PacketNumber != protocol.InvalidPacketNumber {
-		helper.WriteToken(jsontext.String("packet_number"))
-		helper.WriteToken(jsontext.Int(int64(h.PacketNumber)))
+	packetType := h.PacketType
+	if packetType == "" {
+		packetType = PacketTypeUnknown
+	}
+	helper.WriteToken(jsontext.String(string(packetType)))
+	//nolint:exhaustive // Only these packet types carry packet numbers.
+	switch packetType {
+	case PacketTypeInitial, PacketTypeHandshake, PacketType0RTT, PacketType1RTT:
+		if h.PacketNumber != protocol.InvalidPacketNumber {
+			helper.WriteToken(jsontext.String("packet_number"))
+			helper.WriteToken(jsontext.Int(int64(h.PacketNumber)))
+		}
 	}
 	if h.Version != 0 {
 		helper.WriteToken(jsontext.String("version"))
