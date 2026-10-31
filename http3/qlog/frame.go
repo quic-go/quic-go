@@ -125,7 +125,7 @@ func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
 		h.WriteToken(jsontext.String("name"))
 		h.WriteToken(jsontext.String("settings_h3_datagram"))
 		h.WriteToken(jsontext.String("value"))
-		value := uint64(0)
+		var value uint64
 		if *f.Datagram {
 			value = 1
 		}
@@ -137,7 +137,7 @@ func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
 		h.WriteToken(jsontext.String("name"))
 		h.WriteToken(jsontext.String("settings_enable_connect_protocol"))
 		h.WriteToken(jsontext.String("value"))
-		value := uint64(0)
+		var value uint64
 		if *f.ExtendedConnect {
 			value = 1
 		}
