@@ -799,24 +799,24 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.String(string(e.Initiator)))
 		if e.SentBy == protocol.PerspectiveServer {
 			h.WriteToken(jsontext.String("original_destination_connection_id"))
-			h.WriteToken(jsontext.String(e.OriginalDestinationConnectionID.String()))
+			h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.OriginalDestinationConnectionID.Bytes())))
 			if e.StatelessResetToken != nil {
 				h.WriteToken(jsontext.String("stateless_reset_token"))
 				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:])))
 			}
 			if e.RetrySourceConnectionID != nil {
 				h.WriteToken(jsontext.String("retry_source_connection_id"))
-				h.WriteToken(jsontext.String((*e.RetrySourceConnectionID).String()))
+				h.WriteToken(jsontext.String(fmt.Sprintf("%x", (*e.RetrySourceConnectionID).Bytes())))
 			}
 		}
 		h.WriteToken(jsontext.String("initial_source_connection_id"))
-		h.WriteToken(jsontext.String(e.InitialSourceConnectionID.String()))
+		h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.InitialSourceConnectionID.Bytes())))
 	}
 	h.WriteToken(jsontext.String("disable_active_migration"))
 	h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
 	if e.MaxIdleTimeout != 0 {
 		h.WriteToken(jsontext.String("max_idle_timeout"))
-		h.WriteToken(jsontext.Float(milliseconds(e.MaxIdleTimeout)))
+		h.WriteToken(jsontext.Uint(uint64(e.MaxIdleTimeout.Milliseconds())))
 	}
 	if e.MaxUDPPayloadSize != 0 {
 		h.WriteToken(jsontext.String("max_udp_payload_size"))
@@ -828,7 +828,7 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	}
 	if e.MaxAckDelay != 0 {
 		h.WriteToken(jsontext.String("max_ack_delay"))
-		h.WriteToken(jsontext.Float(milliseconds(e.MaxAckDelay)))
+		h.WriteToken(jsontext.Uint(uint64(e.MaxAckDelay.Milliseconds())))
 	}
 	if e.ActiveConnectionIDLimit != 0 {
 		h.WriteToken(jsontext.String("active_connection_id_limit"))
@@ -903,7 +903,7 @@ func (a PreferredAddress) encode(enc *jsontext.Encoder) error {
 		h.WriteIPAddressPort(a.IPv6)
 	}
 	h.WriteToken(jsontext.String("connection_id"))
-	h.WriteToken(jsontext.String(a.ConnectionID.String()))
+	h.WriteToken(jsontext.String(fmt.Sprintf("%x", a.ConnectionID.Bytes())))
 	h.WriteToken(jsontext.String("stateless_reset_token"))
 	h.WriteToken(jsontext.String(fmt.Sprintf("%x", a.StatelessResetToken)))
 	h.WriteToken(jsontext.EndObject)

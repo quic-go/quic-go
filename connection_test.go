@@ -363,7 +363,7 @@ func TestConnectionStatelessReset(t *testing.T) {
 		synctest.Wait()
 
 		require.Equal(t,
-			[]qlogwriter.Event{qlog.ConnectionClosed{Initiator: qlog.InitiatorLocal, Trigger: qlog.ConnectionCloseTriggerStatelessReset}},
+			[]qlogwriter.Event{qlog.ConnectionClosed{Initiator: qlog.InitiatorRemote, Trigger: qlog.ConnectionCloseTriggerStatelessReset}},
 			eventRecorder.Events(qlog.ConnectionClosed{}),
 		)
 	})
@@ -1113,6 +1113,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.ParametersSet{
+				SentBy:                        protocol.PerspectiveClient,
 				Initiator:                     qlog.InitiatorRemote,
 				MaxIdleTimeout:                90 * time.Second,
 				InitialMaxStreamDataBidiLocal: 0x5000,

@@ -2366,7 +2366,7 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 
 	if c.qlogger != nil && !errors.As(e, &recreateErr) {
 		initiator := qlog.InitiatorLocal
-		if isRemoteClose {
+		if isRemoteClose || statelessResetErr != nil {
 			initiator = qlog.InitiatorRemote
 		}
 		c.qlogger.RecordEvent(qlog.ConnectionClosed{
