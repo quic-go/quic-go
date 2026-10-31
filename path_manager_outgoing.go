@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -30,7 +31,7 @@ type Path struct {
 	tr          *Transport
 	initialRTT  time.Duration
 
-	enablePath func(pathID)
+	enablePath func(pathID) pathID
 	validated  atomic.Bool
 	abandon    chan struct{}
 }
@@ -67,7 +68,8 @@ func (p *Path) Probe(ctx context.Context) error {
 
 // Switch switches the QUIC connection to this path.
 // It immediately stops sending on the old path, and sends on this new path.
-// It is possible to switch back to the old path without probing it again, until it is closed.
+// Switching requires a validated path that has received a packet within the last 30 seconds.
+// An expired path needs to be probed again with [Path.Probe].
 func (p *Path) Switch() error {
 	if err := p.pathManager.switchToPath(p.id); err != nil {
 		switch {
@@ -88,7 +90,7 @@ func (p *Path) Switch() error {
 }
 
 // Close abandons a path.
-// It is not possible to close the path that’s currently active.
+// It is not possible to close the path that's currently active.
 // After closing, the path cannot be successfully probed again with [Path.Probe].
 func (p *Path) Close() error {
 	select {
@@ -108,9 +110,11 @@ type pathOutgoing struct {
 	pathChallenges [][8]byte // length is implicitly limited by exponential backoff
 	tr             *Transport
 	isValidated    bool
+	lastPacketTime monotime.Time
+	receivePath    pathID
 	probeSent      chan struct{} // receives when a PATH_CHALLENGE is sent
 	validated      chan struct{} // closed when the path the corresponding PATH_RESPONSE is received
-	enablePath     func(pathID)
+	enablePath     func(pathID) pathID
 }
 
 func (p *pathOutgoing) ProbeSent() <-chan struct{} { return p.probeSent }
@@ -147,7 +151,7 @@ func newPathManagerOutgoing(
 	}
 }
 
-func (pm *pathManagerOutgoing) addPath(p *Path, enablePath func(pathID)) *pathOutgoing {
+func (pm *pathManagerOutgoing) addPath(p *Path, enablePath func(pathID) pathID) *pathOutgoing {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
@@ -161,10 +165,12 @@ func (pm *pathManagerOutgoing) addPath(p *Path, enablePath func(pathID)) *pathOu
 	}
 
 	path := &pathOutgoing{
-		tr:         p.tr,
-		probeSent:  make(chan struct{}, 1),
-		validated:  make(chan struct{}),
-		enablePath: enablePath,
+		tr:             p.tr,
+		probeSent:      make(chan struct{}, 1),
+		validated:      make(chan struct{}),
+		receivePath:    invalidPathID,
+		lastPacketTime: monotime.Now(),
+		enablePath:     enablePath,
 	}
 	pm.paths[p.id] = path
 	return path
@@ -208,7 +214,8 @@ func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	if !ok {
 		return errPathDoesNotExist
 	}
-	if !p.isValidated {
+	if !p.isValidated || monotime.Since(p.lastPacketTime) >= pathValidationTimeout {
+		p.isValidated = false
 		return ErrPathNotValidated
 	}
 	pm.pathToSwitchTo = p
@@ -216,7 +223,7 @@ func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	return nil
 }
 
-func (pm *pathManagerOutgoing) NewPath(t *Transport, initialRTT time.Duration, enablePath func(pathID)) *Path {
+func (pm *pathManagerOutgoing) NewPath(t *Transport, initialRTT time.Duration, enablePath func(pathID) pathID) *Path {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
@@ -262,7 +269,7 @@ func (pm *pathManagerOutgoing) NextPathToProbe() (_ protocol.ConnectionID, _ ack
 	p.pathChallenges = append(p.pathChallenges, b)
 
 	pm.pathsToProbe = pm.pathsToProbe[1:]
-	p.enablePath(id)
+	p.receivePath = p.enablePath(id)
 	select {
 	case p.probeSent <- struct{}{}:
 	default:
@@ -287,7 +294,26 @@ func (pm *pathManagerOutgoing) Transport(id pathID) (*Transport, bool) {
 	return p.tr, true
 }
 
-func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame) {
+// HandlePacket records authenticated, non-duplicate packets on their receiving Transport.
+// A Transport can be reused by multiple Path objects with different path IDs.
+func (pm *pathManagerOutgoing) HandlePacket(receivePath pathID, t monotime.Time) {
+	pm.mx.Lock()
+	defer pm.mx.Unlock()
+	for _, p := range pm.paths {
+		if p.receivePath != receivePath {
+			continue
+		}
+		if p.isValidated && t.Sub(p.lastPacketTime) >= pathValidationTimeout {
+			p.isValidated = false
+			p.pathChallenges = nil
+		}
+		if t.After(p.lastPacketTime) {
+			p.lastPacketTime = t
+		}
+	}
+}
+
+func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame, t monotime.Time) {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
@@ -297,6 +323,9 @@ func (pm *pathManagerOutgoing) HandlePathResponseFrame(f *wire.PathResponseFrame
 			if !p.isValidated {
 				// make sure that duplicate PATH_RESPONSE frames are ignored
 				p.isValidated = true
+				// A matching response is fresh evidence that the challenge reached this path,
+				// even when the peer sent the response on another path (RFC 9000, section 8.2.3).
+				p.lastPacketTime = max(p.lastPacketTime, t)
 				p.pathChallenges = nil
 				close(p.validated)
 			}

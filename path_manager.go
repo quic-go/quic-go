@@ -28,6 +28,9 @@ const maxPaths = 3
 // sending them with spoofed source addresses.
 const pathTimeout = 5 * time.Second
 
+// A validated path must be probed again after this long without receiving packets.
+const pathValidationTimeout = 30 * time.Second
+
 type path struct {
 	id             pathID
 	addr           net.Addr
@@ -36,6 +39,23 @@ type path struct {
 	nextProbeTime  monotime.Time
 	validated      bool
 	rcvdNonProbing bool
+}
+
+func (p *path) expireValidation(t monotime.Time) {
+	if t.Sub(p.lastPacketTime) < pathValidationTimeout {
+		return
+	}
+	p.validated = false
+	p.pathChallenges = nil
+	p.nextProbeTime = t
+	p.rcvdNonProbing = false
+}
+
+func (p *path) receivedPacket(t monotime.Time) {
+	p.expireValidation(t)
+	if t.After(p.lastPacketTime) {
+		p.lastPacketTime = t
+	}
 }
 
 type pathManager struct {
@@ -75,7 +95,7 @@ func (pm *pathManager) HandlePacket(
 	for i, path := range pm.paths {
 		if addrsEqual(path.addr, remoteAddr) {
 			p = path
-			p.lastPacketTime = t
+			p.receivedPacket(t)
 			if isNonProbing {
 				path.rcvdNonProbing = true
 			}
@@ -138,6 +158,8 @@ func (pm *pathManager) HandlePacket(
 func (pm *pathManager) GetOrCreatePath(remoteAddr net.Addr, t monotime.Time) (_ pathID, isNew, ok bool) {
 	for _, p := range pm.paths {
 		if addrsEqual(p.addr, remoteAddr) {
+			// Expire old challenges before processing PATH_RESPONSE frames in this packet.
+			p.expireValidation(t)
 			return p.id, false, true
 		}
 	}
@@ -168,8 +190,9 @@ func (pm *pathManager) GetOrCreatePath(remoteAddr net.Addr, t monotime.Time) (_ 
 	return p.id, true, true
 }
 
-func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame) {
+func (pm *pathManager) HandlePathResponseFrame(f *wire.PathResponseFrame, t monotime.Time) {
 	for _, p := range pm.paths {
+		p.expireValidation(t)
 		if slices.Contains(p.pathChallenges, f.Data) {
 			// path validated
 			p.validated = true
