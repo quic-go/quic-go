@@ -197,7 +197,6 @@ func (h *sentPacketHandler) qlogRecoveryParametersSet(initial bool) {
 		return
 	}
 	ev := qlog.RecoveryParametersSet{
-		EncryptionLevel:         protocol.Encryption1RTT,
 		ReorderingThreshold:     packetThreshold,
 		PacketThresholdDisabled: h.packetThresholdDisabled,
 		TimeThreshold:           float64(8+h.timeThresholdEighths) / 8,

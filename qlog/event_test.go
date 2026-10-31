@@ -731,7 +731,6 @@ func TestDatagramDropped(t *testing.T) {
 
 func TestRecoveryParametersSet(t *testing.T) {
 	parameters := RecoveryParametersSet{
-		EncryptionLevel:         protocol.Encryption1RTT,
 		ReorderingThreshold:     3,
 		TimeThreshold:           1.125,
 		TimerGranularity:        time.Millisecond,
@@ -741,7 +740,6 @@ func TestRecoveryParametersSet(t *testing.T) {
 	name, ev := testEventEncoding(t, &parameters)
 	require.Equal(t, "quic:recovery_parameters_set", name)
 	require.JSONEq(t, `{
-		"packet_number_space": "application_data",
 		"reordering_threshold": 3,
 		"time_threshold": 1.125,
 		"timer_granularity": 1,
@@ -756,7 +754,6 @@ func TestRecoveryParametersSet(t *testing.T) {
 	name, ev = testEventEncoding(t, &parameters)
 	require.Equal(t, "quic:recovery_parameters_set", name)
 	require.JSONEq(t, `{
-		"packet_number_space": "application_data",
 		"reordering_threshold": "disabled",
 		"time_threshold": 1.25,
 		"timer_granularity": 1

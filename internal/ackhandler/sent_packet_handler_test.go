@@ -783,7 +783,6 @@ func TestSentPacketHandlerAdaptiveTimeThreshold(t *testing.T) {
 		utils.DefaultLogger,
 	)
 	parameters := qlog.RecoveryParametersSet{
-		EncryptionLevel:         protocol.Encryption1RTT,
 		ReorderingThreshold:     packetThreshold,
 		TimeThreshold:           1.125,
 		TimerGranularity:        protocol.TimerGranularity,
@@ -1927,7 +1926,6 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 		eventRecorder.Events(qlog.SpuriousLoss{}),
 	)
 	parameters := qlog.RecoveryParametersSet{
-		EncryptionLevel:         protocol.Encryption1RTT,
 		ReorderingThreshold:     packetThreshold,
 		PacketThresholdDisabled: true,
 		TimeThreshold:           1.125,
