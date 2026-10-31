@@ -1236,6 +1236,7 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 
 func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSize protocol.ByteCount) {
 	h.rttStats.ResetForPathMigration()
+	h.lastMetrics = qlog.MetricsUpdated{}
 	h.packetThresholdDisabled = false
 	h.timeThresholdEighths = defaultTimeThresholdEighths
 	h.minPNToRelaxReordering = protocol.InvalidPacketNumber
