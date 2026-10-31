@@ -305,6 +305,9 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	c.rawConn.AddQlogProducer()
+	defer c.rawConn.RemoveQlogProducer()
+
 	reqDone := make(chan struct{})
 	str, err := c.openRequestStream(
 		req.Context(),
@@ -428,7 +431,9 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 			str.Close()
 		} else {
 			// send the request body asynchronously
+			c.rawConn.AddQlogProducer()
 			go func() {
+				defer c.rawConn.RemoveQlogProducer()
 				defer str.Close()
 				contentLength := int64(-1)
 				// According to the documentation for http.Request.ContentLength,
