@@ -319,7 +319,6 @@ func TestNewConnectionIDFrame(t *testing.T) {
 			"frame_type": "new_connection_id",
 			"sequence_number": 42,
 			"retire_prior_to": 24,
-			"length": 4,
 			"connection_id": "deadbeef",
 			"stateless_reset_token": "000102030405060708090a0b0c0d0e0f"
 		}`,
