@@ -710,7 +710,8 @@ func TestPacketDropped(t *testing.T) {
 		"header": {"packet_type": "retry", "scil": 0, "dcil": 0},
 		"raw": {"length": 1337},
 		"datagram_payload_checksum": 42,
-		"trigger": "payload_decrypt_error"
+		"trigger": "decryption_failure",
+        "details": {"reason": "payload_decrypt_error"}
 	}`, ev)
 }
 
