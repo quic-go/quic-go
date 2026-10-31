@@ -324,7 +324,7 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"original_destination_connection_id": "deadc0de",
-		"initial_source_connection_id": "(empty)",
+		"initial_source_connection_id": "",
 		"disable_active_migration": false,
 		"active_connection_id_limit": 7,
 		"max_datagram_frame_size": 0
@@ -341,8 +341,8 @@ func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 	require.Equal(t, "transport:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
-		"original_destination_connection_id": "(empty)",
-		"initial_source_connection_id": "(empty)",
+		"original_destination_connection_id": "",
+		"initial_source_connection_id": "",
 		"stateless_reset_token": "112233445566778899aabbccddeeff00",
 		"disable_active_migration": false,
 		"max_datagram_frame_size": 0
@@ -390,8 +390,8 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 	}
 	require.JSONEq(t, fmt.Sprintf(`{
 		"initiator": "local",
-		"original_destination_connection_id": "(empty)",
-		"initial_source_connection_id": "(empty)",
+		"original_destination_connection_id": "",
+		"initial_source_connection_id": "",
 		"disable_active_migration": false,
 		"max_datagram_frame_size": 0,
 		"preferred_address": {
@@ -412,8 +412,8 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 	require.Equal(t, "transport:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
-		"original_destination_connection_id": "(empty)",
-		"initial_source_connection_id": "(empty)",
+		"original_destination_connection_id": "",
+		"initial_source_connection_id": "",
 		"disable_active_migration": false,
 		"max_datagram_frame_size": 1337
 	}`, ev)
@@ -428,7 +428,7 @@ func TestReceivedTransportParameters(t *testing.T) {
 	require.Equal(t, "transport:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "remote",
-		"initial_source_connection_id": "(empty)",
+		"initial_source_connection_id": "",
 		"disable_active_migration": false,
 		"max_datagram_frame_size": 0
 	}`, ev)

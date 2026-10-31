@@ -799,18 +799,18 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.String(string(e.Initiator)))
 		if e.SentBy == protocol.PerspectiveServer {
 			h.WriteToken(jsontext.String("original_destination_connection_id"))
-			h.WriteToken(jsontext.String(e.OriginalDestinationConnectionID.String()))
+			h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.OriginalDestinationConnectionID.Bytes())))
 			if e.StatelessResetToken != nil {
 				h.WriteToken(jsontext.String("stateless_reset_token"))
 				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:])))
 			}
 			if e.RetrySourceConnectionID != nil {
 				h.WriteToken(jsontext.String("retry_source_connection_id"))
-				h.WriteToken(jsontext.String((*e.RetrySourceConnectionID).String()))
+				h.WriteToken(jsontext.String(fmt.Sprintf("%x", (*e.RetrySourceConnectionID).Bytes())))
 			}
 		}
 		h.WriteToken(jsontext.String("initial_source_connection_id"))
-		h.WriteToken(jsontext.String(e.InitialSourceConnectionID.String()))
+		h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.InitialSourceConnectionID.Bytes())))
 	}
 	h.WriteToken(jsontext.String("disable_active_migration"))
 	h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
@@ -903,7 +903,7 @@ func (a PreferredAddress) encode(enc *jsontext.Encoder) error {
 		h.WriteIPAddressPort(a.IPv6)
 	}
 	h.WriteToken(jsontext.String("connection_id"))
-	h.WriteToken(jsontext.String(a.ConnectionID.String()))
+	h.WriteToken(jsontext.String(fmt.Sprintf("%x", a.ConnectionID.Bytes())))
 	h.WriteToken(jsontext.String("stateless_reset_token"))
 	h.WriteToken(jsontext.String(fmt.Sprintf("%x", a.StatelessResetToken)))
 	h.WriteToken(jsontext.EndObject)
