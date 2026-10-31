@@ -1023,7 +1023,7 @@ func TestALPNInformation(t *testing.T) {
 	require.Equal(t, "transport:alpn_information", name)
 	require.JSONEq(t, `{"chosen_alpn": {"string_value": "h3"}}`, ev)
 	_, ev = testEventEncoding(t, ALPNInformation{ChosenALPN: "\xff"})
-	require.JSONEq(t, `{"chosen_alpn":{"byte_value":"ff"}}`, ev)
+	require.JSONEq(t, `{"chosen_alpn": {"byte_value": "ff"}}`, ev)
 }
 
 func TestDebugEvent(t *testing.T) {
