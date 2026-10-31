@@ -211,18 +211,40 @@ func (m *incomingStreamsMap[T]) maybeDeleteStream(id protocol.StreamID, entry in
 	}
 
 	delete(m.streams, id)
-	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
-	if m.maxNumStreams > uint64(len(m.streams)) {
-		maxStream := m.nextStreamToOpen + 4*protocol.StreamID(m.maxNumStreams-uint64(len(m.streams))-1)
-		// never send a value larger than the maximum value for a stream number
-		if maxStream <= protocol.MaxStreamID {
-			m.maxStream = maxStream
-			m.queueMaxStreamID(&wire.MaxStreamsFrame{
-				Type:         m.streamType,
-				MaxStreamNum: m.maxStream.StreamNum(),
-			})
-		}
+	m.maybeIssueStreamCredit()
+}
+
+// SetMaxStreams sets the maximum number of concurrent streams.
+// Increasing the limit issues new stream credit immediately.
+// Stream credit can't be revoked, so after decreasing the limit,
+// no new stream credit is issued until the number of streams drops below the new limit.
+func (m *incomingStreamsMap[T]) SetMaxStreams(n uint64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.maxNumStreams = min(n, uint64(protocol.MaxStreamCount))
+	m.maybeIssueStreamCredit()
+}
+
+// maybeIssueStreamCredit queues a MAX_STREAMS frame, allowing the peer to open
+// as many new streams as the limit allows, given the number of open streams.
+func (m *incomingStreamsMap[T]) maybeIssueStreamCredit() {
+	if m.maxNumStreams <= uint64(len(m.streams)) {
+		return
 	}
+	maxStream := m.nextStreamToOpen + 4*protocol.StreamID(m.maxNumStreams-uint64(len(m.streams))-1)
+	// never send a value larger than the maximum value for a stream number
+	if maxStream > protocol.MaxStreamID {
+		maxStream = protocol.MaxStreamCount.StreamID(m.streamType, protocol.StreamInitiator(m.nextStreamToOpen))
+	}
+	if maxStream <= m.maxStream {
+		return
+	}
+	m.maxStream = maxStream
+	m.queueMaxStreamID(&wire.MaxStreamsFrame{
+		Type:         m.streamType,
+		MaxStreamNum: m.maxStream.StreamNum(),
+	})
 }
 
 func (m *incomingStreamsMap[T]) CloseWithError(err error) {
