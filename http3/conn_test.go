@@ -65,8 +65,8 @@ func TestConnReceiveSettings(t *testing.T) {
 				Frame: qlog.Frame{
 					Frame: qlog.SettingsFrame{
 						MaxFieldSectionSize: 1234,
-						Datagram:            new(true),
-						ExtendedConnect:     new(true),
+						Datagram:            new(uint64(1)),
+						ExtendedConnect:     new(uint64(1)),
 						Other:               map[uint64]uint64{1337: 42},
 					},
 				},
