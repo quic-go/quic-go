@@ -79,9 +79,12 @@ func (v version) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	switch protocol.Version(v) {
-	case 0, protocol.Version1:
+	case 0:
 		h.WriteToken(jsontext.String("version"))
-		h.WriteToken(jsontext.Uint(uint64(v)))
+		h.WriteToken(jsontext.Uint(0))
+	case protocol.Version1:
+		h.WriteToken(jsontext.String("version"))
+		h.WriteToken(jsontext.Uint(1))
 	case protocol.Version2:
 		h.WriteToken(jsontext.String("version"))
 		h.WriteToken(jsontext.Uint(2))
