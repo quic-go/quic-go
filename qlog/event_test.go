@@ -96,8 +96,8 @@ func TestStartedConnection(t *testing.T) {
 
 	require.Equal(t, "transport:connection_started", name)
 	require.JSONEq(t, `{
-		"local": {"ip_v4": {"ip": "192.168.13.37", "port": 42}},
-		"remote": {"ip_v6": {"ip": "2001:db8::1", "port": 24}}
+		"local": {"address_v4": {"ip": "192.168.13.37", "port": 42}},
+		"remote": {"address_v6": {"ip": "2001:db8::1", "port": 24}}
 	}`, ev)
 }
 
@@ -111,8 +111,8 @@ func TestTupleAssigned(t *testing.T) {
 	require.Equal(t, "transport:tuple_assigned", name)
 	require.JSONEq(t, `{
 		"tuple_id": "1",
-		"tuple_local": {"ip_v4": {"ip": "192.168.13.37", "port": 42}},
-		"tuple_remote": {"ip_v6": {"ip": "2001:db8::1", "port": 24}}
+		"tuple_local": {"address_v4": {"ip": "192.168.13.37", "port": 42}},
+		"tuple_remote": {"address_v6": {"ip": "2001:db8::1", "port": 24}}
 	}`, ev)
 }
 
@@ -383,10 +383,10 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 	require.Equal(t, "transport:parameters_set", name)
 	var addresses string
 	if hasIPv4 {
-		addresses += `"ip_v4": {"ip": "12.34.56.78", "port": 123},`
+		addresses += `"address_v4": {"ip": "12.34.56.78", "port": 123},`
 	}
 	if hasIPv6 {
-		addresses += `"ip_v6": {"ip": "102:304:506:708:90a:b0c:d0e:f10", "port": 456},`
+		addresses += `"address_v6": {"ip": "102:304:506:708:90a:b0c:d0e:f10", "port": 456},`
 	}
 	require.JSONEq(t, fmt.Sprintf(`{
 		"initiator": "local",
