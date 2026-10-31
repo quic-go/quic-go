@@ -794,9 +794,10 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		}
 		h.WriteToken(jsontext.String("initial_source_connection_id"))
 		h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.InitialSourceConnectionID.Bytes())))
+		// disable_active_migration is not restored for 0-RTT
+		h.WriteToken(jsontext.String("disable_active_migration"))
+		h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
 	}
-	h.WriteToken(jsontext.String("disable_active_migration"))
-	h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
 	if e.MaxIdleTimeout != 0 {
 		h.WriteToken(jsontext.String("max_idle_timeout"))
 		h.WriteToken(jsontext.Uint(uint64(e.MaxIdleTimeout.Milliseconds())))

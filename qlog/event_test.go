@@ -451,7 +451,6 @@ func TestRestoredTransportParameters(t *testing.T) {
 
 	require.Equal(t, "transport:parameters_restored", name)
 	require.JSONEq(t, `{
-		"disable_active_migration": false,
 		"max_idle_timeout": 123,
 		"initial_max_data": 400,
 		"initial_max_stream_data_bidi_local": 100,
