@@ -101,11 +101,8 @@ func TestFrameParsedEvent(t *testing.T) {
 	require.Equal(t, "http3:frame_parsed", name)
 	require.JSONEq(t, `{
 		"stream_id": 4,
-		"raw": {
-			"length": 1500,
-			"payload_length": 100
-		},
 		"frame": {
+            "raw": {"length": 1500, "payload_length": 100},
 			"frame_type": "data"
 		}
 	}`, ev)
@@ -129,10 +126,8 @@ func TestFrameCreatedEvent(t *testing.T) {
 	require.Equal(t, "http3:frame_created", name)
 	require.JSONEq(t, `{
 		"stream_id": 8,
-		"raw": {
-			"payload_length": 200
-		},
 		"frame": {
+            "raw": {"payload_length": 200},
 			"frame_type": "headers",
 			"header_fields": [
 				{"name": ":status", "value": "200"},

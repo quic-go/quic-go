@@ -56,6 +56,16 @@ func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
+func (i RawInfo) encodeField(enc *jsontext.Encoder) error {
+	if !i.HasValues() {
+		return nil
+	}
+	if err := enc.WriteToken(jsontext.String("raw")); err != nil {
+		return err
+	}
+	return i.encode(enc)
+}
+
 type FrameParsed struct {
 	StreamID quic.StreamID
 	Raw      RawInfo
@@ -69,14 +79,8 @@ func (e FrameParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("stream_id"))
 	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
-	if e.Raw.HasValues() {
-		h.WriteToken(jsontext.String("raw"))
-		if err := e.Raw.encode(enc); err != nil {
-			return err
-		}
-	}
 	h.WriteToken(jsontext.String("frame"))
-	if err := e.Frame.encode(enc); err != nil {
+	if err := e.Frame.encode(enc, e.Raw); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
@@ -96,14 +100,8 @@ func (e FrameCreated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("stream_id"))
 	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
-	if e.Raw.HasValues() {
-		h.WriteToken(jsontext.String("raw"))
-		if err := e.Raw.encode(enc); err != nil {
-			return err
-		}
-	}
 	h.WriteToken(jsontext.String("frame"))
-	if err := e.Frame.encode(enc); err != nil {
+	if err := e.Frame.encode(enc, e.Raw); err != nil {
 		return err
 	}
 	h.WriteToken(jsontext.EndObject)
