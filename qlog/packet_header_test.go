@@ -133,7 +133,7 @@ func TestHeader1RTT(t *testing.T) {
 			"packet_number": 42,
 			"dcil": 4,
 			"dcid": "55667788",
-			"key_phase_bit": "0"
+			"key_phase_bit": false
 		}`,
 	)
 }

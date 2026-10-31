@@ -527,7 +527,7 @@ func testPacketSent1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloadChe
 	}
 	require.JSONEq(t, fmt.Sprintf(`{
 		%s
-		"header": {"packet_type": "1RTT", "packet_number": 1337, "dcil": 4, "dcid": "01020304", "key_phase_bit": "0"},
+		"header": {"packet_type": "1RTT", "packet_number": 1337, "dcil": 4, "dcid": "01020304", "key_phase_bit": false},
 		"raw": {"length": 123},
 		"frames": [{"frame_type": "ack", "acked_ranges": [[1, 10]]}, {"frame_type": "max_data", "maximum": 987}]
 	}`, checksum), ev)
@@ -616,7 +616,7 @@ func testPacketReceived1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloa
 			"packet_number": 1337,
 			"dcil": 8,
 			"dcid": "0102030405060708",
-			"key_phase_bit": "0"
+			"key_phase_bit": false
 		},
 		"raw": {"length": 789, "payload_length": 1234},
 		"frames": [
