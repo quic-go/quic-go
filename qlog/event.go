@@ -81,20 +81,20 @@ func (p PathEndpointInfo) encode(enc *jsontext.Encoder, redacted *string) error 
 	h.WriteToken(jsontext.BeginObject)
 	if redacted != nil {
 		if p.IPv4.IsValid() {
-			h.WriteToken(jsontext.String("ip_v4"))
+			h.WriteToken(jsontext.String("address_v4"))
 		} else {
-			h.WriteToken(jsontext.String("ip_v6"))
+			h.WriteToken(jsontext.String("address_v6"))
 		}
 		h.WriteToken(jsontext.String(*redacted))
 		h.WriteToken(jsontext.EndObject)
 		return h.err
 	}
 	if p.IPv4.IsValid() {
-		h.WriteToken(jsontext.String("ip_v4"))
+		h.WriteToken(jsontext.String("address_v4"))
 		h.WriteIPAddressPort(p.IPv4)
 	}
 	if p.IPv6.IsValid() {
-		h.WriteToken(jsontext.String("ip_v6"))
+		h.WriteToken(jsontext.String("address_v6"))
 		h.WriteIPAddressPort(p.IPv6)
 	}
 	h.WriteToken(jsontext.EndObject)
@@ -889,17 +889,17 @@ func (a PreferredAddress) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if a.RedactedIPv4 != nil {
-		h.WriteToken(jsontext.String("ip_v4"))
+		h.WriteToken(jsontext.String("address_v4"))
 		h.WriteToken(jsontext.String(*a.RedactedIPv4))
 	} else if a.IPv4.IsValid() {
-		h.WriteToken(jsontext.String("ip_v4"))
+		h.WriteToken(jsontext.String("address_v4"))
 		h.WriteIPAddressPort(a.IPv4)
 	}
 	if a.RedactedIPv6 != nil {
-		h.WriteToken(jsontext.String("ip_v6"))
+		h.WriteToken(jsontext.String("address_v6"))
 		h.WriteToken(jsontext.String(*a.RedactedIPv6))
 	} else if a.IPv6.IsValid() {
-		h.WriteToken(jsontext.String("ip_v6"))
+		h.WriteToken(jsontext.String("address_v6"))
 		h.WriteIPAddressPort(a.IPv6)
 	}
 	h.WriteToken(jsontext.String("connection_id"))
