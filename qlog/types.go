@@ -185,8 +185,8 @@ const (
 	PacketTypeStatelessReset PacketType = "stateless_reset"
 	// PacketType1RTT represents a 1-RTT packet
 	PacketType1RTT PacketType = "1RTT"
-	// // PacketTypeNotDetermined represents a packet type that could not be determined
-	// PacketTypeNotDetermined packetType = ""
+	// PacketTypeUnknown represents a packet type that could not be determined.
+	PacketTypeUnknown PacketType = "unknown"
 )
 
 func EncryptionLevelToPacketType(l EncryptionLevel) PacketType {

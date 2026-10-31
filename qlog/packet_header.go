@@ -35,9 +35,12 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 	helper := encoderHelper{enc: enc}
 	helper.WriteToken(jsontext.BeginObject)
 	helper.WriteToken(jsontext.String("packet_type"))
-	helper.WriteToken(jsontext.String(string(h.PacketType)))
-	if h.PacketType != PacketTypeRetry && h.PacketType != PacketTypeVersionNegotiation && h.PacketType != "" &&
-		h.PacketNumber != protocol.InvalidPacketNumber {
+	packetType := h.PacketType
+	if packetType == "" {
+		packetType = PacketTypeUnknown
+	}
+	helper.WriteToken(jsontext.String(string(packetType)))
+	if (packetType == PacketTypeInitial || packetType == PacketTypeHandshake || packetType == PacketType0RTT || packetType == PacketType1RTT) && h.PacketNumber != protocol.InvalidPacketNumber {
 		helper.WriteToken(jsontext.String("packet_number"))
 		helper.WriteToken(jsontext.Int(int64(h.PacketNumber)))
 	}

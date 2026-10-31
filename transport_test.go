@@ -258,7 +258,7 @@ func TestTransportStatelessResetSending(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketType: qlog.PacketType1RTT},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketType1RTT},
 					Raw:     qlog.RawInfo{Length: len(smallPacket), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnknownConnectionID,
 				},
@@ -354,7 +354,7 @@ func TestTransportListening(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
 					Raw:     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				},

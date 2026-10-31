@@ -431,7 +431,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		s.logger.Debugf("Dropping Version Negotiation packet.")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
@@ -459,7 +459,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		if s.disableVersionNegotiation {
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
-					Header:  qlog.PacketHeader{Version: v},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: v},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedVersion,
 				})
@@ -471,7 +471,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			s.logger.Debugf("Dropping a packet with an unsupported version number %d that is too small (%d bytes)", v, p.Size())
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
-					Header:  qlog.PacketHeader{Version: v},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: v},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				})

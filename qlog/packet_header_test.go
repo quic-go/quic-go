@@ -19,6 +19,11 @@ func checkHeader(t *testing.T, hdr *PacketHeader, expected string) {
 	require.JSONEq(t, expected, buf.String())
 }
 
+func TestHeaderUnknownPacketType(t *testing.T) {
+	checkHeader(t, &PacketHeader{}, `{"packet_type":"unknown","scil":0,"dcil":0}`)
+	checkHeader(t, &PacketHeader{PacketType: PacketTypeUnknown}, `{"packet_type":"unknown","scil":0,"dcil":0}`)
+}
+
 func TestHeaderInitial(t *testing.T) {
 	checkHeader(t,
 		&PacketHeader{

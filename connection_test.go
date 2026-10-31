@@ -417,6 +417,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header: qlog.PacketHeader{
+						PacketNumber:     protocol.InvalidPacketNumber,
 						PacketType:       qlog.PacketTypeRetry,
 						SrcConnectionID:  tc.srcConnID,
 						DestConnectionID: tc.conn.origDestConnID,
@@ -446,7 +447,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
 					Raw:     qlog.RawInfo{Length: len(b), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				},
@@ -474,7 +475,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Header:                  qlog.PacketHeader{Version: 1234},
+					Header:                  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: 1234},
 					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: 42,
 					Trigger:                 qlog.PacketDropUnsupportedVersion,
@@ -804,7 +805,7 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 				ECN:                     qlog.ECT1,
 			},
 			qlog.PacketDropped{
-				Header:                  qlog.PacketHeader{DestConnectionID: incorrectSrcConnID},
+				Header:                  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, DestConnectionID: incorrectSrcConnID},
 				Raw:                     qlog.RawInfo{Length: int(packet3.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: 42,
 				Trigger:                 qlog.PacketDropUnknownConnectionID,
@@ -2933,7 +2934,7 @@ func TestConnectionVersionNegotiationInvalidPackets(t *testing.T) {
 		require.Equal(t,
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketType: qlog.PacketTypeVersionNegotiation},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
 					Raw:     qlog.RawInfo{Length: int(vnp.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: trigger,
 				},
@@ -3012,6 +3013,7 @@ func TestConnectionRetryDrops(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
+					PacketNumber:     protocol.InvalidPacketNumber,
 					PacketType:       qlog.PacketTypeRetry,
 					SrcConnectionID:  newConnID,
 					DestConnectionID: tc.srcConnID,
@@ -3034,6 +3036,7 @@ func TestConnectionRetryDrops(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
+					PacketNumber:     protocol.InvalidPacketNumber,
 					PacketType:       qlog.PacketTypeRetry,
 					SrcConnectionID:  tc.destConnID,
 					DestConnectionID: tc.srcConnID,
@@ -3098,6 +3101,7 @@ func TestConnectionRetryAfterReceivedPacket(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
+					PacketNumber:     protocol.InvalidPacketNumber,
 					PacketType:       qlog.PacketTypeRetry,
 					SrcConnectionID:  tc.conn.origDestConnID,
 					DestConnectionID: tc.srcConnID,
