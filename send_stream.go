@@ -199,23 +199,21 @@ func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool 
 		s.nextFrame.DataLenPresent = true
 		s.nextFrame.Data = s.nextFrame.Data[:0]
 	}
-	l := len(s.nextFrame.Data)
-	if l+len(p) > cap(s.nextFrame.Data) {
+	if len(s.nextFrame.Data)+len(p) > cap(s.nextFrame.Data) {
 		// Pooled STREAM frames must keep their packet-sized buffer.
 		// Use a non-pooled frame when the queued data grows beyond that.
+		// append grows the buffer geometrically, so repeated calls don't copy it every time.
 		nextFrame := &wire.StreamFrame{
 			StreamID:       s.streamID,
 			Offset:         s.nextFrame.Offset,
 			DataLenPresent: true,
-			Data:           make([]byte, l+len(p)),
+			Data:           append(s.nextFrame.Data, p...),
 		}
-		copy(nextFrame.Data, s.nextFrame.Data)
 		s.nextFrame.PutBack()
 		s.nextFrame = nextFrame
 	} else {
-		s.nextFrame.Data = s.nextFrame.Data[:l+len(p)]
+		s.nextFrame.Data = append(s.nextFrame.Data, p...)
 	}
-	copy(s.nextFrame.Data[l:], p)
 	s.nextFrameReserved = true
 	return false, true, nil
 }
