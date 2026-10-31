@@ -51,9 +51,11 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 			helper.WriteToken(jsontext.Int(int64(h.PacketNumber)))
 		}
 	}
-	if h.Version != 0 {
+	if h.Version != 0 || h.PacketType == PacketTypeVersionNegotiation {
 		helper.WriteToken(jsontext.String("version"))
-		helper.WriteToken(jsontext.String(version(h.Version).String()))
+		if err := version(h.Version).encode(enc); err != nil {
+			return err
+		}
 	}
 	if h.PacketType != PacketType1RTT {
 		helper.WriteToken(jsontext.String("scil"))
@@ -93,6 +95,10 @@ func (h PacketHeaderVersionNegotiation) encode(enc *jsontext.Encoder) error {
 	helper.WriteToken(jsontext.BeginObject)
 	helper.WriteToken(jsontext.String("packet_type"))
 	helper.WriteToken(jsontext.String("version_negotiation"))
+	helper.WriteToken(jsontext.String("version"))
+	if err := version(0).encode(enc); err != nil {
+		return err
+	}
 	helper.WriteToken(jsontext.String("scil"))
 	helper.WriteToken(jsontext.Int(int64(h.SrcConnectionID.Len())))
 	helper.WriteToken(jsontext.String("scid"))

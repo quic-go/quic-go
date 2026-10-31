@@ -6,6 +6,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 )
 
 type (
@@ -74,8 +75,22 @@ func (s streamType) String() string {
 
 type version protocol.Version
 
-func (v version) String() string {
-	return fmt.Sprintf("%x", uint32(v))
+func (v version) encode(enc *jsontext.Encoder) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	switch protocol.Version(v) {
+	case 0, protocol.Version1:
+		h.WriteToken(jsontext.String("version"))
+		h.WriteToken(jsontext.Uint(uint64(v)))
+	case protocol.Version2:
+		h.WriteToken(jsontext.String("version"))
+		h.WriteToken(jsontext.Uint(2))
+	default:
+		h.WriteToken(jsontext.String("version_bytes"))
+		h.WriteToken(jsontext.String(fmt.Sprintf("%08x", uint32(v))))
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
 }
 
 func encLevelToPacketNumberSpace(encLevel protocol.EncryptionLevel) string {
