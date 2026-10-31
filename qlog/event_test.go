@@ -326,6 +326,7 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 		"original_destination_connection_id": "deadc0de",
 		"initial_source_connection_id": "",
 		"disable_active_migration": false,
+		"ack_delay_exponent": 0,
 		"active_connection_id_limit": 7,
 		"max_datagram_frame_size": 0
 	}`, ev)
@@ -345,6 +346,7 @@ func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 		"initial_source_connection_id": "",
 		"stateless_reset_token": "112233445566778899aabbccddeeff00",
 		"disable_active_migration": false,
+		"ack_delay_exponent": 0,
 		"max_datagram_frame_size": 0
 	}`, ev)
 }
@@ -393,6 +395,7 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 		"original_destination_connection_id": "",
 		"initial_source_connection_id": "",
 		"disable_active_migration": false,
+		"ack_delay_exponent": 0,
 		"max_datagram_frame_size": 0,
 		"preferred_address": {
 			%s
@@ -415,6 +418,7 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 		"original_destination_connection_id": "",
 		"initial_source_connection_id": "",
 		"disable_active_migration": false,
+		"ack_delay_exponent": 0,
 		"max_datagram_frame_size": 1337
 	}`, ev)
 }
@@ -430,6 +434,7 @@ func TestReceivedTransportParameters(t *testing.T) {
 		"initiator": "remote",
 		"initial_source_connection_id": "",
 		"disable_active_migration": false,
+		"ack_delay_exponent": 0,
 		"max_datagram_frame_size": 0
 	}`, ev)
 }
