@@ -89,7 +89,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
 					StreamID: p.streamID,
-					Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+					Raw:      qlog.RawInfo{Length: r.NumRead + int(l), PayloadLength: int(l)},
 					Frame:    qlog.Frame{Frame: qlog.CancelPushFrame{}},
 				})
 			}
@@ -97,7 +97,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
 					StreamID: p.streamID,
-					Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+					Raw:      qlog.RawInfo{Length: r.NumRead + int(l), PayloadLength: int(l)},
 					Frame:    qlog.Frame{Frame: qlog.PushPromiseFrame{}},
 				})
 			}
@@ -111,7 +111,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
 					StreamID: p.streamID,
-					Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+					Raw:      qlog.RawInfo{Length: r.NumRead + int(l), PayloadLength: int(l)},
 					Frame:    qlog.Frame{Frame: qlog.MaxPushIDFrame{}},
 				})
 			}
@@ -130,7 +130,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
 					StreamID: p.streamID,
-					Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+					Raw:      qlog.RawInfo{Length: r.NumRead + int(l), PayloadLength: int(l)},
 					Frame:    qlog.Frame{Frame: qlog.UnknownFrame{Type: t}},
 				})
 			}
