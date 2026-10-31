@@ -274,7 +274,6 @@ type PacketSent struct {
 	DatagramPayloadChecksum DatagramPayloadChecksum
 	Frames                  []Frame
 	ECN                     ECN
-	IsCoalesced             bool
 	Trigger                 string
 	SupportedVersions       []Version
 	// Tuple is the TupleID of the network tuple that the packet was sent on.
@@ -305,10 +304,6 @@ func (e PacketSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 			return err
 		}
 	}
-	if e.IsCoalesced {
-		h.WriteToken(jsontext.String("is_coalesced"))
-		h.WriteToken(jsontext.True)
-	}
 	if e.ECN != ECNUnsupported {
 		h.WriteToken(jsontext.String("ecn"))
 		h.WriteToken(jsontext.String(string(e.ECN)))
@@ -331,7 +326,6 @@ type PacketReceived struct {
 	DatagramPayloadChecksum DatagramPayloadChecksum
 	Frames                  []Frame
 	ECN                     ECN
-	IsCoalesced             bool
 	Trigger                 string
 	// Tuple is the TupleID of the network tuple that the packet was received on.
 	// It is empty for the tuple that the TupleID "" is assigned to.
@@ -360,10 +354,6 @@ func (e PacketReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		if err := frames(e.Frames).encode(enc); err != nil {
 			return err
 		}
-	}
-	if e.IsCoalesced {
-		h.WriteToken(jsontext.String("is_coalesced"))
-		h.WriteToken(jsontext.True)
 	}
 	if e.ECN != ECNUnsupported {
 		h.WriteToken(jsontext.String("ecn"))
