@@ -85,7 +85,8 @@ func TestParserUnknownFrameType(t *testing.T) {
 
 	r := bytes.NewReader(data)
 	fp := frameParser{r: r}
-	f, err := fp.ParseNext(nil)
+	var eventRecorder events.Recorder
+	f, err := fp.ParseNext(&eventRecorder)
 	require.NoError(t, err)
 	require.IsType(t, &headersFrame{}, f)
 	hf = f.(*headersFrame)
@@ -94,6 +95,9 @@ func TestParserUnknownFrameType(t *testing.T) {
 	_, err = io.ReadFull(r, payload)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), payload)
+	logged := eventRecorder.Events(qlog.FrameParsed{})
+	require.Equal(t, qlog.RawInfo{Length: 11, PayloadLength: 6}, logged[0].(qlog.FrameParsed).Raw)
+	require.Equal(t, qlog.RawInfo{Length: 8, PayloadLength: 3}, logged[1].(qlog.FrameParsed).Raw)
 }
 
 func TestParserUnsupportedFrameTypes(t *testing.T) {
@@ -135,7 +139,7 @@ func TestParserUnsupportedFrameTypes(t *testing.T) {
 				[]qlogwriter.Event{
 					qlog.FrameParsed{
 						StreamID: 42,
-						Raw:      qlog.RawInfo{Length: headerLen, PayloadLength: 6},
+						Raw:      qlog.RawInfo{Length: headerLen + 6, PayloadLength: 6},
 						Frame:    qlog.Frame{Frame: tc.qf},
 					},
 					qlog.FrameParsed{
