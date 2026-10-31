@@ -25,7 +25,7 @@ func TestDataFrame(t *testing.T) {
 }
 
 func TestHeadersFrame(t *testing.T) {
-	check(t, HeadersFrame{}, `{"frame_type":"headers","headers":[]}`)
+	check(t, HeadersFrame{}, `{"frame_type": "headers", "headers": []}`)
 	check(t, HeadersFrame{
 		HeaderFields: []HeaderField{
 			{Name: ":status", Value: "200"},
