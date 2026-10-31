@@ -137,8 +137,8 @@ func TestQlogIPRedaction(t *testing.T) {
 		var buf bytes.Buffer
 		require.NoError(t, conn.Encode(jsontext.NewEncoder(&buf), time.Time{}))
 		require.JSONEq(t, `{
-			"local": {"ip_v4": ""},
-			"remote": {"ip_v4": "***"}
+			"local": {"address_v4": ""},
+			"remote": {"address_v4": "***"}
 		}`, buf.String())
 	}
 }
