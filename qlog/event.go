@@ -815,7 +815,8 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.String("max_udp_payload_size"))
 		h.WriteToken(jsontext.Int(int64(e.MaxUDPPayloadSize)))
 	}
-	if e.AckDelayExponent != 0 {
+	// The ack_delay_exponent is not restored for 0-RTT.
+	if !e.Restore {
 		h.WriteToken(jsontext.String("ack_delay_exponent"))
 		h.WriteToken(jsontext.Uint(uint64(e.AckDelayExponent)))
 	}
