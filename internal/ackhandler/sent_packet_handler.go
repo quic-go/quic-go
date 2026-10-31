@@ -936,7 +936,8 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 							PacketType:   qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
 							PacketNumber: pn,
 						},
-						Trigger: qlog.PacketLossTimeThreshold,
+						IsMTUProbePacket: p.IsPathMTUProbePacket,
+						Trigger:          qlog.PacketLossTimeThreshold,
 					})
 				}
 			}
@@ -952,7 +953,8 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 							PacketType:   qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
 							PacketNumber: pn,
 						},
-						Trigger: qlog.PacketLossReorderingThreshold,
+						IsMTUProbePacket: p.IsPathMTUProbePacket,
+						Trigger:          qlog.PacketLossReorderingThreshold,
 					})
 				}
 			}
