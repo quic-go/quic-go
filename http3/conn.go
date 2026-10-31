@@ -96,10 +96,10 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 			Other:               maps.Clone(settings.Other),
 		}
 		if settings.Datagram {
-			sf.Datagram = new(true)
+			sf.Datagram = new(uint64(1))
 		}
 		if settings.ExtendedConnect {
-			sf.ExtendedConnect = new(true)
+			sf.ExtendedConnect = new(uint64(1))
 		}
 		c.qlogger.RecordEvent(qlog.FrameCreated{
 			StreamID: str.StreamID(),

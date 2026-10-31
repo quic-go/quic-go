@@ -225,7 +225,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 			}
 			frame.ExtendedConnect = val == 1
 			if qlogger != nil {
-				settingsFrame.ExtendedConnect = new(frame.ExtendedConnect)
+				settingsFrame.ExtendedConnect = new(val)
 			}
 		case settingDatagram:
 			if readDatagram {
@@ -237,7 +237,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 			}
 			frame.Datagram = val == 1
 			if qlogger != nil {
-				settingsFrame.Datagram = new(frame.Datagram)
+				settingsFrame.Datagram = new(val)
 			}
 		default:
 			if _, ok := frame.Other[id]; ok {

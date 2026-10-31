@@ -53,10 +53,10 @@ func TestSettingsFrame(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "datagram: true",
+			name: "datagram: 1",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				Datagram:            new(true),
+				Datagram:            new(uint64(1)),
 			},
 			expected: `{
 				"frame_type": "settings",
@@ -67,10 +67,10 @@ func TestSettingsFrame(t *testing.T) {
 			}`,
 		},
 		{
-			name: "extended_connect: false",
+			name: "extended_connect: 0",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				ExtendedConnect:     new(false),
+				ExtendedConnect:     new(uint64(0)),
 			},
 			expected: `{
 				"frame_type": "settings",
@@ -92,11 +92,11 @@ func TestSettingsFrame(t *testing.T) {
 			}`,
 		},
 		{
-			name: "datagram: false, extended_connect: false",
+			name: "datagram: 0, extended_connect: 0",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				Datagram:            new(false),
-				ExtendedConnect:     new(false),
+				Datagram:            new(uint64(0)),
+				ExtendedConnect:     new(uint64(0)),
 			},
 			expected: `{
 				"frame_type": "settings",
