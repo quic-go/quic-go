@@ -61,7 +61,7 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 	}
 	if h.KeyPhaseBit == KeyPhaseZero || h.KeyPhaseBit == KeyPhaseOne {
 		helper.WriteToken(jsontext.String("key_phase_bit"))
-		helper.WriteToken(jsontext.String(h.KeyPhaseBit.String()))
+		helper.WriteToken(jsontext.Bool(h.KeyPhaseBit == KeyPhaseOne))
 	}
 	if h.Token != nil {
 		helper.WriteToken(jsontext.String("token"))

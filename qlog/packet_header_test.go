@@ -126,14 +126,14 @@ func TestHeader1RTT(t *testing.T) {
 			PacketType:       PacketType1RTT,
 			PacketNumber:     42,
 			DestConnectionID: protocol.ParseConnectionID([]byte{0x55, 0x66, 0x77, 0x88}),
-			KeyPhaseBit:      KeyPhaseZero,
+			KeyPhaseBit:      KeyPhaseOne,
 		},
 		`{
 			"packet_type": "1RTT",
 			"packet_number": 42,
 			"dcil": 4,
 			"dcid": "55667788",
-			"key_phase_bit": "0"
+			"key_phase_bit": true
 		}`,
 	)
 }
