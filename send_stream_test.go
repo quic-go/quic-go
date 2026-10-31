@@ -416,6 +416,8 @@ func TestSendStreamLargeTryWriteAll(t *testing.T) {
 		require.NotNil(t, frame.Frame)
 		require.Equal(t, offset, frame.Frame.Offset)
 		require.Equal(t, data[offset:offset+40], frame.Frame.Data)
+		// sent frames must not keep the queued data alive
+		require.Equal(t, protocol.MaxPacketBufferSize, cap(frame.Frame.Data))
 		offset += 40
 		require.Equal(t, offset < protocol.ByteCount(len(data)), hasMore)
 	}
@@ -450,29 +452,6 @@ func TestSendStreamTryWriteAllWhileSending(t *testing.T) {
 	for pop() {
 	}
 	require.Equal(t, data, sent)
-}
-
-func BenchmarkSendStreamLargeTryWriteAll(b *testing.B) {
-	const streamID protocol.StreamID = 42
-	mockCtrl := gomock.NewController(b)
-	mockSender := NewMockStreamSender(mockCtrl)
-	mockSender.EXPECT().onHasStreamData(streamID, gomock.Any()).AnyTimes()
-	data := make([]byte, 1<<20)
-
-	for b.Loop() {
-		fc := newTestStreamFlowControllerWithSendWindow(streamID, protocol.MaxByteCount)
-		str := newSendStream(context.Background(), streamID, mockSender, fc, false)
-		if err := str.TryWriteAll(data); err != nil {
-			b.Fatal(err)
-		}
-		for {
-			frame, _, hasMore := str.popStreamFrame(protocol.MaxPacketBufferSize, protocol.Version1)
-			frame.Frame.PutBack()
-			if !hasMore {
-				break
-			}
-		}
-	}
 }
 
 func TestSendStreamResetFinalSizeIncludesReservedData(t *testing.T) {
