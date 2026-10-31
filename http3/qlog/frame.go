@@ -125,7 +125,11 @@ func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
 		h.WriteToken(jsontext.String("name"))
 		h.WriteToken(jsontext.String("settings_h3_datagram"))
 		h.WriteToken(jsontext.String("value"))
-		h.WriteToken(jsontext.Bool(*f.Datagram))
+		value := uint64(0)
+		if *f.Datagram {
+			value = 1
+		}
+		h.WriteToken(jsontext.Uint(value))
 		h.WriteToken(jsontext.EndObject)
 	}
 	if f.ExtendedConnect != nil {
@@ -133,7 +137,11 @@ func (f *SettingsFrame) encode(enc *jsontext.Encoder) error {
 		h.WriteToken(jsontext.String("name"))
 		h.WriteToken(jsontext.String("settings_enable_connect_protocol"))
 		h.WriteToken(jsontext.String("value"))
-		h.WriteToken(jsontext.Bool(*f.ExtendedConnect))
+		value := uint64(0)
+		if *f.ExtendedConnect {
+			value = 1
+		}
+		h.WriteToken(jsontext.Uint(value))
 		h.WriteToken(jsontext.EndObject)
 	}
 	if len(f.Other) > 0 {

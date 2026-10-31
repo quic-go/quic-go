@@ -62,7 +62,7 @@ func TestSettingsFrame(t *testing.T) {
 				"frame_type": "settings",
 				"settings": [{
 					"name": "settings_h3_datagram",
-					"value": true
+					"value": 1
 				}]
 			}`,
 		},
@@ -76,7 +76,7 @@ func TestSettingsFrame(t *testing.T) {
 				"frame_type": "settings",
 				"settings": [{
 					"name": "settings_enable_connect_protocol",
-					"value": false
+					"value": 0
 				}]
 			}`,
 		},
@@ -101,8 +101,8 @@ func TestSettingsFrame(t *testing.T) {
 			expected: `{
 				"frame_type": "settings",
 				"settings": [
-					{"name": "settings_h3_datagram", "value": false},
-					{"name": "settings_enable_connect_protocol", "value": false}
+					{"name": "settings_h3_datagram", "value": 0},
+					{"name": "settings_enable_connect_protocol", "value": 0}
 				]
 			}`,
 		},
