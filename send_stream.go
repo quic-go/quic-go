@@ -476,17 +476,17 @@ func (s *SendStream) popNewStreamFrame(maxDataLen protocol.ByteCount) (_ *wire.S
 		s.nextFrameReserved = false
 		if nextFrame.DataLen() > maxDataLen {
 			if nextFrame.DataLen()-maxDataLen > protocol.MaxPacketBufferSize {
-				s.nextFrame = &wire.StreamFrame{
-					Data: make([]byte, nextFrame.DataLen()-maxDataLen),
-				}
+				// Don't copy the remaining data for every frame.
+				// Sent frames are only ever shortened, so they can share the buffer.
+				s.nextFrame = &wire.StreamFrame{Data: nextFrame.Data[maxDataLen:]}
 			} else {
 				s.nextFrame = wire.GetStreamFrame()
 				s.nextFrame.Data = s.nextFrame.Data[:nextFrame.DataLen()-maxDataLen]
+				copy(s.nextFrame.Data, nextFrame.Data[maxDataLen:])
 			}
 			s.nextFrame.StreamID = s.streamID
 			s.nextFrame.Offset = s.writeOffset + maxDataLen
 			s.nextFrame.DataLenPresent = true
-			copy(s.nextFrame.Data, nextFrame.Data[maxDataLen:])
 			nextFrame.Data = nextFrame.Data[:maxDataLen]
 			s.nextFrameReserved = nextFrameReserved
 		} else {
