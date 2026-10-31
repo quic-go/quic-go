@@ -14,8 +14,11 @@ type Token struct {
 func (t Token) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("raw"))
+	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("data"))
 	h.WriteToken(jsontext.String(hex.EncodeToString(t.Raw)))
+	h.WriteToken(jsontext.EndObject)
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

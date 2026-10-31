@@ -54,7 +54,7 @@ func TestHeaderInitialWithToken(t *testing.T) {
 			"scil": 4,
 			"scid": "11223344",
 			"version": "decafbad",
-			"token": {"data": "deadbeef"}
+			"token": {"raw": {"data": "deadbeef"}}
 		}`,
 	)
 }
@@ -114,7 +114,7 @@ func TestHeaderRetry(t *testing.T) {
 			"dcid": "5566778899",
 			"scil": 4,
 			"scid": "11223344",
-			"token": {"data": "deadbeef"},
+			"token": {"raw": {"data": "deadbeef"}},
 			"version": "decafbad"
 		}`,
 	)
