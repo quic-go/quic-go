@@ -367,7 +367,7 @@ func (h *sentPacketHandler) SentPacket(
 }
 
 func (h *sentPacketHandler) qlogMetricsUpdated() {
-	var metricsUpdatedEvent qlog.MetricsUpdated
+	metricsUpdatedEvent := h.lastMetrics
 	var updated bool
 	if h.rttStats.HasMeasurement() {
 		if h.lastMetrics.MinRTT != h.rttStats.MinRTT() {
@@ -1235,6 +1235,7 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 
 func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSize protocol.ByteCount) {
 	h.rttStats.ResetForPathMigration()
+	h.lastMetrics = qlog.MetricsUpdated{}
 	h.packetThresholdDisabled = false
 	h.timeThresholdEighths = defaultTimeThresholdEighths
 	h.minPNToRelaxReordering = protocol.InvalidPacketNumber

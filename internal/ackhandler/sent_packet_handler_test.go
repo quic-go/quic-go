@@ -296,6 +296,17 @@ func TestSentPacketHandlerRTTAckEliciting(t *testing.T) {
 	require.Equal(t, 800*time.Millisecond, rttStats.LatestRTT())
 	require.Zero(t, getPacketsInFlight())
 	require.Zero(t, getBytesInFlight())
+
+	sph.MigratedPath(now, 1200)
+	eventRecorder.Clear()
+	sendPacket(t, now, 1200, true)
+	metrics := eventRecorder.Events(qlog.MetricsUpdated{})
+	require.Len(t, metrics, 1)
+	require.Equal(t, qlog.MetricsUpdated{
+		CongestionWindow: 32 * 1200,
+		BytesInFlight:    1200,
+		PacketsInFlight:  1,
+	}, metrics[0])
 }
 
 func TestSentPacketHandlerRTTAcrossPacketNumberSpaces(t *testing.T) {
