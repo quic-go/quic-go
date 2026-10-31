@@ -155,7 +155,9 @@ func TestPriorityUpdateFrame(t *testing.T) {
 	check(t, PriorityUpdateFrame{StreamID: 12, PriorityFieldValue: "u=1, i"}, `{
 		"frame_type": "priority_update",
 		"stream_id": 12,
-		"priority_field_value": "u=1, i"
+		"priority_field_value": "u=1, i",
+        "element_id": 12,
+        "value": "u=1, i"
 	}`)
 }
 

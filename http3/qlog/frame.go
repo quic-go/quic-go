@@ -204,6 +204,11 @@ func (f *PriorityUpdateFrame) encode(enc *jsontext.Encoder) error {
 	h.WriteToken(jsontext.Uint(uint64(f.StreamID)))
 	h.WriteToken(jsontext.String("priority_field_value"))
 	h.WriteToken(jsontext.String(f.PriorityFieldValue))
+	// qvis still reads these legacy names.
+	h.WriteToken(jsontext.String("element_id"))
+	h.WriteToken(jsontext.Uint(uint64(f.StreamID)))
+	h.WriteToken(jsontext.String("value"))
+	h.WriteToken(jsontext.String(f.PriorityFieldValue))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
