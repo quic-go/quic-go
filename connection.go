@@ -2415,28 +2415,18 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 		c.logger.Debugf("Restoring Transport Parameters: %s", params)
 	}
 	if c.qlogger != nil {
+		// only log the parameters that are saved in the session ticket
 		c.qlogger.RecordEvent(qlog.ParametersSet{
-			Restore:                         true,
-			Initiator:                       qlog.InitiatorRemote,
-			SentBy:                          c.perspective,
-			OriginalDestinationConnectionID: params.OriginalDestinationConnectionID,
-			InitialSourceConnectionID:       params.InitialSourceConnectionID,
-			RetrySourceConnectionID:         params.RetrySourceConnectionID,
-			StatelessResetToken:             params.StatelessResetToken,
-			DisableActiveMigration:          params.DisableActiveMigration,
-			MaxIdleTimeout:                  params.MaxIdleTimeout,
-			MaxUDPPayloadSize:               params.MaxUDPPayloadSize,
-			AckDelayExponent:                params.AckDelayExponent,
-			MaxAckDelay:                     params.MaxAckDelay,
-			ActiveConnectionIDLimit:         params.ActiveConnectionIDLimit,
-			InitialMaxData:                  params.InitialMaxData,
-			InitialMaxStreamDataBidiLocal:   params.InitialMaxStreamDataBidiLocal,
-			InitialMaxStreamDataBidiRemote:  params.InitialMaxStreamDataBidiRemote,
-			InitialMaxStreamDataUni:         params.InitialMaxStreamDataUni,
-			InitialMaxStreamsBidi:           int64(params.MaxBidiStreamNum),
-			InitialMaxStreamsUni:            int64(params.MaxUniStreamNum),
-			MaxDatagramFrameSize:            params.MaxDatagramFrameSize,
-			EnableResetStreamAt:             params.EnableResetStreamAt,
+			Restore:                        true,
+			ActiveConnectionIDLimit:        params.ActiveConnectionIDLimit,
+			InitialMaxData:                 params.InitialMaxData,
+			InitialMaxStreamDataBidiLocal:  params.InitialMaxStreamDataBidiLocal,
+			InitialMaxStreamDataBidiRemote: params.InitialMaxStreamDataBidiRemote,
+			InitialMaxStreamDataUni:        params.InitialMaxStreamDataUni,
+			InitialMaxStreamsBidi:          int64(params.MaxBidiStreamNum),
+			InitialMaxStreamsUni:           int64(params.MaxUniStreamNum),
+			MaxDatagramFrameSize:           params.MaxDatagramFrameSize,
+			EnableResetStreamAt:            params.EnableResetStreamAt,
 		})
 	}
 

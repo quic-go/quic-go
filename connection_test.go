@@ -1131,6 +1131,34 @@ func TestConnectionTransportParameters(t *testing.T) {
 	)
 }
 
+func TestConnectionRestoredTransportParameters(t *testing.T) {
+	var eventRecorder events.Recorder
+	tc := newClientTestConnection(t, nil, nil, false, connectionOptTracer(&eventRecorder))
+	var params wire.TransportParameters
+	require.NoError(t, params.UnmarshalFromSessionTicket((&wire.TransportParameters{
+		ActiveConnectionIDLimit:       3,
+		InitialMaxData:                1337,
+		InitialMaxStreamDataBidiLocal: 0x5000,
+		MaxBidiStreamNum:              1,
+		MaxDatagramFrameSize:          protocol.InvalidByteCount,
+	}).MarshalForSessionTicket(nil)))
+	tc.conn.restoreTransportParameters(&params)
+
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.ParametersSet{
+				Restore:                       true,
+				ActiveConnectionIDLimit:       3,
+				InitialMaxData:                1337,
+				InitialMaxStreamDataBidiLocal: 0x5000,
+				InitialMaxStreamsBidi:         1,
+				MaxDatagramFrameSize:          protocol.InvalidByteCount,
+			},
+		},
+		eventRecorder.Events(qlog.ParametersSet{}),
+	)
+}
+
 func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
