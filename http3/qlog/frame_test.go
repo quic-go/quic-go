@@ -37,7 +37,7 @@ func TestHeadersFrame(t *testing.T) {
 		"headers": [
 			{"name": ":status", "value": "200"},
 			{"name": "content-type", "value": "application/json"},
-            {"name":"x-opaque","value_bytes":"ff"}
+            {"name": "x-opaque", "value_bytes": "ff"}
 		]
 	}`)
 }
