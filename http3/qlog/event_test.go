@@ -134,7 +134,7 @@ func TestFrameCreatedEvent(t *testing.T) {
 		},
 		"frame": {
 			"frame_type": "headers",
-			"header_fields": [
+			"headers": [
 				{"name": ":status", "value": "200"},
 				{"name": "content-type", "value": "text/html"}
 			]
