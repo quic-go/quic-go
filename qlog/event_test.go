@@ -991,7 +991,7 @@ func TestLossTimerUpdatedExpired(t *testing.T) {
 }
 
 func TestLossTimerUpdatedCanceled(t *testing.T) {
-	name, ev := testEventEncoding(t, &eventLossTimerCanceled{})
+	name, ev := testEventEncoding(t, &LossTimerUpdated{Type: LossTimerUpdateTypeCancelled})
 
 	require.Equal(t, "recovery:loss_timer_updated", name)
 	require.JSONEq(t, `{"event_type": "cancelled"}`, ev)

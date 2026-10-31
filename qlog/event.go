@@ -917,27 +917,18 @@ func (e LossTimerUpdated) Encode(enc *jsontext.Encoder, t time.Time) error {
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("event_type"))
 	h.WriteToken(jsontext.String(string(e.Type)))
-	h.WriteToken(jsontext.String("timer_type"))
-	h.WriteToken(jsontext.String(string(e.TimerType)))
-	h.WriteToken(jsontext.String("packet_number_space"))
-	h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
+	if e.TimerType != "" {
+		h.WriteToken(jsontext.String("timer_type"))
+		h.WriteToken(jsontext.String(string(e.TimerType)))
+	}
+	if e.EncLevel != 0 {
+		h.WriteToken(jsontext.String("packet_number_space"))
+		h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
+	}
 	if e.Type == LossTimerUpdateTypeSet {
 		h.WriteToken(jsontext.String("delta"))
 		h.WriteToken(jsontext.Float(milliseconds(e.Time.Sub(t))))
 	}
-	h.WriteToken(jsontext.EndObject)
-	return h.err
-}
-
-type eventLossTimerCanceled struct{}
-
-func (e eventLossTimerCanceled) Name() string { return "recovery:loss_timer_updated" }
-
-func (e eventLossTimerCanceled) Encode(enc *jsontext.Encoder, _ time.Time) error {
-	h := encoderHelper{enc: enc}
-	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("event_type"))
-	h.WriteToken(jsontext.String("cancelled"))
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
