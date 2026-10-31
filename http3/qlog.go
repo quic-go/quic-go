@@ -1,6 +1,10 @@
 package http3
 
 import (
+	"strings"
+
+	"golang.org/x/net/http/httpguts"
+
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -21,10 +25,7 @@ func maybeQlogInvalidHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.Str
 func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, hf *headersFrame, hfs []qpack.HeaderField) {
 	headerFields := make([]qlog.HeaderField, len(hfs))
 	for i, hf := range hfs {
-		headerFields[i] = qlog.HeaderField{
-			Name:  hf.Name,
-			Value: hf.Value,
-		}
+		headerFields[i] = qlogHeaderField(hf.Name, hf.Value)
 	}
 	qlogger.RecordEvent(qlog.FrameParsed{
 		StreamID: streamID,
@@ -41,10 +42,7 @@ func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID,
 func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, length, payloadLength int, hfs []qlog.HeaderField) {
 	headerFields := make([]qlog.HeaderField, len(hfs))
 	for i, hf := range hfs {
-		headerFields[i] = qlog.HeaderField{
-			Name:  hf.Name,
-			Value: hf.Value,
-		}
+		headerFields[i] = qlogHeaderField(hf.Name, hf.Value)
 	}
 	qlogger.RecordEvent(qlog.FrameCreated{
 		StreamID: streamID,
@@ -53,4 +51,14 @@ func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID
 			HeaderFields: headerFields,
 		}},
 	})
+}
+
+// qlogHeaderField flags names and values with characters that HTTP/3 doesn't allow.
+func qlogHeaderField(name, value string) qlog.HeaderField {
+	return qlog.HeaderField{
+		Name:         name,
+		Value:        value,
+		InvalidName:  strings.ToLower(name) != name || !httpguts.ValidHeaderFieldName(strings.TrimPrefix(name, ":")),
+		InvalidValue: !httpguts.ValidHeaderFieldValue(value),
+	}
 }

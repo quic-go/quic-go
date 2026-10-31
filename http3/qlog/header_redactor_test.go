@@ -32,6 +32,7 @@ func TestRedactHeaders(t *testing.T) {
 			HeaderFields: []HeaderField{
 				{Name: "authorization", Value: "secret"},
 				{Name: ":path", Value: "secret"},
+				{Name: "x-invalid", Value: "secret", InvalidValue: true},
 			},
 		}},
 	})
@@ -42,13 +43,14 @@ func TestRedactHeaders(t *testing.T) {
 	mtu := quicqlog.MTUUpdated{Value: 1400}
 	producer.RecordEvent(data)
 	producer.RecordEvent(mtu)
-	require.Equal(t, []string{"Authorization", ":path"}, names)
+	require.Equal(t, []string{"Authorization", ":path", "X-Invalid"}, names)
 	require.Equal(t, []qlogwriter.Event{
 		FrameCreated{
 			Raw: RawInfo{Length: OmitLength, PayloadLength: OmitLength},
 			Frame: Frame{Frame: HeadersFrame{HeaderFields: []HeaderField{
 				{Name: "authorization", Value: "***"},
 				{Name: ":path", Value: "***"},
+				{Name: "x-invalid", Value: "***"},
 			}}},
 		},
 		data, mtu,

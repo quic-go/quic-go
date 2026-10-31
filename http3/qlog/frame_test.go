@@ -25,16 +25,23 @@ func TestDataFrame(t *testing.T) {
 }
 
 func TestHeadersFrame(t *testing.T) {
+	check(t, HeadersFrame{}, `{"frame_type": "headers", "headers": []}`)
 	check(t, HeadersFrame{
 		HeaderFields: []HeaderField{
 			{Name: ":status", Value: "200"},
 			{Name: "content-type", Value: "application/json"},
+			{Name: "Bad Name", Value: "ok", InvalidName: true},
+			{Name: "x-example", Value: "a\r\nb", InvalidValue: true},
+			{Name: "x-opaque", Value: "\xff"},
 		},
 	}, `{
 		"frame_type": "headers",
-		"header_fields": [
+		"headers": [
 			{"name": ":status", "value": "200"},
-			{"name": "content-type", "value": "application/json"}
+			{"name": "content-type", "value": "application/json"},
+			{"name_bytes": "426164204e616d65", "value": "ok"},
+			{"name": "x-example", "value_bytes": "610d0a62"},
+			{"name": "x-opaque", "value_bytes": "ff"}
 		]
 	}`)
 }
