@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/textproto"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -253,9 +254,26 @@ func (w *responseWriter) encodeHeader(status int) ([]byte, error) {
 		if strings.HasPrefix(k, http.TrailerPrefix) {
 			continue
 		}
+		// There's no way to return an error to the handler at this point.
+		// Drop invalid header fields instead of sending them (and having the peer reject the response),
+		// like net/http and x/net/http2 do.
+		if !httpguts.ValidHeaderFieldName(k) {
+			w.logInvalidHeaderField(k)
+			continue
+		}
+		name := strings.ToLower(k)
+		// connection-specific header fields are not allowed, see section 4.2 of RFC 9114.
+		// TE is only allowed in requests.
+		if name == "te" || slices.Contains(invalidHeaderFields[:], name) {
+			w.logInvalidHeaderField(k)
+			continue
+		}
 		for index := range v {
-			name := strings.ToLower(k)
 			value := v[index]
+			if !httpguts.ValidHeaderFieldValue(value) {
+				w.logInvalidHeaderField(k)
+				continue
+			}
 			if err := enc.WriteField(qpack.HeaderField{Name: name, Value: value}); err != nil {
 				return nil, err
 			}
@@ -311,6 +329,12 @@ func (w *responseWriter) Flush() {
 		if w.logger != nil {
 			w.logger.Debug("could not flush to stream", "error", err)
 		}
+	}
+}
+
+func (w *responseWriter) logInvalidHeaderField(name string) {
+	if w.logger != nil {
+		w.logger.Debug("ignoring invalid header field", slog.String("header", name))
 	}
 }
 
