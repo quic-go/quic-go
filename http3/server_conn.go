@@ -83,6 +83,9 @@ func (c *RawServerConn) CloseWithError(code quic.ApplicationErrorCode, msg strin
 func (c *RawServerConn) HandleRequestStream(str *quic.Stream) {
 	// HTTP/3 handles this stream, so the peer can replace it as soon as it completes.
 	str.ReleaseStreamCredit()
+	// the handler can produce qlog events until it returns, even after the connection was closed
+	c.rawConn.AddQlogProducer()
+	defer c.rawConn.RemoveQlogProducer()
 	hstr := c.rawConn.TrackStream(str)
 	c.handleRequestStream(hstr)
 }
