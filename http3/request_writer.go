@@ -41,18 +41,24 @@ func newRequestWriter() *requestWriter {
 
 func (w *requestWriter) WriteRequestHeader(wr io.Writer, req *http.Request, gzip bool, streamID quic.StreamID, qlogger qlogwriter.Recorder) error {
 	buf := &bytes.Buffer{}
-	if err := w.writeHeaders(buf, req, gzip, streamID, qlogger); err != nil {
+	headerFields, payloadLen, err := w.writeHeaders(buf, req, gzip, qlogger != nil)
+	if err != nil {
 		return err
 	}
 	if _, err := wr.Write(buf.Bytes()); err != nil {
 		return err
+	}
+	if qlogger != nil {
+		qlogCreatedHeadersFrame(qlogger, streamID, buf.Len(), payloadLen, headerFields)
 	}
 	trace := httptrace.ContextClientTrace(req.Context())
 	traceWroteHeaders(trace)
 	return nil
 }
 
-func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool, streamID quic.StreamID, qlogger qlogwriter.Recorder) error {
+// writeHeaders writes the HEADERS frame.
+// It returns the header fields to log (only if doQlog is set) and the frame's payload length.
+func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip, doQlog bool) ([]qlog.HeaderField, int, error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	defer w.encoder.Close()
@@ -69,21 +75,21 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool,
 		trailers = strings.Join(keys, ", ")
 	}
 
-	headerFields, err := w.encodeHeaders(req, gzip, trailers, actualContentLength(req), qlogger != nil)
+	headerFields, err := w.encodeHeaders(req, gzip, trailers, actualContentLength(req), doQlog)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 
+	payloadLen := w.headerBuf.Len()
 	b := make([]byte, 0, 128)
-	b = (&headersFrame{Length: uint64(w.headerBuf.Len())}).Append(b)
-	if qlogger != nil {
-		qlogCreatedHeadersFrame(qlogger, streamID, len(b)+w.headerBuf.Len(), w.headerBuf.Len(), headerFields)
-	}
+	b = (&headersFrame{Length: uint64(payloadLen)}).Append(b)
 	if _, err := wr.Write(b); err != nil {
-		return err
+		return nil, 0, err
 	}
-	_, err = wr.Write(w.headerBuf.Bytes())
-	return err
+	if _, err := wr.Write(w.headerBuf.Bytes()); err != nil {
+		return nil, 0, err
+	}
+	return headerFields, payloadLen, nil
 }
 
 func isExtendedConnectRequest(req *http.Request) bool {

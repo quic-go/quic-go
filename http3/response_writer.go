@@ -13,6 +13,7 @@ import (
 
 	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"golang.org/x/net/http/httpguts"
 )
@@ -40,6 +41,8 @@ type responseWriter struct {
 	trailers map[string]struct{}
 	buf      []byte // the unwritten part of the HEADERS frame
 	status   int    // status code passed to WriteHeader
+
+	headersEvent qlogwriter.Event // logged once buf was written
 
 	// for responses smaller than maxSmallResponseSize, we buffer calls to Write,
 	// and automatically add the Content-Length header
@@ -105,6 +108,7 @@ func (w *responseWriter) WriteHeader(status int) {
 		// WriteHeader can't return an error, so a failed informational header isn't resumed
 		if err := w.writeHeader(status); err != nil {
 			w.buf = nil
+			w.headersEvent = nil
 		}
 		return
 	}
@@ -209,25 +213,28 @@ func (w *responseWriter) doWrite(p []byte) (int, error) {
 func (w *responseWriter) writeHeader(status int) error {
 	if len(w.buf) == 0 {
 		var err error
-		if w.buf, err = w.encodeHeader(status); err != nil {
+		if w.buf, w.headersEvent, err = w.encodeHeader(status); err != nil {
 			return err
 		}
 	}
-	n, err := w.str.writeUnframed(w.buf)
+	n, err := w.str.writeFrame(w.buf, w.headersEvent)
 	if err != nil && n < len(w.buf) {
 		w.buf = w.buf[n:]
 		return err
 	}
 	w.buf = w.buf[len(w.buf):]
+	w.headersEvent = nil
 	return nil
 }
 
-func (w *responseWriter) encodeHeader(status int) ([]byte, error) {
+// encodeHeader encodes the HEADERS frame.
+// The qlog event is only returned if qlog is enabled.
+func (w *responseWriter) encodeHeader(status int) ([]byte, qlogwriter.Event, error) {
 	var headerFields []qlog.HeaderField // only used for qlog
 	var headers bytes.Buffer
 	enc := qpack.NewEncoder(&headers)
 	if err := enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if w.str.qlogger != nil {
 		headerFields = append(headerFields, qlog.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
@@ -257,7 +264,7 @@ func (w *responseWriter) encodeHeader(status int) ([]byte, error) {
 			name := strings.ToLower(k)
 			value := v[index]
 			if err := enc.WriteField(qpack.HeaderField{Name: name, Value: value}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if w.str.qlogger != nil {
 				headerFields = append(headerFields, qlog.HeaderField{Name: name, Value: value})
@@ -269,10 +276,10 @@ func (w *responseWriter) encodeHeader(status int) ([]byte, error) {
 	buf = (&headersFrame{Length: uint64(headers.Len())}).Append(buf)
 	buf = append(buf, headers.Bytes()...)
 
-	if w.str.qlogger != nil {
-		qlogCreatedHeadersFrame(w.str.qlogger, w.str.StreamID(), len(buf), headers.Len(), headerFields)
+	if w.str.qlogger == nil {
+		return buf, nil, nil
 	}
-	return buf, nil
+	return buf, headersFrameCreated(w.str.StreamID(), len(buf), headers.Len(), headerFields), nil
 }
 
 func (w *responseWriter) FlushError() error {

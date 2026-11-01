@@ -39,6 +39,10 @@ func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID,
 }
 
 func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, length, payloadLength int, hfs []qlog.HeaderField) {
+	qlogger.RecordEvent(headersFrameCreated(streamID, length, payloadLength, hfs))
+}
+
+func headersFrameCreated(streamID quic.StreamID, length, payloadLength int, hfs []qlog.HeaderField) qlog.FrameCreated {
 	headerFields := make([]qlog.HeaderField, len(hfs))
 	for i, hf := range hfs {
 		headerFields[i] = qlog.HeaderField{
@@ -46,11 +50,11 @@ func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID
 			Value: hf.Value,
 		}
 	}
-	qlogger.RecordEvent(qlog.FrameCreated{
+	return qlog.FrameCreated{
 		StreamID: streamID,
 		Raw:      qlog.RawInfo{Length: length, PayloadLength: payloadLength},
 		Frame: qlog.Frame{Frame: qlog.HeadersFrame{
 			HeaderFields: headerFields,
 		}},
-	})
+	}
 }

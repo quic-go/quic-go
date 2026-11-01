@@ -228,6 +228,20 @@ func TestStreamTryWriteAllAfterPartialWrite(t *testing.T) {
 	require.NoError(t, str.TryWriteAll([]byte("obarbaz")))
 }
 
+func TestStreamQlogWriteAfterConnectionClose(t *testing.T) {
+	clientConn, _ := newConnPair(t)
+	var eventRecorder events.Recorder
+	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, &eventRecorder, nil)
+	qstr, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	str := newStream(conn.TrackStream(qstr), conn, nil, nil, &eventRecorder)
+
+	clientConn.CloseWithError(0, "")
+	_, err = str.Write([]byte("foo"))
+	require.Error(t, err)
+	require.Empty(t, eventRecorder.Events(qlog.FrameCreated{}))
+}
+
 func TestStreamTryWriteAll(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)

@@ -90,6 +90,9 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream)
 	b = settings.Append(b)
+	if _, err := str.Write(b); err != nil {
+		return nil, err
+	}
 	if c.qlogger != nil {
 		sf := qlog.SettingsFrame{
 			MaxFieldSectionSize: settings.MaxFieldSectionSize,
@@ -106,9 +109,6 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 			Raw:      qlog.RawInfo{Length: len(b), PayloadLength: qlog.OmitLength},
 			Frame:    qlog.Frame{Frame: sf},
 		})
-	}
-	if _, err := str.Write(b); err != nil {
-		return nil, err
 	}
 	return str, nil
 }
@@ -266,6 +266,9 @@ func (c *rawConn) sendDatagram(streamID quic.StreamID, b []byte) error {
 	quarterStreamID := uint64(streamID / 4)
 	data = quicvarint.Append(data, uint64(streamID/4))
 	data = append(data, b...)
+	if err := c.conn.SendDatagram(data); err != nil {
+		return err
+	}
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.DatagramCreated{
 			QuarterStreamID: quarterStreamID,
@@ -275,7 +278,7 @@ func (c *rawConn) sendDatagram(streamID quic.StreamID, b []byte) error {
 			},
 		})
 	}
-	return c.conn.SendDatagram(data)
+	return nil
 }
 
 func (c *rawConn) receiveDatagrams() error {

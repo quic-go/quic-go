@@ -455,11 +455,13 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 	b := make([]byte, 0, frameHeaderLen+buf.Len())
 	b = (&headersFrame{Length: uint64(buf.Len())}).Append(b)
 	b = append(b, buf.Bytes()...)
+	if _, err := wr.Write(b); err != nil {
+		return true, err
+	}
 	if qlogger != nil {
 		qlogCreatedHeadersFrame(qlogger, streamID, len(b), buf.Len(), headerFields)
 	}
-	_, err := wr.Write(b)
-	return true, err
+	return true, nil
 }
 
 func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder, streamID quic.StreamID) (http.Header, error) {

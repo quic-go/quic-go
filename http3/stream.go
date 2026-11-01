@@ -151,30 +151,25 @@ func (s *Stream) Write(b []byte) (int, error) {
 	l := len(b) - n
 	s.frameHeader = (&dataFrame{Length: uint64(l)}).Append(s.frameHeader[:0])
 	s.bytesUnwrittenInFrame = uint64(l)
-	if s.qlogger != nil {
-		s.qlogger.RecordEvent(qlog.FrameCreated{
-			StreamID: s.StreamID(),
-			Raw: qlog.RawInfo{
-				Length:        len(s.frameHeader) + l,
-				PayloadLength: l,
-			},
-			Frame: qlog.Frame{Frame: qlog.DataFrame{}},
-		})
-	}
 	m, err := s.continueDataFrame(b[n:])
 	return n + m, err
 }
 
 // continueDataFrame writes the unwritten part of the DATA frame header,
 // followed by as much of b as fits into the frame's payload.
+// The frame is logged once its header was written.
 func (s *Stream) continueDataFrame(b []byte) (int, error) {
 	if len(s.frameHeader) > 0 {
 		n, err := s.writeUnframed(s.frameHeader)
-		if err != nil {
+		if n < len(s.frameHeader) {
 			s.frameHeader = s.frameHeader[n:]
 			return 0, err
 		}
 		s.frameHeader = s.frameHeader[:0]
+		s.qlogCreatedDataFrame(s.bytesUnwrittenInFrame)
+		if err != nil {
+			return 0, err
+		}
 	}
 	n, err := s.writeUnframed(b[:min(uint64(len(b)), s.bytesUnwrittenInFrame)])
 	s.bytesUnwrittenInFrame -= uint64(n)
@@ -189,11 +184,12 @@ func (s *Stream) TryWriteAll(b []byte) error {
 		return errors.New("http3: invalid use of Stream.TryWriteAll before sending the response header")
 	}
 	// complete the DATA frame left unfinished by a failed Write, then start a new one
+	pendingHeader := len(s.frameHeader) > 0
+	pendingPayloadLen := s.bytesUnwrittenInFrame
 	completed := min(uint64(len(b)), s.bytesUnwrittenInFrame)
 	data := make([]byte, 0, len(s.frameHeader)+frameHeaderLen+len(b))
 	data = append(data, s.frameHeader...)
 	data = append(data, b[:completed]...)
-	frameStart := len(data)
 	rest := b[completed:]
 	if len(rest) > 0 {
 		data = (&dataFrame{Length: uint64(len(rest))}).Append(data)
@@ -204,22 +200,43 @@ func (s *Stream) TryWriteAll(b []byte) error {
 	}
 	s.frameHeader = s.frameHeader[:0]
 	s.bytesUnwrittenInFrame -= completed
-	if s.qlogger != nil && len(rest) > 0 {
-		s.qlogger.RecordEvent(qlog.FrameCreated{
-			StreamID: s.StreamID(),
-			Raw: qlog.RawInfo{
-				Length:        len(data) - frameStart,
-				PayloadLength: len(rest),
-			},
-			Frame: qlog.Frame{Frame: qlog.DataFrame{}},
-		})
+	if pendingHeader {
+		s.qlogCreatedDataFrame(pendingPayloadLen)
+	}
+	if len(rest) > 0 {
+		s.qlogCreatedDataFrame(uint64(len(rest)))
 	}
 	return nil
+}
+
+// qlogCreatedDataFrame logs a DATA frame once its header was written.
+func (s *Stream) qlogCreatedDataFrame(payloadLen uint64) {
+	if s.qlogger == nil {
+		return
+	}
+	s.qlogger.RecordEvent(qlog.FrameCreated{
+		StreamID: s.StreamID(),
+		Raw: qlog.RawInfo{
+			Length:        len((&dataFrame{Length: payloadLen}).Append(nil)) + int(payloadLen),
+			PayloadLength: int(payloadLen),
+		},
+		Frame: qlog.Frame{Frame: qlog.DataFrame{}},
+	})
 }
 
 func (s *Stream) writeUnframed(b []byte) (int, error) {
 	n, err := s.datagramStream.Write(b)
 	return n, maybeReplaceError(err)
+}
+
+// writeFrame writes (the unwritten part of) a frame.
+// Once the frame was written completely, it logs ev, if set.
+func (s *Stream) writeFrame(b []byte, ev qlogwriter.Event) (int, error) {
+	n, err := s.writeUnframed(b)
+	if n == len(b) && ev != nil {
+		s.qlogger.RecordEvent(ev)
+	}
+	return n, err
 }
 
 func (s *Stream) StreamID() quic.StreamID {
