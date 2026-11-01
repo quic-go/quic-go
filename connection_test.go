@@ -3517,6 +3517,88 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 	})
 }
 
+func TestConnectionPathSwitchWithoutConnectionID(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		unpacker := NewMockUnpacker(mockCtrl)
+		tc := newServerTestConnection(t, mockCtrl, nil, false,
+			connectionOptUnpacker(unpacker),
+			connectionOptHandshakeConfirmed(),
+		)
+		connID := func(seq uint8) protocol.ConnectionID { return protocol.ParseConnectionID([]byte{seq, seq, seq, seq}) }
+		// the peer can only provide new connection IDs if it doesn't use a zero-length connection ID
+		tc.conn.connIDManager.ChangeInitialConnID(connID(0))
+		tc.connRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any()).AnyTimes()
+		tc.connRunner.EXPECT().RemoveResetToken(gomock.Any()).AnyTimes()
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{}, errNothingToPack,
+		).AnyTimes()
+
+		newConnIDFrame := func(seq, retirePriorTo uint8) []byte {
+			b, err := (&wire.NewConnectionIDFrame{
+				SequenceNumber:      uint64(seq),
+				RetirePriorTo:       uint64(retirePriorTo),
+				ConnectionID:        connID(seq),
+				StatelessResetToken: protocol.StatelessResetToken{seq},
+			}).Append(nil, protocol.Version1)
+			require.NoError(t, err)
+			return b
+		}
+		newRemoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 1), Port: 1234}
+		receivePacket := func(pn protocol.PacketNumber, payload []byte) {
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(
+				pn, protocol.PacketNumberLen2, protocol.KeyPhaseZero, payload, nil,
+			)
+			tc.conn.handlePacket(receivedPacket{
+				data:       make([]byte, 100),
+				buffer:     getPacketBuffer(),
+				remoteAddr: newRemoteAddr,
+				rcvTime:    monotime.Now(),
+			})
+			synctest.Wait()
+		}
+
+		errChan := make(chan error, 1)
+		go func() { errChan <- tc.conn.run() }()
+
+		// A non-probing packet on a new path, which also provides a connection ID for probing the path.
+		var pathChallenge *wire.PathChallengeFrame
+		tc.packer.EXPECT().PackPathProbePacket(connID(1), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ protocol.ConnectionID, frames []ackhandler.Frame, _ protocol.Version) (shortHeaderPacket, *packetBuffer, error) {
+				pathChallenge = frames[0].Frame.(*wire.PathChallengeFrame)
+				return shortHeaderPacket{IsPathProbePacket: true}, getPacketBuffer(), nil
+			},
+		)
+		tc.sendConn.EXPECT().WriteTo(gomock.Any(), newRemoteAddr, packetInfo{})
+		receivePacket(10, append([]byte{1}, newConnIDFrame(1, 0)...)) // PING frame
+		require.NotNil(t, pathChallenge)
+
+		// The PATH_RESPONSE validates the path.
+		// Retire Prior To retires the path's connection ID, and the replacement becomes the active connection ID.
+		// Without a connection ID for the path, the connection doesn't switch.
+		pathResponse, err := (&wire.PathResponseFrame{Data: pathChallenge.Data}).Append(nil, protocol.Version1)
+		require.NoError(t, err)
+		receivePacket(11, append(pathResponse, newConnIDFrame(2, 2)...))
+		require.Equal(t, connID(2), tc.conn.connIDManager.Get())
+
+		// once the peer provides another connection ID, the next packet on the path switches the connection
+		tc.sendConn.EXPECT().ChangeRemoteAddr(newRemoteAddr, gomock.Any())
+		receivePacket(12, append([]byte{1}, newConnIDFrame(3, 2)...)) // PING frame
+		require.Equal(t, connID(3), tc.conn.connIDManager.Get())
+
+		// test teardown
+		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+		tc.conn.destroy(nil)
+		synctest.Wait()
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("should have shut down")
+		}
+	})
+}
+
 func TestConnectionMigrationServer(t *testing.T) {
 	tc := newServerTestConnection(t, nil, nil, false)
 	_, err := tc.conn.AddPath(&Transport{})
