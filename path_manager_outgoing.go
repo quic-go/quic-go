@@ -6,7 +6,6 @@ import (
 	"errors"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
@@ -21,8 +20,6 @@ var (
 	ErrPathNotValidated = errors.New("path not yet validated")
 )
 
-var errPathDoesNotExist = errors.New("path does not exist")
-
 // Path is a network path.
 type Path struct {
 	id          pathID
@@ -31,7 +28,6 @@ type Path struct {
 	initialRTT  time.Duration
 
 	enablePath func(pathID)
-	validated  atomic.Bool
 	abandon    chan struct{}
 }
 
@@ -47,7 +43,6 @@ func (p *Path) Probe(ctx context.Context) error {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-path.Validated():
-			p.validated.Store(true)
 			return nil
 		case <-timerChan:
 			nextProbeDur *= 2 // exponential backoff
@@ -69,22 +64,12 @@ func (p *Path) Probe(ctx context.Context) error {
 // It immediately stops sending on the old path, and sends on this new path.
 // It is possible to switch back to the old path without probing it again, until it is closed.
 func (p *Path) Switch() error {
-	if err := p.pathManager.switchToPath(p.id); err != nil {
-		switch {
-		case errors.Is(err, ErrPathNotValidated):
-			return err
-		case errors.Is(err, errPathDoesNotExist) && !p.validated.Load():
-			select {
-			case <-p.abandon:
-				return ErrPathClosed
-			default:
-				return ErrPathNotValidated
-			}
-		default:
-			return ErrPathClosed
-		}
+	select {
+	case <-p.abandon:
+		return ErrPathClosed
+	default:
 	}
-	return nil
+	return p.pathManager.switchToPath(p.id)
 }
 
 // Close abandons a path.
@@ -205,10 +190,7 @@ func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	defer pm.mx.Unlock()
 
 	p, ok := pm.paths[id]
-	if !ok {
-		return errPathDoesNotExist
-	}
-	if !p.isValidated {
+	if !ok || !p.isValidated {
 		return ErrPathNotValidated
 	}
 	pm.pathToSwitchTo = p
