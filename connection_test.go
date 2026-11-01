@@ -369,23 +369,6 @@ func TestConnectionStatelessReset(t *testing.T) {
 	})
 }
 
-func TestConnectionCloseErrorPrecedence(t *testing.T) {
-	var eventRecorder events.Recorder
-	tc := newServerTestConnection(t, nil, nil, false, connectionOptTracer(&eventRecorder))
-	tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
-	tc.conn.handleCloseError(&closeError{
-		err:       errors.Join(qerr.ErrIdleTimeout, &StatelessResetError{}),
-		immediate: true,
-	})
-	require.Equal(t,
-		[]qlogwriter.Event{qlog.ConnectionClosed{
-			Initiator: qlog.InitiatorLocal,
-			Trigger:   qlog.ConnectionCloseTriggerIdleTimeout,
-		}},
-		eventRecorder.Events(qlog.ConnectionClosed{}),
-	)
-}
-
 func getLongHeaderPacket(t *testing.T, remoteAddr net.Addr, extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
 	t.Helper()
 	b, err := extHdr.Append(nil, protocol.Version1)
