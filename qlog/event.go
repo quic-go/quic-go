@@ -276,6 +276,7 @@ type PacketSent struct {
 	ECN                     ECN
 	Trigger                 string
 	SupportedVersions       []Version
+	IsMTUProbePacket        bool
 	// Tuple is the TupleID of the network tuple that the packet was sent on.
 	// It is empty for the tuple that the TupleID "" is assigned to.
 	Tuple string
@@ -311,6 +312,10 @@ func (e PacketSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	if e.Trigger != "" {
 		h.WriteToken(jsontext.String("trigger"))
 		h.WriteToken(jsontext.String(e.Trigger))
+	}
+	if e.IsMTUProbePacket {
+		h.WriteToken(jsontext.String("is_mtu_probe_packet"))
+		h.WriteToken(jsontext.True)
 	}
 	if e.Tuple != "" {
 		h.WriteToken(jsontext.String("tuple"))
@@ -649,8 +654,9 @@ func (e PTOCountUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 }
 
 type PacketLost struct {
-	Header  PacketHeader
-	Trigger PacketLossReason
+	Header           PacketHeader
+	IsMTUProbePacket bool
+	Trigger          PacketLossReason
 }
 
 func (e PacketLost) Name() string { return "recovery:packet_lost" }
@@ -661,6 +667,10 @@ func (e PacketLost) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.String("header"))
 	if err := e.Header.encode(enc); err != nil {
 		return err
+	}
+	if e.IsMTUProbePacket {
+		h.WriteToken(jsontext.String("is_mtu_probe_packet"))
+		h.WriteToken(jsontext.True)
 	}
 	h.WriteToken(jsontext.String("trigger"))
 	h.WriteToken(jsontext.String(string(e.Trigger)))
