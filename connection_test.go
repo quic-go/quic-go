@@ -125,7 +125,7 @@ func newServerTestConnection(
 		origDestConnID,
 		nil,
 		origDestConnID,
-		protocol.ConnectionID{},
+		protocol.ZeroLengthConnectionID,
 		srcConnID,
 		&protocol.DefaultConnectionIDGenerator{},
 		newStatelessResetter(nil),
@@ -403,7 +403,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			tc.remoteAddr,
 			&wire.ExtendedHeader{Header: wire.Header{
 				Type:             protocol.PacketTypeRetry,
-				DestConnectionID: tc.conn.origDestConnID,
+				DestConnectionID: tc.destConnID,
 				SrcConnectionID:  tc.srcConnID,
 				Version:          tc.conn.version,
 				Token:            []byte("foobar"),
@@ -420,7 +420,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 						PacketNumber:     protocol.InvalidPacketNumber,
 						PacketType:       qlog.PacketTypeRetry,
 						SrcConnectionID:  tc.srcConnID,
-						DestConnectionID: tc.conn.origDestConnID,
+						DestConnectionID: tc.destConnID,
 						Version:          tc.conn.version,
 					},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
@@ -548,6 +548,7 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 					Header: qlog.PacketHeader{
 						PacketType:       qlog.PacketTypeHandshake,
 						DestConnectionID: tc.destConnID,
+						SrcConnectionID:  protocol.ZeroLengthConnectionID,
 						PacketNumber:     protocol.InvalidPacketNumber,
 						Version:          Version1,
 					},
@@ -610,6 +611,7 @@ func TestConnectionUnpacking(t *testing.T) {
 		Header: wire.Header{
 			Type:             protocol.PacketTypeInitial,
 			DestConnectionID: tc.srcConnID,
+			SrcConnectionID:  protocol.ZeroLengthConnectionID,
 			Version:          protocol.Version1,
 			Length:           1,
 		},
@@ -637,6 +639,7 @@ func TestConnectionUnpacking(t *testing.T) {
 				Header: qlog.PacketHeader{
 					PacketType:       qlog.PacketTypeInitial,
 					DestConnectionID: tc.srcConnID,
+					SrcConnectionID:  protocol.ZeroLengthConnectionID,
 					PacketNumber:     protocol.PacketNumber(0x1337),
 					Version:          protocol.Version1,
 				},
@@ -666,6 +669,7 @@ func TestConnectionUnpacking(t *testing.T) {
 				Header: qlog.PacketHeader{
 					PacketType:       qlog.PacketTypeInitial,
 					DestConnectionID: tc.srcConnID,
+					SrcConnectionID:  protocol.ZeroLengthConnectionID,
 					PacketNumber:     protocol.PacketNumber(0x1337),
 					Version:          protocol.Version1,
 				},
@@ -1101,6 +1105,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 		// marshaling always sets it to this value
 		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
 		OriginalDestinationConnectionID: tc.destConnID,
+		InitialSourceConnectionID:       protocol.ZeroLengthConnectionID,
 		MaxBidiStreamNum:                1,
 		MaxUniStreamNum:                 1,
 	}
@@ -1123,6 +1128,7 @@ func TestConnectionTransportParameters(t *testing.T) {
 				// marshaling always sets it to this value
 				MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
 				OriginalDestinationConnectionID: tc.destConnID,
+				InitialSourceConnectionID:       protocol.ZeroLengthConnectionID,
 				InitialMaxStreamsBidi:           1,
 				InitialMaxStreamsUni:            1,
 			},
@@ -1136,7 +1142,9 @@ func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		connFC := newConnectionFlowController(0, 0, nil, utils.NewRTTStats(), utils.DefaultLogger)
 		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
-		tc.conn.handleTransportParameters(&wire.TransportParameters{})
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+			InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
+		}))
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -2090,7 +2098,8 @@ func TestConnectionIdleTimeout(t *testing.T) {
 		// the idle timeout is set when the transport parameters are received
 		const idleTimeout = 500 * time.Millisecond
 		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
-			MaxIdleTimeout: idleTimeout,
+			MaxIdleTimeout:            idleTimeout,
+			InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
 		}))
 
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
@@ -2156,7 +2165,8 @@ func testConnectionKeepAlive(t *testing.T, enable, expectKeepAlive bool) {
 		// the idle timeout is set when the transport parameters are received
 		const idleTimeout = 50 * time.Millisecond
 		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
-			MaxIdleTimeout: idleTimeout,
+			MaxIdleTimeout:            idleTimeout,
+			InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
 		}))
 
 		// Receive a packet. This starts the keep-alive timer.
@@ -3355,7 +3365,11 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 			connectionOptRTT(time.Second),
 		)
 		tc.sendConn.EXPECT().capabilities().Return(connCapabilities{DF: df}).AnyTimes()
-		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{MaxUDPPayloadSize: 1456, MaxDatagramFrameSize: 1456}))
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+			MaxUDPPayloadSize:         1456,
+			MaxDatagramFrameSize:      1456,
+			InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
+		}))
 		ping, _ := tc.conn.mtuDiscoverer.GetPing(monotime.Now())
 		ping.Handler.OnAcked(ping.Frame)
 		tc.conn.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(tc.conn.mtuDiscoverer.CurrentSize())))

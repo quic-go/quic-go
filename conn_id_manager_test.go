@@ -475,22 +475,22 @@ func TestConnIDManagerSwitchToPath(t *testing.T) {
 
 func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 	m := newConnIDManager(
-		protocol.ConnectionID{},
+		protocol.ZeroLengthConnectionID,
 		func(protocol.StatelessResetToken) {},
 		func(protocol.StatelessResetToken) {},
 		func(f wire.Frame) {},
 	)
-	require.Equal(t, protocol.ConnectionID{}, m.Get())
+	require.Equal(t, protocol.ZeroLengthConnectionID, m.Get())
 	for range 5 * protocol.PacketsPerConnectionID {
 		m.SentPacket()
-		require.Equal(t, protocol.ConnectionID{}, m.Get())
+		require.Equal(t, protocol.ZeroLengthConnectionID, m.Get())
 	}
 
 	// for path probing, we don't need to change the connection ID
 	for id := pathID(1); id < 10; id++ {
 		connID, ok := m.GetConnIDForPath(id)
 		require.True(t, ok)
-		require.Equal(t, protocol.ConnectionID{}, connID)
+		require.Equal(t, protocol.ZeroLengthConnectionID, connID)
 	}
 	// retiring a connection ID for a path is also a no-op
 	for id := pathID(1); id < 20; id++ {
@@ -499,7 +499,7 @@ func TestConnIDManagerZeroLengthConnectionID(t *testing.T) {
 
 	require.ErrorIs(t, m.Add(&wire.NewConnectionIDFrame{
 		SequenceNumber:      1,
-		ConnectionID:        protocol.ConnectionID{},
+		ConnectionID:        protocol.ZeroLengthConnectionID,
 		StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 	}), &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
 }

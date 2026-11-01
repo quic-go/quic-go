@@ -81,6 +81,7 @@ type TokenGeneratorKey = handshake.TokenProtectorKey
 // A ConnectionID is a QUIC Connection ID, as defined in RFC 9000.
 // It is not able to handle QUIC Connection IDs longer than 20 bytes,
 // as they are allowed by RFC 8999.
+// The zero value is invalid. Use [ConnectionIDFromBytes] to create a zero-length connection ID.
 type ConnectionID = protocol.ConnectionID
 
 // ConnectionIDFromBytes interprets b as a [ConnectionID]. It panics if b is

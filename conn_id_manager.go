@@ -283,7 +283,7 @@ func (h *connIDManager) GetConnIDForPath(id pathID) (protocol.ConnectionID, bool
 	h.assertNotClosed()
 	// if we're using zero-length connection IDs, we don't need to change the connection ID
 	if h.activeConnectionID.Len() == 0 {
-		return protocol.ConnectionID{}, true
+		return h.activeConnectionID, true
 	}
 
 	if h.pathProbing == nil {
