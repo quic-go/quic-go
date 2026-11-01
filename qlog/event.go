@@ -455,6 +455,22 @@ type PacketDropped struct {
 func (e PacketDropped) Name() string { return "transport:packet_dropped" }
 
 func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	trigger := string(e.Trigger)
+	switch e.Trigger {
+	case PacketDropKeyUnavailable:
+		trigger = "keys_unavailable"
+	case PacketDropUnknownConnectionID:
+		trigger = "connection_unknown"
+	case PacketDropHeaderParseError, PacketDropProtocolViolation,
+		PacketDropUnexpectedPacket, PacketDropUnexpectedSourceConnectionID, PacketDropUnexpectedVersion:
+		trigger = "invalid"
+	case PacketDropPayloadDecryptError:
+		trigger = "decryption_failure"
+	case PacketDropDOSPrevention:
+		trigger = "rejected"
+	case PacketDropUnsupportedVersion:
+		trigger = "unsupported"
+	}
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("header"))
@@ -470,7 +486,14 @@ func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.Uint(uint64(e.DatagramPayloadChecksum)))
 	}
 	h.WriteToken(jsontext.String("trigger"))
-	h.WriteToken(jsontext.String(string(e.Trigger)))
+	h.WriteToken(jsontext.String(trigger))
+	if trigger != string(e.Trigger) {
+		h.WriteToken(jsontext.String("details"))
+		h.WriteToken(jsontext.BeginObject)
+		h.WriteToken(jsontext.String("reason"))
+		h.WriteToken(jsontext.String(string(e.Trigger)))
+		h.WriteToken(jsontext.EndObject)
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
