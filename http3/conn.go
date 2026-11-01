@@ -47,7 +47,7 @@ type rawConn struct {
 
 	qlogger          qlogwriter.Recorder
 	qloggerMx        sync.Mutex
-	qloggerProducers int // the open connection, and goroutines and streams that may produce qlog events
+	qloggerProducers int // the open connection, and goroutines and calls that may produce qlog events
 }
 
 func newRawConn(
@@ -70,7 +70,7 @@ func newRawConn(
 		controlStrHandler: controlStrHandler,
 	}
 	if qlogger != nil {
-		context.AfterFunc(quicConn.Context(), c.removeQlogProducer)
+		context.AfterFunc(quicConn.Context(), c.RemoveQlogProducer)
 	}
 	return c
 }
@@ -82,8 +82,8 @@ func (c *rawConn) OpenUniStream() (*quic.SendStream, error) {
 // openControlStream opens the control stream and sends the SETTINGS frame.
 // It returns the control stream (needed by the server for sending GOAWAY later).
 func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, error) {
-	c.addQlogProducer()
-	defer c.removeQlogProducer()
+	c.AddQlogProducer()
+	defer c.RemoveQlogProducer()
 
 	str, err := c.conn.OpenUniStream()
 	if err != nil {
@@ -120,7 +120,6 @@ func (c *rawConn) TrackStream(str *quic.Stream) *stateTrackingStream {
 
 	c.streamMx.Lock()
 	c.streams[str.StreamID()] = hstr
-	c.addQlogProducer()
 	c.streamMx.Unlock()
 	return hstr
 }
@@ -147,10 +146,7 @@ func (c *rawConn) clearStream(id quic.StreamID) {
 	c.streamMx.Lock()
 	defer c.streamMx.Unlock()
 
-	if _, ok := c.streams[id]; ok {
-		delete(c.streams, id)
-		c.removeQlogProducer()
-	}
+	delete(c.streams, id)
 	if len(c.streams) == 0 {
 		c.onStreamsEmpty()
 	}
@@ -170,8 +166,8 @@ func (c *rawConn) CloseWithError(code quic.ApplicationErrorCode, msg string) err
 func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer bool) {
 	// HTTP/3 handles this stream, so the peer can replace it as soon as it completes.
 	str.ReleaseStreamCredit()
-	c.addQlogProducer()
-	defer c.removeQlogProducer()
+	c.AddQlogProducer()
+	defer c.RemoveQlogProducer()
 
 	streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 	if err != nil {
@@ -251,9 +247,9 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			return
 		}
-		c.addQlogProducer()
+		c.AddQlogProducer()
 		go func() {
-			defer c.removeQlogProducer()
+			defer c.RemoveQlogProducer()
 			err := c.receiveDatagrams()
 			if c.logger != nil {
 				c.logger.Debug("receiving datagrams failed", "error", err)
@@ -325,19 +321,21 @@ func (c *rawConn) ReceivedSettings() <-chan struct{} { return c.receivedSettings
 // It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *rawConn) Settings() *Settings { return c.settings }
 
-// addQlogProducer registers a goroutine or stream that may produce qlog events.
-// It is a no-op once the qlogger has been closed.
-func (c *rawConn) addQlogProducer() {
+// AddQlogProducer registers a goroutine or call that may produce qlog events.
+// It returns false once the qlogger has been closed.
+func (c *rawConn) AddQlogProducer() bool {
 	c.qloggerMx.Lock()
 	defer c.qloggerMx.Unlock()
 
-	if c.qloggerProducers > 0 {
-		c.qloggerProducers++
+	if c.qloggerProducers == 0 {
+		return false
 	}
+	c.qloggerProducers++
+	return true
 }
 
-// removeQlogProducer closes the qlogger when the last producer is removed.
-func (c *rawConn) removeQlogProducer() {
+// RemoveQlogProducer closes the qlogger when the last producer is removed.
+func (c *rawConn) RemoveQlogProducer() {
 	c.qloggerMx.Lock()
 	defer c.qloggerMx.Unlock()
 

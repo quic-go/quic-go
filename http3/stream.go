@@ -76,6 +76,9 @@ func newStream(
 }
 
 func (s *Stream) Read(b []byte) (int, error) {
+	s.addQlogProducer()
+	defer s.removeQlogProducer()
+
 	if s.bytesRemainingInFrame == 0 {
 	parseLoop:
 		for {
@@ -133,6 +136,12 @@ func (s *Stream) hasUnfinishedFrame() bool {
 //
 // It can only be used after the response header has been sent.
 func (s *Stream) Write(b []byte) (int, error) {
+	if !s.addQlogProducer() {
+		// the stream was shut down, so writing fails
+		return s.writeUnframed(nil)
+	}
+	defer s.removeQlogProducer()
+
 	if s.missingHeader {
 		return 0, errors.New("http3: invalid use of Stream.Write before sending the response header")
 	}
@@ -185,6 +194,9 @@ func (s *Stream) continueDataFrame(b []byte) (int, error) {
 // It returns [quic.ErrWouldBlock] without queueing anything otherwise.
 // It can only be used after the response header has been sent.
 func (s *Stream) TryWriteAll(b []byte) error {
+	s.addQlogProducer()
+	defer s.removeQlogProducer()
+
 	if s.missingHeader {
 		return errors.New("http3: invalid use of Stream.TryWriteAll before sending the response header")
 	}
@@ -222,6 +234,23 @@ func (s *Stream) writeUnframed(b []byte) (int, error) {
 	return n, maybeReplaceError(err)
 }
 
+// addQlogProducer registers a call that may produce qlog events.
+// The application can make these calls at any time, also after the connection was closed.
+// It returns false once the qlogger was closed. All streams were shut down by then,
+// so a call that logs a frame before writing it must not create the frame.
+func (s *Stream) addQlogProducer() bool {
+	if s.qlogger == nil {
+		return true
+	}
+	return s.conn.AddQlogProducer()
+}
+
+func (s *Stream) removeQlogProducer() {
+	if s.qlogger != nil {
+		s.conn.RemoveQlogProducer()
+	}
+}
+
 func (s *Stream) StreamID() quic.StreamID {
 	return s.datagramStream.StreamID()
 }
@@ -233,6 +262,9 @@ func (s *Stream) QlogTrace() qlogwriter.Trace {
 }
 
 func (s *Stream) SendDatagram(b []byte) error {
+	s.addQlogProducer()
+	defer s.removeQlogProducer()
+
 	// TODO: reject if datagrams are not negotiated (yet)
 	return maybeReplaceError(s.datagramStream.SendDatagram(b))
 }
@@ -391,6 +423,13 @@ func (s *RequestStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 // It can only be used for requests that don't have a request body.
 // It is invalid to call it more than once.
 func (s *RequestStream) SendRequestHeader(req *http.Request) error {
+	if !s.str.addQlogProducer() {
+		// the stream was shut down, so writing fails
+		_, err := s.str.writeUnframed(nil)
+		return err
+	}
+	defer s.str.removeQlogProducer()
+
 	if req.Body != nil && req.Body != http.NoBody {
 		return errors.New("http3: invalid use of RequestStream.SendRequestHeader with a request that has a request body")
 	}
@@ -414,6 +453,13 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 // sendRequestTrailer sends request trailers to the stream.
 // It should be called after the request body has been fully written.
 func (s *RequestStream) sendRequestTrailer(req *http.Request) error {
+	if !s.str.addQlogProducer() {
+		// the stream was shut down, so writing fails
+		_, err := s.str.writeUnframed(nil)
+		return err
+	}
+	defer s.str.removeQlogProducer()
+
 	return maybeReplaceError(s.requestWriter.WriteRequestTrailer(s.str.datagramStream, req, s.str.StreamID(), s.str.qlogger))
 }
 
@@ -423,6 +469,9 @@ func (s *RequestStream) sendRequestTrailer(req *http.Request) error {
 // It is invalid to call it more than once.
 // It doesn't set [http.Response.Request] or [http.Response.TLS].
 func (s *RequestStream) ReadResponse() (*http.Response, error) {
+	s.str.addQlogProducer()
+	defer s.str.removeQlogProducer()
+
 	if !s.sentRequest {
 		return nil, errors.New("http3: invalid use of RequestStream.ReadResponse before SendRequestHeader")
 	}
