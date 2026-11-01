@@ -2305,13 +2305,12 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 		defer func() { closeErr.err = e }()
 	}
 
-	var (
-		statelessResetErr     *StatelessResetError
-		versionNegotiationErr *VersionNegotiationError
-		recreateErr           *errCloseForRecreating
-		applicationErr        *ApplicationError
-		transportErr          *TransportError
-	)
+	_, isStatelessReset := errors.AsType[*StatelessResetError](e)
+	_, isVersionNegotiation := errors.AsType[*VersionNegotiationError](e)
+	_, isRecreate := errors.AsType[*errCloseForRecreating](e)
+	applicationErr, isApplicationError := errors.AsType[*ApplicationError](e)
+	transportErr, isTransportError := errors.AsType[*TransportError](e)
+
 	var isRemoteClose bool
 	var trigger qlog.ConnectionCloseTrigger
 	var reason string
@@ -2321,16 +2320,16 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	case errors.Is(e, qerr.ErrIdleTimeout),
 		errors.Is(e, qerr.ErrHandshakeTimeout):
 		trigger = qlog.ConnectionCloseTriggerIdleTimeout
-	case errors.As(e, &statelessResetErr):
+	case isStatelessReset:
 		trigger = qlog.ConnectionCloseTriggerStatelessReset
-	case errors.As(e, &versionNegotiationErr):
+	case isVersionNegotiation:
 		trigger = qlog.ConnectionCloseTriggerVersionMismatch
-	case errors.As(e, &recreateErr):
-	case errors.As(e, &applicationErr):
+	case isRecreate:
+	case isApplicationError:
 		isRemoteClose = applicationErr.Remote
 		reason = applicationErr.ErrorMessage
 		applicationErrorCode = &applicationErr.ErrorCode
-	case errors.As(e, &transportErr):
+	case isTransportError:
 		isRemoteClose = transportErr.Remote
 		reason = transportErr.ErrorMessage
 		transportErrorCode = &transportErr.ErrorCode
@@ -2358,9 +2357,9 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	// handler map when it is closed, so we need to make sure that this happens last.
 	defer c.connIDManager.Close()
 
-	if c.qlogger != nil && !errors.As(e, &recreateErr) {
+	if c.qlogger != nil && !isRecreate {
 		initiator := qlog.InitiatorLocal
-		if isRemoteClose || statelessResetErr != nil {
+		if isRemoteClose || trigger == qlog.ConnectionCloseTriggerStatelessReset {
 			initiator = qlog.InitiatorRemote
 		}
 		c.qlogger.RecordEvent(qlog.ConnectionClosed{
