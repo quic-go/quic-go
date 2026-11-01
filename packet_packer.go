@@ -217,23 +217,6 @@ func (p *packetPacker) packConnectionClose(
 		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.Encryption0RTT {
 			continue
 		}
-		ccf := &wire.ConnectionCloseFrame{
-			IsApplicationError: isApplicationError,
-			ErrorCode:          errorCode,
-			FrameType:          frameType,
-			ReasonPhrase:       reason,
-		}
-		// don't send application errors in Initial or Handshake packets
-		if isApplicationError && (encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake) {
-			ccf.IsApplicationError = false
-			ccf.ErrorCode = uint64(qerr.ApplicationErrorErrorCode)
-			ccf.ReasonPhrase = ""
-		}
-		pl := payload{
-			frames: []ackhandler.Frame{{Frame: ccf}},
-			length: ccf.Length(v),
-		}
-
 		var sealer sealer
 		var err error
 		switch encLevel {
@@ -258,6 +241,23 @@ func (p *packetPacker) packConnectionClose(
 			return nil, err
 		}
 		sealers[i] = sealer
+		ccf := &wire.ConnectionCloseFrame{
+			IsApplicationError: isApplicationError,
+			ErrorCode:          errorCode,
+			FrameType:          frameType,
+			ReasonPhrase:       reason,
+		}
+		// don't send application errors in Initial or Handshake packets
+		if isApplicationError && (encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake) {
+			ccf.IsApplicationError = false
+			ccf.ErrorCode = uint64(qerr.ApplicationErrorErrorCode)
+			ccf.ReasonPhrase = ""
+		}
+		pl := payload{
+			frames: []ackhandler.Frame{{Frame: ccf}},
+			length: ccf.Length(v),
+		}
+
 		var hdr *wire.ExtendedHeader
 		if encLevel == protocol.Encryption1RTT {
 			connID = p.getDestConnID()
