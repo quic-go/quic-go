@@ -436,8 +436,71 @@ func encodeConnectionCloseFrame(enc *jsontext.Encoder, f *ConnectionCloseFrame) 
 		h.WriteToken(jsontext.String("reason_bytes"))
 		h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.ReasonPhrase))))
 	}
+	// A frame type of 0 means that the frame type is unknown.
+	if !f.IsApplicationError && f.FrameType != 0 {
+		h.WriteToken(jsontext.String("trigger_frame_type"))
+		if name := frameTypeName(wire.FrameType(f.FrameType)); name != "" {
+			h.WriteToken(jsontext.String(name))
+		} else {
+			h.WriteToken(jsontext.Uint(f.FrameType))
+		}
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
+}
+
+func frameTypeName(t wire.FrameType) string {
+	if t.IsStreamFrameType() {
+		return "stream"
+	}
+	switch t {
+	case wire.FrameTypePing:
+		return "ping"
+	case wire.FrameTypeAck, wire.FrameTypeAckECN:
+		return "ack"
+	case wire.FrameTypeResetStream:
+		return "reset_stream"
+	case wire.FrameTypeStopSending:
+		return "stop_sending"
+	case wire.FrameTypeCrypto:
+		return "crypto"
+	case wire.FrameTypeNewToken:
+		return "new_token"
+	case wire.FrameTypeMaxData:
+		return "max_data"
+	case wire.FrameTypeMaxStreamData:
+		return "max_stream_data"
+	case wire.FrameTypeBidiMaxStreams, wire.FrameTypeUniMaxStreams:
+		return "max_streams"
+	case wire.FrameTypeDataBlocked:
+		return "data_blocked"
+	case wire.FrameTypeStreamDataBlocked:
+		return "stream_data_blocked"
+	case wire.FrameTypeBidiStreamBlocked, wire.FrameTypeUniStreamBlocked:
+		return "streams_blocked"
+	case wire.FrameTypeNewConnectionID:
+		return "new_connection_id"
+	case wire.FrameTypeRetireConnectionID:
+		return "retire_connection_id"
+	case wire.FrameTypePathChallenge:
+		return "path_challenge"
+	case wire.FrameTypePathResponse:
+		return "path_response"
+	case wire.FrameTypeConnectionClose, wire.FrameTypeApplicationClose:
+		return "connection_close"
+	case wire.FrameTypeHandshakeDone:
+		return "handshake_done"
+	case wire.FrameTypeResetStreamAt:
+		return "reset_stream_at"
+	case wire.FrameTypeAckFrequency:
+		return "ack_frequency"
+	case wire.FrameTypeImmediateAck:
+		return "immediate_ack"
+	case wire.FrameTypeDatagramNoLength, wire.FrameTypeDatagramWithLength:
+		return "datagram"
+	default:
+		return ""
+	}
 }
 
 func encodeHandshakeDoneFrame(enc *jsontext.Encoder, _ *HandshakeDoneFrame) error {
