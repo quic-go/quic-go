@@ -33,6 +33,18 @@ func (c *connIDGenerator) GenerateConnectionID() (quic.ConnectionID, error) {
 
 func (c *connIDGenerator) ConnectionIDLen() int { return c.Length }
 
+// zeroValueConnIDGenerator returns the zero ConnectionID,
+// which is interpreted as a zero-length connection ID.
+type zeroValueConnIDGenerator struct{}
+
+var _ quic.ConnectionIDGenerator = &zeroValueConnIDGenerator{}
+
+func (*zeroValueConnIDGenerator) GenerateConnectionID() (quic.ConnectionID, error) {
+	return quic.ConnectionID{}, nil
+}
+
+func (*zeroValueConnIDGenerator) ConnectionIDLen() int { return 0 }
+
 func randomConnIDLen() int { return 2 + mrand.IntN(19) }
 
 func TestConnectionIDsZeroLength(t *testing.T) {
@@ -48,6 +60,10 @@ func TestConnectionIDsCustomGenerator(t *testing.T) {
 		&connIDGenerator{Length: randomConnIDLen()},
 		&connIDGenerator{Length: randomConnIDLen()},
 	)
+}
+
+func TestConnectionIDsCustomGeneratorZeroValue(t *testing.T) {
+	testTransferWithConnectionIDs(t, randomConnIDLen(), 0, nil, &zeroValueConnIDGenerator{})
 }
 
 // connIDLen is ignored when connIDGenerator is set
