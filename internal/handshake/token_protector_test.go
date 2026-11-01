@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"crypto/rand"
 	"testing"
 
@@ -12,13 +13,34 @@ func TestTokenProtectorEncodeAndDecode(t *testing.T) {
 	rand.Read(key[:])
 	tp := newTokenProtector(key)
 
-	token, err := tp.NewToken([]byte("foobar"))
-	require.NoError(t, err)
-	require.NotContains(t, string(token), "foobar")
+	for name, data := range map[string][]byte{
+		"empty": nil,
+		"short": []byte("foobar"),
+		"long":  bytes.Repeat([]byte("foobar"), 1024),
+	} {
+		t.Run(name, func(t *testing.T) {
+			token, err := tp.NewToken(data)
+			require.NoError(t, err)
+			if len(data) > 0 {
+				require.NotContains(t, string(token), string(data))
+			}
 
-	decoded, err := tp.DecodeToken(token)
-	require.NoError(t, err)
-	require.Equal(t, []byte("foobar"), decoded)
+			decoded, err := tp.DecodeToken(token)
+			require.NoError(t, err)
+			require.Equal(t, string(data), string(decoded))
+		})
+	}
+}
+
+func BenchmarkTokenProtectorNewToken(b *testing.B) {
+	b.ReportAllocs()
+	tp := newTokenProtector(TokenProtectorKey{})
+	data := make([]byte, 32)
+	for b.Loop() {
+		if _, err := tp.NewToken(data); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func TestTokenProtectorDifferentKeys(t *testing.T) {
