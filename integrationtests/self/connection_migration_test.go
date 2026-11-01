@@ -151,7 +151,7 @@ func TestConnectionMigration(t *testing.T) {
 	// probing the path causes a few packets to be sent on path 2
 	path, err := conn.AddPath(tr2)
 	require.NoError(t, err)
-	require.ErrorIs(t, path.Switch(), quic.ErrPathNotValidated)
+	require.ErrorIs(t, path.Switch(ctx), quic.ErrPathNotValidated)
 	n, ns := len(clientEvents.Events()), len(serverEvents.Events())
 	require.NoError(t, path.Probe(ctx))
 	require.Less(t, int(packetsPath2.Load()), 5)
@@ -182,7 +182,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	// now switch and make sure that no packets are sent on path 1
 	n = len(clientEvents.Events())
-	require.NoError(t, path.Switch())
+	require.NoError(t, path.Switch(ctx))
 	sendAndReceiveFile(t) // stream 10
 	// the old path is assigned its own tuple, and the default tuple now refers to the new path
 	require.Equal(t, []string{"1", "0", ""}, assignedTuples(&clientEvents))
@@ -213,7 +213,7 @@ func TestConnectionMigration(t *testing.T) {
 	require.Equal(t, []string{"1"}, probeTuples(&serverEvents, ns))
 	time.Sleep(3 * rtt) // wait for ACKs
 	n = len(clientEvents.Events())
-	require.NoError(t, path2.Switch())
+	require.NoError(t, path2.Switch(ctx))
 	sendAndReceiveFile(t) // stream 14
 	require.Equal(t, []string{"1", "0", "", "1", ""}, assignedTuples(&clientEvents))
 	require.Equal(t, []string{""}, sentTuples(n))
@@ -226,7 +226,7 @@ func TestConnectionMigration(t *testing.T) {
 	require.Equal(t, tr1.Conn.LocalAddr(), conn.LocalAddr())
 
 	// switch to the first path again, which doesn't require probing it again
-	require.NoError(t, path.Switch())
+	require.NoError(t, path.Switch(ctx))
 	sendAndReceiveFile(t) // stream 18
 	require.Equal(t, tr2.Conn.LocalAddr(), conn.LocalAddr())
 

@@ -28,7 +28,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		tr1 := &Transport{}
 		enabledID := invalidPathID
 		p := pm.NewPath(tr1, time.Second, func(id pathID) { enabledID = id })
-		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+		require.ErrorIs(t, p.Switch(context.Background()), ErrPathNotValidated)
 
 		errChan := make(chan error, 1)
 		go func() { errChan <- p.Probe(context.Background()) }()
@@ -65,7 +65,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		default:
 		}
 
-		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+		require.ErrorIs(t, p.Switch(context.Background()), ErrPathNotValidated)
 		_, _, ok = pm.ShouldSwitchPath()
 		require.False(t, ok)
 
@@ -106,7 +106,7 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 			t.Fatal("should still be probing")
 		default:
 		}
-		require.ErrorIs(t, p.Switch(), ErrPathNotValidated)
+		require.ErrorIs(t, p.Switch(context.Background()), ErrPathNotValidated)
 		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
 		synctest.Wait()
 		select {
@@ -119,13 +119,152 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 		// now switch to the other path
 		_, _, ok = pm.ShouldSwitchPath()
 		require.False(t, ok)
-		require.NoError(t, p.Switch())
+		require.NoError(t, p.Switch(context.Background()))
 		// the active path can't be closed
 		require.EqualError(t, p.Close(), "cannot close active path")
 		id, switchToTransport, ok := pm.ShouldSwitchPath()
 		require.True(t, ok)
 		require.Equal(t, pathID(1), id)
 		require.Same(t, tr1, switchToTransport)
+	})
+}
+
+// validatePath probes the path and completes path validation.
+// It must be called from within a synctest bubble.
+func validatePath(t *testing.T, pm *pathManagerOutgoing, p *Path) {
+	t.Helper()
+
+	errChan := make(chan error, 1)
+	go func() { errChan <- p.Probe(context.Background()) }()
+	synctest.Wait()
+	_, f, _, ok := pm.NextPathToProbe()
+	require.True(t, ok)
+	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+	synctest.Wait()
+	require.NoError(t, <-errChan)
+}
+
+func TestPathManagerOutgoingSwitch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		haveConnID := true
+		pm := newPathManagerOutgoing(
+			func(pathID) (protocol.ConnectionID, bool) {
+				return protocol.ParseConnectionID([]byte{1, 2, 3, 4}), haveConnID
+			},
+			func(pathID) {},
+			func() {},
+		)
+		tr1 := &Transport{}
+		tr2 := &Transport{}
+		p1 := pm.NewPath(tr1, time.Second, func(pathID) {})
+		p2 := pm.NewPath(tr2, time.Second, func(pathID) {})
+		validatePath(t, pm, p1)
+		validatePath(t, pm, p2)
+
+		require.NoError(t, p1.Switch(context.Background()))
+		id, tr, ok := pm.ShouldSwitchPath()
+		require.True(t, ok)
+		require.Equal(t, p1.id, id)
+		require.Same(t, tr1, tr)
+		// switching to the active path is a no-op
+		require.NoError(t, p1.Switch(context.Background()))
+		_, _, ok = pm.ShouldSwitchPath()
+		require.False(t, ok)
+
+		// The peer might retire the path's connection ID (using Retire Prior To) before the connection switches.
+		// The switch then waits until the peer provides a new one.
+		require.NoError(t, p2.Switch(context.Background()))
+		haveConnID = false
+		_, _, ok = pm.ShouldSwitchPath()
+		require.False(t, ok)
+		haveConnID = true
+		id, tr, ok = pm.ShouldSwitchPath()
+		require.True(t, ok)
+		require.Equal(t, p2.id, id)
+		require.Same(t, tr2, tr)
+	})
+}
+
+func TestPathManagerOutgoingSwitchWithoutConnectionID(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		haveConnID := true
+		pm := newPathManagerOutgoing(
+			func(pathID) (protocol.ConnectionID, bool) {
+				return protocol.ParseConnectionID([]byte{1, 2, 3, 4}), haveConnID
+			},
+			func(pathID) {},
+			func() {},
+		)
+		tr := &Transport{}
+		p1 := pm.NewPath(tr, time.Second, func(pathID) {})
+		p2 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		validatePath(t, pm, p1)
+		validatePath(t, pm, p2)
+
+		// Switch probes the path again, which waits until the peer provides a connection ID.
+		haveConnID = false
+		errChan := make(chan error, 1)
+		go func() { errChan <- p1.Switch(context.Background()) }()
+		synctest.Wait()
+		_, _, _, ok := pm.NextPathToProbe()
+		require.False(t, ok)
+		haveConnID = true
+		_, f, _, ok := pm.NextPathToProbe()
+		require.True(t, ok)
+		pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: f.Frame.(*wire.PathChallengeFrame).Data})
+		synctest.Wait()
+		require.NoError(t, <-errChan)
+		id, switchToTransport, ok := pm.ShouldSwitchPath()
+		require.True(t, ok)
+		require.Equal(t, p1.id, id)
+		require.Same(t, tr, switchToTransport)
+
+		// the wait ends when the context is canceled
+		haveConnID = false
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() { errChan <- p2.Switch(ctx) }()
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		require.ErrorIs(t, <-errChan, context.Canceled)
+	})
+}
+
+func TestPathManagerOutgoingClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		haveConnID := true
+		var closed bool
+		pm := newPathManagerOutgoing(
+			func(pathID) (protocol.ConnectionID, bool) {
+				// the connection ID manager can't be used after the connection was closed
+				if closed {
+					t.Error("connection ID manager used after the connection was closed")
+				}
+				return protocol.ParseConnectionID([]byte{1, 2, 3, 4}), haveConnID
+			},
+			func(pathID) {},
+			func() {},
+		)
+		p1 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		p2 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		p3 := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		validatePath(t, pm, p1)
+		validatePath(t, pm, p2)
+
+		// Switch and Probe return when the connection is closed while they're waiting for a connection ID
+		haveConnID = false
+		errChan := make(chan error, 2)
+		go func() { errChan <- p2.Switch(context.Background()) }()
+		go func() { errChan <- p3.Probe(context.Background()) }()
+		synctest.Wait()
+		pm.Close()
+		closed = true
+		synctest.Wait()
+		require.ErrorIs(t, <-errChan, ErrPathClosed)
+		require.ErrorIs(t, <-errChan, ErrPathClosed)
+
+		// after that, Switch fails right away
+		require.ErrorIs(t, p1.Switch(context.Background()), ErrPathClosed)
 	})
 }
 
@@ -305,7 +444,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		_, _, _, ok = pm.NextPathToProbe()
 		require.False(t, ok)
 		// it's not possible to switch to an abandoned path
-		require.ErrorIs(t, p2.Switch(), ErrPathClosed)
+		require.ErrorIs(t, p2.Switch(context.Background()), ErrPathClosed)
 	})
 }
 

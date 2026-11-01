@@ -1318,6 +1318,12 @@ func (c *Conn) handleShortHeaderPacket(
 	if !shouldSwitchPath || pn != c.largestRcvdAppData {
 		return true, nil
 	}
+	// The peer might have retired the path's connection ID (using Retire Prior To).
+	// Without a new one, the next packet received on this path tries again.
+	if _, ok := c.connIDManager.GetConnIDForPath(path); !ok {
+		c.logger.Debugf("not switching to path %s, since no connection ID is available", p.remoteAddr)
+		return true, nil
+	}
 	c.pathManager.SwitchToPath(p.remoteAddr)
 	c.connIDManager.SwitchToPath(path)
 	initialPacketSize := protocol.ByteCount(cmp.Or(c.config.InitialPacketSize, protocol.MinInitialPacketSize))
@@ -2349,6 +2355,9 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	c.streamsMap.CloseWithError(e)
 	if c.datagramQueue != nil {
 		c.datagramQueue.CloseWithError(e)
+	}
+	if pm := c.pathManagerOutgoing.Load(); pm != nil {
+		pm.Close()
 	}
 
 	// In rare instances, the connection ID manager might switch to a new connection ID
