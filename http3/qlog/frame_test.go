@@ -14,7 +14,7 @@ func check(t *testing.T, f any, expected string) {
 
 	var buf bytes.Buffer
 	enc := jsontext.NewEncoder(&buf)
-	require.NoError(t, (Frame{Frame: f}).encode(enc))
+	require.NoError(t, (Frame{Frame: f}).encode(enc, RawInfo{Length: OmitLength, PayloadLength: OmitLength}))
 	require.JSONEq(t, expected, buf.String())
 }
 
