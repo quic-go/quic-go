@@ -24,6 +24,7 @@ func (t Token) encode(enc *jsontext.Encoder) error {
 }
 
 // PacketHeader is a QUIC packet header.
+// Connection IDs are only logged if they are valid.
 type PacketHeader struct {
 	PacketType       PacketType
 	KeyPhaseBit      KeyPhaseBit
@@ -55,11 +56,11 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 		helper.WriteToken(jsontext.String("version"))
 		helper.WriteToken(jsontext.String(version(h.Version).String()))
 	}
-	if h.PacketType != PacketType1RTT && h.SrcConnectionID.Len() > 0 {
+	if h.PacketType != PacketType1RTT && h.SrcConnectionID.Valid() {
 		helper.WriteToken(jsontext.String("scid"))
 		helper.WriteToken(jsontext.String(hex.EncodeToString(h.SrcConnectionID.Bytes())))
 	}
-	if h.DestConnectionID.Len() > 0 {
+	if h.DestConnectionID.Valid() {
 		helper.WriteToken(jsontext.String("dcid"))
 		helper.WriteToken(jsontext.String(hex.EncodeToString(h.DestConnectionID.Bytes())))
 	}

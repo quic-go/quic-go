@@ -131,3 +131,34 @@ func TestHeader1RTT(t *testing.T) {
 		}`,
 	)
 }
+
+func TestHeaderZeroLengthConnectionIDs(t *testing.T) {
+	checkHeader(t,
+		&PacketHeader{
+			PacketType:       PacketTypeHandshake,
+			PacketNumber:     42,
+			SrcConnectionID:  protocol.ZeroLengthConnectionID,
+			DestConnectionID: protocol.ZeroLengthConnectionID,
+			Version:          protocol.Version(0xdecafbad),
+		},
+		`{
+			"packet_type": "handshake",
+			"packet_number": 42,
+			"scid": "",
+			"dcid": "",
+			"version": "decafbad"
+		}`,
+	)
+	checkHeader(t,
+		&PacketHeader{
+			PacketType:       PacketType1RTT,
+			PacketNumber:     42,
+			DestConnectionID: protocol.ZeroLengthConnectionID,
+		},
+		`{
+			"packet_type": "1RTT",
+			"packet_number": 42,
+			"dcid": ""
+		}`,
+	)
+}
