@@ -7,6 +7,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 
 	"github.com/stretchr/testify/require"
@@ -394,38 +395,44 @@ func TestConnectionCloseFrame(t *testing.T) {
 			name: "transport error code",
 			frame: &ConnectionCloseFrame{
 				ErrorCode:    uint64(qerr.FlowControlError),
+				FrameType:    0xa,
 				ReasonPhrase: "lorem ipsum",
 			},
 			expected: `{
 				"frame_type": "connection_close",
 				"error_space": "transport",
 				"error": "flow_control_error",
-				"reason": "lorem ipsum"
+				"reason": "lorem ipsum",
+				"trigger_frame_type": "stream"
 			}`,
 		},
 		{
 			name: "unknown transport error code",
 			frame: &ConnectionCloseFrame{
 				ErrorCode: 0x42,
+				FrameType: 0x42,
 			},
 			expected: `{
 				"frame_type": "connection_close",
 				"error_space": "transport",
 				"error": "unknown",
 				"error_code": 66,
-				"reason": ""
+				"reason": "",
+				"trigger_frame_type": 66
 			}`,
 		},
 		{
 			name: "crypto error",
 			frame: &ConnectionCloseFrame{
 				ErrorCode: 0x12a,
+				FrameType: uint64(wire.FrameTypeCrypto),
 			},
 			expected: `{
 				"frame_type": "connection_close",
 				"error_space": "transport",
 				"error": "crypto_error_0x12a",
-				"reason": ""
+				"reason": "",
+				"trigger_frame_type": "crypto"
 			}`,
 		},
 		{
