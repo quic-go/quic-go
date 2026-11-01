@@ -11,6 +11,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/stretchr/testify/assert"
@@ -146,6 +147,9 @@ func testTransferWithConnectionIDs(
 	conn.CloseWithError(0, "")
 	serverConn.CloseWithError(0, "")
 
+	requireValidConnIDs(t, serverCounter)
+	requireValidConnIDs(t, clientCounter)
+
 	for _, p := range serverCounter.getRcvdShortHeaderPackets() {
 		expectedLen := serverConnIDLen
 		if serverConnIDGenerator != nil {
@@ -162,6 +166,27 @@ func testTransferWithConnectionIDs(
 		}
 		if !assert.Equal(t, expectedLen, p.hdr.DestConnectionID.Len(), "client conn length mismatch") {
 			break
+		}
+	}
+}
+
+// requireValidConnIDs checks that all sent and received packets were logged with their connection IDs.
+func requireValidConnIDs(t *testing.T, c *packetCounter) {
+	t.Helper()
+
+	events := c.recorder.Events(qlog.PacketSent{}, qlog.PacketReceived{})
+	require.NotEmpty(t, events)
+	for _, ev := range events {
+		var hdr qlog.PacketHeader
+		switch e := ev.(type) {
+		case qlog.PacketSent:
+			hdr = e.Header
+		case qlog.PacketReceived:
+			hdr = e.Header
+		}
+		require.True(t, hdr.DestConnectionID.Valid(), "missing destination connection ID: %#v", ev)
+		if hdr.PacketType != qlog.PacketType1RTT {
+			require.True(t, hdr.SrcConnectionID.Valid(), "missing source connection ID: %#v", ev)
 		}
 	}
 }

@@ -27,13 +27,15 @@ func TestHeaderUnknownPacketType(t *testing.T) {
 func TestHeaderInitial(t *testing.T) {
 	checkHeader(t,
 		&PacketHeader{
-			PacketType:   PacketTypeInitial,
-			PacketNumber: 42,
-			Version:      protocol.Version(0xdecafbad),
+			PacketType:      PacketTypeInitial,
+			PacketNumber:    42,
+			SrcConnectionID: protocol.ZeroLengthConnectionID,
+			Version:         protocol.Version(0xdecafbad),
 		},
 		`{
 			"packet_type": "initial",
 			"packet_number": 42,
+			"scid": "",
 			"version": "decafbad"
 		}`,
 	)
