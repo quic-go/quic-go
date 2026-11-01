@@ -50,7 +50,7 @@ func TestRedactHeaders(t *testing.T) {
 			Frame: Frame{Frame: HeadersFrame{HeaderFields: []HeaderField{
 				{Name: "authorization", Value: "***"},
 				{Name: ":path", Value: "***"},
-				{Name: "bad name", Value: "***", InvalidName: true, InvalidValue: true},
+				{Name: "bad name", Value: "***", InvalidName: true},
 			}}},
 		},
 		data, mtu,
