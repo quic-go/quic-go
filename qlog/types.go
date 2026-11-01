@@ -128,6 +128,9 @@ const (
 type transportError uint64
 
 func (e transportError) String() string {
+	if code := qerr.TransportErrorCode(e); code.IsCryptoError() {
+		return fmt.Sprintf("crypto_error_%#x", uint16(code))
+	}
 	switch qerr.TransportErrorCode(e) {
 	case qerr.NoError:
 		return "no_error"

@@ -2,6 +2,7 @@ package qlog
 
 import (
 	"encoding/hex"
+	"unicode/utf8"
 
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
@@ -416,18 +417,25 @@ func encodeConnectionCloseFrame(enc *jsontext.Encoder, f *ConnectionCloseFrame) 
 		errorSpace = "application"
 	}
 	h.WriteToken(jsontext.String(errorSpace))
-	errName := transportError(f.ErrorCode).String()
-	if len(errName) > 0 {
-		h.WriteToken(jsontext.String("error_code"))
+	var errName string
+	if !f.IsApplicationError {
+		errName = transportError(f.ErrorCode).String()
+	}
+	h.WriteToken(jsontext.String("error"))
+	if errName != "" {
 		h.WriteToken(jsontext.String(errName))
 	} else {
+		h.WriteToken(jsontext.String("unknown"))
 		h.WriteToken(jsontext.String("error_code"))
 		h.WriteToken(jsontext.Uint(f.ErrorCode))
 	}
-	h.WriteToken(jsontext.String("raw_error_code"))
-	h.WriteToken(jsontext.Uint(f.ErrorCode))
-	h.WriteToken(jsontext.String("reason"))
-	h.WriteToken(jsontext.String(f.ReasonPhrase))
+	if utf8.ValidString(f.ReasonPhrase) {
+		h.WriteToken(jsontext.String("reason"))
+		h.WriteToken(jsontext.String(f.ReasonPhrase))
+	} else {
+		h.WriteToken(jsontext.String("reason_bytes"))
+		h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.ReasonPhrase))))
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

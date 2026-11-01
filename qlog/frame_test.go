@@ -371,9 +371,23 @@ func TestConnectionCloseFrame(t *testing.T) {
 			expected: `{
 				"frame_type": "connection_close",
 				"error_space": "application",
+				"error": "unknown",
 				"error_code": 1337,
-				"raw_error_code": 1337,
 				"reason": "lorem ipsum"
+			}`,
+		},
+		{
+			name: "application error code that is also a transport error code",
+			frame: &ConnectionCloseFrame{
+				IsApplicationError: true,
+				ErrorCode:          0,
+			},
+			expected: `{
+				"frame_type": "connection_close",
+				"error_space": "application",
+				"error": "unknown",
+				"error_code": 0,
+				"reason": ""
 			}`,
 		},
 		{
@@ -385,9 +399,46 @@ func TestConnectionCloseFrame(t *testing.T) {
 			expected: `{
 				"frame_type": "connection_close",
 				"error_space": "transport",
-				"error_code": "flow_control_error",
-				"raw_error_code": 3,
+				"error": "flow_control_error",
 				"reason": "lorem ipsum"
+			}`,
+		},
+		{
+			name: "unknown transport error code",
+			frame: &ConnectionCloseFrame{
+				ErrorCode: 0x42,
+			},
+			expected: `{
+				"frame_type": "connection_close",
+				"error_space": "transport",
+				"error": "unknown",
+				"error_code": 66,
+				"reason": ""
+			}`,
+		},
+		{
+			name: "crypto error",
+			frame: &ConnectionCloseFrame{
+				ErrorCode: 0x12a,
+			},
+			expected: `{
+				"frame_type": "connection_close",
+				"error_space": "transport",
+				"error": "crypto_error_0x12a",
+				"reason": ""
+			}`,
+		},
+		{
+			name: "reason that is not UTF-8",
+			frame: &ConnectionCloseFrame{
+				ErrorCode:    uint64(qerr.ProtocolViolation),
+				ReasonPhrase: "foo\xffbar",
+			},
+			expected: `{
+				"frame_type": "connection_close",
+				"error_space": "transport",
+				"error": "protocol_violation",
+				"reason_bytes": "666f6fff626172"
 			}`,
 		},
 	}
