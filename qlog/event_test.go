@@ -483,9 +483,7 @@ func TestPacketSent(t *testing.T) {
 			"packet_type": "handshake",
 			"packet_number": 1337,
 			"version": "1",
-			"scil": 4,
 			"scid": "04030201",
-			"dcil": 8,
 			"dcid": "0102030405060708"
 		},
 		"raw": {"length": 987, "payload_length": 1337},
@@ -531,7 +529,7 @@ func testPacketSent1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloadChe
 	}
 	require.JSONEq(t, fmt.Sprintf(`{
 		%s
-		"header": {"packet_type": "1RTT", "packet_number": 1337, "dcil": 4, "dcid": "01020304", "key_phase_bit": false},
+		"header": {"packet_type": "1RTT", "packet_number": 1337, "dcid": "01020304", "key_phase_bit": false},
 		"raw": {"length": 123},
 		"frames": [{"frame_type": "ack", "acked_ranges": [[1, 10]]}, {"frame_type": "max_data", "maximum": 987}]
 	}`, checksum), ev)
@@ -565,9 +563,7 @@ func TestPacketReceived(t *testing.T) {
 			"packet_type": "initial",
 			"packet_number": 1337,
 			"version": "1",
-			"scil": 4,
 			"scid": "04030201",
-			"dcil": 8,
 			"dcid": "0102030405060708",
 			"token": {"raw": {"data": "deadbeef"}}
 		},
@@ -618,7 +614,6 @@ func testPacketReceived1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloa
 		"header": {
 			"packet_type": "1RTT",
 			"packet_number": 1337,
-			"dcil": 8,
 			"dcid": "0102030405060708",
 			"key_phase_bit": false
 		},
@@ -648,9 +643,7 @@ func TestPacketReceivedRetry(t *testing.T) {
 		"header": {
 			"packet_type": "retry",
 			"version": "1",
-			"scil": 4,
 			"scid": "04030201",
-			"dcil": 8,
 			"dcid": "0102030405060708",
 			"token": {"raw": {"data": "deadbeef"}}
 		},
@@ -671,9 +664,7 @@ func TestVersionNegotiationReceived(t *testing.T) {
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "version_negotiation",
-			"scil": 4,
 			"scid": "04030201",
-			"dcil": 8,
 			"dcid": "0102030405060708"
 		},
 		"supported_versions": ["deadbeef", "decafbad"]
@@ -694,7 +685,7 @@ func TestPacketBuffered(t *testing.T) {
 
 	require.Equal(t, "transport:packet_buffered", name)
 	require.JSONEq(t, `{
-		"header": {"packet_type": "handshake", "scil": 4, "scid": "04030201", "dcil": 8, "dcid": "0102030405060708"},
+		"header": {"packet_type": "handshake", "scid": "04030201", "dcid": "0102030405060708"},
 		"raw": {"length": 1337},
 		"datagram_payload_checksum": 42,
 		"trigger": "keys_unavailable"
@@ -711,7 +702,7 @@ func TestPacketDropped(t *testing.T) {
 
 	require.Equal(t, "transport:packet_dropped", name)
 	require.JSONEq(t, `{
-		"header": {"packet_type": "retry", "scil": 0, "dcil": 0},
+		"header": {"packet_type": "retry"},
 		"raw": {"length": 1337},
 		"datagram_payload_checksum": 42,
 		"trigger": "payload_decrypt_error"
@@ -809,7 +800,7 @@ func TestPacketLost(t *testing.T) {
 
 	require.Equal(t, "recovery:packet_lost", name)
 	require.JSONEq(t, `{
-		"header": {"packet_type": "handshake", "packet_number": 42, "scil": 0, "dcil": 0},
+		"header": {"packet_type": "handshake", "packet_number": 42},
 		"trigger": "reordering_threshold"
 	}`, ev)
 }
