@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func nopControlStrHandler(*quic.ReceiveStream, *frameParser) {}
+func nopControlStrHandler(*quic.ReceiveStream, *frameParser, *settingsFrame) {}
 
 func TestConnReceiveSettings(t *testing.T) {
 	var eventRecorder events.Recorder
@@ -245,7 +245,7 @@ func TestConnControlStreamHandler(t *testing.T) {
 	localConn, peerConn := newConnPair(t)
 
 	handlerCalled := make(chan struct{})
-	conn := newRawConn(localConn, false, nil, func(*quic.ReceiveStream, *frameParser) { close(handlerCalled) }, nil, nil)
+	conn := newRawConn(localConn, false, nil, func(*quic.ReceiveStream, *frameParser, *settingsFrame) { close(handlerCalled) }, nil, nil)
 
 	b := quicvarint.Append(nil, streamTypeControlStream)
 	b = (&settingsFrame{}).Append(b)
