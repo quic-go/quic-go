@@ -406,7 +406,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 		}
 
 		if t.ConnectionIDGenerator != nil {
-			t.connIDGenerator = t.ConnectionIDGenerator
+			t.connIDGenerator = &appConnIDGenerator{ConnectionIDGenerator: t.ConnectionIDGenerator}
 			t.connIDLen = t.ConnectionIDGenerator.ConnectionIDLen()
 		} else {
 			connIDLen := t.ConnectionIDLength
@@ -747,6 +747,22 @@ func setTLSConfigServerName(tlsConf *tls.Config, addr net.Addr, host string) {
 		return
 	}
 	tlsConf.ServerName = h
+}
+
+// appConnIDGenerator wraps a ConnectionIDGenerator provided by the application.
+// It interprets the zero ConnectionID as a zero-length connection ID.
+type appConnIDGenerator struct {
+	ConnectionIDGenerator
+}
+
+var _ ConnectionIDGenerator = &appConnIDGenerator{}
+
+func (g *appConnIDGenerator) GenerateConnectionID() (ConnectionID, error) {
+	c, err := g.ConnectionIDGenerator.GenerateConnectionID()
+	if err == nil && !c.Valid() {
+		return protocol.ZeroLengthConnectionID, nil
+	}
+	return c, err
 }
 
 type packetHandlerMap Transport

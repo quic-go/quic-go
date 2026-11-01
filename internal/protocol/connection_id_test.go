@@ -44,6 +44,7 @@ func TestConnectionID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef, 0x42}, c.Bytes())
 	require.Equal(t, 5, c.Len())
+	require.True(t, c.Valid())
 	require.Equal(t, "deadbeef42", c.String())
 
 	// too few bytes
@@ -54,6 +55,8 @@ func TestConnectionID(t *testing.T) {
 	c2, err := ReadConnectionID(buf, 0)
 	require.NoError(t, err)
 	require.Zero(t, c2.Len())
+	require.True(t, c2.Valid())
+	require.Equal(t, ZeroLengthConnectionID, c2)
 
 	// connection ID can have a length of a maximum of 20 bytes
 	buf2 := bytes.NewBuffer(make([]byte, 21))
@@ -63,9 +66,24 @@ func TestConnectionID(t *testing.T) {
 
 func TestConnectionIDZeroValue(t *testing.T) {
 	var c ConnectionID
+	require.False(t, c.Valid())
 	require.Zero(t, c.Len())
 	require.Empty(t, c.Bytes())
-	require.Equal(t, "(empty)", (ConnectionID{}).String())
+	require.Equal(t, "(invalid)", c.String())
+}
+
+func TestConnectionIDZeroLength(t *testing.T) {
+	c := ZeroLengthConnectionID
+	require.True(t, c.Valid())
+	require.Zero(t, c.Len())
+	require.Empty(t, c.Bytes())
+	require.Equal(t, "(empty)", c.String())
+	require.NotEqual(t, ConnectionID{}, c)
+	require.Equal(t, c, ParseConnectionID(nil))
+
+	g, err := GenerateConnectionID(0)
+	require.NoError(t, err)
+	require.Equal(t, c, g)
 }
 
 // The string representation of a connection ID is used in qlog, so it should be fast.

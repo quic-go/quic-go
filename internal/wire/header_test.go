@@ -222,7 +222,7 @@ func TestParseLongHeaderWithoutDestinationConnectionID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, protocol.PacketType0RTT, hdr.Type)
 	require.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}), hdr.SrcConnectionID)
-	require.Zero(t, hdr.DestConnectionID)
+	require.Equal(t, protocol.ZeroLengthConnectionID, hdr.DestConnectionID)
 }
 
 func TestParseLongHeaderWithoutSourceConnectionID(t *testing.T) {
@@ -235,7 +235,7 @@ func TestParseLongHeaderWithoutSourceConnectionID(t *testing.T) {
 	data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 	hdr, _, _, err := ParsePacket(data)
 	require.NoError(t, err)
-	require.Zero(t, hdr.SrcConnectionID)
+	require.Equal(t, protocol.ZeroLengthConnectionID, hdr.SrcConnectionID)
 	require.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), hdr.DestConnectionID)
 }
 
