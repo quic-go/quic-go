@@ -45,7 +45,7 @@ func TestTransportParametersStringRepresentation(t *testing.T) {
 		MaxIdleTimeout:                  42 * time.Second,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
-		RetrySourceConnectionID:         &rcid,
+		RetrySourceConnectionID:         rcid,
 		AckDelayExponent:                14,
 		MaxAckDelay:                     37 * time.Millisecond,
 		StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
@@ -95,7 +95,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 		StatelessResetToken:             &token,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
-		RetrySourceConnectionID:         &rcid,
+		RetrySourceConnectionID:         rcid,
 		AckDelayExponent:                13,
 		MaxAckDelay:                     42 * time.Millisecond,
 		ActiveConnectionIDLimit:         2 + getRandomValueUpTo(quicvarint.Max-2),
@@ -119,7 +119,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 	require.Equal(t, params.StatelessResetToken, p.StatelessResetToken)
 	require.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}), p.OriginalDestinationConnectionID)
 	require.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}), p.InitialSourceConnectionID)
-	require.Equal(t, &rcid, p.RetrySourceConnectionID)
+	require.Equal(t, rcid, p.RetrySourceConnectionID)
 	require.Equal(t, uint8(13), p.AckDelayExponent)
 	require.Equal(t, 42*time.Millisecond, p.MaxAckDelay)
 	require.Equal(t, params.ActiveConnectionIDLimit, p.ActiveConnectionIDLimit)
@@ -178,19 +178,17 @@ func TestMarshalRetrySourceConnectionID(t *testing.T) {
 	}).Marshal(protocol.PerspectiveServer)
 	var p TransportParameters
 	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
-	require.Nil(t, p.RetrySourceConnectionID)
+	require.False(t, p.RetrySourceConnectionID.Valid())
 
 	// zero-length retry source connection ID
-	rcid := protocol.ParseConnectionID([]byte{})
 	data = (&TransportParameters{
-		RetrySourceConnectionID: &rcid,
+		RetrySourceConnectionID: protocol.ZeroLengthConnectionID,
 		StatelessResetToken:     &protocol.StatelessResetToken{},
 		ActiveConnectionIDLimit: 2,
 	}).Marshal(protocol.PerspectiveServer)
 	p = TransportParameters{}
 	require.NoError(t, p.Unmarshal(data, protocol.PerspectiveServer))
-	require.NotNil(t, p.RetrySourceConnectionID)
-	require.Zero(t, p.RetrySourceConnectionID.Len())
+	require.Equal(t, protocol.ZeroLengthConnectionID, p.RetrySourceConnectionID)
 }
 
 func TestTransportParameterNoMaxAckDelayIfDefault(t *testing.T) {
@@ -980,7 +978,7 @@ func benchmarkTransportParameters(b *testing.B, withPreferredAddress bool) {
 		StatelessResetToken:             &token,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
-		RetrySourceConnectionID:         &rcid,
+		RetrySourceConnectionID:         rcid,
 		AckDelayExponent:                13,
 		MaxAckDelay:                     42 * time.Millisecond,
 		ActiveConnectionIDLimit:         2 + getRandomValueUpTo(quicvarint.Max-2),
@@ -1052,11 +1050,11 @@ func FuzzTransportParameters(f *testing.F) {
 		{zeroRTTParams, savedParams},
 		{(&TransportParameters{
 			ActiveConnectionIDLimit: 2,
-			RetrySourceConnectionID: &rcid,
+			RetrySourceConnectionID: rcid,
 		}).Marshal(protocol.PerspectiveClient), savedParams},
 		{(&TransportParameters{
 			EnableResetStreamAt:     true,
-			RetrySourceConnectionID: &rcid,
+			RetrySourceConnectionID: rcid,
 			MinAckDelay:             &minAckDelay,
 		}).Marshal(protocol.PerspectiveClient), savedParams},
 		// session ticket
@@ -1155,7 +1153,7 @@ func checkTransportParameterInvariants(t *testing.T, tp *TransportParameters, se
 	if tp.InitialSourceConnectionID.Len() > 20 {
 		t.Fatalf("invalid initial_source_connection_id length: %s", tp.InitialSourceConnectionID)
 	}
-	if tp.RetrySourceConnectionID != nil && tp.RetrySourceConnectionID.Len() > 20 {
+	if tp.RetrySourceConnectionID.Len() > 20 {
 		t.Fatalf("invalid retry_source_connection_id length: %s", tp.RetrySourceConnectionID)
 	}
 	if tp.PreferredAddress != nil && tp.PreferredAddress.ConnectionID.Len() > 20 {

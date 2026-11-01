@@ -51,10 +51,9 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 	var tracker connIDTracker
 	var queuedFrames []wire.Frame
 	sr := newStatelessResetter(&StatelessResetKey{1, 2, 3, 4})
-	var initialClientDestConnID *protocol.ConnectionID
+	var initialClientDestConnID protocol.ConnectionID
 	if hasInitialClientDestConnID {
-		connID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
-		initialClientDestConnID = &connID
+		initialClientDestConnID = protocol.ParseConnectionID([]byte{2, 2, 2, 2})
 	}
 	g := newConnIDGenerator(
 		&tracker,
@@ -91,7 +90,7 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 	require.Empty(t, tracker.removed)
 	g.RemoveRetiredConnIDs(now)
 	if hasInitialClientDestConnID {
-		require.Equal(t, []protocol.ConnectionID{*initialClientDestConnID}, tracker.removed)
+		require.Equal(t, []protocol.ConnectionID{initialClientDestConnID}, tracker.removed)
 		tracker.removed = tracker.removed[:0]
 	} else {
 		require.Empty(t, tracker.removed)
@@ -128,7 +127,7 @@ func TestConnIDGeneratorRetiring(t *testing.T) {
 	g := newConnIDGenerator(
 		&tracker,
 		protocol.ParseConnectionID([]byte{1, 1, 1, 1}),
-		&initialConnID,
+		initialConnID,
 		newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
 		&pathReceiver{},
 		func(f wire.Frame) {},
@@ -173,7 +172,7 @@ func TestConnIDGeneratorIsInitialClientDestConnID(t *testing.T) {
 		g := newConnIDGenerator(
 			&connIDTracker{},
 			srcConnID,
-			&initialClientDestConnID,
+			initialClientDestConnID,
 			newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
 			&pathReceiver{},
 			func(f wire.Frame) {},
@@ -190,7 +189,7 @@ func TestConnIDGeneratorIsInitialClientDestConnID(t *testing.T) {
 		g := newConnIDGenerator(
 			&connIDTracker{},
 			srcConnID,
-			nil,
+			protocol.ConnectionID{},
 			newStatelessResetter(&StatelessResetKey{1, 2, 3, 4}),
 			&pathReceiver{},
 			func(f wire.Frame) {},
@@ -210,10 +209,9 @@ func TestConnIDGeneratorRemoveAll(t *testing.T) {
 }
 
 func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool) {
-	var initialClientDestConnID *protocol.ConnectionID
+	var initialClientDestConnID protocol.ConnectionID
 	if hasInitialClientDestConnID {
-		connID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
-		initialClientDestConnID = &connID
+		initialClientDestConnID = protocol.ParseConnectionID([]byte{2, 2, 2, 2})
 	}
 	var tracker connIDTracker
 	g := newConnIDGenerator(
@@ -232,7 +230,7 @@ func testConnIDGeneratorRemoveAll(t *testing.T, hasInitialClientDestConnID bool)
 	g.RemoveAll()
 	if hasInitialClientDestConnID {
 		require.Len(t, tracker.removed, protocol.MaxIssuedConnectionIDs+1)
-		require.Contains(t, tracker.removed, *initialClientDestConnID)
+		require.Contains(t, tracker.removed, initialClientDestConnID)
 	} else {
 		require.Len(t, tracker.removed, protocol.MaxIssuedConnectionIDs)
 	}
@@ -252,10 +250,9 @@ func TestConnIDGeneratorReplaceWithClosed(t *testing.T) {
 }
 
 func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConnID bool) {
-	var initialClientDestConnID *protocol.ConnectionID
+	var initialClientDestConnID protocol.ConnectionID
 	if hasInitialClientDestConnID {
-		connID := protocol.ParseConnectionID([]byte{2, 2, 2, 2})
-		initialClientDestConnID = &connID
+		initialClientDestConnID = protocol.ParseConnectionID([]byte{2, 2, 2, 2})
 	}
 	var tracker connIDTracker
 	g := newConnIDGenerator(
@@ -279,7 +276,7 @@ func testConnIDGeneratorReplaceWithClosed(t *testing.T, hasInitialClientDestConn
 	g.ReplaceWithClosed([]byte("foobar"), time.Second)
 	expected := append([]protocol.ConnectionID{protocol.ParseConnectionID([]byte{1, 1, 1, 1})}, tracker.added...)
 	if hasInitialClientDestConnID {
-		expected = append(expected, *initialClientDestConnID)
+		expected = append(expected, initialClientDestConnID)
 	}
 	require.ElementsMatch(t, expected, tracker.replaced)
 	require.Equal(t, []byte("foobar"), tracker.replacedWith)
@@ -298,7 +295,7 @@ func TestConnIDGeneratorAddConnRunner(t *testing.T) {
 	g := newConnIDGenerator(
 		&tracker1,
 		initialConnID,
-		&clientDestConnID,
+		clientDestConnID,
 		sr,
 		h1,
 		func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },

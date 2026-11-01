@@ -140,7 +140,7 @@ type Conn struct {
 	handshakeDestConnID protocol.ConnectionID
 	// Set for the client. Destination connection ID used on the first Initial sent.
 	origDestConnID protocol.ConnectionID
-	retrySrcConnID *protocol.ConnectionID // only set for the client (and if a Retry was performed)
+	retrySrcConnID protocol.ConnectionID // only set for the client (and if a Retry was performed)
 
 	srcConnIDLen int
 
@@ -263,7 +263,7 @@ var newConnection = func(
 	conn sendConn,
 	runner connRunner,
 	origDestConnID protocol.ConnectionID,
-	retrySrcConnID *protocol.ConnectionID,
+	retrySrcConnID protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
@@ -310,7 +310,7 @@ var newConnection = func(
 	s.connIDGenerator = newConnIDGenerator(
 		runner,
 		srcConnID,
-		&clientDestConnID,
+		clientDestConnID,
 		statelessResetter,
 		&w.pathReceiver,
 		s.queueControlFrame,
@@ -436,7 +436,7 @@ var newClientConnection = func(
 	s.connIDGenerator = newConnIDGenerator(
 		runner,
 		srcConnID,
-		nil,
+		protocol.ConnectionID{},
 		statelessResetter,
 		&w.pathReceiver,
 		s.queueControlFrame,
@@ -1590,7 +1590,7 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 	c.receivedRetry = true
 	c.sentPacketHandler.ResetForRetry(rcvTime)
 	c.handshakeDestConnID = newDestConnID
-	c.retrySrcConnID = &newDestConnID
+	c.retrySrcConnID = newDestConnID
 	c.cryptoStreamHandler.ChangeConnectionID(newDestConnID)
 	c.packer.SetToken(hdr.Token)
 	c.connIDManager.ChangeInitialConnID(newDestConnID)
@@ -2483,14 +2483,14 @@ func (c *Conn) checkTransportParameters(params *wire.TransportParameters) error 
 	if params.OriginalDestinationConnectionID != c.origDestConnID {
 		return fmt.Errorf("expected original_destination_connection_id to equal %s, is %s", c.origDestConnID, params.OriginalDestinationConnectionID)
 	}
-	if c.retrySrcConnID != nil { // a Retry was performed
-		if params.RetrySourceConnectionID == nil {
+	if c.retrySrcConnID.Valid() { // a Retry was performed
+		if !params.RetrySourceConnectionID.Valid() {
 			return errors.New("missing retry_source_connection_id")
 		}
-		if *params.RetrySourceConnectionID != *c.retrySrcConnID {
-			return fmt.Errorf("expected retry_source_connection_id to equal %s, is %s", c.retrySrcConnID, *params.RetrySourceConnectionID)
+		if params.RetrySourceConnectionID != c.retrySrcConnID {
+			return fmt.Errorf("expected retry_source_connection_id to equal %s, is %s", c.retrySrcConnID, params.RetrySourceConnectionID)
 		}
-	} else if params.RetrySourceConnectionID != nil {
+	} else if params.RetrySourceConnectionID.Valid() {
 		return errors.New("received retry_source_connection_id, although no Retry was performed")
 	}
 	return nil

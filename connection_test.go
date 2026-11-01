@@ -74,7 +74,7 @@ func connectionOptRTT(rtt time.Duration) testConnectionOpt {
 }
 
 func connectionOptRetrySrcConnID(rcid protocol.ConnectionID) testConnectionOpt {
-	return func(conn *Conn) { conn.retrySrcConnID = &rcid }
+	return func(conn *Conn) { conn.retrySrcConnID = rcid }
 }
 
 type testConnection struct {
@@ -123,7 +123,7 @@ func newServerTestConnection(
 		sendConn,
 		connRunner,
 		origDestConnID,
-		nil,
+		protocol.ConnectionID{},
 		origDestConnID,
 		protocol.ZeroLengthConnectionID,
 		srcConnID,
@@ -1245,7 +1245,7 @@ func TestConnectionTransportParameterValidationFailureClient(t *testing.T) {
 		params := &wire.TransportParameters{
 			InitialSourceConnectionID:       tc.destConnID,
 			OriginalDestinationConnectionID: tc.destConnID,
-			RetrySourceConnectionID:         &rcid,
+			RetrySourceConnectionID:         rcid,
 		}
 		err := tc.conn.handleTransportParameters(params)
 		assert.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.TransportParameterError})
@@ -1279,7 +1279,7 @@ func TestConnectionTransportParameterValidationFailureClient(t *testing.T) {
 		params := &wire.TransportParameters{
 			InitialSourceConnectionID:       tc.destConnID,
 			OriginalDestinationConnectionID: tc.destConnID,
-			RetrySourceConnectionID:         &wrongCID,
+			RetrySourceConnectionID:         wrongCID,
 		}
 		err := tc.conn.handleTransportParameters(params)
 		assert.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.TransportParameterError})

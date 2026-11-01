@@ -720,7 +720,7 @@ type ParametersSet struct {
 	SentBy                          protocol.Perspective
 	OriginalDestinationConnectionID protocol.ConnectionID
 	InitialSourceConnectionID       protocol.ConnectionID
-	RetrySourceConnectionID         *protocol.ConnectionID
+	RetrySourceConnectionID         protocol.ConnectionID
 	StatelessResetToken             *protocol.StatelessResetToken
 	DisableActiveMigration          bool
 	MaxIdleTimeout                  time.Duration
@@ -759,9 +759,9 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 				h.WriteToken(jsontext.String("stateless_reset_token"))
 				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:])))
 			}
-			if e.RetrySourceConnectionID != nil {
+			if e.RetrySourceConnectionID.Valid() {
 				h.WriteToken(jsontext.String("retry_source_connection_id"))
-				h.WriteToken(jsontext.String(fmt.Sprintf("%x", (*e.RetrySourceConnectionID).Bytes())))
+				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.RetrySourceConnectionID.Bytes())))
 			}
 		}
 		h.WriteToken(jsontext.String("initial_source_connection_id"))

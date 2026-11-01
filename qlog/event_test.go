@@ -271,7 +271,7 @@ func TestSentTransportParameters(t *testing.T) {
 		SentBy:                          protocol.PerspectiveServer,
 		OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
 		InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
-		RetrySourceConnectionID:         &rcid,
+		RetrySourceConnectionID:         rcid,
 		StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 		DisableActiveMigration:          true,
 		MaxIdleTimeout:                  321*time.Millisecond + 123*time.Microsecond,
