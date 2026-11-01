@@ -778,7 +778,9 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 		return false
 	}
 	h.handlers[id] = handler
-	h.logger.Debugf("Adding connection ID %s.", id)
+	if h.logger.Debug() {
+		h.logger.Debugf("Adding connection ID %s.", id)
+	}
 	return true
 }
 
@@ -811,7 +813,9 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	}
 	h.handlers[clientDestConnID] = handler
 	h.handlers[newConnID] = handler
-	h.logger.Debugf("Adding connection IDs %s and %s for a new connection.", clientDestConnID, newConnID)
+	if h.logger.Debug() {
+		h.logger.Debugf("Adding connection IDs %s and %s for a new connection.", clientDestConnID, newConnID)
+	}
 	return true
 }
 
