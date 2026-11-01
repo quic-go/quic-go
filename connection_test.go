@@ -310,7 +310,7 @@ func testConnectionClose(t *testing.T, useApplicationClose bool, expectedErr err
 		tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 		go func() { errChan <- tc.conn.run() }()
-		tc.conn.closeLocal(expectedErr)
+		tc.conn.closeLocal(fmt.Errorf("wrapped: %w", expectedErr))
 
 		synctest.Wait()
 
