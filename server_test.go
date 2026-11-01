@@ -40,7 +40,7 @@ type serverOpts struct {
 		sendConn,
 		connRunner,
 		protocol.ConnectionID, // original dest connection ID
-		*protocol.ConnectionID, // retry src connection ID
+		protocol.ConnectionID, // retry src connection ID
 		protocol.ConnectionID, // client dest connection ID
 		protocol.ConnectionID, // destination connection ID
 		protocol.ConnectionID, // source connection ID
@@ -640,7 +640,7 @@ type connConstructorArgs struct {
 	connRunner       connRunner
 	config           *Config
 	origDestConnID   protocol.ConnectionID
-	retrySrcConnID   *protocol.ConnectionID
+	retrySrcConnID   protocol.ConnectionID
 	clientDestConnID protocol.ConnectionID
 	destConnID       protocol.ConnectionID
 	srcConnID        protocol.ConnectionID
@@ -667,7 +667,7 @@ func (r *connConstructorRecorder) NewConn(
 	_ sendConn,
 	connRunner connRunner,
 	origDestConnID protocol.ConnectionID,
-	retrySrcConnID *protocol.ConnectionID,
+	retrySrcConnID protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
@@ -771,10 +771,10 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 	if useRetry {
 		assert.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}), args.destConnID)
 		assert.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}), args.origDestConnID)
-		assert.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}), *args.retrySrcConnID)
+		assert.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}), args.retrySrcConnID)
 	} else {
 		assert.Equal(t, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), args.origDestConnID)
-		assert.Zero(t, args.retrySrcConnID)
+		assert.False(t, args.retrySrcConnID.Valid())
 	}
 
 	for range 3 {
@@ -898,7 +898,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ sendConn,
 			_ connRunner,
 			_ protocol.ConnectionID,
-			_ *protocol.ConnectionID,
+			_ protocol.ConnectionID,
 			_ protocol.ConnectionID,
 			_ protocol.ConnectionID,
 			_ protocol.ConnectionID,

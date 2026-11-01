@@ -91,7 +91,7 @@ type baseServer struct {
 		sendConn,
 		connRunner,
 		protocol.ConnectionID, /* original dest connection ID */
-		*protocol.ConnectionID, /* retry src connection ID */
+		protocol.ConnectionID, /* retry src connection ID */
 		protocol.ConnectionID, /* client dest connection ID */
 		protocol.ConnectionID, /* destination connection ID */
 		protocol.ConnectionID, /* source connection ID */
@@ -718,7 +718,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 
 	var (
 		token              *handshake.Token
-		retrySrcConnID     *protocol.ConnectionID
+		retrySrcConnID     protocol.ConnectionID
 		clientAddrVerified bool
 	)
 	origDestConnID := hdr.DestConnectionID
@@ -727,7 +727,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		if err == nil {
 			if tok.IsRetryToken {
 				origDestConnID = tok.OriginalDestConnectionID
-				retrySrcConnID = &tok.RetrySrcConnectionID
+				retrySrcConnID = tok.RetrySrcConnectionID
 			}
 			token = tok
 		}

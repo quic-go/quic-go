@@ -76,7 +76,7 @@ var _ Trace = &FileSeq{}
 
 // NewFileSeq creates a new JSON-SEQ qlog trace to log transport events.
 func NewFileSeq(w io.WriteCloser) *FileSeq {
-	return newFileSeq(w, "transport", nil, nil)
+	return newFileSeq(w, "transport", ConnectionID{}, nil)
 }
 
 // NewConnectionFileSeq creates a new qlog trace to log connection events.
@@ -86,10 +86,10 @@ func NewConnectionFileSeq(w io.WriteCloser, isClient bool, odcid ConnectionID) *
 	if isClient {
 		pers = "client"
 	}
-	return newFileSeq(w, pers, &odcid, registeredEventSchemas)
+	return newFileSeq(w, pers, odcid, registeredEventSchemas)
 }
 
-func newFileSeq(w io.WriteCloser, pers string, odcid *ConnectionID, eventSchemas []string) *FileSeq {
+func newFileSeq(w io.WriteCloser, pers string, odcid ConnectionID, eventSchemas []string) *FileSeq {
 	now := time.Now()
 	buf := &bytes.Buffer{}
 	enc := jsontext.NewEncoder(buf)
