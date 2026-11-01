@@ -539,6 +539,49 @@ func TestServerRequestContext(t *testing.T) {
 	close(block)
 }
 
+func TestServerQlogClosedAfterHandlerReturns(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	str, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodGet, "https://www.example.com", nil)))
+	require.NoError(t, err)
+
+	handlerStarted := make(chan struct{})
+	block := make(chan struct{})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(handlerStarted)
+		<-block
+	})
+	rec := &closeTrackingRecorder{closed: make(chan struct{})}
+	conn := newRawServerConn(serverConn, false, 0, rec, nil, context.Background(), handler, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	serverStr, err := serverConn.AcceptStream(ctx)
+	require.NoError(t, err)
+	go conn.HandleRequestStream(serverStr)
+
+	select {
+	case <-handlerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+
+	serverConn.CloseWithError(0, "")
+	select {
+	case <-rec.closed:
+		t.Fatal("qlogger closed while the handler was running")
+	case <-time.After(scaleDuration(10 * time.Millisecond)):
+	}
+
+	close(block)
+	select {
+	case <-rec.closed:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
+}
+
 func TestServerHTTPStreamHijacking(t *testing.T) {
 	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
