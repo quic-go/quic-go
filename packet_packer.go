@@ -1,8 +1,6 @@
 package quic
 
 import (
-	crand "crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -138,7 +136,6 @@ type packetPacker struct {
 	acks                ackFrameSource
 	datagramQueue       *datagramQueue
 	retransmissionQueue *retransmissionQueue
-	rand                rand.Rand
 
 	numNonAckElicitingAcks int
 	qlogger                qlogwriter.Recorder
@@ -160,9 +157,6 @@ func newPacketPacker(
 	perspective protocol.Perspective,
 	qlogger qlogwriter.Recorder,
 ) *packetPacker {
-	var b [16]byte
-	_, _ = crand.Read(b[:])
-
 	return &packetPacker{
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
@@ -174,7 +168,6 @@ func newPacketPacker(
 		perspective:         perspective,
 		framer:              framer,
 		acks:                acks,
-		rand:                *rand.New(rand.NewPCG(binary.BigEndian.Uint64(b[:8]), binary.BigEndian.Uint64(b[8:]))),
 		pnManager:           packetNumberManager,
 		qlogger:             qlogger,
 	}
@@ -1049,7 +1042,7 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	// The last DATAGRAM frame also needs to stay at the end, since it might omit its length field.
 	toShuffle := pl.frames[:len(pl.frames)-pl.numDatagramFrames]
 	if len(toShuffle) > 1 {
-		p.rand.Shuffle(
+		rand.Shuffle(
 			len(toShuffle),
 			func(i, j int) { toShuffle[i], toShuffle[j] = toShuffle[j], toShuffle[i] },
 		)
