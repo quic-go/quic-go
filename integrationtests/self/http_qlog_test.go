@@ -68,7 +68,7 @@ func TestHTTP3Qlog(t *testing.T) {
 	resp.Body.Close()
 
 	assert.Equal(t, 2, clientTrace.OpenRecorders())
-	assert.Equal(t, 2, serverTrace.OpenRecorders())
+	assert.Equal(t, 3, serverTrace.OpenRecorders()) // QUIC, HTTP/3, and the GOAWAY producer
 
 	tr.Close()
 	server.Close()
