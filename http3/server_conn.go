@@ -152,7 +152,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	}
 	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, &hfs)
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs, err)
 	}
 	if err != nil {
 		if errors.Is(err, errHeaderTooLarge) {

@@ -1,6 +1,9 @@
 package qlog
 
 import (
+	"encoding/hex"
+	"unicode/utf8"
+
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlogwriter/jsontext"
 )
@@ -56,6 +59,9 @@ func (f *DataFrame) encode(h *encoderHelper) {
 type HeaderField struct {
 	Name  string
 	Value string
+	// InvalidName and InvalidValue report character validation failures in HTTP/3.
+	InvalidName  bool
+	InvalidValue bool
 }
 
 // A HeadersFrame is a HEADERS frame
@@ -66,19 +72,28 @@ type HeadersFrame struct {
 func (f *HeadersFrame) encode(h *encoderHelper) {
 	h.WriteToken(jsontext.String("frame_type"))
 	h.WriteToken(jsontext.String("headers"))
-	if len(f.HeaderFields) > 0 {
-		h.WriteToken(jsontext.String("header_fields"))
-		h.WriteToken(jsontext.BeginArray)
-		for _, f := range f.HeaderFields {
-			h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("headers"))
+	h.WriteToken(jsontext.BeginArray)
+	for _, f := range f.HeaderFields {
+		h.WriteToken(jsontext.BeginObject)
+		if !f.InvalidName && utf8.ValidString(f.Name) {
 			h.WriteToken(jsontext.String("name"))
 			h.WriteToken(jsontext.String(f.Name))
+		} else {
+			h.WriteToken(jsontext.String("name_bytes"))
+			h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.Name))))
+		}
+		// HTTP permits non-UTF-8 bytes in field values.
+		if !f.InvalidValue && utf8.ValidString(f.Value) {
 			h.WriteToken(jsontext.String("value"))
 			h.WriteToken(jsontext.String(f.Value))
-			h.WriteToken(jsontext.EndObject)
+		} else {
+			h.WriteToken(jsontext.String("value_bytes"))
+			h.WriteToken(jsontext.String(hex.EncodeToString([]byte(f.Value))))
 		}
-		h.WriteToken(jsontext.EndArray)
+		h.WriteToken(jsontext.EndObject)
 	}
+	h.WriteToken(jsontext.EndArray)
 }
 
 // A GoAwayFrame is a GOAWAY frame
