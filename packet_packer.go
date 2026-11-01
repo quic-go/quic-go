@@ -1,6 +1,8 @@
 package quic
 
 import (
+	crand "crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -136,6 +138,8 @@ type packetPacker struct {
 	acks                ackFrameSource
 	datagramQueue       *datagramQueue
 	retransmissionQueue *retransmissionQueue
+	rand                rand.Rand
+	pcg                 rand.PCG
 
 	numNonAckElicitingAcks int
 	qlogger                qlogwriter.Recorder
@@ -157,7 +161,10 @@ func newPacketPacker(
 	perspective protocol.Perspective,
 	qlogger qlogwriter.Recorder,
 ) *packetPacker {
-	return &packetPacker{
+	var b [16]byte
+	_, _ = crand.Read(b[:])
+
+	p := &packetPacker{
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
 		srcConnID:           srcConnID,
@@ -168,9 +175,12 @@ func newPacketPacker(
 		perspective:         perspective,
 		framer:              framer,
 		acks:                acks,
+		pcg:                 *rand.NewPCG(binary.BigEndian.Uint64(b[:8]), binary.BigEndian.Uint64(b[8:])),
 		pnManager:           packetNumberManager,
 		qlogger:             qlogger,
 	}
+	p.rand = *rand.New(&p.pcg)
+	return p
 }
 
 // PackConnectionClose packs a packet that closes the connection with a transport error.
@@ -1042,7 +1052,7 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	// The last DATAGRAM frame also needs to stay at the end, since it might omit its length field.
 	toShuffle := pl.frames[:len(pl.frames)-pl.numDatagramFrames]
 	if len(toShuffle) > 1 {
-		rand.Shuffle(
+		p.rand.Shuffle(
 			len(toShuffle),
 			func(i, j int) { toShuffle[i], toShuffle[j] = toShuffle[j], toShuffle[i] },
 		)
