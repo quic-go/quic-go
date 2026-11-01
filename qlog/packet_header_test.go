@@ -27,13 +27,15 @@ func TestHeaderUnknownPacketType(t *testing.T) {
 func TestHeaderInitial(t *testing.T) {
 	checkHeader(t,
 		&PacketHeader{
-			PacketType:   PacketTypeInitial,
-			PacketNumber: 42,
-			Version:      protocol.Version(0xdecafbad),
+			PacketType:      PacketTypeInitial,
+			PacketNumber:    42,
+			SrcConnectionID: protocol.ZeroLengthConnectionID,
+			Version:         protocol.Version(0xdecafbad),
 		},
 		`{
 			"packet_type": "initial",
 			"packet_number": 42,
+			"scid": "",
 			"version": "decafbad"
 		}`,
 	)
@@ -128,37 +130,6 @@ func TestHeader1RTT(t *testing.T) {
 			"packet_number": 42,
 			"dcid": "55667788",
 			"key_phase_bit": true
-		}`,
-	)
-}
-
-func TestHeaderZeroLengthConnectionIDs(t *testing.T) {
-	checkHeader(t,
-		&PacketHeader{
-			PacketType:       PacketTypeHandshake,
-			PacketNumber:     42,
-			SrcConnectionID:  protocol.ZeroLengthConnectionID,
-			DestConnectionID: protocol.ZeroLengthConnectionID,
-			Version:          protocol.Version(0xdecafbad),
-		},
-		`{
-			"packet_type": "handshake",
-			"packet_number": 42,
-			"scid": "",
-			"dcid": "",
-			"version": "decafbad"
-		}`,
-	)
-	checkHeader(t,
-		&PacketHeader{
-			PacketType:       PacketType1RTT,
-			PacketNumber:     42,
-			DestConnectionID: protocol.ZeroLengthConnectionID,
-		},
-		`{
-			"packet_type": "1RTT",
-			"packet_number": 42,
-			"dcid": ""
 		}`,
 	)
 }
