@@ -1054,10 +1054,11 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 	return wasProcessed, nil
 }
 
+// handleOnePacket processes a received datagram while retaining its receiving path.
 func (c *Conn) handleOnePacket(
 	rp receivedPacket,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum, // only for logging
-	path pathID, // only for logging
+	path pathID, // receiving path (activePathID for the current Transport)
 ) (wasProcessed bool, _ error) {
 	c.sentPacketHandler.ReceivedBytes(rp.Size(), rp.rcvTime)
 
@@ -1176,11 +1177,12 @@ func (c *Conn) handleOnePacket(
 	return wasProcessed, nil
 }
 
+// handleShortHeaderPacket updates path activity only for authenticated, non-duplicate 1-RTT packets.
 func (c *Conn) handleShortHeaderPacket(
 	p receivedPacket,
 	isCoalesced bool,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum, // only for logging
-	path pathID, // only for logging
+	path pathID, // receiving path (activePathID for the current Transport)
 ) (wasProcessed bool, _ error) {
 	var wasQueued bool
 
@@ -1243,6 +1245,16 @@ func (c *Conn) handleShortHeaderPacket(
 			})
 		}
 		return false, nil
+	}
+
+	if c.perspective == protocol.PerspectiveClient {
+		if pm := c.pathManagerOutgoing.Load(); pm != nil {
+			receivePath := path
+			if receivePath == activePathID {
+				receivePath = c.receivedPackets.ActivePath()
+			}
+			pm.HandlePacket(receivePath, p.rcvTime)
+		}
 	}
 
 	// Only the client can migrate between paths, so only the server receives packets from different addresses.
@@ -1996,7 +2008,7 @@ func (c *Conn) handleFrame(
 	case *wire.PathChallengeFrame:
 		pathChallenge = frame
 	case *wire.PathResponseFrame:
-		err = c.handlePathResponseFrame(frame)
+		err = c.handlePathResponseFrame(frame, rcvTime)
 	case *wire.NewTokenFrame:
 		err = c.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
@@ -2144,18 +2156,19 @@ func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame, path pathID,
 	return nil
 }
 
-func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame) error {
+// handlePathResponseFrame validates the challenged path using the original packet receive time.
+func (c *Conn) handlePathResponseFrame(f *wire.PathResponseFrame, rcvTime monotime.Time) error {
 	switch c.perspective {
 	case protocol.PerspectiveClient:
-		return c.handlePathResponseFrameClient(f)
+		return c.handlePathResponseFrameClient(f, rcvTime)
 	case protocol.PerspectiveServer:
-		return c.handlePathResponseFrameServer(f)
+		return c.handlePathResponseFrameServer(f, rcvTime)
 	default:
 		panic("unreachable")
 	}
 }
 
-func (c *Conn) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
+func (c *Conn) handlePathResponseFrameClient(f *wire.PathResponseFrame, rcvTime monotime.Time) error {
 	pm := c.pathManagerOutgoing.Load()
 	if pm == nil {
 		return &qerr.TransportError{
@@ -2163,11 +2176,11 @@ func (c *Conn) handlePathResponseFrameClient(f *wire.PathResponseFrame) error {
 			ErrorMessage: "unexpected PATH_RESPONSE frame",
 		}
 	}
-	pm.HandlePathResponseFrame(f)
+	pm.HandlePathResponseFrame(f, rcvTime)
 	return nil
 }
 
-func (c *Conn) handlePathResponseFrameServer(f *wire.PathResponseFrame) error {
+func (c *Conn) handlePathResponseFrameServer(f *wire.PathResponseFrame, rcvTime monotime.Time) error {
 	if c.pathManager == nil {
 		// since we didn't send PATH_CHALLENGEs yet, we don't expect PATH_RESPONSEs
 		return &qerr.TransportError{
@@ -2175,7 +2188,7 @@ func (c *Conn) handlePathResponseFrameServer(f *wire.PathResponseFrame) error {
 			ErrorMessage: "unexpected PATH_RESPONSE frame",
 		}
 	}
-	c.pathManager.HandlePathResponseFrame(f)
+	c.pathManager.HandlePathResponseFrame(f, rcvTime)
 	return nil
 }
 
@@ -3192,6 +3205,8 @@ func (c *Conn) getPathManager() *pathManagerOutgoing {
 	return c.pathManagerOutgoing.Load()
 }
 
+// AddPath prepares a client path using t. Call [Path.Probe] before [Path.Switch].
+// A path whose validation has expired must be probed again before switching.
 func (c *Conn) AddPath(t *Transport) (*Path, error) {
 	if c.perspective == protocol.PerspectiveServer {
 		return nil, errors.New("server cannot initiate connection migration")
@@ -3207,11 +3222,13 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 		200*time.Millisecond, // initial RTT estimate
 		// Called on the run loop every time a PATH_CHALLENGE is sent on the Transport.
 		// The pathReceiver is ignored if the connection is already registered with the Transport.
-		func(id pathID) {
+		func(id pathID) pathID {
 			r := &pathReceiver{Conn: c, id: id}
 			if c.connIDGenerator.AddConnRunner((*packetHandlerMap)(t), r) && c.qlogger != nil {
 				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), t.Conn.LocalAddr(), c.conn.RemoteAddr()))
 			}
+			registered, _ := c.connIDGenerator.Handler((*packetHandlerMap)(t))
+			return registered.id
 		},
 	), nil
 }
