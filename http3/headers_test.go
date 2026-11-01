@@ -11,6 +11,8 @@ import (
 
 	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
 	"github.com/quic-go/qpack"
+	"github.com/quic-go/quic-go/http3/qlog"
+	"github.com/quic-go/quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -49,6 +51,28 @@ func decodeFromSlice(headers []qpack.HeaderField) qpack.DecodeFunc {
 		h := headers[i]
 		i++
 		return h, nil
+	}
+}
+
+func TestHeaderFieldSyntaxQlog(t *testing.T) {
+	for _, field := range []qlog.HeaderField{
+		{Name: "x-example", Value: "ok"},
+		{Name: "X-Example", Value: "ok", InvalidName: true},
+		{Name: "bad name", Value: "ok", InvalidName: true},
+		{Name: "x-example", Value: "a\r\nb", InvalidValue: true},
+	} {
+		var hfs []qpack.HeaderField
+		_, err := parseHeaders(
+			decodeFromSlice([]qpack.HeaderField{{Name: ":status", Value: "200"}, {Name: field.Name, Value: field.Value}}),
+			false,
+			math.MaxInt,
+			&hfs,
+		)
+		require.Equal(t, field.InvalidName || field.InvalidValue, err != nil)
+		var recorder events.Recorder
+		qlogParsedHeadersFrame(&recorder, 0, &headersFrame{}, hfs, err)
+		frame := recorder.Events()[0].(qlog.FrameParsed).Frame.Frame.(qlog.HeadersFrame)
+		require.Equal(t, []qlog.HeaderField{{Name: ":status", Value: "200"}, field}, frame.HeaderFields)
 	}
 }
 

@@ -462,7 +462,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	res := s.response
 	err = updateResponseFromHeaders(res, decodeFn, s.maxHeaderBytes, &hfs)
 	if s.str.qlogger != nil {
-		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, hfs)
+		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, hfs, err)
 	}
 	if err != nil {
 		errCode := ErrCodeMessageError

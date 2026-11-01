@@ -1,9 +1,7 @@
 package http3
 
 import (
-	"strings"
-
-	"golang.org/x/net/http/httpguts"
+	"errors"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
@@ -22,10 +20,19 @@ func maybeQlogInvalidHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.Str
 	}
 }
 
-func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, hf *headersFrame, hfs []qpack.HeaderField) {
+func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, hf *headersFrame, hfs []qpack.HeaderField, err error) {
 	headerFields := make([]qlog.HeaderField, len(hfs))
 	for i, hf := range hfs {
-		headerFields[i] = qlogHeaderField(hf.Name, hf.Value)
+		headerFields[i] = qlog.HeaderField{
+			Name:  hf.Name,
+			Value: hf.Value,
+		}
+	}
+	// Parsing stops at the first invalid field.
+	if fieldErr, ok := errors.AsType[*fieldSyntaxError](err); ok {
+		f := &headerFields[len(headerFields)-1]
+		f.InvalidName = !fieldErr.InvalidValue
+		f.InvalidValue = fieldErr.InvalidValue
 	}
 	qlogger.RecordEvent(qlog.FrameParsed{
 		StreamID: streamID,
@@ -42,7 +49,10 @@ func qlogParsedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID,
 func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID, length, payloadLength int, hfs []qlog.HeaderField) {
 	headerFields := make([]qlog.HeaderField, len(hfs))
 	for i, hf := range hfs {
-		headerFields[i] = qlogHeaderField(hf.Name, hf.Value)
+		headerFields[i] = qlog.HeaderField{
+			Name:  hf.Name,
+			Value: hf.Value,
+		}
 	}
 	qlogger.RecordEvent(qlog.FrameCreated{
 		StreamID: streamID,
@@ -51,14 +61,4 @@ func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID
 			HeaderFields: headerFields,
 		}},
 	})
-}
-
-// qlogHeaderField flags names and values with characters that HTTP/3 doesn't allow.
-func qlogHeaderField(name, value string) qlog.HeaderField {
-	return qlog.HeaderField{
-		Name:         name,
-		Value:        value,
-		InvalidName:  strings.ToLower(name) != name || !httpguts.ValidHeaderFieldName(strings.TrimPrefix(name, ":")),
-		InvalidValue: !httpguts.ValidHeaderFieldValue(value),
-	}
 }
