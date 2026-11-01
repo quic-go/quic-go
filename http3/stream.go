@@ -161,15 +161,12 @@ func (s *Stream) Write(b []byte) (int, error) {
 func (s *Stream) continueDataFrame(b []byte) (int, error) {
 	if len(s.frameHeader) > 0 {
 		n, err := s.writeUnframed(s.frameHeader)
-		if n < len(s.frameHeader) {
+		if err != nil {
 			s.frameHeader = s.frameHeader[n:]
 			return 0, err
 		}
 		s.frameHeader = s.frameHeader[:0]
 		s.qlogCreatedDataFrame(s.bytesUnwrittenInFrame)
-		if err != nil {
-			return 0, err
-		}
 	}
 	n, err := s.writeUnframed(b[:min(uint64(len(b)), s.bytesUnwrittenInFrame)])
 	s.bytesUnwrittenInFrame -= uint64(n)
