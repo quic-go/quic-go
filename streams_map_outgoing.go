@@ -29,8 +29,8 @@ type outgoingStreamsMap[T outgoingStream] struct {
 	maxStream   protocol.StreamID // the maximum stream ID we're allowed to open
 	blockedSent bool              // was a STREAMS_BLOCKED sent for the current maxStream
 
-	newStream            func(protocol.StreamID) T
-	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
+	newStream         func(protocol.StreamID) T
+	queueControlFrame func(wire.Frame)
 
 	closeErr error
 }
@@ -53,12 +53,12 @@ func newOutgoingStreamsMap[T outgoingStream](
 		nextStream = protocol.FirstOutgoingUniStreamClient
 	}
 	return &outgoingStreamsMap[T]{
-		streamType:           streamType,
-		streams:              make(map[protocol.StreamID]T),
-		maxStream:            protocol.InvalidStreamNum,
-		nextStream:           nextStream,
-		newStream:            newStream,
-		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
+		streamType:        streamType,
+		streams:           make(map[protocol.StreamID]T),
+		maxStream:         protocol.InvalidStreamNum,
+		nextStream:        nextStream,
+		newStream:         newStream,
+		queueControlFrame: queueControlFrame,
 	}
 }
 
@@ -151,7 +151,7 @@ func (m *outgoingStreamsMap[T]) maybeSendBlockedFrame() {
 	if m.maxStream != protocol.InvalidStreamID {
 		streamLimit = m.maxStream.StreamNum()
 	}
-	m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+	m.queueControlFrame(&wire.StreamsBlockedFrame{
 		Type:        m.streamType,
 		StreamLimit: streamLimit,
 	})

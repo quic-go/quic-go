@@ -37,8 +37,8 @@ type incomingStreamsMap[T incomingStream] struct {
 
 	requireCreditRelease bool
 
-	newStream        func(protocol.StreamID) T
-	queueMaxStreamID func(*wire.MaxStreamsFrame)
+	newStream         func(protocol.StreamID) T
+	queueControlFrame func(wire.Frame)
 
 	closeErr error
 }
@@ -72,7 +72,7 @@ func newIncomingStreamsMap[T incomingStream](
 		newStream:            newStream,
 		nextStreamToOpen:     nextStreamToAccept,
 		nextStreamToAccept:   nextStreamToAccept,
-		queueMaxStreamID:     func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
+		queueControlFrame:    queueControlFrame,
 	}
 }
 
@@ -217,7 +217,7 @@ func (m *incomingStreamsMap[T]) maybeDeleteStream(id protocol.StreamID, entry in
 		// never send a value larger than the maximum value for a stream number
 		if maxStream <= protocol.MaxStreamID {
 			m.maxStream = maxStream
-			m.queueMaxStreamID(&wire.MaxStreamsFrame{
+			m.queueControlFrame(&wire.MaxStreamsFrame{
 				Type:         m.streamType,
 				MaxStreamNum: m.maxStream.StreamNum(),
 			})
