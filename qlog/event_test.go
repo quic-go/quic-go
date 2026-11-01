@@ -694,7 +694,7 @@ func TestPacketBuffered(t *testing.T) {
 
 func TestPacketDropped(t *testing.T) {
 	name, ev := testEventEncoding(t, &PacketDropped{
-		Header:                  PacketHeader{PacketType: PacketTypeRetry},
+		Header:                  PacketHeader{PacketType: PacketTypeRetry, DestConnectionID: OmitConnectionID, SrcConnectionID: OmitConnectionID},
 		Raw:                     RawInfo{Length: 1337, PayloadLength: OmitLength},
 		DatagramPayloadChecksum: 42,
 		Trigger:                 PacketDropPayloadDecryptError,
@@ -794,7 +794,7 @@ func TestMetricsUpdated(t *testing.T) {
 
 func TestPacketLost(t *testing.T) {
 	name, ev := testEventEncoding(t, &PacketLost{
-		Header:  PacketHeader{PacketType: PacketTypeHandshake, PacketNumber: 42},
+		Header:  PacketHeader{PacketType: PacketTypeHandshake, PacketNumber: 42, DestConnectionID: OmitConnectionID, SrcConnectionID: OmitConnectionID},
 		Trigger: PacketLossReorderingThreshold,
 	})
 
@@ -820,7 +820,7 @@ func TestPacketEventsTuple(t *testing.T) {
 }
 
 func TestMTUProbePacket(t *testing.T) {
-	header := PacketHeader{PacketType: PacketType1RTT, PacketNumber: 42}
+	header := PacketHeader{PacketType: PacketType1RTT, PacketNumber: 42, DestConnectionID: OmitConnectionID}
 	for _, ev := range []qlogwriter.Event{
 		PacketSent{Header: header, IsMTUProbePacket: true},
 		PacketLost{Header: header, IsMTUProbePacket: true},

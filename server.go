@@ -415,6 +415,7 @@ func (s *baseServer) handlePacket(p receivedPacket) {
 		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, p.Size())
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
+				Header:  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
 			})
@@ -431,7 +432,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		s.logger.Debugf("Dropping Version Negotiation packet.")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
@@ -448,6 +449,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		s.logger.Debugf("Dropping a packet with an unknown version")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
+				Header:  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
@@ -459,7 +461,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		if s.disableVersionNegotiation {
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: v},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: v, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedVersion,
 				})
@@ -471,7 +473,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			s.logger.Debugf("Dropping a packet with an unsupported version number %d that is too small (%d bytes)", v, p.Size())
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: v},
+					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: v, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
 				})
@@ -486,8 +488,10 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
 					Header: qlog.PacketHeader{
-						PacketType:   qlog.PacketType0RTT,
-						PacketNumber: protocol.InvalidPacketNumber,
+						PacketType:       qlog.PacketType0RTT,
+						PacketNumber:     protocol.InvalidPacketNumber,
+						DestConnectionID: qlog.OmitConnectionID,
+						SrcConnectionID:  qlog.OmitConnectionID,
 					},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropUnexpectedPacket,
@@ -504,6 +508,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 	if err != nil {
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
+				Header:  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropHeaderParseError,
 			})
@@ -516,9 +521,11 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeInitial,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      v,
+					PacketType:       qlog.PacketTypeInitial,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          v,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
@@ -546,9 +553,11 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			}
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   pt,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      v,
+					PacketType:       pt,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          v,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
@@ -574,9 +583,11 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 			v, _ := wire.ParseVersion(p.data)
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      v,
+					PacketType:       qlog.PacketType0RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          v,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropHeaderParseError,
@@ -597,9 +608,11 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 				v, _ := wire.ParseVersion(p.data)
 				s.qlogger.RecordEvent(qlog.PacketDropped{
 					Header: qlog.PacketHeader{
-						PacketType:   qlog.PacketType0RTT,
-						PacketNumber: protocol.InvalidPacketNumber,
-						Version:      v,
+						PacketType:       qlog.PacketType0RTT,
+						PacketNumber:     protocol.InvalidPacketNumber,
+						Version:          v,
+						DestConnectionID: qlog.OmitConnectionID,
+						SrcConnectionID:  qlog.OmitConnectionID,
 					},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropDOSPrevention,
@@ -616,9 +629,11 @@ func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 			v, _ := wire.ParseVersion(p.data)
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      v,
+					PacketType:       qlog.PacketType0RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          v,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
@@ -653,9 +668,11 @@ func (s *baseServer) cleanupZeroRTTQueues(now monotime.Time) {
 				v, _ := wire.ParseVersion(p.data)
 				s.qlogger.RecordEvent(qlog.PacketDropped{
 					Header: qlog.PacketHeader{
-						PacketType:   qlog.PacketType0RTT,
-						PacketNumber: protocol.InvalidPacketNumber,
-						Version:      v,
+						PacketType:       qlog.PacketType0RTT,
+						PacketNumber:     protocol.InvalidPacketNumber,
+						Version:          v,
+						DestConnectionID: qlog.OmitConnectionID,
+						SrcConnectionID:  qlog.OmitConnectionID,
 					},
 					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropDOSPrevention,
@@ -696,9 +713,11 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeInitial,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      hdr.Version,
+					PacketType:       qlog.PacketTypeInitial,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          hdr.Version,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
@@ -987,8 +1006,10 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeInitial,
-					PacketNumber: protocol.InvalidPacketNumber,
+					PacketType:       qlog.PacketTypeInitial,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropHeaderParseError,
@@ -1001,9 +1022,11 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeInitial,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      hdr.Version,
+					PacketType:       qlog.PacketTypeInitial,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          hdr.Version,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropPayloadDecryptError,
@@ -1109,6 +1132,7 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 		s.logger.Debugf("Dropping a packet with an unknown version for which we failed to parse connection IDs")
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
+				Header:  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})

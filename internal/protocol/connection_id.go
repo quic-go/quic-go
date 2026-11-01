@@ -37,6 +37,10 @@ type ConnectionID struct {
 	l uint8
 }
 
+// InvalidConnectionID is a sentinel for an unknown connection ID.
+// Its methods must not be called.
+var InvalidConnectionID = ConnectionID{l: 0xff}
+
 // GenerateConnectionID generates a connection ID using cryptographic random
 func GenerateConnectionID(l int) (ConnectionID, error) {
 	var c ConnectionID

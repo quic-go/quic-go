@@ -23,7 +23,11 @@ func (t Token) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
+// OmitConnectionID indicates that a connection ID should not be logged.
+var OmitConnectionID = protocol.InvalidConnectionID
+
 // PacketHeader is a QUIC packet header.
+// Set SrcConnectionID or DestConnectionID to OmitConnectionID if it is unknown.
 type PacketHeader struct {
 	PacketType       PacketType
 	KeyPhaseBit      KeyPhaseBit
@@ -55,11 +59,11 @@ func (h PacketHeader) encode(enc *jsontext.Encoder) error {
 		helper.WriteToken(jsontext.String("version"))
 		helper.WriteToken(jsontext.String(version(h.Version).String()))
 	}
-	if h.PacketType != PacketType1RTT && h.SrcConnectionID.Len() > 0 {
+	if h.PacketType != PacketType1RTT && h.SrcConnectionID != OmitConnectionID {
 		helper.WriteToken(jsontext.String("scid"))
 		helper.WriteToken(jsontext.String(hex.EncodeToString(h.SrcConnectionID.Bytes())))
 	}
-	if h.DestConnectionID.Len() > 0 {
+	if h.DestConnectionID != OmitConnectionID {
 		helper.WriteToken(jsontext.String("dcid"))
 		helper.WriteToken(jsontext.String(hex.EncodeToString(h.DestConnectionID.Bytes())))
 	}

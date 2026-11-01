@@ -366,9 +366,11 @@ func testServerDroppedPacket(t *testing.T,
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   expectedPacketType,
-					PacketNumber: expectedPacketNumber,
-					Version:      expectedVersion,
+					PacketType:       expectedPacketType,
+					PacketNumber:     expectedPacketNumber,
+					Version:          expectedVersion,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: expectedDropReason,
@@ -452,7 +454,7 @@ func testServerVersionNegotiation(t *testing.T, enabled bool) {
 			require.Equal(t,
 				[]qlogwriter.Event{
 					qlog.PacketDropped{
-						Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: 0x42},
+						Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: 0x42, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 						Raw:     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: qlog.OmitLength},
 						Trigger: qlog.PacketDropUnexpectedVersion,
 					},
@@ -612,9 +614,11 @@ func testServerTokenValidation(
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header: qlog.PacketHeader{
-						PacketType:   qlog.PacketTypeInitial,
-						PacketNumber: protocol.InvalidPacketNumber,
-						Version:      hdr.Version,
+						PacketType:       qlog.PacketTypeInitial,
+						PacketNumber:     protocol.InvalidPacketNumber,
+						Version:          hdr.Version,
+						DestConnectionID: qlog.OmitConnectionID,
+						SrcConnectionID:  qlog.OmitConnectionID,
 					},
 					Raw:     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: qlog.OmitLength},
 					Trigger: qlog.PacketDropPayloadDecryptError,
@@ -943,6 +947,7 @@ func TestServerReceiveQueue(t *testing.T) {
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
+				Header:  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
 			},
@@ -1176,9 +1181,11 @@ func TestServer0RTTReordering(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      protocol.Version1,
+					PacketType:       qlog.PacketType0RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          protocol.Version1,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
@@ -1280,9 +1287,11 @@ func TestServer0RTTQueueing(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      protocol.Version1,
+					PacketType:       qlog.PacketType0RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          protocol.Version1,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
@@ -1320,18 +1329,22 @@ func TestServer0RTTQueueing(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeHandshake,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      protocol.Version1,
+					PacketType:       qlog.PacketTypeHandshake,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          protocol.Version1,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(triggerPacket.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			},
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
-					Version:      protocol.Version1,
+					PacketType:       qlog.PacketType0RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					Version:          protocol.Version1,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:     qlog.RawInfo{Length: int(sizes[0]), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropDOSPrevention,
@@ -1362,9 +1375,11 @@ func TestServer0RTTQueueing(t *testing.T) {
 	expectedEvents := []qlogwriter.Event{
 		qlog.PacketDropped{
 			Header: qlog.PacketHeader{
-				PacketType:   qlog.PacketTypeHandshake,
-				PacketNumber: protocol.InvalidPacketNumber,
-				Version:      protocol.Version1,
+				PacketType:       qlog.PacketTypeHandshake,
+				PacketNumber:     protocol.InvalidPacketNumber,
+				Version:          protocol.Version1,
+				DestConnectionID: qlog.OmitConnectionID,
+				SrcConnectionID:  qlog.OmitConnectionID,
 			},
 			Raw:     qlog.RawInfo{Length: int(triggerPacket.Size()), PayloadLength: qlog.OmitLength},
 			Trigger: qlog.PacketDropUnexpectedPacket,
@@ -1373,9 +1388,11 @@ func TestServer0RTTQueueing(t *testing.T) {
 	for i := range max0RTTQueues - 1 {
 		expectedEvents = append(expectedEvents, qlog.PacketDropped{
 			Header: qlog.PacketHeader{
-				PacketType:   qlog.PacketType0RTT,
-				PacketNumber: protocol.InvalidPacketNumber,
-				Version:      protocol.Version1,
+				PacketType:       qlog.PacketType0RTT,
+				PacketNumber:     protocol.InvalidPacketNumber,
+				Version:          protocol.Version1,
+				DestConnectionID: qlog.OmitConnectionID,
+				SrcConnectionID:  qlog.OmitConnectionID,
 			},
 			Raw:     qlog.RawInfo{Length: int(sizes[i+1]), PayloadLength: qlog.OmitLength},
 			Trigger: qlog.PacketDropDOSPrevention,

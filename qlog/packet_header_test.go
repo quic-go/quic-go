@@ -20,16 +20,18 @@ func checkHeader(t *testing.T, hdr *PacketHeader, expected string) {
 }
 
 func TestHeaderUnknownPacketType(t *testing.T) {
-	checkHeader(t, &PacketHeader{}, `{"packet_type":"unknown"}`)
-	checkHeader(t, &PacketHeader{PacketType: PacketTypeUnknown}, `{"packet_type":"unknown"}`)
+	checkHeader(t, &PacketHeader{DestConnectionID: OmitConnectionID, SrcConnectionID: OmitConnectionID}, `{"packet_type":"unknown"}`)
+	checkHeader(t, &PacketHeader{PacketType: PacketTypeUnknown, DestConnectionID: OmitConnectionID, SrcConnectionID: OmitConnectionID}, `{"packet_type":"unknown"}`)
 }
 
 func TestHeaderInitial(t *testing.T) {
 	checkHeader(t,
 		&PacketHeader{
-			PacketType:   PacketTypeInitial,
-			PacketNumber: 42,
-			Version:      protocol.Version(0xdecafbad),
+			PacketType:       PacketTypeInitial,
+			PacketNumber:     42,
+			Version:          protocol.Version(0xdecafbad),
+			DestConnectionID: OmitConnectionID,
+			SrcConnectionID:  OmitConnectionID,
 		},
 		`{
 			"packet_type": "initial",
@@ -88,9 +90,11 @@ func TestHeaderLongPacketNumbers(t *testing.T) {
 func testHeaderPacketNumbers(t *testing.T, pn protocol.PacketNumber, expected string) {
 	checkHeader(t,
 		&PacketHeader{
-			PacketType:   PacketTypeHandshake,
-			PacketNumber: pn,
-			Version:      protocol.Version1,
+			PacketType:       PacketTypeHandshake,
+			PacketNumber:     pn,
+			Version:          protocol.Version1,
+			DestConnectionID: OmitConnectionID,
+			SrcConnectionID:  OmitConnectionID,
 		},
 		expected,
 	)
@@ -128,6 +132,23 @@ func TestHeader1RTT(t *testing.T) {
 			"packet_number": 42,
 			"dcid": "55667788",
 			"key_phase_bit": true
+		}`,
+	)
+}
+
+func TestHeaderZeroLengthConnectionIDs(t *testing.T) {
+	checkHeader(t,
+		&PacketHeader{
+			PacketType:   PacketTypeHandshake,
+			PacketNumber: 42,
+			Version:      protocol.Version(0xdecafbad),
+		},
+		`{
+			"packet_type": "handshake",
+			"packet_number": 42,
+			"scid": "",
+			"dcid": "",
+			"version": "decafbad"
 		}`,
 	)
 }

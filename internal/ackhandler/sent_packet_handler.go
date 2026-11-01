@@ -933,8 +933,10 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 				if h.qlogger != nil {
 					h.qlogger.RecordEvent(qlog.PacketLost{
 						Header: qlog.PacketHeader{
-							PacketType:   qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
-							PacketNumber: pn,
+							PacketType:       qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
+							PacketNumber:     pn,
+							DestConnectionID: qlog.OmitConnectionID,
+							SrcConnectionID:  qlog.OmitConnectionID,
 						},
 						IsMTUProbePacket: p.IsPathMTUProbePacket,
 						Trigger:          qlog.PacketLossTimeThreshold,
@@ -950,8 +952,10 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 				if h.qlogger != nil {
 					h.qlogger.RecordEvent(qlog.PacketLost{
 						Header: qlog.PacketHeader{
-							PacketType:   qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
-							PacketNumber: pn,
+							PacketType:       qlog.EncryptionLevelToPacketType(p.EncryptionLevel),
+							PacketNumber:     pn,
+							DestConnectionID: qlog.OmitConnectionID,
+							SrcConnectionID:  qlog.OmitConnectionID,
 						},
 						IsMTUProbePacket: p.IsPathMTUProbePacket,
 						Trigger:          qlog.PacketLossReorderingThreshold,

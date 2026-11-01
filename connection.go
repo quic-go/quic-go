@@ -1078,6 +1078,7 @@ func (c *Conn) handleOnePacket(
 			if err != nil {
 				if c.qlogger != nil {
 					c.qlogger.RecordEvent(qlog.PacketDropped{
+						Header:                  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 						Raw:                     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 						DatagramPayloadChecksum: datagramPayloadChecksum,
 						Trigger:                 qlog.PacketDropHeaderParseError,
@@ -1089,7 +1090,7 @@ func (c *Conn) handleOnePacket(
 			if destConnID != lastConnID {
 				if c.qlogger != nil {
 					c.qlogger.RecordEvent(qlog.PacketDropped{
-						Header:                  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, DestConnectionID: destConnID},
+						Header:                  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, DestConnectionID: destConnID, SrcConnectionID: qlog.OmitConnectionID},
 						Raw:                     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 						DatagramPayloadChecksum: datagramPayloadChecksum,
 						Trigger:                 qlog.PacketDropUnknownConnectionID,
@@ -1106,13 +1107,14 @@ func (c *Conn) handleOnePacket(
 				if c.qlogger != nil {
 					if err == wire.ErrUnsupportedVersion {
 						c.qlogger.RecordEvent(qlog.PacketDropped{
-							Header:                  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: hdr.Version},
+							Header:                  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, Version: hdr.Version, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 							Raw:                     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 							DatagramPayloadChecksum: datagramPayloadChecksum,
 							Trigger:                 qlog.PacketDropUnsupportedVersion,
 						})
 					} else {
 						c.qlogger.RecordEvent(qlog.PacketDropped{
+							Header:                  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 							Raw:                     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 							DatagramPayloadChecksum: datagramPayloadChecksum,
 							Trigger:                 qlog.PacketDropHeaderParseError,
@@ -1127,6 +1129,7 @@ func (c *Conn) handleOnePacket(
 			if hdr.Version != c.version {
 				if c.qlogger != nil {
 					c.qlogger.RecordEvent(qlog.PacketDropped{
+						Header:                  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 						Raw:                     qlog.RawInfo{Length: len(data), PayloadLength: qlog.OmitLength},
 						DatagramPayloadChecksum: datagramPayloadChecksum,
 						Trigger:                 qlog.PacketDropUnexpectedVersion,
@@ -1196,8 +1199,9 @@ func (c *Conn) handleShortHeaderPacket(
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType1RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
+					PacketType:       qlog.PacketType1RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					DestConnectionID: qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: len(p.data), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1234,8 +1238,9 @@ func (c *Conn) handleShortHeaderPacket(
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType1RTT,
-					PacketNumber: pn,
+					PacketType:       qlog.PacketType1RTT,
+					PacketNumber:     pn,
+					DestConnectionID: qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1355,8 +1360,10 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketTypeInitial,
-					PacketNumber: protocol.InvalidPacketNumber,
+					PacketType:       qlog.PacketTypeInitial,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1371,8 +1378,10 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
-					PacketNumber: protocol.InvalidPacketNumber,
+					PacketType:       qlog.PacketType0RTT,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1447,6 +1456,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 					PacketType:       pt,
 					DestConnectionID: connID,
 					PacketNumber:     protocol.InvalidPacketNumber,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1474,6 +1484,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 					PacketType:       pt,
 					DestConnectionID: connID,
 					PacketNumber:     protocol.InvalidPacketNumber,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1492,6 +1503,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 						PacketType:       pt,
 						DestConnectionID: connID,
 						PacketNumber:     protocol.InvalidPacketNumber,
+						SrcConnectionID:  qlog.OmitConnectionID,
 					},
 					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -1622,7 +1634,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 		c.receivedFirstPacket || c.receivedRetry || c.versionNegotiated { // ignore version negotiation packets received after any other packet
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
@@ -1634,7 +1646,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 	if err != nil {
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropHeaderParseError,
 			})
@@ -1647,7 +1659,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 	if !bytes.Equal(src, c.origDestConnID.Bytes()) {
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedSourceConnectionID,
 			})
@@ -1659,7 +1671,7 @@ func (c *Conn) handleVersionNegotiationPacket(p receivedPacket) error {
 	if slices.Contains(supportedVersions, c.version) {
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
-				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation},
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketTypeVersionNegotiation, DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				Trigger: qlog.PacketDropUnexpectedVersion,
 			})
@@ -2023,6 +2035,7 @@ func (c *Conn) queuePacket(p receivedPacket, source *pathReceiver) {
 				datagramPayloadChecksum = qlog.CalculateDatagramPayloadChecksum(p.data)
 			}
 			c.qlogger.RecordEvent(qlog.PacketDropped{
+				Header:                  qlog.PacketHeader{DestConnectionID: qlog.OmitConnectionID, SrcConnectionID: qlog.OmitConnectionID},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
 				Trigger:                 qlog.PacketDropDOSPrevention,
@@ -3056,8 +3069,10 @@ func (c *Conn) tryQueueingUndecryptablePacket(p receivedPacket, pt qlog.PacketTy
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   pt,
-					PacketNumber: protocol.InvalidPacketNumber,
+					PacketType:       pt,
+					PacketNumber:     protocol.InvalidPacketNumber,
+					DestConnectionID: qlog.OmitConnectionID,
+					SrcConnectionID:  qlog.OmitConnectionID,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 				DatagramPayloadChecksum: datagramPayloadChecksum,
@@ -3071,8 +3086,10 @@ func (c *Conn) tryQueueingUndecryptablePacket(p receivedPacket, pt qlog.PacketTy
 	if c.qlogger != nil {
 		c.qlogger.RecordEvent(qlog.PacketBuffered{
 			Header: qlog.PacketHeader{
-				PacketType:   pt,
-				PacketNumber: protocol.InvalidPacketNumber,
+				PacketType:       pt,
+				PacketNumber:     protocol.InvalidPacketNumber,
+				DestConnectionID: qlog.OmitConnectionID,
+				SrcConnectionID:  qlog.OmitConnectionID,
 			},
 			Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
 			DatagramPayloadChecksum: datagramPayloadChecksum,
