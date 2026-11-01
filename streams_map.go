@@ -67,7 +67,7 @@ func (m *streamsMap) initMaps() {
 	m.outgoingBidiStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeBidi,
 		func(id protocol.StreamID) *Stream {
-			return newStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
+			return newStream(m.ctx, id, m.sender, m.newFlowController(id), false)
 		},
 		m.queueControlFrame,
 		m.perspective,
@@ -85,7 +85,7 @@ func (m *streamsMap) initMaps() {
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
 		func(id protocol.StreamID) *SendStream {
-			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id), m.supportsResetStreamAt)
+			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id), false)
 		},
 		m.queueControlFrame,
 		m.perspective,

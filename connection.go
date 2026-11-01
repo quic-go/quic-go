@@ -3019,11 +3019,12 @@ func (c *Conn) OpenUniStreamSync(ctx context.Context) (*SendStream, error) {
 }
 
 func (c *Conn) newFlowController(id protocol.StreamID) *streamFlowController {
-	initialSendWindow := c.peerParams.InitialMaxStreamDataUni
-	if protocol.StreamTypeOf(id) == protocol.StreamTypeBidi {
-		if protocol.StreamInitiator(id) == c.perspective {
-			initialSendWindow = c.peerParams.InitialMaxStreamDataBidiRemote
-		} else {
+	// Outgoing streams get their effective send window from the stream map,
+	// under the same lock that serializes stream creation and parameter updates.
+	var initialSendWindow protocol.ByteCount
+	if protocol.StreamInitiator(id) != c.perspective {
+		initialSendWindow = c.peerParams.InitialMaxStreamDataUni
+		if protocol.StreamTypeOf(id) == protocol.StreamTypeBidi {
 			initialSendWindow = c.peerParams.InitialMaxStreamDataBidiLocal
 		}
 	}

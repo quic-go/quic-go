@@ -29,6 +29,9 @@ type outgoingStreamsMap[T outgoingStream] struct {
 	maxStream   protocol.StreamID // the maximum stream ID we're allowed to open
 	blockedSent bool              // was a STREAMS_BLOCKED sent for the current maxStream
 
+	initialSendWindow     protocol.ByteCount
+	supportsResetStreamAt bool
+
 	newStream            func(protocol.StreamID) T
 	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
 
@@ -135,6 +138,10 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 
 func (m *outgoingStreamsMap[T]) openStream() T {
 	s := m.newStream(m.nextStream)
+	s.updateSendWindow(m.initialSendWindow)
+	if m.supportsResetStreamAt {
+		s.enableResetStreamAt()
+	}
 	m.streams[m.nextStream] = s
 	m.nextStream += 4
 	return s
@@ -201,11 +208,12 @@ func (m *outgoingStreamsMap[T]) SetMaxStream(id protocol.StreamID) {
 	m.maybeUnblockOpenSync()
 }
 
-// UpdateSendWindow is called when the peer's transport parameters are received.
+// UpdateSendWindow is called when the peer's transport parameters are applied.
 // Only in the case of a 0-RTT handshake will we have open streams at this point.
 // We might need to update the send window, in case the server increased it.
 func (m *outgoingStreamsMap[T]) UpdateSendWindow(limit protocol.ByteCount) {
 	m.mutex.Lock()
+	m.initialSendWindow = limit
 	for _, str := range m.streams {
 		str.updateSendWindow(limit)
 	}
@@ -214,6 +222,7 @@ func (m *outgoingStreamsMap[T]) UpdateSendWindow(limit protocol.ByteCount) {
 
 func (m *outgoingStreamsMap[T]) EnableResetStreamAt() {
 	m.mutex.Lock()
+	m.supportsResetStreamAt = true
 	for _, str := range m.streams {
 		str.enableResetStreamAt()
 	}
