@@ -12,6 +12,12 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+# On PRs, a new push cancels outdated runs.
+# Other runs use the run ID as the group, so they never wait for or cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   benchmarks:
     name: Benchmarks

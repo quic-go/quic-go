@@ -10,9 +10,12 @@ on:
       - 'v*'
   pull_request:
 
+# On PRs, a new push cancels outdated runs.
+# On master, runs queue behind each other, so they don't race to push :latest.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' && github.ref != 'refs/heads/master' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
 
 jobs:
   interop:
