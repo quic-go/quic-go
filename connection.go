@@ -361,7 +361,7 @@ var newConnection = func(
 		params.MaxDatagramFrameSize = protocol.InvalidByteCount
 	}
 	if s.qlogger != nil {
-		s.qlogTransportParameters(params, protocol.PerspectiveServer, false)
+		s.qlogTransportParameters(params, protocol.PerspectiveServer)
 	}
 	cs := handshake.NewCryptoSetupServer(
 		clientDestConnID,
@@ -496,7 +496,7 @@ var newClientConnection = func(
 		params.MaxDatagramFrameSize = protocol.InvalidByteCount
 	}
 	if s.qlogger != nil {
-		s.qlogTransportParameters(params, protocol.PerspectiveClient, false)
+		s.qlogTransportParameters(params, protocol.PerspectiveClient)
 	}
 	cs := handshake.NewCryptoSetupClient(
 		destConnID,
@@ -2414,9 +2414,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 		c.logger.Debugf("Restoring Transport Parameters: %s", params)
 	}
 	if c.qlogger != nil {
-		// only log the parameters that are saved in the session ticket
-		c.qlogger.RecordEvent(qlog.ParametersSet{
-			Restore:                        true,
+		c.qlogger.RecordEvent(qlog.ParametersRestored{
 			ActiveConnectionIDLimit:        params.ActiveConnectionIDLimit,
 			InitialMaxData:                 params.InitialMaxData,
 			InitialMaxStreamDataBidiLocal:  params.InitialMaxStreamDataBidiLocal,
@@ -2437,7 +2435,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 
 func (c *Conn) handleTransportParameters(params *wire.TransportParameters) error {
 	if c.qlogger != nil {
-		c.qlogTransportParameters(params, c.perspective.Opposite(), false)
+		c.qlogTransportParameters(params, c.perspective.Opposite())
 	}
 	if err := c.checkTransportParameters(params); err != nil {
 		return &qerr.TransportError{

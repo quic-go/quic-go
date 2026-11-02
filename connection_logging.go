@@ -200,10 +200,9 @@ func (c *Conn) logCoalescedPacket(packet *coalescedPacket, ecn protocol.ECN) {
 	}
 }
 
-func (c *Conn) qlogTransportParameters(tp *wire.TransportParameters, sentBy protocol.Perspective, restore bool) {
+func (c *Conn) qlogTransportParameters(tp *wire.TransportParameters, sentBy protocol.Perspective) {
 	ev := qlog.ParametersSet{
 		SentBy:                          sentBy,
-		Restore:                         restore,
 		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
 		InitialSourceConnectionID:       tp.InitialSourceConnectionID,
 		RetrySourceConnectionID:         tp.RetrySourceConnectionID,

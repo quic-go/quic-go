@@ -440,18 +440,15 @@ func TestReceivedTransportParameters(t *testing.T) {
 }
 
 func TestRestoredTransportParameters(t *testing.T) {
-	name, ev := testEventEncoding(t, &ParametersSet{
-		Restore:                        true,
+	name, ev := testEventEncoding(t, &ParametersRestored{
 		InitialMaxStreamDataBidiLocal:  100,
 		InitialMaxStreamDataBidiRemote: 200,
 		InitialMaxStreamDataUni:        300,
 		InitialMaxData:                 400,
-		MaxIdleTimeout:                 123 * time.Millisecond,
 	})
 
 	require.Equal(t, "transport:parameters_restored", name)
 	require.JSONEq(t, `{
-		"max_idle_timeout": 123,
 		"initial_max_data": 400,
 		"initial_max_stream_data_bidi_local": 100,
 		"initial_max_stream_data_bidi_remote": 200,
