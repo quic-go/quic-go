@@ -30,7 +30,7 @@ func TestTraceMetadata(t *testing.T) {
 			producer := trace.AddProducer()
 			producer.Close()
 
-			testTraceMetadata(t, buf, "transport", "", []string{})
+			testTraceMetadata(t, buf, "", "", []string{})
 		})
 	})
 
@@ -84,11 +84,9 @@ func testTraceMetadata(t *testing.T,
 	if expectedGroupID != "" {
 		commonFields["group_id"] = expectedGroupID
 	}
-	trace := map[string]any{
-		"common_fields": commonFields,
-		"vantage_point": map[string]any{
-			"type": expectedVantagePoint,
-		},
+	trace := map[string]any{"common_fields": commonFields}
+	if expectedVantagePoint != "" {
+		trace["vantage_point"] = map[string]any{"type": expectedVantagePoint}
 	}
 	if len(expectedEventSchemas) > 0 {
 		trace["event_schemas"] = expectedEventSchemas

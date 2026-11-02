@@ -81,13 +81,15 @@ func (l traceHeader) Encode(enc *jsontext.Encoder) error {
 		h.WriteToken(jsontext.EndArray)
 	}
 
-	h.WriteToken(jsontext.String("vantage_point"))
-	// -- vantage_point
-	h.WriteToken(jsontext.BeginObject)
-	h.WriteToken(jsontext.String("type"))
-	h.WriteToken(jsontext.String(l.VantagePointType))
-	// -- end vantage_point
-	h.WriteToken(jsontext.EndObject)
+	if l.VantagePointType != "" {
+		h.WriteToken(jsontext.String("vantage_point"))
+		// -- vantage_point
+		h.WriteToken(jsontext.BeginObject)
+		h.WriteToken(jsontext.String("type"))
+		h.WriteToken(jsontext.String(l.VantagePointType))
+		// -- end vantage_point
+		h.WriteToken(jsontext.EndObject)
+	}
 
 	h.WriteToken(jsontext.String("common_fields"))
 	// -- common_fields
