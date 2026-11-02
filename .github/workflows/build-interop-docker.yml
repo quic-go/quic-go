@@ -11,7 +11,7 @@ on:
   pull_request:
 
 # On PRs, a new push cancels outdated runs.
-# On master, runs queue behind each other, so :latest is pushed in commit order.
+# On master, runs queue behind each other, so they don't race to push :latest.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
