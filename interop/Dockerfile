@@ -1,4 +1,4 @@
-# Build on the native platform and cross-compile, instead of compiling under QEMU emulation.
+# build on the native platform and cross-compile
 FROM --platform=$BUILDPLATFORM martenseemann/quic-network-simulator-endpoint:latest AS builder
 
 ARG BUILDPLATFORM
