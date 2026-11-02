@@ -952,7 +952,7 @@ func TestKeyDiscarded(t *testing.T) {
 	}`, ev)
 }
 
-func TestLossTimerUpdated(t *testing.T) {
+func TestTimerUpdated(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var buf bytes.Buffer
 		tr := qlogwriter.NewConnectionFileSeq(
@@ -966,8 +966,8 @@ func TestLossTimerUpdated(t *testing.T) {
 		synctest.Wait()
 		time.Sleep(42 * time.Second)
 
-		producer.RecordEvent(&LossTimerUpdated{
-			Type:      LossTimerUpdateTypeSet,
+		producer.RecordEvent(&TimerUpdated{
+			Type:      TimerEventTypeSet,
 			TimerType: TimerTypePTO,
 			EncLevel:  protocol.EncryptionHandshake,
 			Time:      time.Now().Add(1337 * time.Second),
@@ -985,9 +985,9 @@ func TestLossTimerUpdated(t *testing.T) {
 	})
 }
 
-func TestLossTimerUpdatedExpired(t *testing.T) {
-	name, ev := testEventEncoding(t, &LossTimerUpdated{
-		Type:      LossTimerUpdateTypeExpired,
+func TestTimerUpdatedExpired(t *testing.T) {
+	name, ev := testEventEncoding(t, &TimerUpdated{
+		Type:      TimerEventTypeExpired,
 		TimerType: TimerTypeACK,
 		EncLevel:  protocol.Encryption1RTT,
 	})
@@ -1000,8 +1000,8 @@ func TestLossTimerUpdatedExpired(t *testing.T) {
 	}`, ev)
 }
 
-func TestLossTimerUpdatedCanceled(t *testing.T) {
-	name, ev := testEventEncoding(t, &LossTimerUpdated{Type: LossTimerUpdateTypeCancelled})
+func TestTimerUpdatedCanceled(t *testing.T) {
+	name, ev := testEventEncoding(t, &TimerUpdated{Type: TimerEventTypeCancelled})
 
 	require.Equal(t, "recovery:loss_timer_updated", name)
 	require.JSONEq(t, `{"event_type": "cancelled"}`, ev)
