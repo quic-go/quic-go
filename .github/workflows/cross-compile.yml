@@ -54,14 +54,22 @@ jobs:
           # Caches are immutable, so we only update it once per day (at most).
           # See https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
           key: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
+      - name: Check that the Go build cache was saved
+        # the save step doesn't fail if saving fails
+        id: check-cache
+        if: github.event_name == 'push' && github.ref_name == 'master'
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
+          lookup-only: true
       - name: Delete outdated Go build caches
         # once today's cache is saved, older ones are never restored
-        if: github.event_name == 'push' && github.ref_name == 'master'
+        if: steps.check-cache.outputs.cache-hit == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PREFIX: go-${{ matrix.go }}-crosscompile-
           KEY: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
         run: |
-          # The save step doesn't fail if saving fails. Only delete older caches if today's cache exists.
-          gh cache list --repo "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key --jq 'map(.key) | select(any(.[]; . == env.KEY)) | .[] | select(. != env.KEY)' |
+          gh cache list --repo "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key --jq ".[].key | select(. != \"$KEY\")" |
             xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
