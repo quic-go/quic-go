@@ -9,7 +9,7 @@ import (
 )
 
 // EventSchema is the qlog event schema for HTTP/3
-const EventSchema = "urn:ietf:params:qlog:events:http3-12"
+const EventSchema = "urn:ietf:params:qlog:events:http3-14"
 
 func init() {
 	qlogwriter.RegisterEventSchema(EventSchema)
