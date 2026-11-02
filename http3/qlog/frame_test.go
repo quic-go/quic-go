@@ -65,7 +65,8 @@ func TestSettingsFrame(t *testing.T) {
 			name: "datagram: 1",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				Datagram:            new(uint64(1)),
+				Datagram:            1,
+				ExtendedConnect:     -1,
 			},
 			expected: `{
 				"frame_type": "settings",
@@ -79,7 +80,8 @@ func TestSettingsFrame(t *testing.T) {
 			name: "extended_connect: 0",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				ExtendedConnect:     new(uint64(0)),
+				Datagram:            -1,
+				ExtendedConnect:     0,
 			},
 			expected: `{
 				"frame_type": "settings",
@@ -91,7 +93,7 @@ func TestSettingsFrame(t *testing.T) {
 		},
 		{
 			name:  "max_field_section_size",
-			frame: SettingsFrame{MaxFieldSectionSize: 1337},
+			frame: SettingsFrame{MaxFieldSectionSize: 1337, Datagram: -1, ExtendedConnect: -1},
 			expected: `{
 				"frame_type": "settings",
 				"settings": [{
@@ -104,8 +106,8 @@ func TestSettingsFrame(t *testing.T) {
 			name: "datagram: 0, extended_connect: 0",
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
-				Datagram:            new(uint64(0)),
-				ExtendedConnect:     new(uint64(0)),
+				Datagram:            0,
+				ExtendedConnect:     0,
 			},
 			expected: `{
 				"frame_type": "settings",
@@ -122,6 +124,8 @@ func TestSettingsFrame(t *testing.T) {
 			// and would require us to deal with non-deterministic map iteration order.
 			frame: SettingsFrame{
 				MaxFieldSectionSize: -1,
+				Datagram:            -1,
+				ExtendedConnect:     -1,
 				Other:               map[uint64]uint64{0xdead: 0xbeef},
 			},
 			expected: `{

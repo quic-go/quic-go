@@ -60,9 +60,9 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 	require.Equal(t, settingsFrame.Datagram, enableDatagrams)
 	require.Equal(t, settingsFrame.Other, other)
 
-	var datagramValue *uint64
+	datagramValue := int64(-1)
 	if enableDatagrams {
-		datagramValue = new(uint64(1))
+		datagramValue = 1
 	}
 	require.Equal(t,
 		[]qlogwriter.Event{
@@ -73,6 +73,7 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 					Frame: qlog.SettingsFrame{
 						MaxFieldSectionSize: defaultMaxResponseHeaderBytes,
 						Datagram:            datagramValue,
+						ExtendedConnect:     -1,
 						Other:               other,
 					},
 				},
