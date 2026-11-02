@@ -45,6 +45,7 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - uses: ./.github/actions/go-cache-restore
+        id: go-cache
         with:
           name: ${{ matrix.race && 'integration-race' || 'integration' }}
       - name: Install go-junit-report
@@ -101,3 +102,6 @@ jobs:
           env_vars: OS,GO
           token: ${{ secrets.CODECOV_TOKEN }}
       - uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go-cache.outputs.path }}
+          key: ${{ steps.go-cache.outputs.key }}
