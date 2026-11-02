@@ -55,7 +55,8 @@ jobs:
           GODEBUG: fips140=only
         run: go test -v ./internal/handshake -run 'TestToken|TestRetry|TestInitial|TestDecode|TestEncrypt'
       - name: Run benchmark tests
-        run: go test -v -run=^$ -benchtime 0.5s -bench=. ./...
+        # only check that the benchmarks still work, including when run for multiple iterations
+        run: go test -v -run=^$ -benchtime 10x -bench=. ./...
       - name: Upload coverage to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
