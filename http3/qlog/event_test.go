@@ -136,3 +136,25 @@ func TestFrameCreatedEvent(t *testing.T) {
 		}
 	}`, ev)
 }
+
+func TestParametersSetEvent(t *testing.T) {
+	name, ev := testEventEncoding(t, ParametersSet{
+		Initiator:           InitiatorRemote,
+		MaxFieldSectionSize: 1234,
+		ExtendedConnect:     0,
+		Datagram:            1,
+		Other:               map[uint64]uint64{1337: 42, 0x21 + 0x1f: 1},
+	})
+
+	require.Equal(t, "http3:parameters_set", name)
+	require.JSONEq(t, `{
+		"initiator": "remote",
+		"max_field_section_size": 1234,
+		"extended_connect": 0,
+		"h3_datagram": 1,
+		"unknown_settings": [
+			{"name": "reserved", "name_bytes": 64, "value": 1},
+			{"name": "unknown", "name_bytes": 1337, "value": 42}
+		]
+	}`, ev)
+}

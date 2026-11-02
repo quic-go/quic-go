@@ -1,6 +1,8 @@
 package qlog
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -133,6 +135,64 @@ func (e DatagramParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.String("raw"))
 	if err := e.Raw.encode(enc); err != nil {
 		return err
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+type Initiator string
+
+const (
+	InitiatorLocal  Initiator = "local"
+	InitiatorRemote Initiator = "remote"
+)
+
+type ParametersSet struct {
+	Initiator           Initiator
+	MaxFieldSectionSize int64 // -1 if not set
+	ExtendedConnect     int64 // -1 if not set
+	Datagram            int64 // -1 if not set
+	Other               map[uint64]uint64
+}
+
+func (e ParametersSet) Name() string { return "http3:parameters_set" }
+
+func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("initiator"))
+	h.WriteToken(jsontext.String(string(e.Initiator)))
+	if e.MaxFieldSectionSize >= 0 {
+		h.WriteToken(jsontext.String("max_field_section_size"))
+		h.WriteToken(jsontext.Uint(uint64(e.MaxFieldSectionSize)))
+	}
+	if e.ExtendedConnect >= 0 {
+		h.WriteToken(jsontext.String("extended_connect"))
+		h.WriteToken(jsontext.Uint(uint64(e.ExtendedConnect)))
+	}
+	if e.Datagram >= 0 {
+		h.WriteToken(jsontext.String("h3_datagram"))
+		h.WriteToken(jsontext.Uint(uint64(e.Datagram)))
+	}
+	if len(e.Other) > 0 {
+		h.WriteToken(jsontext.String("unknown_settings"))
+		h.WriteToken(jsontext.BeginArray)
+		for _, id := range slices.Sorted(maps.Keys(e.Other)) {
+			h.WriteToken(jsontext.BeginObject)
+			h.WriteToken(jsontext.String("name"))
+			// reserved settings have IDs of the form 0x1f * N + 0x21, see RFC 9114, Section 7.2.4.1
+			if id >= 0x21 && (id-0x21)%0x1f == 0 {
+				h.WriteToken(jsontext.String("reserved"))
+			} else {
+				h.WriteToken(jsontext.String("unknown"))
+			}
+			h.WriteToken(jsontext.String("name_bytes"))
+			h.WriteToken(jsontext.Uint(id))
+			h.WriteToken(jsontext.String("value"))
+			h.WriteToken(jsontext.Uint(e.Other[id]))
+			h.WriteToken(jsontext.EndObject)
+		}
+		h.WriteToken(jsontext.EndArray)
 	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err

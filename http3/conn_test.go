@@ -65,14 +65,24 @@ func TestConnReceiveSettings(t *testing.T) {
 				Frame: qlog.Frame{
 					Frame: qlog.SettingsFrame{
 						MaxFieldSectionSize: 1234,
-						Datagram:            new(uint64(1)),
-						ExtendedConnect:     new(uint64(1)),
+						Datagram:            1,
+						ExtendedConnect:     1,
 						Other:               map[uint64]uint64{1337: 42},
 					},
 				},
 			},
 		},
 		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameParsed{}), qlog.SettingsFrame{}),
+	)
+	require.Equal(t,
+		[]qlogwriter.Event{qlog.ParametersSet{
+			Initiator:           qlog.InitiatorRemote,
+			MaxFieldSectionSize: 1234,
+			ExtendedConnect:     1,
+			Datagram:            1,
+			Other:               map[uint64]uint64{1337: 42},
+		}},
+		eventRecorder.Events(qlog.ParametersSet{}),
 	)
 }
 

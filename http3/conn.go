@@ -95,18 +95,27 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 	if c.qlogger != nil {
 		sf := qlog.SettingsFrame{
 			MaxFieldSectionSize: settings.MaxFieldSectionSize,
+			Datagram:            -1,
+			ExtendedConnect:     -1,
 			Other:               maps.Clone(settings.Other),
 		}
 		if settings.Datagram {
-			sf.Datagram = new(uint64(1))
+			sf.Datagram = 1
 		}
 		if settings.ExtendedConnect {
-			sf.ExtendedConnect = new(uint64(1))
+			sf.ExtendedConnect = 1
 		}
 		c.qlogger.RecordEvent(qlog.FrameCreated{
 			StreamID: str.StreamID(),
 			Raw:      qlog.RawInfo{Length: len(b), PayloadLength: qlog.OmitLength},
 			Frame:    qlog.Frame{Frame: sf},
+		})
+		c.qlogger.RecordEvent(qlog.ParametersSet{
+			Initiator:           qlog.InitiatorLocal,
+			MaxFieldSectionSize: sf.MaxFieldSectionSize,
+			ExtendedConnect:     sf.ExtendedConnect,
+			Datagram:            sf.Datagram,
+			Other:               sf.Other,
 		})
 	}
 	if _, err := str.Write(b); err != nil {

@@ -225,6 +225,8 @@ func TestParserSettingsFrame(t *testing.T) {
 	require.Len(t, logged, 1)
 	require.Equal(t, qlog.SettingsFrame{
 		MaxFieldSectionSize: -1,
+		Datagram:            -1,
+		ExtendedConnect:     -1,
 		Other:               map[uint64]uint64{13: 37, 0xdead: 0xbeef},
 	}, logged[0].(qlog.FrameParsed).Frame.Frame)
 
@@ -340,7 +342,8 @@ func testParserSettingsFrameDatagram(t *testing.T, val uint64) {
 	require.Len(t, logged, 1)
 	require.Equal(t, qlog.SettingsFrame{
 		MaxFieldSectionSize: -1,
-		Datagram:            new(val),
+		Datagram:            int64(val),
+		ExtendedConnect:     -1,
 	}, logged[0].(qlog.FrameParsed).Frame.Frame)
 
 	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
@@ -386,7 +389,8 @@ func testParserSettingsFrameExtendedConnect(t *testing.T, val uint64) {
 	require.Len(t, logged, 1)
 	require.Equal(t, qlog.SettingsFrame{
 		MaxFieldSectionSize: -1,
-		ExtendedConnect:     new(val),
+		Datagram:            -1,
+		ExtendedConnect:     int64(val),
 	}, logged[0].(qlog.FrameParsed).Frame.Frame)
 
 	fp = frameParser{r: bytes.NewReader(sf.Append(nil))}
