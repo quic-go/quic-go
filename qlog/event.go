@@ -912,16 +912,16 @@ func (a PreferredAddress) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
-type LossTimerUpdated struct {
-	Type      LossTimerUpdateType
+type TimerUpdated struct {
+	Type      TimerEventType
 	TimerType TimerType
 	EncLevel  EncryptionLevel
 	Time      time.Time
 }
 
-func (e LossTimerUpdated) Name() string { return "recovery:loss_timer_updated" }
+func (e TimerUpdated) Name() string { return "recovery:loss_timer_updated" }
 
-func (e LossTimerUpdated) Encode(enc *jsontext.Encoder, t time.Time) error {
+func (e TimerUpdated) Encode(enc *jsontext.Encoder, t time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	h.WriteToken(jsontext.String("event_type"))
@@ -934,7 +934,7 @@ func (e LossTimerUpdated) Encode(enc *jsontext.Encoder, t time.Time) error {
 		h.WriteToken(jsontext.String("packet_number_space"))
 		h.WriteToken(jsontext.String(encLevelToPacketNumberSpace(e.EncLevel)))
 	}
-	if e.Type == LossTimerUpdateTypeSet {
+	if e.Type == TimerEventTypeSet {
 		h.WriteToken(jsontext.String("delta"))
 		h.WriteToken(jsontext.Float(milliseconds(e.Time.Sub(t))))
 	}

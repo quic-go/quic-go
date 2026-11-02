@@ -243,12 +243,12 @@ const (
 	PacketDropDuplicate PacketDropReason = "duplicate"
 )
 
-type LossTimerUpdateType string
+type TimerEventType string
 
 const (
-	LossTimerUpdateTypeSet       LossTimerUpdateType = "set"
-	LossTimerUpdateTypeExpired   LossTimerUpdateType = "expired"
-	LossTimerUpdateTypeCancelled LossTimerUpdateType = "cancelled"
+	TimerEventTypeSet       TimerEventType = "set"
+	TimerEventTypeExpired   TimerEventType = "expired"
+	TimerEventTypeCancelled TimerEventType = "cancelled"
 )
 
 type TimerType string

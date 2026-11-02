@@ -789,15 +789,15 @@ func (h *sentPacketHandler) setLossDetectionTimer(now monotime.Time) {
 	if !hasAlarm && !oldAlarm.Time.IsZero() {
 		h.logger.Debugf("Canceling loss detection timer.")
 		if h.qlogger != nil {
-			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
-				Type: qlog.LossTimerUpdateTypeCancelled,
+			h.qlogger.RecordEvent(qlog.TimerUpdated{
+				Type: qlog.TimerEventTypeCancelled,
 			})
 		}
 	}
 
 	if h.qlogger != nil && hasAlarm && newAlarm != oldAlarm {
-		h.qlogger.RecordEvent(qlog.LossTimerUpdated{
-			Type:      qlog.LossTimerUpdateTypeSet,
+		h.qlogger.RecordEvent(qlog.TimerUpdated{
+			Type:      qlog.TimerEventTypeSet,
 			TimerType: newAlarm.TimerType,
 			EncLevel:  newAlarm.EncryptionLevel,
 			Time:      newAlarm.Time.ToTime(),
@@ -1006,8 +1006,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
 		}
 		if h.qlogger != nil {
-			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
-				Type:      qlog.LossTimerUpdateTypeExpired,
+			h.qlogger.RecordEvent(qlog.TimerUpdated{
+				Type:      qlog.TimerEventTypeExpired,
 				TimerType: qlog.TimerTypeACK,
 				EncLevel:  encLevel,
 			})
@@ -1048,8 +1048,8 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
 	}
 	if h.qlogger != nil {
-		h.qlogger.RecordEvent(qlog.LossTimerUpdated{
-			Type:      qlog.LossTimerUpdateTypeExpired,
+		h.qlogger.RecordEvent(qlog.TimerUpdated{
+			Type:      qlog.TimerEventTypeExpired,
 			TimerType: qlog.TimerTypePTO,
 			EncLevel:  encLevel,
 		})
@@ -1227,8 +1227,8 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 	if h.qlogger != nil {
 		h.qlogger.RecordEvent(qlog.PTOCountUpdated{PTOCount: 0})
 		if !oldAlarm.Time.IsZero() {
-			h.qlogger.RecordEvent(qlog.LossTimerUpdated{
-				Type: qlog.LossTimerUpdateTypeCancelled,
+			h.qlogger.RecordEvent(qlog.TimerUpdated{
+				Type: qlog.TimerEventTypeCancelled,
 			})
 		}
 	}

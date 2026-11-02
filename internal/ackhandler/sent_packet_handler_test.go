@@ -969,19 +969,19 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, encLevel, protocol.ECNNon, 1000, false, false)
 			require.Equal(t,
 				[]qlogwriter.Event{
-					qlog.LossTimerUpdated{
-						Type:      qlog.LossTimerUpdateTypeSet,
+					qlog.TimerUpdated{
+						Type:      qlog.TimerEventTypeSet,
 						TimerType: qlog.TimerTypePTO,
 						EncLevel:  encLevel,
 						Time:      ti.ToTime().Add(rttStats.PTO(encLevel == protocol.Encryption1RTT) << ptoCount),
 					},
 				},
-				eventRecorder.Events(qlog.LossTimerUpdated{}),
+				eventRecorder.Events(qlog.TimerUpdated{}),
 			)
 			eventRecorder.Clear()
 		} else {
 			sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, nil, encLevel, protocol.ECNNon, 1000, true, false)
-			require.Empty(t, eventRecorder.Events(qlog.LossTimerUpdated{}))
+			require.Empty(t, eventRecorder.Events(qlog.TimerUpdated{}))
 		}
 		return pn
 	}
@@ -1012,20 +1012,20 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	sph.OnLossDetectionTimeout(timeout)
 	require.Equal(t,
 		[]qlogwriter.Event{
-			qlog.LossTimerUpdated{
-				Type:      qlog.LossTimerUpdateTypeExpired,
+			qlog.TimerUpdated{
+				Type:      qlog.TimerEventTypeExpired,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 			},
 			qlog.PTOCountUpdated{PTOCount: 1},
-			qlog.LossTimerUpdated{
-				Type:      qlog.LossTimerUpdateTypeSet,
+			qlog.TimerUpdated{
+				Type:      qlog.TimerEventTypeSet,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 				Time:      sendTimes[2].Add(2 * rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
-		eventRecorder.Events(qlog.PTOCountUpdated{}, qlog.LossTimerUpdated{}),
+		eventRecorder.Events(qlog.PTOCountUpdated{}, qlog.TimerUpdated{}),
 	)
 	// PTO timer expiration doesn't declare packets lost
 	require.Empty(t, packets.Lost)
@@ -1066,20 +1066,20 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	sph.OnLossDetectionTimeout(timeout)
 	require.Equal(t,
 		[]qlogwriter.Event{
-			qlog.LossTimerUpdated{
-				Type:      qlog.LossTimerUpdateTypeExpired,
+			qlog.TimerUpdated{
+				Type:      qlog.TimerEventTypeExpired,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 			},
 			qlog.PTOCountUpdated{PTOCount: 2},
-			qlog.LossTimerUpdated{
-				Type:      qlog.LossTimerUpdateTypeSet,
+			qlog.TimerUpdated{
+				Type:      qlog.TimerEventTypeSet,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 				Time:      sendTimes[6].Add(4 * rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
-		eventRecorder.Events(qlog.LossTimerUpdated{}, qlog.PTOCountUpdated{}),
+		eventRecorder.Events(qlog.TimerUpdated{}, qlog.PTOCountUpdated{}),
 	)
 	eventRecorder.Clear()
 	// PTO timer expiration doesn't declare packets lost
@@ -1120,14 +1120,14 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	)
 	require.Equal(t,
 		[]qlogwriter.Event{
-			qlog.LossTimerUpdated{
-				Type:      qlog.LossTimerUpdateTypeSet,
+			qlog.TimerUpdated{
+				Type:      qlog.TimerEventTypeSet,
 				TimerType: qlog.TimerTypePTO,
 				EncLevel:  encLevel,
 				Time:      sendTimes[8].Add(rttStats.PTO(encLevel == protocol.Encryption1RTT)).ToTime(),
 			},
 		},
-		eventRecorder.Events(qlog.LossTimerUpdated{}),
+		eventRecorder.Events(qlog.TimerUpdated{}),
 	)
 	require.Contains(t, packets.Acked, pns[7])
 
@@ -1150,9 +1150,9 @@ func testSentPacketHandlerPTO(t *testing.T, encLevel protocol.EncryptionLevel, p
 	require.Zero(t, sph.GetLossDetectionTimeout())
 	require.Equal(t,
 		[]qlogwriter.Event{
-			qlog.LossTimerUpdated{Type: qlog.LossTimerUpdateTypeCancelled},
+			qlog.TimerUpdated{Type: qlog.TimerEventTypeCancelled},
 		},
-		eventRecorder.Events(qlog.LossTimerUpdated{}),
+		eventRecorder.Events(qlog.TimerUpdated{}),
 	)
 }
 
