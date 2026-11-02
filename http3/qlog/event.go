@@ -137,3 +137,58 @@ func (e DatagramParsed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
+
+type Initiator string
+
+const (
+	InitiatorLocal  Initiator = "local"
+	InitiatorRemote Initiator = "remote"
+)
+
+type StreamType string
+
+const (
+	StreamTypeControl     StreamType = "control"
+	StreamTypePush        StreamType = "push"
+	StreamTypeQPACKEncode StreamType = "qpack_encode"
+	StreamTypeQPACKDecode StreamType = "qpack_decode"
+	StreamTypeUnknown     StreamType = "unknown"
+)
+
+type StreamTypeSet struct {
+	Initiator       Initiator
+	StreamID        quic.StreamID
+	StreamType      StreamType
+	StreamTypeBytes uint64 // only logged for unknown stream types
+}
+
+func (e StreamTypeSet) Name() string { return "http3:stream_type_set" }
+
+func (e StreamTypeSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("initiator"))
+	h.WriteToken(jsontext.String(string(e.Initiator)))
+	h.WriteToken(jsontext.String("stream_id"))
+	h.WriteToken(jsontext.Uint(uint64(e.StreamID)))
+	h.WriteToken(jsontext.String("stream_type"))
+	if e.StreamType == StreamTypeUnknown {
+		if isReserved(e.StreamTypeBytes) {
+			h.WriteToken(jsontext.String("reserved"))
+		} else {
+			h.WriteToken(jsontext.String("unknown"))
+		}
+		h.WriteToken(jsontext.String("stream_type_bytes"))
+		h.WriteToken(jsontext.Uint(e.StreamTypeBytes))
+	} else {
+		h.WriteToken(jsontext.String(string(e.StreamType)))
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+// isReserved says if a stream type is reserved,
+// i.e. of the form 0x1f * N + 0x21, see RFC 9114, Section 6.2.3.
+func isReserved(v uint64) bool {
+	return v >= 0x21 && (v-0x21)%0x1f == 0
+}

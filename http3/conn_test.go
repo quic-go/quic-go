@@ -74,6 +74,16 @@ func TestConnReceiveSettings(t *testing.T) {
 		},
 		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameParsed{}), qlog.SettingsFrame{}),
 	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.StreamTypeSet{
+				Initiator:  qlog.InitiatorRemote,
+				StreamID:   controlStr.StreamID(),
+				StreamType: qlog.StreamTypeControl,
+			},
+		},
+		eventRecorder.Events(qlog.StreamTypeSet{}),
+	)
 }
 
 func TestConnRejectDuplicateStreams(t *testing.T) {

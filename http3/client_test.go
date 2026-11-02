@@ -81,6 +81,16 @@ func testClientSettings(t *testing.T, enableDatagrams bool, other map[uint64]uin
 		},
 		filterQlogEventsForFrame(eventRecorder.Events(qlog.FrameCreated{}), qlog.SettingsFrame{}),
 	)
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.StreamTypeSet{
+				Initiator:  qlog.InitiatorLocal,
+				StreamID:   str.StreamID(),
+				StreamType: qlog.StreamTypeControl,
+			},
+		},
+		eventRecorder.Events(qlog.StreamTypeSet{}),
+	)
 }
 
 func encodeResponse(t *testing.T, status int) []byte {

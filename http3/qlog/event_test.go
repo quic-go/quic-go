@@ -136,3 +136,31 @@ func TestFrameCreatedEvent(t *testing.T) {
 		}
 	}`, ev)
 }
+
+func TestStreamTypeSetEvent(t *testing.T) {
+	name, ev := testEventEncoding(t, StreamTypeSet{
+		Initiator:  InitiatorLocal,
+		StreamID:   3,
+		StreamType: StreamTypeQPACKEncode,
+	})
+
+	require.Equal(t, "http3:stream_type_set", name)
+	require.JSONEq(t, `{
+		"initiator": "local",
+		"stream_id": 3,
+		"stream_type": "qpack_encode"
+	}`, ev)
+
+	_, ev = testEventEncoding(t, StreamTypeSet{
+		Initiator:       InitiatorRemote,
+		StreamID:        7,
+		StreamType:      StreamTypeUnknown,
+		StreamTypeBytes: 0x21,
+	})
+	require.JSONEq(t, `{
+		"initiator": "remote",
+		"stream_id": 7,
+		"stream_type": "reserved",
+		"stream_type_bytes": 33
+	}`, ev)
+}
