@@ -2832,6 +2832,8 @@ func TestConnectionVersionNegotiation(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		var eventRecorder events.Recorder
 		tc := newClientTestConnection(t, mockCtrl, nil, false, connectionOptTracer(&eventRecorder))
+		// no CONNECTION_CLOSE is sent, even after sending the first Initial
+		tc.conn.sentFirstPacket = true
 
 		tc.packer.EXPECT().PackCoalescedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 		tc.connRunner.EXPECT().Remove(gomock.Any())
@@ -2852,9 +2854,9 @@ func TestConnectionVersionNegotiation(t *testing.T) {
 
 		select {
 		case err := <-errChan:
-			var rerr *errCloseForRecreating
-			require.ErrorAs(t, err, &rerr)
-			require.Equal(t, rerr.nextVersion, protocol.Version2)
+			var serr *errSwitchVersion
+			require.ErrorAs(t, err, &serr)
+			require.Equal(t, serr.nextVersion, protocol.Version2)
 		default:
 			t.Fatal("should have received a Version Negotiation packet")
 		}

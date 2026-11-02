@@ -572,7 +572,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 
 	conn := &connTestHooks{
 		handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
-		run:               func() error { return &errCloseForRecreating{nextPacketNumber: 109, nextVersion: 789} },
+		run:               func() error { return &errSwitchVersion{nextPacketNumber: 109, nextVersion: 789} },
 	}
 	conn2 := &connTestHooks{
 		handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
