@@ -75,8 +75,9 @@ type FileSeq struct {
 var _ Trace = &FileSeq{}
 
 // NewFileSeq creates a new JSON-SEQ qlog trace to log transport events.
+// The trace header declares all event schemas registered using [RegisterEventSchema].
 func NewFileSeq(w io.WriteCloser) *FileSeq {
-	return newFileSeq(w, "transport", ConnectionID{}, nil)
+	return newFileSeq(w, "transport", ConnectionID{})
 }
 
 // NewConnectionFileSeq creates a new qlog trace to log connection events.
@@ -86,10 +87,10 @@ func NewConnectionFileSeq(w io.WriteCloser, isClient bool, odcid ConnectionID) *
 	if isClient {
 		pers = "client"
 	}
-	return newFileSeq(w, pers, odcid, registeredEventSchemas)
+	return newFileSeq(w, pers, odcid)
 }
 
-func newFileSeq(w io.WriteCloser, pers string, odcid ConnectionID, eventSchemas []string) *FileSeq {
+func newFileSeq(w io.WriteCloser, pers string, odcid ConnectionID) *FileSeq {
 	now := time.Now()
 	buf := &bytes.Buffer{}
 	enc := jsontext.NewEncoder(buf)
@@ -100,7 +101,7 @@ func newFileSeq(w io.WriteCloser, pers string, odcid ConnectionID, eventSchemas 
 		VantagePointType: pers,
 		GroupID:          odcid,
 		ReferenceTime:    now,
-		EventSchemas:     eventSchemas,
+		EventSchemas:     registeredEventSchemas,
 	}).Encode(enc); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}

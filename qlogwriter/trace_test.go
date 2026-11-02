@@ -23,6 +23,9 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 
 func TestTraceMetadata(t *testing.T) {
 	t.Run("non-connection trace", func(t *testing.T) {
+		resetEventSchemas(t)
+		RegisterEventSchema("urn:ietf:params:qlog:events:foo")
+
 		synctest.Test(t, func(t *testing.T) {
 			buf := &bytes.Buffer{}
 			trace := NewFileSeq(nopWriteCloser(buf))
@@ -30,7 +33,7 @@ func TestTraceMetadata(t *testing.T) {
 			producer := trace.AddProducer()
 			producer.Close()
 
-			testTraceMetadata(t, buf, "transport", "", []string{})
+			testTraceMetadata(t, buf, "transport", "", []string{"urn:ietf:params:qlog:events:foo"})
 		})
 	})
 

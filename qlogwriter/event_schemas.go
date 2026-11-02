@@ -6,7 +6,7 @@ var registeredEventSchemas []string
 
 // RegisterEventSchema registers a qlog event schema.
 // It must only be called from init functions of packages that produce qlog events.
-// Connection traces declare all registered event schemas in the trace header,
+// Traces declare all registered event schemas in the trace header,
 // independent of whether events of a particular schema end up being recorded.
 func RegisterEventSchema(schema string) {
 	if !slices.Contains(registeredEventSchemas, schema) {
