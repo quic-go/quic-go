@@ -715,7 +715,6 @@ func (e KeyDiscarded) Encode(enc *jsontext.Encoder, _ time.Time) error {
 }
 
 type ParametersSet struct {
-	Restore                         bool
 	Initiator                       Initiator
 	SentBy                          protocol.Perspective
 	OriginalDestinationConnectionID protocol.ConnectionID
@@ -739,37 +738,29 @@ type ParametersSet struct {
 	EnableResetStreamAt             bool
 }
 
-func (e ParametersSet) Name() string {
-	if e.Restore {
-		return "transport:parameters_restored"
-	}
-	return "transport:parameters_set"
-}
+func (e ParametersSet) Name() string { return "transport:parameters_set" }
 
 func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
-	if !e.Restore {
-		h.WriteToken(jsontext.String("initiator"))
-		h.WriteToken(jsontext.String(string(e.Initiator)))
-		if e.SentBy == protocol.PerspectiveServer {
-			h.WriteToken(jsontext.String("original_destination_connection_id"))
-			h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.OriginalDestinationConnectionID.Bytes())))
-			if e.StatelessResetToken != nil {
-				h.WriteToken(jsontext.String("stateless_reset_token"))
-				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:])))
-			}
-			if e.RetrySourceConnectionID.Valid() {
-				h.WriteToken(jsontext.String("retry_source_connection_id"))
-				h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.RetrySourceConnectionID.Bytes())))
-			}
+	h.WriteToken(jsontext.String("initiator"))
+	h.WriteToken(jsontext.String(string(e.Initiator)))
+	if e.SentBy == protocol.PerspectiveServer {
+		h.WriteToken(jsontext.String("original_destination_connection_id"))
+		h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.OriginalDestinationConnectionID.Bytes())))
+		if e.StatelessResetToken != nil {
+			h.WriteToken(jsontext.String("stateless_reset_token"))
+			h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.StatelessResetToken[:])))
 		}
-		h.WriteToken(jsontext.String("initial_source_connection_id"))
-		h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.InitialSourceConnectionID.Bytes())))
-		// disable_active_migration is not restored for 0-RTT
-		h.WriteToken(jsontext.String("disable_active_migration"))
-		h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
+		if e.RetrySourceConnectionID.Valid() {
+			h.WriteToken(jsontext.String("retry_source_connection_id"))
+			h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.RetrySourceConnectionID.Bytes())))
+		}
 	}
+	h.WriteToken(jsontext.String("initial_source_connection_id"))
+	h.WriteToken(jsontext.String(fmt.Sprintf("%x", e.InitialSourceConnectionID.Bytes())))
+	h.WriteToken(jsontext.String("disable_active_migration"))
+	h.WriteToken(jsontext.Bool(e.DisableActiveMigration))
 	if e.MaxIdleTimeout != 0 {
 		h.WriteToken(jsontext.String("max_idle_timeout"))
 		h.WriteToken(jsontext.Uint(uint64(e.MaxIdleTimeout.Milliseconds())))
@@ -778,11 +769,8 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.String("max_udp_payload_size"))
 		h.WriteToken(jsontext.Int(int64(e.MaxUDPPayloadSize)))
 	}
-	// The ack_delay_exponent is not restored for 0-RTT.
-	if !e.Restore {
-		h.WriteToken(jsontext.String("ack_delay_exponent"))
-		h.WriteToken(jsontext.Uint(uint64(e.AckDelayExponent)))
-	}
+	h.WriteToken(jsontext.String("ack_delay_exponent"))
+	h.WriteToken(jsontext.Uint(uint64(e.AckDelayExponent)))
 	if e.MaxAckDelay != 0 {
 		h.WriteToken(jsontext.String("max_ack_delay"))
 		h.WriteToken(jsontext.Uint(uint64(e.MaxAckDelay.Milliseconds())))
@@ -820,6 +808,63 @@ func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		if err := e.PreferredAddress.encode(enc); err != nil {
 			return err
 		}
+	}
+	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
+		h.WriteToken(jsontext.String("max_datagram_frame_size"))
+		h.WriteToken(jsontext.Int(int64(e.MaxDatagramFrameSize)))
+	}
+	if e.EnableResetStreamAt {
+		h.WriteToken(jsontext.String("reset_stream_at"))
+		h.WriteToken(jsontext.True)
+	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+type ParametersRestored struct {
+	ActiveConnectionIDLimit        uint64
+	InitialMaxData                 protocol.ByteCount
+	InitialMaxStreamDataBidiLocal  protocol.ByteCount
+	InitialMaxStreamDataBidiRemote protocol.ByteCount
+	InitialMaxStreamDataUni        protocol.ByteCount
+	InitialMaxStreamsBidi          int64
+	InitialMaxStreamsUni           int64
+	MaxDatagramFrameSize           protocol.ByteCount
+	EnableResetStreamAt            bool
+}
+
+func (e ParametersRestored) Name() string { return "transport:parameters_restored" }
+
+func (e ParametersRestored) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	if e.ActiveConnectionIDLimit != 0 {
+		h.WriteToken(jsontext.String("active_connection_id_limit"))
+		h.WriteToken(jsontext.Uint(e.ActiveConnectionIDLimit))
+	}
+	if e.InitialMaxData != 0 {
+		h.WriteToken(jsontext.String("initial_max_data"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxData)))
+	}
+	if e.InitialMaxStreamDataBidiLocal != 0 {
+		h.WriteToken(jsontext.String("initial_max_stream_data_bidi_local"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiLocal)))
+	}
+	if e.InitialMaxStreamDataBidiRemote != 0 {
+		h.WriteToken(jsontext.String("initial_max_stream_data_bidi_remote"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataBidiRemote)))
+	}
+	if e.InitialMaxStreamDataUni != 0 {
+		h.WriteToken(jsontext.String("initial_max_stream_data_uni"))
+		h.WriteToken(jsontext.Int(int64(e.InitialMaxStreamDataUni)))
+	}
+	if e.InitialMaxStreamsBidi != 0 {
+		h.WriteToken(jsontext.String("initial_max_streams_bidi"))
+		h.WriteToken(jsontext.Int(e.InitialMaxStreamsBidi))
+	}
+	if e.InitialMaxStreamsUni != 0 {
+		h.WriteToken(jsontext.String("initial_max_streams_uni"))
+		h.WriteToken(jsontext.Int(e.InitialMaxStreamsUni))
 	}
 	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		h.WriteToken(jsontext.String("max_datagram_frame_size"))
