@@ -54,7 +54,7 @@ type event struct {
 const eventChanSize = 50
 
 // FileSeq represents a qlog trace using the JSON-SEQ format,
-// https://www.ietf.org/archive/id/draft-ietf-quic-qlog-main-schema-12.html#section-5
+// https://www.ietf.org/archive/id/draft-ietf-quic-qlog-main-schema-15.html#section-5
 // qlog event producers can be created by calling [FileSeq.AddProducer].
 // The underlying io.WriteCloser is closed when the last producer is removed.
 type FileSeq struct {

@@ -13,7 +13,7 @@ import (
 )
 
 // EventSchema is the qlog event schema for QUIC
-const EventSchema = "urn:ietf:params:qlog:events:quic-12"
+const EventSchema = "urn:ietf:params:qlog:events:quic-14"
 
 func init() {
 	qlogwriter.RegisterEventSchema(EventSchema)
