@@ -219,8 +219,8 @@ const (
 type PacketDropReason string
 
 const (
-	// PacketDropKeyUnavailable is used when a packet is dropped because keys are unavailable
-	PacketDropKeyUnavailable PacketDropReason = "key_unavailable"
+	// PacketDropKeysUnavailable is used when a packet is dropped because keys are unavailable
+	PacketDropKeysUnavailable PacketDropReason = "keys_unavailable"
 	// PacketDropUnknownConnectionID is used when a packet is dropped because the connection ID is unknown
 	PacketDropUnknownConnectionID PacketDropReason = "unknown_connection_id"
 	// PacketDropHeaderParseError is used when a packet is dropped because header parsing failed
@@ -242,6 +242,29 @@ const (
 	// PacketDropDuplicate is used when a duplicate packet is received
 	PacketDropDuplicate PacketDropReason = "duplicate"
 )
+
+// trigger returns the packet_dropped trigger defined by the qlog draft.
+func (r PacketDropReason) trigger() string {
+	switch r {
+	case PacketDropKeysUnavailable:
+		return "keys_unavailable"
+	case PacketDropUnknownConnectionID:
+		return "connection_unknown"
+	case PacketDropHeaderParseError, PacketDropProtocolViolation, PacketDropUnexpectedPacket,
+		PacketDropUnexpectedSourceConnectionID, PacketDropUnexpectedVersion:
+		return "invalid"
+	case PacketDropPayloadDecryptError:
+		return "decryption_failure"
+	case PacketDropDOSPrevention:
+		return "rejected"
+	case PacketDropUnsupportedVersion:
+		return "unsupported"
+	case PacketDropDuplicate:
+		return "duplicate"
+	default:
+		return "general"
+	}
+}
 
 type TimerEventType string
 

@@ -866,7 +866,7 @@ func testConnectionUnpackFailureFatal(t *testing.T, unpackErr error) error {
 
 func TestConnectionUnpackFailureDropped(t *testing.T) {
 	t.Run("keys dropped", func(t *testing.T) {
-		testConnectionUnpackFailureDropped(t, handshake.ErrKeysDropped, qlog.PacketDropKeyUnavailable)
+		testConnectionUnpackFailureDropped(t, handshake.ErrKeysDropped, qlog.PacketDropKeysUnavailable)
 	})
 
 	t.Run("decryption failed", func(t *testing.T) {

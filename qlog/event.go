@@ -451,8 +451,17 @@ func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 		h.WriteToken(jsontext.String("datagram_payload_checksum"))
 		h.WriteToken(jsontext.Uint(uint64(e.DatagramPayloadChecksum)))
 	}
+	trigger := e.Trigger.trigger()
 	h.WriteToken(jsontext.String("trigger"))
-	h.WriteToken(jsontext.String(string(e.Trigger)))
+	h.WriteToken(jsontext.String(trigger))
+	// preserve the more specific reason
+	if trigger != string(e.Trigger) {
+		h.WriteToken(jsontext.String("details"))
+		h.WriteToken(jsontext.BeginObject)
+		h.WriteToken(jsontext.String("reason"))
+		h.WriteToken(jsontext.String(string(e.Trigger)))
+		h.WriteToken(jsontext.EndObject)
+	}
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
