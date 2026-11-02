@@ -55,3 +55,18 @@ func qlogCreatedHeadersFrame(qlogger qlogwriter.Recorder, streamID quic.StreamID
 		}},
 	})
 }
+
+func qlogStreamType(t uint64) qlog.StreamType {
+	switch t {
+	case streamTypeControlStream:
+		return qlog.StreamTypeControl
+	case streamTypePushStream:
+		return qlog.StreamTypePush
+	case streamTypeQPACKEncoderStream:
+		return qlog.StreamTypeQPACKEncode
+	case streamTypeQPACKDecoderStream:
+		return qlog.StreamTypeQPACKDecode
+	default:
+		return qlog.StreamTypeUnknown
+	}
+}
