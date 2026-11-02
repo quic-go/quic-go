@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -19,7 +20,11 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/qtls"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/events"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,6 +99,57 @@ func TestHandshake(t *testing.T) {
 			defer serverConn.CloseWithError(0, "")
 		})
 	}
+}
+
+func TestHandshakeConnectionStates(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const rtt = 10 * time.Millisecond
+		clientPacketConn, serverPacketConn, close := newSimnetLink(t, rtt)
+		defer close(t)
+
+		var clientEvents, serverEvents events.Recorder
+		tlsConf := getTLSConfig()
+		tlsConf.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+			assert.Equal(t,
+				[]qlogwriter.Event{qlog.ConnectionStateUpdated{State: qlog.ConnectionStateAttempted}},
+				serverEvents.Events(qlog.ConnectionStateUpdated{}),
+			)
+			return nil, nil
+		}
+		server, err := quic.Listen(serverPacketConn, tlsConf, getQuicConfig(&quic.Config{Tracer: newTracer(&serverEvents)}))
+		require.NoError(t, err)
+		defer server.Close()
+
+		conn, err := quic.Dial(
+			context.Background(),
+			clientPacketConn,
+			serverPacketConn.LocalAddr(),
+			getTLSClientConfig(),
+			getQuicConfig(&quic.Config{Tracer: newTracer(&clientEvents)}),
+		)
+		require.NoError(t, err)
+		serverConn, err := server.Accept(context.Background())
+		require.NoError(t, err)
+
+		// The server sends the HANDSHAKE_DONE frame before the stream data.
+		str, err := serverConn.OpenUniStream()
+		require.NoError(t, err)
+		require.NoError(t, str.Close())
+		_, err = conn.AcceptUniStream(context.Background())
+		require.NoError(t, err)
+		require.NoError(t, conn.CloseWithError(0, ""))
+		<-serverConn.Context().Done()
+
+		states := []qlogwriter.Event{
+			qlog.ConnectionStateUpdated{State: qlog.ConnectionStateAttempted},
+			qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeStarted},
+			qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeComplete},
+			qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeConfirmed},
+			qlog.ConnectionStateUpdated{State: qlog.ConnectionStateClosed},
+		}
+		require.Equal(t, states, clientEvents.Events(qlog.ConnectionStateUpdated{}))
+		require.Equal(t, states, serverEvents.Events(qlog.ConnectionStateUpdated{}))
+	})
 }
 
 func TestHandshakeServerMismatch(t *testing.T) {

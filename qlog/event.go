@@ -230,6 +230,21 @@ func (e ConnectionClosed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	return h.err
 }
 
+type ConnectionStateUpdated struct {
+	State ConnectionState
+}
+
+func (e ConnectionStateUpdated) Name() string { return "quic:connection_state_updated" }
+
+func (e ConnectionStateUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("new"))
+	h.WriteToken(jsontext.String(string(e.State)))
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
 type PacketSent struct {
 	Header                  PacketHeader
 	Raw                     RawInfo
