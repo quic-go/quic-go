@@ -268,12 +268,12 @@ func toQlogPacketType(pt protocol.PacketType) qlog.PacketType {
 	return qpt
 }
 
-func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
+func toTupleEndpointInfo(addr *net.UDPAddr) qlog.TupleEndpointInfo {
 	if addr == nil {
-		return qlog.PathEndpointInfo{}
+		return qlog.TupleEndpointInfo{}
 	}
 
-	var info qlog.PathEndpointInfo
+	var info qlog.TupleEndpointInfo
 	if addr.IP == nil || addr.IP.To4() != nil {
 		addrPort := netip.AddrPortFrom(netip.AddrFrom4([4]byte(addr.IP.To4())), uint16(addr.Port))
 		if addrPort.IsValid() {
@@ -289,24 +289,24 @@ func toPathEndpointInfo(addr *net.UDPAddr) qlog.PathEndpointInfo {
 }
 
 func startedConnectionEvent(local, remote *net.UDPAddr) qlog.StartedConnection {
-	localInfo, remoteInfo := toPathEndpointInfos(local, remote)
+	localInfo, remoteInfo := toTupleEndpointInfos(local, remote)
 	return qlog.StartedConnection{Local: localInfo, Remote: remoteInfo}
 }
 
 func tupleAssignedEvent(tupleID string, local, remote net.Addr) qlog.TupleAssigned {
 	localAddr, _ := local.(*net.UDPAddr)
 	remoteAddr, _ := remote.(*net.UDPAddr)
-	localInfo, remoteInfo := toPathEndpointInfos(localAddr, remoteAddr)
+	localInfo, remoteInfo := toTupleEndpointInfos(localAddr, remoteAddr)
 	return qlog.TupleAssigned{TupleID: tupleID, Local: localInfo, Remote: remoteInfo}
 }
 
-// toPathEndpointInfos converts the local and remote address using consistent logic
+// toTupleEndpointInfos converts the local and remote address using consistent logic
 // for both endpoints. If the local address is unspecified (e.g., dual-stack
 // listener), it selects the family based on the remote address and uses the
 // unspecified address of that family with the local port.
-func toPathEndpointInfos(local, remote *net.UDPAddr) (localInfo, remoteInfo qlog.PathEndpointInfo) {
+func toTupleEndpointInfos(local, remote *net.UDPAddr) (localInfo, remoteInfo qlog.TupleEndpointInfo) {
 	if remote != nil {
-		remoteInfo = toPathEndpointInfo(remote)
+		remoteInfo = toTupleEndpointInfo(remote)
 	}
 	if local != nil {
 		if local.IP == nil || local.IP.IsUnspecified() {
@@ -323,7 +323,7 @@ func toPathEndpointInfos(local, remote *net.UDPAddr) (localInfo, remoteInfo qlog
 				}
 			}
 		} else {
-			localInfo = toPathEndpointInfo(local)
+			localInfo = toTupleEndpointInfo(local)
 		}
 	}
 	return localInfo, remoteInfo
