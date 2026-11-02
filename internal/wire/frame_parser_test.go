@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/israce"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -728,6 +729,10 @@ func parseFrames(tb testing.TB, parser *FrameParser, data []byte, frames ...Fram
 }
 
 func TestFrameParserAllocs(t *testing.T) {
+	if israce.Enabled {
+		t.Skip("the race detector allocates")
+	}
+
 	t.Run("STREAM", func(t *testing.T) {
 		var frames []Frame
 		for i := range 10 {
