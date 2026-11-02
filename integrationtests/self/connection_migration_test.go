@@ -240,7 +240,7 @@ func requireConnIDsNotLinkable(t *testing.T, evs []qlogwriter.Event) {
 	t.Helper()
 
 	type tuple struct {
-		local, remote qlog.PathEndpointInfo
+		local, remote qlog.TupleEndpointInfo
 	}
 
 	tuples := make(map[string]tuple) // by TupleID

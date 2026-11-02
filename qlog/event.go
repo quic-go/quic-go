@@ -72,12 +72,12 @@ func (i RawInfo) encode(enc *jsontext.Encoder) error {
 	return h.err
 }
 
-type PathEndpointInfo struct {
+type TupleEndpointInfo struct {
 	IPv4 netip.AddrPort
 	IPv6 netip.AddrPort
 }
 
-func (p PathEndpointInfo) encode(enc *jsontext.Encoder, redacted *string) error {
+func (p TupleEndpointInfo) encode(enc *jsontext.Encoder, redacted *string) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginObject)
 	if redacted != nil {
@@ -103,8 +103,8 @@ func (p PathEndpointInfo) encode(enc *jsontext.Encoder, redacted *string) error 
 }
 
 type StartedConnection struct {
-	Local  PathEndpointInfo
-	Remote PathEndpointInfo
+	Local  TupleEndpointInfo
+	Remote TupleEndpointInfo
 
 	// Non-nil redacted values replace the corresponding IP and port in qlog output.
 	RedactedLocal, RedactedRemote *string
@@ -130,8 +130,8 @@ func (e StartedConnection) Encode(enc *jsontext.Encoder, _ time.Time) error {
 // TupleAssigned associates a TupleID with the endpoints of a network tuple.
 type TupleAssigned struct {
 	TupleID string
-	Local   PathEndpointInfo
-	Remote  PathEndpointInfo
+	Local   TupleEndpointInfo
+	Remote  TupleEndpointInfo
 
 	// non-nil redacted values replace the corresponding IP and port in qlog output
 	RedactedLocal, RedactedRemote *string

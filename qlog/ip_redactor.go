@@ -80,7 +80,7 @@ func (r *ipRedactingRecorder) RecordEvent(event qlogwriter.Event) {
 
 // redactEndpoint sets redacted to the replacement for the endpoint's address, if it should be redacted.
 // Otherwise, redacted is left unchanged.
-func (r *ipRedactingRecorder) redactEndpoint(info PathEndpointInfo, isLocal bool, redacted **string) {
+func (r *ipRedactingRecorder) redactEndpoint(info TupleEndpointInfo, isLocal bool, redacted **string) {
 	addr := info.IPv4
 	if !addr.IsValid() {
 		addr = info.IPv6

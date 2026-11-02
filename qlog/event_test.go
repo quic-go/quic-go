@@ -83,7 +83,7 @@ func TestRawInfo(t *testing.T) {
 }
 
 func TestStartedConnection(t *testing.T) {
-	var localInfo, remoteInfo PathEndpointInfo
+	var localInfo, remoteInfo TupleEndpointInfo
 	localInfo.IPv4 = netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 13, 37}), 42)
 	ip, err := netip.ParseAddr("2001:db8::1")
 	require.NoError(t, err)
@@ -104,8 +104,8 @@ func TestStartedConnection(t *testing.T) {
 func TestTupleAssigned(t *testing.T) {
 	name, ev := testEventEncoding(t, &TupleAssigned{
 		TupleID: "1",
-		Local:   PathEndpointInfo{IPv4: netip.MustParseAddrPort("192.168.13.37:42")},
-		Remote:  PathEndpointInfo{IPv6: netip.MustParseAddrPort("[2001:db8::1]:24")},
+		Local:   TupleEndpointInfo{IPv4: netip.MustParseAddrPort("192.168.13.37:42")},
+		Remote:  TupleEndpointInfo{IPv6: netip.MustParseAddrPort("[2001:db8::1]:24")},
 	})
 
 	require.Equal(t, "transport:tuple_assigned", name)
