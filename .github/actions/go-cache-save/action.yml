@@ -1,0 +1,25 @@
+name: Save the Go build cache
+description: On pushes to master, saves the Go build cache restored by go-cache-restore and deletes older ones. Needs the actions write permission.
+
+runs:
+  using: composite
+  steps:
+    - name: Save Go build cache
+      if: github.event_name == 'push' && github.ref_name == 'master'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ env.GO_BUILD_CACHE_DIR }}
+        key: ${{ env.GO_BUILD_CACHE_KEY }}
+    - name: Delete outdated Go build caches
+      # Once today's cache is saved, older ones are never restored.
+      # Only delete older caches, in case a run from the previous day finishes later.
+      if: github.event_name == 'push' && github.ref_name == 'master'
+      # no pipefail: pruning is best-effort
+      shell: bash -e {0}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        gh cache list --key "$GO_BUILD_CACHE_PREFIX" --json key \
+          --jq '.[].key | select(. < env.GO_BUILD_CACHE_KEY)' |
+          xargs -r -t -n1 gh cache delete
