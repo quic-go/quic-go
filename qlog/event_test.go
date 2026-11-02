@@ -707,12 +707,15 @@ func TestPacketDropped(t *testing.T) {
 	}`, ev)
 
 	_, ev = testEventEncoding(t, &PacketDropped{
-		Header:  PacketHeader{PacketType: PacketType1RTT},
+		Header:  PacketHeader{PacketType: PacketTypeRetry},
 		Raw:     RawInfo{Length: 1337, PayloadLength: OmitLength},
 		Trigger: PacketDropDuplicate,
 	})
-	require.Contains(t, ev, `"trigger":"duplicate"`)
-	require.NotContains(t, ev, "details")
+	require.JSONEq(t, `{
+		"header": {"packet_type": "retry"},
+		"raw": {"length": 1337},
+		"trigger": "duplicate"
+	}`, ev)
 }
 
 func TestDatagramDropped(t *testing.T) {
