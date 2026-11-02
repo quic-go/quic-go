@@ -62,5 +62,6 @@ jobs:
           PREFIX: go-${{ matrix.go }}-crosscompile-
           KEY: go-${{ matrix.go }}-crosscompile-${{ steps.get-date.outputs.date }}
         run: |
-          gh cache list --repo "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key --jq ".[].key | select(. != \"$KEY\")" |
+          # The save step doesn't fail if saving fails. Only delete older caches if today's cache exists.
+          gh cache list --repo "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key --jq 'map(.key) | select(any(.[]; . == env.KEY)) | .[] | select(. != env.KEY)' |
             xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
