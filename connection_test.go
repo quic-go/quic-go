@@ -2874,9 +2874,14 @@ func TestConnectionVersionNegotiation(t *testing.T) {
 					ClientVersions: []qlog.Version{protocol.Version1, protocol.Version2},
 					ChosenVersion:  protocol.Version2,
 				},
+				qlog.ConnectionClosed{
+					Initiator: qlog.InitiatorLocal,
+					Trigger:   qlog.ConnectionCloseTriggerVersionMismatch,
+				},
 			},
-			eventRecorder.Events(qlog.VersionNegotiationReceived{}, qlog.VersionInformation{}),
+			eventRecorder.Events(qlog.VersionNegotiationReceived{}, qlog.VersionInformation{}, qlog.ConnectionClosed{}),
 		)
+		require.True(t, eventRecorder.Closed())
 	})
 }
 

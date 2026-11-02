@@ -31,6 +31,7 @@ func (t *Trace) AddProducer() qlogwriter.Recorder {
 type Recorder struct {
 	mx     sync.Mutex
 	events []Event
+	closed bool
 }
 
 var _ qlogwriter.Recorder = &Recorder{}
@@ -87,4 +88,16 @@ func (r *Recorder) Clear() {
 	r.mx.Unlock()
 }
 
-func (r *Recorder) Close() error { return nil }
+func (r *Recorder) Close() error {
+	r.mx.Lock()
+	r.closed = true
+	r.mx.Unlock()
+	return nil
+}
+
+// Closed says if the recorder was closed.
+func (r *Recorder) Closed() bool {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	return r.closed
+}
