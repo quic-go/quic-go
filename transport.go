@@ -322,13 +322,13 @@ func (t *Transport) doDial(
 
 	// The error channel needs to be buffered, as the run loop will continue running
 	// after doDial returns (if the handshake is successful).
-	// Similarly, the recreateChan needs to be buffered; in case a different case is selected.
+	// Similarly, the switchVersionChan needs to be buffered; in case a different case is selected.
 	errChan := make(chan error, 1)
-	recreateChan := make(chan errCloseForRecreating, 1)
+	switchVersionChan := make(chan errSwitchVersion, 1)
 	go func() {
 		err := conn.run()
-		if recreateErr, ok := errors.AsType[*errCloseForRecreating](err); ok {
-			recreateChan <- *recreateErr
+		if switchErr, ok := errors.AsType[*errSwitchVersion](err); ok {
+			switchVersionChan <- *switchErr
 			return
 		}
 		if t.isSingleUse {
@@ -350,10 +350,10 @@ func (t *Transport) doDial(
 		// wait until the Go routine that called Conn.run() returns
 		select {
 		case <-errChan:
-		case <-recreateChan:
+		case <-switchVersionChan:
 		}
 		return nil, context.Cause(ctx)
-	case params := <-recreateChan:
+	case params := <-switchVersionChan:
 		return t.doDial(ctx,
 			sendConn,
 			tlsConf,
