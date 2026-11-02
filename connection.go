@@ -750,9 +750,7 @@ runLoop:
 	c.sendQueue.Close() // close the send queue before sending the CONNECTION_CLOSE
 	c.handleCloseError(closeErr)
 	if c.qlogger != nil {
-		if _, ok := errors.AsType[*errSwitchVersion](closeErr.err); !ok {
-			c.qlogger.Close()
-		}
+		c.qlogger.Close()
 	}
 	c.logger.Infof("Connection %s closed.", c.logID)
 	c.timer.Stop()
@@ -2330,9 +2328,8 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 		trigger = qlog.ConnectionCloseTriggerIdleTimeout
 	case isStatelessReset:
 		trigger = qlog.ConnectionCloseTriggerStatelessReset
-	case isVersionNegotiation:
+	case isVersionNegotiation, isSwitchVersion:
 		trigger = qlog.ConnectionCloseTriggerVersionMismatch
-	case isSwitchVersion:
 	case isApplicationError:
 		isRemoteClose = applicationErr.Remote
 		reason = applicationErr.ErrorMessage
@@ -2365,7 +2362,7 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	// handler map when it is closed, so we need to make sure that this happens last.
 	defer c.connIDManager.Close()
 
-	if c.qlogger != nil && !isSwitchVersion {
+	if c.qlogger != nil {
 		initiator := qlog.InitiatorLocal
 		if isRemoteClose || trigger == qlog.ConnectionCloseTriggerStatelessReset {
 			initiator = qlog.InitiatorRemote
