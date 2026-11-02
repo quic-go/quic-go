@@ -74,7 +74,7 @@ We are always happy to welcome new contributors! We have a number of self-contai
 
 ## Supported by
 
-We are very grateful to the following companies for supporting quic-go with free access to their tools:
+We are very grateful to the following organizations for supporting quic-go with free access to their tools:
 
 * [Codecov](https://app.codecov.io/gh/quic-go/quic-go): code coverage
 * [CodeRabbit](https://www.coderabbit.ai/): AI code review
