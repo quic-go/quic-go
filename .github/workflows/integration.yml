@@ -10,6 +10,9 @@ concurrency:
 
 jobs:
   integration:
+    permissions:
+      actions: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +44,10 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
+      - uses: ./.github/actions/go-cache-restore
+        id: go-cache
+        with:
+          name: ${{ matrix.race && 'integration-race' || 'integration' }}
       - name: Install go-junit-report
         run: go install github.com/jstemmer/go-junit-report/v2@v2.1.0
       - name: Set qlogger
@@ -94,3 +101,7 @@ jobs:
           files: report_tools.xml,report_versionnegotiation.xml,report_self.xml,report_self_v2.xml,report_self_nogso.xml,report_self_noecn.xml,report_fips.xml
           env_vars: OS,GO
           token: ${{ secrets.CODECOV_TOKEN }}
+      - uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go-cache.outputs.path }}
+          key: ${{ steps.go-cache.outputs.key }}

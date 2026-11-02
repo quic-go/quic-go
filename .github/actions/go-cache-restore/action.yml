@@ -1,0 +1,35 @@
+name: Restore the Go build cache
+description: Restores the most recent Go build cache. Go must already be set up. Pass the outputs to go-cache-save at the end of the job.
+
+inputs:
+  name:
+    description: Name of the build cache. Jobs building different things should use different names.
+    required: true
+
+outputs:
+  path:
+    description: Path of the Go build cache.
+    value: ${{ steps.key.outputs.path }}
+  key:
+    description: Key to save the Go build cache under, ending with today's date.
+    value: ${{ steps.key.outputs.key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Determine Go build cache key
+      id: key
+      shell: bash
+      # Caches are immutable, so we only update it once per day (at most).
+      # See https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
+      run: |
+        prefix="go-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-$(go env GOVERSION | cut -d. -f1,2)-"
+        echo "path=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+    - name: Restore Go build cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.key.outputs.path }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
