@@ -10,7 +10,8 @@ on:
       - 'v*'
   pull_request:
 
-# Cancel outdated PR runs. Every other run gets its own group, so runs on master are never cancelled.
+# On PRs, a new push cancels outdated runs.
+# Other runs use the run ID as the group, so they never wait for or cancel each other.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
