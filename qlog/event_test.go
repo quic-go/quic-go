@@ -863,6 +863,13 @@ func TestMTUUpdated(t *testing.T) {
 	}`, ev)
 }
 
+func TestConnectionStateUpdated(t *testing.T) {
+	name, ev := testEventEncoding(t, &ConnectionStateUpdated{State: ConnectionStateHandshakeConfirmed})
+
+	require.Equal(t, "quic:connection_state_updated", name)
+	require.JSONEq(t, `{"new": "handshake_confirmed"}`, ev)
+}
+
 func TestCongestionStateUpdated(t *testing.T) {
 	name, ev := testEventEncoding(t, &CongestionStateUpdated{
 		State: CongestionStateCongestionAvoidance,

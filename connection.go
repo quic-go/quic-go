@@ -965,6 +965,7 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 		c.qlogger.RecordEvent(qlog.ALPNInformation{
 			ChosenALPN: c.cryptoStreamHandler.ConnectionState().NegotiatedProtocol,
 		})
+		c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeComplete})
 	}
 
 	// The server applies transport parameters right away, but the client side has to wait for handshake completion.
@@ -1008,6 +1009,9 @@ func (c *Conn) handleHandshakeConfirmed(now monotime.Time) error {
 
 	c.handshakeConfirmed = true
 	c.cryptoStreamHandler.SetHandshakeConfirmed()
+	if c.qlogger != nil {
+		c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeConfirmed})
+	}
 
 	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
 		c.mtuDiscoverer.Start(now)
@@ -1753,6 +1757,7 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 					destAddr = addr
 				}
 				c.qlogger.RecordEvent(startedConnectionEvent(srcAddr, destAddr))
+				c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateAttempted})
 			}
 		}
 	}
@@ -2092,6 +2097,9 @@ func (c *Conn) handleHandshakeEvents(now monotime.Time) error {
 			switch ev.Kind {
 			case handshake.EventReceivedHandshakeReadKeys:
 				err = c.cryptoStreamManager.Finish(protocol.EncryptionInitial)
+				if c.qlogger != nil {
+					c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeStarted})
+				}
 			case handshake.EventReceived1RTTReadKeys:
 				err = c.cryptoStreamManager.Finish(protocol.EncryptionHandshake)
 			}
@@ -2369,6 +2377,7 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 			Trigger:          trigger,
 			Reason:           reason,
 		})
+		c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateClosed})
 	}
 
 	// If this is a remote close we're done here
@@ -2614,6 +2623,9 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 		packet, err := c.packer.PackCoalescedPacket(false, c.maxPacketSize(), now, c.version)
 		if err != nil || packet == nil {
 			return err
+		}
+		if !c.sentFirstPacket && c.perspective == protocol.PerspectiveClient && c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateAttempted})
 		}
 		c.sentFirstPacket = true
 		if err := c.sendPackedCoalescedPacket(packet, c.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket()), now); err != nil {
