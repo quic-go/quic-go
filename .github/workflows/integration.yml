@@ -70,7 +70,8 @@ jobs:
         run: go test ${{ env.RACEFLAG }} -v -timeout 5m -shuffle=on ./integrationtests/self -version=1 ${{ env.QLOGFLAG }} 2>&1 | go-junit-report -set-exit-code -iocopy -out report_self_noecn.xml
       - name: Run benchmarks
         if: ${{ !matrix.race }}
-        run: go test -v -run=^$ -timeout 5m -shuffle=on -bench=. ./integrationtests/self
+        # only check that the benchmarks still work, including when run for multiple iterations
+        run: go test -v -run=^$ -timeout 5m -shuffle=on -benchtime 2x -bench=. ./integrationtests/self
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
         uses: actions/upload-artifact@v7
