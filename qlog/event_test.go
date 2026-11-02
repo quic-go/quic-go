@@ -703,8 +703,16 @@ func TestPacketDropped(t *testing.T) {
 		"raw": {"length": 1337},
 		"datagram_payload_checksum": 42,
 		"trigger": "decryption_failure",
-        "details": {"reason": "payload_decrypt_error"}
+		"details": {"reason": "payload_decrypt_error"}
 	}`, ev)
+
+	_, ev = testEventEncoding(t, &PacketDropped{
+		Header:  PacketHeader{PacketType: PacketType1RTT},
+		Raw:     RawInfo{Length: 1337, PayloadLength: OmitLength},
+		Trigger: PacketDropDuplicate,
+	})
+	require.Contains(t, ev, `"trigger":"duplicate"`)
+	require.NotContains(t, ev, "details")
 }
 
 func TestDatagramDropped(t *testing.T) {
