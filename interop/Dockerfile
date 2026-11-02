@@ -36,8 +36,6 @@ FROM martenseemann/quic-network-simulator-endpoint:latest
 WORKDIR /quic-go
 
 COPY --from=builder /quic-go/commit.txt /quic-go/server /quic-go/client ./
-COPY --from=builder /quic-go/interop/run_endpoint.sh ./
-
-RUN chmod +x run_endpoint.sh
+COPY --from=builder --chmod=755 /quic-go/interop/run_endpoint.sh ./
 
 ENTRYPOINT [ "./run_endpoint.sh" ]
