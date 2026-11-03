@@ -391,6 +391,38 @@ func TestTransportRequestContextCancellation(t *testing.T) {
 	require.Equal(t, 1, dialCount)
 }
 
+func TestTransportDialSurvivesRequestCancellation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cl := NewMockClientConn(mockCtrl)
+	conn, _ := newConnPair(t)
+	unblockDial := make(chan struct{})
+	tr := &Transport{
+		Dial: func(ctx context.Context, _ string, _ *tls.Config, _ *quic.Config) (*quic.Conn, error) {
+			<-unblockDial
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return conn, nil
+		},
+		newClientConn: func(*quic.Conn) clientConn { return cl },
+	}
+
+	// canceling the request doesn't cancel the dial...
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req1 := httptest.NewRequestWithContext(ctx, http.MethodGet, "https://quic-go.net/file1.html", nil)
+	_, err := tr.RoundTrip(req1)
+	require.ErrorIs(t, err, context.Canceled)
+	close(unblockDial)
+
+	// ... so the next request can use the connection
+	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
+	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
+	rsp, err := tr.RoundTrip(req2)
+	require.NoError(t, err)
+	require.Same(t, req2, rsp.Request)
+}
+
 func TestTransportConnetionRedialHandshakeError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
