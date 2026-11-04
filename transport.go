@@ -376,16 +376,10 @@ func (t *Transport) doDial(
 
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 	t.initOnce.Do(func() {
-		var conn rawConn
-		if c, ok := t.Conn.(rawConn); ok {
-			conn = c
-		} else {
-			var err error
-			conn, err = wrapConn(t.Conn)
-			if err != nil {
-				t.initErr = err
-				return
-			}
+		conn, err := wrapConn(t.Conn)
+		if err != nil {
+			t.initErr = err
+			return
 		}
 
 		t.logger = utils.DefaultLogger // TODO: make this configurable
