@@ -15,6 +15,7 @@ import (
 func TestPathManagerOutgoingPathProbing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		pm := newPathManagerOutgoing(
+			context.Background(),
 			func(id pathID) (protocol.ConnectionID, bool) {
 				return protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), true
 			},
@@ -129,6 +130,41 @@ func TestPathManagerOutgoingPathProbing(t *testing.T) {
 	})
 }
 
+func TestPathManagerOutgoingConnectionClosed(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		connCtx, cancelConn := context.WithCancelCause(context.Background())
+		defer cancelConn(nil)
+		pm := newPathManagerOutgoing(
+			connCtx,
+			func(pathID) (protocol.ConnectionID, bool) { return protocol.ConnectionID{}, false },
+			func(pathID) {},
+			func() {},
+		)
+		p := pm.NewPath(&Transport{}, time.Second, func(pathID) {})
+		probeCtx, cancelProbe := context.WithCancel(context.Background())
+		defer cancelProbe()
+		errChan := make(chan error, 1)
+		go func() { errChan <- p.Probe(probeCtx) }()
+
+		synctest.Wait()
+		select {
+		case err := <-errChan:
+			t.Fatalf("probing returned before connection closed: %v", err)
+		default:
+		}
+
+		connErr := &ApplicationError{ErrorCode: 42}
+		cancelConn(connErr)
+		synctest.Wait()
+		select {
+		case err := <-errChan:
+			require.ErrorIs(t, err, connErr)
+		default:
+			t.Fatal("probing did not return after connection closed")
+		}
+	})
+}
+
 func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		connIDs := []protocol.ConnectionID{
@@ -138,6 +174,7 @@ func TestPathManagerOutgoingRetransmissions(t *testing.T) {
 		var retiredConnIDs []protocol.ConnectionID
 		scheduledSending := make(chan struct{}, 20)
 		pm := newPathManagerOutgoing(
+			context.Background(),
 			func(id pathID) (protocol.ConnectionID, bool) { return connIDs[id], true },
 			func(id pathID) { retiredConnIDs = append(retiredConnIDs, connIDs[id]) },
 			func() { scheduledSending <- struct{}{} },
@@ -253,6 +290,7 @@ func TestPathManagerOutgoingAbandonPath(t *testing.T) {
 		}
 		var retiredPaths []pathID
 		pm := newPathManagerOutgoing(
+			context.Background(),
 			func(id pathID) (protocol.ConnectionID, bool) {
 				connID := connIDs[0]
 				connIDs = connIDs[1:]
@@ -320,6 +358,7 @@ func TestPathManagerOutgoingAbandonValidatedPath(t *testing.T) {
 		}
 		var retiredPaths []pathID
 		pm := newPathManagerOutgoing(
+			context.Background(),
 			func(id pathID) (protocol.ConnectionID, bool) {
 				if len(connIDs) == 0 {
 					return protocol.ConnectionID{}, false

@@ -46,6 +46,8 @@ func (p *Path) Probe(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
+		case <-p.pathManager.connCtx.Done():
+			return context.Cause(p.pathManager.connCtx)
 		case <-path.Validated():
 			p.validated.Store(true)
 			return nil
@@ -117,6 +119,8 @@ func (p *pathOutgoing) ProbeSent() <-chan struct{} { return p.probeSent }
 func (p *pathOutgoing) Validated() <-chan struct{} { return p.validated }
 
 type pathManagerOutgoing struct {
+	connCtx context.Context
+
 	getConnID       func(pathID) (_ protocol.ConnectionID, ok bool)
 	retireConnID    func(pathID)
 	scheduleSending func()
@@ -133,11 +137,13 @@ type pathManagerOutgoing struct {
 // function must be side-effect free as it may be called multiple times for a
 // single connection.
 func newPathManagerOutgoing(
+	connCtx context.Context,
 	getConnID func(pathID) (_ protocol.ConnectionID, ok bool),
 	retireConnID func(pathID),
 	scheduleSending func(),
 ) *pathManagerOutgoing {
 	return &pathManagerOutgoing{
+		connCtx:         connCtx,
 		activePath:      0, // at initialization time, we're guaranteed to be using the handshake path
 		nextPathID:      1,
 		getConnID:       getConnID,

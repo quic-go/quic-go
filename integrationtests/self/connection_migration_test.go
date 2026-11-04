@@ -267,6 +267,42 @@ func requireConnIDsNotLinkable(t *testing.T, evs []qlogwriter.Event) {
 	require.NotEmpty(t, usedOn)
 }
 
+func TestConnectionMigrationProbeOnClosedConnection(t *testing.T) {
+	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := quic.DialAddr(ctx, ln.Addr().String(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+	sconn, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	require.NoError(t, sconn.CloseWithError(42, "peer closed connection"))
+
+	select {
+	case <-conn.Context().Done():
+	case <-ctx.Done():
+		t.Fatal("connection did not close")
+	}
+	connErr := context.Cause(conn.Context())
+	var appErr *quic.ApplicationError
+	require.ErrorAs(t, connErr, &appErr)
+	require.Equal(t, quic.ApplicationErrorCode(42), appErr.ErrorCode)
+	require.True(t, appErr.Remote)
+
+	tr := &quic.Transport{Conn: newUDPConnLocalhost(t)}
+	defer tr.Close()
+	path, err := conn.AddPath(tr)
+	require.NoError(t, err)
+
+	// Use an independent context so connection closure must unblock Probe itself.
+	probeCtx, cancelProbe := context.WithTimeout(context.Background(), time.Second)
+	defer cancelProbe()
+	require.ErrorIs(t, path.Probe(probeCtx), connErr)
+}
+
 func hasFrame[T any](frames []qlog.Frame) bool {
 	return slices.ContainsFunc(frames, func(f qlog.Frame) bool {
 		_, ok := f.Frame.(T)

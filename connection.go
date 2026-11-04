@@ -3186,6 +3186,7 @@ func (c *Conn) getPathManager() *pathManagerOutgoing {
 
 	// Initialize the path manager
 	new := newPathManagerOutgoing(
+		c.ctx,
 		c.connIDManager.GetConnIDForPath,
 		c.connIDManager.RetireConnIDForPath,
 		c.scheduleSending,
