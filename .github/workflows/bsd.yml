@@ -1,0 +1,45 @@
+on: [push, pull_request]
+
+permissions: read-all
+
+# On PRs, a new push cancels outdated runs.
+# Other runs use the run ID as the group, so they never wait for or cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bsd:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "freebsd", "openbsd" ]
+        go: [ "1.26.x", "1.27.x" ]
+        include:
+          - os: freebsd
+            version: "15.1"
+          - os: openbsd
+            version: "8.0"
+    runs-on: ubuntu-latest
+    name: BSD tests (${{ matrix.os }}, Go ${{ matrix.go }})
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      # Cross-compile the tests, so we don't need to install Go in the VM.
+      - name: Build tests
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: amd64
+        run: go test -c -o udp.test ./internal/udp
+      - name: Start VM
+        uses: cross-platform-actions/action@82668f1fbd89d9c99487604f822cbf6716f124d3 # v1.7.0
+        with:
+          operating_system: ${{ matrix.os }}
+          version: ${{ matrix.version }}
+      - name: Run tests
+        shell: cpa.sh {0}
+        run: ./udp.test -test.v -test.shuffle on
