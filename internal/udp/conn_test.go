@@ -96,6 +96,10 @@ func TestWrapPacketConn(t *testing.T) {
 	require.Equal(t, desiredBufferSize, pc.ReadBuffer)
 	require.Equal(t, desiredBufferSize, pc.WriteBuffer)
 	require.Equal(t, Capabilities{}, conn.Capabilities())
+	// a Conn is used as is
+	wrapped, err := Wrap(conn.(net.PacketConn))
+	require.NoError(t, err)
+	require.Same(t, conn, wrapped)
 
 	peer := listenUDP(t, "udp4", net.IPv4(127, 0, 0, 1))
 	requireDelivery(t, peer, conn)

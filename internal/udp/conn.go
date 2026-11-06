@@ -64,7 +64,12 @@ type OOBCapablePacketConn interface {
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
 // Wrap configures pc for UDP I/O.
+// If pc already implements Conn, it is returned unchanged.
 func Wrap(pc net.PacketConn) (Conn, error) {
+	// Conn uses internal types, so only packages in this module (e.g. simnet) can implement it.
+	if c, ok := pc.(Conn); ok {
+		return c, nil
+	}
 	if err := setReceiveBuffer(pc); err != nil {
 		if !strings.Contains(err.Error(), "use of closed network connection") {
 			setBufferWarningOnce.Do(func() {
