@@ -40,8 +40,11 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.NativeEndian.Uint32(body), true
 }
 
-func marshalIPv4PktInfo(ip [4]byte, ifIndex uint32) []byte {
-	cm := ipv4.ControlMessage{Src: ip[:], IfIndex: int(ifIndex)}
+// The interface index is not set: if it is, macOS ignores ipi_spec_dst
+// and picks a source address of that interface, see
+// https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/netinet/udp_usrreq.c#L1531-L1546.
+func marshalIPv4PktInfo(ip [4]byte, _ uint32) []byte {
+	cm := ipv4.ControlMessage{Src: ip[:]}
 	return cm.Marshal()
 }
 

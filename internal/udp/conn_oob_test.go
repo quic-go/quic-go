@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"runtime"
 	"testing"
 
@@ -57,11 +58,12 @@ func TestConnECNAndPacketInfo(t *testing.T) {
 // A reply must be sent from the address the client sent to,
 // not from the address the kernel's route lookup would pick.
 func TestConnPacketInfoSourceAddress(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("macOS sends from the interface's primary address: https://github.com/quic-go/quic-go/issues/6141")
+	// Linux routes all of 127.0.0.0/8 to lo. Other OSes need an alias for 127.0.0.2.
+	// CI sets it up, but developer machines usually don't have it, so we only run there on CI.
+	if runtime.GOOS != "linux" && os.Getenv("CI") == "" {
+		t.Skip("requires 127.0.0.2 on lo0, add it with: sudo ifconfig lo0 alias 127.0.0.2/32")
 	}
 
-	// Linux routes all of 127.0.0.0/8 to lo, FreeBSD needs an alias.
 	ip := netip.MustParseAddr("127.0.0.2")
 	ln, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, 0)))
 	require.NoError(t, err, "add the address with: ifconfig lo0 alias %s/32", ip)
