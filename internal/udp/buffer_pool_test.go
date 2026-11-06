@@ -1,4 +1,4 @@
-package quic
+package udp
 
 import (
 	"testing"
@@ -9,31 +9,31 @@ import (
 )
 
 func TestBufferPoolSizes(t *testing.T) {
-	buf1 := getPacketBuffer()
+	buf1 := GetPacketBuffer()
 	require.Equal(t, protocol.MaxPacketBufferSize, cap(buf1.Data))
 	require.Zero(t, buf1.Len())
 	buf1.Data = append(buf1.Data, []byte("foobar")...)
 	require.Equal(t, protocol.ByteCount(6), buf1.Len())
 
-	buf2 := getLargePacketBuffer()
+	buf2 := GetLargePacketBuffer()
 	require.Equal(t, protocol.MaxLargePacketBufferSize, cap(buf2.Data))
 	require.Zero(t, buf2.Len())
 }
 
 func TestBufferPoolRelease(t *testing.T) {
-	buf1 := getPacketBuffer()
+	buf1 := GetPacketBuffer()
 	buf1.Release()
 	// panics if released twice
 	require.PanicsWithValue(t, "negative packetBuffer refCount", func() { buf1.Release() })
 
 	// panics if wrong-sized buffers are passed
-	buf2 := getLargePacketBuffer()
+	buf2 := GetLargePacketBuffer()
 	buf2.Data = make([]byte, 10) // replace the underlying slice
 	require.PanicsWithValue(t, "putPacketBuffer called with packet of wrong size!", func() { buf2.Release() })
 }
 
 func TestBufferPoolSplitting(t *testing.T) {
-	buf := getPacketBuffer()
+	buf := GetPacketBuffer()
 	buf.Split()
 	buf.Split()
 	// now we have 3 parts

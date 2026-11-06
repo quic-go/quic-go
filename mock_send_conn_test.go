@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
+	udp "github.com/quic-go/quic-go/internal/udp"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,7 +43,7 @@ func (m *MockSendConn) EXPECT() *MockSendConnMockRecorder {
 }
 
 // ChangeRemoteAddr mocks base method.
-func (m *MockSendConn) ChangeRemoteAddr(addr net.Addr, info packetInfo) {
+func (m *MockSendConn) ChangeRemoteAddr(addr net.Addr, info udp.PacketInfo) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ChangeRemoteAddr", addr, info)
 }
@@ -66,13 +67,13 @@ func (c *MockSendConnChangeRemoteAddrCall) Return() *MockSendConnChangeRemoteAdd
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendConnChangeRemoteAddrCall) Do(f func(net.Addr, packetInfo)) *MockSendConnChangeRemoteAddrCall {
+func (c *MockSendConnChangeRemoteAddrCall) Do(f func(net.Addr, udp.PacketInfo)) *MockSendConnChangeRemoteAddrCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendConnChangeRemoteAddrCall) DoAndReturn(f func(net.Addr, packetInfo)) *MockSendConnChangeRemoteAddrCall {
+func (c *MockSendConnChangeRemoteAddrCall) DoAndReturn(f func(net.Addr, udp.PacketInfo)) *MockSendConnChangeRemoteAddrCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -230,7 +231,7 @@ func (c *MockSendConnWriteCall) DoAndReturn(f func([]byte, uint16, protocol.ECN)
 }
 
 // WriteTo mocks base method.
-func (m *MockSendConn) WriteTo(arg0 []byte, arg1 net.Addr, arg2 packetInfo) error {
+func (m *MockSendConn) WriteTo(arg0 []byte, arg1 net.Addr, arg2 udp.PacketInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WriteTo", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -256,22 +257,22 @@ func (c *MockSendConnWriteToCall) Return(arg0 error) *MockSendConnWriteToCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendConnWriteToCall) Do(f func([]byte, net.Addr, packetInfo) error) *MockSendConnWriteToCall {
+func (c *MockSendConnWriteToCall) Do(f func([]byte, net.Addr, udp.PacketInfo) error) *MockSendConnWriteToCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendConnWriteToCall) DoAndReturn(f func([]byte, net.Addr, packetInfo) error) *MockSendConnWriteToCall {
+func (c *MockSendConnWriteToCall) DoAndReturn(f func([]byte, net.Addr, udp.PacketInfo) error) *MockSendConnWriteToCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // capabilities mocks base method.
-func (m *MockSendConn) capabilities() connCapabilities {
+func (m *MockSendConn) capabilities() udp.Capabilities {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "capabilities")
-	ret0, _ := ret[0].(connCapabilities)
+	ret0, _ := ret[0].(udp.Capabilities)
 	return ret0
 }
 
@@ -288,19 +289,19 @@ type MockSendConncapabilitiesCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockSendConncapabilitiesCall) Return(arg0 connCapabilities) *MockSendConncapabilitiesCall {
+func (c *MockSendConncapabilitiesCall) Return(arg0 udp.Capabilities) *MockSendConncapabilitiesCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendConncapabilitiesCall) Do(f func() connCapabilities) *MockSendConncapabilitiesCall {
+func (c *MockSendConncapabilitiesCall) Do(f func() udp.Capabilities) *MockSendConncapabilitiesCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendConncapabilitiesCall) DoAndReturn(f func() connCapabilities) *MockSendConncapabilitiesCall {
+func (c *MockSendConncapabilitiesCall) DoAndReturn(f func() udp.Capabilities) *MockSendConncapabilitiesCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

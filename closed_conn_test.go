@@ -4,6 +4,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/utils"
 
 	"github.com/stretchr/testify/require"
@@ -11,7 +12,7 @@ import (
 
 func TestClosedLocalConnection(t *testing.T) {
 	written := make(chan net.Addr, 1)
-	conn := newClosedLocalConn(func(addr net.Addr, _ packetInfo) { written <- addr }, utils.DefaultLogger)
+	conn := newClosedLocalConn(func(addr net.Addr, _ udp.PacketInfo) { written <- addr }, utils.DefaultLogger)
 	addr := &net.UDPAddr{IP: net.IPv4(127, 1, 2, 3), Port: 1337}
 	for i := 1; i <= 20; i++ {
 		conn.handlePacket(receivedPacket{remoteAddr: addr})

@@ -1,22 +1,22 @@
 //go:build linux
 
-package quic
+package udp
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"testing"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/quic-go/quic-go/internal/protocol"
+
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	errGSO          = &os.SyscallError{Err: unix.EIO}
-	errNotPermitted = &os.SyscallError{Syscall: "sendmsg", Err: unix.EPERM}
-)
+var errGSO = &os.SyscallError{Err: unix.EIO}
 
 func TestForcingReceiveBufferSize(t *testing.T) {
 	if os.Getuid() != 0 {
@@ -72,8 +72,29 @@ func TestForcingSendBufferSize(t *testing.T) {
 	require.Equal(t, 2*large, size)
 }
 
+func TestConnGSO(t *testing.T) {
+	server := listenUDP(t, "udp4", net.IPv4(127, 0, 0, 1))
+	client := listenUDP(t, "udp4", net.IPv4(127, 0, 0, 1))
+	require.True(t, client.Capabilities().GSO)
+
+	// the kernel splits the packet into segments of gsoSize bytes, all with the same ECN marking
+	_, err := client.WritePacket([]byte("foobarbaz"), server.LocalAddr(), nil, 3, protocol.ECT1)
+	require.NoError(t, err)
+	for _, s := range []string{"foo", "bar", "baz"} {
+		p, err := server.ReadPacket()
+		require.NoError(t, err)
+		require.Equal(t, s, string(p.Data))
+		require.Equal(t, protocol.ECT1, p.ECN)
+	}
+}
+
 func TestGSOError(t *testing.T) {
-	require.True(t, isGSOError(errGSO))
-	require.False(t, isGSOError(nil))
-	require.False(t, isGSOError(errors.New("test")))
+	require.True(t, IsGSOError(errGSO))
+	require.False(t, IsGSOError(nil))
+	require.False(t, IsGSOError(errors.New("test")))
+}
+
+func init() {
+	major, minor := kernelVersion()
+	fmt.Printf("Kernel Version: %d.%d\n\n", major, minor)
 }

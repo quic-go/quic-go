@@ -1,4 +1,4 @@
-package quic
+package udp
 
 import (
 	"io"
@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
-type connCapabilities struct {
+type Capabilities struct {
 	// This connection has the Don't Fragment (DF) bit set.
 	// This means it makes to run DPLPMTUD.
 	DF bool
@@ -25,9 +26,19 @@ type connCapabilities struct {
 	ECN bool
 }
 
-// rawConn is a connection that allow reading of a receivedPackeh.
-type rawConn interface {
-	ReadPacket() (receivedPacket, error)
+// Packet is a received UDP datagram.
+type Packet struct {
+	Buffer     *PacketBuffer
+	RemoteAddr net.Addr
+	RcvTime    monotime.Time
+	Data       []byte
+	ECN        protocol.ECN
+	Info       PacketInfo
+}
+
+// Conn reads and writes UDP datagrams, including their ancillary data.
+type Conn interface {
+	ReadPacket() (Packet, error)
 	// WritePacket writes a packet on the wire.
 	// gsoSize is the size of a single packet, or 0 to disable GSO.
 	// It is invalid to set gsoSize if capabilities.GSO is not set.
@@ -36,11 +47,10 @@ type rawConn interface {
 	SetReadDeadline(time.Time) error
 	io.Closer
 
-	capabilities() connCapabilities
+	Capabilities() Capabilities
 }
 
 // OOBCapablePacketConn is a connection that allows the reading of ECN bits from the IP header.
-// If the PacketConn passed to the [Transport] satisfies this interface, quic-go will use it.
 // In this case, packets will be read in batches, and [OOBCapablePacketConn.WriteMsgUDP]
 // will be used instead of [net.PacketConn.WriteTo] to write packets.
 type OOBCapablePacketConn interface {
@@ -53,7 +63,8 @@ type OOBCapablePacketConn interface {
 
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
-func wrapConn(pc net.PacketConn) (rawConn, error) {
+// Wrap configures pc for UDP I/O.
+func Wrap(pc net.PacketConn) (Conn, error) {
 	if err := setReceiveBuffer(pc); err != nil {
 		if !strings.Contains(err.Error(), "use of closed network connection") {
 			setBufferWarningOnce.Do(func() {
@@ -112,22 +123,22 @@ type basicConn struct {
 	supportsDF bool
 }
 
-var _ rawConn = &basicConn{}
+var _ Conn = &basicConn{}
 
-func (c *basicConn) ReadPacket() (receivedPacket, error) {
-	buffer := getPacketBuffer()
-	// The packet size should not exceed protocol.MaxPacketBufferSize bytes
-	// If it does, we only read a truncated packet, which will then end up undecryptable
+func (c *basicConn) ReadPacket() (Packet, error) {
+	buffer := GetPacketBuffer()
+	// The packet size should not exceed protocol.MaxPacketBufferSize bytes.
+	// Larger packets are truncated and will fail decryption.
 	buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 	n, addr, err := c.ReadFrom(buffer.Data)
 	if err != nil {
-		return receivedPacket{}, err
+		return Packet{}, err
 	}
-	return receivedPacket{
-		remoteAddr: addr,
-		rcvTime:    monotime.Now(),
-		data:       buffer.Data[:n],
-		buffer:     buffer,
+	return Packet{
+		RemoteAddr: addr,
+		RcvTime:    monotime.Now(),
+		Data:       buffer.Data[:n],
+		Buffer:     buffer,
 	}, nil
 }
 
@@ -141,4 +152,7 @@ func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte, gsoSize uint1
 	return c.WriteTo(b, addr)
 }
 
-func (c *basicConn) capabilities() connCapabilities { return connCapabilities{DF: c.supportsDF} }
+func (c *basicConn) Capabilities() Capabilities { return Capabilities{DF: c.supportsDF} }
+
+// only print warnings about the UDP receive buffer size once
+var setBufferWarningOnce sync.Once

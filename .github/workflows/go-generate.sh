@@ -5,9 +5,9 @@ set -e
 # delete all go-generated files (that adhere to the comment convention)
 git ls-files -z | grep --include \*.go -lrIZ "^// Code generated .* DO NOT EDIT\.$" | tr '\0' '\n' | xargs rm -f
 
-# First regenerate sys_conn_buffers_write.go.
+# First regenerate internal/udp/buffers_write.go.
 # If it doesn't exist, the following mockgen calls will fail.
-go generate -run "sys_conn_buffers_write.go"
+go generate -run "buffers_write.go" ./internal/udp
 # now generate everything
 go generate ./...
 

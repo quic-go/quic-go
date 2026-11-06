@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	protocol "github.com/quic-go/quic-go/internal/protocol"
+	udp "github.com/quic-go/quic-go/internal/udp"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -154,7 +155,7 @@ func (c *MockSenderRunCall) DoAndReturn(f func() error) *MockSenderRunCall {
 }
 
 // Send mocks base method.
-func (m *MockSender) Send(p *packetBuffer, gsoSize uint16, ecn protocol.ECN) {
+func (m *MockSender) Send(p *udp.PacketBuffer, gsoSize uint16, ecn protocol.ECN) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Send", p, gsoSize, ecn)
 }
@@ -178,19 +179,19 @@ func (c *MockSenderSendCall) Return() *MockSenderSendCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSenderSendCall) Do(f func(*packetBuffer, uint16, protocol.ECN)) *MockSenderSendCall {
+func (c *MockSenderSendCall) Do(f func(*udp.PacketBuffer, uint16, protocol.ECN)) *MockSenderSendCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSenderSendCall) DoAndReturn(f func(*packetBuffer, uint16, protocol.ECN)) *MockSenderSendCall {
+func (c *MockSenderSendCall) DoAndReturn(f func(*udp.PacketBuffer, uint16, protocol.ECN)) *MockSenderSendCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // SendProbe mocks base method.
-func (m *MockSender) SendProbe(arg0 *packetBuffer, arg1 net.Addr, arg2 packetInfo) {
+func (m *MockSender) SendProbe(arg0 *udp.PacketBuffer, arg1 net.Addr, arg2 udp.PacketInfo) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SendProbe", arg0, arg1, arg2)
 }
@@ -214,13 +215,13 @@ func (c *MockSenderSendProbeCall) Return() *MockSenderSendProbeCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSenderSendProbeCall) Do(f func(*packetBuffer, net.Addr, packetInfo)) *MockSenderSendProbeCall {
+func (c *MockSenderSendProbeCall) Do(f func(*udp.PacketBuffer, net.Addr, udp.PacketInfo)) *MockSenderSendProbeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSenderSendProbeCall) DoAndReturn(f func(*packetBuffer, net.Addr, packetInfo)) *MockSenderSendProbeCall {
+func (c *MockSenderSendProbeCall) DoAndReturn(f func(*udp.PacketBuffer, net.Addr, udp.PacketInfo)) *MockSenderSendProbeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

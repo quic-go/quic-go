@@ -14,6 +14,7 @@ import (
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/udp"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
@@ -59,7 +60,7 @@ type serverOpts struct {
 
 func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 	t.Helper()
-	c, err := wrapConn(newUDPConnLocalhost(t))
+	c, err := udp.Wrap(newUDPConnLocalhost(t))
 	require.NoError(t, err)
 	verifySourceAddress := func(net.Addr) bool { return serverOpts.useRetry }
 	config := populateConfig(serverOpts.config)
@@ -325,7 +326,7 @@ func TestServerPacketDropping(t *testing.T) {
 			receivedPacket{
 				remoteAddr: conn.LocalAddr(),
 				data:       data,
-				buffer:     getPacketBuffer(),
+				buffer:     udp.GetPacketBuffer(),
 			},
 			0, // version negotiation packets don't have a version
 			qlog.PacketTypeVersionNegotiation,
