@@ -11,6 +11,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/quic-go/quic-go/internal/protocol"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,6 +70,22 @@ func TestForcingSendBufferSize(t *testing.T) {
 	require.NoError(t, err)
 	// the kernel doubles this value (to allow space for bookkeeping overhead)
 	require.Equal(t, 2*large, size)
+}
+
+func TestConnGSO(t *testing.T) {
+	server := listenUDP(t, "udp4", net.IPv4(127, 0, 0, 1))
+	client := listenUDP(t, "udp4", net.IPv4(127, 0, 0, 1))
+	require.True(t, client.Capabilities().GSO)
+
+	// the kernel splits the packet into segments of gsoSize bytes, all with the same ECN marking
+	_, err := client.WritePacket([]byte("foobarbaz"), server.LocalAddr(), nil, 3, protocol.ECT1)
+	require.NoError(t, err)
+	for _, s := range []string{"foo", "bar", "baz"} {
+		p, err := server.ReadPacket()
+		require.NoError(t, err)
+		require.Equal(t, s, string(p.Data))
+		require.Equal(t, protocol.ECT1, p.ECN)
+	}
 }
 
 func TestGSOError(t *testing.T) {

@@ -44,7 +44,6 @@ jobs:
       - name: Run tests as root
         if: ${{ matrix.os == 'ubuntu' }}
         env:
-          TIMESCALE_FACTOR: 10
           FILE: internal/udp/conn_linux_test.go
         run: |
           test -f $FILE # make sure the file actually exists
