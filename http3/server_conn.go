@@ -21,8 +21,9 @@ import (
 type RawServerConn struct {
 	rawConn *rawConn
 
-	idleTimeout time.Duration
-	idleTimer   *time.Timer
+	idleTimeout       time.Duration
+	idleTimer         *time.Timer
+	readHeaderTimeout time.Duration
 
 	serverContext  context.Context
 	requestHandler http.Handler
@@ -102,6 +103,9 @@ func (c *RawServerConn) openControlStream(settings *settingsFrame) (*quic.SendSt
 }
 
 func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
+	if c.readHeaderTimeout > 0 {
+		_ = str.SetReadDeadline(time.Now().Add(c.readHeaderTimeout))
+	}
 	if c.idleTimeout > 0 {
 		// This only applies if the stream is the first active stream,
 		// but it's ok to stop a stopped timer.
@@ -144,6 +148,10 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return
+	}
+	// The header timeout must not limit reads of the request body.
+	if c.readHeaderTimeout > 0 {
+		_ = str.SetReadDeadline(time.Time{})
 	}
 	decodeFn := decoder.Decode(headerBlock)
 	var hfs []qpack.HeaderField

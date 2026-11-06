@@ -180,6 +180,10 @@ type Server struct {
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	AdditionalSettings map[uint64]uint64
 
+	// ReadHeaderTimeout limits the time to read each request's headers.
+	// Zero or negative values disable this timeout.
+	ReadHeaderTimeout time.Duration
+
 	// IdleTimeout specifies how long until idle clients connection should be
 	// closed. Idle refers only to the HTTP/3 layer, activity at the QUIC layer
 	// like PING frames are not considered.
@@ -487,6 +491,8 @@ func (s *Server) newRawServerConn(conn *quic.Conn) (*RawServerConn, *quic.SendSt
 		s.Handler,
 		s.maxHeaderBytes(),
 	)
+
+	hconn.readHeaderTimeout = s.ReadHeaderTimeout
 
 	// open the control stream and send a SETTINGS frame, it's also used to send a GOAWAY frame later
 	// when the server is gracefully closed
