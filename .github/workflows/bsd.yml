@@ -40,6 +40,10 @@ jobs:
         with:
           operating_system: ${{ matrix.os }}
           version: ${{ matrix.version }}
+      - name: Add a second loopback address
+        if: ${{ matrix.os == 'freebsd' }}
+        shell: cpa.sh {0}
+        run: sudo ifconfig lo0 alias 127.0.0.2/32
       - name: Run tests
         shell: cpa.sh {0}
         run: ./udp.test -test.v -test.shuffle on

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"golang.org/x/net/ipv4"
 	"golang.org/x/sys/unix"
 
 	"github.com/quic-go/quic-go/internal/utils"
@@ -61,6 +62,11 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 		return netip.Addr{}, 0, false
 	}
 	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.NativeEndian.Uint32(body), true
+}
+
+func marshalIPv4PktInfo(ip [4]byte, ifIndex uint32) []byte {
+	cm := ipv4.ControlMessage{Src: ip[:], IfIndex: int(ifIndex)}
+	return cm.Marshal()
 }
 
 // isGSOEnabled tests if the kernel supports GSO.
