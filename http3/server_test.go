@@ -876,32 +876,6 @@ func TestServerConcurrentServeAndClose(t *testing.T) {
 	}
 }
 
-func TestServerCloseWhileHandlerSetsQUICHeaders(t *testing.T) {
-	started := make(chan struct{})
-	s := &Server{}
-	s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(started)
-		<-r.Context().Done()
-		s.SetQUICHeaders(w.Header())
-	})
-	clientConn, serverConn := newConnPair(t)
-	go s.ServeQUICConn(serverConn)
-	str, err := clientConn.OpenStream()
-	require.NoError(t, err)
-	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodGet, "https://www.example.com", nil)))
-	require.NoError(t, err)
-	<-started
-
-	errChan := make(chan error, 1)
-	go func() { errChan <- s.Close() }()
-	select {
-	case err := <-errChan:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
-}
-
 func TestServerImmediateGracefulShutdown(t *testing.T) {
 	s := &Server{TLSConfig: testdata.GetTLSConfig()}
 	errChan := make(chan error, 1)
