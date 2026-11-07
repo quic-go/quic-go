@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,4 +103,44 @@ func (d *directionAwareDroppingRouter) SendPacket(p simnet.Packet) error {
 		return nil
 	}
 	return d.PerfectRouter.SendPacket(p)
+}
+
+// natRouter translates the client's address to an external address, like a NAT.
+// Packets sent to a previous external address are dropped.
+type natRouter struct {
+	simnet.PerfectRouter
+
+	clientAddr net.Addr
+
+	mx           sync.Mutex
+	externalAddr net.Addr
+}
+
+var _ simnet.Router = &natRouter{}
+
+func newNATRouter(clientAddr, externalAddr net.Addr) *natRouter {
+	return &natRouter{clientAddr: clientAddr, externalAddr: externalAddr}
+}
+
+func (r *natRouter) SendPacket(p simnet.Packet) error {
+	r.mx.Lock()
+	externalAddr := r.externalAddr
+	r.mx.Unlock()
+
+	switch {
+	case p.From.String() == r.clientAddr.String():
+		p.From = externalAddr
+	case p.To.String() == externalAddr.String():
+		p.To = r.clientAddr
+	default:
+		return nil
+	}
+	return r.PerfectRouter.SendPacket(p)
+}
+
+// Rebind changes the external address.
+func (r *natRouter) Rebind(externalAddr net.Addr) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	r.externalAddr = externalAddr
 }
