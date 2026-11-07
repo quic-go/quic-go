@@ -1171,6 +1171,9 @@ func (h *sentPacketHandler) QueueProbePacket(space protocol.PacketNumberSpace) b
 	h.hist.DeclareLost(pn)
 	h.removeFromBytesInFlight(p)
 	h.queueFramesForRetransmission(p)
+	if p.EncryptionLevel == protocol.Encryption1RTT && h.ecnTracker != nil {
+		h.ecnTracker.LostPacket(pn)
+	}
 	return true
 }
 
