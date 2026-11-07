@@ -15,13 +15,16 @@ import (
 )
 
 var (
-	// ErrPathClosed can be returned by [Path.Probe] or [Path.Switch] after the path has been closed.
+	// ErrPathClosed can be returned by [Path.Probe] or [Path.Switch] after the path or the connection has been closed.
 	ErrPathClosed = errors.New("path closed")
 	// ErrPathNotValidated is returned by [Path.Switch] when the path has not yet been validated.
 	ErrPathNotValidated = errors.New("path not yet validated")
 )
 
-var errPathDoesNotExist = errors.New("path does not exist")
+var (
+	errPathDoesNotExist = errors.New("path does not exist")
+	errNoConnectionID   = errors.New("no connection ID available")
+)
 
 // Path is a network path.
 type Path struct {
@@ -55,6 +58,8 @@ func (p *Path) Probe(ctx context.Context) error {
 		case <-path.ProbeSent():
 		case <-p.abandon:
 			return ErrPathClosed
+		case <-p.pathManager.Closed():
+			return ErrPathClosed
 		}
 
 		if timer != nil {
@@ -68,8 +73,17 @@ func (p *Path) Probe(ctx context.Context) error {
 // Switch switches the QUIC connection to this path.
 // It immediately stops sending on the old path, and sends on this new path.
 // It is possible to switch back to the old path without probing it again, until it is closed.
-func (p *Path) Switch() error {
-	if err := p.pathManager.switchToPath(p.id); err != nil {
+// Every path uses its own connection ID: if the peer hasn't provided one for this path yet,
+// e.g. right after switching away from it, Switch probes the path again, which waits for one.
+func (p *Path) Switch(ctx context.Context) error {
+	err := p.pathManager.switchToPath(p.id)
+	for errors.Is(err, errNoConnectionID) {
+		if err = p.Probe(ctx); err != nil {
+			return err
+		}
+		err = p.pathManager.switchToPath(p.id)
+	}
+	if err != nil {
 		switch {
 		case errors.Is(err, ErrPathNotValidated):
 			return err
@@ -122,6 +136,7 @@ type pathManagerOutgoing struct {
 	scheduleSending func()
 
 	mx             sync.Mutex
+	closed         chan struct{} // closed when the connection is closed
 	activePath     pathID
 	pathsToProbe   []pathID
 	paths          map[pathID]*pathOutgoing
@@ -143,6 +158,7 @@ func newPathManagerOutgoing(
 		getConnID:       getConnID,
 		retireConnID:    retireConnID,
 		scheduleSending: scheduleSending,
+		closed:          make(chan struct{}),
 		paths:           make(map[pathID]*pathOutgoing, 4),
 	}
 }
@@ -204,6 +220,16 @@ func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	pm.mx.Lock()
 	defer pm.mx.Unlock()
 
+	// The connection ID manager can't be used after the connection was closed,
+	// and it is closed after the path manager.
+	select {
+	case <-pm.closed:
+		return ErrPathClosed
+	default:
+	}
+	if id == pm.activePath {
+		return nil
+	}
 	p, ok := pm.paths[id]
 	if !ok {
 		return errPathDoesNotExist
@@ -211,8 +237,13 @@ func (pm *pathManagerOutgoing) switchToPath(id pathID) error {
 	if !p.isValidated {
 		return ErrPathNotValidated
 	}
+	// allocates the connection ID used on the path
+	if _, ok := pm.getConnID(id); !ok {
+		return errNoConnectionID
+	}
 	pm.pathToSwitchTo = p
 	pm.activePath = id
+	pm.scheduleSending()
 	return nil
 }
 
@@ -312,9 +343,26 @@ func (pm *pathManagerOutgoing) ShouldSwitchPath() (pathID, *Transport, bool) {
 	if pm.pathToSwitchTo == nil {
 		return invalidPathID, nil, false
 	}
+	// The peer might have retired the path's connection ID (using Retire Prior To) since Switch was called.
+	// The switch then waits until the peer provides a new one.
+	if _, ok := pm.getConnID(pm.activePath); !ok {
+		return invalidPathID, nil, false
+	}
 	p := pm.pathToSwitchTo
 	pm.pathToSwitchTo = nil
 	return pm.activePath, p.tr, true
+}
+
+// Closed returns a channel that is closed when the connection is closed.
+func (pm *pathManagerOutgoing) Closed() <-chan struct{} { return pm.closed }
+
+// Close is called when the connection is closed.
+// It waits for switchToPath calls that are using the connection ID manager.
+func (pm *pathManagerOutgoing) Close() {
+	pm.mx.Lock()
+	defer pm.mx.Unlock()
+
+	close(pm.closed)
 }
 
 type pathManagerOutgoingAckHandler pathManagerOutgoing
