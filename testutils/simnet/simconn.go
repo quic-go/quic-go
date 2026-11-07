@@ -7,6 +7,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/quic-go/quic-go/internal/monotime"
+	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/udp"
 )
 
 var ErrDeadlineExceeded = errors.New("deadline exceeded")
@@ -58,7 +62,10 @@ type SimConn struct {
 	writeDeadline time.Time
 }
 
-var _ net.PacketConn = &SimConn{}
+var (
+	_ net.PacketConn = &SimConn{}
+	_ udp.Conn       = &SimConn{}
+)
 
 // NewSimConn creates a new simulated connection that drops packets if the
 // receive buffer is full.
@@ -207,6 +214,32 @@ func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 	return len(p), c.router.SendPacket(pkt)
 }
+
+// ReadPacket implements quic-go's internal UDP connection interface.
+func (c *SimConn) ReadPacket() (udp.Packet, error) {
+	buf := udp.GetPacketBuffer()
+	buf.Data = buf.Data[:protocol.MaxPacketBufferSize]
+	n, addr, err := c.ReadFrom(buf.Data)
+	if err != nil {
+		buf.Release()
+		return udp.Packet{}, err
+	}
+	return udp.Packet{
+		Buffer:     buf,
+		RemoteAddr: addr,
+		RcvTime:    monotime.Now(),
+		Data:       buf.Data[:n],
+	}, nil
+}
+
+// WritePacket implements quic-go's internal UDP connection interface.
+// SimConn supports neither GSO nor ECN.
+func (c *SimConn) WritePacket(b []byte, addr net.Addr, _ []byte, _ uint16, _ protocol.ECN) (int, error) {
+	return c.WriteTo(b, addr)
+}
+
+// Capabilities reports DF: links drop packets larger than their MTU instead of fragmenting them.
+func (c *SimConn) Capabilities() udp.Capabilities { return udp.Capabilities{DF: true} }
 
 func (c *SimConn) UnicastAddr() net.Addr {
 	return c.myAddr
