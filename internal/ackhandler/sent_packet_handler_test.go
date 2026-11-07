@@ -1909,6 +1909,8 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	// pns[4] and pns[5] are not yet declared lost
 	require.Equal(t, []protocol.PacketNumber{pns[1], pns[2], pns[3]}, packets.Lost)
 	require.Less(t, connStats.CongestionWindow.Load(), window)
+	require.Equal(t, uint64(3), connStats.PacketsLost.Load())
+	require.Equal(t, uint64(3000), connStats.BytesLost.Load())
 
 	packets.Reset()
 	eventRecorder.Clear()
@@ -1925,6 +1927,8 @@ func TestSentPacketHandlerSpuriousLoss(t *testing.T) {
 	require.Equal(t, []protocol.PacketNumber{pns[4], pns[5], pns[12], pns[16]}, packets.Acked)
 	require.Empty(t, packets.Lost)
 	require.Equal(t, window, connStats.CongestionWindow.Load())
+	require.Zero(t, connStats.PacketsLost.Load())
+	require.Zero(t, connStats.BytesLost.Load())
 	require.Equal(t,
 		[]qlogwriter.Event{
 			qlog.SpuriousLoss{
