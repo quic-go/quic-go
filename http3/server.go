@@ -623,11 +623,10 @@ func (s *Server) maxHeaderBytes() int {
 // It is the caller's responsibility to close any connection passed to [Server.ServeQUICConn].
 func (s *Server) Close() error {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	s.closed = true
 	// server is never used
 	if s.closeCtx == nil {
+		s.mutex.Unlock()
 		return nil
 	}
 	s.closeCancel()
@@ -640,6 +639,8 @@ func (s *Server) Close() error {
 			}
 		}
 	}
+	// Don't hold the mutex while waiting: handlers might call SetQUICHeaders.
+	s.mutex.Unlock()
 	if s.connCount.Load() == 0 {
 		return err
 	}
