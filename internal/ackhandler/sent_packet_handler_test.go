@@ -1627,6 +1627,11 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	)
 	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[0])}, protocol.Encryption1RTT, now.Add(100*time.Millisecond))
 	require.NoError(t, err)
+
+	// Packets declared lost for a PTO probe are reported to the ECN handler.
+	pn = sendPacket(t, now, protocol.ECT0)
+	ecnHandler.EXPECT().LostPacket(pn)
+	require.True(t, sph.QueueProbePacket(protocol.PacketNumberSpaceAppData))
 }
 
 func TestSentPacketHandlerPathProbe(t *testing.T) {
