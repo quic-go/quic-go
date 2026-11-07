@@ -253,7 +253,7 @@ func (s *SendStream) write(p []byte, limiter func(int) int) (bool /* is newly co
 		notifiedSender bool
 	)
 	for {
-		if s.writeLimited {
+		if s.writeLimited || s.resetErr != nil || s.shutdownErr != nil {
 			bytesWritten = len(p) - len(s.dataForWriting)
 			s.dataForWriting = nil
 			break
@@ -297,7 +297,7 @@ func (s *SendStream) write(p []byte, limiter func(int) int) (bool /* is newly co
 					deadlineTimer.Reset(monotime.Until(deadline))
 				}
 			}
-			if s.dataForWriting == nil || s.shutdownErr != nil || s.resetErr != nil {
+			if s.dataForWriting == nil {
 				break
 			}
 		}
