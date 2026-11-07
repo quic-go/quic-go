@@ -592,8 +592,8 @@ func (h *sentPacketHandler) detectSpuriousLosses(ack *wire.AckFrame, ackTime mon
 	}
 	for _, pn := range spuriousLosses {
 		length := h.lostPackets.Delete(pn)
-		h.connStats.PacketsLost.Add(^uint64(0))
-		h.connStats.BytesLost.Add(^uint64(length - 1))
+		h.connStats.PacketsLost.Add(-1)
+		h.connStats.BytesLost.Add(-int64(length))
 	}
 	lossDelay := max(
 		max(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT())*time.Duration(8+h.timeThresholdEighths)/8,
@@ -979,7 +979,7 @@ func (h *sentPacketHandler) detectLostPackets(now monotime.Time, encLevel protoc
 				h.queueFramesForRetransmission(p)
 				if !p.IsPathMTUProbePacket {
 					h.connStats.PacketsLost.Add(1)
-					h.connStats.BytesLost.Add(uint64(p.Length))
+					h.connStats.BytesLost.Add(int64(p.Length))
 					h.congestion.OnCongestionEvent(pn, p.Length, priorInFlight)
 				}
 				if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil {
