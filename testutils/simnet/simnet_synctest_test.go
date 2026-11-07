@@ -37,7 +37,6 @@ func TestSimpleSimNet(t *testing.T) {
 		}
 		connB := newConn(router, &addressB, linkSettings)
 
-		router.Start()
 		defer router.Close()
 
 		start := time.Now()

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -12,6 +13,7 @@ import (
 type Simnet struct {
 	Router Router
 
+	mx    sync.Mutex
 	links []*SimulatedLink
 }
 
@@ -34,18 +36,13 @@ type NodeBiDiLinkSettings struct {
 	LatencyFunc func(Packet) time.Duration
 }
 
-func (n *Simnet) Start() error {
-	for _, link := range n.links {
-		link.Start()
-	}
-	return nil
-}
-
 func (n *Simnet) Close() error {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
 	var errs error
 	for _, link := range n.links {
-		err := link.Close()
-		if err != nil {
+		if err := link.Close(); err != nil {
 			errs = errors.Join(errs, err)
 		}
 	}
@@ -55,6 +52,7 @@ func (n *Simnet) Close() error {
 	return nil
 }
 
+// NewEndpoint adds a node to the network.
 func (n *Simnet) NewEndpoint(addr *net.UDPAddr, linkSettings NodeBiDiLinkSettings) *SimConn {
 	link := &SimulatedLink{
 		DownlinkSettings: linkSettings.Downlink,
@@ -64,8 +62,12 @@ func (n *Simnet) NewEndpoint(addr *net.UDPAddr, linkSettings NodeBiDiLinkSetting
 		UploadPacket:     n.Router,
 	}
 	c := NewBlockingSimConn(addr, link)
+	link.Start()
 
+	n.mx.Lock()
 	n.links = append(n.links, link)
+	n.mx.Unlock()
+
 	n.Router.AddNode(addr, link)
 	return c
 }

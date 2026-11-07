@@ -252,7 +252,6 @@ func TestDatagramLoss(t *testing.T) {
 		defer clientPacketConn.Close()
 		serverPacketConn := n.NewEndpoint(serverAddr, settings)
 		defer serverPacketConn.Close()
-		require.NoError(t, n.Start())
 		defer n.Close()
 
 		server, err := quic.Listen(
