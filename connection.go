@@ -851,8 +851,8 @@ func (c *Conn) ConnectionStats() ConnectionStats {
 		PacketsSent:     c.connStats.PacketsSent.Load(),
 		BytesReceived:   c.connStats.BytesReceived.Load(),
 		PacketsReceived: c.connStats.PacketsReceived.Load(),
-		BytesLost:       c.connStats.BytesLost.Load(),
-		PacketsLost:     c.connStats.PacketsLost.Load(),
+		BytesLost:       uint64(c.connStats.BytesLost.Load()),
+		PacketsLost:     uint64(c.connStats.PacketsLost.Load()),
 	}
 }
 
