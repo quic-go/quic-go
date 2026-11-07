@@ -2,6 +2,7 @@ package http3
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
 	"os"
 	"testing"
@@ -278,7 +279,7 @@ func TestDatagramReceiving(t *testing.T) {
 		t.Fatal("should have received a datagram")
 	}
 
-	// up to 32 datagrams can be queued
+	// up to streamDatagramQueueLen datagrams can be queued
 	for i := range streamDatagramQueueLen + 1 {
 		str.enqueueDatagram([]byte{uint8(i)})
 	}
@@ -287,11 +288,16 @@ func TestDatagramReceiving(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []byte{uint8(i)}, data)
 	}
+	// the datagram that exceeded the queue length was dropped
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), scaleDuration(10*time.Millisecond))
+	defer timeoutCancel()
+	_, err := str.ReceiveDatagram(timeoutCtx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// Receive respects the context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := str.ReceiveDatagram(ctx)
+	_, err = str.ReceiveDatagram(ctx)
 	require.ErrorIs(t, err, context.Canceled)
 
 	// a canceled context takes precedence over queued datagrams
@@ -302,6 +308,23 @@ func TestDatagramReceiving(t *testing.T) {
 	data, err := str.ReceiveDatagram(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), data)
+}
+
+func TestDatagramQueueRetainsBurst(t *testing.T) {
+	client, _ := newStreamPair(t)
+	str := newStateTrackingStream(client, nil, func(b []byte) error { return nil })
+
+	const burst = 80
+	for i := range burst {
+		str.enqueueDatagram(binary.BigEndian.AppendUint16(nil, uint16(i)))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for i := range burst {
+		data, err := str.ReceiveDatagram(ctx)
+		require.NoError(t, err)
+		require.Equal(t, binary.BigEndian.AppendUint16(nil, uint16(i)), data)
+	}
 }
 
 func TestDatagramSending(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-const streamDatagramQueueLen = 32
+const streamDatagramQueueLen = 256
 
 // stateTrackingStream is an implementation of quic.Stream that delegates
 // to an underlying stream
