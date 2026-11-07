@@ -71,7 +71,6 @@ func newSimnetLink(t *testing.T, rtt time.Duration) (client, server net.PacketCo
 
 	client = n.NewEndpoint(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9001}, settings)
 	server = n.NewEndpoint(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9002}, settings)
-	require.NoError(t, n.Start())
 	return client, server, func() {
 		require.NoError(t, n.Close())
 	}

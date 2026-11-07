@@ -36,7 +36,6 @@ func newStreamPriorityTestConnections(t *testing.T) (client, server *quic.Conn) 
 	}
 	clientPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, linkSettings())
 	serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}, linkSettings())
-	require.NoError(t, n.Start())
 	t.Cleanup(func() {
 		require.NoError(t, clientPacketConn.Close())
 		require.NoError(t, serverPacketConn.Close())

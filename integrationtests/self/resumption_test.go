@@ -91,8 +91,6 @@ func handshakeWithSessionResumption(t *testing.T, serverTLSConf *tls.Config, exp
 		serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.3"), Port: 9002}, settings)
 		defer serverPacketConn.Close()
 
-		require.NoError(t, n.Start())
-
 		server, err := quic.Listen(serverPacketConn, serverTLSConf, getQuicConfig(nil))
 		require.NoError(t, err)
 		defer server.Close()

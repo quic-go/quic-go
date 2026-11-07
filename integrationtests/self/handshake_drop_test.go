@@ -277,7 +277,6 @@ func TestHandshakeWithPacketLoss(t *testing.T) {
 								defer clientConn.Close()
 								serverConn := n.NewEndpoint(serverAddr, settings)
 								defer serverConn.Close()
-								require.NoError(t, n.Start())
 								defer n.Close()
 
 								var tlsConf *tls.Config
@@ -357,7 +356,6 @@ func TestHandshakePacketBuffering(t *testing.T) {
 		defer clientConn.Close()
 		serverConn := n.NewEndpoint(serverAddr, settings)
 		defer serverConn.Close()
-		require.NoError(t, n.Start())
 		defer n.Close()
 
 		var serverEventRecorder events.Recorder

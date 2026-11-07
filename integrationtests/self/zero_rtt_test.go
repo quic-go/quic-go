@@ -1045,7 +1045,6 @@ func Test0RTTPacketQueueing(t *testing.T) {
 		}
 		clientConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
 		serverConn := n.NewEndpoint(serverAddr, settings)
-		require.NoError(t, n.Start())
 		defer func() {
 			require.NoError(t, clientConn.Close())
 			require.NoError(t, serverConn.Close())

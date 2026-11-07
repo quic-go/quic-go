@@ -69,7 +69,6 @@ func testPacketDrops(t *testing.T, direction protocol.Perspective) {
 		serverPacketConn := n.NewEndpoint(addrServer, settings)
 		defer serverPacketConn.Close()
 
-		require.NoError(t, n.Start())
 		defer n.Close()
 
 		t.Logf("sending a message every %s, %d times", messageInterval, numMessages)
