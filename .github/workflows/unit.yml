@@ -37,6 +37,11 @@ jobs:
       - name: Remove integrationtests
         shell: bash
         run: git rm -r --cached integrationtests && rm -rf integrationtests
+      # Needed by TestConnPacketInfoSourceAddress.
+      # Only macOS needs it, since Linux routes all of 127.0.0.0/8 to lo.
+      - name: Add a second loopback address
+        if: ${{ matrix.os == 'macos' }}
+        run: sudo ifconfig lo0 alias 127.0.0.2/32
       - name: Run tests
         env:
           TIMESCALE_FACTOR: 10
