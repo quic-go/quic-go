@@ -31,6 +31,7 @@ type Packet struct {
 	From net.Addr
 
 	Data []byte
+	ECN  protocol.ECN
 }
 
 // SimConn is a simulated network connection that implements net.PacketConn.
@@ -156,42 +157,53 @@ func (c *SimConn) Close() error {
 }
 
 func (c *SimConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	pkt, err := c.readPacket()
+	if err != nil {
+		return 0, nil, err
+	}
+	n = copy(p, pkt.Data)
+	// If the provided buffer is not enough to read the whole packet, we drop
+	// the rest of the data. This is similar to what recvfrom does on Linux and macOS.
+	return n, pkt.From, nil
+}
+
+func (c *SimConn) readPacket() (Packet, error) {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
-		return 0, nil, net.ErrClosed
+		return Packet{}, net.ErrClosed
 	}
 	deadline := c.readDeadline
 	c.mu.Unlock()
 
 	if !deadline.IsZero() && !time.Now().Before(deadline) {
-		return 0, nil, ErrDeadlineExceeded
+		return Packet{}, ErrDeadlineExceeded
 	}
 
-	var pkt Packet
 	var deadlineTimer <-chan time.Time
 	if !deadline.IsZero() {
 		deadlineTimer = time.After(time.Until(deadline))
 	}
 
 	select {
-	case pkt = <-c.packetsToRead:
+	case pkt := <-c.packetsToRead:
+		return pkt, nil
 	case <-c.closedChan:
-		return 0, nil, net.ErrClosed
+		return Packet{}, net.ErrClosed
 	case <-c.deadlineUpdated:
-		return c.ReadFrom(p)
+		return c.readPacket()
 	case <-deadlineTimer:
-		return 0, nil, ErrDeadlineExceeded
+		return Packet{}, ErrDeadlineExceeded
 	}
-
-	n = copy(p, pkt.Data)
-	// if the provided buffer is not enough to read the whole packet, we drop
-	// the rest of the data. this is similar to what `recvfrom` does on Linux
-	// and macOS.
-	return n, pkt.From, nil
 }
 
 func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	return c.WritePacket(p, addr, nil, 0, protocol.ECNUnsupported)
+}
+
+// WritePacket implements quic-go's internal UDP connection interface.
+// SimConn doesn't support GSO.
+func (c *SimConn) WritePacket(p []byte, addr net.Addr, _ []byte, _ uint16, ecn protocol.ECN) (int, error) {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -211,35 +223,37 @@ func (c *SimConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		From: c.myAddr,
 		To:   addr,
 		Data: slices.Clone(p),
+		ECN:  ecn,
 	}
 	return len(p), c.router.SendPacket(pkt)
 }
 
 // ReadPacket implements quic-go's internal UDP connection interface.
 func (c *SimConn) ReadPacket() (udp.Packet, error) {
-	buf := udp.GetPacketBuffer()
-	buf.Data = buf.Data[:protocol.MaxPacketBufferSize]
-	n, addr, err := c.ReadFrom(buf.Data)
+	pkt, err := c.readPacket()
 	if err != nil {
-		buf.Release()
 		return udp.Packet{}, err
 	}
+	buf := udp.GetPacketBuffer()
+	buf.Data = buf.Data[:protocol.MaxPacketBufferSize]
+	n := copy(buf.Data, pkt.Data)
 	return udp.Packet{
 		Buffer:     buf,
-		RemoteAddr: addr,
+		RemoteAddr: pkt.From,
 		RcvTime:    monotime.Now(),
 		Data:       buf.Data[:n],
+		ECN:        pkt.ECN,
 	}, nil
 }
 
-// WritePacket implements quic-go's internal UDP connection interface.
-// SimConn supports neither GSO nor ECN.
-func (c *SimConn) WritePacket(b []byte, addr net.Addr, _ []byte, _ uint16, _ protocol.ECN) (int, error) {
-	return c.WriteTo(b, addr)
+// Capabilities reports DF and ECN:
+// links drop packets larger than their MTU, and packets keep their ECN codepoint.
+func (c *SimConn) Capabilities() udp.Capabilities {
+	return udp.Capabilities{
+		DF:  true,
+		ECN: true,
+	}
 }
-
-// Capabilities reports DF: links drop packets larger than their MTU instead of fragmenting them.
-func (c *SimConn) Capabilities() udp.Capabilities { return udp.Capabilities{DF: true} }
 
 func (c *SimConn) UnicastAddr() net.Addr {
 	return c.myAddr
