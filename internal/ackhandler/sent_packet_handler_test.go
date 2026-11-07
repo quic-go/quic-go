@@ -1316,6 +1316,7 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 func TestSentPacketHandlerCongestion(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cong := mocks.NewMockSendAlgorithmWithDebugInfos(mockCtrl)
+	cong.EXPECT().GetCongestionWindow().AnyTimes()
 	rttStats := utils.NewRTTStats()
 	sph := NewSentPacketHandler(
 		0,
@@ -1512,6 +1513,7 @@ func TestSentPacketHandlerRetryAfterPTO(t *testing.T) {
 func TestSentPacketHandlerECN(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cong := mocks.NewMockSendAlgorithmWithDebugInfos(mockCtrl)
+	cong.EXPECT().GetCongestionWindow().AnyTimes()
 	cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	cong.EXPECT().OnPacketAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	cong.EXPECT().MaybeExitSlowStart().AnyTimes()

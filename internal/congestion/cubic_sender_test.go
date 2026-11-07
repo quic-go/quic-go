@@ -48,7 +48,6 @@ func newTestCubicSender(cubic bool) *testCubicSender {
 		sender: newCubicSender(
 			&clock,
 			&rttStats,
-			&utils.ConnectionStats{},
 			!cubic,
 			protocol.InitialPacketSize,
 			initialCongestionWindowPackets*maxDatagramSize,
@@ -142,7 +141,7 @@ func TestCubicSenderPacingRate(t *testing.T) {
 	clock.Advance(time.Second)
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
-	sender := NewCubicSender(&clock, rttStats, &utils.ConnectionStats{}, maxDatagramSize, true, nil)
+	sender := NewCubicSender(&clock, rttStats, maxDatagramSize, true, nil)
 
 	// Exhaust the burst allowance before checking the pacing rate.
 	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(clock.Now()); pn++ {
@@ -586,7 +585,6 @@ func TestCubicSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 	sender := newCubicSender(
 		&clock,
 		&rttStats,
-		&utils.ConnectionStats{},
 		true,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
@@ -613,7 +611,6 @@ func TestCubicSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 	sender := newCubicSender(
 		&clock,
 		&rttStats,
-		&utils.ConnectionStats{},
 		true,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
@@ -637,7 +634,6 @@ func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
 	sender := newCubicSender(
 		&clock,
 		&rttStats,
-		&utils.ConnectionStats{},
 		false,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,

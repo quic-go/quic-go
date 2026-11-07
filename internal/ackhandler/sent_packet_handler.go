@@ -155,7 +155,6 @@ func NewSentPacketHandler(
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
-		connStats,
 		initialMaxDatagramSize,
 		true, // use Reno
 		qlogger,
@@ -188,6 +187,7 @@ func NewSentPacketHandler(
 		h.enableECN = true
 		h.ecnTracker = newECNTracker(logger, qlogger)
 	}
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 	h.qlogRecoveryParametersSet(true)
 	return h
 }
@@ -426,6 +426,12 @@ func (h *sentPacketHandler) getPacketNumberSpace(space protocol.PacketNumberSpac
 }
 
 func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool /* contained 1-RTT packet */, error) {
+	acked1RTTPacket, err := h.receivedAck(ack, encLevel, rcvTime)
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
+	return acked1RTTPacket, err
+}
+
+func (h *sentPacketHandler) receivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 
 	largestAcked := ack.LargestAcked()
@@ -1018,6 +1024,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		}
 		// Early retransmit or time loss detection
 		h.detectLostPackets(now, encLevel)
+		h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 		return nil
 	}
 
@@ -1155,6 +1162,7 @@ func (h *sentPacketHandler) TimeUntilSend() monotime.Time {
 
 func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
 	h.congestion.SetMaxDatagramSize(s)
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 }
 
 func (h *sentPacketHandler) isAmplificationLimited() bool {
@@ -1267,11 +1275,11 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	h.congestion = congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		h.rttStats,
-		h.connStats,
 		initialMaxDatagramSize,
 		true, // use Reno
 		h.qlogger,
 	)
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 	h.qlogRecoveryParametersSet(true)
 	h.setLossDetectionTimer(now)
 }
