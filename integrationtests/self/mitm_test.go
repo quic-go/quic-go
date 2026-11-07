@@ -51,10 +51,9 @@ func (r *mitmRouter) SendPacket(p simnet.Packet) error {
 
 func getTransportsForMITMTest(
 	t *testing.T,
-	rtt time.Duration,
 	intercept func(dir direction, p simnet.Packet) []simnet.Packet,
 ) (serverTransport, clientTransport *quic.Transport) {
-	clientConn, serverConn, closeFn := newSimnetLinkWithRouter(t, rtt, &mitmRouter{
+	clientConn, serverConn, closeFn := newSimnetLinkWithRouter(t, 10*time.Millisecond, &mitmRouter{
 		ServerAddr: &net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002},
 		Intercept:  intercept,
 	})
@@ -154,7 +153,7 @@ func testMITMInjectRandomPackets(t *testing.T, dir direction) {
 	}
 
 	synctest.Test(t, func(t *testing.T) {
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 10*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			packets := []simnet.Packet{p}
 			if d != dir {
 				return packets
@@ -170,7 +169,7 @@ func testMITMInjectRandomPackets(t *testing.T, dir direction) {
 
 func testMITMDuplicatePackets(t *testing.T, dir direction) {
 	synctest.Test(t, func(t *testing.T) {
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 10*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			if d != dir {
 				return []simnet.Packet{p}
 			}
@@ -183,7 +182,7 @@ func testMITMDuplicatePackets(t *testing.T, dir direction) {
 func testMITMCorruptPackets(t *testing.T, dir direction) {
 	synctest.Test(t, func(t *testing.T) {
 		var numCorrupted atomic.Int32
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 5*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			if d != dir {
 				return []simnet.Packet{p}
 			}
@@ -268,7 +267,7 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 		const supportedVersion protocol.Version = 42
 
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 10*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			packets := []simnet.Packet{p}
 			if d != directionToServer {
 				return packets
@@ -302,7 +301,7 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 func TestMITMForgedRetryPacket(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 10*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			packets := []simnet.Packet{p}
 			hdr, _, _, err := wire.ParsePacket(p.Data)
 			if err != nil {
@@ -329,7 +328,7 @@ func TestMITMForgedRetryPacket(t *testing.T) {
 func TestMITMForgedInitialPacket(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 10*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			packets := []simnet.Packet{p}
 			if d != directionToServer {
 				return packets
@@ -366,7 +365,7 @@ func TestMITMForgedInitialPacket(t *testing.T) {
 func TestMITMForgedInitialPacketWithAck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, 10*time.Millisecond, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
 			packets := []simnet.Packet{p}
 			if d != directionToServer {
 				return packets
