@@ -155,7 +155,6 @@ func NewSentPacketHandler(
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
-		connStats,
 		initialMaxDatagramSize,
 		true, // use Reno
 		qlogger,
@@ -188,8 +187,14 @@ func NewSentPacketHandler(
 		h.enableECN = true
 		h.ecnTracker = newECNTracker(logger, qlogger)
 	}
+	h.updateCongestionWindowStat()
 	h.qlogRecoveryParametersSet(true)
 	return h
+}
+
+// updateCongestionWindowStat must be called whenever the congestion window might have changed.
+func (h *sentPacketHandler) updateCongestionWindowStat() {
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 }
 
 func (h *sentPacketHandler) qlogRecoveryParametersSet(initial bool) {
@@ -506,6 +511,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.congestion.OnSpuriousLoss(pn)
 	}
 	if len(ackedPackets) == 0 {
+		h.updateCongestionWindowStat()
 		if len(spuriousLosses) > 0 && h.qlogger != nil {
 			h.qlogMetricsUpdated()
 		}
@@ -528,6 +534,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			putPacket(p.packet)
 		}
 	}
+	h.updateCongestionWindowStat()
 
 	// After this point, we must not use ackedPackets any longer!
 	// We've already returned the buffers.
@@ -1018,6 +1025,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		}
 		// Early retransmit or time loss detection
 		h.detectLostPackets(now, encLevel)
+		h.updateCongestionWindowStat()
 		return nil
 	}
 
@@ -1155,6 +1163,7 @@ func (h *sentPacketHandler) TimeUntilSend() monotime.Time {
 
 func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
 	h.congestion.SetMaxDatagramSize(s)
+	h.updateCongestionWindowStat()
 }
 
 func (h *sentPacketHandler) isAmplificationLimited() bool {
@@ -1267,11 +1276,11 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	h.congestion = congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		h.rttStats,
-		h.connStats,
 		initialMaxDatagramSize,
 		true, // use Reno
 		h.qlogger,
 	)
+	h.updateCongestionWindowStat()
 	h.qlogRecoveryParametersSet(true)
 	h.setLossDetectionTimer(now)
 }
