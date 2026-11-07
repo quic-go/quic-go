@@ -196,7 +196,7 @@ type Server struct {
 
 	Logger *slog.Logger
 
-	mutex     sync.RWMutex
+	mutex     sync.Mutex
 	listeners []listener
 
 	closed           bool
@@ -207,7 +207,7 @@ type Server struct {
 	connCount        atomic.Int64
 	connHandlingDone chan struct{}
 
-	altSvcHeader string
+	altSvcHeader atomic.Pointer[string]
 }
 
 // ListenAndServe listens on the UDP address [Server.Addr] and calls [Server.Handler]
@@ -392,7 +392,7 @@ func extractPort(addr string) (int, error) {
 func (s *Server) generateAltSvcHeader() {
 	if len(s.listeners) == 0 {
 		// Don't announce any ports since no one is listening for connections
-		s.altSvcHeader = ""
+		s.altSvcHeader.Store(nil)
 		return
 	}
 
@@ -424,7 +424,7 @@ func (s *Server) generateAltSvcHeader() {
 		}
 	}
 
-	s.altSvcHeader = strings.Join(altSvc, ",")
+	s.altSvcHeader.Store(new(strings.Join(altSvc, ",")))
 }
 
 func (s *Server) addListener(l *QUICListener, createdLocally bool) error {
@@ -708,14 +708,12 @@ var ErrNoAltSvcPort = errors.New("no port can be announced, specify it explicitl
 //
 //	Alt-Svc: h3=":443"; ma=2592000
 func (s *Server) SetQUICHeaders(hdr http.Header) error {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	if s.altSvcHeader == "" {
+	altSvc := s.altSvcHeader.Load()
+	if altSvc == nil || *altSvc == "" {
 		return ErrNoAltSvcPort
 	}
 	// use the map directly to avoid constant canonicalization since the key is already canonicalized
-	hdr["Alt-Svc"] = append(hdr["Alt-Svc"], s.altSvcHeader)
+	hdr["Alt-Svc"] = append(hdr["Alt-Svc"], *altSvc)
 	return nil
 }
 
