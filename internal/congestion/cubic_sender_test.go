@@ -29,8 +29,15 @@ func (c *mockClock) Advance(d time.Duration) {
 
 const MaxCongestionWindow = 200 * maxDatagramSize
 
+type testSender interface {
+	SendAlgorithmWithDebugInfos
+	OnConnectionMigration()
+	BandwidthEstimate() Bandwidth
+}
+
 type testCubicSender struct {
-	sender            *cubicSender
+	sender            testSender
+	reno              *renoSender
 	clock             *mockClock
 	rttStats          *utils.RTTStats
 	bytesInFlight     protocol.ByteCount
@@ -41,20 +48,25 @@ type testCubicSender struct {
 func newTestCubicSender(cubic bool) *testCubicSender {
 	var clock mockClock
 	rttStats := utils.RTTStats{}
+	reno := newRenoSender(
+		&clock,
+		&rttStats,
+		&utils.ConnectionStats{},
+		protocol.InitialPacketSize,
+		initialCongestionWindowPackets*maxDatagramSize,
+		MaxCongestionWindow,
+		nil,
+	)
+	var sender testSender = reno
+	if cubic {
+		sender = &cubicSender{renoSender: reno, cubic: NewCubic(&clock)}
+	}
 	return &testCubicSender{
 		clock:        &clock,
 		rttStats:     &rttStats,
 		packetNumber: 1,
-		sender: newCubicSender(
-			&clock,
-			&rttStats,
-			&utils.ConnectionStats{},
-			!cubic,
-			protocol.InitialPacketSize,
-			initialCongestionWindowPackets*maxDatagramSize,
-			MaxCongestionWindow,
-			nil,
-		),
+		sender:       sender,
+		reno:         reno,
 	}
 }
 
@@ -142,7 +154,7 @@ func TestCubicSenderPacingRate(t *testing.T) {
 	clock.Advance(time.Second)
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
-	sender := NewCubicSender(&clock, rttStats, &utils.ConnectionStats{}, maxDatagramSize, true, nil)
+	sender := NewRenoSender(&clock, rttStats, &utils.ConnectionStats{}, maxDatagramSize, nil)
 
 	// Exhaust the burst allowance before checking the pacing rate.
 	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(clock.Now()); pn++ {
@@ -236,10 +248,10 @@ func TestCubicSenderSlowStartPacketLoss(t *testing.T) {
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 
 	// Now RTO and ensure slow start gets reset.
-	require.True(t, sender.sender.hybridSlowStart.Started())
+	require.True(t, sender.reno.hybridSlowStart.Started())
 	sender.sender.OnRetransmissionTimeout(true)
-	require.False(t, sender.sender.hybridSlowStart.Started())
-	require.Zero(t, sender.sender.undoState)
+	require.False(t, sender.reno.hybridSlowStart.Started())
+	require.Zero(t, sender.reno.undoState)
 }
 
 func TestCubicSenderSlowStartPacketLossPRR(t *testing.T) {
@@ -349,13 +361,13 @@ func TestCubicSenderRTOCongestionWindow(t *testing.T) {
 	sender := newTestCubicSender(false)
 
 	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
-	require.Equal(t, protocol.MaxByteCount, sender.sender.slowStartThreshold)
+	require.Equal(t, protocol.MaxByteCount, sender.reno.slowStartThreshold)
 
 	// Expect the window to decrease to the minimum once the RTO fires
 	// and slow start threshold to be set to 1/2 of the CWND.
 	sender.sender.OnRetransmissionTimeout(true)
 	require.Equal(t, 2*maxDatagramSize, sender.sender.GetCongestionWindow())
-	require.Equal(t, 5*maxDatagramSize, sender.sender.slowStartThreshold)
+	require.Equal(t, 5*maxDatagramSize, sender.reno.slowStartThreshold)
 }
 
 func TestCubicSenderTCPCubicResetEpochOnQuiescence(t *testing.T) {
@@ -437,9 +449,9 @@ func TestCubicSenderSpuriousLoss(t *testing.T) {
 	require.Equal(t, reducedWindow, sender.sender.GetCongestionWindow())
 	sender.sender.OnSpuriousLoss(13)
 	require.Equal(t, window, sender.sender.GetCongestionWindow())
-	require.Equal(t, window, sender.sender.slowStartThreshold)
+	require.Equal(t, window, sender.reno.slowStartThreshold)
 	require.False(t, sender.sender.InRecovery())
-	require.Zero(t, sender.sender.undoState)
+	require.Zero(t, sender.reno.undoState)
 
 	// Restoring the ACK credit lets the seventh ACK grow the window.
 	sender.AckNPackets(4)
@@ -462,7 +474,7 @@ func TestCubicSenderSpuriousLossAfterWindowGrowth(t *testing.T) {
 	sender.sender.OnSpuriousLoss(1)
 	require.Equal(t, window, sender.sender.GetCongestionWindow())
 	require.False(t, sender.sender.InSlowStart())
-	require.Zero(t, sender.sender.undoState)
+	require.Zero(t, sender.reno.undoState)
 }
 
 func TestCubicSenderSpuriousLossWithECN(t *testing.T) {
@@ -548,7 +560,7 @@ func TestCubicSenderResetAfterConnectionMigration(t *testing.T) {
 	sender := newTestCubicSender(false)
 
 	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
-	require.Equal(t, protocol.MaxByteCount, sender.sender.slowStartThreshold)
+	require.Equal(t, protocol.MaxByteCount, sender.reno.slowStartThreshold)
 
 	// Starts with slow start.
 	const numberOfAcks = 10
@@ -568,26 +580,25 @@ func TestCubicSenderResetAfterConnectionMigration(t *testing.T) {
 	// start threshold is also updated.
 	expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * renoBeta)
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
-	require.Equal(t, expectedSendWindow, sender.sender.slowStartThreshold)
+	require.Equal(t, expectedSendWindow, sender.reno.slowStartThreshold)
 
 	// Resets cwnd and slow start threshold on connection migrations.
-	require.NotZero(t, sender.sender.undoState)
+	require.NotZero(t, sender.reno.undoState)
 	sender.sender.OnConnectionMigration()
 	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
-	require.Equal(t, MaxCongestionWindow, sender.sender.slowStartThreshold)
-	require.False(t, sender.sender.hybridSlowStart.Started())
-	require.Zero(t, sender.sender.undoState)
+	require.Equal(t, MaxCongestionWindow, sender.reno.slowStartThreshold)
+	require.False(t, sender.reno.hybridSlowStart.Started())
+	require.Zero(t, sender.reno.undoState)
 }
 
 func TestCubicSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 	var clock mockClock
 	rttStats := utils.RTTStats{}
 	const initialMaxCongestionWindow = protocol.MaxCongestionWindowPackets * initialMaxDatagramSize
-	sender := newCubicSender(
+	sender := newRenoSender(
 		&clock,
 		&rttStats,
 		&utils.ConnectionStats{},
-		true,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
 		initialMaxCongestionWindow,
@@ -610,11 +621,10 @@ func TestCubicSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 	var clock mockClock
 	rttStats := utils.RTTStats{}
 	const initialMaxCongestionWindow = protocol.MaxCongestionWindowPackets * initialMaxDatagramSize
-	sender := newCubicSender(
+	sender := newRenoSender(
 		&clock,
 		&rttStats,
 		&utils.ConnectionStats{},
-		true,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
 		initialMaxCongestionWindow,
@@ -638,7 +648,6 @@ func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
 		&clock,
 		&rttStats,
 		&utils.ConnectionStats{},
-		false,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
 		MaxCongestionWindow,
@@ -646,6 +655,7 @@ func TestCubicSenderLimitCwndIncreaseInCongestionAvoidance(t *testing.T) {
 	)
 	testSender := &testCubicSender{
 		sender:   sender,
+		reno:     sender.renoSender,
 		clock:    &clock,
 		rttStats: &rttStats,
 	}
