@@ -24,14 +24,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const mitmTestConnIDLen = 6
+const (
+	mitmTestConnIDLen = 6
+	mitmTestRTT       = 10 * time.Millisecond
+)
+
+// mitmPacket is a packet that is delivered after Delay, in addition to the link latency.
+type mitmPacket struct {
+	simnet.Packet
+	Delay time.Duration
+}
 
 // mitmRouter delivers the packets returned by Intercept instead of the packet that was sent.
 type mitmRouter struct {
 	simnet.PerfectRouter
 
 	ServerAddr net.Addr
-	Intercept  func(dir direction, p simnet.Packet) []simnet.Packet
+	Intercept  func(dir direction, p simnet.Packet) []mitmPacket
 }
 
 var _ simnet.Router = &mitmRouter{}
@@ -41,8 +50,12 @@ func (r *mitmRouter) SendPacket(p simnet.Packet) error {
 	if p.To.String() == r.ServerAddr.String() {
 		dir = directionToServer
 	}
-	for _, p := range r.Intercept(dir, p) {
-		if err := r.PerfectRouter.SendPacket(p); err != nil {
+	for _, mp := range r.Intercept(dir, p) {
+		if mp.Delay > 0 {
+			time.AfterFunc(mp.Delay, func() { r.PerfectRouter.SendPacket(mp.Packet) })
+			continue
+		}
+		if err := r.PerfectRouter.SendPacket(mp.Packet); err != nil {
 			return err
 		}
 	}
@@ -51,9 +64,9 @@ func (r *mitmRouter) SendPacket(p simnet.Packet) error {
 
 func getTransportsForMITMTest(
 	t *testing.T,
-	intercept func(dir direction, p simnet.Packet) []simnet.Packet,
+	intercept func(dir direction, p simnet.Packet) []mitmPacket,
 ) (serverTransport, clientTransport *quic.Transport) {
-	clientConn, serverConn, closeFn := newSimnetLinkWithRouter(t, 10*time.Millisecond, &mitmRouter{
+	clientConn, serverConn, closeFn := newSimnetLinkWithRouter(t, mitmTestRTT, &mitmRouter{
 		ServerAddr: &net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002},
 		Intercept:  intercept,
 	})
@@ -153,13 +166,16 @@ func testMITMInjectRandomPackets(t *testing.T, dir direction) {
 	}
 
 	synctest.Test(t, func(t *testing.T) {
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
-			packets := []simnet.Packet{p}
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
+			packets := []mitmPacket{{Packet: p}}
 			if d != dir {
 				return packets
 			}
 			for range 10 {
-				packets = append(packets, simnet.Packet{From: p.From, To: p.To, Data: createRandomPacketOfSameType(p.Data)})
+				packets = append(packets, mitmPacket{
+					Packet: simnet.Packet{From: p.From, To: p.To, Data: createRandomPacketOfSameType(p.Data)},
+					Delay:  mrand.N(mitmTestRTT),
+				})
 			}
 			return packets
 		})
@@ -169,11 +185,14 @@ func testMITMInjectRandomPackets(t *testing.T, dir direction) {
 
 func testMITMDuplicatePackets(t *testing.T, dir direction) {
 	synctest.Test(t, func(t *testing.T) {
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
 			if d != dir {
-				return []simnet.Packet{p}
+				return []mitmPacket{{Packet: p}}
 			}
-			return []simnet.Packet{p, {From: p.From, To: p.To, Data: slices.Clone(p.Data)}}
+			return []mitmPacket{
+				{Packet: p},
+				{Packet: simnet.Packet{From: p.From, To: p.To, Data: slices.Clone(p.Data)}, Delay: mrand.N(mitmTestRTT)},
+			}
 		})
 		runMITMTest(t, serverTransport, clientTransport)
 	})
@@ -182,22 +201,22 @@ func testMITMDuplicatePackets(t *testing.T, dir direction) {
 func testMITMCorruptPackets(t *testing.T, dir direction) {
 	synctest.Test(t, func(t *testing.T) {
 		var numCorrupted atomic.Int32
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
 			if d != dir {
-				return []simnet.Packet{p}
+				return []mitmPacket{{Packet: p}}
 			}
 			isLongHeaderPacket := wire.IsLongHeaderPacket(p.Data[0])
 			// corrupt 20% of long header packets and 5% of short header packets
 			if isLongHeaderPacket && mrand.IntN(4) != 0 {
-				return []simnet.Packet{p}
+				return []mitmPacket{{Packet: p}}
 			}
 			if !isLongHeaderPacket && mrand.IntN(20) != 0 {
-				return []simnet.Packet{p}
+				return []mitmPacket{{Packet: p}}
 			}
 			numCorrupted.Add(1)
 			p.Data = slices.Clone(p.Data)
 			p.Data[mrand.IntN(len(p.Data))] = byte(mrand.IntN(256))
-			return []simnet.Packet{p}
+			return []mitmPacket{{Packet: p}}
 		})
 
 		runMITMTest(t, serverTransport, clientTransport)
@@ -267,8 +286,8 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 		const supportedVersion protocol.Version = 42
 
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
-			packets := []simnet.Packet{p}
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
+			packets := []mitmPacket{{Packet: p}}
 			if d != directionToServer {
 				return packets
 			}
@@ -283,7 +302,7 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 					protocol.ArbitraryLenConnectionID(hdr.DestConnectionID.Bytes()),
 					[]protocol.Version{supportedVersion},
 				)
-				packets = append(packets, simnet.Packet{From: p.To, To: p.From, Data: packet})
+				packets = append(packets, mitmPacket{Packet: simnet.Packet{From: p.To, To: p.From, Data: packet}})
 			})
 			return packets
 		})
@@ -301,8 +320,8 @@ func TestMITMForgedVersionNegotiationPacket(t *testing.T) {
 func TestMITMForgedRetryPacket(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
-			packets := []simnet.Packet{p}
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
+			packets := []mitmPacket{{Packet: p}}
 			hdr, _, _, err := wire.ParsePacket(p.Data)
 			if err != nil {
 				panic("failed to parse packet: " + err.Error())
@@ -311,7 +330,7 @@ func TestMITMForgedRetryPacket(t *testing.T) {
 				once.Do(func() {
 					fakeSrcConnID := protocol.ParseConnectionID([]byte{0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12})
 					retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
-					packets = append(packets, simnet.Packet{From: p.To, To: p.From, Data: retryPacket})
+					packets = append(packets, mitmPacket{Packet: simnet.Packet{From: p.To, To: p.From, Data: retryPacket}})
 				})
 			}
 			return packets
@@ -328,8 +347,8 @@ func TestMITMForgedRetryPacket(t *testing.T) {
 func TestMITMForgedInitialPacket(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
-			packets := []simnet.Packet{p}
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
+			packets := []mitmPacket{{Packet: p}}
 			if d != directionToServer {
 				return packets
 			}
@@ -350,7 +369,7 @@ func TestMITMForgedInitialPacket(t *testing.T) {
 					protocol.PerspectiveServer,
 					hdr.Version,
 				)
-				packets = append(packets, simnet.Packet{From: p.To, To: p.From, Data: initialPacket})
+				packets = append(packets, mitmPacket{Packet: simnet.Packet{From: p.To, To: p.From, Data: initialPacket}})
 			})
 			return packets
 		})
@@ -365,8 +384,8 @@ func TestMITMForgedInitialPacket(t *testing.T) {
 func TestMITMForgedInitialPacketWithAck(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var once sync.Once
-		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []simnet.Packet {
-			packets := []simnet.Packet{p}
+		serverTransport, clientTransport := getTransportsForMITMTest(t, func(d direction, p simnet.Packet) []mitmPacket {
+			packets := []mitmPacket{{Packet: p}}
 			if d != directionToServer {
 				return packets
 			}
@@ -389,7 +408,7 @@ func TestMITMForgedInitialPacketWithAck(t *testing.T) {
 					protocol.PerspectiveServer,
 					hdr.Version,
 				)
-				packets = append(packets, simnet.Packet{From: p.To, To: p.From, Data: initialPacket})
+				packets = append(packets, mitmPacket{Packet: simnet.Packet{From: p.To, To: p.From, Data: initialPacket}})
 			})
 			return packets
 		})
