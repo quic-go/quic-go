@@ -994,7 +994,8 @@ func TestSendStreamCancellation(t *testing.T) {
 		mockSender.EXPECT().onHasStreamData(streamID, str).Do(func(protocol.StreamID, *SendStream) { close(wrote) })
 		errChan := make(chan error, 1)
 		go func() {
-			_, err := strWithTimeout.Write(make([]byte, 2000))
+			// fits into a packet buffer once the cancellation drops the queued "bar"
+			_, err := strWithTimeout.Write(make([]byte, protocol.MaxPacketBufferSize))
 			errChan <- err
 		}()
 
@@ -1252,15 +1253,17 @@ func TestSendStreamStopSendingDuringWrite(t *testing.T) {
 		mockSender.EXPECT().onHasStreamData(streamID, str).MaxTimes(2)
 		_, err := (&writerWithTimeout{Writer: str, Timeout: time.Second}).Write([]byte("foobar"))
 		require.NoError(t, err)
-		frame, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		frame, _, _ := str.popStreamFrame(3+expectedFrameHeaderLen(streamID, 0), protocol.Version1)
 		require.NotNil(t, frame.Frame)
 		require.True(t, mockCtrl.Satisfied())
 
 		errChan := make(chan error, 1)
 		go func() {
-			_, err := str.Write(make([]byte, 2000))
+			// fits into a packet buffer once the cancellation drops the queued "bar"
+			_, err := str.Write(make([]byte, protocol.MaxPacketBufferSize))
 			errChan <- err
 		}()
+		synctest.Wait()
 
 		mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
 		str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID, ErrorCode: 1337})
@@ -1276,7 +1279,7 @@ func TestSendStreamStopSendingDuringWrite(t *testing.T) {
 
 		cf, ok, hasMore := str.getControlFrame(monotime.Now())
 		require.True(t, ok)
-		require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 6, ErrorCode: 1337}, cf.Frame)
+		require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 3, ErrorCode: 1337}, cf.Frame)
 		require.False(t, hasMore)
 
 		// receiving another STOP_SENDING frame has no effect
