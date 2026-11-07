@@ -187,14 +187,9 @@ func NewSentPacketHandler(
 		h.enableECN = true
 		h.ecnTracker = newECNTracker(logger, qlogger)
 	}
-	h.updateCongestionWindowStat()
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 	h.qlogRecoveryParametersSet(true)
 	return h
-}
-
-// updateCongestionWindowStat must be called whenever the congestion window might have changed.
-func (h *sentPacketHandler) updateCongestionWindowStat() {
-	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 }
 
 func (h *sentPacketHandler) qlogRecoveryParametersSet(initial bool) {
@@ -431,6 +426,12 @@ func (h *sentPacketHandler) getPacketNumberSpace(space protocol.PacketNumberSpac
 }
 
 func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool /* contained 1-RTT packet */, error) {
+	acked1RTTPacket, err := h.receivedAck(ack, encLevel, rcvTime)
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
+	return acked1RTTPacket, err
+}
+
+func (h *sentPacketHandler) receivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (bool, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel.PacketNumberSpace())
 
 	largestAcked := ack.LargestAcked()
@@ -511,7 +512,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.congestion.OnSpuriousLoss(pn)
 	}
 	if len(ackedPackets) == 0 {
-		h.updateCongestionWindowStat()
 		if len(spuriousLosses) > 0 && h.qlogger != nil {
 			h.qlogMetricsUpdated()
 		}
@@ -534,7 +534,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			putPacket(p.packet)
 		}
 	}
-	h.updateCongestionWindowStat()
 
 	// After this point, we must not use ackedPackets any longer!
 	// We've already returned the buffers.
@@ -1025,7 +1024,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout(now monotime.Time) error {
 		}
 		// Early retransmit or time loss detection
 		h.detectLostPackets(now, encLevel)
-		h.updateCongestionWindowStat()
+		h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 		return nil
 	}
 
@@ -1163,7 +1162,7 @@ func (h *sentPacketHandler) TimeUntilSend() monotime.Time {
 
 func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
 	h.congestion.SetMaxDatagramSize(s)
-	h.updateCongestionWindowStat()
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 }
 
 func (h *sentPacketHandler) isAmplificationLimited() bool {
@@ -1280,7 +1279,7 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 		true, // use Reno
 		h.qlogger,
 	)
-	h.updateCongestionWindowStat()
+	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 	h.qlogRecoveryParametersSet(true)
 	h.setLossDetectionTimer(now)
 }
