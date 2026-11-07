@@ -365,6 +365,37 @@ func TestServerStreamResetByClient(t *testing.T) {
 	require.False(t, called)
 }
 
+func TestServerReadHeaderTimeout(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	s := &Server{
+		ReadHeaderTimeout: scaleDuration(20 * time.Millisecond),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := io.ReadAll(r.Body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+			}
+		}),
+	}
+	go s.ServeQUICConn(serverConn)
+	req := encodeRequest(t, httptest.NewRequest(http.MethodPost, "https://example.com", bytes.NewBufferString("foobar")))
+
+	str, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(req[:5]) // incomplete HEADERS frame
+	require.NoError(t, err)
+	expectStreamReadReset(t, str, quic.StreamErrorCode(ErrCodeRequestIncomplete))
+
+	// the timeout doesn't apply to the request body
+	str, err = clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(req[:len(req)-1])
+	require.NoError(t, err)
+	time.Sleep(2 * s.ReadHeaderTimeout)
+	_, err = str.Write(req[len(req)-1:])
+	require.NoError(t, err)
+	require.NoError(t, str.Close())
+	require.Equal(t, []string{"200"}, decodeHeader(t, str)[":status"])
+}
+
 func TestServerPanickingHandler(t *testing.T) {
 	t.Run("panicking handler", func(t *testing.T) {
 		logOutput := testServerPanickingHandler(t, func(w http.ResponseWriter, r *http.Request) {
