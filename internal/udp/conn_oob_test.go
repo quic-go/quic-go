@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime"
 	"testing"
 
 	"golang.org/x/net/ipv4"
@@ -49,6 +50,43 @@ func TestConnECNAndPacketInfo(t *testing.T) {
 				require.Equal(t, ecn, p.ECN)
 				require.Equal(t, serverAddr, p.RemoteAddr.(*net.UDPAddr).AddrPort())
 			}
+		})
+	}
+}
+
+// A reply must be sent from the address the client sent to,
+// not from the address the kernel's route lookup would pick.
+func TestConnPacketInfoSourceAddress(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS sends from the interface's primary address: https://github.com/quic-go/quic-go/issues/6141")
+	}
+
+	// Linux routes all of 127.0.0.0/8 to lo, FreeBSD needs an alias.
+	ip := netip.MustParseAddr("127.0.0.2")
+	ln, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(ip, 0)))
+	require.NoError(t, err, "add the address with: ifconfig lo0 alias %s/32", ip)
+	ln.Close()
+
+	for _, tc := range []struct{ name, network string }{
+		{name: "IPv4", network: "udp4"},
+		{name: "dual-stack", network: "udp"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := listenUDP(t, tc.network, nil)
+			client := listenUDP(t, "udp4", net.IPv4(127, 0, 0, 1))
+			serverAddr := netip.AddrPortFrom(ip, uint16(server.LocalAddr().(*net.UDPAddr).Port))
+
+			_, err := client.WritePacket([]byte("foobar"), net.UDPAddrFromAddrPort(serverAddr), nil, 0, protocol.ECNUnsupported)
+			require.NoError(t, err)
+			p, err := server.ReadPacket()
+			require.NoError(t, err)
+			require.Equal(t, ip, p.Info.Addr)
+
+			_, err = server.WritePacket([]byte("raboof"), p.RemoteAddr, p.Info.OOB(), 0, protocol.ECNUnsupported)
+			require.NoError(t, err)
+			p, err = client.ReadPacket()
+			require.NoError(t, err)
+			require.Equal(t, serverAddr, p.RemoteAddr.(*net.UDPAddr).AddrPort())
 		})
 	}
 }

@@ -5,6 +5,7 @@ package udp
 import (
 	"net/netip"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -26,6 +27,18 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, _ uint32, ok bool) {
 		return netip.Addr{}, 0, false
 	}
 	return netip.AddrFrom4(*(*[4]byte)(body)), 0, true
+}
+
+// FreeBSD has no IP_PKTINFO. The source address is set using IP_SENDSRCADDR,
+// which doesn't take an interface index.
+func marshalIPv4PktInfo(ip [4]byte, _ uint32) []byte {
+	b := make([]byte, unix.CmsgSpace(len(ip)))
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&b[0]))
+	h.Level = unix.IPPROTO_IP
+	h.Type = unix.IP_SENDSRCADDR
+	h.SetLen(unix.CmsgLen(len(ip)))
+	copy(b[unix.CmsgLen(0):], ip[:])
+	return b
 }
 
 func isGSOEnabled(syscall.RawConn) bool { return false }

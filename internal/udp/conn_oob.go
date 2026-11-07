@@ -263,17 +263,7 @@ func (info *PacketInfo) OOB() []byte {
 		return nil
 	}
 	if info.Addr.Is4() {
-		ip := info.Addr.As4()
-		// struct in_pktinfo {
-		// 	unsigned int   ipi_ifindex;  /* Interface index */
-		// 	struct in_addr ipi_spec_dst; /* Local address */
-		// 	struct in_addr ipi_addr;     /* Header Destination address */
-		// };
-		cm := ipv4.ControlMessage{
-			Src:     ip[:],
-			IfIndex: int(info.IfIndex),
-		}
-		return cm.Marshal()
+		return marshalIPv4PktInfo(info.Addr.As4(), info.IfIndex)
 	} else if info.Addr.Is6() {
 		ip := info.Addr.As16()
 		// struct in6_pktinfo {
