@@ -130,6 +130,19 @@ func TestRenoSenderPacingRate(t *testing.T) {
 	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend().Sub(now)), float64(time.Microsecond))
 }
 
+func TestRenoSenderPacingInitialPacketSize(t *testing.T) {
+	const size = 1500
+	now := monotime.Now()
+	rttStats := utils.NewRTTStats()
+	rttStats.UpdateRTT(time.Second, 0)
+	sender := NewRenoSender(rttStats, size, nil)
+
+	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(now); pn++ {
+		sender.OnPacketSent(now, pn, size, true)
+	}
+	require.True(t, sender.HasPacingBudget(sender.TimeUntilSend()))
+}
+
 func TestRenoSenderApplicationLimitedSlowStart(t *testing.T) {
 	sender := newTestRenoSender()
 

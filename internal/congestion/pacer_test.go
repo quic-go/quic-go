@@ -13,7 +13,7 @@ import (
 
 func TestPacerPacing(t *testing.T) {
 	bandwidth := 50 * Bandwidth(initialMaxDatagramSize) * BytesPerSecond // 50 full-size packets per second
-	p := newPacer()
+	p := newPacer(initialMaxDatagramSize)
 	now := monotime.Now()
 	require.Zero(t, p.TimeUntilSend(bandwidth))
 	budget := p.Budget(now, bandwidth)
@@ -67,7 +67,7 @@ func TestPacerPacing(t *testing.T) {
 
 func TestPacerUpdatePacketSize(t *testing.T) {
 	const bandwidth = 50 * Bandwidth(initialMaxDatagramSize) * BytesPerSecond // 50 full-size packets per second
-	p := newPacer()
+	p := newPacer(initialMaxDatagramSize)
 
 	// consume the initial budget by sending packets
 	now := monotime.Now()
@@ -87,7 +87,7 @@ func TestPacerUpdatePacketSize(t *testing.T) {
 
 func TestPacerFastPacing(t *testing.T) {
 	const bandwidth = 10000 * Bandwidth(initialMaxDatagramSize) * BytesPerSecond // 10,000 full-size packets per second
-	p := newPacer()
+	p := newPacer(initialMaxDatagramSize)
 
 	// consume the initial budget by sending packets
 	now := monotime.Now()
@@ -112,7 +112,7 @@ func TestPacerFastPacing(t *testing.T) {
 
 func TestPacerNoOverflows(t *testing.T) {
 	const bandwidth Bandwidth = math.MaxUint64
-	p := newPacer()
+	p := newPacer(initialMaxDatagramSize)
 	now := monotime.Now()
 	p.SentPacket(now, initialMaxDatagramSize, bandwidth)
 	for range 100000 {
@@ -134,7 +134,7 @@ func TestPacerNoOverflows(t *testing.T) {
 
 func BenchmarkPacer(b *testing.B) {
 	const bandwidth = 50 * Bandwidth(initialMaxDatagramSize) * BytesPerSecond // 50 full-size packets per second
-	p := newPacer()
+	p := newPacer(initialMaxDatagramSize)
 
 	now := monotime.Now()
 

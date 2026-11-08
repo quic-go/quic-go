@@ -98,7 +98,7 @@ func newRenoSender(
 		largestSentAtLastCutback: protocol.InvalidPacketNumber,
 		congestionWindow:         initialCongestionWindow,
 		slowStartThreshold:       protocol.MaxByteCount,
-		pacer:                    newPacer(),
+		pacer:                    newPacer(initialMaxDatagramSize),
 		qlogger:                  qlogger,
 		maxDatagramSize:          initialMaxDatagramSize,
 	}
