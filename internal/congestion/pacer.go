@@ -22,9 +22,9 @@ type pacer struct {
 	lastSentTime     monotime.Time
 }
 
-func newPacer() *pacer {
+func newPacer(maxDatagramSize protocol.ByteCount) *pacer {
 	return &pacer{
-		maxDatagramSize: protocol.InitialPacketSize,
+		maxDatagramSize: maxDatagramSize,
 	}
 }
 
