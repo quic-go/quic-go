@@ -16,6 +16,5 @@ type SendAlgorithm interface {
 	OnPacketAcked(number protocol.PacketNumber, priorInFlight protocol.ByteCount)
 	OnCongestionEvent(number protocol.PacketNumber)
 	OnSpuriousLoss(number protocol.PacketNumber)
-	OnRetransmissionTimeout(packetsRetransmitted bool)
 	SetMaxDatagramSize(protocol.ByteCount)
 }

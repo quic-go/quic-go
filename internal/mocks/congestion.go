@@ -299,42 +299,6 @@ func (c *MockSendAlgorithmOnPacketSentCall) DoAndReturn(f func(monotime.Time, pr
 	return c
 }
 
-// OnRetransmissionTimeout mocks base method.
-func (m *MockSendAlgorithm) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnRetransmissionTimeout", packetsRetransmitted)
-}
-
-// OnRetransmissionTimeout indicates an expected call of OnRetransmissionTimeout.
-func (mr *MockSendAlgorithmMockRecorder) OnRetransmissionTimeout(packetsRetransmitted any) *MockSendAlgorithmOnRetransmissionTimeoutCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnRetransmissionTimeout", reflect.TypeOf((*MockSendAlgorithm)(nil).OnRetransmissionTimeout), packetsRetransmitted)
-	return &MockSendAlgorithmOnRetransmissionTimeoutCall{Call: call}
-}
-
-// MockSendAlgorithmOnRetransmissionTimeoutCall wrap *gomock.Call
-type MockSendAlgorithmOnRetransmissionTimeoutCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockSendAlgorithmOnRetransmissionTimeoutCall) Return() *MockSendAlgorithmOnRetransmissionTimeoutCall {
-	c.Call = c.Call.Return()
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockSendAlgorithmOnRetransmissionTimeoutCall) Do(f func(bool)) *MockSendAlgorithmOnRetransmissionTimeoutCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendAlgorithmOnRetransmissionTimeoutCall) DoAndReturn(f func(bool)) *MockSendAlgorithmOnRetransmissionTimeoutCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // OnSpuriousLoss mocks base method.
 func (m *MockSendAlgorithm) OnSpuriousLoss(number protocol.PacketNumber) {
 	m.ctrl.T.Helper()

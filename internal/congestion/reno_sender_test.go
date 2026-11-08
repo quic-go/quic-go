@@ -41,13 +41,13 @@ func newTestRenoSender() *testRenoSender {
 	}
 }
 
-func (s *testRenoSender) SendAvailableSendWindowLen(packetLength protocol.ByteCount) int {
+func (s *testRenoSender) SendAvailableSendWindow() int {
 	var packetsSent int
 	for s.sender.CanSend(s.bytesInFlight) {
-		s.sender.OnPacketSent(s.now, s.packetNumber, packetLength, true)
+		s.sender.OnPacketSent(s.now, s.packetNumber, maxDatagramSize, true)
 		s.packetNumber++
 		packetsSent++
-		s.bytesInFlight += packetLength
+		s.bytesInFlight += maxDatagramSize
 	}
 	return packetsSent
 }
@@ -63,25 +63,17 @@ func (s *testRenoSender) AckNPackets(n int) {
 	s.now = s.now.Add(time.Millisecond)
 }
 
-func (s *testRenoSender) LoseNPacketsLen(n int, packetLength protocol.ByteCount) {
+func (s *testRenoSender) LoseNPackets(n int) {
 	for range n {
 		s.ackedPacketNumber++
 		s.sender.OnCongestionEvent(s.ackedPacketNumber)
 	}
-	s.bytesInFlight -= protocol.ByteCount(n) * packetLength
+	s.bytesInFlight -= protocol.ByteCount(n) * maxDatagramSize
 }
 
 func (s *testRenoSender) LosePacket(number protocol.PacketNumber) {
 	s.sender.OnCongestionEvent(number)
 	s.bytesInFlight -= maxDatagramSize
-}
-
-func (s *testRenoSender) SendAvailableSendWindow() int {
-	return s.SendAvailableSendWindowLen(maxDatagramSize)
-}
-
-func (s *testRenoSender) LoseNPackets(n int) {
-	s.LoseNPacketsLen(n, maxDatagramSize)
 }
 
 func TestRenoSenderStartup(t *testing.T) {
@@ -206,7 +198,6 @@ func TestRenoSenderSlowStartPacketLoss(t *testing.T) {
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 
 	// We need to ack an entire window before we increase CWND by 1.
-	fmt.Println(numberOfPacketsInWindow)
 	sender.AckNPackets(int(numberOfPacketsInWindow) - 2)
 	sender.SendAvailableSendWindow()
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
@@ -215,12 +206,6 @@ func TestRenoSenderSlowStartPacketLoss(t *testing.T) {
 	sender.AckNPackets(1)
 	expectedSendWindow += maxDatagramSize
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
-
-	// Now RTO and ensure slow start gets reset.
-	require.True(t, sender.sender.hybridSlowStart.Started())
-	sender.sender.OnRetransmissionTimeout(true)
-	require.False(t, sender.sender.hybridSlowStart.Started())
-	require.Zero(t, sender.sender.undoState)
 }
 
 func TestRenoSenderSlowStartPacketLossPRR(t *testing.T) {
@@ -324,19 +309,6 @@ func TestRenoSenderSlowStartBurstPacketLossPRR(t *testing.T) {
 		sender.AckNPackets(1)
 		require.Equal(t, 1, sender.SendAvailableSendWindow())
 	}
-}
-
-func TestRenoSenderRTOCongestionWindow(t *testing.T) {
-	sender := newTestRenoSender()
-
-	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
-	require.Equal(t, protocol.MaxByteCount, sender.sender.slowStartThreshold)
-
-	// Expect the window to decrease to the minimum once the RTO fires
-	// and slow start threshold to be set to 1/2 of the CWND.
-	sender.sender.OnRetransmissionTimeout(true)
-	require.Equal(t, 2*maxDatagramSize, sender.sender.GetCongestionWindow())
-	require.Equal(t, 5*maxDatagramSize, sender.sender.slowStartThreshold)
 }
 
 func TestRenoSenderMultipleLossesInOneWindow(t *testing.T) {
