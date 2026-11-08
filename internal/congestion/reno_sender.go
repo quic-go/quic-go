@@ -51,10 +51,6 @@ type renoSender struct {
 	// Largest packet number sent when the latest CWND cutback occurred.
 	largestSentAtLastCutback protocol.PacketNumber
 
-	// Whether the last loss event caused us to exit slowstart.
-	// Used for stats collection of slowstartPacketsLost
-	lastCutbackExitedSlowstart bool
-
 	// Congestion window in bytes.
 	congestionWindow protocol.ByteCount
 
@@ -200,7 +196,6 @@ func (c *renoSender) OnCongestionEvent(packetNumber protocol.PacketNumber) {
 		numCongestionEvents:      1,
 	}
 
-	c.lastCutbackExitedSlowstart = c.InSlowStart()
 	c.maybeQlogStateChange(qlog.CongestionStateRecovery)
 
 	c.congestionWindow = protocol.ByteCount(float64(c.congestionWindow) * renoBeta)
@@ -301,18 +296,6 @@ func (c *renoSender) pacingRate() Bandwidth {
 	}
 	// Allow for RTT variations when filling the congestion window.
 	return c.BandwidthEstimate() * 5 / 4
-}
-
-// OnRetransmissionTimeout is called on an retransmission timeout
-func (c *renoSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
-	c.undoState.Reset()
-	if !packetsRetransmitted {
-		return
-	}
-	c.hybridSlowStart.Restart()
-	c.slowStartThreshold = c.congestionWindow / 2
-	c.congestionWindow = c.minCongestionWindow()
 }
 
 func (c *renoSender) maybeQlogStateChange(new qlog.CongestionState) {

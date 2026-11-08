@@ -101,12 +101,9 @@ func (s *HybridSlowStart) OnPacketAcked(ackedPacketNumber protocol.PacketNumber)
 	}
 }
 
-// Started returns true if started
-func (s *HybridSlowStart) Started() bool {
-	return s.started
-}
-
-// Restart the slow start phase
+// Restart the slow start phase.
+// Unused for now, but needed once we detect persistent congestion:
+// https://github.com/quic-go/quic-go/issues/1691
 func (s *HybridSlowStart) Restart() {
 	s.started = false
 	s.hystartFound = false
