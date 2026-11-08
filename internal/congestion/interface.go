@@ -12,7 +12,7 @@ type SendAlgorithm interface {
 	OnPacketSent(sentTime monotime.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool)
 	CanSend(bytesInFlight protocol.ByteCount) bool
 	MaybeExitSlowStart()
-	OnPacketAcked(number protocol.PacketNumber, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime monotime.Time)
+	OnPacketAcked(number protocol.PacketNumber, priorInFlight protocol.ByteCount)
 	OnCongestionEvent(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
 	OnSpuriousLoss(number protocol.PacketNumber)
 	OnRetransmissionTimeout(packetsRetransmitted bool)

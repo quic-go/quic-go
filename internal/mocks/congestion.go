@@ -304,15 +304,15 @@ func (c *MockSendAlgorithmWithDebugInfosOnCongestionEventCall) DoAndReturn(f fun
 }
 
 // OnPacketAcked mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) OnPacketAcked(number protocol.PacketNumber, ackedBytes, priorInFlight protocol.ByteCount, eventTime monotime.Time) {
+func (m *MockSendAlgorithmWithDebugInfos) OnPacketAcked(number protocol.PacketNumber, priorInFlight protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnPacketAcked", number, ackedBytes, priorInFlight, eventTime)
+	m.ctrl.Call(m, "OnPacketAcked", number, priorInFlight)
 }
 
 // OnPacketAcked indicates an expected call of OnPacketAcked.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketAcked(number, ackedBytes, priorInFlight, eventTime any) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnPacketAcked(number, priorInFlight any) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketAcked), number, ackedBytes, priorInFlight, eventTime)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnPacketAcked), number, priorInFlight)
 	return &MockSendAlgorithmWithDebugInfosOnPacketAckedCall{Call: call}
 }
 
@@ -328,13 +328,13 @@ func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) Return() *MockSendAlg
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) Do(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount, monotime.Time)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) Do(f func(protocol.PacketNumber, protocol.ByteCount)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount, monotime.Time)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
+func (c *MockSendAlgorithmWithDebugInfosOnPacketAckedCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ByteCount)) *MockSendAlgorithmWithDebugInfosOnPacketAckedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
