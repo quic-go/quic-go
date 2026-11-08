@@ -18,21 +18,11 @@ const (
 	defaultWindowTCP               = protocol.ByteCount(initialCongestionWindowPackets) * maxDatagramSize
 )
 
-type mockClock monotime.Time
-
-func (c *mockClock) Now() monotime.Time {
-	return monotime.Time(*c)
-}
-
-func (c *mockClock) Advance(d time.Duration) {
-	*c = mockClock(monotime.Time(*c).Add(d))
-}
-
 const MaxCongestionWindow = 200 * maxDatagramSize
 
 type testRenoSender struct {
 	sender            *renoSender
-	clock             *mockClock
+	now               monotime.Time
 	rttStats          *utils.RTTStats
 	bytesInFlight     protocol.ByteCount
 	packetNumber      protocol.PacketNumber
@@ -40,10 +30,8 @@ type testRenoSender struct {
 }
 
 func newTestRenoSender() *testRenoSender {
-	var clock mockClock
 	rttStats := utils.RTTStats{}
 	return &testRenoSender{
-		clock:        &clock,
 		rttStats:     &rttStats,
 		packetNumber: 1,
 		sender: newRenoSender(
@@ -59,7 +47,7 @@ func newTestRenoSender() *testRenoSender {
 func (s *testRenoSender) SendAvailableSendWindowLen(packetLength protocol.ByteCount) int {
 	var packetsSent int
 	for s.sender.CanSend(s.bytesInFlight) {
-		s.sender.OnPacketSent(s.clock.Now(), s.bytesInFlight, s.packetNumber, packetLength, true)
+		s.sender.OnPacketSent(s.now, s.bytesInFlight, s.packetNumber, packetLength, true)
 		s.packetNumber++
 		packetsSent++
 		s.bytesInFlight += packetLength
@@ -75,7 +63,7 @@ func (s *testRenoSender) AckNPackets(n int) {
 		s.sender.OnPacketAcked(s.ackedPacketNumber, s.bytesInFlight)
 	}
 	s.bytesInFlight -= protocol.ByteCount(n) * maxDatagramSize
-	s.clock.Advance(time.Millisecond)
+	s.now = s.now.Add(time.Millisecond)
 }
 
 func (s *testRenoSender) LoseNPacketsLen(n int, packetLength protocol.ByteCount) {
@@ -122,7 +110,7 @@ func TestRenoSenderPacing(t *testing.T) {
 
 	// Set up RTT and advance clock
 	sender.rttStats.UpdateRTT(10*time.Millisecond, 0)
-	sender.clock.Advance(time.Hour)
+	sender.now = sender.now.Add(time.Hour)
 
 	// Fill the send window with data, then verify that we can't send.
 	sender.SendAvailableSendWindow()
@@ -131,27 +119,26 @@ func TestRenoSenderPacing(t *testing.T) {
 	// Check that we can't send immediately due to pacing
 	delay := sender.sender.TimeUntilSend(sender.bytesInFlight)
 	require.NotZero(t, delay)
-	require.Less(t, delay.Sub(monotime.Time(*sender.clock)), time.Hour)
+	require.Less(t, delay.Sub(sender.now), time.Hour)
 }
 
 func TestRenoSenderPacingRate(t *testing.T) {
 	const rtt = 100 * time.Millisecond
-	var clock mockClock
-	clock.Advance(time.Second)
+	now := monotime.Now()
 	rttStats := utils.NewRTTStats()
 	rttStats.UpdateRTT(rtt, 0)
 	sender := NewRenoSender(rttStats, maxDatagramSize, nil)
 
 	// Exhaust the burst allowance before checking the pacing rate.
-	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(clock.Now()); pn++ {
-		sender.OnPacketSent(clock.Now(), 0, pn, maxDatagramSize, true)
+	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(now); pn++ {
+		sender.OnPacketSent(now, 0, pn, maxDatagramSize, true)
 	}
-	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend(0).Sub(clock.Now()))
+	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend(0).Sub(now))
 
 	sender.OnCongestionEvent(0, maxDatagramSize, sender.GetCongestionWindow())
 	require.False(t, sender.InSlowStart())
 	wantDelay := float64(rtt) * float64(maxDatagramSize) / (1.25 * float64(sender.GetCongestionWindow()))
-	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend(0).Sub(clock.Now())), float64(time.Microsecond))
+	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend(0).Sub(now)), float64(time.Microsecond))
 }
 
 func TestRenoSenderApplicationLimitedSlowStart(t *testing.T) {
@@ -225,7 +212,6 @@ func TestRenoSenderSlowStartPacketLoss(t *testing.T) {
 	fmt.Println(numberOfPacketsInWindow)
 	sender.AckNPackets(int(numberOfPacketsInWindow) - 2)
 	sender.SendAvailableSendWindow()
-	fmt.Println(sender.clock.Now())
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 
 	// Next ack should increase cwnd by 1.
