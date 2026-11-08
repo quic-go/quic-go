@@ -70,8 +70,9 @@ func TestHTTPSettings(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/settings", port), nil)
 		require.NoError(t, err)
 
-		_, err = tr.RoundTrip(req)
+		rsp, err := tr.RoundTrip(req)
 		require.NoError(t, err)
+		rsp.Body.Close()
 		var conn http3.Settingser
 		select {
 		case conn = <-connChan:

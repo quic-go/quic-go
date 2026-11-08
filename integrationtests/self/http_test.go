@@ -266,6 +266,7 @@ func TestContentLengthForSmallResponse(t *testing.T) {
 
 	resp, err := newHTTP3Client(t).Get(fmt.Sprintf("https://localhost:%d/small", port))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, "6", resp.Header.Get("Content-Length"))
 }
@@ -286,6 +287,7 @@ func TestHTTPHeaders(t *testing.T) {
 
 	resp, err := newHTTP3Client(t).Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, "bar", resp.Header.Get("foo"))
 	require.Equal(t, "ipsum", resp.Header.Get("lorem"))
@@ -337,6 +339,7 @@ func testHTTPHeaderSizeLimitServer(t *testing.T, hdr http.Header, limit int) (he
 
 	resp, err := cl.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusRequestHeaderFieldsTooLarge, resp.StatusCode)
 	require.False(t, handlerCalled)
 
@@ -518,6 +521,7 @@ func TestHTTPRequestTrailers(t *testing.T) {
 
 	resp, err := newHTTP3Client(t).Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	select {
@@ -696,6 +700,7 @@ func TestHTTPReestablishConnectionAfterDialError(t *testing.T) {
 	require.ErrorIs(t, err, assert.AnError)
 	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -860,6 +865,7 @@ func TestHTTPServeQUICConn(t *testing.T) {
 	cl := newHTTP3Client(t)
 	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", ln.Addr().(*net.UDPAddr).Port))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	require.NoError(t, cl.Transport.(io.Closer).Close())
@@ -903,6 +909,7 @@ func TestHTTPContextFromQUIC(t *testing.T) {
 	cl := newHTTP3Client(t)
 	resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/quic-conn-context", conn.LocalAddr().(*net.UDPAddr).Port))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	select {
@@ -938,6 +945,7 @@ func TestHTTPConnContext(t *testing.T) {
 
 	resp, err := newHTTP3Client(t).Get(fmt.Sprintf("https://localhost:%d/context", port))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	select {
@@ -970,6 +978,7 @@ func TestHTTPRemoteAddrContextKey(t *testing.T) {
 
 	resp, err := newHTTP3Client(t).Get(fmt.Sprintf("https://localhost:%d/remote-addr", port))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	select {
@@ -1011,6 +1020,7 @@ func TestHTTPStreamedRequests(t *testing.T) {
 	client := newHTTP3Client(t)
 	rsp, err := client.Do(req)
 	require.NoError(t, err)
+	defer rsp.Body.Close()
 	require.Equal(t, 200, rsp.StatusCode)
 
 	reader := bufio.NewReader(rsp.Body)
@@ -1355,6 +1365,7 @@ func testHTTPRequestAfterGracefulShutdown(t *testing.T, setGetBody bool) {
 	// first request to establish the connection
 	resp, err := cl.Get(fmt.Sprintf("https://%s/", proxy.LocalAddr()))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// If the body is a strings.Reader, http.NewRequest automatically sets the GetBody callback.
