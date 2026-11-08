@@ -67,9 +67,6 @@ type renoSender struct {
 	// Retained after recovery, since spurious losses can be reported later.
 	undoState renoUndoState
 
-	initialCongestionWindow    protocol.ByteCount
-	initialMaxCongestionWindow protocol.ByteCount
-
 	maxDatagramSize protocol.ByteCount
 
 	lastState qlog.CongestionState
@@ -91,7 +88,6 @@ func NewRenoSender(
 		rttStats,
 		initialMaxDatagramSize,
 		initialCongestionWindow*initialMaxDatagramSize,
-		protocol.MaxCongestionWindowPackets*initialMaxDatagramSize,
 		qlogger,
 	)
 }
@@ -99,22 +95,19 @@ func NewRenoSender(
 func newRenoSender(
 	rttStats *utils.RTTStats,
 	initialMaxDatagramSize,
-	initialCongestionWindow,
-	initialMaxCongestionWindow protocol.ByteCount,
+	initialCongestionWindow protocol.ByteCount,
 	qlogger qlogwriter.Recorder,
 ) *renoSender {
 	c := &renoSender{
-		rttStats:                   rttStats,
-		largestSentPacketNumber:    protocol.InvalidPacketNumber,
-		largestAckedPacketNumber:   protocol.InvalidPacketNumber,
-		largestSentAtLastCutback:   protocol.InvalidPacketNumber,
-		initialCongestionWindow:    initialCongestionWindow,
-		initialMaxCongestionWindow: initialMaxCongestionWindow,
-		congestionWindow:           initialCongestionWindow,
-		slowStartThreshold:         protocol.MaxByteCount,
-		pacer:                      newPacer(),
-		qlogger:                    qlogger,
-		maxDatagramSize:            initialMaxDatagramSize,
+		rttStats:                 rttStats,
+		largestSentPacketNumber:  protocol.InvalidPacketNumber,
+		largestAckedPacketNumber: protocol.InvalidPacketNumber,
+		largestSentAtLastCutback: protocol.InvalidPacketNumber,
+		congestionWindow:         initialCongestionWindow,
+		slowStartThreshold:       protocol.MaxByteCount,
+		pacer:                    newPacer(),
+		qlogger:                  qlogger,
+		maxDatagramSize:          initialMaxDatagramSize,
 	}
 	if c.qlogger != nil {
 		c.lastState = qlog.CongestionStateSlowStart
@@ -324,19 +317,6 @@ func (c *renoSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 	c.hybridSlowStart.Restart()
 	c.slowStartThreshold = c.congestionWindow / 2
 	c.congestionWindow = c.minCongestionWindow()
-}
-
-// OnConnectionMigration is called when the connection is migrated (?)
-func (c *renoSender) OnConnectionMigration() {
-	c.hybridSlowStart.Restart()
-	c.largestSentPacketNumber = protocol.InvalidPacketNumber
-	c.largestAckedPacketNumber = protocol.InvalidPacketNumber
-	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
-	c.undoState.Reset()
-	c.lastCutbackExitedSlowstart = false
-	c.numAckedPackets = 0
-	c.congestionWindow = c.initialCongestionWindow
-	c.slowStartThreshold = c.initialMaxCongestionWindow
 }
 
 func (c *renoSender) maybeQlogStateChange(new qlog.CongestionState) {

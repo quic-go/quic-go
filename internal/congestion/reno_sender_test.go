@@ -18,8 +18,6 @@ const (
 	defaultWindowTCP               = protocol.ByteCount(initialCongestionWindowPackets) * maxDatagramSize
 )
 
-const MaxCongestionWindow = 200 * maxDatagramSize
-
 type testRenoSender struct {
 	sender            *renoSender
 	now               monotime.Time
@@ -38,7 +36,6 @@ func newTestRenoSender() *testRenoSender {
 			&rttStats,
 			protocol.InitialPacketSize,
 			initialCongestionWindowPackets*maxDatagramSize,
-			MaxCongestionWindow,
 			nil,
 		),
 	}
@@ -484,41 +481,6 @@ func TestRenoSenderNoPRR(t *testing.T) {
 	require.Equal(t, windowInPackets, numSent)
 }
 
-func TestRenoSenderResetAfterConnectionMigration(t *testing.T) {
-	sender := newTestRenoSender()
-
-	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
-	require.Equal(t, protocol.MaxByteCount, sender.sender.slowStartThreshold)
-
-	// Starts with slow start.
-	const numberOfAcks = 10
-	for range numberOfAcks {
-		// Send our full send window.
-		sender.SendAvailableSendWindow()
-		sender.AckNPackets(2)
-	}
-	sender.SendAvailableSendWindow()
-	expectedSendWindow := defaultWindowTCP + (maxDatagramSize * 2 * numberOfAcks)
-	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
-
-	// Loses a packet to exit slow start.
-	sender.LoseNPackets(1)
-
-	// We should now have fallen out of slow start with a reduced window. Slow
-	// start threshold is also updated.
-	expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * renoBeta)
-	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
-	require.Equal(t, expectedSendWindow, sender.sender.slowStartThreshold)
-
-	// Resets cwnd and slow start threshold on connection migrations.
-	require.NotZero(t, sender.sender.undoState)
-	sender.sender.OnConnectionMigration()
-	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
-	require.Equal(t, MaxCongestionWindow, sender.sender.slowStartThreshold)
-	require.False(t, sender.sender.hybridSlowStart.Started())
-	require.Zero(t, sender.sender.undoState)
-}
-
 func TestRenoSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 	rttStats := utils.RTTStats{}
 	const initialMaxCongestionWindow = protocol.MaxCongestionWindowPackets * initialMaxDatagramSize
@@ -526,7 +488,6 @@ func TestRenoSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 		&rttStats,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
-		initialMaxCongestionWindow,
 		nil,
 	)
 
@@ -544,12 +505,10 @@ func TestRenoSenderMaximumPacketSizeReduction(t *testing.T) {
 
 func TestRenoSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 	rttStats := utils.RTTStats{}
-	const initialMaxCongestionWindow = protocol.MaxCongestionWindowPackets * initialMaxDatagramSize
 	sender := newRenoSender(
 		&rttStats,
 		protocol.InitialPacketSize,
 		initialCongestionWindowPackets*maxDatagramSize,
-		initialMaxCongestionWindow,
 		nil,
 	)
 	const packetSize = initialMaxDatagramSize + 100
