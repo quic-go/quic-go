@@ -47,7 +47,7 @@ func newTestRenoSender() *testRenoSender {
 func (s *testRenoSender) SendAvailableSendWindowLen(packetLength protocol.ByteCount) int {
 	var packetsSent int
 	for s.sender.CanSend(s.bytesInFlight) {
-		s.sender.OnPacketSent(s.now, s.bytesInFlight, s.packetNumber, packetLength, true)
+		s.sender.OnPacketSent(s.now, s.packetNumber, packetLength, true)
 		s.packetNumber++
 		packetsSent++
 		s.bytesInFlight += packetLength
@@ -69,13 +69,13 @@ func (s *testRenoSender) AckNPackets(n int) {
 func (s *testRenoSender) LoseNPacketsLen(n int, packetLength protocol.ByteCount) {
 	for range n {
 		s.ackedPacketNumber++
-		s.sender.OnCongestionEvent(s.ackedPacketNumber, packetLength, s.bytesInFlight)
+		s.sender.OnCongestionEvent(s.ackedPacketNumber)
 	}
 	s.bytesInFlight -= protocol.ByteCount(n) * packetLength
 }
 
 func (s *testRenoSender) LosePacket(number protocol.PacketNumber) {
-	s.sender.OnCongestionEvent(number, maxDatagramSize, s.bytesInFlight)
+	s.sender.OnCongestionEvent(number)
 	s.bytesInFlight -= maxDatagramSize
 }
 
@@ -94,7 +94,7 @@ func TestRenoSenderStartup(t *testing.T) {
 	require.Equal(t, defaultWindowTCP, sender.sender.GetCongestionWindow())
 
 	// Make sure we can send.
-	require.Zero(t, sender.sender.TimeUntilSend(0))
+	require.Zero(t, sender.sender.TimeUntilSend())
 	require.True(t, sender.sender.CanSend(sender.bytesInFlight))
 
 	// And that window is un-affected.
@@ -117,7 +117,7 @@ func TestRenoSenderPacing(t *testing.T) {
 	sender.AckNPackets(1)
 
 	// Check that we can't send immediately due to pacing
-	delay := sender.sender.TimeUntilSend(sender.bytesInFlight)
+	delay := sender.sender.TimeUntilSend()
 	require.NotZero(t, delay)
 	require.Less(t, delay.Sub(sender.now), time.Hour)
 }
@@ -131,14 +131,14 @@ func TestRenoSenderPacingRate(t *testing.T) {
 
 	// Exhaust the burst allowance before checking the pacing rate.
 	for pn := protocol.PacketNumber(0); sender.HasPacingBudget(now); pn++ {
-		sender.OnPacketSent(now, 0, pn, maxDatagramSize, true)
+		sender.OnPacketSent(now, pn, maxDatagramSize, true)
 	}
-	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend(0).Sub(now))
+	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend().Sub(now))
 
-	sender.OnCongestionEvent(0, maxDatagramSize, sender.GetCongestionWindow())
+	sender.OnCongestionEvent(0)
 	require.False(t, sender.InSlowStart())
 	wantDelay := float64(rtt) * float64(maxDatagramSize) / (1.25 * float64(sender.GetCongestionWindow()))
-	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend(0).Sub(now)), float64(time.Microsecond))
+	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend().Sub(now)), float64(time.Microsecond))
 }
 
 func TestRenoSenderApplicationLimitedSlowStart(t *testing.T) {
@@ -146,7 +146,7 @@ func TestRenoSenderApplicationLimitedSlowStart(t *testing.T) {
 
 	// At startup make sure we can send.
 	require.True(t, sender.sender.CanSend(0))
-	require.Zero(t, sender.sender.TimeUntilSend(0))
+	require.Zero(t, sender.sender.TimeUntilSend())
 
 	// Send exactly 10 packets and ensure the CWND ends at 14 packets.
 	const numberOfAcks = 5
@@ -166,7 +166,7 @@ func TestRenoSenderExponentialSlowStart(t *testing.T) {
 
 	// At startup make sure we can send.
 	require.True(t, sender.sender.CanSend(0))
-	require.Zero(t, sender.sender.TimeUntilSend(0))
+	require.Zero(t, sender.sender.TimeUntilSend())
 
 	const numberOfAcks = 20
 	for range numberOfAcks {
@@ -411,11 +411,11 @@ func TestRenoSenderSpuriousLossWithECN(t *testing.T) {
 			sender := newTestRenoSender()
 			sender.SendAvailableSendWindow()
 			if ecnFirst {
-				sender.sender.OnCongestionEvent(10, 0, sender.bytesInFlight)
+				sender.sender.OnCongestionEvent(10)
 			}
 			sender.LoseNPackets(1)
 			if !ecnFirst {
-				sender.sender.OnCongestionEvent(10, 0, sender.bytesInFlight)
+				sender.sender.OnCongestionEvent(10)
 			}
 			window := sender.sender.GetCongestionWindow()
 			sender.sender.OnSpuriousLoss(1)

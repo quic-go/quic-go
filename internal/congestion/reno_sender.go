@@ -126,7 +126,7 @@ func newRenoSender(
 }
 
 // TimeUntilSend returns when the next packet should be sent.
-func (c *renoSender) TimeUntilSend(_ protocol.ByteCount) monotime.Time {
+func (c *renoSender) TimeUntilSend() monotime.Time {
 	return c.pacer.TimeUntilSend(c.pacingRate())
 }
 
@@ -144,7 +144,6 @@ func (c *renoSender) minCongestionWindow() protocol.ByteCount {
 
 func (c *renoSender) OnPacketSent(
 	sentTime monotime.Time,
-	_ protocol.ByteCount,
 	packetNumber protocol.PacketNumber,
 	bytes protocol.ByteCount,
 	isRetransmittable bool,
@@ -193,7 +192,7 @@ func (c *renoSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, prio
 	}
 }
 
-func (c *renoSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lostBytes, priorInFlight protocol.ByteCount) {
+func (c *renoSender) OnCongestionEvent(packetNumber protocol.PacketNumber) {
 	// TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
 	// already sent should be treated as a single loss event, since it's expected.
 	if packetNumber <= c.largestSentAtLastCutback {
