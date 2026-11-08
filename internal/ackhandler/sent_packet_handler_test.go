@@ -1378,8 +1378,8 @@ func TestSentPacketHandlerCongestion(t *testing.T) {
 	gomock.InOrder(
 		cong.EXPECT().MaybeExitSlowStart(),
 		cong.EXPECT().OnCongestionEvent(pns[0], protocol.ByteCount(1000), protocol.ByteCount(5000)),
-		cong.EXPECT().OnPacketAcked(pns[2], protocol.ByteCount(1000), protocol.ByteCount(5000), ackTime),
-		cong.EXPECT().OnPacketAcked(pns[3], protocol.ByteCount(1000), protocol.ByteCount(5000), ackTime),
+		cong.EXPECT().OnPacketAcked(pns[2], protocol.ByteCount(5000)),
+		cong.EXPECT().OnPacketAcked(pns[3], protocol.ByteCount(5000)),
 	)
 	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pns[2], pns[3])}, protocol.EncryptionInitial, ackTime)
 	require.NoError(t, err)
@@ -1515,7 +1515,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	cong := mocks.NewMockSendAlgorithmWithDebugInfos(mockCtrl)
 	cong.EXPECT().GetCongestionWindow().AnyTimes()
 	cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	cong.EXPECT().OnPacketAcked(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	cong.EXPECT().OnPacketAcked(gomock.Any(), gomock.Any()).AnyTimes()
 	cong.EXPECT().MaybeExitSlowStart().AnyTimes()
 	ecnHandler := NewMockECNHandler(mockCtrl)
 	sph := NewSentPacketHandler(
