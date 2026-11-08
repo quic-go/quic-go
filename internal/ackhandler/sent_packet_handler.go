@@ -112,7 +112,7 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
-	congestion congestion.SendAlgorithmWithDebugInfos
+	congestion congestion.SendAlgorithm
 	rttStats   *utils.RTTStats
 	connStats  *utils.ConnectionStats
 

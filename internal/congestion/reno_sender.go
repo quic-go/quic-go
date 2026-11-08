@@ -73,10 +73,7 @@ type renoSender struct {
 	qlogger   qlogwriter.Recorder
 }
 
-var (
-	_ SendAlgorithm               = &renoSender{}
-	_ SendAlgorithmWithDebugInfos = &renoSender{}
-)
+var _ SendAlgorithm = &renoSender{}
 
 // NewRenoSender makes a new Reno sender
 func NewRenoSender(
