@@ -38,7 +38,7 @@ func (s *renoUndoState) Reset() {
 }
 
 type renoSender struct {
-	hybridSlowStart HybridSlowStart
+	hybridSlowStart hybridSlowStart
 	rttStats        *utils.RTTStats
 	pacer           *pacer
 
@@ -143,15 +143,15 @@ func (c *renoSender) OnPacketSent(
 }
 
 func (c *renoSender) CanSend(bytesInFlight protocol.ByteCount) bool {
-	return bytesInFlight < c.GetCongestionWindow()
+	return bytesInFlight < c.congestionWindow
 }
 
-func (c *renoSender) InRecovery() bool {
+func (c *renoSender) inRecovery() bool {
 	return c.largestAckedPacketNumber != protocol.InvalidPacketNumber && c.largestAckedPacketNumber <= c.largestSentAtLastCutback
 }
 
-func (c *renoSender) InSlowStart() bool {
-	return c.GetCongestionWindow() < c.slowStartThreshold
+func (c *renoSender) inSlowStart() bool {
+	return c.congestionWindow < c.slowStartThreshold
 }
 
 func (c *renoSender) GetCongestionWindow() protocol.ByteCount {
@@ -159,8 +159,8 @@ func (c *renoSender) GetCongestionWindow() protocol.ByteCount {
 }
 
 func (c *renoSender) MaybeExitSlowStart() {
-	if c.InSlowStart() &&
-		c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/c.maxDatagramSize) {
+	if c.inSlowStart() &&
+		c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.congestionWindow/c.maxDatagramSize) {
 		// exit slow start
 		c.slowStartThreshold = c.congestionWindow
 		c.maybeQlogStateChange(qlog.CongestionStateCongestionAvoidance)
@@ -169,11 +169,11 @@ func (c *renoSender) MaybeExitSlowStart() {
 
 func (c *renoSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, priorInFlight protocol.ByteCount) {
 	c.largestAckedPacketNumber = max(ackedPacketNumber, c.largestAckedPacketNumber)
-	if c.InRecovery() {
+	if c.inRecovery() {
 		return
 	}
 	c.maybeIncreaseCwnd(priorInFlight)
-	if c.InSlowStart() {
+	if c.inSlowStart() {
 		c.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
 	}
 }
@@ -233,9 +233,9 @@ func (c *renoSender) OnSpuriousLoss(packetNumber protocol.PacketNumber) {
 	c.numAckedPackets = state.numAckedPackets
 	c.largestSentAtLastCutback = state.largestSentAtLastCutback
 	switch {
-	case c.InRecovery():
+	case c.inRecovery():
 		c.maybeQlogStateChange(qlog.CongestionStateRecovery)
-	case c.InSlowStart():
+	case c.inSlowStart():
 		c.maybeQlogStateChange(qlog.CongestionStateSlowStart)
 	default:
 		c.maybeQlogStateChange(qlog.CongestionStateCongestionAvoidance)
@@ -254,7 +254,7 @@ func (c *renoSender) maybeIncreaseCwnd(priorInFlight protocol.ByteCount) {
 	if c.congestionWindow >= c.maxCongestionWindow() {
 		return
 	}
-	if c.InSlowStart() {
+	if c.inSlowStart() {
 		// TCP slow start, exponential growth, increase by one for each ACK.
 		c.congestionWindow += c.maxDatagramSize
 		c.maybeQlogStateChange(qlog.CongestionStateSlowStart)
@@ -270,32 +270,31 @@ func (c *renoSender) maybeIncreaseCwnd(priorInFlight protocol.ByteCount) {
 }
 
 func (c *renoSender) isCwndLimited(bytesInFlight protocol.ByteCount) bool {
-	congestionWindow := c.GetCongestionWindow()
-	if bytesInFlight >= congestionWindow {
+	if bytesInFlight >= c.congestionWindow {
 		return true
 	}
-	availableBytes := congestionWindow - bytesInFlight
-	slowStartLimited := c.InSlowStart() && bytesInFlight > congestionWindow/2
+	availableBytes := c.congestionWindow - bytesInFlight
+	slowStartLimited := c.inSlowStart() && bytesInFlight > c.congestionWindow/2
 	return slowStartLimited || availableBytes <= maxBurstPackets*c.maxDatagramSize
 }
 
-// BandwidthEstimate returns the current bandwidth estimate
-func (c *renoSender) BandwidthEstimate() Bandwidth {
+// bandwidthEstimate returns the current bandwidth estimate
+func (c *renoSender) bandwidthEstimate() bandwidth {
 	srtt := c.rttStats.SmoothedRTT()
 	if srtt == 0 {
 		// This should never happen, but if it does, avoid division by zero.
 		srtt = protocol.TimerGranularity
 	}
-	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
+	return bandwidthFromDelta(c.congestionWindow, srtt)
 }
 
-func (c *renoSender) pacingRate() Bandwidth {
-	if c.InSlowStart() {
+func (c *renoSender) pacingRate() bandwidth {
+	if c.inSlowStart() {
 		// Allow slow start to double the sending rate every RTT.
-		return 2 * c.BandwidthEstimate()
+		return 2 * c.bandwidthEstimate()
 	}
 	// Allow for RTT variations when filling the congestion window.
-	return c.BandwidthEstimate() * 5 / 4
+	return c.bandwidthEstimate() * 5 / 4
 }
 
 func (c *renoSender) maybeQlogStateChange(new qlog.CongestionState) {

@@ -10,39 +10,39 @@ import (
 )
 
 func TestHybridSlowStartSimpleCase(t *testing.T) {
-	slowStart := HybridSlowStart{}
+	slowStart := hybridSlowStart{}
 
 	packetNumber := protocol.PacketNumber(1)
 	endPacketNumber := protocol.PacketNumber(3)
-	slowStart.StartReceiveRound(endPacketNumber)
+	slowStart.startReceiveRound(endPacketNumber)
 
 	packetNumber++
-	require.False(t, slowStart.IsEndOfRound(packetNumber))
+	require.False(t, slowStart.isEndOfRound(packetNumber))
 
 	// Test duplicates.
-	require.False(t, slowStart.IsEndOfRound(packetNumber))
+	require.False(t, slowStart.isEndOfRound(packetNumber))
 
 	packetNumber++
-	require.False(t, slowStart.IsEndOfRound(packetNumber))
+	require.False(t, slowStart.isEndOfRound(packetNumber))
 	packetNumber++
-	require.True(t, slowStart.IsEndOfRound(packetNumber))
+	require.True(t, slowStart.isEndOfRound(packetNumber))
 
 	// Test without a new registered end_packet_number;
 	packetNumber++
-	require.True(t, slowStart.IsEndOfRound(packetNumber))
+	require.True(t, slowStart.isEndOfRound(packetNumber))
 
 	endPacketNumber = 20
-	slowStart.StartReceiveRound(endPacketNumber)
+	slowStart.startReceiveRound(endPacketNumber)
 	for packetNumber < endPacketNumber {
 		packetNumber++
-		require.False(t, slowStart.IsEndOfRound(packetNumber))
+		require.False(t, slowStart.isEndOfRound(packetNumber))
 	}
 	packetNumber++
-	require.True(t, slowStart.IsEndOfRound(packetNumber))
+	require.True(t, slowStart.isEndOfRound(packetNumber))
 }
 
 func TestHybridSlowStartWithDelay(t *testing.T) {
-	slowStart := HybridSlowStart{}
+	slowStart := hybridSlowStart{}
 	const rtt = 60 * time.Millisecond
 	// We expect to detect the increase at +1/8 of the RTT; hence at a typical
 	// RTT of 60ms the detection will happen at 67.5 ms.
@@ -50,7 +50,7 @@ func TestHybridSlowStartWithDelay(t *testing.T) {
 
 	endPacketNumber := protocol.PacketNumber(1)
 	endPacketNumber++
-	slowStart.StartReceiveRound(endPacketNumber)
+	slowStart.startReceiveRound(endPacketNumber)
 
 	// Will not trigger since our lowest RTT in our burst is the same as the long
 	// term RTT provided.
@@ -58,7 +58,7 @@ func TestHybridSlowStartWithDelay(t *testing.T) {
 		require.False(t, slowStart.ShouldExitSlowStart(rtt+time.Duration(n)*time.Millisecond, rtt, 100))
 	}
 	endPacketNumber++
-	slowStart.StartReceiveRound(endPacketNumber)
+	slowStart.startReceiveRound(endPacketNumber)
 	for n := 1; n < hybridStartMinSamples; n++ {
 		require.False(t, slowStart.ShouldExitSlowStart(rtt+(time.Duration(n)+10)*time.Millisecond, rtt, 100))
 	}
