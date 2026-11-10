@@ -21,7 +21,8 @@ func TestHTTPClientTrace(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusContinue)
 	})
-	port := startHTTPServer(t, mux)
+	// This test uses real sockets, since it traces the DNS lookup and dialing of the http3.Transport.
+	port := startHTTPServer(t, newUDPConnLocalhost(t), mux)
 
 	buf := make([]byte, 1)
 	type event struct {

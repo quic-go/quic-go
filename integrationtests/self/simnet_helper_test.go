@@ -1,11 +1,14 @@
 package self_test
 
 import (
+	"context"
+	"crypto/tls"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/testutils/simnet"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +33,65 @@ func newSimnetLinkWithRouter(t *testing.T, rtt time.Duration, router simnet.Rout
 		require.NoError(t, serverPacketConn.Close())
 		require.NoError(t, n.Close())
 	}
+}
+
+// testNetwork is a simulated network.
+// Every connection gets its own 127.0.0.1 address.
+type testNetwork struct {
+	simnet   simnet.Simnet
+	settings simnet.NodeBiDiLinkSettings
+
+	mx    sync.Mutex
+	conns []*simnet.SimConn
+}
+
+func newTestNetwork(t *testing.T) *testNetwork {
+	return newTestNetworkWithSettings(t, simnet.NodeBiDiLinkSettings{})
+}
+
+func newTestNetworkWithSettings(t *testing.T, settings simnet.NodeBiDiLinkSettings) *testNetwork {
+	n := &testNetwork{
+		simnet:   simnet.Simnet{Router: &simnet.PerfectRouter{}},
+		settings: settings,
+	}
+	t.Cleanup(func() { require.NoError(t, n.Close()) })
+	return n
+}
+
+func (n *testNetwork) NewConn() *simnet.SimConn {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	c := n.simnet.NewEndpoint(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 10000 + len(n.conns)}, n.settings)
+	n.conns = append(n.conns, c)
+	return c
+}
+
+// DialEarly dials from a new connection.
+// It can be used as the http3.Transport's Dial callback.
+func (n *testNetwork) DialEarly(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	if host == "localhost" {
+		host = "127.0.0.1"
+	}
+	udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, port))
+	if err != nil {
+		return nil, err
+	}
+	return quic.DialEarly(ctx, n.NewConn(), udpAddr, tlsConf, conf)
+}
+
+func (n *testNetwork) Close() error {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	for _, c := range n.conns {
+		c.Close()
+	}
+	return n.simnet.Close()
 }
 
 type droppingRouter struct {

@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
@@ -41,26 +43,37 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 	h2Transport.DisableCompression = true
 	h2Transport.ForceAttemptHTTP2 = true
 
-	h3PacketConn := newUDPConnLocalhost(t)
-	h3Server := &http3.Server{Handler: handler, TLSConfig: getTLSConfig()}
-	h3ServerErr := make(chan error, 1)
-	go func() { h3ServerErr <- h3Server.Serve(h3PacketConn) }()
-	t.Cleanup(func() {
-		require.NoError(t, h3Server.Close())
-		require.ErrorIs(t, <-h3ServerErr, http.ErrServerClosed)
-	})
-	h3TLSConfig := getTLSClientConfig()
-	h3TLSConfig.NextProtos = []string{http3.NextProtoH3}
-	h3Conn, err := quic.Dial(
-		t.Context(),
-		newUDPConnLocalhost(t),
-		h3PacketConn.LocalAddr(),
-		h3TLSConfig,
-		getQuicConfig(nil),
-	)
-	require.NoError(t, err)
-	defer h3Conn.CloseWithError(0, "")
-	h3Client := &http.Client{Transport: (&http3.Transport{DisableCompression: true}).NewClientConn(h3Conn)}
+	// The HTTP/2 server uses real sockets, so only HTTP/3 runs in a bubble.
+	doHTTP3Request := func(t *testing.T, req *http.Request) *http.Response {
+		var resp *http.Response
+		synctest.Test(t, func(t *testing.T) {
+			n := newTestNetwork(t)
+			h3PacketConn := n.NewConn()
+			h3Server := &http3.Server{Handler: handler, TLSConfig: getTLSConfig()}
+			h3ServerErr := make(chan error, 1)
+			go func() { h3ServerErr <- h3Server.Serve(h3PacketConn) }()
+			t.Cleanup(func() {
+				require.NoError(t, h3Server.Close())
+				require.ErrorIs(t, <-h3ServerErr, http.ErrServerClosed)
+			})
+			h3TLSConfig := getTLSClientConfig()
+			h3TLSConfig.NextProtos = []string{http3.NextProtoH3}
+			h3Conn, err := quic.Dial(
+				context.Background(),
+				n.NewConn(),
+				h3PacketConn.LocalAddr(),
+				h3TLSConfig,
+				getQuicConfig(nil),
+			)
+			require.NoError(t, err)
+			defer h3Conn.CloseWithError(0, "")
+			h3Client := &http.Client{Transport: (&http3.Transport{DisableCompression: true}).NewClientConn(h3Conn)}
+			resp, err = h3Client.Do(req.Clone(context.Background()))
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+		})
+		return resp
+	}
 
 	// Cover origin, asterisk and authority request-target forms, URL parsing
 	// edge cases, host authorities, body lengths and trailers.
@@ -215,10 +228,8 @@ func TestHTTPServerRequestParsing(t *testing.T) {
 			if tc.body != "" {
 				request.Body = io.NopCloser(strings.NewReader(tc.body))
 			}
-			resp, err = h3Client.Do(request.Clone(t.Context()))
-			require.NoError(t, err)
+			resp = doHTTP3Request(t, request)
 			h3Request := <-requests
-			require.NoError(t, resp.Body.Close())
 			require.Equal(t, 3, resp.ProtoMajor)
 			require.Equal(t, h2Status, resp.StatusCode)
 

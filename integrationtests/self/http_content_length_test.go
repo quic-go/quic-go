@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,7 +96,7 @@ func TestHTTPResponseContentLength(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			do := func(cl *http.Client, url string) (*http.Response, []byte, error) {
+			do := func(t *testing.T, cl *http.Client, url string) (*http.Response, []byte, error) {
 				req, err := http.NewRequest(tc.method, url, nil)
 				require.NoError(t, err)
 				resp, err := cl.Do(req)
@@ -105,10 +106,17 @@ func TestHTTPResponseContentLength(t *testing.T) {
 				return resp, body, err
 			}
 
-			mux := http.NewServeMux()
-			mux.Handle("/", tc.handler)
-			port := startHTTPServer(t, mux)
-			h3Resp, h3Body, h3Err := do(newHTTP3Client(t), fmt.Sprintf("https://localhost:%d", port))
+			// The HTTP/1.1 and HTTP/2 servers use real sockets, so only HTTP/3 runs in a bubble.
+			var h3Resp *http.Response
+			var h3Body []byte
+			var h3Err error
+			synctest.Test(t, func(t *testing.T) {
+				n := newTestNetwork(t)
+				mux := http.NewServeMux()
+				mux.Handle("/", tc.handler)
+				port := startHTTPServer(t, n.NewConn(), mux)
+				h3Resp, h3Body, h3Err = do(t, newHTTP3Client(t, n), fmt.Sprintf("https://localhost:%d", port))
+			})
 
 			for _, h2 := range []bool{false, true} {
 				if h2 && tc.skipHTTP2 {
@@ -118,7 +126,7 @@ func TestHTTPResponseContentLength(t *testing.T) {
 				s.EnableHTTP2 = h2
 				s.StartTLS()
 				t.Cleanup(s.Close)
-				resp, body, err := do(s.Client(), s.URL)
+				resp, body, err := do(t, s.Client(), s.URL)
 
 				assert.Equal(t, resp.StatusCode, h3Resp.StatusCode, resp.Proto)
 				assert.Equal(t, resp.Header["Content-Length"], h3Resp.Header["Content-Length"], resp.Proto)

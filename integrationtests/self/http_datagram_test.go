@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -19,80 +21,90 @@ import (
 )
 
 func TestHTTPSettings(t *testing.T) {
-	mux := http.NewServeMux()
-	port := startHTTPServer(t, mux)
-
 	t.Run("server settings", func(t *testing.T) {
-		tlsConf := tlsClientConfigWithoutServerName.Clone()
-		tlsConf.NextProtos = []string{http3.NextProtoH3}
-		conn, err := quic.Dial(
-			context.Background(),
-			newUDPConnLocalhost(t),
-			&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
-			tlsConf,
-			getQuicConfig(nil),
-		)
-		require.NoError(t, err)
-		defer conn.CloseWithError(0, "")
-		var tr http3.Transport
-		cc := tr.NewClientConn(conn)
+		synctest.Test(t, func(t *testing.T) {
+			n := newTestNetwork(t)
+			mux := http.NewServeMux()
+			port := startHTTPServer(t, n.NewConn(), mux)
 
-		select {
-		case <-cc.ReceivedSettings():
-		case <-time.After(time.Second):
-			t.Fatal("didn't receive HTTP/3 settings")
-		}
+			tlsConf := tlsClientConfigWithoutServerName.Clone()
+			tlsConf.NextProtos = []string{http3.NextProtoH3}
+			conn, err := quic.Dial(
+				context.Background(),
+				n.NewConn(),
+				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
+				tlsConf,
+				getQuicConfig(nil),
+			)
+			require.NoError(t, err)
+			defer conn.CloseWithError(0, "")
+			var tr http3.Transport
+			cc := tr.NewClientConn(conn)
 
-		settings := cc.Settings()
-		require.True(t, settings.EnableExtendedConnect)
-		require.False(t, settings.EnableDatagrams)
-		require.Empty(t, settings.Other)
+			select {
+			case <-cc.ReceivedSettings():
+			case <-time.After(time.Second):
+				t.Fatal("didn't receive HTTP/3 settings")
+			}
+
+			settings := cc.Settings()
+			require.True(t, settings.EnableExtendedConnect)
+			require.False(t, settings.EnableDatagrams)
+			require.Empty(t, settings.Other)
+		})
 	})
 
 	t.Run("client settings", func(t *testing.T) {
-		connChan := make(chan http3.Settingser, 1)
-		mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
-			connChan <- w.(http3.Settingser)
-			w.WriteHeader(http.StatusOK)
+		synctest.Test(t, func(t *testing.T) {
+			n := newTestNetwork(t)
+			mux := http.NewServeMux()
+			port := startHTTPServer(t, n.NewConn(), mux)
+
+			connChan := make(chan http3.Settingser, 1)
+			mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
+				connChan <- w.(http3.Settingser)
+				w.WriteHeader(http.StatusOK)
+			})
+
+			tr := &http3.Transport{
+				TLSClientConfig: getTLSClientConfigWithoutServerName(),
+				QUICConfig: getQuicConfig(&quic.Config{
+					MaxIdleTimeout:  10 * time.Second,
+					EnableDatagrams: true,
+				}),
+				EnableDatagrams:    true,
+				AdditionalSettings: map[uint64]uint64{1337: 42},
+				Dial:               n.DialEarly,
+			}
+			defer tr.Close()
+			req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/settings", port), nil)
+			require.NoError(t, err)
+
+			rsp, err := tr.RoundTrip(req)
+			require.NoError(t, err)
+			rsp.Body.Close()
+			var conn http3.Settingser
+			select {
+			case conn = <-connChan:
+			case <-time.After(time.Second):
+				t.Fatal("didn't receive HTTP/3 connection")
+			}
+
+			select {
+			case <-conn.ReceivedSettings():
+			case <-time.After(time.Second):
+				t.Fatal("didn't receive HTTP/3 settings")
+			}
+			settings := conn.Settings()
+			require.NotNil(t, settings)
+			require.True(t, settings.EnableDatagrams)
+			require.False(t, settings.EnableExtendedConnect)
+			require.Equal(t, uint64(42), settings.Other[1337])
 		})
-
-		tr := &http3.Transport{
-			TLSClientConfig: getTLSClientConfigWithoutServerName(),
-			QUICConfig: getQuicConfig(&quic.Config{
-				MaxIdleTimeout:  10 * time.Second,
-				EnableDatagrams: true,
-			}),
-			EnableDatagrams:    true,
-			AdditionalSettings: map[uint64]uint64{1337: 42},
-		}
-		addDialCallback(t, tr)
-		defer tr.Close()
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://localhost:%d/settings", port), nil)
-		require.NoError(t, err)
-
-		_, err = tr.RoundTrip(req)
-		require.NoError(t, err)
-		var conn http3.Settingser
-		select {
-		case conn = <-connChan:
-		case <-time.After(time.Second):
-			t.Fatal("didn't receive HTTP/3 connection")
-		}
-
-		select {
-		case <-conn.ReceivedSettings():
-		case <-time.After(time.Second):
-			t.Fatal("didn't receive HTTP/3 settings")
-		}
-		settings := conn.Settings()
-		require.NotNil(t, settings)
-		require.True(t, settings.EnableDatagrams)
-		require.False(t, settings.EnableExtendedConnect)
-		require.Equal(t, uint64(42), settings.Other[1337])
 	})
 }
 
-func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) *http3.RequestStream {
+func dialAndOpenHTTPDatagramStream(t *testing.T, n *testNetwork, addr string) *http3.RequestStream {
 	t.Helper()
 
 	u, err := url.Parse(addr)
@@ -102,12 +114,12 @@ func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) *http3.RequestStre
 	tlsConf.NextProtos = []string{http3.NextProtoH3}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	serverAddr, err := net.ResolveUDPAddr("udp4", u.Host)
+	port, err := strconv.Atoi(u.Port())
 	require.NoError(t, err)
 	conn, err := quic.Dial(
 		ctx,
-		newUDPConnLocalhost(t),
-		serverAddr,
+		n.NewConn(),
+		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
 		tlsConf,
 		getQuicConfig(&quic.Config{EnableDatagrams: true}),
 	)
@@ -135,202 +147,207 @@ func dialAndOpenHTTPDatagramStream(t *testing.T, addr string) *http3.RequestStre
 }
 
 func TestHTTPDatagrams(t *testing.T) {
-	errChan := make(chan error, 1)
-	const num = 5
-	datagramChan := make(chan struct{}, num)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodConnect {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		s := w.(http3.Settingser)
-		select {
-		case <-s.ReceivedSettings():
-		case <-time.After(time.Second):
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if !s.Settings().EnableDatagrams {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+	synctest.Test(t, func(t *testing.T) {
+		n := newTestNetwork(t)
+		errChan := make(chan error, 1)
+		const num = 5
+		datagramChan := make(chan struct{}, num)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodConnect {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			s := w.(http3.Settingser)
+			select {
+			case <-s.ReceivedSettings():
+			case <-time.After(time.Second):
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if !s.Settings().EnableDatagrams {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
 
-		str, err := w.(http3.HTTPStreamer).HTTPStream()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
-
-		for {
-			if _, err := str.ReceiveDatagram(context.Background()); err != nil {
+			str, err := w.(http3.HTTPStreamer).HTTPStream()
+			if err != nil {
 				errChan <- err
 				return
 			}
-			datagramChan <- struct{}{}
+			go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
+
+			for {
+				if _, err := str.ReceiveDatagram(context.Background()); err != nil {
+					errChan <- err
+					return
+				}
+				datagramChan <- struct{}{}
+			}
+		})
+
+		port := startHTTPServer(t, n.NewConn(), mux, func(s *http3.Server) { s.EnableDatagrams = true })
+		str := dialAndOpenHTTPDatagramStream(t, n, fmt.Sprintf("https://localhost:%d/datagrams", port))
+
+		for i := range num {
+			b := make([]byte, 8)
+			binary.BigEndian.PutUint64(b, uint64(i))
+			require.NoError(t, str.SendDatagram(bytes.Repeat(b, 100)))
+		}
+		var count int
+	loop:
+		for {
+			select {
+			case <-datagramChan:
+				count++
+				if count >= num*4/5 {
+					break loop
+				}
+			case err := <-errChan:
+				t.Fatalf("receiving datagrams failed: %s", err)
+			case <-time.After(time.Second):
+				t.Fatal("timeout")
+			}
+		}
+		str.CancelWrite(42)
+
+		select {
+		case err := <-errChan:
+			require.ErrorIs(t, err, &http3.Error{ErrorCode: 42, Remote: true})
+		case <-time.After(time.Second):
+			t.Fatal("didn't receive error")
 		}
 	})
-
-	port := startHTTPServer(t, mux, func(s *http3.Server) { s.EnableDatagrams = true })
-	str := dialAndOpenHTTPDatagramStream(t, fmt.Sprintf("https://localhost:%d/datagrams", port))
-
-	for i := range num {
-		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(i))
-		require.NoError(t, str.SendDatagram(bytes.Repeat(b, 100)))
-	}
-	var count int
-loop:
-	for {
-		select {
-		case <-datagramChan:
-			count++
-			if count >= num*4/5 {
-				break loop
-			}
-		case err := <-errChan:
-			t.Fatalf("receiving datagrams failed: %s", err)
-		case <-time.After(time.Second):
-			t.Fatal("timeout")
-		}
-	}
-	str.CancelWrite(42)
-
-	select {
-	case err := <-errChan:
-		require.ErrorIs(t, err, &http3.Error{ErrorCode: 42, Remote: true})
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive error")
-	}
 }
 
 func TestHTTPDatagramClose(t *testing.T) {
-	errChan := make(chan error, 1)
-	datagramChan := make(chan []byte, 1)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
-		s := w.(http3.Settingser)
-		select {
-		case <-s.ReceivedSettings():
-		case <-time.After(time.Second):
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if !s.Settings().EnableDatagrams {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+	synctest.Test(t, func(t *testing.T) {
+		n := newTestNetwork(t)
+		errChan := make(chan error, 1)
+		datagramChan := make(chan []byte, 1)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
+			s := w.(http3.Settingser)
+			select {
+			case <-s.ReceivedSettings():
+			case <-time.After(time.Second):
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if !s.Settings().EnableDatagrams {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
 
-		str, err := w.(http3.HTTPStreamer).HTTPStream()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
-
-		for {
-			data, err := str.ReceiveDatagram(context.Background())
+			str, err := w.(http3.HTTPStreamer).HTTPStream()
 			if err != nil {
 				errChan <- err
 				return
 			}
-			datagramChan <- data
+			go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
+
+			for {
+				data, err := str.ReceiveDatagram(context.Background())
+				if err != nil {
+					errChan <- err
+					return
+				}
+				datagramChan <- data
+			}
+		})
+
+		port := startHTTPServer(t, n.NewConn(), mux, func(s *http3.Server) { s.EnableDatagrams = true })
+		str := dialAndOpenHTTPDatagramStream(t, n, fmt.Sprintf("https://localhost:%d/datagrams", port))
+		go str.Read([]byte{0})
+
+		require.NoError(t, str.SendDatagram([]byte("foo")))
+		select {
+		case data := <-datagramChan:
+			require.Equal(t, []byte("foo"), data)
+		case <-time.After(time.Second):
+			t.Fatal("didn't receive datagram")
 		}
+		// signal that we're done sending
+		str.Close()
+
+		var resetErr error
+		select {
+		case resetErr = <-errChan:
+		case <-time.After(time.Second):
+			t.Fatal("didn't receive error")
+		}
+		require.ErrorIs(t, resetErr, io.EOF)
+
+		// make sure we can't send anymore
+		require.ErrorIs(t, context.Cause(str.Context()), quic.ErrStreamClosed)
+		_, err := str.Write([]byte("foo"))
+		require.ErrorIs(t, err, quic.ErrStreamClosed)
+		require.ErrorIs(t, str.SendDatagram([]byte("foo")), quic.ErrStreamClosed)
 	})
-
-	port := startHTTPServer(t, mux, func(s *http3.Server) { s.EnableDatagrams = true })
-	str := dialAndOpenHTTPDatagramStream(t, fmt.Sprintf("https://localhost:%d/datagrams", port))
-	go str.Read([]byte{0})
-
-	require.NoError(t, str.SendDatagram([]byte("foo")))
-	select {
-	case data := <-datagramChan:
-		require.Equal(t, []byte("foo"), data)
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive datagram")
-	}
-	// signal that we're done sending
-	str.Close()
-
-	var resetErr error
-	select {
-	case resetErr = <-errChan:
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive error")
-	}
-	require.ErrorIs(t, resetErr, io.EOF)
-
-	// make sure we can't send anymore
-	require.ErrorIs(t, context.Cause(str.Context()), quic.ErrStreamClosed)
-	_, err := str.Write([]byte("foo"))
-	require.ErrorIs(t, err, quic.ErrStreamClosed)
-	require.ErrorIs(t, str.SendDatagram([]byte("foo")), quic.ErrStreamClosed)
 }
 
 func TestHTTPDatagramStreamReset(t *testing.T) {
-	errChan := make(chan error, 1)
-	datagramChan := make(chan []byte, 1)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
-		s := w.(http3.Settingser)
-		select {
-		case <-s.ReceivedSettings():
-		case <-time.After(time.Second):
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if !s.Settings().EnableDatagrams {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+	synctest.Test(t, func(t *testing.T) {
+		n := newTestNetwork(t)
+		errChan := make(chan error, 1)
+		datagramChan := make(chan []byte, 1)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/datagrams", func(w http.ResponseWriter, r *http.Request) {
+			s := w.(http3.Settingser)
+			select {
+			case <-s.ReceivedSettings():
+			case <-time.After(time.Second):
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if !s.Settings().EnableDatagrams {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
 
-		str, err := w.(http3.HTTPStreamer).HTTPStream()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
-
-		for {
-			data, err := str.ReceiveDatagram(context.Background())
+			str, err := w.(http3.HTTPStreamer).HTTPStream()
 			if err != nil {
 				errChan <- err
 				return
 			}
-			str.CancelRead(42)
-			datagramChan <- data
+			go str.Read([]byte{0}) // need to continue reading from stream to observe state transitions
+
+			for {
+				data, err := str.ReceiveDatagram(context.Background())
+				if err != nil {
+					errChan <- err
+					return
+				}
+				str.CancelRead(42)
+				datagramChan <- data
+			}
+		})
+
+		port := startHTTPServer(t, n.NewConn(), mux, func(s *http3.Server) { s.EnableDatagrams = true })
+		str := dialAndOpenHTTPDatagramStream(t, n, fmt.Sprintf("https://localhost:%d/datagrams", port))
+		go str.Read([]byte{0})
+
+		require.NoError(t, str.SendDatagram([]byte("foo")))
+		select {
+		case data := <-datagramChan:
+			require.Equal(t, []byte("foo"), data)
+		case <-time.After(time.Second):
+			t.Fatal("didn't receive datagram")
 		}
+
+		var resetErr error
+		select {
+		case resetErr = <-errChan:
+		case <-time.After(time.Second):
+			t.Fatal("didn't receive error")
+		}
+		require.ErrorIs(t, resetErr, &http3.Error{ErrorCode: 42, Remote: false})
+
+		// make sure we can't send anymore
+		synctest.Wait()
+		require.ErrorIs(t, str.SendDatagram([]byte("foo")), &http3.Error{ErrorCode: 42, Remote: true})
 	})
-
-	port := startHTTPServer(t, mux, func(s *http3.Server) { s.EnableDatagrams = true })
-	str := dialAndOpenHTTPDatagramStream(t, fmt.Sprintf("https://localhost:%d/datagrams", port))
-	go str.Read([]byte{0})
-
-	require.NoError(t, str.SendDatagram([]byte("foo")))
-	select {
-	case data := <-datagramChan:
-		require.Equal(t, []byte("foo"), data)
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive datagram")
-	}
-
-	var resetErr error
-	select {
-	case resetErr = <-errChan:
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive error")
-	}
-	require.ErrorIs(t, resetErr, &http3.Error{ErrorCode: 42, Remote: false})
-
-	var err error
-	require.Eventually(t, func() bool {
-		err = str.SendDatagram([]byte("foo"))
-		return err != nil
-	}, time.Second, 10*time.Millisecond)
-	// make sure we can't send anymore
-	require.ErrorIs(t, err, &http3.Error{ErrorCode: 42, Remote: true})
 }
