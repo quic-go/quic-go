@@ -125,7 +125,7 @@ func TestRenoSenderPacingRate(t *testing.T) {
 	require.Equal(t, rtt/(2*initialCongestionWindow), sender.TimeUntilSend().Sub(now))
 
 	sender.OnCongestionEvent(0)
-	require.False(t, sender.InSlowStart())
+	require.False(t, sender.inSlowStart())
 	wantDelay := float64(rtt) * float64(maxDatagramSize) / (1.25 * float64(sender.GetCongestionWindow()))
 	require.InDelta(t, wantDelay, float64(sender.TimeUntilSend().Sub(now)), float64(time.Microsecond))
 }
@@ -179,7 +179,7 @@ func TestRenoSenderExponentialSlowStart(t *testing.T) {
 
 	cwnd := sender.sender.GetCongestionWindow()
 	require.Equal(t, defaultWindowTCP+maxDatagramSize*2*numberOfAcks, cwnd)
-	require.Equal(t, BandwidthFromDelta(cwnd, sender.rttStats.SmoothedRTT()), sender.sender.BandwidthEstimate())
+	require.Equal(t, bandwidthFromDelta(cwnd, sender.rttStats.SmoothedRTT()), sender.sender.bandwidthEstimate())
 }
 
 func TestRenoSenderSlowStartPacketLoss(t *testing.T) {
@@ -360,7 +360,7 @@ func TestRenoSenderSpuriousLoss(t *testing.T) {
 	sender.sender.OnSpuriousLoss(13)
 	require.Equal(t, window, sender.sender.GetCongestionWindow())
 	require.Equal(t, window, sender.sender.slowStartThreshold)
-	require.False(t, sender.sender.InRecovery())
+	require.False(t, sender.sender.inRecovery())
 	require.Zero(t, sender.sender.undoState)
 
 	// Restoring the ACK credit lets the seventh ACK grow the window.
@@ -383,7 +383,7 @@ func TestRenoSenderSpuriousLossAfterWindowGrowth(t *testing.T) {
 	window := sender.sender.GetCongestionWindow()
 	sender.sender.OnSpuriousLoss(1)
 	require.Equal(t, window, sender.sender.GetCongestionWindow())
-	require.False(t, sender.sender.InSlowStart())
+	require.False(t, sender.sender.inSlowStart())
 	require.Zero(t, sender.sender.undoState)
 }
 
@@ -402,7 +402,7 @@ func TestRenoSenderSpuriousLossWithECN(t *testing.T) {
 			window := sender.sender.GetCongestionWindow()
 			sender.sender.OnSpuriousLoss(1)
 			require.Equal(t, window, sender.sender.GetCongestionWindow())
-			require.False(t, sender.sender.InSlowStart())
+			require.False(t, sender.sender.inSlowStart())
 		})
 	}
 }
@@ -432,11 +432,11 @@ func TestRenoSender1ConnectionCongestionAvoidanceAtEndOfRecovery(t *testing.T) {
 	for range 10 {
 		// Send our full send window.
 		sender.SendAvailableSendWindow()
-		require.True(t, sender.sender.InRecovery())
+		require.True(t, sender.sender.inRecovery())
 		sender.AckNPackets(2)
 		require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 	}
-	require.False(t, sender.sender.InRecovery())
+	require.False(t, sender.sender.inRecovery())
 
 	// Out of recovery now. Congestion window should not grow during RTT.
 	for i := protocol.ByteCount(0); i < expectedSendWindow/maxDatagramSize-2; i += 2 {
