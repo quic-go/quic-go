@@ -109,18 +109,7 @@ func TestFrameSorterGapHandling(t *testing.T) {
 	}
 
 	checkGaps := func(t *testing.T, s *frameSorter, expectedGaps []byteInterval) {
-		if s.gaps.Len() != len(expectedGaps) {
-			fmt.Println("Gaps:")
-			for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-				fmt.Printf("\t%d - %d\n", gap.Value.Start, gap.Value.End)
-			}
-			require.Equal(t, len(expectedGaps), s.gaps.Len())
-		}
-		var i int
-		for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-			require.Equal(t, expectedGaps[i], gap.Value)
-			i++
-		}
+		require.Equal(t, expectedGaps, slices.Concat(s.gaps...))
 	}
 
 	// ---xxx--------------
@@ -1370,12 +1359,53 @@ func TestFrameSorterGapHandling(t *testing.T) {
 
 func TestFrameSorterTooManyGaps(t *testing.T) {
 	s := newFrameSorter()
-	for i := range protocol.MaxStreamFrameSorterGaps {
+	for i := range maxStreamFrameSorterGaps {
 		require.NoError(t, s.Push([]byte("foobar"), protocol.ByteCount(i*7), nil))
 	}
-	require.Equal(t, protocol.MaxStreamFrameSorterGaps, s.gaps.Len())
-	err := s.Push([]byte("foobar"), protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7)+100, nil)
+	require.Equal(t, maxStreamFrameSorterGaps, s.numGaps)
+	err := s.Push([]byte("foobar"), protocol.ByteCount(maxStreamFrameSorterGaps*7)+100, nil)
 	require.EqualError(t, err, "too many gaps in received data")
+}
+
+// n 2-byte frames, each after a 2-byte gap, and then a frame that starts in the first gap
+// and ends in the last of these gaps, closing all gaps in between.
+func TestFrameSorterFrameClosesMultipleGaps(t *testing.T) {
+	for _, n := range []int{4, 3 * maxGapChunkLen} { // the gaps are in one chunk, or in multiple chunks
+		t.Run(fmt.Sprintf("%d gaps", n), func(t *testing.T) {
+			data := make([]byte, 4*n)
+			for i := range data {
+				data[i] = byte(i)
+			}
+			s := newFrameSorter()
+			for i := range n {
+				require.NoError(t, s.Push(data[4*i+2:4*i+4], protocol.ByteCount(4*i+2), nil))
+			}
+			require.Equal(t, n > maxGapChunkLen, len(s.gaps) > 1)
+
+			end := 4*n - 3
+			require.NoError(t, s.Push(data[1:end], 1, nil))
+			require.Equal(t, [][]byteInterval{{
+				{Start: 0, End: 1},
+				{Start: protocol.ByteCount(end), End: protocol.ByteCount(end + 1)},
+				{Start: protocol.ByteCount(4 * n), End: protocol.MaxByteCount},
+			}}, s.gaps)
+			require.Equal(t, 3, s.numGaps)
+
+			// fill the remaining gaps, and read all data
+			require.NoError(t, s.Push(data[:1], 0, nil))
+			require.NoError(t, s.Push(data[end:end+1], protocol.ByteCount(end), nil))
+			var read []byte
+			for {
+				_, b, _ := s.Pop()
+				if b == nil {
+					break
+				}
+				read = append(read, b...)
+			}
+			require.Equal(t, data, read)
+			require.False(t, s.HasMoreData())
+		})
+	}
 }
 
 func TestFrameSorterRandomized(t *testing.T) {
@@ -1451,8 +1481,7 @@ func testFrameSorterRandomized(t *testing.T, dataLen protocol.ByteCount, injectD
 			callbacks = append(callbacks, tr)
 		}
 	}
-	require.Equal(t, 1, s.gaps.Len())
-	require.Equal(t, byteInterval{Start: num * dataLen, End: protocol.MaxByteCount}, s.gaps.Front().Value)
+	require.Equal(t, [][]byteInterval{{{Start: num * dataLen, End: protocol.MaxByteCount}}}, s.gaps)
 
 	// read all data
 	var read []byte
@@ -1657,7 +1686,7 @@ func frameSorterFuzzPeek(t *testing.T, s *frameSorter, streamData []byte, receiv
 }
 
 // The maximum number of gaps in the benchmarks, including the last gap, which ends at protocol.MaxByteCount.
-var frameSorterBenchmarkGaps = []int{10, 100, 1000}
+var frameSorterBenchmarkGaps = []int{10, 100, 1000, maxStreamFrameSorterGaps}
 
 // Frames arrive in order. This is the common case.
 func BenchmarkFrameSorterInOrder(b *testing.B) {
