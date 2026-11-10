@@ -40,7 +40,6 @@ func TestConnectionCloseRetransmission(t *testing.T) {
 		settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
 		clientConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
 		serverConn := n.NewEndpoint(serverAddr, settings)
-		require.NoError(t, n.Start())
 		defer n.Close()
 
 		tr := &quic.Transport{Conn: serverConn}

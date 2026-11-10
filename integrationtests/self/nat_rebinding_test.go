@@ -38,7 +38,6 @@ func TestNATRebinding(t *testing.T) {
 				return oldPathRTT / 2
 			},
 		})
-		require.NoError(t, n.Start())
 		defer n.Close()
 		defer clientPacketConn.Close()
 		defer serverPacketConn.Close()

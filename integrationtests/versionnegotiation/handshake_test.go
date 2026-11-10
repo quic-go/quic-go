@@ -94,7 +94,6 @@ func TestClientSupportsMoreVersionsThanServer(t *testing.T) {
 		defer clientPacketConn.Close()
 		serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}, settings)
 		defer serverPacketConn.Close()
-		require.NoError(t, n.Start())
 		defer n.Close()
 
 		expectedVersion := protocol.SupportedVersions[0]
