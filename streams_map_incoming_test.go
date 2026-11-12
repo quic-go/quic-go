@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"math"
 	"math/rand/v2"
 	"testing"
 	"testing/synctest"
@@ -319,6 +320,69 @@ func testStreamsMapIncomingStreamCreditRelease(t *testing.T, perspective protoco
 	require.Empty(t, frameQueue)
 	m.ReleaseStreamCredit(firstStream + 8)
 	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 6}}, frameQueue)
+}
+
+func TestStreamsMapIncomingSetMaxStreams(t *testing.T) {
+	t.Run("client", func(t *testing.T) {
+		testStreamsMapIncomingSetMaxStreams(t, protocol.PerspectiveClient, protocol.FirstIncomingUniStreamClient)
+	})
+	t.Run("server", func(t *testing.T) {
+		testStreamsMapIncomingSetMaxStreams(t, protocol.PerspectiveServer, protocol.FirstIncomingUniStreamServer)
+	})
+}
+
+func testStreamsMapIncomingSetMaxStreams(t *testing.T, perspective protocol.Perspective, firstStream protocol.StreamID) {
+	var frameQueue []wire.Frame
+	m := newIncomingStreamsMap(
+		protocol.StreamTypeUni,
+		func(id protocol.StreamID) *mockStream { return &mockStream{id: id} },
+		0,
+		false,
+		func(f wire.Frame) { frameQueue = append(frameQueue, f) },
+		perspective,
+	)
+	_, err := m.GetOrOpenStream(firstStream)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamLimitError})
+
+	// increasing the limit issues new stream credit immediately
+	m.SetMaxStreams(3)
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 3}}, frameQueue)
+	frameQueue = frameQueue[:0]
+	_, err = m.GetOrOpenStream(firstStream + 8)
+	require.NoError(t, err)
+	for range 3 {
+		_, err := m.AcceptStream(context.Background())
+		require.NoError(t, err)
+	}
+	m.SetMaxStreams(5)
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 5}}, frameQueue)
+	frameQueue = frameQueue[:0]
+	m.SetMaxStreams(5)
+	require.Empty(t, frameQueue)
+
+	// The peer has opened 3 streams, and is allowed to open 2 more.
+	// After decreasing the limit, no new stream credit is issued until fewer than 2 streams are open.
+	m.SetMaxStreams(2)
+	for i := range 3 {
+		require.NoError(t, m.DeleteStream(firstStream+protocol.StreamID(4*i)))
+	}
+	require.Empty(t, frameQueue)
+	_, err = m.GetOrOpenStream(firstStream + 16)
+	require.NoError(t, err)
+	for range 2 {
+		_, err := m.AcceptStream(context.Background())
+		require.NoError(t, err)
+	}
+	require.NoError(t, m.DeleteStream(firstStream+12))
+	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 6}}, frameQueue)
+	frameQueue = frameQueue[:0]
+
+	// the limit is capped at the maximum stream count
+	m.SetMaxStreams(math.MaxUint64)
+	require.Equal(t,
+		[]wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: protocol.MaxStreamCount}},
+		frameQueue,
+	)
 }
 
 func TestStreamsMapIncomingClosing(t *testing.T) {
