@@ -6,16 +6,16 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
-const serverSettingsSessionTicketPrefix = "quic-go h3 settings v1"
+const settingsSessionTicketPrefix = "quic-go h3 settings v1"
 
 type settings = settingsFrame
 
 func settingsForSessionTicket(current *settings) []byte {
-	return current.Append([]byte(serverSettingsSessionTicketPrefix))
+	return current.Append([]byte(settingsSessionTicketPrefix))
 }
 
 func settingsDataFromSessionTicket(extras [][]byte) ([]byte, bool) {
-	prefix := []byte(serverSettingsSessionTicketPrefix)
+	prefix := []byte(settingsSessionTicketPrefix)
 	for _, extra := range extras {
 		if data, ok := bytes.CutPrefix(extra, prefix); ok {
 			return data, true
