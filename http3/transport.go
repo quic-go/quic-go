@@ -57,7 +57,7 @@ func (r *roundTripperWithCount) Close() error {
 	r.cancel()
 	<-r.dialing
 	if r.conn != nil {
-		return r.conn.CloseWithError(0, "")
+		return r.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 	}
 	return nil
 }
