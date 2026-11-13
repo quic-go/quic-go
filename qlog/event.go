@@ -110,7 +110,7 @@ type StartedConnection struct {
 	RedactedLocal, RedactedRemote *string
 }
 
-func (e StartedConnection) Name() string { return "transport:connection_started" }
+func (e StartedConnection) Name() string { return "quic:connection_started" }
 
 func (e StartedConnection) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -137,7 +137,7 @@ type TupleAssigned struct {
 	RedactedLocal, RedactedRemote *string
 }
 
-func (e TupleAssigned) Name() string { return "transport:tuple_assigned" }
+func (e TupleAssigned) Name() string { return "quic:tuple_assigned" }
 
 func (e TupleAssigned) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -161,7 +161,7 @@ type VersionInformation struct {
 	ChosenVersion                  Version
 }
 
-func (e VersionInformation) Name() string { return "transport:version_information" }
+func (e VersionInformation) Name() string { return "quic:version_information" }
 
 func (e VersionInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -195,7 +195,7 @@ type ConnectionClosed struct {
 	Trigger ConnectionCloseTrigger
 }
 
-func (e ConnectionClosed) Name() string { return "transport:connection_closed" }
+func (e ConnectionClosed) Name() string { return "quic:connection_closed" }
 
 func (e ConnectionClosed) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -259,7 +259,7 @@ type PacketSent struct {
 	Tuple string
 }
 
-func (e PacketSent) Name() string { return "transport:packet_sent" }
+func (e PacketSent) Name() string { return "quic:packet_sent" }
 
 func (e PacketSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -314,7 +314,7 @@ type PacketReceived struct {
 	Tuple string
 }
 
-func (e PacketReceived) Name() string { return "transport:packet_received" }
+func (e PacketReceived) Name() string { return "quic:packet_received" }
 
 func (e PacketReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -358,7 +358,7 @@ type VersionNegotiationReceived struct {
 	SupportedVersions []Version
 }
 
-func (e VersionNegotiationReceived) Name() string { return "transport:packet_received" }
+func (e VersionNegotiationReceived) Name() string { return "quic:packet_received" }
 
 func (e VersionNegotiationReceived) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -380,7 +380,7 @@ type VersionNegotiationSent struct {
 	SupportedVersions []Version
 }
 
-func (e VersionNegotiationSent) Name() string { return "transport:packet_sent" }
+func (e VersionNegotiationSent) Name() string { return "quic:packet_sent" }
 
 func (e VersionNegotiationSent) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -403,7 +403,7 @@ type PacketBuffered struct {
 	DatagramPayloadChecksum DatagramPayloadChecksum
 }
 
-func (e PacketBuffered) Name() string { return "transport:packet_buffered" }
+func (e PacketBuffered) Name() string { return "quic:packet_buffered" }
 
 func (e PacketBuffered) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -434,7 +434,7 @@ type PacketDropped struct {
 	Trigger                 PacketDropReason
 }
 
-func (e PacketDropped) Name() string { return "transport:packet_dropped" }
+func (e PacketDropped) Name() string { return "quic:packet_dropped" }
 
 func (e PacketDropped) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -504,7 +504,7 @@ type StreamPriorityUpdated struct {
 	Incremental bool
 }
 
-func (e StreamPriorityUpdated) Name() string { return "transport:priority_updated" }
+func (e StreamPriorityUpdated) Name() string { return "quic:priority_updated" }
 
 func (e StreamPriorityUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -526,7 +526,7 @@ type MTUUpdated struct {
 	Done  bool
 }
 
-func (e MTUUpdated) Name() string { return "recovery:mtu_updated" }
+func (e MTUUpdated) Name() string { return "quic:mtu_updated" }
 
 func (e MTUUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -591,7 +591,7 @@ type MetricsUpdated struct {
 	PacketsInFlight  int
 }
 
-func (e MetricsUpdated) Name() string { return "recovery:metrics_updated" }
+func (e MetricsUpdated) Name() string { return "quic:recovery_metrics_updated" }
 
 func (e MetricsUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -628,7 +628,7 @@ type PTOCountUpdated struct {
 	PTOCount uint32
 }
 
-func (e PTOCountUpdated) Name() string { return "recovery:metrics_updated" }
+func (e PTOCountUpdated) Name() string { return "quic:recovery_metrics_updated" }
 
 func (e PTOCountUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -645,7 +645,7 @@ type PacketLost struct {
 	Trigger          PacketLossReason
 }
 
-func (e PacketLost) Name() string { return "recovery:packet_lost" }
+func (e PacketLost) Name() string { return "quic:packet_lost" }
 
 func (e PacketLost) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -673,7 +673,7 @@ type SpuriousLoss struct {
 	TimeReordering   time.Duration
 }
 
-func (e SpuriousLoss) Name() string { return "recovery:spurious_loss" }
+func (e SpuriousLoss) Name() string { return "quic:spurious_loss" }
 
 func (e SpuriousLoss) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -697,7 +697,7 @@ type KeyUpdated struct {
 	// we don't log the keys here, so we don't need `old` and `new`.
 }
 
-func (e KeyUpdated) Name() string { return "security:key_updated" }
+func (e KeyUpdated) Name() string { return "quic:key_updated" }
 
 func (e KeyUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -719,7 +719,7 @@ type KeyDiscarded struct {
 	KeyPhase KeyPhase // only set for 1-RTT keys
 }
 
-func (e KeyDiscarded) Name() string { return "security:key_discarded" }
+func (e KeyDiscarded) Name() string { return "quic:key_discarded" }
 
 func (e KeyDiscarded) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -762,7 +762,7 @@ type ParametersSet struct {
 	EnableResetStreamAt             bool
 }
 
-func (e ParametersSet) Name() string { return "transport:parameters_set" }
+func (e ParametersSet) Name() string { return "quic:parameters_set" }
 
 func (e ParametersSet) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -857,7 +857,7 @@ type ParametersRestored struct {
 	EnableResetStreamAt            bool
 }
 
-func (e ParametersRestored) Name() string { return "transport:parameters_restored" }
+func (e ParametersRestored) Name() string { return "quic:parameters_restored" }
 
 func (e ParametersRestored) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -943,7 +943,7 @@ type TimerUpdated struct {
 	Time      time.Time
 }
 
-func (e TimerUpdated) Name() string { return "recovery:loss_timer_updated" }
+func (e TimerUpdated) Name() string { return "quic:timer_updated" }
 
 func (e TimerUpdated) Encode(enc *jsontext.Encoder, t time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -970,7 +970,7 @@ type CongestionStateUpdated struct {
 	State CongestionState
 }
 
-func (e CongestionStateUpdated) Name() string { return "recovery:congestion_state_updated" }
+func (e CongestionStateUpdated) Name() string { return "quic:congestion_state_updated" }
 
 func (e CongestionStateUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -986,7 +986,7 @@ type ECNStateUpdated struct {
 	Trigger string
 }
 
-func (e ECNStateUpdated) Name() string { return "recovery:ecn_state_updated" }
+func (e ECNStateUpdated) Name() string { return "quic:ecn_state_updated" }
 
 func (e ECNStateUpdated) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -1005,7 +1005,7 @@ type ALPNInformation struct {
 	ChosenALPN string
 }
 
-func (e ALPNInformation) Name() string { return "transport:alpn_information" }
+func (e ALPNInformation) Name() string { return "quic:alpn_information" }
 
 func (e ALPNInformation) Encode(enc *jsontext.Encoder, _ time.Time) error {
 	h := encoderHelper{enc: enc}
@@ -1032,9 +1032,9 @@ type DebugEvent struct {
 
 func (e DebugEvent) Name() string {
 	if e.EventName == "" {
-		return "transport:debug"
+		return "quic:debug"
 	}
-	return fmt.Sprintf("transport:%s", e.EventName)
+	return fmt.Sprintf("quic:%s", e.EventName)
 }
 
 func (e DebugEvent) Encode(enc *jsontext.Encoder, _ time.Time) error {
