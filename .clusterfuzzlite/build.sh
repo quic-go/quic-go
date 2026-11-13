@@ -10,6 +10,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 # Pin the adapter to the commit used in that PR.
 fuzzbuild_ref=fc5dc53b9db8a38c394c53d6e439a1410cf8fc19
 
+# Go 1.27.0 and 1.27.1 inflate coverage statement counts (golang/go#80974).
+export GOTOOLCHAIN=go1.27.4
+
 # Copy downloaded toolchains out of the module cache so OSS-Fuzz can overlay
 # the standard library when building fuzzers.
 goroot=$(go env GOROOT)
