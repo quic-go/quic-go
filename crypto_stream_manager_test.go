@@ -22,10 +22,7 @@ func TestCryptoStreamManager(t *testing.T) {
 }
 
 func testCryptoStreamManager(t *testing.T, encLevel protocol.EncryptionLevel) {
-	initialStream := newInitialCryptoStream(true)
-	handshakeStream := newCryptoStream()
-	oneRTTStream := newCryptoStream()
-	csm := newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
+	csm := newCryptoStreamManager(protocol.PerspectiveClient)
 
 	require.NoError(t, csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")}, encLevel))
 	require.NoError(t, csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}, encLevel))
@@ -41,7 +38,7 @@ func testCryptoStreamManager(t *testing.T, encLevel protocol.EncryptionLevel) {
 }
 
 func TestCryptoStreamManagerInvalidEncryptionLevel(t *testing.T) {
-	csm := newCryptoStreamManager(nil, nil, nil)
+	csm := newCryptoStreamManager(protocol.PerspectiveClient)
 	require.ErrorContains(t,
 		csm.HandleCryptoFrame(&wire.CryptoFrame{}, protocol.Encryption0RTT),
 		"received CRYPTO frame with unexpected encryption level",
@@ -58,14 +55,22 @@ func TestCryptoStreamManagerFinishEncryptionLevel(t *testing.T) {
 }
 
 func testCryptoStreamManagerFinishEncryptionLevel(t *testing.T, encLevel protocol.EncryptionLevel) {
-	initialStream := newInitialCryptoStream(true)
-	handshakeStream := newCryptoStream()
-	oneRTTStream := newCryptoStream()
-	csm := newCryptoStreamManager(initialStream, handshakeStream, oneRTTStream)
+	csm := newCryptoStreamManager(protocol.PerspectiveClient)
 
 	require.NoError(t, csm.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")}, encLevel))
 	require.ErrorContains(t, csm.Finish(encLevel), "encryption level changed, but crypto stream has more data to read")
 
 	require.Equal(t, []byte("foo"), csm.GetCryptoData(encLevel))
 	require.NoError(t, csm.Finish(encLevel))
+}
+
+func TestCryptoStreamManagerDrop(t *testing.T) {
+	csm := newCryptoStreamManager(protocol.PerspectiveServer)
+	for _, encLevel := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake} {
+		require.NoError(t, csm.Write(encLevel, []byte("foobar")))
+		require.True(t, csm.HasData(encLevel))
+		csm.Drop(encLevel)
+		require.False(t, csm.HasData(encLevel))
+		require.Nil(t, csm.PopCryptoFrame(encLevel, protocol.MaxByteCount))
+	}
 }
