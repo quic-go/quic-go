@@ -101,8 +101,6 @@ func testTraceMetadata(t *testing.T,
 		"serialization_format": "application/qlog+json-seq",
 		"title":                "quic-go qlog",
 		"code_version":         quicGoVersion,
-		"qlog_format":          "JSON-SEQ",
-		"qlog_version":         "0.3",
 		"trace":                trace,
 	})
 	require.NoError(t, err)

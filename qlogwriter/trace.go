@@ -112,13 +112,6 @@ func (l traceHeader) Encode(enc *jsontext.Encoder) error {
 	// end trace
 	h.WriteToken(jsontext.EndObject)
 
-	// The following fields are not required by the qlog draft anymore,
-	// but qvis still requires them to be present.
-	h.WriteToken(jsontext.String("qlog_format"))
-	h.WriteToken(jsontext.String("JSON-SEQ"))
-	h.WriteToken(jsontext.String("qlog_version"))
-	h.WriteToken(jsontext.String("0.3"))
-
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }
