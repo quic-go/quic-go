@@ -152,6 +152,42 @@ func (c *MockECNHandlerModeCall) DoAndReturn(f func() protocol.ECN) *MockECNHand
 	return c
 }
 
+// ResetForPathMigration mocks base method.
+func (m *MockECNHandler) ResetForPathMigration() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ResetForPathMigration")
+}
+
+// ResetForPathMigration indicates an expected call of ResetForPathMigration.
+func (mr *MockECNHandlerMockRecorder) ResetForPathMigration() *MockECNHandlerResetForPathMigrationCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetForPathMigration", reflect.TypeOf((*MockECNHandler)(nil).ResetForPathMigration))
+	return &MockECNHandlerResetForPathMigrationCall{Call: call}
+}
+
+// MockECNHandlerResetForPathMigrationCall wrap *gomock.Call
+type MockECNHandlerResetForPathMigrationCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockECNHandlerResetForPathMigrationCall) Return() *MockECNHandlerResetForPathMigrationCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockECNHandlerResetForPathMigrationCall) Do(f func()) *MockECNHandlerResetForPathMigrationCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockECNHandlerResetForPathMigrationCall) DoAndReturn(f func()) *MockECNHandlerResetForPathMigrationCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // SentPacket mocks base method.
 func (m *MockECNHandler) SentPacket(arg0 protocol.PacketNumber, arg1 protocol.ECN) {
 	m.ctrl.T.Helper()

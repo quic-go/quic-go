@@ -43,10 +43,11 @@ type ecnHandler interface {
 	Mode() protocol.ECN
 	HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ect1, ecnce int64) (congested bool)
 	LostPacket(protocol.PacketNumber)
+	ResetForPathMigration()
 }
 
 // The ecnTracker performs ECN validation of a path.
-// Once failed, it doesn't do any re-validation of the path.
+// Once failed, it only re-validates after a path migration.
 // It is designed only work for 1-RTT packets, it doesn't handle multiple packet number spaces.
 // In order to avoid revealing any internal state to on-path observers,
 // callers should make sure to start using ECN (i.e. calling Mode) for the very first 1-RTT packet sent.
@@ -61,6 +62,8 @@ type ecnTracker struct {
 
 	numSentECT0, numSentECT1                  int64
 	numAckedECT0, numAckedECT1, numAckedECNCE int64
+	// numAckedECNCE when validation of the current path started
+	pathStartECNCE int64
 
 	qlogger qlogwriter.Recorder
 	logger  utils.Logger
@@ -108,7 +111,7 @@ func (e *ecnTracker) SentPacket(pn protocol.PacketNumber, ecn protocol.ECN) {
 	if e.firstTestingPacket == protocol.InvalidPacketNumber {
 		e.firstTestingPacket = pn
 	}
-	if e.numSentECT0+e.numSentECT1 >= numECNTestingPackets {
+	if e.numSentTesting >= numECNTestingPackets {
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State: qlog.ECNStateUnknown,
@@ -169,6 +172,15 @@ func (e *ecnTracker) LostPacket(pn protocol.PacketNumber) {
 // It must only be called for ACK frames that increase the largest acknowledged packet number,
 // see section 13.4.2.1 of RFC 9000.
 func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ect1, ecnce int64) (congested bool) {
+	// Determine the increase in ECT0, ECT1 and ECNCE marks.
+	newECT0 := ect0 - e.numAckedECT0
+	newECT1 := ect1 - e.numAckedECT1
+	newECNCE := ecnce - e.numAckedECNCE
+	// The counters are updated even if validation fails, since validation restarts after a path migration.
+	e.numAckedECT0 = ect0
+	e.numAckedECT1 = ect1
+	e.numAckedECNCE = ecnce
+
 	if e.state == ecnStateFailed {
 		return false
 	}
@@ -216,11 +228,6 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 		return false
 	}
 
-	// Determine the increase in ECT0, ECT1 and ECNCE marks
-	newECT0 := ect0 - e.numAckedECT0
-	newECT1 := ect1 - e.numAckedECT1
-	newECNCE := ecnce - e.numAckedECNCE
-
 	// We're only processing ACKs that increase the Largest Acked.
 	// Therefore, the ECN counters should only ever increase.
 	// Any decrease means that the peer's counting logic is broken.
@@ -264,11 +271,6 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 		return false
 	}
 
-	// update our counters
-	e.numAckedECT0 = ect0
-	e.numAckedECT1 = ect1
-	e.numAckedECNCE = ecnce
-
 	// Detect mangling (a path remarking all ECN-marked testing packets as CE),
 	// once all 10 testing packets have been sent out.
 	if e.state == ecnStateUnknown {
@@ -304,8 +306,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 
 // failIfMangled fails ECN validation if all testing packets are lost or CE-marked.
 func (e *ecnTracker) failIfMangled() {
-	numAckedECNCE := e.numAckedECNCE + int64(e.numLostTesting)
-	if e.numSentECT0+e.numSentECT1 > numAckedECNCE {
+	if int64(e.numSentTesting) > e.numAckedECNCE-e.pathStartECNCE+int64(e.numLostTesting) {
 		return
 	}
 	if e.qlogger != nil {
@@ -315,6 +316,18 @@ func (e *ecnTracker) failIfMangled() {
 		})
 	}
 	e.state = ecnStateFailed
+}
+
+// ResetForPathMigration restarts ECN validation on a new path.
+// The ECN counts are kept, since the peer reports them for the entire packet number space.
+func (e *ecnTracker) ResetForPathMigration() {
+	e.state = ecnStateInitial
+	e.numSentTesting = 0
+	e.numLostTesting = 0
+	e.firstTestingPacket = protocol.InvalidPacketNumber
+	e.lastTestingPacket = protocol.InvalidPacketNumber
+	e.firstCapablePacket = protocol.InvalidPacketNumber
+	e.pathStartECNCE = e.numAckedECNCE
 }
 
 func (e *ecnTracker) ecnMarking(pn protocol.PacketNumber) protocol.ECN {

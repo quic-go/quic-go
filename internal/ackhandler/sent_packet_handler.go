@@ -1267,6 +1267,9 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	}
 	h.congestion = congestion.NewRenoSender(h.rttStats, initialMaxDatagramSize, h.qlogger)
 	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
+	if h.ecnTracker != nil {
+		h.ecnTracker.ResetForPathMigration()
+	}
 	h.qlogRecoveryParametersSet(true)
 	h.setLossDetectionTimer(now)
 }

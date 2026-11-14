@@ -1635,6 +1635,9 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	pn = sendPacket(t, now, protocol.ECT0)
 	ecnHandler.EXPECT().LostPacket(pn)
 	require.True(t, sph.QueueProbePacket(protocol.PacketNumberSpaceAppData))
+
+	ecnHandler.EXPECT().ResetForPathMigration()
+	sph.MigratedPath(now, 1200)
 }
 
 func TestSentPacketHandlerPathProbe(t *testing.T) {

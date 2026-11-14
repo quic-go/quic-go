@@ -355,3 +355,39 @@ func TestECNCongestionDetection(t *testing.T) {
 	require.True(t, ecnTracker.HandleNewlyAcked(getAckedPackets(7, 8, 9, 14), 7, 0, 2))
 	require.Empty(t, eventRecorder.Events())
 }
+
+func TestECNRevalidationAfterPathMigration(t *testing.T) {
+	var eventRecorder events.Recorder
+	ecnTracker := newECNTracker(utils.DefaultLogger, &eventRecorder)
+
+	// the first path marks all testing packets CE
+	sendECNTestingPackets(t, ecnTracker, &eventRecorder)
+	require.False(t, ecnTracker.HandleNewlyAcked(getAckedPackets(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), 0, 0, 10))
+	require.Equal(t,
+		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateFailed, Trigger: ecnFailedManglingDetected}},
+		eventRecorder.Events(),
+	)
+	// ECN counts are still tracked after validation failed
+	require.False(t, ecnTracker.HandleNewlyAcked(nil, 0, 0, 11))
+	eventRecorder.Clear()
+
+	ecnTracker.ResetForPathMigration()
+	for pn := protocol.PacketNumber(10); pn < 20; pn++ {
+		require.Equal(t, protocol.ECT0, ecnTracker.Mode())
+		ecnTracker.SentPacket(pn, protocol.ECT0)
+	}
+	require.Equal(t,
+		[]qlogwriter.Event{
+			qlog.ECNStateUpdated{State: qlog.ECNStateTesting},
+			qlog.ECNStateUpdated{State: qlog.ECNStateUnknown},
+		},
+		eventRecorder.Events(),
+	)
+	eventRecorder.Clear()
+	// the new path marks 9 of the 10 testing packets CE: not mangling, but congestion
+	require.True(t, ecnTracker.HandleNewlyAcked(getAckedPackets(10, 11, 12, 13, 14, 15, 16, 17, 18, 19), 1, 0, 20))
+	require.Equal(t,
+		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateCapable}},
+		eventRecorder.Events(),
+	)
+}
