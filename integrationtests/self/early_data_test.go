@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/testutils/simnet"
 
 	"github.com/stretchr/testify/require"
 )
@@ -16,15 +15,16 @@ import (
 func TestEarlyData(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const rtt = 80 * time.Millisecond
-		n := newTestNetworkWithSettings(t, simnet.NodeBiDiLinkSettings{Latency: rtt / 2})
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLink(t, rtt)
+		defer closeFn(t)
 
-		ln, err := quic.ListenEarly(n.NewConn(), getTLSConfig(), getQuicConfig(nil))
+		ln, err := quic.ListenEarly(serverPacketConn, getTLSConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
 		defer ln.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		clientConn, err := quic.Dial(ctx, n.NewConn(), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		clientConn, err := quic.Dial(ctx, clientPacketConn, ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		require.NoError(t, err)
 
 		serverConn, err := ln.Accept(ctx)
