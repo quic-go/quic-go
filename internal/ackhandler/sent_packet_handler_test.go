@@ -1640,6 +1640,11 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	// ECN validation restarts 3 PTOs of the old path after the migration
 	ecnHandler.EXPECT().MigratedPath(now.Add(3 * rttStats.PTO(true)))
 	sph.MigratedPath(now, 1200)
+
+	// ACKs for packets sent on the old path still update the ECN counts
+	ecnHandler.EXPECT().HandleNewlyAcked(gomock.Len(0), int64(1), int64(2), int64(3))
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(pn), ECT0: 1, ECT1: 2, ECNCE: 3}, protocol.Encryption1RTT, now)
+	require.NoError(t, err)
 }
 
 func TestSentPacketHandlerPathProbe(t *testing.T) {

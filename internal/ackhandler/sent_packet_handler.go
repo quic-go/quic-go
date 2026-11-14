@@ -482,16 +482,16 @@ func (h *sentPacketHandler) receivedAck(ack *wire.AckFrame, encLevel protocol.En
 		// clean up lost packet history
 		h.lostPackets.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
 	}
-	if len(ackedPackets) > 0 {
-		// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
-		if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil && largestAcked > pnSpace.largestAcked {
+	// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
+	// This includes ACKs for packets that are no longer tracked, e.g. packets sent on the old path.
+	if largestAcked > pnSpace.largestAcked {
+		if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil {
 			congested := h.ecnTracker.HandleNewlyAcked(ackedPackets, int64(ack.ECT0), int64(ack.ECT1), int64(ack.ECNCE))
 			if congested {
 				h.congestion.OnCongestionEvent(largestAcked)
 			}
 		}
-
-		pnSpace.largestAcked = max(pnSpace.largestAcked, largestAcked)
+		pnSpace.largestAcked = largestAcked
 	}
 	// new acked packets can advance largestAcked or update the RTT,
 	// and a larger time threshold moves the loss deadline
