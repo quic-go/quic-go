@@ -321,7 +321,7 @@ func (e *ecnTracker) ecnMarking(pn protocol.PacketNumber) protocol.ECN {
 	if pn < e.firstTestingPacket || e.firstTestingPacket == protocol.InvalidPacketNumber {
 		return protocol.ECNNon
 	}
-	if pn < e.lastTestingPacket || e.lastTestingPacket == protocol.InvalidPacketNumber {
+	if pn <= e.lastTestingPacket || e.lastTestingPacket == protocol.InvalidPacketNumber {
 		return protocol.ECT0
 	}
 	if pn < e.firstCapablePacket || e.firstCapablePacket == protocol.InvalidPacketNumber {
