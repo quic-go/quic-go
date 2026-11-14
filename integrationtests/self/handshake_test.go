@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -73,6 +72,20 @@ func TestHandshakeAddrResolutionHelpers(t *testing.T) {
 	serverConn, err := server.Accept(ctx)
 	require.NoError(t, err)
 	defer serverConn.CloseWithError(0, "")
+
+	// ListenAddr's socket is closed once the listener is closed
+	// and the connection's closed entries have expired.
+	addr := server.Addr().(*net.UDPAddr)
+	require.NoError(t, server.Close())
+	require.NoError(t, serverConn.CloseWithError(0, ""))
+	require.Eventually(t, func() bool {
+		c, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			return false
+		}
+		c.Close()
+		return true
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestHandshake(t *testing.T) {
@@ -412,7 +425,7 @@ func TestHandshakeCloseListener(t *testing.T) {
 	t.Run("using Transport.Listen", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			n := newTestNetwork(t)
-			testHandshakeCloseListener(t, func() net.PacketConn { return n.NewConn() }, func(tlsConf *tls.Config) *quic.Listener {
+			testHandshakeCloseListener(t, n, func(tlsConf *tls.Config) *quic.Listener {
 				tr := &quic.Transport{Conn: n.NewConn()}
 				addTracer(tr)
 				t.Cleanup(func() { tr.Close() })
@@ -428,7 +441,7 @@ func TestHandshakeCloseListener(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			n := newTestNetwork(t)
 			conn := n.NewConn()
-			testHandshakeCloseListener(t, func() net.PacketConn { return n.NewConn() }, func(tlsConf *tls.Config) *quic.Listener {
+			testHandshakeCloseListener(t, n, func(tlsConf *tls.Config) *quic.Listener {
 				ln, err := quic.Listen(conn, tlsConf, getQuicConfig(nil))
 				require.NoError(t, err)
 				return ln
@@ -441,36 +454,9 @@ func TestHandshakeCloseListener(t *testing.T) {
 			}, time.Second, 50*time.Millisecond)
 		})
 	})
-
-	// This test uses real sockets, since ListenAddr opens its own UDP socket.
-	// It is somewhat slow (600ms), since the connection entries are kept for 3 PTOs.
-	t.Run("using ListenAddr", func(t *testing.T) {
-		var lnAddr *net.UDPAddr
-		testHandshakeCloseListener(t, func() net.PacketConn { return newUDPConnLocalhost(t) }, func(tlsConf *tls.Config) *quic.Listener {
-			ln, err := quic.ListenAddr("127.0.0.1:0", tlsConf, getQuicConfig(nil))
-			require.NoError(t, err)
-			lnAddr = ln.Addr().(*net.UDPAddr)
-			return ln
-		})
-
-		// make sure that the Transport closed the underlying connection
-		if runtime.GOOS != "windows" { // this check doesn't work on Windows
-			require.Eventually(t, func() bool {
-				conn, err := net.DialUDP("udp", nil, lnAddr)
-				require.NoError(t, err)
-				defer conn.Close()
-				_, err = conn.Write([]byte("test"))
-				require.NoError(t, err)
-				conn.SetReadDeadline(time.Now().Add(scaleDuration(10 * time.Millisecond)))
-				_, err = conn.Read(make([]byte, 1000))
-				require.Error(t, err)
-				return strings.Contains(err.Error(), "read: connection refused")
-			}, time.Second, 50*time.Millisecond)
-		}
-	})
 }
 
-func testHandshakeCloseListener(t *testing.T, newConn func() net.PacketConn, createListener func(*tls.Config) *quic.Listener) {
+func testHandshakeCloseListener(t *testing.T, n *testNetwork, createListener func(*tls.Config) *quic.Listener) {
 	connQueued := make(chan struct{})
 	var sawFirst atomic.Bool
 	tlsConf := &tls.Config{
@@ -492,7 +478,7 @@ func testHandshakeCloseListener(t *testing.T, newConn func() net.PacketConn, cre
 	// dial the first connection
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := quic.Dial(ctx, newConn(), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	conn, err := quic.Dial(ctx, n.NewConn(), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	defer conn.CloseWithError(0, "")
 	sconn, err := ln.Accept(ctx)
@@ -503,7 +489,7 @@ func testHandshakeCloseListener(t *testing.T, newConn func() net.PacketConn, cre
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, err := quic.Dial(ctx, newConn(), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		_, err := quic.Dial(ctx, n.NewConn(), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 		errChan <- err
 	}()
 
