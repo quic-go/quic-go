@@ -288,7 +288,10 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	e.numAckedECT1 = ect1
 	e.numAckedECNCE = ecnce
 
-	if e.firstPNAfterDrain != protocol.InvalidPacketNumber && len(packets) > 0 && packets[len(packets)-1].PacketNumber >= e.firstPNAfterDrain {
+	// Acknowledging a packet sent after the drain time means the ECN counts
+	// now include every packet sent on the old path, so testing can start.
+	if e.firstPNAfterDrain != protocol.InvalidPacketNumber &&
+		len(packets) > 0 && packets[len(packets)-1].PacketNumber >= e.firstPNAfterDrain {
 		e.oldPathDrainTime = 0
 		e.firstPNAfterDrain = protocol.InvalidPacketNumber
 	}
