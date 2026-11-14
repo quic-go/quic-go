@@ -341,7 +341,7 @@ func (h *sentPacketHandler) SentPacket(
 	h.congestion.OnPacketSent(t, pn, size, isAckEliciting)
 
 	if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil {
-		h.ecnTracker.SentPacket(pn, ecn)
+		h.ecnTracker.SentPacket(t, pn, ecn)
 	}
 
 	if p.Outstanding() {
@@ -482,16 +482,16 @@ func (h *sentPacketHandler) receivedAck(ack *wire.AckFrame, encLevel protocol.En
 		// clean up lost packet history
 		h.lostPackets.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
 	}
-	// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
-	// This includes ACKs for packets that are no longer tracked, e.g. packets sent on the old path.
-	if largestAcked > pnSpace.largestAcked {
-		if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil {
+	if len(ackedPackets) > 0 {
+		// Only inform the ECN tracker about new 1-RTT ACKs if the ACK increases the largest acked.
+		if encLevel == protocol.Encryption1RTT && h.ecnTracker != nil && largestAcked > pnSpace.largestAcked {
 			congested := h.ecnTracker.HandleNewlyAcked(ackedPackets, int64(ack.ECT0), int64(ack.ECT1), int64(ack.ECNCE))
 			if congested {
 				h.congestion.OnCongestionEvent(largestAcked)
 			}
 		}
-		pnSpace.largestAcked = largestAcked
+
+		pnSpace.largestAcked = max(pnSpace.largestAcked, largestAcked)
 	}
 	// new acked packets can advance largestAcked or update the RTT,
 	// and a larger time threshold moves the loss deadline
@@ -1081,14 +1081,14 @@ func (h *sentPacketHandler) GetLossDetectionTimeout() monotime.Time {
 	return h.alarm.Time
 }
 
-func (h *sentPacketHandler) ECNMode(now monotime.Time, isShortHeaderPacket bool) protocol.ECN {
+func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
 	if !h.enableECN {
 		return protocol.ECNUnsupported
 	}
 	if !isShortHeaderPacket {
 		return protocol.ECNNon
 	}
-	return h.ecnTracker.Mode(now)
+	return h.ecnTracker.Mode()
 }
 
 func (h *sentPacketHandler) PeekPacketNumber(space protocol.PacketNumberSpace) (protocol.PacketNumber, protocol.PacketNumberLen) {
@@ -1244,8 +1244,8 @@ func (h *sentPacketHandler) ResetForRetry(now monotime.Time) {
 }
 
 func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSize protocol.ByteCount) {
-	// ECN counts for packets sent on the old path are expected to be reported within 3 PTOs of the old path.
-	ecnTestingStart := now.Add(3 * h.rttStats.PTO(true))
+	// Packets sent on the old path are expected to have arrived within 3 PTOs of the old path.
+	oldPathDrainTime := now.Add(3 * h.rttStats.PTO(true))
 	h.rttStats.ResetForPathMigration()
 	h.lastMetrics = qlog.MetricsUpdated{}
 	h.packetThresholdDisabled = false
@@ -1270,7 +1270,7 @@ func (h *sentPacketHandler) MigratedPath(now monotime.Time, initialMaxDatagramSi
 	h.congestion = congestion.NewRenoSender(h.rttStats, initialMaxDatagramSize, h.qlogger)
 	h.connStats.CongestionWindow.Store(uint64(h.congestion.GetCongestionWindow()))
 	if h.ecnTracker != nil {
-		h.ecnTracker.MigratedPath(ecnTestingStart)
+		h.ecnTracker.MigratedPath(oldPathDrainTime)
 	}
 	h.qlogRecoveryParametersSet(true)
 	h.setLossDetectionTimer(now)

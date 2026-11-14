@@ -116,15 +116,15 @@ func (c *MockECNHandlerLostPacketCall) DoAndReturn(f func(protocol.PacketNumber)
 }
 
 // MigratedPath mocks base method.
-func (m *MockECNHandler) MigratedPath(testingStart monotime.Time) {
+func (m *MockECNHandler) MigratedPath(oldPathDrainTime monotime.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MigratedPath", testingStart)
+	m.ctrl.Call(m, "MigratedPath", oldPathDrainTime)
 }
 
 // MigratedPath indicates an expected call of MigratedPath.
-func (mr *MockECNHandlerMockRecorder) MigratedPath(testingStart any) *MockECNHandlerMigratedPathCall {
+func (mr *MockECNHandlerMockRecorder) MigratedPath(oldPathDrainTime any) *MockECNHandlerMigratedPathCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigratedPath", reflect.TypeOf((*MockECNHandler)(nil).MigratedPath), testingStart)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigratedPath", reflect.TypeOf((*MockECNHandler)(nil).MigratedPath), oldPathDrainTime)
 	return &MockECNHandlerMigratedPathCall{Call: call}
 }
 
@@ -152,17 +152,17 @@ func (c *MockECNHandlerMigratedPathCall) DoAndReturn(f func(monotime.Time)) *Moc
 }
 
 // Mode mocks base method.
-func (m *MockECNHandler) Mode(now monotime.Time) protocol.ECN {
+func (m *MockECNHandler) Mode() protocol.ECN {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Mode", now)
+	ret := m.ctrl.Call(m, "Mode")
 	ret0, _ := ret[0].(protocol.ECN)
 	return ret0
 }
 
 // Mode indicates an expected call of Mode.
-func (mr *MockECNHandlerMockRecorder) Mode(now any) *MockECNHandlerModeCall {
+func (mr *MockECNHandlerMockRecorder) Mode() *MockECNHandlerModeCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mode", reflect.TypeOf((*MockECNHandler)(nil).Mode), now)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Mode", reflect.TypeOf((*MockECNHandler)(nil).Mode))
 	return &MockECNHandlerModeCall{Call: call}
 }
 
@@ -178,27 +178,27 @@ func (c *MockECNHandlerModeCall) Return(arg0 protocol.ECN) *MockECNHandlerModeCa
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockECNHandlerModeCall) Do(f func(monotime.Time) protocol.ECN) *MockECNHandlerModeCall {
+func (c *MockECNHandlerModeCall) Do(f func() protocol.ECN) *MockECNHandlerModeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockECNHandlerModeCall) DoAndReturn(f func(monotime.Time) protocol.ECN) *MockECNHandlerModeCall {
+func (c *MockECNHandlerModeCall) DoAndReturn(f func() protocol.ECN) *MockECNHandlerModeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // SentPacket mocks base method.
-func (m *MockECNHandler) SentPacket(arg0 protocol.PacketNumber, arg1 protocol.ECN) {
+func (m *MockECNHandler) SentPacket(arg0 monotime.Time, arg1 protocol.PacketNumber, arg2 protocol.ECN) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SentPacket", arg0, arg1)
+	m.ctrl.Call(m, "SentPacket", arg0, arg1, arg2)
 }
 
 // SentPacket indicates an expected call of SentPacket.
-func (mr *MockECNHandlerMockRecorder) SentPacket(arg0, arg1 any) *MockECNHandlerSentPacketCall {
+func (mr *MockECNHandlerMockRecorder) SentPacket(arg0, arg1, arg2 any) *MockECNHandlerSentPacketCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockECNHandler)(nil).SentPacket), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockECNHandler)(nil).SentPacket), arg0, arg1, arg2)
 	return &MockECNHandlerSentPacketCall{Call: call}
 }
 
@@ -214,13 +214,13 @@ func (c *MockECNHandlerSentPacketCall) Return() *MockECNHandlerSentPacketCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockECNHandlerSentPacketCall) Do(f func(protocol.PacketNumber, protocol.ECN)) *MockECNHandlerSentPacketCall {
+func (c *MockECNHandlerSentPacketCall) Do(f func(monotime.Time, protocol.PacketNumber, protocol.ECN)) *MockECNHandlerSentPacketCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockECNHandlerSentPacketCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ECN)) *MockECNHandlerSentPacketCall {
+func (c *MockECNHandlerSentPacketCall) DoAndReturn(f func(monotime.Time, protocol.PacketNumber, protocol.ECN)) *MockECNHandlerSentPacketCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
