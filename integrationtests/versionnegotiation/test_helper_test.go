@@ -5,11 +5,17 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"net"
 	"os"
+	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools"
 	"github.com/quic-go/quic-go/qlogwriter"
+	"github.com/quic-go/quic-go/testutils/simnet"
+
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -48,6 +54,21 @@ func init() {
 
 func getTLSConfig() *tls.Config       { return tlsConfig }
 func getTLSClientConfig() *tls.Config { return tlsClientConfig }
+
+func newSimnetLink(t *testing.T, rtt time.Duration) (client, server *simnet.SimConn, close func(t *testing.T)) {
+	t.Helper()
+
+	n := &simnet.Simnet{Router: &simnet.PerfectRouter{}}
+	settings := simnet.NodeBiDiLinkSettings{Latency: rtt / 2}
+	clientPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, settings)
+	serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}, settings)
+
+	return clientPacketConn, serverPacketConn, func(t *testing.T) {
+		require.NoError(t, clientPacketConn.Close())
+		require.NoError(t, serverPacketConn.Close())
+		require.NoError(t, n.Close())
+	}
+}
 
 type multiplexedRecorder struct {
 	Recorders []qlogwriter.Recorder

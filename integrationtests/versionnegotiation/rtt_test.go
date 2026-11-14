@@ -2,12 +2,11 @@ package versionnegotiation
 
 import (
 	"context"
-	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go"
-	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
@@ -28,31 +27,25 @@ func TestVersionNegotiationFailure(t *testing.T) {
 		t.Fatal("Test requires at least 2 supported versions.")
 	}
 
-	serverConfig := &quic.Config{}
-	serverConfig.Versions = protocol.SupportedVersions[:1]
-	ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
-	require.NoError(t, err)
-	defer ln.Close()
+	synctest.Test(t, func(t *testing.T) {
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLink(t, rtt)
+		defer closeFn(t)
 
-	proxyConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	require.NoError(t, err)
-	defer proxyConn.Close()
-	// start the proxy
-	proxy := quicproxy.Proxy{
-		Conn:        proxyConn,
-		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
-	}
-	require.NoError(t, proxy.Start())
-	defer proxy.Close()
+		serverConfig := &quic.Config{}
+		serverConfig.Versions = protocol.SupportedVersions[:1]
+		ln, err := quic.Listen(serverPacketConn, getTLSConfig(), serverConfig)
+		require.NoError(t, err)
+		defer ln.Close()
 
-	startTime := time.Now()
-	_, err = quic.DialAddr(
-		context.Background(),
-		proxy.LocalAddr().String(),
-		getTLSClientConfig(),
-		maybeAddQLOGTracer(&quic.Config{Versions: protocol.SupportedVersions[1:2]}),
-	)
-	require.Error(t, err)
-	expectDurationInRTTs(t, startTime, 1)
+		startTime := time.Now()
+		_, err = quic.Dial(
+			context.Background(),
+			clientPacketConn,
+			serverPacketConn.LocalAddr(),
+			getTLSClientConfig(),
+			maybeAddQLOGTracer(&quic.Config{Versions: protocol.SupportedVersions[1:2]}),
+		)
+		require.Error(t, err)
+		expectDurationInRTTs(t, startTime, 1)
+	})
 }
