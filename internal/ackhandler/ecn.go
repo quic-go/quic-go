@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"fmt"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/qlog"
@@ -33,8 +34,6 @@ const (
 	ecnFailedTooFewECNCounts = "ACK contains fewer new ECN counts than acknowledged ECN-marked packets"
 	// ecnFailedManglingDetected is emitted when the path marks all ECN-marked packets as CE
 	ecnFailedManglingDetected = "ECN mangling detected"
-	// ecnFailedPathMigration is emitted when the connection migrates to a new path
-	ecnFailedPathMigration = "path migration"
 )
 
 // must fit into an uint8, otherwise numSentTesting and numLostTesting must have a larger type
@@ -42,15 +41,14 @@ const numECNTestingPackets = 10
 
 type ecnHandler interface {
 	SentPacket(protocol.PacketNumber, protocol.ECN)
-	Mode() protocol.ECN
+	Mode(now monotime.Time) protocol.ECN
 	HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ect1, ecnce int64) (congested bool)
 	LostPacket(protocol.PacketNumber)
-	MigratedPath()
+	MigratedPath(testingStart monotime.Time)
 }
 
 // The ecnTracker performs ECN validation of a path.
-// Once failed, it doesn't do any re-validation of the path.
-// ECN is disabled when the connection migrates to a new path.
+// Once failed, it only re-validates after a path migration.
 // It is designed only work for 1-RTT packets, it doesn't handle multiple packet number spaces.
 // In order to avoid revealing any internal state to on-path observers,
 // callers should make sure to start using ECN (i.e. calling Mode) for the very first 1-RTT packet sent.
@@ -62,6 +60,11 @@ type ecnTracker struct {
 	firstTestingPacket protocol.PacketNumber
 	lastTestingPacket  protocol.PacketNumber
 	firstCapablePacket protocol.PacketNumber
+
+	// after a path migration, testing doesn't start before testingStart
+	testingStart monotime.Time
+	// numAckedECNCE when testing started
+	testingStartECNCE int64
 
 	numSentECT0, numSentECT1                  int64
 	numAckedECT0, numAckedECT1, numAckedECNCE int64
@@ -112,7 +115,7 @@ func (e *ecnTracker) SentPacket(pn protocol.PacketNumber, ecn protocol.ECN) {
 	if e.firstTestingPacket == protocol.InvalidPacketNumber {
 		e.firstTestingPacket = pn
 	}
-	if e.numSentECT0+e.numSentECT1 >= numECNTestingPackets {
+	if e.numSentTesting >= numECNTestingPackets {
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State: qlog.ECNStateUnknown,
@@ -123,16 +126,20 @@ func (e *ecnTracker) SentPacket(pn protocol.PacketNumber, ecn protocol.ECN) {
 	}
 }
 
-func (e *ecnTracker) Mode() protocol.ECN {
+func (e *ecnTracker) Mode(now monotime.Time) protocol.ECN {
 	switch e.state {
 	case ecnStateInitial:
+		if !e.testingStart.IsZero() && now.Before(e.testingStart) {
+			return protocol.ECNNon
+		}
 		if e.qlogger != nil {
 			e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 				State: qlog.ECNStateTesting,
 			})
 		}
 		e.state = ecnStateTesting
-		return e.Mode()
+		e.testingStartECNCE = e.numAckedECNCE
+		return e.Mode(now)
 	case ecnStateTesting, ecnStateCapable:
 		return protocol.ECT0
 	case ecnStateUnknown, ecnStateFailed:
@@ -308,8 +315,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 
 // failIfMangled fails ECN validation if all testing packets are lost or CE-marked.
 func (e *ecnTracker) failIfMangled() {
-	numAckedECNCE := e.numAckedECNCE + int64(e.numLostTesting)
-	if e.numSentECT0+e.numSentECT1 > numAckedECNCE {
+	if int64(e.numSentTesting) > e.numAckedECNCE-e.testingStartECNCE+int64(e.numLostTesting) {
 		return
 	}
 	if e.qlogger != nil {
@@ -321,20 +327,16 @@ func (e *ecnTracker) failIfMangled() {
 	e.state = ecnStateFailed
 }
 
-// MigratedPath disables ECN.
-// CE marks reported for packets sent on the old path must not be treated as congestion on the new path.
-func (e *ecnTracker) MigratedPath() {
-	if e.state == ecnStateFailed {
-		return
-	}
-	e.logger.Debugf("Disabling ECN. Connection migrated to a new path.")
-	if e.qlogger != nil {
-		e.qlogger.RecordEvent(qlog.ECNStateUpdated{
-			State:   qlog.ECNStateFailed,
-			Trigger: ecnFailedPathMigration,
-		})
-	}
-	e.state = ecnStateFailed
+// MigratedPath restarts ECN validation on a new path, with testing starting at testingStart.
+// The ECN counts are kept, since the peer reports them for the entire packet number space.
+func (e *ecnTracker) MigratedPath(testingStart monotime.Time) {
+	e.state = ecnStateInitial
+	e.numSentTesting = 0
+	e.numLostTesting = 0
+	e.firstTestingPacket = protocol.InvalidPacketNumber
+	e.lastTestingPacket = protocol.InvalidPacketNumber
+	e.firstCapablePacket = protocol.InvalidPacketNumber
+	e.testingStart = testingStart
 }
 
 func (e *ecnTracker) ecnMarking(pn protocol.PacketNumber) protocol.ECN {

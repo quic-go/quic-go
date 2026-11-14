@@ -28,7 +28,7 @@ type SentPacketHandler interface {
 	// only to be called once the handshake is complete
 	QueueProbePacket(protocol.PacketNumberSpace) bool /* was a packet queued */
 
-	ECNMode(isShortHeaderPacket bool) protocol.ECN // isShortHeaderPacket should only be true for non-coalesced 1-RTT packets
+	ECNMode(now monotime.Time, isShortHeaderPacket bool) protocol.ECN // isShortHeaderPacket should only be true for non-coalesced 1-RTT packets
 	PeekPacketNumber(protocol.PacketNumberSpace) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.PacketNumberSpace) protocol.PacketNumber
 

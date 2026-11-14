@@ -2603,7 +2603,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 		if err != nil {
 			return err
 		}
-		ecn := c.sentPacketHandler.ECNMode(true)
+		ecn := c.sentPacketHandler.ECNMode(now, true)
 		c.logShortHeaderPacket(p, ecn, buf.Len())
 		c.registerPackedShortHeaderPacket(p, ecn, now)
 		c.sendQueue.Send(buf, 0, ecn)
@@ -2624,7 +2624,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 			c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateAttempted})
 		}
 		c.sentFirstPacket = true
-		if err := c.sendPackedCoalescedPacket(packet, c.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket()), now); err != nil {
+		if err := c.sendPackedCoalescedPacket(packet, c.sentPacketHandler.ECNMode(now, packet.IsOnlyShortHeaderPacket()), now); err != nil {
 			return err
 		}
 		//nolint:exhaustive // only need to handle pacing-related events here
@@ -2646,7 +2646,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 	for {
 		buf := udp.GetPacketBuffer()
-		ecn := c.sentPacketHandler.ECNMode(true)
+		ecn := c.sentPacketHandler.ECNMode(now, true)
 		if _, err := c.appendOneShortHeaderPacket(buf, c.maxPacketSize(), ecn, now); err != nil {
 			if err == errNothingToPack {
 				buf.Release()
@@ -2680,7 +2680,7 @@ func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
 	buf := udp.GetLargePacketBuffer()
 	maxSize := c.maxPacketSize()
 
-	ecn := c.sentPacketHandler.ECNMode(true)
+	ecn := c.sentPacketHandler.ECNMode(now, true)
 	for {
 		var dontSendMore bool
 		size, err := c.appendOneShortHeaderPacket(buf, maxSize, ecn, now)
@@ -2706,7 +2706,7 @@ func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
 		}
 
 		// Don't send more packets in this batch if they require a different ECN marking than the previous ones.
-		nextECN := c.sentPacketHandler.ECNMode(true)
+		nextECN := c.sentPacketHandler.ECNMode(now, true)
 
 		// Append another packet if
 		// 1. The congestion controller and pacer allow sending more
@@ -2747,7 +2747,7 @@ func (c *Conn) resetPacingDeadline() {
 
 func (c *Conn) maybeSendAckOnlyPacket(now monotime.Time) error {
 	if !c.handshakeConfirmed {
-		ecn := c.sentPacketHandler.ECNMode(false)
+		ecn := c.sentPacketHandler.ECNMode(now, false)
 		packet, err := c.packer.PackCoalescedPacket(true, c.maxPacketSize(), now, c.version)
 		if err != nil {
 			return err
@@ -2758,7 +2758,7 @@ func (c *Conn) maybeSendAckOnlyPacket(now monotime.Time) error {
 		return c.sendPackedCoalescedPacket(packet, ecn, now)
 	}
 
-	ecn := c.sentPacketHandler.ECNMode(true)
+	ecn := c.sentPacketHandler.ECNMode(now, true)
 	p, buf, err := c.packer.PackAckOnlyPacket(c.maxPacketSize(), now, c.version)
 	if err != nil {
 		if err == errNothingToPack {
@@ -2808,7 +2808,7 @@ func (c *Conn) sendProbePacket(sendMode ackhandler.SendMode, now monotime.Time) 
 	if packet == nil || (len(packet.longHdrPackets) == 0 && packet.shortHdrPacket == nil) {
 		return fmt.Errorf("connection BUG: couldn't pack %s probe packet: %v", encLevel, packet)
 	}
-	return c.sendPackedCoalescedPacket(packet, c.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket()), now)
+	return c.sendPackedCoalescedPacket(packet, c.sentPacketHandler.ECNMode(now, packet.IsOnlyShortHeaderPacket()), now)
 }
 
 // appendOneShortHeaderPacket appends a new packet to the given packetBuffer.
@@ -2959,7 +2959,7 @@ func (c *Conn) sendConnectionClose(e error) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	ecn := c.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket())
+	ecn := c.sentPacketHandler.ECNMode(monotime.Now(), packet.IsOnlyShortHeaderPacket())
 	c.logCoalescedPacket(packet, ecn)
 	return packet.buffer.Data, c.conn.Write(packet.buffer.Data, 0, ecn)
 }
