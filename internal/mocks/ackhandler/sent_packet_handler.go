@@ -80,17 +80,17 @@ func (c *MockSentPacketHandlerDropPacketsCall) DoAndReturn(f func(protocol.Encry
 }
 
 // ECNMode mocks base method.
-func (m *MockSentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
+func (m *MockSentPacketHandler) ECNMode(now monotime.Time, isShortHeaderPacket bool) protocol.ECN {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ECNMode", isShortHeaderPacket)
+	ret := m.ctrl.Call(m, "ECNMode", now, isShortHeaderPacket)
 	ret0, _ := ret[0].(protocol.ECN)
 	return ret0
 }
 
 // ECNMode indicates an expected call of ECNMode.
-func (mr *MockSentPacketHandlerMockRecorder) ECNMode(isShortHeaderPacket any) *MockSentPacketHandlerECNModeCall {
+func (mr *MockSentPacketHandlerMockRecorder) ECNMode(now, isShortHeaderPacket any) *MockSentPacketHandlerECNModeCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNMode", reflect.TypeOf((*MockSentPacketHandler)(nil).ECNMode), isShortHeaderPacket)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ECNMode", reflect.TypeOf((*MockSentPacketHandler)(nil).ECNMode), now, isShortHeaderPacket)
 	return &MockSentPacketHandlerECNModeCall{Call: call}
 }
 
@@ -106,13 +106,13 @@ func (c *MockSentPacketHandlerECNModeCall) Return(arg0 protocol.ECN) *MockSentPa
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSentPacketHandlerECNModeCall) Do(f func(bool) protocol.ECN) *MockSentPacketHandlerECNModeCall {
+func (c *MockSentPacketHandlerECNModeCall) Do(f func(monotime.Time, bool) protocol.ECN) *MockSentPacketHandlerECNModeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSentPacketHandlerECNModeCall) DoAndReturn(f func(bool) protocol.ECN) *MockSentPacketHandlerECNModeCall {
+func (c *MockSentPacketHandlerECNModeCall) DoAndReturn(f func(monotime.Time, bool) protocol.ECN) *MockSentPacketHandlerECNModeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
