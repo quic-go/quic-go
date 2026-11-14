@@ -58,6 +58,9 @@ jobs:
         if: ${{ (success() || failure()) && github.event_name == 'pull_request' }}
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
   golangci-lint:
+    permissions:
+      actions: write
+      contents: read
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -72,6 +75,10 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
+      - uses: ./.github/actions/go-cache-restore
+        id: go-cache
+        with:
+          name: lint
       - name: golangci-lint (Linux)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -117,3 +124,7 @@ jobs:
         with:
           args: --timeout=3m
           version: ${{ env.GOLANGCI_LINT_VERSION }}
+      - uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go-cache.outputs.path }}
+          key: ${{ steps.go-cache.outputs.key }}
