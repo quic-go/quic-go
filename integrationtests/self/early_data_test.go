@@ -3,70 +3,51 @@ package self_test
 import (
 	"context"
 	"io"
-	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go"
-	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestEarlyData(t *testing.T) {
-	const rtt = 80 * time.Millisecond
-	ln, err := quic.ListenEarly(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
-	require.NoError(t, err)
-	defer ln.Close()
+	synctest.Test(t, func(t *testing.T) {
+		const rtt = 80 * time.Millisecond
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLink(t, rtt)
+		defer closeFn(t)
 
-	proxy := &quicproxy.Proxy{
-		Conn:        newUDPConnLocalhost(t),
-		ServerAddr:  ln.Addr().(*net.UDPAddr),
-		DelayPacket: func(quicproxy.Direction, net.Addr, net.Addr, []byte) time.Duration { return rtt / 2 },
-	}
-	require.NoError(t, proxy.Start())
-	defer proxy.Close()
+		ln, err := quic.ListenEarly(serverPacketConn, getTLSConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+		defer ln.Close()
 
-	connChan := make(chan *quic.Conn)
-	errChan := make(chan error)
-	go func() {
-		conn, err := ln.Accept(context.Background())
-		if err != nil {
-			errChan <- err
-			return
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		clientConn, err := quic.Dial(ctx, clientPacketConn, ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+		require.NoError(t, err)
+
+		serverConn, err := ln.Accept(ctx)
+		require.NoError(t, err)
+		str, err := serverConn.OpenUniStream()
+		require.NoError(t, err)
+		_, err = str.Write([]byte("early data"))
+		require.NoError(t, err)
+		require.NoError(t, str.Close())
+		// the write should have completed before the handshake
+		select {
+		case <-serverConn.HandshakeComplete():
+			t.Fatal("handshake shouldn't be completed yet")
+		default:
 		}
-		connChan <- conn
-	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	clientConn, err := quic.Dial(ctx, newUDPConnLocalhost(t), proxy.LocalAddr(), getTLSClientConfig(), getQuicConfig(nil))
-	require.NoError(t, err)
+		clientStr, err := clientConn.AcceptUniStream(context.Background())
+		require.NoError(t, err)
+		data, err := io.ReadAll(clientStr)
+		require.NoError(t, err)
+		require.Equal(t, []byte("early data"), data)
 
-	var serverConn *quic.Conn
-	select {
-	case serverConn = <-connChan:
-	case err := <-errChan:
-		t.Fatalf("error accepting connection: %s", err)
-	}
-	str, err := serverConn.OpenUniStream()
-	require.NoError(t, err)
-	_, err = str.Write([]byte("early data"))
-	require.NoError(t, err)
-	require.NoError(t, str.Close())
-	// the write should have completed before the handshake
-	select {
-	case <-serverConn.HandshakeComplete():
-		t.Fatal("handshake shouldn't be completed yet")
-	default:
-	}
-
-	clientStr, err := clientConn.AcceptUniStream(context.Background())
-	require.NoError(t, err)
-	data, err := io.ReadAll(clientStr)
-	require.NoError(t, err)
-	require.Equal(t, []byte("early data"), data)
-
-	clientConn.CloseWithError(0, "")
-	<-serverConn.Context().Done()
+		clientConn.CloseWithError(0, "")
+		<-serverConn.Context().Done()
+	})
 }
