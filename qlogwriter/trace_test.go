@@ -92,6 +92,10 @@ func testTraceMetadata(t *testing.T,
 		"vantage_point": map[string]any{
 			"type": expectedVantagePoint,
 		},
+		"implementation": map[string]any{
+			"name":    "quic-go",
+			"version": quicGoVersion,
+		},
 	}
 	if len(expectedEventSchemas) > 0 {
 		trace["event_schemas"] = expectedEventSchemas
@@ -100,7 +104,6 @@ func testTraceMetadata(t *testing.T,
 		"file_schema":          "urn:ietf:params:qlog:file:sequential",
 		"serialization_format": "application/qlog+json-seq",
 		"title":                "quic-go qlog",
-		"code_version":         quicGoVersion,
 		"qlog_format":          "JSON-SEQ",
 		"qlog_version":         "0.3",
 		"trace":                trace,
