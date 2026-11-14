@@ -28,7 +28,7 @@ func init() {
 			quicGoVersion = d.Version
 			if d.Replace != nil {
 				if len(d.Replace.Version) > 0 {
-					quicGoVersion = d.Version
+					quicGoVersion = d.Replace.Version
 				} else {
 					quicGoVersion += " (replaced)"
 				}
