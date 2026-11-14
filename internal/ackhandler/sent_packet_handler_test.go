@@ -1519,10 +1519,11 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	cong.EXPECT().OnPacketAcked(gomock.Any(), gomock.Any()).AnyTimes()
 	cong.EXPECT().MaybeExitSlowStart().AnyTimes()
 	ecnHandler := NewMockECNHandler(mockCtrl)
+	rttStats := utils.NewRTTStats()
 	sph := NewSentPacketHandler(
 		0,
 		1200,
-		utils.NewRTTStats(),
+		rttStats,
 		&utils.ConnectionStats{},
 		true,
 		false,
@@ -1543,7 +1544,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	sendPacket := func(t *testing.T, ti monotime.Time, ecn protocol.ECN) protocol.PacketNumber {
 		t.Helper()
 		pn := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
-		ecnHandler.EXPECT().SentPacket(pn, ecn)
+		ecnHandler.EXPECT().SentPacket(ti, pn, ecn)
 		sph.SentPacket(ti, pn, protocol.InvalidPacketNumber, nil, []Frame{packets.NewPingFrame(pn)}, protocol.Encryption1RTT, ecn, 1200, false, false)
 		return pn
 	}
@@ -1636,7 +1637,8 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	ecnHandler.EXPECT().LostPacket(pn)
 	require.True(t, sph.QueueProbePacket(protocol.PacketNumberSpaceAppData))
 
-	ecnHandler.EXPECT().MigratedPath()
+	// ECN validation waits for 3 PTOs of the old path after the migration
+	ecnHandler.EXPECT().MigratedPath(now.Add(3 * rttStats.PTO(true)))
 	sph.MigratedPath(now, 1200)
 }
 
