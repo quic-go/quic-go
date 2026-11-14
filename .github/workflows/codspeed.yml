@@ -29,6 +29,7 @@ jobs:
         with:
           go-version: "1.27.x"
           check-latest: true
+          cache: false
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@af75f77f17a054769abefaa42fe8dc2975469b5f # v5.6.3
         with:

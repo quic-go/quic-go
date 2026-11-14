@@ -29,6 +29,7 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
+          cache: false
       # Cross-compile the tests, so we don't need to install Go in the VM.
       - name: Build tests
         env:
