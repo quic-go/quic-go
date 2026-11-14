@@ -371,7 +371,7 @@ func TestECNPathMigration(t *testing.T) {
 	ecnTracker.MigratedPath(now.Add(time.Second))
 	require.Equal(t, protocol.ECNNon, ecnTracker.Mode(now))
 	// CE marks for packets sent on the old path are not treated as congestion
-	require.False(t, ecnTracker.HandleNewlyAcked(nil, 5, 0, 5))
+	require.False(t, ecnTracker.HandleNewlyAcked(nil, 5, 0, 2))
 	require.Empty(t, eventRecorder.Events())
 
 	for pn := protocol.PacketNumber(10); pn < 20; pn++ {
@@ -387,10 +387,10 @@ func TestECNPathMigration(t *testing.T) {
 	)
 	eventRecorder.Clear()
 	// a delayed ACK for packets sent on the old path doesn't count towards mangling detection
-	require.False(t, ecnTracker.HandleNewlyAcked(nil, 5, 0, 15))
+	require.False(t, ecnTracker.HandleNewlyAcked(nil, 5, 0, 5))
 	require.Empty(t, eventRecorder.Events())
 	// 9 of the 10 testing packets are CE-marked: not mangling, but congestion
-	require.True(t, ecnTracker.HandleNewlyAcked(getAckedPackets(10, 11, 12, 13, 14, 15, 16, 17, 18, 19), 6, 0, 24))
+	require.True(t, ecnTracker.HandleNewlyAcked(getAckedPackets(10, 11, 12, 13, 14, 15, 16, 17, 18, 19), 6, 0, 14))
 	require.Equal(t,
 		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateCapable}},
 		eventRecorder.Events(),
