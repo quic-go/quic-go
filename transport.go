@@ -827,6 +827,9 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	h.mutex.Lock()
 	delete(h.handlers, id)
+	if len(h.handlers) == 0 {
+		(*Transport)(h).maybeStopListening()
+	}
 	h.mutex.Unlock()
 	h.logger.Debugf("Removing connection ID %s.", id)
 }

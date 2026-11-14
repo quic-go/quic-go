@@ -155,6 +155,37 @@ func TestTransportAndDialConcurrentClose(t *testing.T) {
 	}
 }
 
+func TestTransportSingleUseStopsAfterLastConnRemoved(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		_, conn, closeFn := newSimnetLink(t, 10*time.Millisecond)
+		defer closeFn()
+
+		tr := &Transport{Conn: conn, isSingleUse: true}
+		defer tr.Close()
+		ln, err := tr.Listen(&tls.Config{}, nil)
+		require.NoError(t, err)
+
+		connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+		m := (*packetHandlerMap)(tr)
+		require.True(t, m.Add(connID, &mockPacketHandler{}))
+		require.NoError(t, ln.Close())
+		synctest.Wait()
+		select {
+		case <-tr.listening:
+			t.Fatal("stopped listening while a connection is still alive")
+		default:
+		}
+
+		m.Remove(connID)
+		synctest.Wait()
+		select {
+		case <-tr.listening:
+		default:
+			t.Fatal("still listening")
+		}
+	})
+}
+
 func TestTransportErrFromConn(t *testing.T) {
 	t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
 
