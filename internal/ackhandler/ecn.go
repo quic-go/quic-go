@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -63,8 +64,8 @@ type ecnTracker struct {
 
 	// after a path migration, testing doesn't start before testingStart
 	testingStart monotime.Time
-	// numAckedECNCE when testing started
-	testingStartECNCE int64
+	// CE marks reported for the testing packets, used for mangling detection
+	numTestingECNCE int64
 
 	numSentECT0, numSentECT1                  int64
 	numAckedECT0, numAckedECT1, numAckedECNCE int64
@@ -138,7 +139,6 @@ func (e *ecnTracker) Mode(now monotime.Time) protocol.ECN {
 			})
 		}
 		e.state = ecnStateTesting
-		e.testingStartECNCE = e.numAckedECNCE
 		return e.Mode(now)
 	case ecnStateTesting, ecnStateCapable:
 		return protocol.ECT0
@@ -280,24 +280,24 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	e.numAckedECT1 = ect1
 	e.numAckedECNCE = ecnce
 
-	// Detect mangling (a path remarking all ECN-marked testing packets as CE),
-	// once all 10 testing packets have been sent out.
-	if e.state == ecnStateUnknown {
-		e.failIfMangled()
-		if e.state == ecnStateFailed {
+	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
+		// ACKs that don't acknowledge any testing packets might report CE marks for packets sent on the old path.
+		if ackedTestingPacket := slices.ContainsFunc(packets, func(p packetWithPacketNumber) bool {
+			return e.isTestingPacket(p.PacketNumber)
+		}); !ackedTestingPacket {
 			return false
 		}
-	}
-	if e.state == ecnStateTesting || e.state == ecnStateUnknown {
-		var ackedTestingPacket bool
-		for _, p := range packets {
-			if e.isTestingPacket(p.PacketNumber) {
-				ackedTestingPacket = true
-				break
+		e.numTestingECNCE += newECNCE
+		// Detect mangling (a path remarking all ECN-marked testing packets as CE),
+		// once all 10 testing packets have been sent out.
+		if e.state == ecnStateUnknown {
+			e.failIfMangled()
+			if e.state == ecnStateFailed {
+				return false
 			}
 		}
 		// This check won't succeed if the path is mangling ECN-marks (i.e. rewrites all ECN-marked packets to CE).
-		if ackedTestingPacket && (newECT0 > 0 || newECT1 > 0) {
+		if newECT0 > 0 || newECT1 > 0 {
 			e.logger.Debugf("ECN capability confirmed.")
 			if e.qlogger != nil {
 				e.qlogger.RecordEvent(qlog.ECNStateUpdated{
@@ -315,7 +315,7 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 
 // failIfMangled fails ECN validation if all testing packets are lost or CE-marked.
 func (e *ecnTracker) failIfMangled() {
-	if int64(e.numSentTesting) > e.numAckedECNCE-e.testingStartECNCE+int64(e.numLostTesting) {
+	if int64(e.numSentTesting) > e.numTestingECNCE+int64(e.numLostTesting) {
 		return
 	}
 	if e.qlogger != nil {
@@ -333,6 +333,7 @@ func (e *ecnTracker) MigratedPath(testingStart monotime.Time) {
 	e.state = ecnStateInitial
 	e.numSentTesting = 0
 	e.numLostTesting = 0
+	e.numTestingECNCE = 0
 	e.firstTestingPacket = protocol.InvalidPacketNumber
 	e.lastTestingPacket = protocol.InvalidPacketNumber
 	e.firstCapablePacket = protocol.InvalidPacketNumber
