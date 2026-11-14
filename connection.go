@@ -180,9 +180,6 @@ type Conn struct {
 
 	maxPayloadSizeEstimate atomic.Uint32
 
-	initialStream       *initialCryptoStream
-	handshakeStream     *cryptoStream
-	oneRTTStream        *cryptoStream // only set for the server
 	cryptoStreamHandler cryptoStreamHandler
 
 	notifyReceivedPacket chan struct{}
@@ -287,7 +284,6 @@ var newConnection = func(
 		handshakeDestConnID: destConnID,
 		srcConnIDLen:        srcConnID.Len(),
 		tokenGenerator:      tokenGenerator,
-		oneRTTStream:        newCryptoStream(),
 		perspective:         protocol.PerspectiveServer,
 		qlogTrace:           qlogTrace,
 		logger:              logger,
@@ -377,9 +373,8 @@ var newConnection = func(
 		s.version,
 	)
 	s.cryptoStreamHandler = cs
-	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
+	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.cryptoStreamManager, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
-	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, s.oneRTTStream)
 	return w
 }
 
@@ -470,7 +465,6 @@ var newClientConnection = func(
 		s.logger,
 	)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(s.config.initialPacketSize())))
-	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -510,9 +504,8 @@ var newClientConnection = func(
 		s.version,
 	)
 	s.cryptoStreamHandler = cs
-	s.cryptoStreamManager = newCryptoStreamManager(s.initialStream, s.handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
-	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
+	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.cryptoStreamManager, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, &s.receivedPacketHandler, s.datagramQueue, s.perspective, s.qlogger)
 	if token != nil {
 		s.packer.SetToken(token.data)
 	}
@@ -522,8 +515,7 @@ var newClientConnection = func(
 // r is the pathReceiver for the Transport that the connection was dialed or accepted on.
 func (c *Conn) preSetup(r *pathReceiver) {
 	c.largestRcvdAppData = protocol.InvalidPacketNumber
-	c.initialStream = newInitialCryptoStream(c.perspective == protocol.PerspectiveClient)
-	c.handshakeStream = newCryptoStream()
+	c.cryptoStreamManager = newCryptoStreamManager(c.perspective)
 	c.sendQueue = newSendQueue(c.conn)
 	c.retransmissionQueue = newRetransmissionQueue()
 	c.frameParser = *wire.NewFrameParser(
@@ -984,8 +976,10 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 		return err
 	}
 	if ticket != nil { // may be nil if session tickets are disabled via tls.Config.SessionTicketsDisabled
-		c.oneRTTStream.Write(ticket)
-		if cf := c.oneRTTStream.PopCryptoFrame(protocol.MaxByteCount); cf != nil {
+		if err := c.cryptoStreamManager.Write(protocol.Encryption1RTT, ticket); err != nil {
+			return err
+		}
+		if cf := c.cryptoStreamManager.PopCryptoFrame(protocol.Encryption1RTT, protocol.MaxByteCount); cf != nil {
 			c.queueControlFrame(cf)
 		}
 	}
@@ -1043,7 +1037,8 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 		}
 		// Prioritize sending of new CRYPTO data.
 		// This is especially relevant when processing 0-RTT packets.
-		if !c.handshakeComplete && (c.initialStream.HasData() || c.handshakeStream.HasData()) {
+		if !c.handshakeComplete &&
+			(c.cryptoStreamManager.HasData(protocol.EncryptionInitial) || c.cryptoStreamManager.HasData(protocol.EncryptionHandshake)) {
 			break
 		}
 	}
@@ -2108,9 +2103,9 @@ func (c *Conn) handleHandshakeEvents(now monotime.Time) error {
 		case handshake.EventDiscard0RTTKeys:
 			c.dropEncryptionLevel(protocol.Encryption0RTT, now)
 		case handshake.EventWriteInitialData:
-			_, err = c.initialStream.Write(ev.Data)
+			err = c.cryptoStreamManager.Write(protocol.EncryptionInitial, ev.Data)
 		case handshake.EventWriteHandshakeData:
-			_, err = c.handshakeStream.Write(ev.Data)
+			err = c.cryptoStreamManager.Write(protocol.EncryptionHandshake, ev.Data)
 		}
 		if err != nil {
 			return err
@@ -2403,11 +2398,14 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 func (c *Conn) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now monotime.Time) {
 	c.sentPacketHandler.DropPackets(encLevel, now)
 	c.receivedPacketHandler.DropPackets(encLevel)
-	//nolint:exhaustive // only Initial and 0-RTT need special treatment
+	//nolint:exhaustive // 1-RTT is never dropped
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		c.droppedInitialKeys = true
 		c.cryptoStreamHandler.DiscardInitialKeys()
+		c.cryptoStreamManager.Drop(protocol.EncryptionInitial)
+	case protocol.EncryptionHandshake:
+		c.cryptoStreamManager.Drop(protocol.EncryptionHandshake)
 	case protocol.Encryption0RTT:
 		c.streamsMap.ResetFor0RTT()
 		c.framer.Handle0RTTRejection()
