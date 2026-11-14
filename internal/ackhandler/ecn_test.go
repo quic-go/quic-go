@@ -355,3 +355,21 @@ func TestECNCongestionDetection(t *testing.T) {
 	require.True(t, ecnTracker.HandleNewlyAcked(getAckedPackets(7, 8, 9, 14), 7, 0, 2))
 	require.Empty(t, eventRecorder.Events())
 }
+
+func TestECNPathMigration(t *testing.T) {
+	var eventRecorder events.Recorder
+	ecnTracker := newECNTracker(utils.DefaultLogger, &eventRecorder)
+
+	sendECNTestingPackets(t, ecnTracker, &eventRecorder)
+	require.False(t, ecnTracker.HandleNewlyAcked(getAckedPackets(0, 1, 2), 3, 0, 0))
+	eventRecorder.Clear()
+
+	ecnTracker.MigratedPath()
+	require.Equal(t,
+		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateFailed, Trigger: ecnFailedPathMigration}},
+		eventRecorder.Events(),
+	)
+	require.Equal(t, protocol.ECNNon, ecnTracker.Mode())
+	// CE marks for packets sent on the old path are not treated as congestion
+	require.False(t, ecnTracker.HandleNewlyAcked(getAckedPackets(3, 4), 5, 0, 2))
+}

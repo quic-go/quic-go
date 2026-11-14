@@ -114,6 +114,42 @@ func (c *MockECNHandlerLostPacketCall) DoAndReturn(f func(protocol.PacketNumber)
 	return c
 }
 
+// MigratedPath mocks base method.
+func (m *MockECNHandler) MigratedPath() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MigratedPath")
+}
+
+// MigratedPath indicates an expected call of MigratedPath.
+func (mr *MockECNHandlerMockRecorder) MigratedPath() *MockECNHandlerMigratedPathCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigratedPath", reflect.TypeOf((*MockECNHandler)(nil).MigratedPath))
+	return &MockECNHandlerMigratedPathCall{Call: call}
+}
+
+// MockECNHandlerMigratedPathCall wrap *gomock.Call
+type MockECNHandlerMigratedPathCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockECNHandlerMigratedPathCall) Return() *MockECNHandlerMigratedPathCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockECNHandlerMigratedPathCall) Do(f func()) *MockECNHandlerMigratedPathCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockECNHandlerMigratedPathCall) DoAndReturn(f func()) *MockECNHandlerMigratedPathCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // Mode mocks base method.
 func (m *MockECNHandler) Mode() protocol.ECN {
 	m.ctrl.T.Helper()

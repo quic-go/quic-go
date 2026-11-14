@@ -33,6 +33,8 @@ const (
 	ecnFailedTooFewECNCounts = "ACK contains fewer new ECN counts than acknowledged ECN-marked packets"
 	// ecnFailedManglingDetected is emitted when the path marks all ECN-marked packets as CE
 	ecnFailedManglingDetected = "ECN mangling detected"
+	// ecnFailedPathMigration is emitted when the connection migrates to a new path
+	ecnFailedPathMigration = "path migration"
 )
 
 // must fit into an uint8, otherwise numSentTesting and numLostTesting must have a larger type
@@ -43,10 +45,12 @@ type ecnHandler interface {
 	Mode() protocol.ECN
 	HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ect1, ecnce int64) (congested bool)
 	LostPacket(protocol.PacketNumber)
+	MigratedPath()
 }
 
 // The ecnTracker performs ECN validation of a path.
 // Once failed, it doesn't do any re-validation of the path.
+// ECN is disabled when the connection migrates to a new path.
 // It is designed only work for 1-RTT packets, it doesn't handle multiple packet number spaces.
 // In order to avoid revealing any internal state to on-path observers,
 // callers should make sure to start using ECN (i.e. calling Mode) for the very first 1-RTT packet sent.
@@ -312,6 +316,22 @@ func (e *ecnTracker) failIfMangled() {
 		e.qlogger.RecordEvent(qlog.ECNStateUpdated{
 			State:   qlog.ECNStateFailed,
 			Trigger: ecnFailedManglingDetected,
+		})
+	}
+	e.state = ecnStateFailed
+}
+
+// MigratedPath disables ECN.
+// CE marks reported for packets sent on the old path must not be treated as congestion on the new path.
+func (e *ecnTracker) MigratedPath() {
+	if e.state == ecnStateFailed {
+		return
+	}
+	e.logger.Debugf("Disabling ECN. Connection migrated to a new path.")
+	if e.qlogger != nil {
+		e.qlogger.RecordEvent(qlog.ECNStateUpdated{
+			State:   qlog.ECNStateFailed,
+			Trigger: ecnFailedPathMigration,
 		})
 	}
 	e.state = ecnStateFailed
