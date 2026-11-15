@@ -3505,8 +3505,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 			t.Fatal("should have migrated")
 		}
 		assert.Equal(t, protocol.ByteCount(1234), tc.conn.mtuDiscoverer.CurrentSize())
-		maxPayloadSize := estimateMaxPayloadSize(1234)
-		require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxPayloadSize)}, tc.conn.SendDatagram(make([]byte, 1234)))
+		maxDataLen := (&wire.DatagramFrame{DataLenPresent: true}).MaxDataLen(estimateMaxPayloadSize(1234), protocol.Version1)
+		require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}, tc.conn.SendDatagram(make([]byte, 1234)))
 		assert.False(t, tc.conn.mtuDiscoverer.ShouldSendProbe(monotime.Now()))
 		assert.Equal(t, !disableMTU && df, tc.conn.mtuDiscoverer.ShouldSendProbe(monotime.Now().Add(time.Hour)))
 
@@ -3567,8 +3567,8 @@ func TestConnectionMigrationMTUDiscovery(t *testing.T) {
 			defer tc.conn.sendQueue.Close()
 
 			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), tc.conn.mtuDiscoverer.CurrentSize())
-			maxPayloadSize := estimateMaxPayloadSize(protocol.MinInitialPacketSize)
-			require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxPayloadSize)}, tc.conn.SendDatagram(make([]byte, protocol.MinInitialPacketSize)))
+			maxDataLen := (&wire.DatagramFrame{DataLenPresent: true}).MaxDataLen(estimateMaxPayloadSize(protocol.MinInitialPacketSize), protocol.Version1)
+			require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}, tc.conn.SendDatagram(make([]byte, protocol.MinInitialPacketSize)))
 			require.False(t, tc.conn.mtuDiscoverer.ShouldSendProbe(now))
 			require.Equal(t, !test.disableMTU && test.df, tc.conn.mtuDiscoverer.ShouldSendProbe(now.Add(time.Hour)))
 		})

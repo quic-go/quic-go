@@ -130,6 +130,41 @@ func TestDatagramSizeLimit(t *testing.T) {
 	require.Equal(t, bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize)), datagram)
 }
 
+// The largest datagram SendDatagram accepts fits in a packet,
+// even with the longest connection IDs.
+func TestDatagramSizeLimitLongConnectionIDs(t *testing.T) {
+	serverTr := &quic.Transport{Conn: newUDPConnLocalhost(t), ConnectionIDLength: protocol.MaxConnIDLen}
+	defer serverTr.Close()
+	server, err := serverTr.Listen(getTLSConfig(), getQuicConfig(&quic.Config{EnableDatagrams: true}))
+	require.NoError(t, err)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	clientTr := &quic.Transport{Conn: newUDPConnLocalhost(t), ConnectionIDLength: protocol.MaxConnIDLen}
+	defer clientTr.Close()
+	clientConn, err := clientTr.Dial(
+		ctx,
+		server.Addr(),
+		getTLSClientConfig(),
+		getQuicConfig(&quic.Config{EnableDatagrams: true, DisablePathMTUDiscovery: true}),
+	)
+	require.NoError(t, err)
+	defer clientConn.CloseWithError(0, "")
+	serverConn, err := server.Accept(ctx)
+	require.NoError(t, err)
+	defer serverConn.CloseWithError(0, "")
+
+	err = clientConn.SendDatagram(bytes.Repeat([]byte("a"), 2000))
+	var sizeErr *quic.DatagramTooLargeError
+	require.ErrorAs(t, err, &sizeErr)
+	datagram := bytes.Repeat([]byte("b"), int(sizeErr.MaxDatagramPayloadSize))
+	require.NoError(t, clientConn.SendDatagram(datagram))
+	received, err := serverConn.ReceiveDatagram(ctx)
+	require.NoError(t, err, "the largest datagram SendDatagram accepted was never received")
+	require.Equal(t, datagram, received)
+}
+
 func TestDatagramSizeLimitWithMTUDiscovery(t *testing.T) {
 	server, err := quic.Listen(
 		newUDPConnLocalhost(t),

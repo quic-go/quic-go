@@ -3148,9 +3148,9 @@ func (c *Conn) SendDatagram(p []byte) error {
 	f := &wire.DatagramFrame{DataLenPresent: true}
 	// The payload size estimate is conservative.
 	// Under many circumstances we could send a few more bytes.
-	maxDataLen := min(
-		f.MaxDataLen(c.peerParams.MaxDatagramFrameSize, c.version),
-		protocol.ByteCount(c.maxPayloadSizeEstimate.Load()),
+	maxDataLen := f.MaxDataLen(
+		min(c.peerParams.MaxDatagramFrameSize, protocol.ByteCount(c.maxPayloadSizeEstimate.Load())),
+		c.version,
 	)
 	if protocol.ByteCount(len(p)) > maxDataLen {
 		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
@@ -3260,5 +3260,5 @@ func (c *Conn) NextConnection(ctx context.Context) (*Conn, error) {
 // It is not very sophisticated: it just subtracts the size of header (assuming the maximum
 // connection ID length), and the size of the encryption tag.
 func estimateMaxPayloadSize(mtu protocol.ByteCount) protocol.ByteCount {
-	return mtu - 1 /* type byte */ - 20 /* maximum connection ID length */ - 16 /* tag size */
+	return mtu - 1 /* type byte */ - 20 /* maximum connection ID length */ - 4 /* maximum packet number length */ - 16 /* tag size */
 }
