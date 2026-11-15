@@ -51,3 +51,13 @@ jobs:
       - name: Run tests
         shell: cpa.sh {0}
         run: ./udp.test -test.v -test.shuffle on
+  # Stable check name for branch protection, independent of the Go versions in the matrix.
+  # always(): if a dependency fails, a skipped job would count as a passed required check.
+  result:
+    name: BSD tests
+    needs: bsd
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
