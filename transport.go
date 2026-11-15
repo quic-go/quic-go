@@ -168,7 +168,12 @@ type Transport struct {
 	listening   chan struct{} // is closed when listen returns
 	closeErr    error
 	createdConn bool
-	isSingleUse bool // was created for a single server or client, i.e. by calling quic.Listen or quic.Dial
+	// Created by one of the package-level Listen or Dial functions,
+	// to serve a single listener or connection.
+	isSingleUse bool
+	// Set when the server of a single-use transport is closed.
+	// The transport is closed once its last connection is gone.
+	serverClosed bool
 
 	readingNonQUICPackets atomic.Bool
 	nonQUICPackets        chan receivedPacket
@@ -485,7 +490,7 @@ func (t *Transport) closeServer() {
 
 	t.server = nil
 	if t.isSingleUse {
-		t.closeErr = ErrServerClosed
+		t.serverClosed = true
 	}
 
 	if len(t.handlers) == 0 {
@@ -561,9 +566,11 @@ func (t *Transport) listen(conn udp.Conn) {
 }
 
 func (t *Transport) maybeStopListening() {
-	if t.isSingleUse && t.closeErr != nil {
-		t.conn.SetReadDeadline(time.Now())
+	if !t.serverClosed || t.closeErr != nil {
+		return
 	}
+	t.closeErr = ErrServerClosed
+	t.conn.SetReadDeadline(time.Now())
 }
 
 func (t *Transport) handlePacket(p receivedPacket) {
