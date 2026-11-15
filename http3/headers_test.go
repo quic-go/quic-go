@@ -422,6 +422,16 @@ func TestRequestHeadersValidation(t *testing.T) {
 			err: "userinfo is not allowed in :authority",
 		},
 		{
+			name: "invalid :authority",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "https"},
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "quic-go.net/foo"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			err: `invalid :authority: "quic-go.net/foo"`,
+		},
+		{
 			name: "missing :scheme",
 			headers: []qpack.HeaderField{
 				{Name: ":path", Value: "/foo"},
