@@ -108,3 +108,10 @@ jobs:
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: exit 1
+      # codecov.yml sets manual_trigger, so Codecov waits for all coverage uploads.
+      - name: Send Codecov notifications
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          run_command: send-notifications
+          token: ${{ secrets.CODECOV_TOKEN }}
