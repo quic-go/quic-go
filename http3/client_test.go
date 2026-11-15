@@ -523,6 +523,33 @@ func TestClientGzip(t *testing.T) {
 	})
 }
 
+func TestClientConnectIgnoresContentLength(t *testing.T) {
+	var hdr bytes.Buffer
+	enc := qpack.NewEncoder(&hdr)
+	require.NoError(t, enc.WriteField(qpack.HeaderField{Name: ":status", Value: "200"}))
+	require.NoError(t, enc.WriteField(qpack.HeaderField{Name: "content-length", Value: "3"}))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	clientConn, serverConn := newConnPair(t)
+	go func() {
+		str, err := serverConn.AcceptStream(ctx)
+		if err != nil {
+			return
+		}
+		str.Write(append((&headersFrame{Length: uint64(hdr.Len())}).Append(nil), hdr.Bytes()...))
+		str.Write(getDataFrame([]byte("foobar")))
+		str.Close()
+	}()
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodConnect, "http://quic-go.net", nil)
+	rsp, err := (&Transport{}).NewClientConn(clientConn).RoundTrip(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foobar"), body)
+}
+
 func testClientGzip(t *testing.T,
 	data []byte,
 	expectedRsp []byte,
