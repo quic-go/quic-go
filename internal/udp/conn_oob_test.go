@@ -55,6 +55,11 @@ func TestConnECNAndPacketInfo(t *testing.T) {
 	}
 }
 
+func TestConnECNDisabledUsingEnv(t *testing.T) {
+	t.Setenv("QUIC_GO_DISABLE_ECN", "true")
+	require.False(t, listenUDP(t, "udp", nil).Capabilities().ECN)
+}
+
 // A reply must be sent from the address the client sent to,
 // not from the address the kernel's route lookup would pick.
 func TestConnPacketInfoSourceAddress(t *testing.T) {
