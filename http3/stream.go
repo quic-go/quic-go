@@ -92,6 +92,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 			switch f := frame.(type) {
 			case *dataFrame:
 				if s.parsedTrailer {
+					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 					return 0, errors.New("DATA frame received after trailers")
 				}
 				s.bytesRemainingInFrame = f.Length
@@ -99,6 +100,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 			case *headersFrame:
 				if s.parsedTrailer {
 					maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), f.Length)
+					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true

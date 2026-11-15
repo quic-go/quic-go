@@ -99,35 +99,57 @@ func TestStreamReadDataFrames(t *testing.T) {
 }
 
 func TestStreamInvalidFrame(t *testing.T) {
-	var buf bytes.Buffer
-	b := (&settingsFrame{}).Append(nil)
-	buf.Write(b)
+	trailers := (&headersFrame{}).Append(nil)
+	for _, tc := range []struct {
+		name string
+		data []byte
+		err  string
+	}{
+		{
+			name: "unexpected frame",
+			data: (&settingsFrame{}).Append(nil),
+			err:  "peer sent an unexpected frame",
+		},
+		{
+			name: "DATA after trailers",
+			data: slices.Concat(trailers, getDataFrame([]byte("foo"))),
+			err:  "DATA frame received after trailers",
+		},
+		{
+			name: "HEADERS after trailers",
+			data: slices.Concat(trailers, trailers),
+			err:  "additional HEADERS frame received after trailers",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := bytes.NewBuffer(tc.data)
+			mockCtrl := gomock.NewController(t)
+			qstr := NewMockDatagramStream(mockCtrl)
+			qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+			qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			clientConn, serverConn := newConnPair(t)
 
-	mockCtrl := gomock.NewController(t)
-	qstr := NewMockDatagramStream(mockCtrl)
-	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-	clientConn, serverConn := newConnPair(t)
+			str := newStream(
+				qstr,
+				newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
+				nil,
+				func(io.Reader, *headersFrame) error { return nil },
+				nil,
+			)
 
-	str := newStream(
-		qstr,
-		newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
-		nil,
-		func(io.Reader, *headersFrame) error { return nil },
-		nil,
-	)
+			_, err := io.ReadAll(str)
+			require.ErrorContains(t, err, tc.err)
 
-	_, err := str.Read([]byte{0})
-	require.ErrorContains(t, err, "peer sent an unexpected frame")
-
-	select {
-	case <-serverConn.Context().Done():
-		var appErr *quic.ApplicationError
-		require.ErrorAs(t, context.Cause(serverConn.Context()), &appErr)
-		require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), appErr.ErrorCode)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
+			select {
+			case <-serverConn.Context().Done():
+				var appErr *quic.ApplicationError
+				require.ErrorAs(t, context.Cause(serverConn.Context()), &appErr)
+				require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), appErr.ErrorCode)
+			case <-time.After(time.Second):
+				t.Fatal("timeout")
+			}
+		})
 	}
 }
 
