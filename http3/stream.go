@@ -50,7 +50,7 @@ type Stream struct {
 	parseTrailer  func(io.Reader, *headersFrame) error
 	parsedTrailer bool
 
-	missingHeader bool // set if the stream was taken over before the response header was sent
+	missingHeader bool // set until the response header was written: DATA frames can't be written before it
 }
 
 func newStream(
@@ -71,6 +71,18 @@ func newStream(
 			closeConn: conn.CloseWithError,
 		},
 	}
+}
+
+// newServerStream creates a stream that only writes DATA frames once the response header was written.
+func newServerStream(
+	str datagramStream,
+	conn *rawConn,
+	parseTrailer func(io.Reader, *headersFrame) error,
+	qlogger qlogwriter.Recorder,
+) *Stream {
+	s := newStream(str, conn, nil, parseTrailer, qlogger)
+	s.missingHeader = true
+	return s
 }
 
 func (s *Stream) Read(b []byte) (int, error) {
@@ -221,6 +233,16 @@ func (s *Stream) TryWriteAll(b []byte) error {
 		})
 	}
 	return nil
+}
+
+// writeHeader writes b, the unwritten part of a HEADERS frame.
+// DATA frames can be written once the final response header was written.
+func (s *Stream) writeHeader(b []byte, final bool) (int, error) {
+	n, err := s.writeUnframed(b)
+	if final && n == len(b) {
+		s.missingHeader = false
+	}
+	return n, err
 }
 
 func (s *Stream) writeUnframed(b []byte) (int, error) {

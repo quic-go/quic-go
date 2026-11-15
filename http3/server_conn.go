@@ -189,7 +189,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, nil, func(r io.Reader, hf *headersFrame) error {
+	hstr := newServerStream(str, conn, func(r io.Reader, hf *headersFrame) error {
 		trailers, err := decodeTrailers(r, str, hf, maxHeaderBytes, decoder, qlogger)
 		if err != nil {
 			return err
@@ -316,7 +316,7 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 }
 
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {
-	hstr := newStream(str, c.rawConn, nil, nil, c.qlogger)
+	hstr := newServerStream(str, c.rawConn, nil, c.qlogger)
 	defer hstr.Close()
 	r := newResponseWriter(hstr, c.rawConn, "", c.logger)
 	r.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)

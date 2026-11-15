@@ -87,7 +87,7 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 	clientConn, _ := newConnPair(t)
 	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, &eventRecorder, nil)
 	rw := newResponseWriter(
-		newStream(str, conn, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
+		newServerStream(str, conn, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
 		nil,
 		http.MethodGet,
 		slog.Default(),
@@ -171,10 +171,9 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		rw := newTestResponseWriter(t)
 		rw.Header().Set("Capsule-Protocol", "?1")
 		rw.WriteHeader(http.StatusOK)
-		str, err := rw.HTTPStream()
-		require.NoError(t, err)
-		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
-		_, err = str.Write([]byte("foobar"))
+		require.NoError(t, rw.FlushError())
+		str := rw.HTTPStream()
+		_, err := str.Write([]byte("foobar"))
 		require.NoError(t, err)
 		n, err := rw.Write([]byte("raboof"))
 		require.ErrorIs(t, err, http.ErrHijacked)
@@ -186,13 +185,11 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 	})
 
-	t.Run("without WriteHeader", func(t *testing.T) {
+	t.Run("before sending the response header", func(t *testing.T) {
 		rw := newTestResponseWriter(t)
-		str, err := rw.HTTPStream()
-		require.NoError(t, err)
-		require.Zero(t, rw.buf.Len())
-		require.PanicsWithValue(t, "http3: WriteHeader called after HTTPStream", func() { rw.WriteHeader(http.StatusOK) })
-		_, err = str.Write([]byte("foobar"))
+		str := rw.HTTPStream()
+		rw.WriteHeader(http.StatusOK)
+		_, err := str.Write([]byte("foobar"))
 		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
 		require.EqualError(t,
 			str.TryWriteAll([]byte("foobar")),
@@ -201,6 +198,12 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		_, err = rw.Write([]byte("foobar"))
 		require.ErrorIs(t, err, http.ErrHijacked)
 		require.Zero(t, rw.buf.Len())
+
+		require.NoError(t, rw.FlushError())
+		_, err = str.Write([]byte("foobar"))
+		require.NoError(t, err)
+		require.Equal(t, []string{"200"}, rw.DecodeHeaders(t, 0)[":status"])
+		require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 	})
 
 	t.Run("after an informational response", func(t *testing.T) {
@@ -208,46 +211,22 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 		rw.WriteHeader(http.StatusEarlyHints)
 		l := rw.buf.Len()
 		require.NotZero(t, l)
-		str, err := rw.HTTPStream()
-		require.NoError(t, err)
-		_, err = str.Write([]byte("foobar"))
+		str := rw.HTTPStream()
+		_, err := str.Write([]byte("foobar"))
 		require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
 		require.Equal(t, l, rw.buf.Len())
 	})
 
 	t.Run("after writing the response body", func(t *testing.T) {
+		const msg = "http3: HTTPStream called after writing the response body"
 		rw := newTestResponseWriter(t)
 		rw.Write([]byte("foobar"))
 		// the DATA frame is queued
-		_, err := rw.HTTPStream()
-		require.EqualError(t, err, "http3: invalid use of HTTPStream after writing the response body")
+		require.PanicsWithValue(t, msg, func() { rw.HTTPStream() })
 		// the DATA frame was sent
 		rw.Flush()
-		_, err = rw.HTTPStream()
-		require.EqualError(t, err, "http3: invalid use of HTTPStream after writing the response body")
+		require.PanicsWithValue(t, msg, func() { rw.HTTPStream() })
 		require.False(t, rw.wasStreamHijacked())
-	})
-
-	t.Run("retry after a failed write", func(t *testing.T) {
-		mockCtrl := gomock.NewController(t)
-		qstr := NewMockDatagramStream(mockCtrl)
-		qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
-		gomock.InOrder(
-			qstr.EXPECT().Write(gomock.Any()).Return(0, os.ErrDeadlineExceeded),
-			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) { return len(b), nil }),
-		)
-		rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
-		rw.WriteHeader(http.StatusOK)
-
-		str, err := rw.HTTPStream()
-		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
-		require.Nil(t, str)
-		require.False(t, rw.wasStreamHijacked())
-
-		str, err = rw.HTTPStream()
-		require.NoError(t, err)
-		require.NotNil(t, str)
-		require.True(t, rw.wasStreamHijacked())
 	})
 }
 
@@ -264,14 +243,17 @@ func TestResponseWriterHeaderRetry(t *testing.T) {
 		}),
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes(),
 	)
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
+	str := newServerStream(qstr, nil, nil, nil)
+	rw := newResponseWriter(str, nil, http.MethodGet, nil)
 	rw.Header().Set("Foo", "bar")
 	rw.WriteHeader(http.StatusOK)
 
 	require.ErrorIs(t, rw.FlushError(), os.ErrDeadlineExceeded)
+	_, err := str.Write([]byte("foobar"))
+	require.EqualError(t, err, "http3: invalid use of Stream.Write before sending the response header")
 	// retry, as an application would after extending the write deadline
 	require.NoError(t, rw.FlushError())
-	_, err := rw.Write([]byte("foobar"))
+	_, err = rw.Write([]byte("foobar"))
 	require.NoError(t, err)
 
 	fields := decodeHeader(t, &buf)
