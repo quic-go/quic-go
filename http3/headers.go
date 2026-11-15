@@ -339,7 +339,7 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if !isConnect && hdr.Scheme != "http" && hdr.Scheme != "https" {
 		return nil, fmt.Errorf("invalid :scheme: %q", hdr.Scheme)
 	}
-	// Like net/http's HTTP/1 server validates the Host header.
+	// :authority must be a host and an optional port, see section 4.3.1 of RFC 9114.
 	if !httpguts.ValidHostHeader(hdr.Authority) {
 		return nil, fmt.Errorf("invalid :authority: %q", hdr.Authority)
 	}
