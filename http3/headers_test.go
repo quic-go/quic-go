@@ -126,6 +126,7 @@ func TestRequestHeaderParsingWithHostHeader(t *testing.T) {
 func TestRequestHeadersContentLength(t *testing.T) {
 	t.Run("no content length", func(t *testing.T) {
 		headers := []qpack.HeaderField{
+			{Name: ":scheme", Value: "https"},
 			{Name: ":path", Value: "/"},
 			{Name: ":authority", Value: "quic-go.net"},
 			{Name: ":method", Value: http.MethodGet},
@@ -137,6 +138,7 @@ func TestRequestHeadersContentLength(t *testing.T) {
 
 	t.Run("multiple content lengths", func(t *testing.T) {
 		headers := []qpack.HeaderField{
+			{Name: ":scheme", Value: "https"},
 			{Name: ":path", Value: "/"},
 			{Name: ":authority", Value: "quic-go.net"},
 			{Name: ":method", Value: http.MethodGet},
@@ -419,6 +421,25 @@ func TestRequestHeadersValidation(t *testing.T) {
 			},
 			err: "userinfo is not allowed in :authority",
 		},
+		{
+			name: "missing :scheme",
+			headers: []qpack.HeaderField{
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "user@quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			err: `invalid :scheme: ""`,
+		},
+		{
+			name: "non-HTTP :scheme",
+			headers: []qpack.HeaderField{
+				{Name: ":scheme", Value: "ftp"},
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "user@quic-go.net"},
+				{Name: ":method", Value: http.MethodGet},
+			},
+			err: `invalid :scheme: "ftp"`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := requestFromHeaders(decodeFromSlice(tc.headers), math.MaxInt, nil)
@@ -435,6 +456,7 @@ func TestRequestHeadersValidation(t *testing.T) {
 
 func TestCookieHeader(t *testing.T) {
 	headers := []qpack.HeaderField{
+		{Name: ":scheme", Value: "https"},
 		{Name: ":path", Value: "/foo"},
 		{Name: ":authority", Value: "quic-go.net"},
 		{Name: ":method", Value: http.MethodGet},
@@ -450,6 +472,7 @@ func TestCookieHeader(t *testing.T) {
 
 func TestHeadersConcatenation(t *testing.T) {
 	headers := []qpack.HeaderField{
+		{Name: ":scheme", Value: "https"},
 		{Name: ":path", Value: "/foo"},
 		{Name: ":authority", Value: "quic-go.net"},
 		{Name: ":method", Value: http.MethodGet},

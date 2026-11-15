@@ -334,6 +334,11 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if (!isConnect || isExtendedConnected) && !validPath {
 		return nil, fmt.Errorf("invalid :path: %q", hdr.Path)
 	}
+	// Like net/http's HTTP/2 server, only accept http and https for regular requests.
+	// This also rejects a missing :scheme, see section 4.3.1 of RFC 9114.
+	if !isConnect && hdr.Scheme != "http" && hdr.Scheme != "https" {
+		return nil, fmt.Errorf("invalid :scheme: %q", hdr.Scheme)
+	}
 
 	var u *url.URL
 	var requestURI string
