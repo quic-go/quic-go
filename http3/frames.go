@@ -65,6 +65,10 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			return nil, err
 		}
 
+		// We don't support server push, so we skip CANCEL_PUSH, PUSH_PROMISE and MAX_PUSH_ID frames,
+		// the same way we skip unknown frame types.
+		// In some cases, RFC 9114 requires these frames to be treated as a connection error.
+		// We deliberately don't implement these checks, since they'd only catch a misbehaving peer.
 		switch t {
 		case 0x0: // DATA
 			if qlogger != nil {
