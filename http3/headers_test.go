@@ -848,6 +848,7 @@ func TestQpackError(t *testing.T) {
 }
 
 var benchmarkRequestHeaders = []qpack.HeaderField{
+	{Name: ":scheme", Value: "https"},
 	{Name: ":path", Value: "/api/v1/users/12345"},
 	{Name: ":authority", Value: "quic-go.net"},
 	{Name: ":method", Value: http.MethodPost},
