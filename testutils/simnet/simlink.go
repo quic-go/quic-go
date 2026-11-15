@@ -16,6 +16,10 @@ type packetWithDeliveryTime struct {
 type LinkSettings struct {
 	// MTU (Maximum Transmission Unit) specifies the maximum packet size in bytes
 	MTU int
+	// Bandwidth in bits per second.
+	// Packets wait in a CoDel queue (RFC 8289) that marks ECN-capable packets and drops others.
+	// Zero means infinite bandwidth and no queuing.
+	Bandwidth int
 }
 
 // SimulatedLink simulates a bidirectional network link with variable latency and MTU constraints
@@ -26,6 +30,9 @@ type SimulatedLink struct {
 	// Queues for packet delivery timing
 	downstreamQueue *queue
 	upstreamQueue   *queue
+	// nil if the bandwidth is infinite
+	downstreamCodel *codelQueue
+	upstreamCodel   *codelQueue
 
 	// Configuration for link characteristics
 	UplinkSettings   LinkSettings
@@ -64,12 +71,38 @@ func (l *SimulatedLink) Start() {
 
 	l.downstreamQueue = newQueue()
 	l.upstreamQueue = newQueue()
+	if l.DownlinkSettings.Bandwidth > 0 {
+		l.downstreamCodel = newCodelQueue(l.DownlinkSettings.MTU)
+		l.wg.Go(func() { transmit(l.downstreamCodel, l.DownlinkSettings.Bandwidth, l.enqueueDownstream) })
+	}
+	if l.UplinkSettings.Bandwidth > 0 {
+		l.upstreamCodel = newCodelQueue(l.UplinkSettings.MTU)
+		l.wg.Go(func() { transmit(l.upstreamCodel, l.UplinkSettings.Bandwidth, l.enqueueUpstream) })
+	}
 
 	l.wg.Go(func() { l.backgroundDownlink() })
 	l.wg.Go(func() { l.backgroundUplink() })
 }
 
+// transmit sends the packets from q one at a time, at the given bandwidth.
+func transmit(q *codelQueue, bandwidth int, send func(Packet)) {
+	for {
+		p, err := q.Dequeue()
+		if err != nil {
+			return
+		}
+		time.Sleep(time.Duration(len(p.Data)*8) * time.Second / time.Duration(bandwidth))
+		send(p)
+	}
+}
+
 func (l *SimulatedLink) Close() error {
+	if l.downstreamCodel != nil {
+		l.downstreamCodel.Close()
+	}
+	if l.upstreamCodel != nil {
+		l.upstreamCodel.Close()
+	}
 	l.downstreamQueue.Close()
 	l.upstreamQueue.Close()
 	l.wg.Wait()
@@ -110,16 +143,20 @@ func (l *SimulatedLink) SendPacket(p Packet) error {
 		return nil
 	}
 
-	// Uplink has no latency - packets are delivered immediately
-	deliveryTime := time.Now()
+	if l.upstreamCodel != nil {
+		l.upstreamCodel.Enqueue(p)
+		return nil
+	}
+	l.enqueueUpstream(p)
+	return nil
+}
 
-	// Enqueue packet with delivery time
+func (l *SimulatedLink) enqueueUpstream(p Packet) {
+	// Uplink has no latency
 	l.upstreamQueue.Enqueue(&packetWithDeliveryTime{
 		Packet:       p,
-		DeliveryTime: deliveryTime,
+		DeliveryTime: time.Now(),
 	})
-
-	return nil
 }
 
 func (l *SimulatedLink) RecvPacket(p Packet) {
@@ -128,6 +165,14 @@ func (l *SimulatedLink) RecvPacket(p Packet) {
 		return
 	}
 
+	if l.downstreamCodel != nil {
+		l.downstreamCodel.Enqueue(p)
+		return
+	}
+	l.enqueueDownstream(p)
+}
+
+func (l *SimulatedLink) enqueueDownstream(p Packet) {
 	// Calculate delivery time based on downlink latency
 	var latency time.Duration
 	if l.LatencyFunc != nil {
@@ -135,11 +180,8 @@ func (l *SimulatedLink) RecvPacket(p Packet) {
 	} else {
 		latency = l.Latency
 	}
-	deliveryTime := time.Now().Add(latency)
-
-	// Enqueue packet with delivery time
 	l.downstreamQueue.Enqueue(&packetWithDeliveryTime{
 		Packet:       p,
-		DeliveryTime: deliveryTime,
+		DeliveryTime: time.Now().Add(latency),
 	})
 }
