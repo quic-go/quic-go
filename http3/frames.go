@@ -65,6 +65,10 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			return nil, err
 		}
 
+		// We don't support server push, so we skip CANCEL_PUSH, PUSH_PROMISE and MAX_PUSH_ID frames,
+		// the same way we skip unknown frame types.
+		// In some cases, RFC 9114 requires these frames to be treated as a connection error.
+		// We deliberately don't implement these checks, since they'd only catch a misbehaving peer.
 		switch t {
 		case 0x0: // DATA
 			if qlogger != nil {
@@ -85,10 +89,6 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 			}, nil
 		case 0x4: // SETTINGS
 			return parseSettingsFrame(r, l, p.streamID, qlogger)
-		// We don't support server push, so we skip CANCEL_PUSH, PUSH_PROMISE and MAX_PUSH_ID frames,
-		// the same way we skip unknown frame types.
-		// In some cases, RFC 9114 requires these frames to be treated as a connection error.
-		// We deliberately don't implement these checks, since they'd only catch a misbehaving peer.
 		case 0x3: // unsupported: CANCEL_PUSH
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
@@ -105,6 +105,12 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 					Frame:    qlog.Frame{Frame: qlog.PushPromiseFrame{}},
 				})
 			}
+		case 0x7: // GOAWAY
+			return parseGoAwayFrame(r, l, p.streamID, qlogger)
+		case 0xf0700: // PRIORITY_UPDATE for a request stream
+			return parsePriorityUpdateFrame(r, l, p.streamID, qlogger)
+		case 0xf0701: // PRIORITY_UPDATE for a push stream
+			return nil, errPriorityUpdateForPush
 		case 0xd: // unsupported: MAX_PUSH_ID
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
@@ -113,12 +119,6 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 					Frame:    qlog.Frame{Frame: qlog.MaxPushIDFrame{}},
 				})
 			}
-		case 0x7: // GOAWAY
-			return parseGoAwayFrame(r, l, p.streamID, qlogger)
-		case 0xf0700: // PRIORITY_UPDATE for a request stream
-			return parsePriorityUpdateFrame(r, l, p.streamID, qlogger)
-		case 0xf0701: // PRIORITY_UPDATE for a push stream
-			return nil, errPriorityUpdateForPush
 		case 0x2, 0x6, 0x8, 0x9: // reserved frame types
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
