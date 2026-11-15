@@ -405,9 +405,10 @@ func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, si
 	rsp.Trailer = extractAnnouncedTrailers(rsp.Header)
 	rsp.ContentLength = hdr.ContentLength
 
+	// Status codes have three digits and range from 100 to 599, see section 15 of RFC 9110.
 	status, err := strconv.Atoi(hdr.Status)
-	if err != nil {
-		return fmt.Errorf("invalid status code: %w", err)
+	if err != nil || len(hdr.Status) != 3 || status < 100 || status > 599 {
+		return fmt.Errorf("invalid status code: %q", hdr.Status)
 	}
 	rsp.StatusCode = status
 	rsp.Status = hdr.Status + " " + http.StatusText(status)

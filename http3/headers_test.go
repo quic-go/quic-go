@@ -626,10 +626,9 @@ func TestResponseHeaderParsing(t *testing.T) {
 
 func TestResponseHeaderParsingValidation(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		headers     []qpack.HeaderField
-		err         string
-		errContains string
+		name    string
+		headers []qpack.HeaderField
+		err     string
 	}{
 		{
 			name: "missing :status",
@@ -637,13 +636,6 @@ func TestResponseHeaderParsingValidation(t *testing.T) {
 				{Name: "content-length", Value: "42"},
 			},
 			err: "missing :status field",
-		},
-		{
-			name: "invalid status code",
-			headers: []qpack.HeaderField{
-				{Name: ":status", Value: "foobar"},
-			},
-			errContains: "invalid status code",
 		},
 		{
 			name: ":method header field", // :method is a request pseudo header
@@ -663,12 +655,15 @@ func TestResponseHeaderParsingValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := updateResponseFromHeaders(&http.Response{}, decodeFromSlice(tc.headers), math.MaxInt, nil)
-			if tc.errContains != "" {
-				require.ErrorContains(t, err, tc.errContains)
-			}
-			if tc.err != "" {
-				require.EqualError(t, err, tc.err)
-			}
+			require.EqualError(t, err, tc.err)
+		})
+	}
+
+	for _, status := range []string{"foobar", "+200", "0200", "-1", "99", "600"} {
+		t.Run("invalid status code "+status, func(t *testing.T) {
+			headers := []qpack.HeaderField{{Name: ":status", Value: status}}
+			err := updateResponseFromHeaders(&http.Response{}, decodeFromSlice(headers), math.MaxInt, nil)
+			require.EqualError(t, err, fmt.Sprintf("invalid status code: %q", status))
 		})
 	}
 
