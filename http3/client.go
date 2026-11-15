@@ -469,10 +469,7 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 			return nil, err
 		}
 		resCode := res.StatusCode
-		is1xx := 100 <= resCode && resCode <= 199
-		// treat 101 as a terminal status, see https://github.com/golang/go/issues/26161
-		is1xxNonTerminal := is1xx && resCode != http.StatusSwitchingProtocols
-		if is1xxNonTerminal {
+		if 100 <= resCode && resCode <= 199 {
 			num1xx++
 			if num1xx > max1xxResponses {
 				str.CancelRead(quic.StreamErrorCode(ErrCodeExcessiveLoad))

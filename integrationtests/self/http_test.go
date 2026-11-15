@@ -1184,41 +1184,6 @@ func TestHTTP1xxResponse(t *testing.T) {
 	})
 }
 
-func TestHTTP1xxTerminalResponse(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		n := newTestNetwork(t)
-		mux := http.NewServeMux()
-		mux.HandleFunc("/101-switch-protocols", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Add("foo", "bar")
-			w.WriteHeader(http.StatusSwitchingProtocols)
-		})
-
-		port := startHTTPServer(t, n.NewConn(), mux)
-
-		var (
-			cnt    int
-			status int
-		)
-		ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
-			Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
-				status = code
-				cnt++
-				return nil
-			},
-		})
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/101-switch-protocols", port), nil)
-		require.NoError(t, err)
-		resp, err := newHTTP3Client(t, n).Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
-		require.Equal(t, "bar", resp.Header.Get("Foo"))
-		require.Zero(t, status)
-		require.Zero(t, cnt)
-		require.NoError(t, resp.Body.Close())
-	})
-}
-
 func TestHTTPStreamer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		n := newTestNetwork(t)
