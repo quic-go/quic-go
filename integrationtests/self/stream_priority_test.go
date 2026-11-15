@@ -16,26 +16,14 @@ import (
 func newStreamPriorityTestConnections(t *testing.T) (client, server *quic.Conn) {
 	t.Helper()
 
-	const (
-		rtt               = 10 * time.Millisecond
-		bandwidthBytesSec = 1 << 20
-	)
+	const rtt = 10 * time.Millisecond
 	n := &simnet.Simnet{Router: &simnet.PerfectRouter{}}
-	linkSettings := func() simnet.NodeBiDiLinkSettings {
-		var nextTransmission time.Time
-		return simnet.NodeBiDiLinkSettings{
-			LatencyFunc: func(p simnet.Packet) time.Duration {
-				now := time.Now()
-				if nextTransmission.Before(now) {
-					nextTransmission = now
-				}
-				nextTransmission = nextTransmission.Add(time.Duration(len(p.Data)) * time.Second / bandwidthBytesSec)
-				return nextTransmission.Add(rtt / 2).Sub(now)
-			},
-		}
+	linkSettings := simnet.NodeBiDiLinkSettings{
+		Downlink: simnet.LinkSettings{Bandwidth: 8 << 20},
+		Latency:  rtt / 2,
 	}
-	clientPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, linkSettings())
-	serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}, linkSettings())
+	clientPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.1"), Port: 9001}, linkSettings)
+	serverPacketConn := n.NewEndpoint(&net.UDPAddr{IP: net.ParseIP("1.0.0.2"), Port: 9002}, linkSettings)
 	t.Cleanup(func() {
 		require.NoError(t, clientPacketConn.Close())
 		require.NoError(t, serverPacketConn.Close())

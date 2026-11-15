@@ -8,7 +8,7 @@ with latency and MTU constraints. Useful for testing networking code
 without sockets or root privileges.
 
 - **Drop-in API**: implements `net.PacketConn`
-- **Realistic links**: per-direction latency and MTU
+- **Realistic links**: per-direction latency, MTU and bandwidth, with a CoDel queue
 - **Packet queuing**: priority queue for scheduled packet delivery
 - **Routers**: perfect delivery, fixed-latency, simple firewall/NAT-like routing
 - **Deterministic testing**: opt-in `synctest`-based tests for time control
