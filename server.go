@@ -240,7 +240,6 @@ func listenUDP(addr string) (*net.UDPConn, error) {
 // This is a convenience function. More advanced use cases should instantiate a [Transport],
 // which offers configuration options for a more fine-grained control of the connection establishment,
 // including reusing the underlying UDP socket for outgoing QUIC connections.
-// When closing a listener created with Listen, all established QUIC connections will be closed immediately.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener, error) {
 	tr := &Transport{Conn: conn, isSingleUse: true}
 	return tr.Listen(tlsConf, config)
