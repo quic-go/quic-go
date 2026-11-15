@@ -431,17 +431,17 @@ func TestClientExtendedConnectCancelBeforeSettings(t *testing.T) {
 
 func TestClient1xxHandling(t *testing.T) {
 	t.Run("a few early hints", func(t *testing.T) {
-		testClient1xxHandling(t, max1xxResponses, http.StatusOK, false)
+		testClient1xxHandling(t, max1xxResponses, http.StatusOK, "")
 	})
 	t.Run("too many early hints", func(t *testing.T) {
-		testClient1xxHandling(t, max1xxResponses+1, http.StatusOK, true)
+		testClient1xxHandling(t, max1xxResponses+1, http.StatusOK, "http3: too many 1xx informational responses")
 	})
 	t.Run("EarlyHints followed by StatusSwitchingProtocols", func(t *testing.T) {
-		testClient1xxHandling(t, 1, http.StatusSwitchingProtocols, false)
+		testClient1xxHandling(t, 1, http.StatusSwitchingProtocols, "http3: invalid response: 101 (Switching Protocols) is not supported")
 	})
 }
 
-func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, tooMany bool) {
+func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, expectedErr string) {
 	var rspBuf bytes.Buffer
 	rstr := NewMockDatagramStream(gomock.NewController(t))
 	rstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
@@ -484,8 +484,8 @@ func testClient1xxHandling(t *testing.T, numEarlyHints int, terminalStatus int, 
 	var rsp *http.Response
 	select {
 	case res := <-resultChan:
-		if tooMany {
-			require.EqualError(t, res.err, "http3: too many 1xx informational responses")
+		if expectedErr != "" {
+			require.EqualError(t, res.err, expectedErr)
 			return
 		}
 		require.NoError(t, res.err)

@@ -409,6 +409,10 @@ func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, si
 	if err != nil {
 		return fmt.Errorf("invalid status code: %w", err)
 	}
+	// HTTP/3 doesn't support 101 (Switching Protocols), see section 4.5 of RFC 9114.
+	if status == http.StatusSwitchingProtocols {
+		return errors.New("101 (Switching Protocols) is not supported")
+	}
 	rsp.StatusCode = status
 	rsp.Status = hdr.Status + " " + http.StatusText(status)
 	return nil
