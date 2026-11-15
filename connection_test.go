@@ -2815,6 +2815,72 @@ func testConnectionSendQueue(t *testing.T, enableGSO bool) {
 	})
 }
 
+// When the send queue frees up after the send loop stopped, but before the run loop checks it,
+// the run loop needs to keep sending.
+// See https://github.com/quic-go/quic-go/issues/6189 for more details.
+func TestConnectionSendQueueFreedBeforeCheck(t *testing.T) {
+	t.Run("with GSO", func(t *testing.T) {
+		testConnectionSendQueueFreedBeforeCheck(t, true)
+	})
+	t.Run("without GSO", func(t *testing.T) {
+		testConnectionSendQueueFreedBeforeCheck(t, false)
+	})
+}
+
+func testConnectionSendQueueFreedBeforeCheck(t *testing.T, enableGSO bool) {
+	synctest.Test(t, func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		sender := NewMockSender(mockCtrl)
+		tc := newServerTestConnection(t,
+			mockCtrl,
+			nil,
+			enableGSO,
+			connectionOptSender(sender),
+			connectionOptHandshakeConfirmed(),
+			connectionOptSentPacketHandler(sph),
+		)
+
+		sender.EXPECT().Run().MaxTimes(1)
+		sender.EXPECT().WouldBlock()              // the run loop checks before sending
+		sender.EXPECT().WouldBlock().Return(true) // the send loop stops
+		sender.EXPECT().WouldBlock().AnyTimes()   // the queue has freed up
+		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+		sph.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+		sph.EXPECT().SendMode(gomock.Any()).Return(ackhandler.SendAny).AnyTimes()
+		sph.EXPECT().ECNMode(gomock.Any()).AnyTimes()
+		sender.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any())
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{PacketNumber: protocol.PacketNumber(1)}, nil,
+		)
+		// sending continues without another call to scheduleSending
+		tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			shortHeaderPacket{}, errNothingToPack,
+		)
+
+		errChan := make(chan error, 1)
+		go func() { errChan <- tc.conn.run() }()
+		tc.conn.scheduleSending()
+
+		synctest.Wait()
+		require.True(t, mockCtrl.Satisfied())
+
+		// test teardown
+		sender.EXPECT().Close()
+		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+		tc.conn.destroy(nil)
+
+		synctest.Wait()
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+			t.Fatal("timeout")
+		}
+	})
+}
+
 func getVersionNegotiationPacket(src, dest protocol.ConnectionID, versions []protocol.Version) receivedPacket {
 	b := wire.ComposeVersionNegotiation(
 		protocol.ArbitraryLenConnectionID(dest.Bytes()),

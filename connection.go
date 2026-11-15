@@ -2658,6 +2658,8 @@ func (c *Conn) sendPacketsWithoutGSO(now monotime.Time) error {
 		c.sendQueue.Send(buf, 0, ecn)
 
 		if c.sendQueue.WouldBlock() {
+			// keep sending if the send queue frees up before the run loop checks it
+			c.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
 		sendMode := c.sentPacketHandler.SendMode(now)
@@ -2723,6 +2725,8 @@ func (c *Conn) sendPacketsWithGSO(now monotime.Time) error {
 			return nil
 		}
 		if c.sendQueue.WouldBlock() {
+			// keep sending if the send queue frees up before the run loop checks it
+			c.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
 
