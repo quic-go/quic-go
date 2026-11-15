@@ -186,6 +186,30 @@ func TestTransportSingleUseStopsAfterLastConnRemoved(t *testing.T) {
 	})
 }
 
+func TestTransportSingleUseConnClosedAfterListener(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		_, conn, closeFn := newSimnetLink(t, 10*time.Millisecond)
+		defer closeFn()
+
+		tr := &Transport{Conn: conn, isSingleUse: true}
+		ln, err := tr.Listen(&tls.Config{}, nil)
+		require.NoError(t, err)
+
+		errChan := make(chan error, 1)
+		ph := &mockPacketHandler{destruction: errChan}
+		require.True(t, (*packetHandlerMap)(tr).Add(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), ph))
+		require.NoError(t, ln.Close())
+		require.NoError(t, conn.Close())
+
+		select {
+		case err := <-errChan:
+			require.ErrorIs(t, err, ErrTransportClosed)
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+	})
+}
+
 func TestTransportErrFromConn(t *testing.T) {
 	t.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
 
