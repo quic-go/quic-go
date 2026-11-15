@@ -339,7 +339,8 @@ func requestFromHeaders(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *
 	if !isConnect && hdr.Scheme != "http" && hdr.Scheme != "https" {
 		return nil, fmt.Errorf("invalid :scheme: %q", hdr.Scheme)
 	}
-	// :authority must be a host and an optional port, see section 4.3.1 of RFC 9114.
+	// Reject bytes that can't appear in a host and port, see section 4.3.1 of RFC 9114.
+	// Like net/http, we don't validate the host and port syntax, see https://github.com/golang/go/issues/78172.
 	if !httpguts.ValidHostHeader(hdr.Authority) {
 		return nil, fmt.Errorf("invalid :authority: %q", hdr.Authority)
 	}
