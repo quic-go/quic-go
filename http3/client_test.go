@@ -524,44 +524,30 @@ func TestClientGzip(t *testing.T) {
 }
 
 func TestClientConnectIgnoresContentLength(t *testing.T) {
-	headerBuf := &bytes.Buffer{}
-	enc := qpack.NewEncoder(headerBuf)
+	var hdr bytes.Buffer
+	enc := qpack.NewEncoder(&hdr)
 	require.NoError(t, enc.WriteField(qpack.HeaderField{Name: ":status", Value: "200"}))
 	require.NoError(t, enc.WriteField(qpack.HeaderField{Name: "content-length", Value: "3"}))
-	require.NoError(t, enc.Close())
-	b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
-	b = append(b, headerBuf.Bytes()...)
-	b = append(b, getDataFrame([]byte("foobar"))...)
-
-	clientConn, serverConn := newConnPair(t)
-	type result struct {
-		rsp *http.Response
-		err error
-	}
-	resultChan := make(chan result, 1)
-	go func() {
-		cc := (&Transport{}).NewClientConn(clientConn)
-		rsp, err := cc.RoundTrip(httptest.NewRequest(http.MethodConnect, "http://quic-go.net", nil))
-		resultChan <- result{rsp: rsp, err: err}
-	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	str, err := serverConn.AcceptStream(ctx)
-	require.NoError(t, err)
-	_, err = str.Write(b)
-	require.NoError(t, err)
-	require.NoError(t, str.Close())
+	clientConn, serverConn := newConnPair(t)
+	go func() {
+		str, err := serverConn.AcceptStream(ctx)
+		if err != nil {
+			return
+		}
+		str.Write(append((&headersFrame{Length: uint64(hdr.Len())}).Append(nil), hdr.Bytes()...))
+		str.Write(getDataFrame([]byte("foobar")))
+		str.Close()
+	}()
 
-	select {
-	case res := <-resultChan:
-		require.NoError(t, res.err)
-		body, err := io.ReadAll(res.rsp.Body)
-		require.NoError(t, err)
-		require.Equal(t, []byte("foobar"), body)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	req := httptest.NewRequestWithContext(ctx, http.MethodConnect, "http://quic-go.net", nil)
+	rsp, err := (&Transport{}).NewClientConn(clientConn).RoundTrip(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, []byte("foobar"), body)
 }
 
 func testClientGzip(t *testing.T,
