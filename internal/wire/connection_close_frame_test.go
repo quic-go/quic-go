@@ -38,11 +38,14 @@ func TestParseConnectionCloseWithApplicationError(t *testing.T) {
 }
 
 func TestParseConnectionCloseLongReasonPhrase(t *testing.T) {
-	data := encodeVarInt(0xcafe)
-	data = append(data, encodeVarInt(0x42)...)   // frame type
-	data = append(data, encodeVarInt(0xffff)...) // reason phrase length
-	_, _, err := parseConnectionCloseFrame(data, FrameTypeConnectionClose, protocol.Version1)
-	require.ErrorIs(t, err, io.EOF)
+	// 0x80000005 overflows a 32-bit int
+	for _, l := range []uint64{0xffff, 0x80000005} {
+		data := encodeVarInt(0xcafe)
+		data = append(data, encodeVarInt(0x42)...) // frame type
+		data = append(data, encodeVarInt(l)...)    // reason phrase length
+		_, _, err := parseConnectionCloseFrame(data, FrameTypeConnectionClose, protocol.Version1)
+		require.ErrorIs(t, err, io.EOF)
+	}
 }
 
 func TestParseConnectionCloseErrorsOnEOFs(t *testing.T) {
