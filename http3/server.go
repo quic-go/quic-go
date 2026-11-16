@@ -408,16 +408,15 @@ func (s *Server) generateAltSvcHeader() {
 		// listener addresses since there's a reason it's specified.
 		addPort(s.Port)
 	} else {
-		// if we have some listeners assigned, try to find ports
-		// which we can announce, otherwise nothing should be announced
-		validPortsFound := false
-		for _, info := range s.listeners {
-			if info.port != 0 {
-				addPort(info.port)
-				validPortsFound = true
+		// Announce each listener port once, since multiple listeners can share a port.
+		// If no listener port is known, fall back to the port from Addr.
+		for i, info := range s.listeners {
+			if info.port == 0 || slices.ContainsFunc(s.listeners[:i], func(l listener) bool { return l.port == info.port }) {
+				continue
 			}
+			addPort(info.port)
 		}
-		if !validPortsFound {
+		if len(altSvc) == 0 {
 			if port, err := extractPort(s.Addr); err == nil {
 				addPort(port)
 			}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -710,10 +711,15 @@ func testServerAltSvcFromListenersAndConns(t *testing.T, versions []quic.Version
 		TLSConfig:  getTLSConfig(),
 		QUICConfig: &quic.Config{Versions: versions},
 	}
+	// two listeners on the same port are only announced once
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() { s.ServeListener(ln1) })
+	}
 	done1 := make(chan struct{})
 	go func() {
-		defer close(done1)
-		s.ServeListener(ln1)
+		wg.Wait()
+		close(done1)
 	}()
 	time.Sleep(scaleDuration(10 * time.Millisecond))
 	altSvc, ok := getAltSvc(s)
