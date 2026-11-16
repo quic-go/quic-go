@@ -399,7 +399,12 @@ func (s *Server) generateAltSvcHeader() {
 	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
 
 	var altSvc []string
+	seenPorts := make(map[int]struct{})
 	addPort := func(port int) {
+		if _, ok := seenPorts[port]; ok {
+			return
+		}
+		seenPorts[port] = struct{}{}
 		altSvc = append(altSvc, fmt.Sprintf(`%s=":%d"; ma=2592000`, NextProtoH3, port))
 	}
 
