@@ -634,13 +634,21 @@ func TestStreamsMap0RTTResetStreamAt(t *testing.T) {
 				protocol.PerspectiveClient,
 			)
 
-			m.HandleTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 1, MaxUniStreamNum: 1})
+			m.HandleTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 2, MaxUniStreamNum: 2})
 			str, err := m.OpenStream()
 			require.NoError(t, err)
 			uniStr, err := m.OpenUniStream()
 			require.NoError(t, err)
 
 			m.HandleTransportParameters(&wire.TransportParameters{EnableResetStreamAt: enabled})
+			require.Equal(t, enabled, supportsResetStreamAt(t, str))
+			require.Equal(t, enabled, sendStreamSupportsResetStreamAt(t, uniStr))
+
+			// Newly opened streams must inherit the applied capability as well.
+			str, err = m.OpenStream()
+			require.NoError(t, err)
+			uniStr, err = m.OpenUniStream()
+			require.NoError(t, err)
 			require.Equal(t, enabled, supportsResetStreamAt(t, str))
 			require.Equal(t, enabled, sendStreamSupportsResetStreamAt(t, uniStr))
 		})
