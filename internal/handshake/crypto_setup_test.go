@@ -335,6 +335,20 @@ func TestTransportParameters(t *testing.T) {
 	require.Equal(t, 42*time.Second, serverReceivedTransportParameters.MaxIdleTimeout)
 }
 
+func TestInvalidTransportParameters(t *testing.T) {
+	clientConf, serverConf := getTLSConfigs()
+	_, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
+		t,
+		clientConf, serverConf,
+		utils.NewRTTStats(), utils.NewRTTStats(),
+		&wire.TransportParameters{ActiveConnectionIDLimit: 2, AckDelayExponent: protocol.MaxAckDelayExponent + 1},
+		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
+		false,
+	)
+	require.NoError(t, clientErr)
+	require.ErrorIs(t, serverErr, &qerr.TransportError{ErrorCode: qerr.TransportParameterError})
+}
+
 func TestNewSessionTicketAtWrongEncryptionLevel(t *testing.T) {
 	clientConf, serverConf := getTLSConfigs()
 	client, _, clientErr, _, _, serverErr := handshakeWithTLSConf(
