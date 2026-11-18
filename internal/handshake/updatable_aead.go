@@ -49,13 +49,13 @@ type updatableAEAD struct {
 	prevRcvAEADExpiry monotime.Time
 	prevRcvAEAD       cipher.AEAD
 
-	firstRcvdWithCurrentKey protocol.PacketNumber
-	firstSentWithCurrentKey protocol.PacketNumber
-	highestRcvdPN           protocol.PacketNumber // highest packet number received (which could be successfully unprotected)
-	numRcvdWithCurrentKey   uint64
-	numSentWithCurrentKey   uint64
-	rcvAEAD                 cipher.AEAD
-	sendAEAD                cipher.AEAD
+	lowestRcvdWithCurrentKey protocol.PacketNumber
+	firstSentWithCurrentKey  protocol.PacketNumber
+	highestRcvdPN            protocol.PacketNumber // highest packet number received (which could be successfully unprotected)
+	numRcvdWithCurrentKey    uint64
+	numSentWithCurrentKey    uint64
+	rcvAEAD                  cipher.AEAD
+	sendAEAD                 cipher.AEAD
 	// caches cipher.AEAD.Overhead(). This speeds up calls to Overhead().
 	aeadOverhead int
 
@@ -83,14 +83,14 @@ var (
 
 func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, logger utils.Logger, version protocol.Version) *updatableAEAD {
 	return &updatableAEAD{
-		firstPacketNumber:       protocol.InvalidPacketNumber,
-		largestAcked:            protocol.InvalidPacketNumber,
-		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
-		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
-		rttStats:                rttStats,
-		qlogger:                 qlogger,
-		logger:                  logger,
-		version:                 version,
+		firstPacketNumber:        protocol.InvalidPacketNumber,
+		largestAcked:             protocol.InvalidPacketNumber,
+		lowestRcvdWithCurrentKey: protocol.InvalidPacketNumber,
+		firstSentWithCurrentKey:  protocol.InvalidPacketNumber,
+		rttStats:                 rttStats,
+		qlogger:                  qlogger,
+		logger:                   logger,
+		version:                  version,
 	}
 }
 
@@ -111,7 +111,7 @@ func (a *updatableAEAD) rollKeys() {
 	}
 
 	a.keyPhase++
-	a.firstRcvdWithCurrentKey = protocol.InvalidPacketNumber
+	a.lowestRcvdWithCurrentKey = protocol.InvalidPacketNumber
 	a.firstSentWithCurrentKey = protocol.InvalidPacketNumber
 	a.numRcvdWithCurrentKey = 0
 	a.numSentWithCurrentKey = 0
@@ -219,7 +219,7 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 	}
 	binary.BigEndian.PutUint64(a.nonceBuf[:], uint64(pn))
 	if kp != a.keyPhase.Bit() {
-		if a.keyPhase > 0 && a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
+		if a.keyPhase > 0 && a.lowestRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.lowestRcvdWithCurrentKey {
 			if a.prevRcvAEAD == nil {
 				return nil, ErrKeysDropped
 			}
@@ -259,7 +259,7 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 				KeyPhase: a.keyPhase,
 			})
 		}
-		a.firstRcvdWithCurrentKey = pn
+		a.lowestRcvdWithCurrentKey = pn
 		return dec, err
 	}
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
@@ -269,14 +269,16 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol
 		return dec, ErrDecryptionFailed
 	}
 	a.numRcvdWithCurrentKey++
-	if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
+	if a.lowestRcvdWithCurrentKey == protocol.InvalidPacketNumber {
 		// We initiated the key updated, and now we received the first packet protected with the new key phase.
 		// Therefore, we are certain that the peer rolled its keys as well. Start a timer to drop the old keys.
 		if a.keyPhase > 0 {
 			a.logger.Debugf("Peer confirmed key update to phase %d", a.keyPhase)
 			a.startKeyDropTimer(rcvTime)
 		}
-		a.firstRcvdWithCurrentKey = pn
+		a.lowestRcvdWithCurrentKey = pn
+	} else {
+		a.lowestRcvdWithCurrentKey = min(a.lowestRcvdWithCurrentKey, pn)
 	}
 	return dec, err
 }

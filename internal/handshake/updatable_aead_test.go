@@ -323,6 +323,28 @@ func TestReorderedPacketAfterKeyUpdate(t *testing.T) {
 	require.Equal(t, protocol.KeyPhaseOne, server.KeyPhase())
 }
 
+func TestKeyUpdateOldKeysOnlyBelowLowestNewKeyPacket(t *testing.T) {
+	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
+	now := monotime.Now()
+
+	old14 := client.Seal(nil, []byte(msg), 14, []byte(ad))
+	old17 := client.Seal(nil, []byte(msg), 17, []byte(ad))
+	client.rollKeys()
+	_, err := server.Open(nil, client.Seal(nil, []byte(msg), 20, []byte(ad)), now, 20, protocol.KeyPhaseOne, []byte(ad))
+	require.NoError(t, err)
+	// reordered: 17 is below every packet received with the new keys
+	_, err = server.Open(nil, old17, now, 17, protocol.KeyPhaseZero, []byte(ad))
+	require.NoError(t, err)
+
+	_, err = server.Open(nil, client.Seal(nil, []byte(msg), 15, []byte(ad)), now, 15, protocol.KeyPhaseOne, []byte(ad))
+	require.NoError(t, err)
+	// 15 used the new keys, so 17 can't use the old keys anymore
+	_, err = server.Open(nil, old17, now, 17, protocol.KeyPhaseZero, []byte(ad))
+	require.ErrorIs(t, err, ErrDecryptionFailed)
+	_, err = server.Open(nil, old14, now, 14, protocol.KeyPhaseZero, []byte(ad))
+	require.NoError(t, err)
+}
+
 func TestDropsKeys3PTOsAfterKeyUpdate(t *testing.T) {
 	rttStats := utils.NewRTTStats()
 	client, server, eventRecorder := setupEndpoints(t, rttStats)
