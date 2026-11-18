@@ -60,6 +60,9 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 			continue
 		}
 		ft := FrameType(typ)
+		// Frames of extensions we didn't advertise are handled like unknown frame types,
+		// as if we didn't implement the extension.
+		// For DATAGRAM frames, this deviates from RFC 9221, which requires a PROTOCOL_VIOLATION.
 		valid := ft.isValidRFC9000() ||
 			(p.supportsDatagrams && ft.IsDatagramFrameType()) ||
 			(p.supportsResetStreamAt && ft == FrameTypeResetStreamAt) ||
