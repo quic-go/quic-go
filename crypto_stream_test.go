@@ -34,15 +34,18 @@ func TestCryptoStreamDataAssembly(t *testing.T) {
 	require.Equal(t, []byte("foobar"), data)
 }
 
-func TestCryptoStreamMaxOffset(t *testing.T) {
+func TestCryptoStreamBufferLimit(t *testing.T) {
 	str := newCryptoStream()
+	// data that was already read doesn't count towards the limit
+	require.NoError(t, str.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foobar")}))
+	require.Equal(t, []byte("foobar"), str.GetCryptoData())
 	require.NoError(t, str.HandleCryptoFrame(&wire.CryptoFrame{
-		Offset: protocol.MaxCryptoStreamOffset - 5,
+		Offset: 6 + protocol.MaxCryptoStreamBufferSize - 5,
 		Data:   []byte("foo"),
 	}))
 	require.ErrorIs(t,
 		str.HandleCryptoFrame(&wire.CryptoFrame{
-			Offset: protocol.MaxCryptoStreamOffset - 2,
+			Offset: 6 + protocol.MaxCryptoStreamBufferSize - 2,
 			Data:   []byte("bar"),
 		}),
 		&qerr.TransportError{ErrorCode: qerr.CryptoBufferExceeded},

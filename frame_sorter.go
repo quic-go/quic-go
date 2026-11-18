@@ -320,6 +320,11 @@ func (s *frameSorter) Pop() (protocol.ByteCount, []byte, func()) {
 	return offset, entry.Data, entry.DoneCb
 }
 
+// ReadPos returns the offset of the next byte that will be popped.
+func (s *frameSorter) ReadPos() protocol.ByteCount {
+	return s.readPos
+}
+
 // HasMoreData says if there is any more data queued at *any* offset.
 func (s *frameSorter) HasMoreData() bool {
 	return len(s.queue) > 0
