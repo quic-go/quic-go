@@ -791,6 +791,14 @@ func (s *SendStream) getControlFrame(monotime.Time) (_ ackhandler.Frame, ok, has
 	if s.queuedResetStreamFrame == nil {
 		return ackhandler.Frame{}, false, false
 	}
+	// The Final Size of a RESET_STREAM_AT frame must not exceed the peer's flow control limits.
+	// It includes the unsent data up to the reliable size.
+	if s.nextFrame != nil && !s.nextFrameReserved {
+		if !s.flowController.TryAddBytesSent(s.nextFrame.DataLen()) {
+			return ackhandler.Frame{}, false, true
+		}
+		s.nextFrameReserved = true
+	}
 	s.numOutstandingFrames++
 	f := ackhandler.Frame{
 		Frame:   s.queuedResetStreamFrame,
