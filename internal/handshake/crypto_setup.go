@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
-	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -45,10 +45,10 @@ type cryptoSetup struct {
 
 	perspective protocol.Perspective
 
-	handshakeCompleteTime time.Time
-
 	zeroRTTOpener LongHeaderOpener // only set for the server
 	zeroRTTSealer LongHeaderSealer // only set for the client
+	// set when the server receives its first 1-RTT packet while holding 0-RTT keys
+	first1RTTPacketTime monotime.Time
 
 	initialOpener LongHeaderOpener
 	initialSealer LongHeaderSealer
@@ -572,7 +572,6 @@ func (h *cryptoSetup) DiscardInitialKeys() {
 }
 
 func (h *cryptoSetup) handshakeComplete() {
-	h.handshakeCompleteTime = time.Now()
 	h.events = append(h.events, Event{Kind: EventHandshakeComplete})
 }
 
@@ -633,6 +632,7 @@ func (h *cryptoSetup) GetInitialOpener() (LongHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) Get0RTTOpener() (LongHeaderOpener, error) {
+	h.maybeDrop0RTTKeys()
 	if h.zeroRTTOpener == nil {
 		if h.initialOpener != nil {
 			return nil, ErrKeysNotYetAvailable
@@ -655,18 +655,30 @@ func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
-	if h.zeroRTTOpener != nil && time.Since(h.handshakeCompleteTime) > 3*h.rttStats.PTO(true) {
-		h.zeroRTTOpener = nil
-		h.logger.Debugf("Dropping 0-RTT keys.")
-		if h.qlogger != nil {
-			h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeClient0RTT})
-		}
-	}
-
 	if !h.has1RTTOpener {
 		return nil, ErrKeysNotYetAvailable
 	}
+	if h.zeroRTTOpener != nil && h.first1RTTPacketTime.IsZero() {
+		h.first1RTTPacketTime = monotime.Now()
+	}
+	h.maybeDrop0RTTKeys()
 	return h.aead, nil
+}
+
+// After receiving a 1-RTT packet, servers MUST discard 0-RTT keys within a short time.
+// The RECOMMENDED time period is three times the PTO.
+func (h *cryptoSetup) maybeDrop0RTTKeys() {
+	if h.zeroRTTOpener == nil || h.first1RTTPacketTime.IsZero() {
+		return
+	}
+	if monotime.Since(h.first1RTTPacketTime) <= 3*h.rttStats.PTO(true) {
+		return
+	}
+	h.zeroRTTOpener = nil
+	h.logger.Debugf("Dropping 0-RTT keys.")
+	if h.qlogger != nil {
+		h.qlogger.RecordEvent(qlog.KeyDiscarded{KeyType: qlog.KeyTypeClient0RTT})
+	}
 }
 
 func (h *cryptoSetup) ConnectionState() ConnectionState {

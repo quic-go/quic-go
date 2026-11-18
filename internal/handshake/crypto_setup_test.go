@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -475,10 +476,11 @@ func Test0RTT(t *testing.T) {
 	require.False(t, server.ConnectionState().DidResume)
 	require.False(t, client.ConnectionState().DidResume)
 
+	serverRTTStats := utils.NewRTTStats()
 	client, clientEvents, clientErr, server, serverEvents, serverErr := handshakeWithTLSConf(
 		t,
 		clientConf, serverConf,
-		utils.NewRTTStats(), utils.NewRTTStats(),
+		utils.NewRTTStats(), serverRTTStats,
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 		true,
@@ -509,6 +511,19 @@ func Test0RTT(t *testing.T) {
 	require.True(t, client.ConnectionState().DidResume)
 	require.True(t, server.ConnectionState().Used0RTT)
 	require.True(t, client.ConnectionState().Used0RTT)
+
+	// the server drops 0-RTT keys 3 PTOs after receiving the first 1-RTT packet
+	server.DiscardInitialKeys()
+	synctest.Test(t, func(t *testing.T) {
+		_, err := server.Get1RTTOpener()
+		require.NoError(t, err)
+		time.Sleep(3 * serverRTTStats.PTO(true))
+		_, err = server.Get0RTTOpener()
+		require.NoError(t, err)
+		time.Sleep(time.Nanosecond)
+		_, err = server.Get0RTTOpener()
+		require.ErrorIs(t, err, ErrKeysDropped)
+	})
 }
 
 func Test0RTTRejectionOnTransportParametersChanged(t *testing.T) {
