@@ -530,7 +530,7 @@ func TestFrameParserDatagramUnsupported(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = parser.ParseType(b, protocol.Encryption1RTT)
-	checkFrameUnsupported(t, err, 0x30)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation, FrameType: 0x30})
 }
 
 func TestFrameParserResetStreamAtUnsupported(t *testing.T) {
