@@ -436,6 +436,15 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 			allowedOneRTT:    true,
 		},
 		{
+			name:             "HANDSHAKE_DONE_FRAME",
+			frameType:        FrameTypeHandshakeDone,
+			frame:            &HandshakeDoneFrame{},
+			allowedInitial:   false,
+			allowedHandshake: false,
+			allowedZeroRTT:   false,
+			allowedOneRTT:    true,
+		},
+		{
 			name:             "MAX_DATA_FRAME",
 			frameType:        FrameTypeMaxData,
 			frame:            &MaxDataFrame{MaximumData: 1},
