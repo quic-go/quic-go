@@ -254,9 +254,12 @@ func (w *responseWriter) encodeHeader(status int) ([]byte, error) {
 		if strings.HasPrefix(k, http.TrailerPrefix) {
 			continue
 		}
-		for index := range v {
-			name := strings.ToLower(k)
-			value := v[index]
+		name := strings.ToLower(k)
+		for _, value := range v {
+			// drop fields that HTTP/3 does not allow
+			if !canSendField(name, value) {
+				continue
+			}
 			if err := enc.WriteField(qpack.HeaderField{Name: name, Value: value}); err != nil {
 				return nil, err
 			}

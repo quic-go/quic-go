@@ -103,6 +103,17 @@ func TestRequestWriterInvalidHeaderValue(t *testing.T) {
 	require.EqualError(t, err, `invalid HTTP header value for header "Authorization"`)
 }
 
+func TestRequestWriterConnectionSpecificHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+	req.Header.Set("Connection", "close")
+	req.Header["Te"] = []string{"gzip", "trailers"}
+	buf := &bytes.Buffer{}
+	require.NoError(t, newRequestWriter().WriteRequestHeader(buf, req, false, 0, nil))
+	headers := decodeHeader(t, buf)
+	require.NotContains(t, headers, "connection")
+	require.Equal(t, []string{"trailers"}, headers["te"])
+}
+
 func TestRequestWriterConnect(t *testing.T) {
 	// httptest.NewRequest does not properly support the CONNECT method
 	req, err := http.NewRequest(http.MethodConnect, "https://quic-go.net/", nil)

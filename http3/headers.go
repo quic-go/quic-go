@@ -219,6 +219,17 @@ func validateRegularHeaderField(h qpack.HeaderField) error {
 	return nil
 }
 
+// canSendField reports whether a field with a lower-case name may be sent.
+// HTTP/3 endpoints must not generate connection-specific fields,
+// TE must not contain any value other than "trailers",
+// and field names and values must be valid.
+func canSendField(name, value string) bool {
+	if !httpguts.ValidHeaderFieldName(name) || !httpguts.ValidHeaderFieldValue(value) {
+		return false
+	}
+	return validateRegularHeaderField(qpack.HeaderField{Name: name, Value: value}) == nil
+}
+
 func validateTrailerHeaderField(h qpack.HeaderField) error {
 	if err := validateRegularHeaderField(h); err != nil {
 		return err
@@ -475,6 +486,9 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 		}
 		lowercaseKey := strings.ToLower(k)
 		for _, v := range vals {
+			if !canSendField(lowercaseKey, v) {
+				continue
+			}
 			if err := enc.WriteField(qpack.HeaderField{Name: lowercaseKey, Value: v}); err != nil {
 				return false, err
 			}
