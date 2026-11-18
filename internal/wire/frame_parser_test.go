@@ -501,7 +501,7 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 				} else {
 					var transportErr *qerr.TransportError
 					require.ErrorAs(t, err, &transportErr)
-					require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
+					require.Equal(t, qerr.ProtocolViolation, transportErr.ErrorCode)
 				}
 			})
 		}

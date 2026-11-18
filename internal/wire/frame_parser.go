@@ -65,7 +65,7 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		}
 		if !ft.isAllowedAtEncLevel(encLevel) {
 			return 0, parsed, &qerr.TransportError{
-				ErrorCode:    qerr.FrameEncodingError,
+				ErrorCode:    qerr.ProtocolViolation,
 				FrameType:    typ,
 				ErrorMessage: fmt.Sprintf("%d not allowed at encryption level %s", ft, encLevel),
 			}
