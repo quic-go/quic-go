@@ -396,7 +396,7 @@ func TestFrameAllowedAtEncLevel(t *testing.T) {
 			frame:            &ConnectionCloseFrame{IsApplicationError: false, ReasonPhrase: "err"},
 			allowedInitial:   true,
 			allowedHandshake: true,
-			allowedZeroRTT:   false,
+			allowedZeroRTT:   true,
 			allowedOneRTT:    true,
 		},
 		{
