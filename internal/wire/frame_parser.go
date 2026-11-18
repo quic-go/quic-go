@@ -47,7 +47,7 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 				ErrorMessage: err.Error(),
 			}
 		}
-		// RFC 9000, Section 12.4
+		// Frame types must use the shortest possible encoding.
 		if l != quicvarint.Len(typ) {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.ProtocolViolation,
