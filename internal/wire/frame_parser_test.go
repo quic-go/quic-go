@@ -589,6 +589,13 @@ func TestFrameParserInvalidFrameType(t *testing.T) {
 	require.Equal(t, qerr.FrameEncodingError, transportErr.ErrorCode)
 }
 
+func TestFrameParserNonMinimalFrameType(t *testing.T) {
+	parser := NewFrameParser(true, true, true)
+	_, l, err := parser.ParseType(quicvarint.AppendWithLen(nil, uint64(FrameTypePing), 2), protocol.Encryption1RTT)
+	require.Equal(t, 2, l)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation, FrameType: uint64(FrameTypePing)})
+}
+
 func TestFrameParsingErrorsOnInvalidFrames(t *testing.T) {
 	parser := NewFrameParser(true, true, true)
 	f := &MaxStreamDataFrame{

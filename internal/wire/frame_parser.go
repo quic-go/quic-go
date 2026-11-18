@@ -47,6 +47,14 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 				ErrorMessage: err.Error(),
 			}
 		}
+		// Frame types must use the shortest possible encoding.
+		if l != quicvarint.Len(typ) {
+			return 0, parsed, &qerr.TransportError{
+				ErrorCode:    qerr.ProtocolViolation,
+				FrameType:    typ,
+				ErrorMessage: "frame type not minimally encoded",
+			}
+		}
 		b = b[l:]
 		if typ == 0x0 { // skip PADDING frames
 			continue
