@@ -72,9 +72,8 @@ const MinStreamFrameBufferSize = 128
 // If a packet has less than this number of bytes, we won't coalesce any more packets onto it.
 const MinCoalescedPacketSize = 128
 
-// MaxCryptoStreamOffset is the maximum offset allowed on any of the crypto streams.
-// This limits the size of the ClientHello and Certificates that can be received.
-const MaxCryptoStreamOffset = 16 * (1 << 10)
+// MaxCryptoStreamBufferSize is the maximum amount of out-of-order data buffered on any of the crypto streams.
+const MaxCryptoStreamBufferSize = 16 * (1 << 10)
 
 // MinRemoteIdleTimeout is the minimum value that we accept for the remote idle timeout
 const MinRemoteIdleTimeout = 5 * time.Second

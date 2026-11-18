@@ -20,6 +20,7 @@ const disableClientHelloScramblingEnv = "QUIC_GO_DISABLE_CLIENTHELLO_SCRAMBLING"
 type baseCryptoStream struct {
 	queue frameSorter
 
+	readOffset    protocol.ByteCount
 	highestOffset protocol.ByteCount
 	finished      bool
 
@@ -33,10 +34,10 @@ func newCryptoStream() *cryptoStream {
 
 func (s *baseCryptoStream) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	highestOffset := f.Offset + protocol.ByteCount(len(f.Data))
-	if maxOffset := highestOffset; maxOffset > protocol.MaxCryptoStreamOffset {
+	if maxOffset := s.readOffset + protocol.MaxCryptoStreamBufferSize; highestOffset > maxOffset {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.CryptoBufferExceeded,
-			ErrorMessage: fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset),
+			ErrorMessage: fmt.Sprintf("received offset %d on crypto stream, maximum allowed %d", highestOffset, maxOffset),
 		}
 	}
 	if s.finished {
@@ -58,6 +59,7 @@ func (s *baseCryptoStream) HandleCryptoFrame(f *wire.CryptoFrame) error {
 // GetCryptoData retrieves data that was received in CRYPTO frames
 func (s *baseCryptoStream) GetCryptoData() []byte {
 	_, data, _ := s.queue.Pop()
+	s.readOffset += protocol.ByteCount(len(data))
 	return data
 }
 
