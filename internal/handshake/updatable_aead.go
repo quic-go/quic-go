@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
-	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
@@ -42,8 +41,8 @@ type updatableAEAD struct {
 	firstPacketNumber  protocol.PacketNumber
 	handshakeConfirmed bool
 
-	invalidPacketLimit uint64
-	invalidPacketCount uint64
+	invalidPackets *invalidPacketCounter
+	integrityLimit uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
 	prevRcvAEADExpiry monotime.Time
@@ -81,12 +80,13 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, logger utils.Logger, version protocol.Version) *updatableAEAD {
+func newUpdatableAEAD(invalidPackets *invalidPacketCounter, rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, logger utils.Logger, version protocol.Version) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
+		invalidPackets:          invalidPackets,
 		rttStats:                rttStats,
 		qlogger:                 qlogger,
 		logger:                  logger,
@@ -173,14 +173,7 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
-	switch suite.ID {
-	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
-		a.invalidPacketLimit = protocol.InvalidPacketLimitAES
-	case tls.TLS_CHACHA20_POLY1305_SHA256:
-		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha
-	default:
-		panic(fmt.Sprintf("unknown cipher suite %d", suite.ID))
-	}
+	a.integrityLimit = suite.IntegrityLimit()
 }
 
 func (a *updatableAEAD) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber {
@@ -190,9 +183,8 @@ func (a *updatableAEAD) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNL
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
 	if err == ErrDecryptionFailed {
-		a.invalidPacketCount++
-		if a.invalidPacketCount >= a.invalidPacketLimit {
-			return nil, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
+		if err := a.invalidPackets.Add(a.integrityLimit); err != nil {
+			return nil, err
 		}
 	}
 	if err == nil {

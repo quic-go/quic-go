@@ -36,8 +36,8 @@ func setupEndpoints(t *testing.T, serverRTTStats *utils.RTTStats) (client, serve
 	rand.Read(trafficSecret1)
 	rand.Read(trafficSecret2)
 
-	client = newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.Version1)
-	server = newUpdatableAEAD(serverRTTStats, &eventRecorder, utils.DefaultLogger, protocol.Version1)
+	client = newUpdatableAEAD(&invalidPacketCounter{}, utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.Version1)
+	server = newUpdatableAEAD(&invalidPacketCounter{}, serverRTTStats, &eventRecorder, utils.DefaultLogger, protocol.Version1)
 	client.SetReadKey(cs, trafficSecret2)
 	client.SetWriteKey(cs, trafficSecret1)
 	server.SetReadKey(cs, trafficSecret1)
@@ -105,7 +105,7 @@ func TestChaChaTestVector(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("QUIC %s", tc.version), func(t *testing.T) {
 			secret := splitHexString(t, "9ac312a7f877468ebe69422748ad00a1 5443f18203a07d6060f688f30f21632b")
-			aead := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, tc.version)
+			aead := newUpdatableAEAD(&invalidPacketCounter{}, utils.NewRTTStats(), nil, utils.DefaultLogger, tc.version)
 			chacha := getCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
 			require.Equal(t, tls.TLS_CHACHA20_POLY1305_SHA256, chacha.ID)
 			aead.SetReadKey(chacha, secret)
@@ -121,7 +121,7 @@ func TestChaChaTestVector(t *testing.T) {
 			require.Equal(t, tc.expectedPacket, packet)
 
 			aead.SetHandshakeConfirmed()
-			peer := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, tc.version)
+			peer := newUpdatableAEAD(&invalidPacketCounter{}, utils.NewRTTStats(), nil, utils.DefaultLogger, tc.version)
 			peer.SetWriteKey(chacha, tc.nextTrafficSecret)
 			header = splitHexString(t, "4600bff5")
 			payload = peer.Seal(nil, plaintext, 654360565, header)
@@ -143,8 +143,8 @@ func TestUpdatableAEADHeaderProtection(t *testing.T) {
 				rand.Read(trafficSecret1)
 				rand.Read(trafficSecret2)
 
-				client := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, v)
-				server := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, v)
+				client := newUpdatableAEAD(&invalidPacketCounter{}, utils.NewRTTStats(), nil, utils.DefaultLogger, v)
+				server := newUpdatableAEAD(&invalidPacketCounter{}, utils.NewRTTStats(), nil, utils.DefaultLogger, v)
 				client.SetReadKey(cs, trafficSecret2)
 				client.SetWriteKey(cs, trafficSecret1)
 				server.SetReadKey(cs, trafficSecret1)
@@ -181,8 +181,8 @@ func TestUpdatableAEADEncryptDecryptMessage(t *testing.T) {
 				rand.Read(trafficSecret1)
 				rand.Read(trafficSecret2)
 
-				client := newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, v)
-				server := newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, v)
+				client := newUpdatableAEAD(&invalidPacketCounter{}, &rttStats, nil, utils.DefaultLogger, v)
+				server := newUpdatableAEAD(&invalidPacketCounter{}, &rttStats, nil, utils.DefaultLogger, v)
 				client.SetReadKey(cs, trafficSecret2)
 				client.SetWriteKey(cs, trafficSecret1)
 				server.SetReadKey(cs, trafficSecret1)
@@ -229,7 +229,7 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 
 func TestAEADLimitReached(t *testing.T) {
 	client, _, _ := setupEndpoints(t, utils.NewRTTStats())
-	client.invalidPacketLimit = 10
+	client.integrityLimit = 10
 	for i := range 9 {
 		_, err := client.Open(nil, []byte("foobar"), monotime.Now(), protocol.PacketNumber(i), protocol.KeyPhaseZero, []byte("ad"))
 		require.ErrorIs(t, err, ErrDecryptionFailed)
@@ -271,7 +271,7 @@ func TestKeyUpdates(t *testing.T) {
 // 	rand.Read(trafficSecret2)
 
 // 	client := newUpdatableAEAD(&rttStats, nil, utils.DefaultLogger, protocol.Version1)
-// 	server := newUpdatableAEAD(&rttStats, serverTracer, utils.DefaultLogger, protocol.Version1)
+// 	server := newUpdatableAEAD(&invalidPacketCounter{}, &rttStats, serverTracer, utils.DefaultLogger, protocol.Version1)
 // 	client.SetReadKey(cs, trafficSecret2)
 // 	client.SetWriteKey(cs, trafficSecret1)
 // 	server.SetReadKey(cs, trafficSecret1)
@@ -696,8 +696,8 @@ func getClientAndServer() (client, server *updatableAEAD) {
 
 	cs := cipherSuites[0]
 	rttStats := utils.NewRTTStats()
-	client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
-	server = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	client = newUpdatableAEAD(&invalidPacketCounter{}, rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	server = newUpdatableAEAD(&invalidPacketCounter{}, rttStats, nil, utils.DefaultLogger, protocol.Version1)
 	client.SetReadKey(cs, trafficSecret2)
 	client.SetWriteKey(cs, trafficSecret1)
 	server.SetReadKey(cs, trafficSecret1)

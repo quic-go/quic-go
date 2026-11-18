@@ -5,7 +5,23 @@ import (
 	"encoding/binary"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 )
+
+// An invalidPacketCounter counts the packets of a connection that failed authentication, across all keys.
+type invalidPacketCounter struct {
+	count uint64
+}
+
+// Add counts a packet that failed authentication with an AEAD that has the given integrity limit.
+// It returns an AEAD_LIMIT_REACHED error once the limit is reached.
+func (c *invalidPacketCounter) Add(limit uint64) error {
+	c.count++
+	if c.count >= limit {
+		return &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
+	}
+	return nil
+}
 
 func createAEAD(suite cipherSuite, trafficSecret []byte, v protocol.Version) cipher.AEAD {
 	keyLabel := hkdfLabelKeyV1
@@ -54,6 +70,8 @@ type longHeaderOpener struct {
 	aead            cipher.AEAD
 	headerProtector headerProtector
 	highestRcvdPN   protocol.PacketNumber // highest packet number received (which could be successfully unprotected)
+	invalidPackets  *invalidPacketCounter
+	integrityLimit  uint64
 
 	// use a single array to avoid allocations
 	nonceBuf [8]byte
@@ -61,13 +79,15 @@ type longHeaderOpener struct {
 
 var _ LongHeaderOpener = &longHeaderOpener{}
 
-func newLongHeaderOpener(aead cipher.AEAD, headerProtector headerProtector) LongHeaderOpener {
+func newLongHeaderOpener(aead cipher.AEAD, headerProtector headerProtector, suite cipherSuite, invalidPackets *invalidPacketCounter) LongHeaderOpener {
 	if aead.NonceSize() != 8 {
 		panic("unexpected nonce size")
 	}
 	return &longHeaderOpener{
 		aead:            aead,
 		headerProtector: headerProtector,
+		invalidPackets:  invalidPackets,
+		integrityLimit:  suite.IntegrityLimit(),
 	}
 }
 
@@ -78,12 +98,14 @@ func (o *longHeaderOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wire
 func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(o.nonceBuf[:], uint64(pn))
 	dec, err := o.aead.Open(dst, o.nonceBuf[:], src, ad)
-	if err == nil {
-		o.highestRcvdPN = max(o.highestRcvdPN, pn)
-	} else {
-		err = ErrDecryptionFailed
+	if err != nil {
+		if err := o.invalidPackets.Add(o.integrityLimit); err != nil {
+			return nil, err
+		}
+		return nil, ErrDecryptionFailed
 	}
-	return dec, err
+	o.highestRcvdPN = max(o.highestRcvdPN, pn)
+	return dec, nil
 }
 
 func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {

@@ -61,6 +61,9 @@ type cryptoSetup struct {
 	aead          *updatableAEAD
 	has1RTTSealer bool
 	has1RTTOpener bool
+
+	// shared by all openers, since the AEAD integrity limit applies across all keys
+	invalidPackets *invalidPacketCounter
 }
 
 var _ CryptoSetup = &cryptoSetup{}
@@ -138,7 +141,8 @@ func newCryptoSetup(
 	perspective protocol.Perspective,
 	version protocol.Version,
 ) *cryptoSetup {
-	initialSealer, initialOpener := NewInitialAEAD(connID, perspective, version)
+	invalidPackets := &invalidPacketCounter{}
+	initialSealer, initialOpener := newInitialAEAD(connID, perspective, version, invalidPackets)
 	if qlogger != nil {
 		qlogger.RecordEvent(qlog.KeyUpdated{
 			Trigger: qlog.KeyUpdateTLS,
@@ -150,21 +154,22 @@ func newCryptoSetup(
 		})
 	}
 	return &cryptoSetup{
-		initialSealer: initialSealer,
-		initialOpener: initialOpener,
-		aead:          newUpdatableAEAD(rttStats, qlogger, logger, version),
-		events:        make([]Event, 0, 16),
-		ourParams:     tp,
-		rttStats:      rttStats,
-		qlogger:       qlogger,
-		logger:        logger,
-		perspective:   perspective,
-		version:       version,
+		initialSealer:  initialSealer,
+		initialOpener:  initialOpener,
+		aead:           newUpdatableAEAD(invalidPackets, rttStats, qlogger, logger, version),
+		invalidPackets: invalidPackets,
+		events:         make([]Event, 0, 16),
+		ourParams:      tp,
+		rttStats:       rttStats,
+		qlogger:        qlogger,
+		logger:         logger,
+		perspective:    perspective,
+		version:        version,
 	}
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
-	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective, h.version)
+	initialSealer, initialOpener := newInitialAEAD(id, h.perspective, h.version, h.invalidPackets)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
 	if h.qlogger != nil {
@@ -453,6 +458,8 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		h.zeroRTTOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
+			suite,
+			h.invalidPackets,
 		)
 		h.used0RTT.Store(true)
 		if h.logger.Debug() {
@@ -463,6 +470,8 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
+			suite,
+			h.invalidPackets,
 		)
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))

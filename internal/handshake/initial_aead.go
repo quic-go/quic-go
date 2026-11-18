@@ -26,6 +26,10 @@ var initialSuite = getCipherSuite(tls.TLS_AES_128_GCM_SHA256)
 
 // NewInitialAEAD creates a new AEAD for Initial encryption / decryption.
 func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v protocol.Version) (LongHeaderSealer, LongHeaderOpener) {
+	return newInitialAEAD(connID, pers, v, &invalidPacketCounter{})
+}
+
+func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v protocol.Version, invalidPackets *invalidPacketCounter) (LongHeaderSealer, LongHeaderOpener) {
 	var sealer LongHeaderSealer
 	var opener LongHeaderOpener
 	// The keys for the Initial AEAD are derived from the connection ID and constants defined in RFC 9001, Section 5.2.
@@ -49,7 +53,7 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v p
 		decrypter := initialSuite.AEAD(otherKey, otherIV)
 
 		sealer = newLongHeaderSealer(encrypter, newHeaderProtector(initialSuite, mySecret, true, v))
-		opener = newLongHeaderOpener(decrypter, newHeaderProtector(initialSuite, otherSecret, true, v))
+		opener = newLongHeaderOpener(decrypter, newHeaderProtector(initialSuite, otherSecret, true, v), initialSuite, invalidPackets)
 	})
 	return sealer, opener
 }

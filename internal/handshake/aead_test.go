@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,18 @@ func getSealerAndOpener(t *testing.T, cs cipherSuite, v protocol.Version) (LongH
 	rand.Read(hpKey)
 	aead := createAEAD(cs, trafficSecret, v)
 	return newLongHeaderSealer(aead, newHeaderProtector(cs, hpKey, true, v)),
-		newLongHeaderOpener(aead, newHeaderProtector(cs, hpKey, true, v))
+		newLongHeaderOpener(aead, newHeaderProtector(cs, hpKey, true, v), cs, &invalidPacketCounter{})
+}
+
+func TestLongHeaderOpenerCountsInvalidPackets(t *testing.T) {
+	var invalidPackets invalidPacketCounter
+	_, opener := newInitialAEAD(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PerspectiveServer, protocol.Version1, &invalidPackets)
+	for range 3 {
+		_, err := opener.Open(nil, []byte("foobar"), 0, []byte("ad"))
+		require.ErrorIs(t, err, ErrDecryptionFailed)
+	}
+	// the counter is shared with the 1-RTT keys, so the next failure reaches a limit of 4
+	require.ErrorIs(t, invalidPackets.Add(4), &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
 }
 
 func TestEncryptAndDecryptMessage(t *testing.T) {
