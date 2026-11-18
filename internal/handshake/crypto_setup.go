@@ -680,6 +680,9 @@ func wrapError(err error) error {
 	if alertErr, ok := errors.AsType[tls.AlertError](err); ok {
 		return qerr.NewLocalCryptoError(uint8(alertErr), err)
 	}
+	if transportErr, ok := errors.AsType[*qerr.TransportError](err); ok {
+		return transportErr
+	}
 	return &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: err.Error()}
 }
 
