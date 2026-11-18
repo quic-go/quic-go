@@ -106,6 +106,9 @@ type sentPacketHandler struct {
 
 	handshakeConfirmed bool
 
+	// the largest packet number of the 0-RTT packets dropped when the server rejected 0-RTT
+	largestRejected0RTTPacket protocol.PacketNumber
+
 	ignorePacketsBelow func(protocol.PacketNumber)
 
 	ackedPackets []packetWithPacketNumber // to avoid allocations in detectAndRemoveAckedPackets
@@ -161,6 +164,7 @@ func NewSentPacketHandler(
 		hist:                           *newSentPacketHistory(),
 		timeThresholdEighths:           defaultTimeThresholdEighths,
 		minPNToRelaxReordering:         protocol.InvalidPacketNumber,
+		largestRejected0RTTPacket:      protocol.InvalidPacketNumber,
 		handshakePNs: &handshakePacketNumbers{
 			Initial:   make([]protocol.PacketNumber, 0, 4),
 			Handshake: make([]protocol.PacketNumber, 0, 8),
@@ -241,6 +245,9 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel, now m
 		}
 		if p.EncryptionLevel != encLevel {
 			continue
+		}
+		if encLevel == protocol.Encryption0RTT {
+			h.largestRejected0RTTPacket = pn
 		}
 		h.removeFromBytesInFlight(p)
 		h.hist.Remove(pn)
@@ -433,6 +440,12 @@ func (h *sentPacketHandler) receivedAck(ack *wire.AckFrame, encLevel protocol.En
 		return false, &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "received ACK for an unsent packet",
+		}
+	}
+	if encLevel == protocol.Encryption1RTT && ack.LowestAcked() <= h.largestRejected0RTTPacket {
+		return false, &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "received ACK for a rejected 0-RTT packet",
 		}
 	}
 

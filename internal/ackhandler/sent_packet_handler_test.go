@@ -1307,10 +1307,13 @@ func TestSentPacketHandler0RTT(t *testing.T) {
 	require.Equal(t, protocol.ByteCount(3000), sph.(*sentPacketHandler).getBytesInFlight())
 	// 0-RTT are discarded, not lost
 	require.Empty(t, appDataPackets.Lost)
-	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(zeroRTT1, zeroRTT2, oneRTT1, oneRTT2)}, protocol.Encryption1RTT, now)
+	_, err := sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(oneRTT1, oneRTT2)}, protocol.Encryption1RTT, now)
 	require.NoError(t, err)
 	require.Equal(t, []protocol.PacketNumber{oneRTT1, oneRTT2}, appDataPackets.Acked)
 	require.Equal(t, protocol.ByteCount(1000), sph.(*sentPacketHandler).getBytesInFlight())
+	// the server can't acknowledge 0-RTT packets it rejected
+	_, err = sph.ReceivedAck(&wire.AckFrame{AckRanges: ackRanges(zeroRTT1, zeroRTT2, oneRTT1, oneRTT2)}, protocol.Encryption1RTT, now)
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.ProtocolViolation})
 }
 
 func TestSentPacketHandlerCongestion(t *testing.T) {
