@@ -57,7 +57,7 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 			(p.supportsResetStreamAt && ft == FrameTypeResetStreamAt) ||
 			(p.supportsAckFrequency && (ft == FrameTypeAckFrequency || ft == FrameTypeImmediateAck))
 		if !valid {
-			// RFC 9221, Section 3
+			// Receiving a DATAGRAM frame without having advertised support is a PROTOCOL_VIOLATION.
 			if ft.IsDatagramFrameType() {
 				return 0, parsed, &qerr.TransportError{
 					ErrorCode:    qerr.ProtocolViolation,
