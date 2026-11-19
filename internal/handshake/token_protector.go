@@ -56,12 +56,8 @@ func (s *tokenProtector) DecodeToken(p []byte) ([]byte, error) {
 const tokenProtectorHKDFInfo = "quic-go token source"
 
 func (s *tokenProtector) createAEAD(salt []byte) (cipher.AEAD, error) {
-	prk, err := hkdf.Extract(sha256.New, s.key[:], salt)
-	if err != nil {
-		return nil, err
-	}
-
-	key, err := hkdf.Expand(sha256.New, prk, tokenProtectorHKDFInfo, 32)
+	// HKDF-Extract can be skipped if the input is already a uniformly random key (RFC 5869, Section 3.3).
+	key, err := hkdf.Expand(sha256.New, s.key[:], tokenProtectorHKDFInfo+string(salt), 32)
 	if err != nil {
 		return nil, err
 	}
