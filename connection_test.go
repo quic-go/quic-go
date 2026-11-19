@@ -1267,6 +1267,23 @@ func TestConnectionHandleMaxStreamsFrame(t *testing.T) {
 	})
 }
 
+func TestConnectionTransportParametersDuring0RTT(t *testing.T) {
+	tc := newClientTestConnection(t, nil, nil, false)
+	tc.conn.restoreTransportParameters(&wire.TransportParameters{MaxBidiStreamNum: 1})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tc.conn.ConnectionState()
+		tc.conn.OpenStream()
+	}()
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+		MaxBidiStreamNum:                1,
+	}))
+	<-done
+}
+
 func TestConnectionTransportParameterValidationFailureServer(t *testing.T) {
 	tc := newServerTestConnection(t, nil, nil, false)
 	err := tc.conn.handleTransportParameters(&wire.TransportParameters{
@@ -1963,7 +1980,7 @@ func TestConnectionInitialPacketSizeFallback(t *testing.T) {
 			require.Equal(t, uint32(estimateMaxPayloadSize(protocol.MinInitialPacketSize)), tc.conn.maxPayloadSizeEstimate.Load())
 			require.Zero(t, tc.conn.config.InitialPacketSize)
 
-			tc.conn.peerParams = &wire.TransportParameters{MaxUDPPayloadSize: 1300, ActiveConnectionIDLimit: 2}
+			tc.conn.peerParams.Store(&wire.TransportParameters{MaxUDPPayloadSize: 1300, ActiveConnectionIDLimit: 2})
 			tc.conn.applyTransportParameters()
 			require.Equal(t, protocol.ByteCount(protocol.MinInitialPacketSize), tc.conn.maxPacketSize())
 
