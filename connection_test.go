@@ -1342,6 +1342,18 @@ func TestConnectionTransportParameterValidationFailureClient(t *testing.T) {
 		assert.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.TransportParameterError})
 		assert.ErrorContains(t, err, "expected retry_source_connection_id to equal")
 	})
+
+	t.Run("preferred_address with zero-length connection ID", func(t *testing.T) {
+		tc := newClientTestConnection(t, nil, nil, false)
+		tc.conn.handshakeDestConnID = protocol.ZeroLengthConnectionID
+		err := tc.conn.handleTransportParameters(&wire.TransportParameters{
+			OriginalDestinationConnectionID: tc.destConnID,
+			InitialSourceConnectionID:       protocol.ZeroLengthConnectionID,
+			PreferredAddress:                &wire.PreferredAddress{ConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4})},
+		})
+		assert.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.TransportParameterError})
+		assert.ErrorContains(t, err, "received preferred_address, although the server uses a zero-length connection ID")
+	})
 }
 
 func TestConnectionHandshakeServer(t *testing.T) {
@@ -1465,8 +1477,9 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 	tc.sendConn.EXPECT().Write(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// the state transition is driven by processing of a CRYPTO frame
+	serverConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 	hdr := &wire.ExtendedHeader{
-		Header:          wire.Header{Type: protocol.PacketTypeHandshake, Version: protocol.Version1},
+		Header:          wire.Header{Type: protocol.PacketTypeHandshake, SrcConnectionID: serverConnID, Version: protocol.Version1},
 		PacketNumberLen: protocol.PacketNumberLen2,
 	}
 	data, err := (&wire.CryptoFrame{Data: []byte("foobar")}).Append(nil, protocol.Version1)
@@ -1474,6 +1487,7 @@ func testConnectionHandshakeClient(t *testing.T, usePreferredAddress bool) {
 
 	tp := &wire.TransportParameters{
 		OriginalDestinationConnectionID: tc.destConnID,
+		InitialSourceConnectionID:       serverConnID,
 		MaxIdleTimeout:                  time.Hour,
 	}
 	preferredAddressConnID := protocol.ParseConnectionID([]byte{10, 8, 6, 4})
