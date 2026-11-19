@@ -2441,7 +2441,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	}
 
 	c.peerParams = params
-	c.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
+	// Connection IDs are issued when the handshake completes, since 0-RTT might be rejected.
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	c.streamsMap.HandleTransportParameters(params)
 }
