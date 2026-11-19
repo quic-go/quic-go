@@ -36,6 +36,7 @@ func (t *Token) ValidateRemoteAddr(addr net.Addr) bool {
 }
 
 // The first byte of the token plaintext.
+// Use new values when changing the plaintext format.
 const (
 	tokenTypeRetry    byte = 1
 	tokenTypeNewToken byte = 2
