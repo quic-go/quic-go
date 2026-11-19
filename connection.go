@@ -1146,7 +1146,7 @@ func (c *Conn) handleOnePacket(
 
 			p.data = packetData
 
-			processed, err := c.handleLongHeaderPacket(p, hdr, datagramPayloadChecksum)
+			processed, err := c.handleLongHeaderPacket(p, hdr, rp.Size(), datagramPayloadChecksum)
 			if err != nil {
 				return false, err
 			}
@@ -1340,7 +1340,12 @@ func (c *Conn) handleShortHeaderPacket(
 	return true, nil
 }
 
-func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagramPayloadChecksum qlog.DatagramPayloadChecksum) (wasProcessed bool, _ error) {
+func (c *Conn) handleLongHeaderPacket(
+	p receivedPacket,
+	hdr *wire.Header,
+	datagramSize protocol.ByteCount,
+	datagramPayloadChecksum qlog.DatagramPayloadChecksum,
+) (wasProcessed bool, _ error) {
 	var wasQueued bool
 
 	defer func() {
@@ -1352,6 +1357,25 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 
 	if hdr.Type == protocol.PacketTypeRetry {
 		return c.handleRetryPacket(hdr, p.data, p.rcvTime), nil
+	}
+
+	// A server must discard Initial packets carried in UDP datagrams smaller than 1200 bytes.
+	if c.perspective == protocol.PerspectiveServer && hdr.Type == protocol.PacketTypeInitial && datagramSize < protocol.MinInitialPacketSize {
+		if c.qlogger != nil {
+			c.qlogger.RecordEvent(qlog.PacketDropped{
+				Header: qlog.PacketHeader{
+					PacketType:       qlog.PacketTypeInitial,
+					DestConnectionID: hdr.DestConnectionID,
+					SrcConnectionID:  hdr.SrcConnectionID,
+					PacketNumber:     protocol.InvalidPacketNumber,
+				},
+				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+				DatagramPayloadChecksum: datagramPayloadChecksum,
+				Trigger:                 qlog.PacketDropUnexpectedPacket,
+			})
+		}
+		c.logger.Debugf("Dropping Initial packet in a datagram that is too small (%d bytes)", datagramSize)
+		return false, nil
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
