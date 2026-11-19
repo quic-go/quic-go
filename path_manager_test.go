@@ -96,7 +96,7 @@ func TestPathManagerIntentionalMigration(t *testing.T) {
 	require.False(t, shouldSwitch)
 
 	// receiving a PATH_RESPONSE for the second path confirms the path
-	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc2.Data})
+	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc2.Data}, monotime.Now())
 	connID, frames, shouldSwitch = pm.HandlePacket(addr2, now, nil, false)
 	require.Zero(t, connID)
 	require.Empty(t, frames)
@@ -214,7 +214,7 @@ func TestPathManagerNATRebinding(t *testing.T) {
 	require.False(t, shouldSwitch)
 
 	// receiving a PATH_RESPONSE for the second path confirms the path
-	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc1.Data})
+	pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: pc1.Data}, monotime.Now())
 	// we now switch to the new path, as soon as the next packet on that path is received
 	connID, frames, shouldSwitch = pm.HandlePacket(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1000}, now, nil, false)
 	require.Zero(t, connID)
@@ -283,7 +283,7 @@ func TestPathManagerRetransmissions(t *testing.T) {
 			if response.respondToLast {
 				challenge = challenges[len(challenges)-1]
 			}
-			pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: challenge})
+			pm.HandlePathResponseFrame(&wire.PathResponseFrame{Data: challenge}, monotime.Now())
 			// Once validated, even a packet at the next retry deadline needs no new challenge.
 			now = now.Add((23 + 16) * rtt)
 			id, frames, shouldSwitch := pm.HandlePacket(addr, now, nil, false)

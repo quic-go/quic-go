@@ -57,6 +57,14 @@ func (q *receivedPacketQueue) Push(p receivedPacket, source *pathReceiver) bool 
 // Like the qlog TupleID "", it refers to whichever path is currently active.
 const activePathID pathID = -2
 
+// ActivePath returns the receiver ID of the Transport currently used by the run loop.
+// This can differ from a switch requested by the application but not yet applied.
+func (q *receivedPacketQueue) ActivePath() pathID {
+	q.mx.Lock()
+	defer q.mx.Unlock()
+	return q.active.id
+}
+
 // Pop returns the next packet, and the ID of the path it was received on.
 // The ID is activePathID for packets received on the active path.
 // Packets in the side queue are returned first:
