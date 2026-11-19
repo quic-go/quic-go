@@ -183,4 +183,9 @@ func TestRequestWriterTrailers(t *testing.T) {
 		"trailer1": {"foo"},
 		"trailer2": {"bar"},
 	}, trailers)
+
+	// no HEADERS frame is sent if all trailers are dropped
+	req.Trailer = http.Header{"Upgrade": {"foo"}}
+	require.NoError(t, rw.WriteRequestTrailer(buf, req, 42, nil))
+	require.Zero(t, buf.Len())
 }

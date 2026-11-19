@@ -132,9 +132,10 @@ func TestResponseWriterHeader(t *testing.T) {
 
 func TestResponseWriterConnectionSpecificHeaders(t *testing.T) {
 	rw := newTestResponseWriter(t)
-	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Connection", "Transfer-Encoding", "Upgrade", "Te"} {
+	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Connection", "Transfer-Encoding", "Upgrade"} {
 		rw.Header().Set(name, "foo")
 	}
+	rw.Header().Set("Te", "trailers") // TE is only allowed in request headers
 	rw.Header().Set("Invalid", "foo\r\nbar")
 	rw.Header().Set("Date", "today")
 	rw.WriteHeader(http.StatusOK)

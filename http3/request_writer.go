@@ -186,12 +186,8 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 
 			}
 
-			name := strings.ToLower(k)
 			for _, v := range vv {
-				// drop fields that HTTP/3 does not allow
-				if canSendField(name, v) {
-					f(k, v)
-				}
+				f(k, v)
 			}
 		}
 		if shouldSendReqContentLength(req.Method, contentLength) {
@@ -230,6 +226,10 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 	}
 	enumerateHeaders(func(name, value string) {
 		name = strings.ToLower(name)
+		// drop fields that HTTP/3 does not allow; names and values were validated above
+		if isForbiddenField(name, value, true) {
+			return
+		}
 		w.encoder.WriteField(qpack.HeaderField{Name: name, Value: value})
 		if traceHeaders {
 			traceWroteHeaderField(trace, name, value)
