@@ -3385,9 +3385,13 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 		)
 		eventRecorder.Clear()
 
-		// Send the second packet. We refuse to accept it, because the connection ID is changed again.
+		// Send an Initial and a Handshake packet. We refuse to accept them, because the connection ID is changed again.
 		packet2 := receivedPacket{data: makeInitialPacket(t, &hdr2), buffer: udp.GetPacketBuffer(), rcvTime: monotime.Now(), remoteAddr: tc.remoteAddr}
 		tc.conn.handlePacket(packet2)
+		hdr3 := hdr2
+		hdr3.Type = protocol.PacketTypeHandshake
+		packet3 := getLongHeaderPacket(t, tc.remoteAddr, &hdr3, make([]byte, 198))
+		tc.conn.handlePacket(packet3)
 
 		synctest.Wait()
 
@@ -3395,12 +3399,25 @@ func testConnectionConnectionIDChanges(t *testing.T, sendRetry bool) {
 			[]qlogwriter.Event{
 				qlog.PacketDropped{
 					Header: qlog.PacketHeader{
-						PacketType:   qlog.PacketTypeInitial,
-						PacketNumber: protocol.InvalidPacketNumber,
+						PacketType:       qlog.PacketTypeInitial,
+						DestConnectionID: tc.srcConnID,
+						SrcConnectionID:  newConnID2,
+						PacketNumber:     protocol.InvalidPacketNumber,
 					},
 					Raw:                     qlog.RawInfo{Length: int(packet2.Size()), PayloadLength: qlog.OmitLength},
 					DatagramPayloadChecksum: qlog.CalculateDatagramPayloadChecksum(packet2.data),
-					Trigger:                 qlog.PacketDropUnknownConnectionID,
+					Trigger:                 qlog.PacketDropUnexpectedSourceConnectionID,
+				},
+				qlog.PacketDropped{
+					Header: qlog.PacketHeader{
+						PacketType:       qlog.PacketTypeHandshake,
+						DestConnectionID: tc.srcConnID,
+						SrcConnectionID:  newConnID2,
+						PacketNumber:     protocol.InvalidPacketNumber,
+					},
+					Raw:                     qlog.RawInfo{Length: int(packet3.Size()), PayloadLength: qlog.OmitLength},
+					DatagramPayloadChecksum: qlog.CalculateDatagramPayloadChecksum(packet3.data),
+					Trigger:                 qlog.PacketDropUnexpectedSourceConnectionID,
 				},
 			},
 			eventRecorder.Events(qlog.PacketDropped{}, qlog.PacketReceived{}),
