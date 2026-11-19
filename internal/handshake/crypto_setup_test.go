@@ -590,3 +590,21 @@ func Test0RTTRejectionOnTransportParametersChanged(t *testing.T) {
 	require.False(t, server.ConnectionState().Used0RTT)
 	require.False(t, client.ConnectionState().Used0RTT)
 }
+
+func Test0RTTRejectionOnVersionMismatch(t *testing.T) {
+	tp := &wire.TransportParameters{ActiveConnectionIDLimit: 2}
+	server := NewCryptoSetupServer(
+		protocol.ConnectionID{},
+		&net.UDPAddr{IP: net.IPv6loopback, Port: 1234},
+		&net.UDPAddr{IP: net.IPv6loopback, Port: 4321},
+		tp,
+		testdata.GetTLSConfig(),
+		true,
+		utils.NewRTTStats(),
+		nil,
+		utils.DefaultLogger.WithPrefix("server"),
+		protocol.Version1,
+	).(*cryptoSetup)
+	require.True(t, server.handleSessionTicket((&sessionTicket{Version: protocol.Version1, Parameters: tp}).Marshal(), true))
+	require.False(t, server.handleSessionTicket((&sessionTicket{Version: protocol.Version2, Parameters: tp}).Marshal(), true))
+}

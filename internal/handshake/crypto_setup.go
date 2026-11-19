@@ -368,6 +368,7 @@ func decodeDataFromSessionState(b []byte, earlyData bool) (*wire.TransportParame
 
 func (h *cryptoSetup) getDataForSessionTicket() []byte {
 	return (&sessionTicket{
+		Version:    h.version,
 		Parameters: h.ourParams,
 	}).Marshal()
 }
@@ -414,6 +415,11 @@ func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEar
 		return false
 	}
 	if !using0RTT {
+		return false
+	}
+	// Session tickets are specific to the QUIC version of the connection that issued them.
+	if t.Version != h.version {
+		h.logger.Debugf("Session ticket was issued for %s. Rejecting 0-RTT.", t.Version)
 		return false
 	}
 	valid := h.ourParams.ValidFor0RTT(t.Parameters)
