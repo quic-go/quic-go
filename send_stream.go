@@ -564,7 +564,8 @@ func (s *SendStream) isNewlyCompleted() bool {
 	if s.completed {
 		return false
 	}
-	if s.nextFrame != nil && s.nextFrame.DataLen() > 0 {
+	// After a reset, only data up to the reliable size is sent.
+	if s.nextFrame != nil && s.nextFrame.Offset < s.reliableOffset() {
 		return false
 	}
 	// We need to keep the stream around until all frames have been sent and acknowledged.
@@ -583,6 +584,7 @@ func (s *SendStream) isNewlyCompleted() bool {
 	//		* the application called Close
 	if s.resetErr != nil && (s.cancellationFlagged || s.finishedWriting) {
 		s.completed = true
+		s.returnFramesToPool() // drops the data beyond the reliable size
 		return true
 	}
 	return false
@@ -696,11 +698,11 @@ func (s *SendStream) CancelWrite(errorCode StreamErrorCode) {
 		ReliableSize: reliableOffset,
 	}
 	if reliableOffset > 0 {
-		if s.nextFrame != nil {
+		// Reserved data counts toward the Final Size. It is kept, but not sent.
+		if s.nextFrame != nil && !s.nextFrameReserved {
 			if s.nextFrame.Offset >= reliableOffset {
 				s.nextFrame.PutBack()
 				s.nextFrame = nil
-				s.nextFrameReserved = false
 			} else if s.nextFrame.Offset+s.nextFrame.DataLen() > reliableOffset {
 				s.nextFrame.Data = s.nextFrame.Data[:reliableOffset-s.nextFrame.Offset]
 			}
@@ -757,7 +759,7 @@ func (s *SendStream) handleStopSendingFrame(f *wire.StopSendingFrame) {
 
 	// If the stream was already cancelled (either locally, or due to a previous STOP_SENDING frame),
 	// there's nothing else to do.
-	if s.resetErr != nil && s.reliableOffset() == 0 {
+	if s.resetErr != nil && (s.completed || s.reliableOffset() == 0) {
 		s.mutex.Unlock()
 		return
 	}
