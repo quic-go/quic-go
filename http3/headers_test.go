@@ -89,6 +89,7 @@ func TestRequestHeaderParsing(t *testing.T) {
 				{Name: ":authority", Value: "quic-go.net:443"},
 				{Name: ":method", Value: http.MethodGet},
 				{Name: "content-length", Value: "42"},
+				{Name: "te", Value: "trailers"},
 			}
 			req, err := requestFromHeaders(decodeFromSlice(headers), math.MaxInt, nil)
 			require.NoError(t, err)
@@ -99,8 +100,9 @@ func TestRequestHeaderParsing(t *testing.T) {
 			require.Equal(t, 3, req.ProtoMajor)
 			require.Zero(t, req.ProtoMinor)
 			require.Equal(t, int64(42), req.ContentLength)
-			require.Len(t, req.Header, 1)
+			require.Len(t, req.Header, 2)
 			require.Equal(t, "42", req.Header.Get("Content-Length"))
+			require.Equal(t, "trailers", req.Header.Get("Te"))
 			require.Nil(t, req.Body)
 			require.Equal(t, "quic-go.net:443", req.Host)
 			require.Equal(t, tc.path, req.RequestURI)
@@ -693,7 +695,7 @@ func TestResponseHeaderParsingValidation(t *testing.T) {
 				{Name: tc.invalidField, Value: "some-value"},
 			}
 			err := updateResponseFromHeaders(&http.Response{}, decodeFromSlice(headers), math.MaxInt, nil)
-			require.EqualError(t, err, fmt.Sprintf("invalid header field name: %q", tc.invalidField))
+			require.EqualError(t, err, fmt.Sprintf(`invalid connection-specific header field %s: "some-value"`, tc.invalidField))
 		})
 	}
 }
@@ -715,18 +717,14 @@ func TestResponseTrailerFields(t *testing.T) {
 }
 
 func TestResponseTrailerParsingTE(t *testing.T) {
+	// TE is only allowed in request headers
 	headers := []qpack.HeaderField{
 		{Name: ":status", Value: "404"},
 		{Name: "te", Value: "trailers"},
 	}
-	require.NoError(t, updateResponseFromHeaders(&http.Response{}, decodeFromSlice(headers), math.MaxInt, nil))
-	headers = []qpack.HeaderField{
-		{Name: ":status", Value: "404"},
-		{Name: "te", Value: "not-trailers"},
-	}
 	require.EqualError(t,
 		updateResponseFromHeaders(&http.Response{}, decodeFromSlice(headers), math.MaxInt, nil),
-		`invalid TE header field value: "not-trailers"`)
+		`invalid connection-specific header field te: "trailers"`)
 }
 
 func TestResponseTrailerParsing(t *testing.T) {
@@ -787,14 +785,14 @@ func TestResponseTrailerParsingValidation(t *testing.T) {
 			headers: []qpack.HeaderField{
 				{Name: "connection", Value: "close"},
 			},
-			err: `invalid header field name: "connection"`,
+			err: `invalid connection-specific header field connection: "close"`,
 		},
 		{
 			name: "invalid te field value",
 			headers: []qpack.HeaderField{
 				{Name: "te", Value: "gzip"},
 			},
-			err: `invalid TE header field value: "gzip"`,
+			err: `invalid connection-specific header field te: "gzip"`,
 		},
 		{
 			name: "invalid trailer field",
@@ -1009,7 +1007,7 @@ func requireValidFuzzHeader(t *testing.T, h http.Header, context string) {
 			require.Truef(t, httpguts.ValidHeaderFieldValue(value), "%s contains invalid header field value for %q: %q", context, name, value)
 		}
 	}
-	for _, name := range invalidHeaderFields {
+	for _, name := range []string{"connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade"} {
 		require.Emptyf(t, h.Get(name), "%s contains connection-specific header %q", context, name)
 	}
 	if te := h.Values("Te"); len(te) > 0 {

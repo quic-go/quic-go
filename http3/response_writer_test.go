@@ -130,6 +130,19 @@ func TestResponseWriterHeader(t *testing.T) {
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 }
 
+func TestResponseWriterConnectionSpecificHeaders(t *testing.T) {
+	rw := newTestResponseWriter(t)
+	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Connection", "Transfer-Encoding", "Upgrade"} {
+		rw.Header().Set(name, "foo")
+	}
+	rw.Header().Set("Te", "trailers") // TE is only allowed in request headers
+	rw.Header().Set("Invalid", "foo\r\nbar")
+	rw.Header().Set("Date", "today")
+	rw.WriteHeader(http.StatusOK)
+
+	require.Equal(t, map[string][]string{":status": {"200"}, "date": {"today"}}, rw.DecodeHeaders(t, 0))
+}
+
 func TestResponseWriterDataWithoutHeader(t *testing.T) {
 	rw := newTestResponseWriter(t)
 	rw.Write([]byte("foobar"))
@@ -410,14 +423,14 @@ func TestResponseWriterEarlyHints(t *testing.T) {
 func TestResponseWriterTrailers(t *testing.T) {
 	rw := newTestResponseWriter(t)
 
-	rw.Header().Add("Trailer", "key, Content-Length") // Content-Length is not a valid trailer
+	rw.Header().Add("Trailer", "key, Content-Length, Upgrade") // Content-Length and Upgrade are not valid trailers
 	n, err := rw.Write([]byte("foobar"))
 	require.Equal(t, 6, n)
 	require.NoError(t, err)
 
 	// writeTrailers needs to be called after writing the full body
 	headers := rw.DecodeHeaders(t, 0)
-	require.Equal(t, []string{"key, Content-Length"}, headers["trailer"])
+	require.Equal(t, []string{"key, Content-Length, Upgrade"}, headers["trailer"])
 	require.NotContains(t, headers, "foo")
 	require.Equal(t, []byte("foobar"), rw.DecodeBody(t))
 
@@ -426,6 +439,7 @@ func TestResponseWriterTrailers(t *testing.T) {
 	rw.Header().Set("foo", "bar")                        // this trailer was not announced, and will therefore be ignored
 	rw.Header().Set(http.TrailerPrefix+"lorem", "ipsum") // unannounced trailer with trailer prefix
 	rw.Header().Set("Content-Length", "999")             // invalid trailer, will be ignored
+	rw.Header().Set("Upgrade", "foo")                    // connection-specific field, will be ignored
 	require.NoError(t, rw.writeTrailers())
 
 	trailers := rw.DecodeHeaders(t, 2)
@@ -435,4 +449,5 @@ func TestResponseWriterTrailers(t *testing.T) {
 	require.NotContains(t, trailers, "foo")
 	// invalid trailers are ignored
 	require.NotContains(t, trailers, "content-length")
+	require.NotContains(t, trailers, "upgrade")
 }

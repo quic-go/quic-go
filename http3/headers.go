@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -65,15 +64,6 @@ type header struct {
 	// all non-pseudo headers.
 	// Some pseudo-header keys with nil values are temporarily added to track presence.
 	Headers http.Header
-}
-
-// connection-specific header fields must not be sent on HTTP/3
-var invalidHeaderFields = [...]string{
-	"connection",
-	"keep-alive",
-	"proxy-connection",
-	"transfer-encoding",
-	"upgrade",
 }
 
 func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, sizeLimit int, headerFields *[]qpack.HeaderField) (header, error) {
@@ -148,7 +138,7 @@ func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, sizeLimit int, head
 				return header{}, fmt.Errorf("invalid response pseudo header: %s", h.Name)
 			}
 		} else {
-			if err := validateRegularHeaderField(h); err != nil {
+			if err := validateRegularHeaderField(h, isRequest); err != nil {
 				return header{}, err
 			}
 			readFirstRegularHeader = true
@@ -209,18 +199,34 @@ func validateHeaderFieldNameAndValue(h qpack.HeaderField) error {
 	return nil
 }
 
-func validateRegularHeaderField(h qpack.HeaderField) error {
-	if slices.Contains(invalidHeaderFields[:], h.Name) {
-		return fmt.Errorf("invalid header field name: %q", h.Name)
+// isForbiddenField reports whether HTTP/3 forbids a field with a lower-case name.
+// Connection-specific fields are forbidden. The only exception is TE in a request header,
+// which must not contain any value other than "trailers".
+func isForbiddenField(name, value string, isRequestHeader bool) bool {
+	switch name {
+	case "connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade":
+		return true
+	case "te":
+		return !isRequestHeader || value != "trailers"
 	}
-	if h.Name == "te" && h.Value != "trailers" {
-		return fmt.Errorf("invalid TE header field value: %q", h.Value)
+	return false
+}
+
+func validateRegularHeaderField(h qpack.HeaderField, isRequestHeader bool) error {
+	if isForbiddenField(h.Name, h.Value, isRequestHeader) {
+		return fmt.Errorf("invalid connection-specific header field %s: %q", h.Name, h.Value)
 	}
 	return nil
 }
 
+// canSendField reports whether a field with a lower-case name is valid
+// and allowed in a response header or a trailer section.
+func canSendField(name, value string) bool {
+	return httpguts.ValidHeaderFieldName(name) && httpguts.ValidHeaderFieldValue(value) && !isForbiddenField(name, value, false)
+}
+
 func validateTrailerHeaderField(h qpack.HeaderField) error {
-	if err := validateRegularHeaderField(h); err != nil {
+	if err := validateRegularHeaderField(h, false); err != nil {
 		return err
 	}
 	if !httpguts.ValidTrailerHeader(h.Name) {
@@ -448,17 +454,6 @@ func extractAnnouncedTrailers(header http.Header) http.Header {
 // writeTrailers encodes and writes HTTP trailers as a HEADERS frame.
 // It returns true if trailers were written, false if there were no trailers to write.
 func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, qlogger qlogwriter.Recorder) (bool, error) {
-	var hasValues bool
-	for k, vals := range trailers {
-		if httpguts.ValidTrailerHeader(k) && len(vals) > 0 {
-			hasValues = true
-			break
-		}
-	}
-	if !hasValues {
-		return false, nil
-	}
-
 	var buf bytes.Buffer
 	enc := qpack.NewEncoder(&buf)
 	var headerFields []qlog.HeaderField
@@ -475,6 +470,9 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 		}
 		lowercaseKey := strings.ToLower(k)
 		for _, v := range vals {
+			if !canSendField(lowercaseKey, v) {
+				continue
+			}
 			if err := enc.WriteField(qpack.HeaderField{Name: lowercaseKey, Value: v}); err != nil {
 				return false, err
 			}
@@ -482,6 +480,9 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 				headerFields = append(headerFields, qlog.HeaderField{Name: lowercaseKey, Value: v})
 			}
 		}
+	}
+	if buf.Len() == 0 {
+		return false, nil
 	}
 
 	b := make([]byte, 0, frameHeaderLen+buf.Len())
