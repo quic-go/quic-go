@@ -137,8 +137,7 @@ func testUnpackLongHeaderPacket(t *testing.T,
 	}
 	calls = append(calls, []any{
 		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any()),
-		opener.EXPECT().DecodePacketNumber(protocol.PacketNumber(2), protocol.PacketNumberLen3).Return(protocol.PacketNumber(1234)),
-		opener.EXPECT().Open(gomock.Any(), payload, protocol.PacketNumber(1234), hdrRaw).Return(
+		opener.EXPECT().Open(gomock.Any(), payload, protocol.PacketNumber(2), hdrRaw).Return(
 			decryptResult.decrypted, decryptResult.err,
 		),
 	}...)
@@ -207,7 +206,6 @@ func testUnpackShortHeaderPacket(t *testing.T, incorrectReservedBits bool, decry
 	opener := mocks.NewMockShortHeaderOpener(mockCtrl)
 	opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
 	cs.EXPECT().Get1RTTOpener().Return(opener, nil)
-	opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(1234))
 	opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 		decryptResult.decrypted, decryptResult.err,
 	)
@@ -218,7 +216,7 @@ func testUnpackShortHeaderPacket(t *testing.T, incorrectReservedBits bool, decry
 	}
 	require.NoError(t, err)
 	require.Equal(t, decryptResult.decrypted, data)
-	require.Equal(t, protocol.PacketNumber(1234), pn)
+	require.Equal(t, protocol.PacketNumber(0x1337), pn)
 	require.Equal(t, protocol.PacketNumberLen3, pnLen)
 	require.Equal(t, protocol.KeyPhaseOne, kp)
 }
@@ -256,7 +254,6 @@ func TestUnpackHeaderSampleLongHeader(t *testing.T) {
 		opener := mocks.NewMockLongHeaderOpener(mockCtrl)
 		cs.EXPECT().GetHandshakeOpener().Return(opener, nil)
 		opener.EXPECT().DecryptHeader(b[len(b)-16:], gomock.Any(), gomock.Any())
-		opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(1337))
 		opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("decrypted"), nil)
 		_, err = unpacker.UnpackLongHeader(hdr, data)
 		require.NoError(t, err)
@@ -291,7 +288,6 @@ func TestUnpackHeaderSampleShortHeader(t *testing.T) {
 		opener := mocks.NewMockShortHeaderOpener(mockCtrl)
 		cs.EXPECT().Get1RTTOpener().Return(opener, nil)
 		opener.EXPECT().DecryptHeader(data[len(data)-16:], gomock.Any(), gomock.Any())
-		opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(1337))
 		opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("decrypted"), nil)
 		_, _, _, _, err = unpacker.UnpackShortHeader(monotime.Now(), data)
 		require.NoError(t, err)
@@ -312,7 +308,6 @@ func TestUnpackErrors(t *testing.T) {
 	opener := mocks.NewMockLongHeaderOpener(mockCtrl)
 	cs.EXPECT().GetHandshakeOpener().Return(opener, nil)
 	opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
-	opener.EXPECT().DecodePacketNumber(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(1234))
 	opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, &qerr.TransportError{ErrorCode: qerr.CryptoBufferExceeded})
 	_, err = unpacker.UnpackLongHeader(&wire.Header{Type: protocol.PacketTypeHandshake}, make([]byte, 100))
 	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.CryptoBufferExceeded})
@@ -359,8 +354,7 @@ func TestUnpackHeaderDecryption(t *testing.T) {
 				pnBytes[i] ^= 0xff // invert the packet number bytes
 			}
 		}),
-		opener.EXPECT().DecodePacketNumber(protocol.PacketNumber(0x1337), protocol.PacketNumberLen2).Return(protocol.PacketNumber(0x7331)),
-		opener.EXPECT().Open(gomock.Any(), gomock.Any(), protocol.PacketNumber(0x7331), origHdrRaw).Return([]byte{0}, nil),
+		opener.EXPECT().Open(gomock.Any(), gomock.Any(), protocol.PacketNumber(0x1337), origHdrRaw).Return([]byte{0}, nil),
 	)
 
 	data := hdrRaw
@@ -369,5 +363,53 @@ func TestUnpackHeaderDecryption(t *testing.T) {
 	}
 	packet, err := unpacker.UnpackLongHeader(hdr, data)
 	require.NoError(t, err)
-	require.Equal(t, protocol.PacketNumber(0x7331), packet.hdr.PacketNumber)
+	require.Equal(t, protocol.PacketNumber(0x1337), packet.hdr.PacketNumber)
+}
+
+func TestUnpack0RTTAnd1RTTPacketNumbers(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cs := mocks.NewMockCryptoSetup(mockCtrl)
+	unpacker := newPacketUnpacker(cs, 4)
+	connID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+
+	extHdr := &wire.ExtendedHeader{
+		Header: wire.Header{
+			Type:             protocol.PacketType0RTT,
+			Length:           2 + 20,
+			DestConnectionID: connID,
+			Version:          protocol.Version1,
+		},
+		PacketNumber:    1000,
+		PacketNumberLen: protocol.PacketNumberLen2,
+	}
+	data, err := extHdr.Append(nil, protocol.Version1)
+	require.NoError(t, err)
+	data = append(data, make([]byte, 20)...)
+	hdr, _, _, err := wire.ParsePacket(data)
+	require.NoError(t, err)
+	longHdrOpener := mocks.NewMockLongHeaderOpener(mockCtrl)
+	cs.EXPECT().Get0RTTOpener().Return(longHdrOpener, nil)
+	longHdrOpener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
+	longHdrOpener.EXPECT().Open(gomock.Any(), gomock.Any(), protocol.PacketNumber(1000), gomock.Any()).Return([]byte("foo"), nil)
+	_, err = unpacker.UnpackLongHeader(hdr, data)
+	require.NoError(t, err)
+
+	// packets that fail decryption don't advance the largest packet number
+	data, err = wire.AppendShortHeader(nil, connID, 1300, protocol.PacketNumberLen2, protocol.KeyPhaseZero)
+	require.NoError(t, err)
+	data = append(data, make([]byte, 20)...)
+	shortHdrOpener := mocks.NewMockShortHeaderOpener(mockCtrl)
+	cs.EXPECT().Get1RTTOpener().Return(shortHdrOpener, nil).Times(2)
+	shortHdrOpener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+	shortHdrOpener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), protocol.PacketNumber(1300), gomock.Any(), gomock.Any()).Return(nil, handshake.ErrDecryptionFailed)
+	_, _, _, _, err = unpacker.UnpackShortHeader(monotime.Now(), data)
+	require.ErrorIs(t, err, handshake.ErrDecryptionFailed)
+
+	// 0-RTT and 1-RTT packets share a packet number space
+	data, err = wire.AppendShortHeader(nil, connID, 1001, protocol.PacketNumberLen1, protocol.KeyPhaseZero)
+	require.NoError(t, err)
+	data = append(data, make([]byte, 20)...)
+	shortHdrOpener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), protocol.PacketNumber(1001), gomock.Any(), gomock.Any()).Return([]byte("foo"), nil)
+	_, _, _, _, err = unpacker.UnpackShortHeader(monotime.Now(), data)
+	require.NoError(t, err)
 }

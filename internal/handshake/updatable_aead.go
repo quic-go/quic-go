@@ -51,7 +51,6 @@ type updatableAEAD struct {
 
 	lowestRcvdWithCurrentKey protocol.PacketNumber
 	firstSentWithCurrentKey  protocol.PacketNumber
-	highestRcvdPN            protocol.PacketNumber // highest packet number received (which could be successfully unprotected)
 	numRcvdWithCurrentKey    uint64
 	numSentWithCurrentKey    uint64
 	rcvAEAD                  cipher.AEAD
@@ -183,10 +182,6 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 }
 
-func (a *updatableAEAD) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber {
-	return protocol.DecodePacketNumber(wirePNLen, a.highestRcvdPN, wirePN)
-}
-
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
 	if err == ErrDecryptionFailed {
@@ -194,9 +189,6 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol
 		if a.invalidPacketCount >= a.invalidPacketLimit {
 			return nil, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
 		}
-	}
-	if err == nil {
-		a.highestRcvdPN = max(a.highestRcvdPN, pn)
 	}
 	return dec, err
 }

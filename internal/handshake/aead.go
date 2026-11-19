@@ -53,7 +53,6 @@ func (s *longHeaderSealer) Overhead() int {
 type longHeaderOpener struct {
 	aead            cipher.AEAD
 	headerProtector headerProtector
-	highestRcvdPN   protocol.PacketNumber // highest packet number received (which could be successfully unprotected)
 
 	// use a single array to avoid allocations
 	nonceBuf [8]byte
@@ -71,16 +70,10 @@ func newLongHeaderOpener(aead cipher.AEAD, headerProtector headerProtector) Long
 	}
 }
 
-func (o *longHeaderOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber {
-	return protocol.DecodePacketNumber(wirePNLen, o.highestRcvdPN, wirePN)
-}
-
 func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(o.nonceBuf[:], uint64(pn))
 	dec, err := o.aead.Open(dst, o.nonceBuf[:], src, ad)
-	if err == nil {
-		o.highestRcvdPN = max(o.highestRcvdPN, pn)
-	} else {
+	if err != nil {
 		err = ErrDecryptionFailed
 	}
 	return dec, err
