@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"crypto/rand"
-	"encoding/asn1"
 	"net"
 	"testing"
 	"time"
@@ -36,12 +35,23 @@ func TestTokenGeneratorValidToken(t *testing.T) {
 	require.NoError(t, err)
 	decodedToken, err := tokenGen.DecodeToken(tokenEnc)
 	require.NoError(t, err)
+	require.True(t, decodedToken.IsRetryToken)
 	require.True(t, decodedToken.ValidateRemoteAddr(addr))
 	require.False(t, decodedToken.ValidateRemoteAddr(&net.UDPAddr{IP: net.IPv4(192, 168, 0, 2), Port: 1337}))
 	require.WithinDuration(t, time.Now(), decodedToken.SentTime, 100*time.Millisecond)
 	require.Equal(t, connID1, decodedToken.OriginalDestConnectionID)
 	require.Equal(t, connID2, decodedToken.RetrySrcConnectionID)
 	require.Equal(t, protocol.Version2, decodedToken.Version)
+
+	tokenEnc, err = tokenGen.NewToken(addr, 1337*time.Microsecond, protocol.Version1)
+	require.NoError(t, err)
+	decodedToken, err = tokenGen.DecodeToken(tokenEnc)
+	require.NoError(t, err)
+	require.False(t, decodedToken.IsRetryToken)
+	require.True(t, decodedToken.ValidateRemoteAddr(addr))
+	require.WithinDuration(t, time.Now(), decodedToken.SentTime, 100*time.Millisecond)
+	require.Equal(t, 1337*time.Microsecond, decodedToken.RTT)
+	require.Equal(t, protocol.Version1, decodedToken.Version)
 }
 
 func TestTokenGeneratorRejectsInvalidTokens(t *testing.T) {
@@ -54,33 +64,40 @@ func TestTokenGeneratorRejectsInvalidTokens(t *testing.T) {
 func TestTokenGeneratorDecodingFailed(t *testing.T) {
 	tokenGen := newTokenGenerator(t)
 
-	invalidToken, err := tokenGen.tokenProtector.NewToken([]byte("foobar"))
+	invalidToken, err := tokenGen.tokenProtector.NewToken([]byte("foobarfoobarfoobar"))
 	require.NoError(t, err)
 	_, err = tokenGen.DecodeToken(invalidToken)
-	require.ErrorContains(t, err, "asn1")
+	require.EqualError(t, err, "unknown token type: 102")
 }
 
-func TestTokenGeneratorAdditionalPayload(t *testing.T) {
+func TestTokenGeneratorMalformedTokens(t *testing.T) {
 	tokenGen := newTokenGenerator(t)
 
-	tok, err := asn1.Marshal(token{RemoteAddr: []byte("foobar")})
+	addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+	connID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+	enc, err := tokenGen.NewRetryToken(addr, connID, connID, protocol.Version1)
 	require.NoError(t, err)
-	tok = append(tok, []byte("rest")...)
-	enc, err := tokenGen.tokenProtector.NewToken(tok)
+	data, err := tokenGen.tokenProtector.DecodeToken(enc)
+	require.NoError(t, err)
+
+	for i := range data {
+		enc, err := tokenGen.tokenProtector.NewToken(data[:i])
+		require.NoError(t, err)
+		_, err = tokenGen.DecodeToken(enc)
+		require.Error(t, err)
+	}
+
+	enc, err = tokenGen.tokenProtector.NewToken(append(data, []byte("rest")...))
 	require.NoError(t, err)
 	_, err = tokenGen.DecodeToken(enc)
 	require.EqualError(t, err, "rest when unpacking token: 4")
-}
 
-func TestTokenGeneratorEmptyTokens(t *testing.T) {
-	tokenGen := newTokenGenerator(t)
-
-	emptyTok, err := asn1.Marshal(token{RemoteAddr: []byte("")})
+	b := newTokenPlaintext(tokenTypeRetry, addr, protocol.Version1, 0)
+	b = appendLengthPrefixed(b, make([]byte, protocol.MaxConnIDLen+1))
+	enc, err = tokenGen.tokenProtector.NewToken(appendLengthPrefixed(b, nil))
 	require.NoError(t, err)
-	emptyEnc, err := tokenGen.tokenProtector.NewToken(emptyTok)
-	require.NoError(t, err)
-	_, err = tokenGen.DecodeToken(emptyEnc)
-	require.NoError(t, err)
+	_, err = tokenGen.DecodeToken(enc)
+	require.EqualError(t, err, "invalid connection ID length: 21")
 }
 
 func TestTokenGeneratorIPv6(t *testing.T) {
