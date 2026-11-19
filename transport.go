@@ -577,23 +577,22 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	if len(p.data) == 0 {
 		return
 	}
-	if !wire.IsPotentialQUICPacket(p.data[0]) && !wire.IsLongHeaderPacket(p.data[0]) {
+	switch {
+	case wire.IsLongHeaderPacket(p.data[0]):
+		t.handleLongHeaderPacket(p)
+	case wire.IsPotentialQUICPacket(p.data[0]):
+		t.handleShortHeaderPacket(p)
+	default:
 		t.handleNonQUICPacket(p)
-		return
 	}
+}
+
+func (t *Transport) handleShortHeaderPacket(p receivedPacket) {
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
-		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
-		if t.Tracer != nil {
-			t.Tracer.RecordEvent(qlog.PacketDropped{
-				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
-				Trigger: qlog.PacketDropHeaderParseError,
-			})
-		}
-		p.buffer.MaybeRelease()
+		t.dropUnparseablePacket(p, err)
 		return
 	}
-
 	// If there's a connection associated with the connection ID, pass the packet there.
 	if handler, ok := (*packetHandlerMap)(t).Get(connID); ok {
 		handler.handlePacket(p)
@@ -609,24 +608,39 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	if isStatelessReset := t.maybeHandleStatelessReset(p.data); isStatelessReset {
 		return
 	}
-	if !wire.IsLongHeaderPacket(p.data[0]) {
-		if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
-			if t.Tracer != nil {
-				t.Tracer.RecordEvent(qlog.PacketDropped{
-					Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketType1RTT},
-					Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
-					Trigger: qlog.PacketDropUnknownConnectionID,
-				})
-			}
-			p.buffer.Release()
+	if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
+		if t.Tracer != nil {
+			t.Tracer.RecordEvent(qlog.PacketDropped{
+				Header:  qlog.PacketHeader{PacketNumber: protocol.InvalidPacketNumber, PacketType: qlog.PacketType1RTT},
+				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+				Trigger: qlog.PacketDropUnknownConnectionID,
+			})
 		}
+		p.buffer.Release()
+	}
+}
+
+func (t *Transport) handleLongHeaderPacket(p receivedPacket) {
+	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
+	switch {
+	case errors.Is(err, protocol.ErrInvalidConnectionIDLen):
+		// Packets of other QUIC versions can use connection IDs longer than 20 bytes.
+		// They can't belong to any connection, but the server needs them to send a Version Negotiation packet.
+	case err != nil:
+		t.dropUnparseablePacket(p, err)
 		return
+	default:
+		// If there's a connection associated with the connection ID, pass the packet there.
+		if handler, ok := (*packetHandlerMap)(t).Get(connID); ok {
+			handler.handlePacket(p)
+			return
+		}
 	}
 
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.server == nil { // no server set
-		t.logger.Debugf("received a packet with an unexpected connection ID %s", connID)
+		t.logger.Debugf("received a long header packet from %s without a matching connection", p.remoteAddr)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
 				Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
@@ -637,6 +651,17 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 	t.server.handlePacket(p)
+}
+
+func (t *Transport) dropUnparseablePacket(p receivedPacket, err error) {
+	t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
+	if t.Tracer != nil {
+		t.Tracer.RecordEvent(qlog.PacketDropped{
+			Raw:     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+			Trigger: qlog.PacketDropHeaderParseError,
+		})
+	}
+	p.buffer.MaybeRelease()
 }
 
 func (t *Transport) maybeSendStatelessReset(p receivedPacket) (statelessResetQueued bool) {
