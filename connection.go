@@ -2457,13 +2457,6 @@ func (c *Conn) handleTransportParameters(params *wire.TransportParameters) error
 		}
 	}
 
-	if c.perspective == protocol.PerspectiveClient && c.peerParams != nil && c.ConnectionState().Used0RTT && !params.ValidForUpdate(c.peerParams) {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "server sent reduced limits after accepting 0-RTT data",
-		}
-	}
-
 	c.peerParams = params
 	// On the client side we have to wait for handshake completion.
 	// During a 0-RTT connection, we are only allowed to use the new transport parameters for 1-RTT packets.
