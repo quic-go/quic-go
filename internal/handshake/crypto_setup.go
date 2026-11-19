@@ -87,6 +87,11 @@ func NewCryptoSetupClient(
 	)
 
 	tlsConf = setupConfigForClient(tlsConf)
+	// Session tickets are specific to the QUIC version of the connection that provided them.
+	if tlsConf.ClientSessionCache != nil {
+		tlsConf = tlsConf.Clone()
+		tlsConf.ClientSessionCache = newSessionCache(tlsConf.ClientSessionCache, version)
+	}
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 

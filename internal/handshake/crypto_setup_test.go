@@ -406,6 +406,9 @@ func TestSessionResumption(t *testing.T) {
 	}
 	require.False(t, server.ConnectionState().DidResume)
 	require.False(t, client.ConnectionState().DidResume)
+	// session tickets are stored per QUIC version
+	_, ok := csc.Get("localhost|1")
+	require.True(t, ok)
 
 	clientRTTStats := utils.NewRTTStats()
 	serverRTTStats := utils.NewRTTStats()
