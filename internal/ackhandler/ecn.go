@@ -50,8 +50,8 @@ type ecnHandler interface {
 // The ecnTracker performs ECN validation of a path.
 // Once failed, it only re-validates after a path migration.
 // It is designed only work for 1-RTT packets, it doesn't handle multiple packet number spaces.
-// In order to avoid revealing any internal state to on-path observers,
-// callers should make sure to start using ECN (i.e. calling Mode) for the very first 1-RTT packet sent.
+// Starting with the first 1-RTT packet sent after handshake confirmation,
+// all 1-RTT packets must be sent with the marking returned by Mode.
 // The validation logic implemented here strictly follows the algorithm described in RFC 9000 section 13.4.2 and A.4.
 type ecnTracker struct {
 	state                          ecnState

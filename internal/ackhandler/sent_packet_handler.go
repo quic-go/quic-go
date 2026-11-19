@@ -1089,7 +1089,8 @@ func (h *sentPacketHandler) ECNMode(isShortHeaderPacket bool) protocol.ECN {
 	if !h.enableECN {
 		return protocol.ECNUnsupported
 	}
-	if !isShortHeaderPacket {
+	// Before handshake confirmation, 1-RTT packets might be coalesced with long header packets.
+	if !isShortHeaderPacket || !h.handshakeConfirmed {
 		return protocol.ECNNon
 	}
 	return h.ecnTracker.Mode()
