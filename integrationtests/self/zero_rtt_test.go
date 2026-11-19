@@ -212,6 +212,11 @@ func Test0RTTTransfer(t *testing.T) {
 		t.Logf("received %d 0-RTT packets", len(zeroRTTPackets))
 		require.Greater(t, num0RTT, 20)
 		require.Len(t, zeroRTTPackets, num0RTT)
+		for _, p := range counter.getRcvdLongHeaderPackets() {
+			for _, f := range p.frames {
+				require.IsNotType(t, &qlog.NewConnectionIDFrame{}, f.Frame)
+			}
+		}
 	})
 }
 
