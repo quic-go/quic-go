@@ -583,6 +583,11 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	}
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
+		// Packets of other QUIC versions can use connection IDs longer than 20 bytes.
+		// The server needs to read them to send a Version Negotiation packet.
+		if errors.Is(err, protocol.ErrInvalidConnectionIDLen) && t.passToServer(p) {
+			return
+		}
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
@@ -623,9 +628,7 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	if t.server == nil { // no server set
+	if !t.passToServer(p) {
 		t.logger.Debugf("received a packet with an unexpected connection ID %s", connID)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
@@ -634,9 +637,19 @@ func (t *Transport) handlePacket(p receivedPacket) {
 			})
 		}
 		p.buffer.MaybeRelease()
-		return
+	}
+}
+
+// passToServer passes a long header packet to the server.
+// It returns false if there is no server.
+func (t *Transport) passToServer(p receivedPacket) bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if t.server == nil {
+		return false
 	}
 	t.server.handlePacket(p)
+	return true
 }
 
 func (t *Transport) maybeSendStatelessReset(p receivedPacket) (statelessResetQueued bool) {

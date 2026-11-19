@@ -420,6 +420,13 @@ func TestTransportListening(t *testing.T) {
 			eventRecorder.Events(qlog.PacketDropped{}),
 		)
 
+		// packets of other QUIC versions can use connection IDs longer than 20 bytes
+		packet := append([]byte{0xc0, 0, 0, 0, 0x42, 21}, make([]byte, protocol.MinUnknownVersionPacketSize)...)
+		_, err = clientConn.WriteTo(packet, tr.Conn.LocalAddr())
+		require.NoError(t, err)
+		time.Sleep(rtt) // so that the packet arrives at the server
+		require.Len(t, eventRecorder.Events(qlog.VersionNegotiationSent{}), 1)
+
 		// only a single listener can be set
 		_, err = tr.Listen(&tls.Config{}, nil)
 		require.ErrorIs(t, err, errListenerAlreadySet)
