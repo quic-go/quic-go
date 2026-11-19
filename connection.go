@@ -2502,6 +2502,10 @@ func (c *Conn) checkTransportParameters(params *wire.TransportParameters) error 
 	} else if params.RetrySourceConnectionID.Valid() {
 		return errors.New("received retry_source_connection_id, although no Retry was performed")
 	}
+	// A server that chooses a zero-length connection ID must not provide a preferred address.
+	if params.PreferredAddress != nil && c.handshakeDestConnID.Len() == 0 {
+		return errors.New("received preferred_address, although the server uses a zero-length connection ID")
+	}
 	return nil
 }
 
