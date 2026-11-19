@@ -1345,7 +1345,6 @@ func (c *Conn) handleLongHeaderPacket(
 	hdr *wire.Header,
 	datagramSize protocol.ByteCount,
 	datagramPayloadChecksum qlog.DatagramPayloadChecksum,
-	path pathID, // only for logging
 ) (wasProcessed bool, _ error) {
 	var wasQueued bool
 
