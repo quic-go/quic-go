@@ -41,44 +41,6 @@ func (m *MockShortHeaderOpener) EXPECT() *MockShortHeaderOpenerMockRecorder {
 	return m.recorder
 }
 
-// DecodePacketNumber mocks base method.
-func (m *MockShortHeaderOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DecodePacketNumber", wirePN, wirePNLen)
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	return ret0
-}
-
-// DecodePacketNumber indicates an expected call of DecodePacketNumber.
-func (mr *MockShortHeaderOpenerMockRecorder) DecodePacketNumber(wirePN, wirePNLen any) *MockShortHeaderOpenerDecodePacketNumberCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecodePacketNumber", reflect.TypeOf((*MockShortHeaderOpener)(nil).DecodePacketNumber), wirePN, wirePNLen)
-	return &MockShortHeaderOpenerDecodePacketNumberCall{Call: call}
-}
-
-// MockShortHeaderOpenerDecodePacketNumberCall wrap *gomock.Call
-type MockShortHeaderOpenerDecodePacketNumberCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockShortHeaderOpenerDecodePacketNumberCall) Return(arg0 protocol.PacketNumber) *MockShortHeaderOpenerDecodePacketNumberCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockShortHeaderOpenerDecodePacketNumberCall) Do(f func(protocol.PacketNumber, protocol.PacketNumberLen) protocol.PacketNumber) *MockShortHeaderOpenerDecodePacketNumberCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockShortHeaderOpenerDecodePacketNumberCall) DoAndReturn(f func(protocol.PacketNumber, protocol.PacketNumberLen) protocol.PacketNumber) *MockShortHeaderOpenerDecodePacketNumberCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
 // DecryptHeader mocks base method.
 func (m *MockShortHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	m.ctrl.T.Helper()

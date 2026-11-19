@@ -48,23 +48,6 @@ func TestEncryptAndDecryptMessage(t *testing.T) {
 	}
 }
 
-func TestDecodePacketNumber(t *testing.T) {
-	msg := []byte("Lorem ipsum dolor sit amet")
-	ad := []byte("Donec in velit neque.")
-
-	sealer, opener := getSealerAndOpener(t, getCipherSuite(tls.TLS_AES_128_GCM_SHA256), protocol.Version1)
-	encrypted := sealer.Seal(nil, msg, 0x1337, ad)
-
-	// can't decode the packet number if encryption failed
-	_, err := opener.Open(nil, encrypted[:len(encrypted)-1], 0x1337, ad)
-	require.Error(t, err)
-	require.Equal(t, protocol.PacketNumber(0x38), opener.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
-
-	_, err = opener.Open(nil, encrypted, 0x1337, ad)
-	require.NoError(t, err)
-	require.Equal(t, protocol.PacketNumber(0x1338), opener.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
-}
-
 func TestEncryptAndDecryptHeader(t *testing.T) {
 	for _, v := range []protocol.Version{protocol.Version1, protocol.Version2} {
 		t.Run("QUIC "+v.String(), func(t *testing.T) {

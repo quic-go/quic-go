@@ -208,23 +208,14 @@ func TestUpdatableAEADEncryptDecryptMessage(t *testing.T) {
 }
 
 func TestUpdatableAEADPacketNumbers(t *testing.T) {
-	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
+	_, server, _ := setupEndpoints(t, utils.NewRTTStats())
 	msg := []byte("Lorem ipsum")
 	ad := []byte("Donec in velit neque.")
 
-	encrypted := server.Seal(nil, msg, 0x1337, ad)
+	_ = server.Seal(nil, msg, 0x1337, ad)
 	require.Equal(t, protocol.PacketNumber(0x1337), server.FirstPacketNumber()) // make sure we save the first packet number
 	_ = server.Seal(nil, msg, 0x1338, ad)
 	require.Equal(t, protocol.PacketNumber(0x1337), server.FirstPacketNumber()) // make sure we save the first packet number
-
-	// check that decoding the packet number works as expected
-	_, err := client.Open(nil, encrypted[:len(encrypted)-1], monotime.Now(), 0x1337, protocol.KeyPhaseZero, ad)
-	require.Error(t, err)
-	require.Equal(t, protocol.PacketNumber(0x38), client.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
-
-	_, err = client.Open(nil, encrypted, monotime.Now(), 0x1337, protocol.KeyPhaseZero, ad)
-	require.NoError(t, err)
-	require.Equal(t, protocol.PacketNumber(0x1338), client.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
 }
 
 func TestAEADLimitReached(t *testing.T) {
