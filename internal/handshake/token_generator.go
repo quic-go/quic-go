@@ -19,6 +19,7 @@ const (
 type Token struct {
 	IsRetryToken      bool
 	SentTime          time.Time
+	Version           protocol.Version
 	encodedRemoteAddr []byte
 	// only set for tokens sent in NEW_TOKEN frames
 	RTT time.Duration
@@ -40,6 +41,7 @@ type token struct {
 	RTT                      int64 // in mus
 	OriginalDestConnectionID []byte
 	RetrySrcConnectionID     []byte
+	Version                  int64
 }
 
 // A TokenGenerator generates tokens
@@ -57,6 +59,7 @@ func (g *TokenGenerator) NewRetryToken(
 	raddr net.Addr,
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID protocol.ConnectionID,
+	v protocol.Version,
 ) ([]byte, error) {
 	data, err := asn1.Marshal(token{
 		IsRetryToken:             true,
@@ -64,6 +67,7 @@ func (g *TokenGenerator) NewRetryToken(
 		OriginalDestConnectionID: origDestConnID.Bytes(),
 		RetrySrcConnectionID:     retrySrcConnID.Bytes(),
 		Timestamp:                time.Now().UnixNano(),
+		Version:                  int64(v),
 	})
 	if err != nil {
 		return nil, err
@@ -72,11 +76,12 @@ func (g *TokenGenerator) NewRetryToken(
 }
 
 // NewToken generates a new token to be sent in a NEW_TOKEN frame
-func (g *TokenGenerator) NewToken(raddr net.Addr, rtt time.Duration) ([]byte, error) {
+func (g *TokenGenerator) NewToken(raddr net.Addr, rtt time.Duration, v protocol.Version) ([]byte, error) {
 	data, err := asn1.Marshal(token{
 		RemoteAddr: encodeRemoteAddr(raddr),
 		Timestamp:  time.Now().UnixNano(),
 		RTT:        rtt.Microseconds(),
+		Version:    int64(v),
 	})
 	if err != nil {
 		return nil, err
@@ -106,6 +111,7 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 	token := &Token{
 		IsRetryToken:      t.IsRetryToken,
 		SentTime:          time.Unix(0, t.Timestamp),
+		Version:           protocol.Version(t.Version),
 		encodedRemoteAddr: t.RemoteAddr,
 	}
 	if t.IsRetryToken {

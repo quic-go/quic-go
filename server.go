@@ -673,13 +673,17 @@ func (s *baseServer) cleanupZeroRTTQueues(now monotime.Time) {
 
 // validateToken returns false if:
 //   - address is invalid
+//   - token was issued for a different QUIC version
 //   - token is expired
 //   - token is null
-func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
+func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr, v protocol.Version) bool {
 	if token == nil {
 		return false
 	}
 	if !token.ValidateRemoteAddr(addr) {
+		return false
+	}
+	if token.Version != v {
 		return false
 	}
 	if !token.IsRetryToken && time.Since(token.SentTime) > s.maxTokenAge {
@@ -733,7 +737,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		}
 	}
 	if token != nil {
-		clientAddrVerified = s.validateToken(token, p.remoteAddr)
+		clientAddrVerified = s.validateToken(token, p.remoteAddr, hdr.Version)
 		if !clientAddrVerified {
 			// For invalid and expired non-retry tokens, we don't send an INVALID_TOKEN error.
 			// We just ignore them, and act as if there was no token on this packet at all.
@@ -928,7 +932,7 @@ func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
 	if err != nil {
 		return err
 	}
-	token, err := s.tokenGenerator.NewRetryToken(p.remoteAddr, hdr.DestConnectionID, srcConnID)
+	token, err := s.tokenGenerator.NewRetryToken(p.remoteAddr, hdr.DestConnectionID, srcConnID, hdr.Version)
 	if err != nil {
 		return err
 	}

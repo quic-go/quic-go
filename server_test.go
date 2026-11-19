@@ -496,6 +496,7 @@ func TestServerTokenValidation(t *testing.T) {
 			&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
 			protocol.ConnectionID{},
 			protocol.ConnectionID{},
+			protocol.Version1,
 		)
 		require.NoError(t, err)
 		var eventRecorder events.Recorder
@@ -518,7 +519,7 @@ func TestServerTokenValidation(t *testing.T) {
 			tokenGeneratorKey: tokenGeneratorKey,
 		})
 
-		token, err := tg.NewRetryToken(conn.LocalAddr(), protocol.ConnectionID{}, protocol.ConnectionID{})
+		token, err := tg.NewRetryToken(conn.LocalAddr(), protocol.ConnectionID{}, protocol.ConnectionID{}, protocol.Version1)
 		require.NoError(t, err)
 		// the maximum retry token age is equivalent to the handshake timeout
 		time.Sleep(time.Millisecond) // make sure the token is expired
@@ -536,7 +537,7 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewRetryToken(conn.LocalAddr(), protocol.ConnectionID{}, protocol.ConnectionID{})
+		token, err := tg.NewRetryToken(conn.LocalAddr(), protocol.ConnectionID{}, protocol.ConnectionID{}, protocol.Version1)
 		require.NoError(t, err)
 		time.Sleep(time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, &eventRecorder, conn, token, true, false, true)
@@ -554,7 +555,7 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewToken(conn.LocalAddr(), 10*time.Millisecond)
+		token, err := tg.NewToken(conn.LocalAddr(), 10*time.Millisecond, protocol.Version1)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, false, true)
@@ -570,9 +571,24 @@ func TestServerTokenValidation(t *testing.T) {
 		})
 
 		conn := newUDPConnLocalhost(t)
-		token, err := tg.NewToken(conn.LocalAddr(), 100*time.Millisecond)
+		token, err := tg.NewToken(conn.LocalAddr(), 100*time.Millisecond, protocol.Version1)
 		require.NoError(t, err)
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
+		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, false, true)
+	})
+
+	t.Run("non-retry token from a different QUIC version", func(t *testing.T) {
+		var eventRecorder events.Recorder
+		server := newTestServer(t, &serverOpts{
+			tokenGeneratorKey: tokenGeneratorKey,
+			useRetry:          true,
+			eventRecorder:     &eventRecorder,
+			maxTokenAge:       time.Hour,
+		})
+
+		conn := newUDPConnLocalhost(t)
+		token, err := tg.NewToken(conn.LocalAddr(), 100*time.Millisecond, protocol.Version2)
+		require.NoError(t, err)
 		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, false, true)
 	})
 }
@@ -734,6 +750,7 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 			conn.LocalAddr(),
 			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
 			protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
+			protocol.Version1,
 		)
 		require.NoError(t, err)
 	}

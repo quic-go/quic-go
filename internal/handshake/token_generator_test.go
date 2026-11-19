@@ -32,7 +32,7 @@ func TestTokenGeneratorValidToken(t *testing.T) {
 	addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 	connID1 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 	connID2 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
-	tokenEnc, err := tokenGen.NewRetryToken(addr, connID1, connID2)
+	tokenEnc, err := tokenGen.NewRetryToken(addr, connID1, connID2, protocol.Version2)
 	require.NoError(t, err)
 	decodedToken, err := tokenGen.DecodeToken(tokenEnc)
 	require.NoError(t, err)
@@ -41,6 +41,7 @@ func TestTokenGeneratorValidToken(t *testing.T) {
 	require.WithinDuration(t, time.Now(), decodedToken.SentTime, 100*time.Millisecond)
 	require.Equal(t, connID1, decodedToken.OriginalDestConnectionID)
 	require.Equal(t, connID2, decodedToken.RetrySrcConnectionID)
+	require.Equal(t, protocol.Version2, decodedToken.Version)
 }
 
 func TestTokenGeneratorRejectsInvalidTokens(t *testing.T) {
@@ -95,7 +96,7 @@ func TestTokenGeneratorIPv6(t *testing.T) {
 		ip := net.ParseIP(addr)
 		require.NotNil(t, ip)
 		raddr := &net.UDPAddr{IP: ip, Port: 1337}
-		tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
+		tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{}, protocol.Version1)
 		require.NoError(t, err)
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		require.NoError(t, err)
@@ -108,7 +109,7 @@ func TestTokenGeneratorNonUDPAddr(t *testing.T) {
 	tokenGen := newTokenGenerator(t)
 
 	raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
-	tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
+	tokenEnc, err := tokenGen.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{}, protocol.Version1)
 	require.NoError(t, err)
 	token, err := tokenGen.DecodeToken(tokenEnc)
 	require.NoError(t, err)
@@ -127,7 +128,7 @@ func BenchmarkTokenGeneratorDecodeToken(b *testing.B) {
 	addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 	connID1 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 	connID2 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
-	tokenEnc, err := tokenGen.NewRetryToken(addr, connID1, connID2)
+	tokenEnc, err := tokenGen.NewRetryToken(addr, connID1, connID2, protocol.Version1)
 	require.NoError(b, err)
 
 	for b.Loop() {
