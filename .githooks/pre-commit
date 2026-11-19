@@ -13,13 +13,12 @@ for f in $(git diff --diff-filter=d --cached --name-only); do
 	fi
 done
 
-pushd ./integrationtests/gomodvendor > /dev/null
-go mod tidy
-if [[ -n $(git diff --diff-filter=d --name-only -- "go.mod" "go.sum") ]]; then
+# In a git worktree, GIT_DIR is set, so git commands must run from the repository root.
+(cd ./integrationtests/gomodvendor && go mod tidy)
+if [[ -n $(git diff --diff-filter=d --name-only -- integrationtests/gomodvendor/go.mod integrationtests/gomodvendor/go.sum) ]]; then
   echo "go.mod / go.sum in integrationtests/gomodvendor not tidied"
   errored=true
 fi
-popd > /dev/null
 
 # Check that all Go files are properly gofumpt-ed.
 output=$(gofumpt -d $(git diff --diff-filter=d --cached --name-only -- '*.go'))
