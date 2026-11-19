@@ -582,7 +582,11 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
-	if err != nil {
+	switch {
+	case errors.Is(err, protocol.ErrInvalidConnectionIDLen):
+		// Packets of other QUIC versions can use connection IDs longer than 20 bytes.
+		// They can't belong to any connection, but the server needs them to send a Version Negotiation packet.
+	case err != nil:
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
 		if t.Tracer != nil {
 			t.Tracer.RecordEvent(qlog.PacketDropped{
@@ -592,12 +596,12 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		}
 		p.buffer.MaybeRelease()
 		return
-	}
-
-	// If there's a connection associated with the connection ID, pass the packet there.
-	if handler, ok := (*packetHandlerMap)(t).Get(connID); ok {
-		handler.handlePacket(p)
-		return
+	default:
+		// If there's a connection associated with the connection ID, pass the packet there.
+		if handler, ok := (*packetHandlerMap)(t).Get(connID); ok {
+			handler.handlePacket(p)
+			return
+		}
 	}
 	// RFC 9000 section 10.3.1 requires that the stateless reset detection logic is run for both
 	// packets that cannot be associated with any connections, and for packets that can't be decrypted.
