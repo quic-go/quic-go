@@ -65,6 +65,7 @@ func connectionOptHandshakeConfirmed() testConnectionOpt {
 	return func(conn *Conn) {
 		conn.handshakeComplete = true
 		conn.handshakeConfirmed = true
+		close(conn.handshakeCompleteChan)
 		conn.mtuDiscoverer = newMTUDiscoverer(conn.rttStats, conn.config.initialPacketSize(), conn.maxMTU(), conn.qlogger)
 	}
 }
@@ -3625,6 +3626,13 @@ func TestConnectionMigrationServer(t *testing.T) {
 	tc := newServerTestConnection(t, nil, nil, false)
 	_, err := tc.conn.AddPath(&Transport{})
 	require.ErrorContains(t, err, "server cannot initiate connection migration")
+}
+
+func TestConnectionMigrationBeforeHandshakeComplete(t *testing.T) {
+	tc := newClientTestConnection(t, nil, nil, false)
+	tc.conn.restoreTransportParameters(&wire.TransportParameters{}) // remembered for 0-RTT
+	_, err := tc.conn.AddPath(&Transport{})
+	require.ErrorContains(t, err, "cannot add path before handshake completion")
 }
 
 func TestConnectionMigrationMTUDiscovery(t *testing.T) {

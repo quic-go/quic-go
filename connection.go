@@ -3236,9 +3236,16 @@ func (c *Conn) getPathManager() *pathManagerOutgoing {
 	return c.pathManagerOutgoing.Load()
 }
 
+// AddPath adds a path for connection migration.
+// It fails until the handshake completes.
 func (c *Conn) AddPath(t *Transport) (*Path, error) {
 	if c.perspective == protocol.PerspectiveServer {
 		return nil, errors.New("server cannot initiate connection migration")
+	}
+	select {
+	case <-c.handshakeCompleteChan:
+	default:
+		return nil, errors.New("cannot add path before handshake completion")
 	}
 	if c.peerParams.Load().DisableActiveMigration {
 		return nil, errors.New("server disabled connection migration")
