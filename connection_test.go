@@ -562,6 +562,52 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 			eventRecorder.Events(qlog.PacketDropped{}),
 		)
 	})
+
+	t.Run("Initial packet in a datagram smaller than 1200 bytes", func(t *testing.T) {
+		mockCtrl := gomock.NewController(t)
+		var eventRecorder events.Recorder
+		tc := newServerTestConnection(t,
+			mockCtrl,
+			nil,
+			false,
+			connectionOptTracer(&eventRecorder),
+			connectionOptUnpacker(NewMockUnpacker(mockCtrl)), // the packet must not be unpacked
+		)
+
+		p := getLongHeaderPacket(t,
+			tc.remoteAddr,
+			&wire.ExtendedHeader{
+				Header: wire.Header{
+					Type:             protocol.PacketTypeInitial,
+					DestConnectionID: tc.srcConnID,
+					SrcConnectionID:  tc.destConnID,
+					Version:          Version1,
+					Length:           1,
+				},
+				PacketNumberLen: protocol.PacketNumberLen1,
+			},
+			nil,
+		)
+		wasProcessed, err := tc.conn.handleOnePacket(p, 42, activePathID)
+		require.NoError(t, err)
+		require.False(t, wasProcessed)
+		require.Equal(t,
+			[]qlogwriter.Event{
+				qlog.PacketDropped{
+					Header: qlog.PacketHeader{
+						PacketType:       qlog.PacketTypeInitial,
+						DestConnectionID: tc.srcConnID,
+						SrcConnectionID:  tc.destConnID,
+						PacketNumber:     protocol.InvalidPacketNumber,
+					},
+					Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
+					DatagramPayloadChecksum: 42,
+					Trigger:                 qlog.PacketDropUnexpectedPacket,
+				},
+			},
+			eventRecorder.Events(qlog.PacketDropped{}),
+		)
+	})
 }
 
 func TestConnectionClientInvalidPackets(t *testing.T) {
@@ -624,14 +670,14 @@ func TestConnectionUnpacking(t *testing.T) {
 			DestConnectionID: tc.srcConnID,
 			SrcConnectionID:  protocol.ZeroLengthConnectionID,
 			Version:          protocol.Version1,
-			Length:           1,
+			Length:           1200,
 		},
 		PacketNumber:    0x37,
 		PacketNumberLen: protocol.PacketNumberLen1,
 	}
 	unpackedHdr := *hdr
 	unpackedHdr.PacketNumber = 0x1337
-	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
+	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr, make([]byte, 1199))
 	packet.ecn = protocol.ECNCE
 	rcvTime := monotime.Now().Add(-10 * time.Second)
 	packet.rcvTime = rcvTime
@@ -656,7 +702,7 @@ func TestConnectionUnpacking(t *testing.T) {
 				},
 				Frames:                  []qlog.Frame{},
 				ECN:                     qlog.ECNCE,
-				Raw:                     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: 1},
+				Raw:                     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: int(hdr.Length)},
 				DatagramPayloadChecksum: 42,
 			},
 		},
@@ -665,7 +711,7 @@ func TestConnectionUnpacking(t *testing.T) {
 	eventRecorder.Clear()
 
 	// receive a duplicate of this packet
-	packet = getLongHeaderPacket(t, tc.remoteAddr, hdr, nil)
+	packet = getLongHeaderPacket(t, tc.remoteAddr, hdr, make([]byte, 1199))
 	unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 		encryptionLevel: protocol.EncryptionInitial,
 		hdr:             &unpackedHdr,
@@ -684,7 +730,7 @@ func TestConnectionUnpacking(t *testing.T) {
 					PacketNumber:     protocol.PacketNumber(0x1337),
 					Version:          protocol.Version1,
 				},
-				Raw:                     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: 1},
+				Raw:                     qlog.RawInfo{Length: int(packet.Size()), PayloadLength: int(hdr.Length)},
 				DatagramPayloadChecksum: 43,
 				Trigger:                 qlog.PacketDropDuplicate,
 			},
@@ -747,7 +793,7 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 			Type:             protocol.PacketTypeHandshake,
 			DestConnectionID: tc.srcConnID,
 			Version:          protocol.Version1,
-			Length:           1,
+			Length:           1200,
 		},
 		PacketNumber:    38,
 		PacketNumberLen: protocol.PacketNumberLen1,
@@ -771,7 +817,7 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 
 	packet := getLongHeaderPacket(t, tc.remoteAddr, hdr1, nil)
 	firstPacketLen := packet.Size()
-	packet2 := getLongHeaderPacket(t, tc.remoteAddr, hdr2, nil)
+	packet2 := getLongHeaderPacket(t, tc.remoteAddr, hdr2, make([]byte, 1199)) // pads the datagram
 	packet3 := getLongHeaderPacket(t, tc.remoteAddr, hdr3, nil)
 	packet.data = append(packet.data, packet2.data...)
 	packet.data = append(packet.data, packet3.data...)
@@ -814,7 +860,7 @@ func TestConnectionUnpackCoalescedPacket(t *testing.T) {
 					PacketNumber:     protocol.PacketNumber(1338),
 					Version:          protocol.Version1,
 				},
-				Raw:                     qlog.RawInfo{Length: int(packet2.Size()), PayloadLength: 1},
+				Raw:                     qlog.RawInfo{Length: int(packet2.Size()), PayloadLength: int(hdr2.Length)},
 				DatagramPayloadChecksum: 42,
 				Frames:                  []qlog.Frame{{Frame: &wire.PingFrame{}}},
 				ECN:                     qlog.ECT1,
