@@ -683,7 +683,7 @@ func (t *Transport) maybeHandleStatelessReset(data []byte) bool {
 	if wire.IsLongHeaderPacket(data[0]) {
 		return false
 	}
-	if len(data) < 17 /* type byte + 16 bytes for the reset token */ {
+	if len(data) < protocol.MinReceivedStatelessResetSize {
 		return false
 	}
 

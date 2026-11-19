@@ -269,6 +269,8 @@ func TestTransportStatelessResetReceiving(t *testing.T) {
 	destroyChan := make(chan error, 1)
 	conn1 := &mockPacketHandler{destruction: destroyChan}
 	(*packetHandlerMap)(tr).AddResetToken(token, conn1)
+	// short header packets smaller than 21 bytes are never valid
+	require.False(t, tr.maybeHandleStatelessReset(append([]byte{0x40, 1, 2, 3}, token[:]...)))
 
 	conn := newUDPConnLocalhost(t)
 	_, err = conn.WriteTo(b, tr.Conn.LocalAddr())
