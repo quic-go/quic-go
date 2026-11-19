@@ -31,6 +31,7 @@ type packer interface {
 	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, v protocol.Version) (shortHeaderPacket, *udp.PacketBuffer, error)
 
 	SetToken([]byte)
+	SetMaxDatagramFrameSize(protocol.ByteCount)
 }
 
 type sealer interface {
@@ -132,6 +133,8 @@ type packetPacker struct {
 	cryptoStreamManager *cryptoStreamManager
 
 	token []byte
+
+	maxDatagramFrameSize protocol.ByteCount // the peer's max_datagram_frame_size
 
 	pnManager           packetNumberManager
 	framer              frameSource
@@ -702,7 +705,10 @@ func (p *packetPacker) composeNextPacket(
 				f.DataLenPresent = false
 				size = f.Length(v)
 			}
-			if size <= maxPayloadSize-pl.length { // DATAGRAM frame fits
+			// RFC 9221, Section 3: DATAGRAM frames MUST NOT be larger than the peer's max_datagram_frame_size.
+			// Frames queued during 0-RTT can exceed it if the server rejected 0-RTT and reduced the limit.
+			tooLarge := size > p.maxDatagramFrameSize
+			if !tooLarge && size <= maxPayloadSize-pl.length { // DATAGRAM frame fits
 				p.datagramQueue.Pop()
 				pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
 				pl.numDatagramFrames++
@@ -712,8 +718,9 @@ func (p *packetPacker) composeNextPacket(
 					// This DATAGRAM frame only fit without the length field, so it has to be the last frame in the packet.
 					break
 				}
-			} else if pl.ack == nil && len(pl.frames) == 0 {
-				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK or any other frames.
+			} else if tooLarge || (pl.ack == nil && len(pl.frames) == 0) {
+				// The DATAGRAM frame exceeds the peer's limit,
+				// or it doesn't fit and the packet doesn't contain an ACK or any other frames.
 				// Discard this frame. There's no point in retrying this in the next packet,
 				// as it's unlikely that the available packet size will increase.
 				p.datagramQueue.Pop()
@@ -1074,6 +1081,11 @@ func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.Pack
 
 func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
+}
+
+// SetMaxDatagramFrameSize sets the peer's max_datagram_frame_size.
+func (p *packetPacker) SetMaxDatagramFrameSize(size protocol.ByteCount) {
+	p.maxDatagramFrameSize = size
 }
 
 type emptyHandler struct{}

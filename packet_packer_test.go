@@ -718,8 +718,11 @@ func TestPackDatagramFrames(t *testing.T) {
 	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42))
 	tp.sealingManager.EXPECT().Get1RTTSealer().Return(newMockShortHeaderSealer(mockCtrl), nil)
+	tp.packer.SetMaxDatagramFrameSize(5)
 	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("foo")})
 	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("bar")})
+	// larger than the peer's max_datagram_frame_size
+	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("foobar")})
 	tp.datagramQueue.Add(&wire.DatagramFrame{DataLenPresent: true, Data: []byte("baz")})
 	tp.framer.EXPECT().HasData().Return(true)
 	expectAppendFrames(tp.framer, []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.DataBlockedFrame{}}}, nil)
@@ -732,12 +735,17 @@ func TestPackDatagramFrames(t *testing.T) {
 	// the last DATAGRAM frame is the last frame in the packet, so it doesn't need a length field
 	require.Equal(t, &wire.DatagramFrame{Data: []byte("baz")}, p.Frames[4].Frame)
 	require.NotEmpty(t, buffer.Data)
-	require.Empty(t, tp.Recorder.Events(qlog.DatagramDropped{}))
+	require.Equal(t, []qlogwriter.Event{qlog.DatagramDropped{
+		Direction: qlog.DirectionSending,
+		Raw:       qlog.RawInfo{Length: 6, PayloadLength: qlog.OmitLength},
+		Trigger:   "too_large",
+	}}, tp.Recorder.Events(qlog.DatagramDropped{}))
 }
 
 func TestPackDatagramFrameFittingOnlyWithoutLength(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveServer)
+	tp.packer.SetMaxDatagramFrameSize(wire.MaxDatagramSize)
 
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), true)
 	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
@@ -763,6 +771,7 @@ func TestPackLargeDatagramFrame(t *testing.T) {
 	const maxPacketSize = 1000
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveServer)
+	tp.packer.SetMaxDatagramFrameSize(wire.MaxDatagramSize)
 	tp.ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, gomock.Any(), true).Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100}}})
 	tp.pnManager.EXPECT().PeekPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 	tp.pnManager.EXPECT().PopPacketNumber(protocol.PacketNumberSpaceAppData).Return(protocol.PacketNumber(0x42))
@@ -803,6 +812,7 @@ func TestPackDatagramFramesAfterControlFramesAndRetransmissions(t *testing.T) {
 	const maxPacketSize = 1000
 	mockCtrl := gomock.NewController(t)
 	tp := newTestPacketPacker(t, mockCtrl, protocol.PerspectiveServer)
+	tp.packer.SetMaxDatagramFrameSize(wire.MaxDatagramSize)
 	sealer := newMockShortHeaderSealer(mockCtrl)
 	hdrLen := wire.ShortHeaderLen(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PacketNumberLen2)
 	// this DATAGRAM frame fills an entire packet
