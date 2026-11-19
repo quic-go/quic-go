@@ -1526,7 +1526,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 		rttStats,
 		&utils.ConnectionStats{},
 		true,
-		false,
+		true,
 		nil,
 		protocol.PerspectiveClient,
 		nil,
@@ -1539,6 +1539,12 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	sph.SentPacket(monotime.Now(), sph.PopPacketNumber(protocol.PacketNumberSpaceInitial), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionInitial, protocol.ECT1, 1200, false, false)
 	sph.SentPacket(monotime.Now(), sph.PopPacketNumber(protocol.PacketNumberSpaceHandshake), protocol.InvalidPacketNumber, nil, nil, protocol.EncryptionHandshake, protocol.ECT0, 1200, false, false)
 	sph.SentPacket(monotime.Now(), sph.PopPacketNumber(protocol.PacketNumberSpaceAppData), protocol.InvalidPacketNumber, nil, nil, protocol.Encryption0RTT, protocol.ECNCE, 1200, false, false)
+
+	// ECN is only used after handshake confirmation
+	require.Equal(t, protocol.ECNNon, sph.ECNMode(true))
+	sph.DropPackets(protocol.EncryptionHandshake, monotime.Now())
+	ecnHandler.EXPECT().Mode().Return(protocol.ECT1)
+	require.Equal(t, protocol.ECT1, sph.ECNMode(true))
 
 	var packets packetTracker
 	sendPacket := func(t *testing.T, ti monotime.Time, ecn protocol.ECN) protocol.PacketNumber {
