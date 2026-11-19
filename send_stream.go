@@ -457,7 +457,8 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 			blocked = &wire.StreamDataBlockedFrame{StreamID: s.streamID, MaximumStreamData: offset}
 		}
 	}
-	f.Fin = s.finishedWriting && s.dataForWriting == nil && s.nextFrame == nil && !s.finSent
+	// After a reset, the RESET_STREAM_AT frame carries the Final Size.
+	f.Fin = s.finishedWriting && s.resetErr == nil && s.dataForWriting == nil && s.nextFrame == nil && !s.finSent
 	if f.Fin {
 		s.finSent = true
 	}
@@ -534,6 +535,11 @@ func (s *SendStream) popRetransmissionFrame(maxBytes protocol.ByteCount, v proto
 		hasMore = len(s.retransmissionQueue) > 0
 	}
 	if f != nil {
+		// The frame might have been truncated to the reliable size.
+		// The RESET_STREAM_AT frame carries the Final Size.
+		if s.resetErr != nil {
+			f.Fin = false
+		}
 		s.numOutstandingFrames++
 	}
 	s.mutex.Unlock()

@@ -1850,6 +1850,39 @@ func testSendStreamResetStreamAtStopSendingAfterCancelation(t *testing.T, loseRe
 	cf3.Handler.OnAcked(cf3.Frame)
 }
 
+func TestSendStreamResetStreamAtAfterClose(t *testing.T) {
+	for _, sentBeforeCancel := range []bool{true, false} {
+		mockSender := NewMockStreamSender(gomock.NewController(t))
+		mockSender.EXPECT().onHasStreamData(gomock.Any(), gomock.Any()).AnyTimes()
+		mockSender.EXPECT().onHasStreamRetransmission(gomock.Any(), gomock.Any()).AnyTimes()
+		mockSender.EXPECT().onHasStreamControlFrame(gomock.Any(), gomock.Any())
+		str := newSendStream(context.Background(), 1337, mockSender, newTestStreamFlowControllerWithSendWindow(1337, 100), true)
+		_, err := str.Write([]byte("foo"))
+		require.NoError(t, err)
+		str.SetReliableBoundary()
+
+		// only "foo" is sent reliably, but the Final Size is 6
+		var f ackhandler.StreamFrame
+		if sentBeforeCancel {
+			_, err = str.Write([]byte("bar"))
+			require.NoError(t, err)
+			require.NoError(t, str.Close())
+			f, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+			str.CancelWrite(42)
+			f.Handler.OnLost(f.Frame)
+			f, _ = str.popRetransmissionFrame(protocol.MaxByteCount, protocol.Version1)
+		} else {
+			// unsent data only counts towards the Final Size if it consumed flow control credit
+			require.NoError(t, str.TryWriteAll([]byte("bar")))
+			require.NoError(t, str.Close())
+			str.CancelWrite(42)
+			f, _, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+		}
+		require.Equal(t, []byte("foo"), f.Frame.Data)
+		require.False(t, f.Frame.Fin)
+	}
+}
+
 func TestSendStreamResetStreamAtRandomized(t *testing.T) {
 	const streamID protocol.StreamID = 123456
 	const dataLen = 8 << 10
