@@ -227,6 +227,20 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 	require.Equal(t, protocol.PacketNumber(0x1338), client.DecodePacketNumber(0x38, protocol.PacketNumberLen1))
 }
 
+func TestUpdatableAEADPacketNumbersAfter0RTT(t *testing.T) {
+	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
+	sealer, opener := getSealerAndOpener(t, randomCipherSuite(), protocol.Version1)
+	opener = newZeroRTTOpener(opener, server)
+
+	_, err := opener.Open(nil, sealer.Seal(nil, []byte(msg), 1000, []byte(ad)), 1000, []byte(ad))
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(1001), server.DecodePacketNumber(233, protocol.PacketNumberLen1))
+
+	_, err = server.Open(nil, client.Seal(nil, []byte(msg), 2000, []byte(ad)), monotime.Now(), 2000, protocol.KeyPhaseZero, []byte(ad))
+	require.NoError(t, err)
+	require.Equal(t, protocol.PacketNumber(2001), opener.DecodePacketNumber(209, protocol.PacketNumberLen1))
+}
+
 func TestAEADLimitReached(t *testing.T) {
 	client, _, _ := setupEndpoints(t, utils.NewRTTStats())
 	client.invalidPacketLimit = 10

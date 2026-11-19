@@ -89,3 +89,32 @@ func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []
 func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	o.headerProtector.DecryptHeader(sample, firstByte, pnBytes)
 }
+
+// zeroRTTOpener opens 0-RTT packets.
+// 0-RTT and 1-RTT packets share a packet number space, so packet numbers are
+// decoded against the largest packet number received in either.
+type zeroRTTOpener struct {
+	LongHeaderOpener
+	oneRTTOpener *updatableAEAD
+}
+
+var _ LongHeaderOpener = &zeroRTTOpener{}
+
+func newZeroRTTOpener(opener LongHeaderOpener, oneRTTOpener *updatableAEAD) LongHeaderOpener {
+	return &zeroRTTOpener{
+		LongHeaderOpener: opener,
+		oneRTTOpener:     oneRTTOpener,
+	}
+}
+
+func (o *zeroRTTOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber {
+	return o.oneRTTOpener.DecodePacketNumber(wirePN, wirePNLen)
+}
+
+func (o *zeroRTTOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
+	dec, err := o.LongHeaderOpener.Open(dst, src, pn, ad)
+	if err == nil {
+		o.oneRTTOpener.Received0RTTPacket(pn)
+	}
+	return dec, err
+}

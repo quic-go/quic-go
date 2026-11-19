@@ -450,9 +450,12 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		if h.perspective == protocol.PerspectiveClient {
 			panic("Received 0-RTT read key for the client")
 		}
-		h.zeroRTTOpener = newLongHeaderOpener(
-			createAEAD(suite, trafficSecret, h.version),
-			newHeaderProtector(suite, trafficSecret, true, h.version),
+		h.zeroRTTOpener = newZeroRTTOpener(
+			newLongHeaderOpener(
+				createAEAD(suite, trafficSecret, h.version),
+				newHeaderProtector(suite, trafficSecret, true, h.version),
+			),
+			h.aead,
 		)
 		h.used0RTT.Store(true)
 		if h.logger.Debug() {

@@ -201,6 +201,12 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol
 	return dec, err
 }
 
+// Received0RTTPacket records a successfully unprotected 0-RTT packet.
+// 0-RTT and 1-RTT packets share a packet number space.
+func (a *updatableAEAD) Received0RTTPacket(pn protocol.PacketNumber) {
+	a.highestRcvdPN = max(a.highestRcvdPN, pn)
+}
+
 func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
