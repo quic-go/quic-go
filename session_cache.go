@@ -1,4 +1,4 @@
-package handshake
+package quic
 
 import (
 	"crypto/tls"
@@ -15,7 +15,17 @@ type sessionCache struct {
 var _ tls.ClientSessionCache = &sessionCache{}
 
 func newSessionCache(cache tls.ClientSessionCache, v protocol.Version) *sessionCache {
+	if c, ok := cache.(*sessionCache); ok {
+		cache = c.cache
+	}
 	return &sessionCache{cache: cache, version: v}
+}
+
+// setSessionCacheVersion makes conf store session tickets for QUIC version v.
+func setSessionCacheVersion(conf *tls.Config, v protocol.Version) {
+	if conf.ClientSessionCache != nil {
+		conf.ClientSessionCache = newSessionCache(conf.ClientSessionCache, v)
+	}
 }
 
 func (c *sessionCache) Get(key string) (*tls.ClientSessionState, bool) {
