@@ -119,6 +119,11 @@ func testConnIDGeneratorIssueAndRetire(t *testing.T, hasInitialClientDestConnID 
 	g.RemoveRetiredConnIDs(monotime.Now())
 	require.Empty(t, queuedFrames)
 	require.Empty(t, tracker.removed)
+
+	// retiring the initial connection ID also makes us issue a new one
+	require.NoError(t, g.Retire(0, protocol.ParseConnectionID([]byte{3, 3, 3, 3}), monotime.Now()))
+	require.Len(t, queuedFrames, 1)
+	require.EqualValues(t, 5, queuedFrames[0].(*wire.NewConnectionIDFrame).SequenceNumber)
 }
 
 func TestConnIDGeneratorRetiring(t *testing.T) {
