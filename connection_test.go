@@ -564,7 +564,16 @@ func TestConnectionServerInvalidPackets(t *testing.T) {
 	})
 }
 
-func TestConnectionClientDrop0RTT(t *testing.T) {
+func TestConnectionClientInvalidPackets(t *testing.T) {
+	t.Run("0-RTT", func(t *testing.T) {
+		testConnectionClientInvalidPacket(t, wire.Header{Type: protocol.PacketType0RTT, Length: 2, Version: protocol.Version1}, qlog.PacketType0RTT)
+	})
+	t.Run("Initial with token", func(t *testing.T) {
+		testConnectionClientInvalidPacket(t, wire.Header{Type: protocol.PacketTypeInitial, Token: []byte("foobar"), Length: 2, Version: protocol.Version1}, qlog.PacketTypeInitial)
+	})
+}
+
+func testConnectionClientInvalidPacket(t *testing.T, hdr wire.Header, packetType qlog.PacketType) {
 	mockCtrl := gomock.NewController(t)
 	var eventRecorder events.Recorder
 	tc := newClientTestConnection(t, mockCtrl, nil, false, connectionOptTracer(&eventRecorder))
@@ -572,7 +581,7 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 	p := getLongHeaderPacket(t,
 		tc.remoteAddr,
 		&wire.ExtendedHeader{
-			Header:          wire.Header{Type: protocol.PacketType0RTT, Length: 2, Version: protocol.Version1},
+			Header:          hdr,
 			PacketNumberLen: protocol.PacketNumberLen2,
 		},
 		nil,
@@ -584,7 +593,7 @@ func TestConnectionClientDrop0RTT(t *testing.T) {
 		[]qlogwriter.Event{
 			qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
+					PacketType:   packetType,
 					PacketNumber: protocol.InvalidPacketNumber,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},

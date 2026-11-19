@@ -1371,12 +1371,13 @@ func (c *Conn) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header, datagr
 		c.logger.Debugf("Dropping Initial packet (%d bytes) with unexpected source connection ID: %s (expected %s)", p.Size(), hdr.SrcConnectionID, c.handshakeDestConnID)
 		return false, nil
 	}
-	// drop 0-RTT packets, if we are a client
-	if c.perspective == protocol.PerspectiveClient && hdr.Type == protocol.PacketType0RTT {
+	// Servers never send 0-RTT packets, and their Initial packets must not carry a token.
+	if c.perspective == protocol.PerspectiveClient &&
+		(hdr.Type == protocol.PacketType0RTT || (hdr.Type == protocol.PacketTypeInitial && len(hdr.Token) > 0)) {
 		if c.qlogger != nil {
 			c.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
-					PacketType:   qlog.PacketType0RTT,
+					PacketType:   toQlogPacketType(hdr.Type),
 					PacketNumber: protocol.InvalidPacketNumber,
 				},
 				Raw:                     qlog.RawInfo{Length: int(p.Size()), PayloadLength: qlog.OmitLength},
