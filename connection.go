@@ -1318,6 +1318,13 @@ func (c *Conn) handleShortHeaderPacket(
 	}
 	c.pathManager.SwitchToPath(p.remoteAddr)
 	c.connIDManager.SwitchToPath(path)
+	// After validating a new client address, the server should send a new token.
+	// It uses the RTT measured before the RTT stats are reset for the new path.
+	token, err := c.tokenGenerator.NewToken(p.remoteAddr, c.rttStats.SmoothedRTT())
+	if err != nil {
+		return true, err
+	}
+	c.queueControlFrame(&wire.NewTokenFrame{Token: token})
 	initialPacketSize := protocol.ByteCount(cmp.Or(c.config.InitialPacketSize, protocol.MinInitialPacketSize))
 	c.sentPacketHandler.MigratedPath(p.rcvTime, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))

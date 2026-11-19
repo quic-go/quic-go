@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"syscall"
 	"testing"
@@ -3514,7 +3515,7 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 		calls = append(calls,
 			tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 				shortHeaderPacket{}, errNothingToPack,
-			).MaxTimes(1),
+			).AnyTimes(),
 		)
 		gomock.InOrder(calls...)
 		require.Equal(t, tc.remoteAddr, tc.conn.RemoteAddr())
@@ -3553,7 +3554,7 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 				),
 				tc.packer.EXPECT().AppendPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					shortHeaderPacket{}, errNothingToPack,
-				).MaxTimes(1),
+				).AnyTimes(),
 			)
 			tc.conn.handlePacket(receivedPacket{
 				data:       make([]byte, 100),
@@ -3570,6 +3571,8 @@ func testConnectionPathValidation(t *testing.T, isNATRebinding, disableMTU, df b
 		default:
 			t.Fatal("should have migrated")
 		}
+		frames, _ := tc.conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, monotime.Now(), protocol.Version1)
+		require.True(t, slices.ContainsFunc(frames, func(f ackhandler.Frame) bool { _, ok := f.Frame.(*wire.NewTokenFrame); return ok }))
 		assert.Equal(t, protocol.ByteCount(1234), tc.conn.mtuDiscoverer.CurrentSize())
 		maxPayloadSize := estimateMaxPayloadSize(1234)
 		require.Equal(t, &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxPayloadSize)}, tc.conn.SendDatagram(make([]byte, 1234)))
