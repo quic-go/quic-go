@@ -20,6 +20,7 @@ type packet struct {
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel
+	ECN             protocol.ECN
 
 	IsPathMTUProbePacket bool // We don't report the loss of Path MTU probe packets to the congestion controller.
 
@@ -44,6 +45,7 @@ func getPacket() *packet {
 	p.LargestAcked = 0
 	p.Length = 0
 	p.EncryptionLevel = protocol.EncryptionLevel(0)
+	p.ECN = protocol.ECNUnsupported
 	p.SendTime = 0
 	p.IsPathMTUProbePacket = false
 	p.includedInBytesInFlight = false

@@ -1564,6 +1564,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 		require.Len(t, packets, 2)
 		require.Equal(t, pns[2], packets[0].PacketNumber)
 		require.Equal(t, pns[3], packets[1].PacketNumber)
+		require.Equal(t, protocol.ECT0, packets[0].ECN)
 		return false
 	})
 	_, err := sph.ReceivedAck(

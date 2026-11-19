@@ -317,6 +317,7 @@ func (h *sentPacketHandler) SentPacket(
 	p := getPacket()
 	p.SendTime = t
 	p.EncryptionLevel = encLevel
+	p.ECN = ecn
 	p.Length = size
 	p.Frames = frames
 	p.LargestAcked = largestAcked

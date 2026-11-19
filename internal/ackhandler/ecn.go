@@ -59,7 +59,6 @@ type ecnTracker struct {
 
 	firstTestingPacket protocol.PacketNumber
 	lastTestingPacket  protocol.PacketNumber
-	firstCapablePacket protocol.PacketNumber
 
 	// After a path migration, all packets sent on the old path are expected to have arrived by oldPathDrainTime.
 	// Testing starts once a packet sent after that time is acknowledged:
@@ -82,7 +81,6 @@ func newECNTracker(logger utils.Logger, qlogger qlogwriter.Recorder) *ecnTracker
 	return &ecnTracker{
 		firstTestingPacket: protocol.InvalidPacketNumber,
 		lastTestingPacket:  protocol.InvalidPacketNumber,
-		firstCapablePacket: protocol.InvalidPacketNumber,
 		firstPNAfterDrain:  protocol.InvalidPacketNumber,
 		state:              ecnStateInitial,
 		logger:             logger,
@@ -108,10 +106,6 @@ func (e *ecnTracker) SentPacket(now monotime.Time, pn protocol.PacketNumber, ecn
 		}
 	default:
 		panic(fmt.Sprintf("sent packet with unexpected ECN marking: %s", ecn))
-	}
-
-	if e.state == ecnStateCapable && e.firstCapablePacket == protocol.InvalidPacketNumber {
-		e.firstCapablePacket = pn
 	}
 
 	if e.state != ecnStateTesting {
@@ -209,8 +203,8 @@ func (e *ecnTracker) HandleNewlyAcked(packets []packetWithPacketNumber, ect0, ec
 	// Count ECT0 and ECT1 marks that we used when sending the packets that are now being acknowledged.
 	var ackedECT0, ackedECT1 int64
 	for _, p := range packets {
-		//nolint:exhaustive // We only ever send ECT(0) and ECT(1).
-		switch e.ecnMarking(p.PacketNumber) {
+		//nolint:exhaustive // We only count ECT(0) and ECT(1) marks.
+		switch p.ECN {
 		case protocol.ECT0:
 			ackedECT0++
 		case protocol.ECT1:
@@ -352,24 +346,8 @@ func (e *ecnTracker) MigratedPath(oldPathDrainTime monotime.Time) {
 	e.numLostTesting = 0
 	e.firstTestingPacket = protocol.InvalidPacketNumber
 	e.lastTestingPacket = protocol.InvalidPacketNumber
-	e.firstCapablePacket = protocol.InvalidPacketNumber
 	e.oldPathDrainTime = oldPathDrainTime
 	e.firstPNAfterDrain = protocol.InvalidPacketNumber
-}
-
-func (e *ecnTracker) ecnMarking(pn protocol.PacketNumber) protocol.ECN {
-	if pn < e.firstTestingPacket || e.firstTestingPacket == protocol.InvalidPacketNumber {
-		return protocol.ECNNon
-	}
-	if pn <= e.lastTestingPacket || e.lastTestingPacket == protocol.InvalidPacketNumber {
-		return protocol.ECT0
-	}
-	if pn < e.firstCapablePacket || e.firstCapablePacket == protocol.InvalidPacketNumber {
-		return protocol.ECNNon
-	}
-	// We don't need to deal with the case when ECN validation fails,
-	// since we're ignoring any ECN counts reported in ACK frames in that case.
-	return protocol.ECT0
 }
 
 func (e *ecnTracker) isTestingPacket(pn protocol.PacketNumber) bool {

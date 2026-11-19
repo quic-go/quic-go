@@ -14,10 +14,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// getAckedPackets marks packets 0 to 9 as ECT(0), see sendECNTestingPackets.
 func getAckedPackets(pns ...protocol.PacketNumber) []packetWithPacketNumber {
 	var packets []packetWithPacketNumber
 	for _, p := range pns {
-		packets = append(packets, packetWithPacketNumber{PacketNumber: p})
+		ecn := protocol.ECNNon
+		if p < numECNTestingPackets {
+			ecn = protocol.ECT0
+		}
+		packets = append(packets, packetWithPacketNumber{PacketNumber: p, packet: &packet{ECN: ecn}})
 	}
 	return packets
 }
@@ -95,19 +100,22 @@ func TestECNValidationInTestingState(t *testing.T) {
 		require.Equal(t, protocol.ECT0, ecnTracker.Mode())
 		ecnTracker.SentPacket(monotime.Now(), protocol.PacketNumber(i), protocol.ECT0)
 	}
+	// a 1-RTT packet coalesced with a long header packet is sent without ECN marking
+	ecnTracker.SentPacket(monotime.Now(), 5, protocol.ECNNon)
 	require.Equal(t,
 		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateTesting}},
 		eventRecorder.Events(),
 	)
 	eventRecorder.Clear()
-	require.False(t, ecnTracker.HandleNewlyAcked(getAckedPackets(3), 1, 0, 0))
+	acked := append(getAckedPackets(3), packetWithPacketNumber{PacketNumber: 5, packet: &packet{ECN: protocol.ECNNon}})
+	require.False(t, ecnTracker.HandleNewlyAcked(acked, 1, 0, 0))
 	require.Equal(t,
 		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateCapable}},
 		eventRecorder.Events(),
 	)
 
 	// make sure we continue sending ECT(0) packets
-	for i := 5; i < 100; i++ {
+	for i := 6; i < 100; i++ {
 		require.Equal(t, protocol.ECT0, ecnTracker.Mode())
 		ecnTracker.SentPacket(monotime.Now(), protocol.PacketNumber(i), protocol.ECT0)
 	}
@@ -380,9 +388,11 @@ func TestECNPathMigration(t *testing.T) {
 	require.False(t, ecnTracker.HandleNewlyAcked(getAckedPackets(11), 5, 0, 5))
 	require.Empty(t, eventRecorder.Events())
 
+	var acked []packetWithPacketNumber
 	for pn := protocol.PacketNumber(12); pn < 22; pn++ {
 		require.Equal(t, protocol.ECT0, ecnTracker.Mode())
 		ecnTracker.SentPacket(now.Add(time.Second), pn, protocol.ECT0)
+		acked = append(acked, packetWithPacketNumber{PacketNumber: pn, packet: &packet{ECN: protocol.ECT0}})
 	}
 	require.Equal(t,
 		[]qlogwriter.Event{
@@ -393,7 +403,7 @@ func TestECNPathMigration(t *testing.T) {
 	)
 	eventRecorder.Clear()
 	// 9 of the 10 testing packets are CE-marked: not mangling, but congestion
-	require.True(t, ecnTracker.HandleNewlyAcked(getAckedPackets(12, 13, 14, 15, 16, 17, 18, 19, 20, 21), 6, 0, 14))
+	require.True(t, ecnTracker.HandleNewlyAcked(acked, 6, 0, 14))
 	require.Equal(t,
 		[]qlogwriter.Event{qlog.ECNStateUpdated{State: qlog.ECNStateCapable}},
 		eventRecorder.Events(),
