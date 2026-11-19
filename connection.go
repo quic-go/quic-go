@@ -983,7 +983,7 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 			c.queueControlFrame(cf)
 		}
 	}
-	token, err := c.tokenGenerator.NewToken(c.conn.RemoteAddr(), c.rttStats.SmoothedRTT())
+	token, err := c.tokenGenerator.NewToken(c.conn.RemoteAddr(), c.rttStats.SmoothedRTT(), c.version)
 	if err != nil {
 		return err
 	}
@@ -1320,7 +1320,7 @@ func (c *Conn) handleShortHeaderPacket(
 	c.connIDManager.SwitchToPath(path)
 	// After validating a new client address, the server should send a new token.
 	// It uses the RTT measured before the RTT stats are reset for the new path.
-	token, err := c.tokenGenerator.NewToken(p.remoteAddr, c.rttStats.SmoothedRTT())
+	token, err := c.tokenGenerator.NewToken(p.remoteAddr, c.rttStats.SmoothedRTT(), c.version)
 	if err != nil {
 		return true, err
 	}
