@@ -1552,6 +1552,9 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	pns := make([]protocol.PacketNumber, 4)
 	now := monotime.Now()
 	pns[0] = sendPacket(t, now, protocol.ECT1)
+	ackOnly := sph.PopPacketNumber(protocol.PacketNumberSpaceAppData)
+	ecnHandler.EXPECT().SentPacket(now, ackOnly, protocol.ECT1)
+	sph.SentPacket(now, ackOnly, protocol.InvalidPacketNumber, nil, nil, protocol.Encryption1RTT, protocol.ECT1, 100, false, false)
 	now = now.Add(time.Second)
 	pns[1] = sendPacket(t, now, protocol.ECT0)
 	pns[2] = sendPacket(t, now, protocol.ECT0)
@@ -1560,6 +1563,7 @@ func TestSentPacketHandlerECN(t *testing.T) {
 	// Receive an ACK with a short RTT, such that the first packet is lost.
 	cong.EXPECT().OnCongestionEvent(gomock.Any())
 	ecnHandler.EXPECT().LostPacket(pns[0])
+	ecnHandler.EXPECT().LostPacket(ackOnly) // ACK-only packets are reported as lost as well
 	ecnHandler.EXPECT().HandleNewlyAcked(gomock.Any(), int64(10), int64(11), int64(12)).DoAndReturn(func(packets []packetWithPacketNumber, _, _, _ int64) bool {
 		require.Len(t, packets, 2)
 		require.Equal(t, pns[2], packets[0].PacketNumber)
