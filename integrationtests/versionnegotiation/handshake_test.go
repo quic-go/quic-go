@@ -1,6 +1,7 @@
 package versionnegotiation
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/quic-go/quic-go/testutils/events"
@@ -207,5 +209,37 @@ func TestServerDisablesVersionNegotiation(t *testing.T) {
 		require.True(t, ok)
 		require.True(t, nerr.Timeout())
 		require.Empty(t, clientEventTracer.Events(qlog.VersionNegotiationReceived{}))
+	})
+}
+
+func TestVersionNegotiationLongConnectionIDs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		clientConn, serverConn, closeFn := newSimnetLink(t, 10*time.Millisecond)
+		defer closeFn(t)
+
+		ln, err := quic.Listen(serverConn, getTLSConfig(), nil)
+		require.NoError(t, err)
+		defer ln.Close()
+
+		// packets of other QUIC versions can use connection IDs longer than 20 bytes
+		destConnID := bytes.Repeat([]byte{1}, 21)
+		srcConnID := bytes.Repeat([]byte{2}, 30)
+		packet := []byte{0xc0, 0x1a, 0x2a, 0x3a, 0x4a, byte(len(destConnID))}
+		packet = append(packet, destConnID...)
+		packet = append(packet, byte(len(srcConnID)))
+		packet = append(packet, srcConnID...)
+		packet = append(packet, make([]byte, 1200-len(packet))...)
+		_, err = clientConn.WriteTo(packet, serverConn.LocalAddr())
+		require.NoError(t, err)
+
+		b := make([]byte, 1500)
+		require.NoError(t, clientConn.SetReadDeadline(time.Now().Add(time.Second)))
+		n, _, err := clientConn.ReadFrom(b)
+		require.NoError(t, err)
+		dest, src, versions, err := wire.ParseVersionNegotiationPacket(b[:n])
+		require.NoError(t, err)
+		require.Equal(t, protocol.ArbitraryLenConnectionID(srcConnID), dest)
+		require.Equal(t, protocol.ArbitraryLenConnectionID(destConnID), src)
+		require.Contains(t, versions, protocol.Version1)
 	})
 }
