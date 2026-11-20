@@ -229,11 +229,12 @@ func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version)
 }
 
 func (s *Stream) getControlFrame(now monotime.Time) (_ ackhandler.Frame, ok, hasMore bool) {
-	f, ok, _ := s.sendStr.getControlFrame(now)
+	f, ok, sendHasMore := s.sendStr.getControlFrame(now)
 	if ok {
 		return f, true, true
 	}
-	return s.receiveStr.getControlFrame(now)
+	f, ok, hasMore = s.receiveStr.getControlFrame(now)
+	return f, ok, hasMore || sendHasMore
 }
 
 // SetReadDeadline sets the deadline for future [Stream.Read] calls.

@@ -48,6 +48,26 @@ func TestStreamReceiveFinalSizeCallback(t *testing.T) {
 	require.EqualValues(t, 6, size)
 }
 
+func TestStreamResetStreamAtFlowControl(t *testing.T) {
+	mockSender := NewMockStreamSender(gomock.NewController(t))
+	str := newStream(context.Background(), 1337, mockSender, newTestStreamFlowControllerWithSendWindow(1337, 3), true)
+	mockSender.EXPECT().onHasStreamData(protocol.StreamID(1337), gomock.Any()).Times(2)
+	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
+	_, err := str.Write([]byte("foobar"))
+	require.NoError(t, err)
+	str.SetReliableBoundary()
+	str.CancelWrite(42)
+	// the Final Size would exceed the flow control limit
+	_, ok, hasMore := str.getControlFrame(monotime.Now())
+	require.False(t, ok)
+	require.True(t, hasMore)
+
+	str.updateSendWindow(6)
+	cf, ok, _ := str.getControlFrame(monotime.Now())
+	require.True(t, ok)
+	require.Equal(t, &wire.ResetStreamFrame{StreamID: 1337, FinalSize: 6, ErrorCode: 42, ReliableSize: 6}, cf.Frame)
+}
+
 func TestStreamCompletion(t *testing.T) {
 	completeReadSide := func(
 		t *testing.T,
