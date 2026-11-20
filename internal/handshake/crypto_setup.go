@@ -61,6 +61,9 @@ type cryptoSetup struct {
 	aead          *updatableAEAD
 	has1RTTSealer bool
 	has1RTTOpener bool
+
+	invalidPacketLimit uint64
+	invalidPacketCount uint64
 }
 
 var _ CryptoSetup = &cryptoSetup{}
@@ -150,16 +153,17 @@ func newCryptoSetup(
 		})
 	}
 	return &cryptoSetup{
-		initialSealer: initialSealer,
-		initialOpener: initialOpener,
-		aead:          newUpdatableAEAD(rttStats, qlogger, logger, version),
-		events:        make([]Event, 0, 16),
-		ourParams:     tp,
-		rttStats:      rttStats,
-		qlogger:       qlogger,
-		logger:        logger,
-		perspective:   perspective,
-		version:       version,
+		initialSealer:      initialSealer,
+		initialOpener:      initialOpener,
+		aead:               newUpdatableAEAD(rttStats, qlogger, logger, version),
+		invalidPacketLimit: protocol.InvalidPacketLimitAES, // Initial packets use AES-128-GCM
+		events:             make([]Event, 0, 16),
+		ourParams:          tp,
+		rttStats:           rttStats,
+		qlogger:            qlogger,
+		logger:             logger,
+		perspective:        perspective,
+		version:            version,
 	}
 }
 
@@ -181,6 +185,16 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 
 func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
 	return h.aead.SetLargestAcked(pn)
+}
+
+// CountInvalidPacket counts a packet that failed authentication, with any of the keys.
+// It returns an AEAD_LIMIT_REACHED error once the integrity limit of the selected AEAD is reached.
+func (h *cryptoSetup) CountInvalidPacket() error {
+	h.invalidPacketCount++
+	if h.invalidPacketCount >= h.invalidPacketLimit {
+		return &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
+	}
+	return nil
 }
 
 func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
@@ -447,6 +461,12 @@ func (h *cryptoSetup) rejected0RTT() {
 
 func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
+	switch suiteID {
+	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
+		h.invalidPacketLimit = protocol.InvalidPacketLimitAES
+	case tls.TLS_CHACHA20_POLY1305_SHA256:
+		h.invalidPacketLimit = protocol.InvalidPacketLimitChaCha
+	}
 	var ev EventKind
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {

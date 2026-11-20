@@ -639,3 +639,13 @@ func Test0RTTRejectionOnVersionMismatch(t *testing.T) {
 	require.True(t, server.handleSessionTicket((&sessionTicket{Version: protocol.Version1, Parameters: tp}).Marshal(), true))
 	require.False(t, server.handleSessionTicket((&sessionTicket{Version: protocol.Version2, Parameters: tp}).Marshal(), true))
 }
+
+func TestAEADLimitReached(t *testing.T) {
+	cs := newCryptoSetup(protocol.ConnectionID{}, &wire.TransportParameters{}, utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.PerspectiveClient, protocol.Version1)
+	cs.invalidPacketCount = protocol.InvalidPacketLimitChaCha
+	// Initial packets use AES-128-GCM
+	require.NoError(t, cs.CountInvalidPacket())
+	// the limit of the selected AEAD applies to packets that failed with any of the keys
+	cs.setReadKey(tls.QUICEncryptionLevelHandshake, tls.TLS_CHACHA20_POLY1305_SHA256, make([]byte, 32))
+	require.ErrorIs(t, cs.CountInvalidPacket(), &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
+}

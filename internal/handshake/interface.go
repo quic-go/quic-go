@@ -129,6 +129,7 @@ type CryptoSetup interface {
 	NextEvent() Event
 
 	SetLargest1RTTAcked(protocol.PacketNumber) error
+	CountInvalidPacket() error
 	DiscardInitialKeys()
 	SetHandshakeConfirmed()
 	ConnectionState() ConnectionState

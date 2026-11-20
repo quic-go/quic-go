@@ -154,6 +154,44 @@ func (c *MockCryptoSetupConnectionStateCall) DoAndReturn(f func() handshake.Conn
 	return c
 }
 
+// CountInvalidPacket mocks base method.
+func (m *MockCryptoSetup) CountInvalidPacket() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountInvalidPacket")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CountInvalidPacket indicates an expected call of CountInvalidPacket.
+func (mr *MockCryptoSetupMockRecorder) CountInvalidPacket() *MockCryptoSetupCountInvalidPacketCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountInvalidPacket", reflect.TypeOf((*MockCryptoSetup)(nil).CountInvalidPacket))
+	return &MockCryptoSetupCountInvalidPacketCall{Call: call}
+}
+
+// MockCryptoSetupCountInvalidPacketCall wrap *gomock.Call
+type MockCryptoSetupCountInvalidPacketCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockCryptoSetupCountInvalidPacketCall) Return(arg0 error) *MockCryptoSetupCountInvalidPacketCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockCryptoSetupCountInvalidPacketCall) Do(f func() error) *MockCryptoSetupCountInvalidPacketCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockCryptoSetupCountInvalidPacketCall) DoAndReturn(f func() error) *MockCryptoSetupCountInvalidPacketCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // DiscardInitialKeys mocks base method.
 func (m *MockCryptoSetup) DiscardInitialKeys() {
 	m.ctrl.T.Helper()
