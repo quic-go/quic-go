@@ -223,7 +223,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	req = req.WithContext(ctx)
 	context.AfterFunc(str.Context(), cancel)
 
-	r := newResponseWriter(hstr, conn, req.Method == http.MethodHead, c.logger)
+	r := newResponseWriter(hstr, conn, req.Method, c.logger)
 	handler := c.requestHandler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -316,7 +316,7 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {
 	hstr := newStream(str, c.rawConn, nil, nil, c.qlogger)
 	defer hstr.Close()
-	r := newResponseWriter(hstr, c.rawConn, false, c.logger)
+	r := newResponseWriter(hstr, c.rawConn, "", c.logger)
 	r.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
 	r.Flush()
 }
