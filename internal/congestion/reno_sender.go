@@ -22,7 +22,7 @@ const (
 type renoUndoState struct {
 	congestionWindow   protocol.ByteCount
 	slowStartThreshold protocol.ByteCount
-	numAckedPackets    uint64
+	bytesAcked         protocol.ByteCount
 	// Previous cutback's boundary; renoSender holds the current boundary.
 	largestSentAtLastCutback protocol.PacketNumber
 	// Includes ECN events, which cannot be undone by spurious-loss reports.
@@ -57,8 +57,8 @@ type renoSender struct {
 	// Slow start congestion window in bytes, aka ssthresh.
 	slowStartThreshold protocol.ByteCount
 
-	// ACK counter for the Reno implementation.
-	numAckedPackets uint64
+	// Bytes acked in congestion avoidance that haven't increased the window yet.
+	bytesAcked protocol.ByteCount
 
 	// Retained after recovery, since spurious losses can be reported later.
 	undoState renoUndoState
@@ -167,12 +167,12 @@ func (c *renoSender) MaybeExitSlowStart() {
 	}
 }
 
-func (c *renoSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, priorInFlight protocol.ByteCount) {
+func (c *renoSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes, priorInFlight protocol.ByteCount) {
 	c.largestAckedPacketNumber = max(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.inRecovery() {
 		return
 	}
-	c.maybeIncreaseCwnd(priorInFlight)
+	c.maybeIncreaseCwnd(ackedBytes, priorInFlight)
 	if c.inSlowStart() {
 		c.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
 	}
@@ -191,7 +191,7 @@ func (c *renoSender) OnCongestionEvent(packetNumber protocol.PacketNumber) {
 	c.undoState = renoUndoState{
 		congestionWindow:         c.congestionWindow,
 		slowStartThreshold:       c.slowStartThreshold,
-		numAckedPackets:          c.numAckedPackets,
+		bytesAcked:               c.bytesAcked,
 		largestSentAtLastCutback: c.largestSentAtLastCutback,
 		numCongestionEvents:      1,
 	}
@@ -204,9 +204,7 @@ func (c *renoSender) OnCongestionEvent(packetNumber protocol.PacketNumber) {
 	}
 	c.slowStartThreshold = c.congestionWindow
 	c.largestSentAtLastCutback = c.largestSentPacketNumber
-	// reset packet count from congestion avoidance mode. We start
-	// counting again when we're out of recovery.
-	c.numAckedPackets = 0
+	c.bytesAcked = 0
 }
 
 func (c *renoSender) OnSpuriousLoss(packetNumber protocol.PacketNumber) {
@@ -230,7 +228,7 @@ func (c *renoSender) OnSpuriousLoss(packetNumber protocol.PacketNumber) {
 	}
 	c.congestionWindow = state.congestionWindow
 	c.slowStartThreshold = state.slowStartThreshold
-	c.numAckedPackets = state.numAckedPackets
+	c.bytesAcked = state.bytesAcked
 	c.largestSentAtLastCutback = state.largestSentAtLastCutback
 	switch {
 	case c.inRecovery():
@@ -244,7 +242,7 @@ func (c *renoSender) OnSpuriousLoss(packetNumber protocol.PacketNumber) {
 
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
 // represents, but quic has a separate ack for each packet.
-func (c *renoSender) maybeIncreaseCwnd(priorInFlight protocol.ByteCount) {
+func (c *renoSender) maybeIncreaseCwnd(ackedBytes, priorInFlight protocol.ByteCount) {
 	// Do not increase the congestion window unless the sender is close to using
 	// the current window.
 	if !c.isCwndLimited(priorInFlight) {
@@ -255,17 +253,17 @@ func (c *renoSender) maybeIncreaseCwnd(priorInFlight protocol.ByteCount) {
 		return
 	}
 	if c.inSlowStart() {
-		// TCP slow start, exponential growth, increase by one for each ACK.
-		c.congestionWindow += c.maxDatagramSize
+		c.congestionWindow += ackedBytes
 		c.maybeQlogStateChange(qlog.CongestionStateSlowStart)
 		return
 	}
 	// Congestion avoidance
 	c.maybeQlogStateChange(qlog.CongestionStateCongestionAvoidance)
-	c.numAckedPackets++
-	if c.numAckedPackets >= uint64(c.congestionWindow/c.maxDatagramSize) {
+	// Count bytes, since maxDatagramSize * ackedBytes / congestionWindow can truncate to 0.
+	c.bytesAcked += ackedBytes
+	if c.bytesAcked >= c.congestionWindow {
+		c.bytesAcked -= c.congestionWindow
 		c.congestionWindow += c.maxDatagramSize
-		c.numAckedPackets = 0
 	}
 }
 

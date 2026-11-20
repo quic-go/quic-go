@@ -228,15 +228,15 @@ func (c *MockSendAlgorithmOnCongestionEventCall) DoAndReturn(f func(protocol.Pac
 }
 
 // OnPacketAcked mocks base method.
-func (m *MockSendAlgorithm) OnPacketAcked(number protocol.PacketNumber, priorInFlight protocol.ByteCount) {
+func (m *MockSendAlgorithm) OnPacketAcked(number protocol.PacketNumber, ackedBytes, priorInFlight protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnPacketAcked", number, priorInFlight)
+	m.ctrl.Call(m, "OnPacketAcked", number, ackedBytes, priorInFlight)
 }
 
 // OnPacketAcked indicates an expected call of OnPacketAcked.
-func (mr *MockSendAlgorithmMockRecorder) OnPacketAcked(number, priorInFlight any) *MockSendAlgorithmOnPacketAckedCall {
+func (mr *MockSendAlgorithmMockRecorder) OnPacketAcked(number, ackedBytes, priorInFlight any) *MockSendAlgorithmOnPacketAckedCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithm)(nil).OnPacketAcked), number, priorInFlight)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithm)(nil).OnPacketAcked), number, ackedBytes, priorInFlight)
 	return &MockSendAlgorithmOnPacketAckedCall{Call: call}
 }
 
@@ -252,13 +252,13 @@ func (c *MockSendAlgorithmOnPacketAckedCall) Return() *MockSendAlgorithmOnPacket
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSendAlgorithmOnPacketAckedCall) Do(f func(protocol.PacketNumber, protocol.ByteCount)) *MockSendAlgorithmOnPacketAckedCall {
+func (c *MockSendAlgorithmOnPacketAckedCall) Do(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount)) *MockSendAlgorithmOnPacketAckedCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSendAlgorithmOnPacketAckedCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ByteCount)) *MockSendAlgorithmOnPacketAckedCall {
+func (c *MockSendAlgorithmOnPacketAckedCall) DoAndReturn(f func(protocol.PacketNumber, protocol.ByteCount, protocol.ByteCount)) *MockSendAlgorithmOnPacketAckedCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

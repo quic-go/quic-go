@@ -13,7 +13,7 @@ type SendAlgorithm interface {
 	CanSend(bytesInFlight protocol.ByteCount) bool
 	GetCongestionWindow() protocol.ByteCount
 	MaybeExitSlowStart()
-	OnPacketAcked(number protocol.PacketNumber, priorInFlight protocol.ByteCount)
+	OnPacketAcked(number protocol.PacketNumber, ackedBytes, priorInFlight protocol.ByteCount)
 	OnCongestionEvent(number protocol.PacketNumber)
 	OnSpuriousLoss(number protocol.PacketNumber)
 	SetMaxDatagramSize(protocol.ByteCount)
