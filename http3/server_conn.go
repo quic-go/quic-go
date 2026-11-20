@@ -145,6 +145,9 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	headerBlock, err := readHeaderBlock(str, hf.Length)
 	if err != nil {
 		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
+		if err == io.ErrUnexpectedEOF {
+			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+		}
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return

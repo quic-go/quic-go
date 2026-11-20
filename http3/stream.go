@@ -104,7 +104,11 @@ func (s *Stream) Read(b []byte) (int, error) {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
-				return 0, maybeReplaceError(s.parseTrailer(s.datagramStream, f))
+				err = s.parseTrailer(s.datagramStream, f)
+				if err == io.ErrUnexpectedEOF {
+					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+				}
+				return 0, maybeReplaceError(err)
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -498,6 +502,9 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	headerBlock, err := readHeaderBlock(s.str.datagramStream, hf.Length)
 	if err != nil {
 		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
+		if err == io.ErrUnexpectedEOF {
+			s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+		}
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", maybeReplaceError(err))

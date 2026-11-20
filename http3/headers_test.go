@@ -39,7 +39,7 @@ func TestReadHeaderBlock(t *testing.T) {
 		return 0, io.EOF
 	})
 	_, err := readHeaderBlock(r, 1<<20)
-	require.ErrorIs(t, err, io.EOF)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func decodeFromSlice(headers []qpack.HeaderField) qpack.DecodeFunc {

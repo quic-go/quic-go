@@ -34,17 +34,21 @@ var errHeaderTooLarge = errors.New("http3: headers too large")
 
 // readHeaderBlock preallocates up to 8 KiB, growing larger buffers as data arrives.
 // The caller must check length against the configured header size limit first.
+// It returns io.ErrUnexpectedEOF if the stream ends before length bytes were read.
 func readHeaderBlock(r io.Reader, length uint64) ([]byte, error) {
 	const maxInitialBufferSize = 8 << 10
 
 	b := make([]byte, min(length, maxInitialBufferSize))
 	if length <= maxInitialBufferSize {
 		_, err := io.ReadFull(r, b)
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
 		return b, err
 	}
 	buf := bytes.NewBuffer(b[:0])
-	n, err := io.CopyN(buf, r, int64(length))
-	if errors.Is(err, io.EOF) && n > 0 {
+	_, err := io.CopyN(buf, r, int64(length))
+	if err == io.EOF {
 		err = io.ErrUnexpectedEOF
 	}
 	return buf.Bytes(), err

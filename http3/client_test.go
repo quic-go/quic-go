@@ -265,6 +265,29 @@ func TestClientResponseValidation(t *testing.T) {
 			"invalid response pseudo header",
 		)
 	})
+
+	t.Run("truncated HEADERS frame", func(t *testing.T) {
+		clientConn, serverConn := newConnPair(t)
+		go (&Transport{}).NewClientConn(clientConn).RoundTrip(httptest.NewRequest(http.MethodGet, "http://quic-go.net", nil))
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		str, err := serverConn.AcceptStream(ctx)
+		require.NoError(t, err)
+		_, err = str.Write((&headersFrame{Length: 10}).Append(nil))
+		require.NoError(t, err)
+		require.NoError(t, str.Close())
+
+		select {
+		case <-serverConn.Context().Done():
+			require.ErrorIs(t,
+				context.Cause(serverConn.Context()),
+				&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeFrameError)},
+			)
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for close")
+		}
+	})
 }
 
 func testClientResponseValidation(t *testing.T, tr *Transport, rsp []byte, expectedReset quic.StreamErrorCode) error {
