@@ -1190,11 +1190,11 @@ func TestHTTPStreamer(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/httpstreamer", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-
-			str, err := w.(http3.HTTPStreamer).HTTPStream()
-			if !assert.NoError(t, err) {
+			if !assert.NoError(t, http.NewResponseController(w).Flush()) {
 				return
 			}
+
+			str := w.(http3.HTTPStreamer).HTTPStream()
 			str.Write([]byte("foobar"))
 
 			// Do this in a Go routine, so that the handler returns early.
