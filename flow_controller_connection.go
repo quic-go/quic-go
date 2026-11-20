@@ -30,6 +30,7 @@ func newConnectionFlowController(
 	logger utils.Logger,
 ) *connectionFlowController {
 	return &connectionFlowController{
+		lastBlockedAt: protocol.InvalidByteCount,
 		receiveFlowController: receiveFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
@@ -173,6 +174,6 @@ func (c *connectionFlowController) Reset() {
 	defer c.sendMutex.Unlock()
 
 	c.bytesSent = 0
-	c.lastBlockedAt = 0
+	c.lastBlockedAt = protocol.InvalidByteCount
 	c.sendWindow = 0
 }
