@@ -915,11 +915,12 @@ func testClientConnGoAwayFailures(t *testing.T, data []byte, readErr error, expe
 func TestClientConnHandleBidirectionalStream(t *testing.T) {
 	clientConn, serverConn := newConnPair(t)
 
-	cc := (&Transport{}).NewClientConn(clientConn)
+	(&Transport{}).NewClientConn(clientConn)
 
-	str, err := clientConn.OpenStream()
+	str, err := serverConn.OpenStream()
 	require.NoError(t, err)
-	cc.HandleBidirectionalStream(str)
+	_, err = str.Write([]byte("foobar"))
+	require.NoError(t, err)
 
 	select {
 	case <-serverConn.Context().Done():

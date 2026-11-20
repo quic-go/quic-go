@@ -40,7 +40,6 @@ type RoundTripOpt struct {
 type clientConn interface {
 	OpenRequestStream(context.Context) (*RequestStream, error)
 	RoundTrip(*http.Request) (*http.Response, error)
-	handleUnidirectionalStream(*quic.ReceiveStream)
 }
 
 type roundTripperWithCount struct {
@@ -128,16 +127,7 @@ var (
 
 func (t *Transport) init() error {
 	if t.newClientConn == nil {
-		t.newClientConn = func(conn *quic.Conn) clientConn {
-			return newClientConn(
-				conn,
-				t.EnableDatagrams,
-				t.AdditionalSettings,
-				t.MaxResponseHeaderBytes,
-				t.DisableCompression,
-				t.Logger,
-			)
-		}
+		t.newClientConn = func(conn *quic.Conn) clientConn { return t.NewClientConn(conn) }
 	}
 	if t.QUICConfig == nil {
 		t.QUICConfig = defaultQuicConfig.Clone()
@@ -387,17 +377,7 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 	if err != nil {
 		return nil, nil, err
 	}
-	clientConn := t.newClientConn(conn)
-	go func() {
-		for {
-			str, err := conn.AcceptUniStream(context.Background())
-			if err != nil {
-				return
-			}
-			go clientConn.handleUnidirectionalStream(str)
-		}
-	}()
-	return conn, clientConn, nil
+	return conn, t.newClientConn(conn), nil
 }
 
 func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*net.UDPAddr, error) {
@@ -450,6 +430,15 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 				return
 			}
 			go c.handleUnidirectionalStream(str)
+		}
+	}()
+	go func() {
+		for {
+			str, err := conn.AcceptStream(context.Background())
+			if err != nil {
+				return
+			}
+			c.HandleBidirectionalStream(str)
 		}
 	}()
 	return c
