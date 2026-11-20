@@ -133,6 +133,12 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	if req.Method == http.MethodConnect {
 		hstr.rejectTrailer()
 	}
+	// HTTP Datagrams received for a request without datagram semantics abort the request (RFC 9297, Section 2).
+	// Only Extended CONNECT requests can define such semantics.
+	// For these, req.Proto is the :protocol value, otherwise it's "HTTP/3.0".
+	if req.Proto == "HTTP/3.0" {
+		str.RejectDatagrams()
+	}
 
 	// We only use the client's priority for local scheduling.
 	// A Priority response header is only transmitted so that potential intermediaries can use it,

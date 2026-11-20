@@ -194,6 +194,16 @@ func (c *rawConn) UpdateStreamPriority(id quic.StreamID, urgency int8, increment
 	}
 }
 
+// RejectDatagrams makes HTTP Datagrams received for the stream abort it.
+func (c *rawConn) RejectDatagrams(id quic.StreamID) {
+	c.streamMx.Lock()
+	str := c.streams[id]
+	c.streamMx.Unlock()
+	if str != nil {
+		str.RejectDatagrams()
+	}
+}
+
 func (c *rawConn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }

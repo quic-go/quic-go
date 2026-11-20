@@ -429,6 +429,25 @@ func TestClientExtendedConnectCancelBeforeSettings(t *testing.T) {
 	}
 }
 
+func TestClientRejectsDatagrams(t *testing.T) {
+	clientConn, serverConn := newConnPair(t, withDatagrams())
+	cc := (&Transport{EnableDatagrams: true}).NewClientConn(clientConn)
+	controlStr, err := serverConn.OpenUniStream()
+	require.NoError(t, err)
+	_, err = controlStr.Write((&settingsFrame{Datagram: true}).Append(quicvarint.Append(nil, streamTypeControlStream)))
+	require.NoError(t, err)
+
+	str, err := cc.OpenRequestStream(context.Background())
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodGet, "https://quic-go.net", nil)
+	require.NoError(t, err)
+	require.NoError(t, str.SendRequestHeader(req))
+	serverStr, err := serverConn.AcceptStream(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, serverConn.SendDatagram(quicvarint.Append(nil, uint64(serverStr.StreamID()/4))))
+	expectStreamWriteReset(t, serverStr, quic.StreamErrorCode(ErrCodeDatagramError))
+}
+
 func TestClient1xxHandling(t *testing.T) {
 	t.Run("a few early hints", func(t *testing.T) {
 		testClient1xxHandling(t, max1xxResponses, false)
