@@ -298,7 +298,11 @@ func testConnectionClose(t *testing.T, useApplicationClose bool, expectedErr err
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)
 		var eventRecorder events.Recorder
-		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(&eventRecorder))
+		tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptTracer(&eventRecorder), connectionOptRTT(10*time.Millisecond))
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+			MaxAckDelay:               25 * time.Millisecond,
+			InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
+		}))
 		errChan := make(chan error, 1)
 
 		tc.connRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
@@ -310,7 +314,8 @@ func testConnectionClose(t *testing.T, useApplicationClose bool, expectedErr err
 			tc.packer.EXPECT().PackConnectionClose(expectedErr, gomock.Any(), protocol.Version1).Return(&coalescedPacket{buffer: b}, nil)
 		}
 		tc.sendConn.EXPECT().Write([]byte("connection close"), gomock.Any(), gomock.Any())
-		tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		// 3 PTOs, including the peer's max_ack_delay
+		tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), 3*(30+25)*time.Millisecond)
 
 		go func() { errChan <- tc.conn.run() }()
 		tc.conn.closeLocal(expectedErr)
@@ -1023,7 +1028,12 @@ func TestConnectionRemoteClose(t *testing.T) {
 			false,
 			connectionOptTracer(&eventRecorder),
 			connectionOptUnpacker(unpacker),
+			connectionOptRTT(10*time.Millisecond),
 		)
+		require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+			MaxAckDelay:               25 * time.Millisecond,
+			InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
+		}))
 		ccf, err := (&wire.ConnectionCloseFrame{
 			ErrorCode:    uint64(qerr.StreamLimitError),
 			ReasonPhrase: "foobar",
@@ -1031,7 +1041,8 @@ func TestConnectionRemoteClose(t *testing.T) {
 		require.NoError(t, err)
 		unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(1), protocol.PacketNumberLen2, protocol.KeyPhaseBit(0), ccf, nil)
 
-		tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any())
+		// 3 PTOs, including the peer's max_ack_delay
+		tc.connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), 3*(30+25)*time.Millisecond)
 
 		errChan := make(chan error, 1)
 		go func() { errChan <- tc.conn.run() }()
