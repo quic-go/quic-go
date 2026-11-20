@@ -501,6 +501,14 @@ func (s *ReceiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame,
 	if err := s.flowController.UpdateHighestReceived(frame.FinalSize, true, now); err != nil {
 		return err
 	}
+	// Subsequent RESET_STREAM and RESET_STREAM_AT frames must not change the error code.
+	// The error code of frames received after sending STOP_SENDING may be ignored.
+	if s.cancelledRemotely && frame.ErrorCode != s.cancelErr.ErrorCode {
+		return &qerr.TransportError{
+			ErrorCode:    qerr.StreamStateError,
+			ErrorMessage: fmt.Sprintf("received inconsistent error code for stream %d (old: %d, new: %d)", s.streamID, s.cancelErr.ErrorCode, frame.ErrorCode),
+		}
+	}
 	s.finalOffset = frame.FinalSize
 
 	// senders are allowed to reduce the reliable size, but frames might have been reordered
