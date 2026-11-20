@@ -3835,3 +3835,13 @@ func testConnectionDatagrams(t *testing.T, enabled bool) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("bar"), d)
 }
+
+func TestConnectionSendEmptyDatagram(t *testing.T) {
+	tc := newServerTestConnection(t, nil, &Config{EnableDatagrams: true}, false)
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID: protocol.ZeroLengthConnectionID,
+		MaxDatagramFrameSize:      1,
+	}))
+	// an empty DATAGRAM frame with a length field is 2 bytes
+	require.Equal(t, &DatagramTooLargeError{}, tc.conn.SendDatagram(nil))
+}

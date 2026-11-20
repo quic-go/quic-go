@@ -3193,7 +3193,8 @@ func (c *Conn) SendDatagram(p []byte) error {
 		f.MaxDataLen(params.MaxDatagramFrameSize, c.version),
 		protocol.ByteCount(c.maxPayloadSizeEstimate.Load()),
 	)
-	if protocol.ByteCount(len(p)) > maxDataLen {
+	// An empty DATAGRAM frame with a length field is 2 bytes.
+	if protocol.ByteCount(len(p)) > maxDataLen || params.MaxDatagramFrameSize == 1 {
 		return &DatagramTooLargeError{MaxDatagramPayloadSize: int64(maxDataLen)}
 	}
 	f.Data = make([]byte, len(p))
