@@ -7,10 +7,12 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"slices"
 	"testing"
 
 	ossfuzzseeds "github.com/quic-go/go-ossfuzz-seeds"
 	"github.com/quic-go/qpack"
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/testutils/events"
 
@@ -827,6 +829,33 @@ func TestResponseTrailerParsingValidation(t *testing.T) {
 			require.NotErrorAs(t, err, new(*qpackError))
 		})
 	}
+}
+
+func TestDecodeTrailersReset(t *testing.T) {
+	decode := func(t *testing.T, fields ...qpack.HeaderField) *stateTrackingStream {
+		client, server := newStreamPair(t)
+		var b bytes.Buffer
+		enc := qpack.NewEncoder(&b)
+		for _, f := range fields {
+			require.NoError(t, enc.WriteField(f))
+		}
+		_, err := server.Write(b.Bytes())
+		require.NoError(t, err)
+		str := newStateTrackingStream(client, &mockStreamClearer{}, nil)
+		_, err = decodeTrailers(str, &headersFrame{Length: uint64(b.Len())}, 1000, qpack.NewDecoder(), nil)
+		require.Error(t, err)
+		return str
+	}
+
+	// pseudo-header fields are not allowed in trailers
+	str := decode(t, qpack.HeaderField{Name: ":path", Value: "/"})
+	_, err := str.Write([]byte("foo"))
+	require.ErrorIs(t, err, &quic.StreamError{StreamID: str.StreamID(), ErrorCode: quic.StreamErrorCode(ErrCodeMessageError)})
+
+	// small on the wire, but exceeding the size limit once decoded
+	str = decode(t, slices.Repeat([]qpack.HeaderField{{Name: "a", Value: "b"}}, 40)...)
+	_, err = str.Write([]byte("foo"))
+	require.NoError(t, err)
 }
 
 func TestQpackError(t *testing.T) {
