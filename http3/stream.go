@@ -285,7 +285,8 @@ func (s *Stream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 // MASQUE proxying protocols.
 // Stream and application errors are returned as *[Error], possibly wrapped.
 type RequestStream struct {
-	str *Stream
+	str  *Stream
+	conn *rawConn
 
 	responseBody io.ReadCloser // set by ReadResponse
 
@@ -304,6 +305,7 @@ type RequestStream struct {
 
 func newRequestStream(
 	str *Stream,
+	conn *rawConn,
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
 	decoder *qpack.Decoder,
@@ -313,6 +315,7 @@ func newRequestStream(
 ) *RequestStream {
 	return &RequestStream{
 		str:                str,
+		conn:               conn,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
 		decoder:            decoder,
@@ -422,6 +425,7 @@ func (s *RequestStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 // SendRequestHeader sends the HTTP request.
 //
 // It can only be used for requests that don't have a request body.
+// For Extended CONNECT requests, it blocks until the server's SETTINGS were received.
 // It is invalid to call it more than once.
 func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	if !s.str.addQlogProducer() {
@@ -439,6 +443,12 @@ func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	if s.sentRequest {
 		return errors.New("http3: invalid duplicate use of RequestStream.SendRequestHeader")
+	}
+	// A client must not send Extended CONNECT unless the server enabled it.
+	if isExtendedConnectRequest(req) {
+		if err := s.conn.WaitForExtendedConnect(req.Context()); err != nil {
+			return maybeReplaceError(err)
+		}
 	}
 	if !s.disableCompression && req.Method != http.MethodHead &&
 		req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
@@ -477,7 +487,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	frame, err := s.str.frameParser.ParseNext(s.str.qlogger)
 	if err != nil {
 		if errors.Is(err, errPriorityUpdateForPush) {
-			s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			return nil, err
 		}
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
@@ -486,7 +496,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		s.str.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
+		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
 	}
 	if hf.Length > uint64(s.maxHeaderBytes) {
