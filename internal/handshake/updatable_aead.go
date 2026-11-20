@@ -311,7 +311,9 @@ func (a *updatableAEAD) updateAllowed() bool {
 	}
 	// the first key update is allowed as soon as the handshake is confirmed
 	return a.keyPhase == 0 ||
-		// subsequent key updates as soon as a packet sent with that key phase has been acknowledged
+		// Subsequent key updates are allowed as soon as a packet sent with the current keys was acknowledged.
+		// We don't wait 3 PTOs as recommended by RFC 9001, Section 6.5,
+		// since that only matters at very high packet rates.
 		(a.firstSentWithCurrentKey != protocol.InvalidPacketNumber &&
 			a.largestAcked != protocol.InvalidPacketNumber &&
 			a.largestAcked >= a.firstSentWithCurrentKey)
