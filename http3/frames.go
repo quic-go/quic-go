@@ -55,6 +55,16 @@ type frameParser struct {
 
 func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 	r := &countingByteReader{Reader: quicvarint.NewReader(p.r)}
+	f, err := p.parseNext(r, qlogger)
+	// A stream must not end in the middle of a frame.
+	if (err == io.EOF && r.NumRead > 0) || err == io.ErrUnexpectedEOF {
+		p.closeConn(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+		return nil, io.ErrUnexpectedEOF
+	}
+	return f, err
+}
+
+func (p *frameParser) parseNext(r *countingByteReader, qlogger qlogwriter.Recorder) (frame, error) {
 	for {
 		t, err := quicvarint.Read(r)
 		if err != nil {
@@ -192,9 +202,6 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 	}
 	buf := make([]byte, l)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, io.EOF
-		}
 		return nil, err
 	}
 	frame := &settingsFrame{MaxFieldSectionSize: -1}
@@ -344,9 +351,6 @@ func parsePriorityUpdateFrame(r *countingByteReader, l uint64, streamID quic.Str
 	}
 	buf := make([]byte, l)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, io.EOF
-		}
 		return nil, err
 	}
 	id, n, err := quicvarint.Parse(buf)

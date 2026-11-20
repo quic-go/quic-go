@@ -24,9 +24,21 @@ func testFrameParserEOF(t *testing.T, data []byte) {
 	for i := range data {
 		b := make([]byte, i)
 		copy(b, data[:i])
-		fp := frameParser{r: bytes.NewReader(b)}
+		var closeCode quic.ApplicationErrorCode
+		fp := frameParser{
+			r: bytes.NewReader(b),
+			closeConn: func(code quic.ApplicationErrorCode, _ string) error {
+				closeCode = code
+				return nil
+			},
+		}
 		_, err := fp.ParseNext(nil)
-		require.ErrorIs(t, err, io.EOF)
+		if i == 0 {
+			require.ErrorIs(t, err, io.EOF)
+			continue
+		}
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+		require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameError), closeCode)
 	}
 }
 
@@ -159,7 +171,7 @@ func TestParserHeadersFrame(t *testing.T) {
 	data = quicvarint.Append(data, 0x1337)
 	fp := frameParser{r: bytes.NewReader(data)}
 
-	// incomplete data results in an io.EOF
+	// incomplete data results in an io.ErrUnexpectedEOF
 	testFrameParserEOF(t, data)
 
 	// parse
@@ -180,7 +192,7 @@ func TestDataFrame(t *testing.T) {
 	data = quicvarint.Append(data, 0x1337)
 	fp := frameParser{r: bytes.NewReader(data)}
 
-	// incomplete data results in an io.EOF
+	// incomplete data results in an io.ErrUnexpectedEOF
 	testFrameParserEOF(t, data)
 
 	// parse
@@ -210,7 +222,7 @@ func TestParserSettingsFrame(t *testing.T) {
 	data = quicvarint.Append(data, uint64(len(settings)))
 	data = append(data, settings...)
 
-	// incomplete data results in an io.EOF
+	// incomplete data results in an io.ErrUnexpectedEOF
 	testFrameParserEOF(t, data)
 
 	fp := frameParser{r: bytes.NewReader(data)}
@@ -415,7 +427,7 @@ func TestParserGoAwayFrame(t *testing.T) {
 	data = quicvarint.Append(data, uint64(quicvarint.Len(100)))
 	data = quicvarint.Append(data, 100)
 
-	// incomplete data results in an io.EOF
+	// incomplete data results in an io.ErrUnexpectedEOF
 	testFrameParserEOF(t, data)
 
 	fp := frameParser{r: bytes.NewReader(data)}
