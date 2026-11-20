@@ -2410,7 +2410,7 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 
 	// If this is a remote close we're done here
 	if isRemoteClose {
-		c.connIDGenerator.ReplaceWithClosed(nil, 3*c.rttStats.PTO(false))
+		c.connIDGenerator.ReplaceWithClosed(nil, 3*c.rttStats.PTO(true))
 		return
 	}
 	if closeErr.immediate {
@@ -2427,7 +2427,7 @@ func (c *Conn) handleCloseError(closeErr *closeError) {
 	if err != nil {
 		c.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
-	c.connIDGenerator.ReplaceWithClosed(connClosePacket, 3*c.rttStats.PTO(false))
+	c.connIDGenerator.ReplaceWithClosed(connClosePacket, 3*c.rttStats.PTO(true))
 }
 
 func (c *Conn) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now monotime.Time) {
