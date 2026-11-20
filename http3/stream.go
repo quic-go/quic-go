@@ -444,7 +444,7 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	if s.sentRequest {
 		return errors.New("http3: invalid duplicate use of RequestStream.SendRequestHeader")
 	}
-	// A client must not send Extended CONNECT unless the server enabled it.
+	// RFC 8441, Section 3 allows Extended CONNECT only once the server's SETTINGS enabled it.
 	if isExtendedConnectRequest(req) {
 		if err := s.conn.WaitForExtendedConnect(req.Context()); err != nil {
 			return maybeReplaceError(err)
