@@ -227,6 +227,35 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 	}
 }
 
+func TestFramerRequeuesConnectionBlockedStreams(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	str := NewMockStreamFrameGetter(mockCtrl)
+	str.EXPECT().priority().Return(defaultUrgency, true, uint32(0)).AnyTimes()
+	done := NewMockStreamFrameGetter(mockCtrl)
+	done.EXPECT().priority().Return(defaultUrgency, true, uint32(0)).AnyTimes()
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
+	framer.AddActiveStream(4, str)
+	framer.AddActiveStream(8, done)
+
+	// stream 4 has data but no credit, stream 8 has nothing left to send
+	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).Return(ackhandler.StreamFrame{}, nil, true)
+	done.EXPECT().popStreamFrame(gomock.Any(), gomock.Any())
+	framer.AppendStreamFrames(nil, nil, 1000, protocol.Version1)
+	require.False(t, framer.HasData())
+	// stream 4 is queued again when it has a frame to send, e.g. a FIN
+	framer.AddActiveStream(4, str)
+	require.True(t, framer.HasData())
+	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).Return(ackhandler.StreamFrame{}, nil, true)
+	framer.AppendStreamFrames(nil, nil, 1000, protocol.Version1)
+	require.False(t, framer.HasData())
+
+	// only stream 4 is queued again
+	framer.UpdateSendWindow(100)
+	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any())
+	framer.AppendStreamFrames(nil, nil, 1000, protocol.Version1)
+	require.False(t, framer.HasData())
+}
+
 func TestFramerDetectsFrameDoS(t *testing.T) {
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	for i := range maxControlFrames - 1 {

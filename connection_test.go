@@ -42,7 +42,10 @@ func connectionOptCryptoSetup(cs *mocks.MockCryptoSetup) testConnectionOpt {
 }
 
 func connectionOptConnFlowController(cfc *connectionFlowController) testConnectionOpt {
-	return func(conn *Conn) { conn.connFlowController = cfc }
+	return func(conn *Conn) {
+		conn.connFlowController = cfc
+		conn.framer = newFramer(cfc)
+	}
 }
 
 func connectionOptTracer(r qlogwriter.Recorder) testConnectionOpt {
