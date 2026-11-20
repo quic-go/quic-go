@@ -495,13 +495,13 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 	return true, err
 }
 
-func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder, streamID quic.StreamID) (http.Header, error) {
+func decodeTrailers(str *stateTrackingStream, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder) (http.Header, error) {
 	if hf.Length > uint64(maxHeaderBytes) {
-		maybeQlogInvalidHeadersFrame(qlogger, streamID, hf.Length)
+		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
 
-	b, err := readHeaderBlock(r, hf.Length)
+	b, err := readHeaderBlock(str, hf.Length)
 	if err != nil {
 		return nil, err
 	}
@@ -514,11 +514,18 @@ func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *
 	}
 	trailers, err := parseTrailers(decodeFn, maxHeaderBytes, headerFields)
 	if err != nil {
-		maybeQlogInvalidHeadersFrame(qlogger, streamID, hf.Length)
+		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
+		// Malformed trailers are a stream error of type H3_MESSAGE_ERROR.
+		// Trailers exceeding the size limit are not malformed.
+		_, isQPACKErr := errors.AsType[*qpackError](err)
+		if !isQPACKErr && !errors.Is(err, errHeaderTooLarge) {
+			str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
+			str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+		}
 		return nil, err
 	}
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, streamID, hf, fields, nil)
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, fields, nil)
 	}
 	return trailers, nil
 }
