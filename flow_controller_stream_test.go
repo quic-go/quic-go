@@ -155,12 +155,16 @@ func TestStreamSendWindow(t *testing.T) {
 	// first, we're limited by the stream flow controller
 	require.Equal(t, protocol.ByteCount(100), fc.SendWindowSize())
 	require.True(t, fc.TryAddBytesSent(50))
-	require.False(t, fc.IsNewlyBlocked())
+	isBlocked, _ := fc.IsNewlyBlocked()
+	require.False(t, isBlocked)
 	require.Equal(t, protocol.ByteCount(50), fc.SendWindowSize())
 	require.True(t, fc.TryAddBytesSent(50))
-	require.True(t, fc.IsNewlyBlocked())
+	isBlocked, offset := fc.IsNewlyBlocked()
+	require.True(t, isBlocked)
+	require.Equal(t, protocol.ByteCount(100), offset)
 	require.Zero(t, fc.SendWindowSize())
-	require.False(t, fc.IsNewlyBlocked()) // we're still blocked, but it's not new
+	isBlocked, _ = fc.IsNewlyBlocked()
+	require.False(t, isBlocked) // we're still blocked, but it's not new
 
 	// Update the stream flow control limit, but don't update the connection flow control limit.
 	// We're now limited by the connection flow controller.
@@ -168,11 +172,13 @@ func TestStreamSendWindow(t *testing.T) {
 	// reordered updates are ignored
 	require.False(t, fc.UpdateSendWindow(999))
 
-	require.False(t, fc.IsNewlyBlocked()) // we're not blocked anymore
+	isBlocked, _ = fc.IsNewlyBlocked()
+	require.False(t, isBlocked) // we're not blocked anymore
 	require.Equal(t, protocol.ByteCount(200), fc.SendWindowSize())
 	require.True(t, fc.TryAddBytesSent(200))
 	require.Zero(t, fc.SendWindowSize())
-	require.False(t, fc.IsNewlyBlocked()) // we're blocked, but not on stream flow control
+	isBlocked, _ = fc.IsNewlyBlocked()
+	require.False(t, isBlocked) // we're blocked, but not on stream flow control
 }
 
 func TestStreamFlowControllerTryAddBytesSent(t *testing.T) {
