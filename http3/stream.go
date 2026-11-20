@@ -29,6 +29,7 @@ type datagramStream interface {
 	TryWriteAll([]byte) error
 	SendDatagram(b []byte) error
 	ReceiveDatagram(ctx context.Context) ([]byte, error)
+	rejectDatagrams()
 
 	QUICStream() *quic.Stream
 }
@@ -447,6 +448,10 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	s.isConnect = req.Method == http.MethodConnect
 	s.isHead = req.Method == http.MethodHead
 	s.sentRequest = true
+	// Only Extended CONNECT requests can define semantics for HTTP Datagrams.
+	if !isExtendedConnectRequest(req) {
+		s.str.rejectDatagrams()
+	}
 	return maybeReplaceError(s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip, s.str.StreamID(), s.str.qlogger))
 }
 

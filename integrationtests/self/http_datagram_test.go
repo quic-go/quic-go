@@ -254,6 +254,7 @@ func TestHTTPDatagramClose(t *testing.T) {
 					errChan <- err
 					return
 				}
+				str.SendDatagram(data)
 				datagramChan <- data
 			}
 		})
@@ -269,6 +270,10 @@ func TestHTTPDatagramClose(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("didn't receive datagram")
 		}
+		// the server echoes the datagram
+		data, err := str.ReceiveDatagram(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, []byte("foo"), data)
 		// signal that we're done sending
 		str.Close()
 
@@ -282,7 +287,7 @@ func TestHTTPDatagramClose(t *testing.T) {
 
 		// make sure we can't send anymore
 		require.ErrorIs(t, context.Cause(str.Context()), quic.ErrStreamClosed)
-		_, err := str.Write([]byte("foo"))
+		_, err = str.Write([]byte("foo"))
 		require.ErrorIs(t, err, quic.ErrStreamClosed)
 		require.ErrorIs(t, str.SendDatagram([]byte("foo")), quic.ErrStreamClosed)
 	})
