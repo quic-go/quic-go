@@ -122,6 +122,10 @@ func (s *Stream) Read(b []byte) (int, error) {
 		n, err = s.datagramStream.Read(b)
 	}
 	s.bytesRemainingInFrame -= uint64(n)
+	if err == io.EOF && s.bytesRemainingInFrame > 0 {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+		return n, io.ErrUnexpectedEOF
+	}
 	return n, maybeReplaceError(err)
 }
 
