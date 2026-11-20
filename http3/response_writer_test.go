@@ -89,7 +89,7 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 	rw := newResponseWriter(
 		newStream(str, conn, nil, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
 		nil,
-		false,
+		http.MethodGet,
 		slog.Default(),
 	)
 	return &testResponseWriter{
@@ -236,7 +236,7 @@ func TestResponseWriterHTTPStream(t *testing.T) {
 			qstr.EXPECT().Write(gomock.Any()).Return(0, os.ErrDeadlineExceeded),
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) { return len(b), nil }),
 		)
-		rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+		rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
 		rw.WriteHeader(http.StatusOK)
 
 		str, err := rw.HTTPStream()
@@ -264,7 +264,7 @@ func TestResponseWriterHeaderRetry(t *testing.T) {
 		}),
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes(),
 	)
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
 	rw.Header().Set("Foo", "bar")
 	rw.WriteHeader(http.StatusOK)
 
@@ -291,7 +291,7 @@ func TestResponseWriterDataRetry(t *testing.T) {
 		return 1, os.ErrDeadlineExceeded
 	})
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
 	_, err := rw.Write([]byte("foo")) // buffered
 	require.NoError(t, err)
 
@@ -337,6 +337,22 @@ func TestResponseWriterContentLengthZero(t *testing.T) {
 	require.Empty(t, rw.DecodeBody(t))
 }
 
+func TestResponseWriterConnect(t *testing.T) {
+	var buf bytes.Buffer
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodConnect, nil)
+	_, err := rw.Write([]byte("foobar"))
+	require.NoError(t, err)
+	require.NoError(t, rw.Finish())
+
+	fields := decodeHeader(t, &buf)
+	require.Equal(t, []string{"200"}, fields[":status"])
+	require.NotContains(t, fields, "content-length")
+}
+
 func TestResponseWriterContentLengthRetry(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	qstr := NewMockDatagramStream(mockCtrl)
@@ -346,7 +362,7 @@ func TestResponseWriterContentLengthRetry(t *testing.T) {
 		qstr.EXPECT().Write(gomock.Any()).Return(0, os.ErrDeadlineExceeded),
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(io.Discard.Write).AnyTimes(),
 	)
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, false, nil)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
 	rw.Header().Set("Content-Length", strconv.Itoa(maxSmallResponseSize))
 
 	data := make([]byte, maxSmallResponseSize)

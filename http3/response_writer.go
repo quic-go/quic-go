@@ -50,6 +50,7 @@ type responseWriter struct {
 	headerComplete bool  // set once WriteHeader is called with a status code >= 200
 	headerWritten  bool  // set once the response header has been serialized to the stream
 	isHead         bool
+	isConnect      bool
 	trailerWritten bool // set once the response trailers has been serialized to the stream
 
 	hijacked bool // set on HTTPStream is called
@@ -71,13 +72,14 @@ var (
 	} = &responseWriter{}
 )
 
-func newResponseWriter(str *Stream, conn *rawConn, isHead bool, logger *slog.Logger) *responseWriter {
+func newResponseWriter(str *Stream, conn *rawConn, method string, logger *slog.Logger) *responseWriter {
 	return &responseWriter{
 		str:        str,
 		conn:       conn,
 		header:     http.Header{},
 		contentLen: -1,
-		isHead:     isHead,
+		isHead:     method == http.MethodHead,
+		isConnect:  method == http.MethodConnect,
 		logger:     logger,
 	}
 }
@@ -255,6 +257,10 @@ func (w *responseWriter) encodeHeader(status int) ([]byte, error) {
 			continue
 		}
 		name := strings.ToLower(k)
+		// A 2xx response to CONNECT must not contain a Content-Length.
+		if name == "content-length" && w.isConnect && status >= 200 && status < 300 {
+			continue
+		}
 		for _, value := range v {
 			// drop fields that HTTP/3 does not allow
 			if !canSendField(name, value) {
