@@ -189,7 +189,15 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
+	isConnect := req.Method == http.MethodConnect
 	hstr := newStream(str, conn, nil, func(_ io.Reader, hf *headersFrame) error {
+		// After a CONNECT request, only DATA frames are allowed,
+		// and a HEADERS frame is a connection error of type H3_FRAME_UNEXPECTED (RFC 9114, Section 4.4).
+		if isConnect {
+			maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
+			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return errors.New("HEADERS frame received on a CONNECT stream")
+		}
 		trailers, err := decodeTrailers(str, hf, maxHeaderBytes, decoder, qlogger)
 		if err != nil {
 			return err
