@@ -57,6 +57,7 @@ func (vn Version) String() string {
 
 // VersionedKey appends the version number to a token store or session cache key.
 func VersionedKey(key string, v Version) string {
+	//nolint:exhaustive // other versions are formatted in the default case
 	switch v {
 	case Version1:
 		return key + "|1"
