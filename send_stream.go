@@ -424,7 +424,9 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 		maxDataLen = min(maxDataLen, f.MaxDataLen(maxBytes, v), protocol.ByteCount(len(s.dataForWriting)))
 	}
 	if maxDataLen == 0 {
-		return nil, s.maybeGetBlockedFrame(), true
+		// Without stream flow control credit, the stream is queued again when it receives MAX_STREAM_DATA.
+		hasMoreData := s.nextFrameReserved || !s.flowController.IsBlocked()
+		return nil, s.maybeGetBlockedFrame(), hasMoreData
 	}
 	if limitedWrite {
 		added, limited := s.flowController.AddBytesSentWithLimiter(maxDataLen, s.writeLimiter)

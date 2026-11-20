@@ -44,6 +44,10 @@ type streamQueueEntry struct {
 type queuedStream struct {
 	streamFrameGetter
 	generation uint32
+	// The stream ran out of connection-level flow control credit and isn't in any queue.
+	// It is queued again when the connection's send window increases,
+	// or by AddActiveStream, since it might now have a FIN to send.
+	connBlocked bool
 }
 
 type framer struct {
@@ -314,9 +318,14 @@ func (f *framer) AddActiveStream(id protocol.StreamID, str streamFrameGetter) {
 	defer f.mutex.Unlock()
 
 	urgency, incremental, generation := str.priority()
-	if activeStr, ok := f.activeStreams[id]; ok && activeStr.generation == generation {
+	if activeStr, ok := f.activeStreams[id]; ok && activeStr.generation == generation && !activeStr.connBlocked {
 		return
 	}
+	f.queueStream(id, str, urgency, incremental, generation)
+}
+
+// queueStream adds the stream to the queue for the given priority.
+func (f *framer) queueStream(id protocol.StreamID, str streamFrameGetter, urgency int8, incremental bool, generation uint32) {
 	if incremental {
 		f.incrementalStreams[urgency].PushBack(streamQueueEntry{id: id, generation: generation})
 	} else {
@@ -358,12 +367,32 @@ func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	delete(f.retransmissionStreams, id)
 }
 
+// UpdateSendWindow is called when the peer increases the connection-level flow control limit.
+func (f *framer) UpdateSendWindow(offset protocol.ByteCount) {
+	// Streams are only blocked on connection flow control while the send window is 0.
+	wasBlocked := f.connFlowController.SendWindowSize() == 0
+	if !f.connFlowController.UpdateSendWindow(offset) || !wasBlocked {
+		return
+	}
+
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	for id, str := range f.activeStreams {
+		if str.connBlocked {
+			urgency, incremental, generation := str.priority()
+			f.queueStream(id, str.streamFrameGetter, urgency, incremental, generation)
+		}
+	}
+}
+
 func (f *framer) UpdateStreamPriority(id protocol.StreamID) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
 	str, ok := f.activeStreams[id]
-	if !ok {
+	// A stream blocked on connection flow control is queued with its new priority when it's unblocked.
+	if !ok || str.connBlocked {
 		return
 	}
 	urgency, incremental, generation := str.priority()
@@ -458,6 +487,12 @@ func (f *framer) popStreamFrame(
 	// the STREAM frame (which will always have the DataLen set).
 	maxLen += protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
 	frame, blocked, hasMoreData := str.popStreamFrame(maxLen, v)
+	// The stream has data, but couldn't send any: it's blocked on connection flow control.
+	if hasMoreData && frame.Frame == nil && f.connFlowController.SendWindowSize() == 0 {
+		str.connBlocked = true
+		f.activeStreams[id] = str
+		return frame, blocked, false
+	}
 	if !hasMoreData {
 		delete(f.activeStreams, id)
 	}
