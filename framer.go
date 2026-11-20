@@ -51,6 +51,9 @@ type framer struct {
 
 	activeStreams         map[protocol.StreamID]queuedStream
 	retransmissionStreams map[protocol.StreamID]streamFrameGetter
+	// Without connection-level flow control credit, only these streams are popped.
+	// They might have reserved data or a FIN, which don't need credit.
+	connBlockedStreams map[protocol.StreamID]struct{}
 
 	incrementalStreams    [8]ringbuffer.RingBuffer[streamQueueEntry]
 	nonIncrementalStreams [8]minheap.Heap[protocol.StreamID, uint32 /* generation */]
@@ -75,6 +78,7 @@ func newFramer(connFlowController *connectionFlowController) *framer {
 	return &framer{
 		activeStreams:            make(map[protocol.StreamID]queuedStream),
 		retransmissionStreams:    make(map[protocol.StreamID]streamFrameGetter),
+		connBlockedStreams:       make(map[protocol.StreamID]struct{}),
 		streamsWithControlFrames: make(map[protocol.StreamID]streamControlFrameGetter),
 		connFlowController:       connFlowController,
 	}
@@ -92,9 +96,16 @@ func (f *framer) HasData() bool {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
+	for urgency := range f.retransmissionQueue {
+		if !f.retransmissionQueue[urgency].Empty() {
+			return true
+		}
+	}
+	if f.connFlowController.IsBlocked() {
+		return len(f.connBlockedStreams) > 0
+	}
 	for urgency := range f.incrementalStreams {
-		if !f.incrementalStreams[urgency].Empty() || !f.nonIncrementalStreams[urgency].Empty() ||
-			!f.retransmissionQueue[urgency].Empty() {
+		if !f.incrementalStreams[urgency].Empty() || !f.nonIncrementalStreams[urgency].Empty() {
 			return true
 		}
 	}
@@ -180,7 +191,7 @@ retransmissions:
 		numActiveStreams := f.incrementalStreams[urgency].Len() + f.nonIncrementalStreams[urgency].Len()
 
 		for range numActiveStreams {
-			if protocol.MinStreamFrameSize > maxLen {
+			if protocol.MinStreamFrameSize > maxLen || f.connFlowController.IsBlocked() {
 				break
 			}
 			sf, blocked := f.getNextStreamFrame(maxLen, int8(urgency), v)
@@ -206,7 +217,7 @@ retransmissions:
 		}
 	}
 
-	// The only way to become blocked on connection-level flow control is by sending STREAM frames.
+	// The connection becomes blocked by sending STREAM frames, or by streams reserving credit.
 	if isBlocked, offset := f.connFlowController.IsNewlyBlocked(); isBlocked {
 		blocked := &wire.DataBlockedFrame{MaximumData: offset}
 		l := blocked.Length(v)
@@ -216,6 +227,39 @@ retransmissions:
 			controlFrameLen += l
 		} else {
 			f.controlFrames = append(f.controlFrames, blocked)
+		}
+		for id := range f.activeStreams {
+			f.connBlockedStreams[id] = struct{}{}
+		}
+	}
+
+	if f.connFlowController.IsBlocked() {
+		for id := range f.connBlockedStreams {
+			if protocol.MinStreamFrameSize > maxLen {
+				break
+			}
+			str, ok := f.activeStreams[id]
+			if !ok {
+				delete(f.connBlockedStreams, id)
+				continue
+			}
+			// For the last STREAM frame, we'll remove the DataLen field later.
+			frameMaxLen := maxLen + protocol.ByteCount(quicvarint.Len(uint64(maxLen)))
+			sf, blocked, hasMoreData := str.popStreamFrame(frameMaxLen, v)
+			if blocked != nil {
+				f.controlFrames = append(f.controlFrames, blocked)
+			}
+			// The stream stays queued, and is popped again once there's credit.
+			if sf.Frame == nil || !hasMoreData {
+				delete(f.connBlockedStreams, id)
+			}
+			if sf.Frame == nil {
+				continue
+			}
+			streamFrames = append(streamFrames, sf)
+			maxLen -= sf.Frame.Length(v)
+			lastFrame = sf
+			streamFrameLen += sf.Frame.Length(v)
 		}
 	}
 
@@ -313,6 +357,9 @@ func (f *framer) AddActiveStream(id protocol.StreamID, str streamFrameGetter) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
+	if f.connFlowController.IsBlocked() {
+		f.connBlockedStreams[id] = struct{}{}
+	}
 	urgency, incremental, generation := str.priority()
 	if activeStr, ok := f.activeStreams[id]; ok && activeStr.generation == generation {
 		return
@@ -356,6 +403,7 @@ func (f *framer) RemoveActiveStream(id protocol.StreamID) {
 	// Instead, we check if the stream is still in active when appending STREAM frames.
 	delete(f.activeStreams, id)
 	delete(f.retransmissionStreams, id)
+	delete(f.connBlockedStreams, id)
 }
 
 func (f *framer) UpdateStreamPriority(id protocol.StreamID) {
@@ -481,6 +529,7 @@ func (f *framer) Handle0RTTRejection() {
 	}
 	clear(f.activeStreams)
 	clear(f.retransmissionStreams)
+	clear(f.connBlockedStreams)
 	clear(f.streamsWithControlFrames)
 
 	var j int
