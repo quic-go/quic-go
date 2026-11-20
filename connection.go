@@ -440,15 +440,15 @@ var newClientConnection = func(
 	)
 	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	s.preSetup(&w.pathReceiver)
-	if len(tlsConf.ServerName) > 0 {
-		s.tokenStoreKey = tlsConf.ServerName
-	} else {
-		s.tokenStoreKey = conn.RemoteAddr().String()
-	}
-	// Tokens are specific to the QUIC version of the connection that provided them.
-	s.tokenStoreKey = protocol.VersionedKey(s.tokenStoreKey, v)
 	var token *ClientToken
 	if s.config.TokenStore != nil {
+		if len(tlsConf.ServerName) > 0 {
+			s.tokenStoreKey = tlsConf.ServerName
+		} else {
+			s.tokenStoreKey = conn.RemoteAddr().String()
+		}
+		// Tokens are specific to the QUIC version of the connection that provided them.
+		s.tokenStoreKey = protocol.VersionedKey(s.tokenStoreKey, v)
 		token = s.config.TokenStore.Pop(s.tokenStoreKey)
 		if token != nil {
 			s.rttStats.SetInitialRTT(token.rtt)

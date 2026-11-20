@@ -149,3 +149,9 @@ func TestVersionGreasing(t *testing.T) {
 	require.NotZero(t, greasedVersionLast)
 	require.NotZero(t, greasedVersionMiddle)
 }
+
+func TestVersionedKey(t *testing.T) {
+	require.Equal(t, "foo|1", VersionedKey("foo", Version1))
+	require.Equal(t, "foo|6b3343cf", VersionedKey("foo", Version2))
+	require.Equal(t, "foo|1337", VersionedKey("foo", 0x1337))
+}

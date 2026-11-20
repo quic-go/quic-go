@@ -57,7 +57,14 @@ func (vn Version) String() string {
 
 // VersionedKey appends the version number to a token store or session cache key.
 func VersionedKey(key string, v Version) string {
-	return key + "|" + strconv.FormatUint(uint64(v), 16)
+	switch v {
+	case Version1:
+		return key + "|1"
+	case Version2:
+		return key + "|6b3343cf"
+	default:
+		return key + "|" + strconv.FormatUint(uint64(v), 16)
+	}
 }
 
 func (vn Version) isGQUIC() bool {
