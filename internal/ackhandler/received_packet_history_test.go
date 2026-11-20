@@ -107,6 +107,11 @@ func TestReceivedPacketHistoryMaxNumAckRanges(t *testing.T) {
 	// check that the oldest ACK range was deleted
 	require.Len(t, hist.ranges, protocol.MaxNumAckRanges)
 	require.Equal(t, interval{Start: 2, End: 2}, hist.ranges[0])
+	// packets from the deleted range are rejected
+	require.True(t, hist.IsPotentiallyDuplicate(0))
+	require.False(t, hist.ReceivedPacket(0))
+	// packets from the gap after the deleted range are accepted
+	require.True(t, hist.ReceivedPacket(1))
 }
 
 func TestReceivedPacketHistoryDeleteBelow(t *testing.T) {
