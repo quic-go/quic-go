@@ -305,7 +305,9 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 			urgency, incremental := parsePriority(frame.PriorityFieldValue)
 			c.rawConn.UpdateStreamPriority(quic.StreamID(frame.ElementID), urgency, incremental)
 		case *goAwayFrame:
-			// Server push is not supported, so there is no push state to update.
+			// Server push is not supported, so we ignore the push ID.
+			// We don't close the connection if it increased since the last GOAWAY frame,
+			// although RFC 9114, Section 5.2 requires it.
 		default:
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 			return
