@@ -235,7 +235,7 @@ func TestSendStreamWriteWithLimit(t *testing.T) {
 
 		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.Nil(t, frame.Frame)
-		require.True(t, hasMore)
+		require.False(t, hasMore)
 		require.Equal(t, 2, calls)
 
 		str.updateSendWindow(57)
@@ -493,6 +493,49 @@ func TestSendStreamResetFinalSizeIncludesReservedData(t *testing.T) {
 			require.Equal(t, &wire.ResetStreamFrame{StreamID: streamID, FinalSize: 100, ErrorCode: 42}, cf.Frame)
 		})
 	}
+}
+
+// Reserved data doesn't need connection-level credit until it is sent or dropped.
+func TestSendStreamTryWriteAllReservesConnectionCredit(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	connFC := newConnectionFlowController(0, 0, nil, nil, nil)
+	connFC.UpdateSendWindow(100)
+	fc := newStreamFlowController(streamID, connFC, 0, 0, protocol.MaxByteCount, nil, nil)
+	mockSender := NewMockStreamSender(gomock.NewController(t))
+	str := newSendStream(context.Background(), streamID, mockSender, fc, false)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	require.NoError(t, str.TryWriteAll(make([]byte, 100)))
+	require.False(t, connFC.IsBlocked())
+	frame, _, _ := str.popStreamFrame(expectedFrameHeaderLen(streamID, 0)+40, protocol.Version1)
+	require.Equal(t, protocol.ByteCount(40), frame.Frame.DataLen())
+	require.False(t, connFC.IsBlocked())
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	require.NoError(t, str.Close())
+	str.closeForShutdown(Err0RTTRejected) // drops the remaining 60 bytes
+	require.True(t, connFC.IsBlocked())
+}
+
+func TestSendStreamResetStreamAtReservesConnectionCredit(t *testing.T) {
+	const streamID protocol.StreamID = 42
+	connFC := newConnectionFlowController(0, 0, nil, nil, nil)
+	connFC.UpdateSendWindow(6)
+	fc := newStreamFlowController(streamID, connFC, 0, 0, protocol.MaxByteCount, nil, nil)
+	mockSender := NewMockStreamSender(gomock.NewController(t))
+	str := newSendStream(context.Background(), streamID, mockSender, fc, true)
+
+	mockSender.EXPECT().onHasStreamData(streamID, str)
+	_, err := str.Write([]byte("foobar"))
+	require.NoError(t, err)
+	str.SetReliableBoundary()
+	mockSender.EXPECT().onHasStreamControlFrame(streamID, str)
+	str.CancelWrite(42)
+	_, ok, _ := str.getControlFrame(monotime.Now())
+	require.True(t, ok)
+	require.False(t, connFC.IsBlocked())
+	frame, _, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
+	require.Equal(t, []byte("foobar"), frame.Frame.Data)
+	require.True(t, connFC.IsBlocked())
 }
 
 func TestSendStreamSetReliableBoundaryAfterTryWriteAll(t *testing.T) {

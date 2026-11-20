@@ -140,6 +140,23 @@ func (c *streamFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
 	return true
 }
 
+// TryReserve is like TryAddBytesSent, but the connection counts the bytes as reserved until Unreserve is called.
+func (c *streamFlowController) TryReserve(n protocol.ByteCount) bool {
+	if c.bytesSent > c.sendWindow || n > c.sendWindow-c.bytesSent {
+		return false
+	}
+	if !c.connection.TryReserve(n) {
+		return false
+	}
+	c.bytesSent += n
+	return true
+}
+
+// Unreserve is called when n reserved bytes were sent or dropped.
+func (c *streamFlowController) Unreserve(n protocol.ByteCount) {
+	c.connection.Unreserve(n)
+}
+
 // AddBytesSentWithLimiter adds the limiter-approved portion of the available stream- and connection-level send credit.
 func (c *streamFlowController) AddBytesSentWithLimiter(
 	n protocol.ByteCount,
@@ -158,10 +175,15 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return min(c.sendWindow-c.bytesSent, c.connection.SendWindowSize())
 }
 
+// IsBlocked says if the stream flow control limit is reached.
+func (c *streamFlowController) IsBlocked() bool {
+	return c.bytesSent >= c.sendWindow
+}
+
 // IsNewlyBlocked says if it is newly blocked by stream flow control.
 // For every offset, it only returns true once.
 func (c *streamFlowController) IsNewlyBlocked() bool {
-	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
+	if !c.IsBlocked() || c.sendWindow == c.lastBlockedAt {
 		return false
 	}
 	c.lastBlockedAt = c.sendWindow

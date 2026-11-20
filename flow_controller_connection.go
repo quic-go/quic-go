@@ -18,6 +18,8 @@ type connectionFlowController struct {
 	bytesSent     protocol.ByteCount
 	sendWindow    protocol.ByteCount
 	lastBlockedAt protocol.ByteCount
+	// Reserved bytes that weren't sent yet. They are included in bytesSent.
+	bytesReserved protocol.ByteCount
 }
 
 // newConnectionFlowController gets a new flow controller for the connection.
@@ -81,6 +83,27 @@ func (c *connectionFlowController) TryAddBytesSent(n protocol.ByteCount) bool {
 	return true
 }
 
+// TryReserve is like TryAddBytesSent, but counts the bytes as reserved until Unreserve is called.
+func (c *connectionFlowController) TryReserve(n protocol.ByteCount) bool {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	if c.bytesSent > c.sendWindow || n > c.sendWindow-c.bytesSent {
+		return false
+	}
+	c.bytesSent += n
+	c.bytesReserved += n
+	return true
+}
+
+// Unreserve is called when n reserved bytes were sent or dropped.
+func (c *connectionFlowController) Unreserve(n protocol.ByteCount) {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	c.bytesReserved -= n
+}
+
 // AddBytesSentWithLimiter adds the limiter-approved portion of the available connection-level send credit.
 func (c *connectionFlowController) AddBytesSentWithLimiter(
 	n protocol.ByteCount,
@@ -118,6 +141,14 @@ func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
 	defer c.sendMutex.Unlock()
 
 	return c.sendWindow - c.bytesSent
+}
+
+// IsBlocked says if the connection flow control limit is reached, and no reserved bytes are left to send.
+func (c *connectionFlowController) IsBlocked() bool {
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	return c.bytesSent >= c.sendWindow && c.bytesReserved == 0
 }
 
 // IsNewlyBlocked says if it is newly blocked by connection flow control.

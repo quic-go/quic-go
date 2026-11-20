@@ -92,9 +92,16 @@ func (f *framer) HasData() bool {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
+	for urgency := range f.retransmissionQueue {
+		if !f.retransmissionQueue[urgency].Empty() {
+			return true
+		}
+	}
+	if f.connFlowController.IsBlocked() {
+		return false
+	}
 	for urgency := range f.incrementalStreams {
-		if !f.incrementalStreams[urgency].Empty() || !f.nonIncrementalStreams[urgency].Empty() ||
-			!f.retransmissionQueue[urgency].Empty() {
+		if !f.incrementalStreams[urgency].Empty() || !f.nonIncrementalStreams[urgency].Empty() {
 			return true
 		}
 	}
@@ -180,7 +187,7 @@ retransmissions:
 		numActiveStreams := f.incrementalStreams[urgency].Len() + f.nonIncrementalStreams[urgency].Len()
 
 		for range numActiveStreams {
-			if protocol.MinStreamFrameSize > maxLen {
+			if protocol.MinStreamFrameSize > maxLen || f.connFlowController.IsBlocked() {
 				break
 			}
 			sf, blocked := f.getNextStreamFrame(maxLen, int8(urgency), v)
@@ -206,7 +213,7 @@ retransmissions:
 		}
 	}
 
-	// The only way to become blocked on connection-level flow control is by sending STREAM frames.
+	// The connection becomes blocked by sending STREAM frames, or by streams reserving credit.
 	if isBlocked, offset := f.connFlowController.IsNewlyBlocked(); isBlocked {
 		blocked := &wire.DataBlockedFrame{MaximumData: offset}
 		l := blocked.Length(v)

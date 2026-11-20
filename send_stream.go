@@ -188,7 +188,7 @@ func (s *SendStream) tryWriteAll(p []byte) (bool /* is newly completed */, bool 
 	if s.nextFrame != nil && !s.nextFrameReserved {
 		bytesToReserve += s.nextFrame.DataLen()
 	}
-	if !s.flowController.TryAddBytesSent(bytesToReserve) {
+	if !s.flowController.TryReserve(bytesToReserve) {
 		return false, false, ErrWouldBlock
 	}
 
@@ -424,7 +424,9 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 		maxDataLen = min(maxDataLen, f.MaxDataLen(maxBytes, v), protocol.ByteCount(len(s.dataForWriting)))
 	}
 	if maxDataLen == 0 {
-		return nil, s.maybeGetBlockedFrame(), true
+		// Without stream flow control credit, the stream is queued again when it receives MAX_STREAM_DATA.
+		hasMoreData := s.nextFrameReserved || !s.flowController.IsBlocked()
+		return nil, s.maybeGetBlockedFrame(), hasMoreData
 	}
 	if limitedWrite {
 		added, limited := s.flowController.AddBytesSentWithLimiter(maxDataLen, s.writeLimiter)
@@ -436,7 +438,9 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 		if maxDataLen == 0 {
 			return nil, nil, !limited
 		}
-	} else if !s.nextFrameReserved && !s.flowController.TryAddBytesSent(maxDataLen) {
+	} else if s.nextFrameReserved {
+		s.flowController.Unreserve(maxDataLen)
+	} else if !s.flowController.TryAddBytesSent(maxDataLen) {
 		return nil, nil, true
 	}
 	f, hasMoreData := s.popNewStreamFrame(maxDataLen)
@@ -659,6 +663,9 @@ func (s *SendStream) returnFramesToPool() {
 	clear(s.retransmissionQueue)
 	s.retransmissionQueue = nil
 	if s.nextFrame != nil {
+		if s.nextFrameReserved {
+			s.flowController.Unreserve(s.nextFrame.DataLen())
+		}
 		s.nextFrame.PutBack()
 		s.nextFrame = nil
 	}
@@ -810,7 +817,7 @@ func (s *SendStream) getControlFrame(monotime.Time) (_ ackhandler.Frame, ok, has
 	// The Final Size of a RESET_STREAM_AT frame must not exceed the peer's flow control limits.
 	// It includes the unsent data up to the reliable size.
 	if s.nextFrame != nil && !s.nextFrameReserved {
-		if !s.flowController.TryAddBytesSent(s.nextFrame.DataLen()) {
+		if !s.flowController.TryReserve(s.nextFrame.DataLen()) {
 			return ackhandler.Frame{}, false, true
 		}
 		s.nextFrameReserved = true
@@ -891,8 +898,10 @@ func (s *SendStream) closeForShutdown(err error) {
 	s.completed = true
 	if s.shutdownErr == nil && !s.finishedWriting {
 		s.shutdownErr = err
-		s.returnFramesToPool()
 	}
+	// This also releases the reserved credit of a closed stream.
+	// After a 0-RTT rejection, the connection flow controller is still in use.
+	s.returnFramesToPool()
 	s.mutex.Unlock()
 	s.ctxCancel(err)
 	s.signalWrite()
