@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"testing"
 
+	"github.com/quic-go/quic-go/internal/israce"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/stretchr/testify/require"
 )
@@ -39,4 +40,13 @@ func TestStatelessResetter(t *testing.T) {
 		connID2 := protocol.ParseConnectionID(b)
 		require.NotEqual(t, token, m.GetStatelessResetToken(connID2))
 	})
+}
+
+func TestStatelessResetterAllocs(t *testing.T) {
+	if israce.Enabled {
+		t.Skip("the race detector allocates")
+	}
+	r := newStatelessResetter(nil)
+	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+	require.Zero(t, testing.AllocsPerRun(100, func() { r.GetStatelessResetToken(connID) }))
 }
