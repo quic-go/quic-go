@@ -70,8 +70,6 @@ type Transport struct {
 
 	// QUICConfig is the [quic.Config] used for dialing new connections.
 	// If nil, reasonable default values will be used.
-	// [quic.Config.MaxIncomingStreams] defaults to -1, so the server can't open
-	// bidirectional streams (see [Transport.NewClientConn]).
 	QUICConfig *quic.Config
 
 	// Dial specifies an optional dial function for creating QUIC
@@ -155,8 +153,10 @@ func (t *Transport) init() error {
 	if len(t.QUICConfig.Versions) != 1 {
 		return errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
+	// RFC 9114, Section 6.1 requires closing the connection when the server opens a bidirectional stream.
+	// Disallowing them makes QUIC do that, saving a goroutine per connection that would accept them.
 	if t.QUICConfig.MaxIncomingStreams == 0 {
-		t.QUICConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+		t.QUICConfig.MaxIncomingStreams = -1
 	}
 	if t.Dial == nil {
 		udpConn, err := net.ListenUDP("udp", nil)
@@ -436,12 +436,6 @@ func (t *Transport) removeClient(hostname string) {
 //
 // Obtaining a [ClientConn] is only needed for more advanced use cases, such as
 // using Extended CONNECT for WebTransport or the various MASQUE protocols.
-//
-// RFC 9114, Section 6.1 requires clients to close the connection with H3_STREAM_CREATION_ERROR
-// when the server opens a bidirectional stream, unless an extension allows it. To save a goroutine
-// per connection, the [ClientConn] never accepts these streams. Dial the QUIC connection with a
-// negative [quic.Config.MaxIncomingStreams] to make QUIC close the connection with
-// STREAM_LIMIT_ERROR instead.
 func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 	c := newClientConn(
 		conn,
