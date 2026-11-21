@@ -495,13 +495,14 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 	return true, err
 }
 
-func decodeTrailers(str *stateTrackingStream, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder) (http.Header, error) {
+// decodeTrailers reads the header block of hf from r and decodes the trailers.
+func decodeTrailers(r io.Reader, str *stateTrackingStream, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder) (http.Header, error) {
 	if hf.Length > uint64(maxHeaderBytes) {
 		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
 
-	b, err := readHeaderBlock(str, hf.Length)
+	b, err := readHeaderBlock(r, hf.Length)
 	if err != nil {
 		return nil, err
 	}

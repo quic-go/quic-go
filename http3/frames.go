@@ -37,12 +37,6 @@ func (r *countingByteReader) ReadByte() (byte, error) {
 	return b, err
 }
 
-func (r *countingByteReader) Read(b []byte) (int, error) {
-	n, err := r.Reader.Read(b)
-	r.NumRead += n
-	return n, err
-}
-
 func (r *countingByteReader) Reset() {
 	r.NumRead = 0
 }
@@ -51,9 +45,29 @@ type frameParser struct {
 	r         io.Reader
 	streamID  quic.StreamID
 	closeConn func(quic.ApplicationErrorCode, string) error
+
+	remaining uint64 // payload bytes of the current frame that weren't read yet
+	isData    bool   // whether the current frame is a DATA frame
+}
+
+// Read reads the payload of the current frame.
+// It returns io.EOF at the end of the payload.
+func (p *frameParser) Read(b []byte) (int, error) {
+	if p.remaining == 0 {
+		return 0, io.EOF
+	}
+	n, err := p.r.Read(b[:min(uint64(len(b)), p.remaining)])
+	p.remaining -= uint64(n)
+	return n, err
+}
+
+// HasMoreData reports whether the payload of the current DATA frame wasn't read completely.
+func (p *frameParser) HasMoreData() bool {
+	return p.isData && p.remaining > 0
 }
 
 func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
+	p.isData = false
 	r := &countingByteReader{Reader: quicvarint.NewReader(p.r)}
 	for {
 		t, err := quicvarint.Read(r)
@@ -64,6 +78,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 		if err != nil {
 			return nil, err
 		}
+		p.remaining = l
 
 		// We don't support server push, so we skip CANCEL_PUSH, PUSH_PROMISE and MAX_PUSH_ID frames,
 		// the same way we skip unknown frame types.
@@ -71,6 +86,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 		// We deliberately don't implement these checks, since they'd only catch a misbehaving peer.
 		switch t {
 		case 0x0: // DATA
+			p.isData = true
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
 					StreamID: p.streamID,
@@ -88,7 +104,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 				headerLen: r.NumRead,
 			}, nil
 		case 0x4: // SETTINGS
-			return parseSettingsFrame(r, l, p.streamID, qlogger)
+			return parseSettingsFrame(p, l, r.NumRead, p.streamID, qlogger)
 		case 0x3: // unsupported: CANCEL_PUSH
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
@@ -106,9 +122,9 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 				})
 			}
 		case 0x7: // GOAWAY
-			return parseGoAwayFrame(r, l, p.streamID, qlogger)
+			return parseGoAwayFrame(p, l, r.NumRead, p.streamID, qlogger)
 		case 0xf0700: // PRIORITY_UPDATE for a request stream
-			return parsePriorityUpdateFrame(r, l, p.streamID, qlogger)
+			return parsePriorityUpdateFrame(p, l, r.NumRead, p.streamID, qlogger)
 		case 0xf0701: // PRIORITY_UPDATE for a push stream
 			return nil, errPriorityUpdateForPush
 		case 0xd: // unsupported: MAX_PUSH_ID
@@ -141,7 +157,7 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 		}
 
 		// skip over the payload
-		if _, err := io.CopyN(io.Discard, r, int64(l)); err != nil {
+		if _, err := io.CopyN(io.Discard, p, int64(l)); err != nil {
 			return nil, err
 		}
 		r.Reset()
@@ -186,7 +202,7 @@ type settingsFrame struct {
 
 const maxSettingsFrameSize = 8 << 10
 
-func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*settingsFrame, error) {
+func parseSettingsFrame(r io.Reader, l uint64, headerLen int, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*settingsFrame, error) {
 	if l > maxSettingsFrameSize {
 		return nil, fmt.Errorf("unexpected size for SETTINGS frame: %d", l)
 	}
@@ -204,12 +220,12 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 	extendedConnect := int64(-1)
 	for b.Len() > 0 {
 		id, err := quicvarint.Read(b)
-		if err != nil { // should not happen. We allocated the whole frame already.
-			return nil, err
+		if err != nil {
+			return nil, errors.New("SETTINGS frame: inconsistent length")
 		}
 		val, err := quicvarint.Read(b)
-		if err != nil { // should not happen. We allocated the whole frame already.
-			return nil, err
+		if err != nil {
+			return nil, errors.New("SETTINGS frame: inconsistent length")
 		}
 
 		switch id {
@@ -250,7 +266,7 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 		qlogger.RecordEvent(qlog.FrameParsed{
 			StreamID: streamID,
 			Raw: qlog.RawInfo{
-				Length:        r.NumRead,
+				Length:        headerLen + int(l),
 				PayloadLength: int(l),
 			},
 			Frame: qlog.Frame{Frame: qlog.SettingsFrame{
@@ -303,21 +319,24 @@ type goAwayFrame struct {
 	StreamID quic.StreamID
 }
 
-func parseGoAwayFrame(r *countingByteReader, l uint64, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*goAwayFrame, error) {
-	frame := &goAwayFrame{}
-	startLen := r.NumRead
-	id, err := quicvarint.Read(r)
-	if err != nil {
-		return nil, err
-	}
-	if r.NumRead-startLen != int(l) {
+func parseGoAwayFrame(r io.Reader, l uint64, headerLen int, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*goAwayFrame, error) {
+	// the payload is a single varint, which is at most 8 bytes long
+	if l > 8 {
 		return nil, errors.New("GOAWAY frame: inconsistent length")
 	}
-	frame.StreamID = quic.StreamID(id)
+	buf := make([]byte, l)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return nil, err
+	}
+	id, n, err := quicvarint.Parse(buf)
+	if err != nil || n != len(buf) {
+		return nil, errors.New("GOAWAY frame: inconsistent length")
+	}
+	frame := &goAwayFrame{StreamID: quic.StreamID(id)}
 	if qlogger != nil {
 		qlogger.RecordEvent(qlog.FrameParsed{
 			StreamID: streamID,
-			Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+			Raw:      qlog.RawInfo{Length: headerLen + int(l), PayloadLength: int(l)},
 			Frame:    qlog.Frame{Frame: qlog.GoAwayFrame{StreamID: frame.StreamID}},
 		})
 	}
@@ -338,7 +357,7 @@ type priorityUpdateFrame struct {
 
 const maxPriorityUpdateFrameSize = 4 << 10
 
-func parsePriorityUpdateFrame(r *countingByteReader, l uint64, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*priorityUpdateFrame, error) {
+func parsePriorityUpdateFrame(r io.Reader, l uint64, headerLen int, streamID quic.StreamID, qlogger qlogwriter.Recorder) (*priorityUpdateFrame, error) {
 	if l > maxPriorityUpdateFrameSize {
 		return nil, fmt.Errorf("unexpected size for PRIORITY_UPDATE frame: %d", l)
 	}
@@ -351,7 +370,7 @@ func parsePriorityUpdateFrame(r *countingByteReader, l uint64, streamID quic.Str
 	}
 	id, n, err := quicvarint.Parse(buf)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("PRIORITY_UPDATE frame: inconsistent length")
 	}
 	frame := &priorityUpdateFrame{
 		ElementID:          id,
@@ -360,7 +379,7 @@ func parsePriorityUpdateFrame(r *countingByteReader, l uint64, streamID quic.Str
 	if qlogger != nil {
 		qlogger.RecordEvent(qlog.FrameParsed{
 			StreamID: streamID,
-			Raw:      qlog.RawInfo{Length: r.NumRead, PayloadLength: int(l)},
+			Raw:      qlog.RawInfo{Length: headerLen + int(l), PayloadLength: int(l)},
 			Frame: qlog.Frame{Frame: qlog.PriorityUpdateFrame{
 				StreamID:           quic.StreamID(frame.ElementID),
 				PriorityFieldValue: frame.PriorityFieldValue,

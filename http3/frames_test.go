@@ -83,8 +83,7 @@ func TestParserUnknownFrameType(t *testing.T) {
 	data = hf.Append(data)
 	data = append(data, []byte("foo")...)
 
-	r := bytes.NewReader(data)
-	fp := frameParser{r: r}
+	fp := frameParser{r: bytes.NewReader(data)}
 	var eventRecorder events.Recorder
 	f, err := fp.ParseNext(&eventRecorder)
 	require.NoError(t, err)
@@ -92,7 +91,7 @@ func TestParserUnknownFrameType(t *testing.T) {
 	hf = f.(*headersFrame)
 	require.Equal(t, uint64(3), hf.Length)
 	payload := make([]byte, 3)
-	_, err = io.ReadFull(r, payload)
+	_, err = io.ReadFull(&fp, payload)
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), payload)
 	logged := eventRecorder.Events(qlog.FrameParsed{})
@@ -120,8 +119,7 @@ func TestParserUnsupportedFrameTypes(t *testing.T) {
 			data = df.Append(data)
 			data = append(data, []byte("foo")...)
 
-			r := bytes.NewReader(data)
-			fp := frameParser{streamID: 42, r: r}
+			fp := frameParser{streamID: 42, r: bytes.NewReader(data)}
 
 			f, err := fp.ParseNext(&eventRecorder)
 			require.NoError(t, err)
@@ -129,7 +127,7 @@ func TestParserUnsupportedFrameTypes(t *testing.T) {
 			df = f.(*dataFrame)
 			require.Equal(t, uint64(3), df.Length)
 			payload := make([]byte, 3)
-			_, err = io.ReadFull(r, payload)
+			_, err = io.ReadFull(&fp, payload)
 			require.NoError(t, err)
 			require.Equal(t, []byte("foo"), payload)
 
@@ -416,7 +414,10 @@ func TestParserGoAwayFrame(t *testing.T) {
 	data = quicvarint.Append(data, 100)
 
 	// incomplete data results in an io.EOF
-	testFrameParserEOF(t, data)
+	testFrameParserEOF(t, data[:3])
+	// unless the stream ends inside the payload
+	_, err := (&frameParser{r: bytes.NewReader(data[:3])}).ParseNext(nil)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 
 	fp := frameParser{r: bytes.NewReader(data)}
 	f, err := fp.ParseNext(nil)
@@ -429,6 +430,20 @@ func TestParserGoAwayFrame(t *testing.T) {
 	f2, err := fp.ParseNext(nil)
 	require.NoError(t, err)
 	require.Equal(t, f, f2)
+}
+
+func TestParserMalformedPayload(t *testing.T) {
+	for _, data := range [][]byte{
+		{4, 1, 64},   // SETTINGS: the payload ends inside an identifier
+		{4, 1, 1},    // SETTINGS: the value is missing
+		{7, 0},       // GOAWAY: empty
+		{7, 2, 1, 0}, // GOAWAY: a byte after the stream ID
+		{7, 9},       // GOAWAY: longer than the longest varint
+		append(quicvarint.Append(nil, 0xf0700), 0), // PRIORITY_UPDATE: empty
+	} {
+		_, err := (&frameParser{r: bytes.NewReader(data)}).ParseNext(nil)
+		require.ErrorContains(t, err, "inconsistent length")
+	}
 }
 
 func TestParserPriorityUpdateFrame(t *testing.T) {
@@ -498,7 +513,7 @@ func FuzzFrameParser(f *testing.F) {
 
 			switch f := fr.(type) {
 			case *dataFrame:
-				if _, err := io.CopyN(io.Discard, fp.r, int64(f.Length)); err != nil {
+				if _, err := io.Copy(io.Discard, &fp); err != nil {
 					return
 				}
 			case *headersFrame:
@@ -506,7 +521,7 @@ func FuzzFrameParser(f *testing.F) {
 				if f.headerLen < 2 || f.headerLen > frameHeaderLen {
 					t.Fatalf("HEADERS: headerLen %d outside [2, %d]", f.headerLen, frameHeaderLen)
 				}
-				if _, err := io.CopyN(io.Discard, fp.r, int64(f.Length)); err != nil {
+				if _, err := io.Copy(io.Discard, &fp); err != nil {
 					return
 				}
 			case *settingsFrame:
